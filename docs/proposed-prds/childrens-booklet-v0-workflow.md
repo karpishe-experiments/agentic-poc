@@ -60,12 +60,12 @@ This POC specifies the experience and agent decisions; it does not implement the
 ### 3. Ask questions to fill the gaps
 
 1. The agent assesses the storyline and uses its storytelling skills to infer what information is missing. It does not follow a fixed questionnaire or require fixed story fields.
-2. If more information is needed, the agent asks one relevant question at a time, up to a maximum of eight questions.
-3. The agent chooses the most suitable question card:
+2. If plot gaps exist, the agent generates up to eight focused questions designed to close those specific gaps.
+3. The agent presents the generated questions one at a time and chooses the most suitable question card for each:
    - **Free text:** may be pre-populated or offer **Generate for me**.
    - **Multiple choice:** may tag recommended options and offer **Proceed with recommendations**.
    - **Single choice:** may highlight one recommended option.
-4. The agent stops asking questions when it has enough information to produce a coherent plot or the eight-question maximum is reached.
+4. After the generated questions are answered, the agent continues to plot generation. If no gaps were identified, it proceeds without asking questions.
 
 ### 4. Generate and confirm the whole plot
 
@@ -134,8 +134,8 @@ This POC specifies the experience and agent decisions; it does not implement the
 ## Agent decision rules
 
 - Infer missing story information from context; do not require fixed story fields.
-- Ask only relevant questions, one at a time, with an eight-question maximum.
-- Treat sufficient information or the question limit as permission to generate the whole plot.
+- Generate up to eight focused questions from the identified plot gaps and present them one at a time.
+- Generate the whole plot after the planned questions are answered, or immediately when no gaps are identified.
 - Accept plot edits without restarting the interview.
 - Decide style before selecting characters so character suggestions fit the visual direction.
 - Use only inventory styles and characters.
