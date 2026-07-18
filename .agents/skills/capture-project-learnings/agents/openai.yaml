@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capture Project Learnings"
+  short_description: "Turn verified work into reusable project guidance"
+  default_prompt: "Use $capture-project-learnings to update the project documentation and record transferable lessons from this work."

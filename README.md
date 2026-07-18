@@ -19,6 +19,12 @@ Expect the implementation and structure to change as ideas are tested.
 
 Setup and run instructions will be added alongside the first implementation.
 
+## Agentic coding workflow
+
+Coding agents should follow [AGENTS.md](AGENTS.md). Start each experiment by copying and completing the [experiment brief](docs/experiment-brief.md), then review and approve an implementation plan before code changes begin.
+
+After verified work, use the repository's `capture-project-learnings` skill to keep documentation accurate and identify lessons worth promoting into the main project.
+
 ## Contributing
 
 Keep experiments small, easy to understand, and disposable. When adding an experiment, document what it is intended to prove and any important limitations.
