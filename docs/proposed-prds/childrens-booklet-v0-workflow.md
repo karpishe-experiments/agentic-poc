@@ -48,9 +48,7 @@ This POC specifies the experience and agent decisions; it does not implement the
 | --- | --- | --- |
 | Agent chat shell | Hosting the creation flow on mobile and desktop | Read agent guidance, move through sequential steps |
 | Storyline composer | Capturing the initial idea and later free-text feedback | Type, use voice input, submit |
-| Free-text question card | Answering an open-ended plot question | Type, use voice input, accept a pre-filled answer, or select **Generate for me** |
-| Single-choice card | Choosing one answer from a focused set | Select an option or accept the highlighted recommendation |
-| Multiple-choice card | Choosing several compatible answers | Select options or choose **Proceed with recommendations** |
+| Question card | Answering plot-gap questions through free-text, single-choice, or multiple-choice variants | Type, use voice input, select options, accept recommendations, or choose **Generate for me** |
 | Editable plot overview card | Reviewing the generated whole plot | Confirm or edit plot details |
 | Style gallery card | Comparing recommended inventory styles | Review title, description, and example gallery; select one style |
 | Character card | Building the inventory-based cast | Select, confirm, rename, or adjust simple traits and style attributes |
@@ -59,7 +57,6 @@ This POC specifies the experience and agent decisions; it does not implement the
 | Booklet-specifications card | Reviewing global booklet decisions | Confirm or edit cover direction, dialogue usage, and other fields; review the fixed page count |
 | Story artifact cards | Reviewing the cover and complete story | Confirm or edit cover, narrative, dialogue, setting, props, and layout cards |
 | Panel card | Reviewing an individual panel | Confirm or edit characters, action, continuity notes, and illustration prompt |
-| Generation status card | Showing the saved booklet after generation starts | View **Generating** status from the dashboard |
 
 ## Proposed workflow
 
