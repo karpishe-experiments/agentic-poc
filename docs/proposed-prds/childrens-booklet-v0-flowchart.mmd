@@ -1,47 +1,52 @@
 flowchart TD
-    A[User opens dashboard] --> B{Choose an action}
-    B -- Create a booklet --> B2{Any existing booklets?}
+    A[User opens dashboard] --> B2{Any existing booklets?}
     B2 -- No --> C[Show Create your first booklet]
     B2 -- Yes --> D[Show Create a new booklet]
-    C --> E[User opens creation chat]
+    C --> E[Open agent chat]
     D --> E
-    B -- Resume incomplete draft --> G[Restore the last incomplete step]
-    G --> CONTINUE[Continue at the restored workflow step]
 
-    E --> H[User provides a short storyline<br/>by text or voice]
-    H --> I[Autosave draft]
-    I --> J[Agent assesses story coherence]
-    J --> K{More information needed<br/>and fewer than 8 questions asked?}
-    K -- Yes --> L[Agent selects the next relevant<br/>question-card type]
-    L --> M[User answers or accepts<br/>a recommendation]
-    M --> N[Autosave answer]
-    N --> J
-    K -- No --> O[Agent presents editable<br/>story overview]
+    E --> S[User submits a storyline<br/>by text or voice]
+    S --> Q[Agent assesses gaps]
+    Q --> QD{More information needed<br/>and fewer than 8 questions asked?}
+    QD -- Yes --> QC[Show the next relevant<br/>generative UI question card]
+    QC --> QA[User answers or accepts<br/>a recommendation]
+    QA --> Q
+    QD -- No --> P[Generate the whole plot]
 
-    O --> P[User reviews and optionally edits]
-    P --> Q[Accept edits and autosave<br/>without reopening questions]
-    Q --> R[Agent selects a suggested cast<br/>from character inventory]
-    R --> S[User confirms cast and optionally<br/>edits names or simple traits]
-    S --> T[Autosave cast]
-    T --> U[Agent retrieves 2 to 5<br/>suitable inventory styles]
-    U --> V[User selects one style]
-    V --> W[Autosave style]
-    W --> X[Agent creates cover + 5-page structure<br/>and selects a representative moment]
-    X --> Y[Generate mocked preview panel]
-    Y --> Z{User accepts preview?}
-    Z -- No, first feedback --> AA[User gives text or voice feedback]
-    AA --> AB[Regenerate and show preview once]
-    AB --> AC{Confirm final generation?}
-    Z -- Yes --> AC
-    AC -- No --> AD[Keep autosaved draft]
-    AC -- Yes --> AE[Start mocked asynchronous generation]
-    AE --> AF[Return to dashboard]
-    AF --> AG[Show booklet status: Generating]
+    P --> PC[Show editable plot overview card]
+    PC --> PD{Plot confirmed?}
+    PD -- Edit --> PC
+    PD -- Yes --> ST[Show 2 to 5 inventory<br/>style cards]
+    ST --> STC[User selects a style]
+    STC --> CH[Show suggested inventory<br/>character cards]
+    CH --> CHC[User confirms cast and<br/>optional simple edits]
 
-    ERR[Recoverable error] --> RETRY[Explain failure, preserve draft,<br/>and offer retry]
-    RETRY --> CONTINUE
-    L -. failure .-> ERR
-    R -. failure .-> ERR
-    U -. failure .-> ERR
-    Y -. failure .-> ERR
-    AE -. failure .-> ERR
+    CHC --> LK[Generate style and character<br/>reference prompts or assets]
+    LK --> LKC{Locked references confirmed?}
+    LKC -- Edit --> LK
+    LKC -- Yes --> CS[Generate character sheet]
+    CS --> CSC{Character sheet confirmed?}
+    CSC -- Edit --> CSU[Update locked character references]
+    CSU --> CS
+    CSC -- Yes --> BS[Generate reviewable booklet<br/>specifications card]
+
+    BS --> BSC{Specifications confirmed?}
+    BSC -- Edit --> BS
+    BSC -- Yes --> FS[Generate cover and full<br/>page-by-page story]
+    FS --> FC[Show reviewable cards for cover, text,<br/>setting and props, page layout,<br/>and every panel prompt]
+    FC --> FCD{All required cards confirmed?}
+    FCD -- Review or edit --> FC
+    FCD -- Yes --> GEN[Start mocked asynchronous generation]
+    GEN --> DASH[Return to dashboard]
+    DASH --> STATUS[Show booklet status: Generating]
+
+    SAVE[Autosave every meaningful change]
+    S -.-> SAVE
+    QA -.-> SAVE
+    PC -.-> SAVE
+    STC -.-> SAVE
+    CHC -.-> SAVE
+    LKC -.-> SAVE
+    CSC -.-> SAVE
+    BSC -.-> SAVE
+    FC -.-> SAVE
