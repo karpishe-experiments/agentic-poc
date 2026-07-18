@@ -10,28 +10,37 @@ This proposed PRD was produced for a 30-minute workshop. The process is the prim
 
 An adaptive agent can turn a short storyline into a generation-ready booklet by progressively filling narrative gaps and asking the user to confirm the plot, visual direction, characters, booklet specifications, and complete page-by-page story.
 
+## Related work
+
+- [Discussion #2: Feedback on the Kid Comics project description](https://github.com/karpishe-experiments/agentic-poc/discussions/2) provides the broader POC, MVP, and product context.
+- [Issue #4: Review the proposed children's booklet v0 workflow](https://github.com/karpishe-experiments/agentic-poc/issues/4) tracks review and convergence feedback for this proposed flow.
+
 ## POC boundaries
 
-This POC specifies the experience and agent decisions; it does not implement them.
+This POC is a working prototype of the proposed flow. Its stages may use disposable, manually assisted, or independently implemented components, but together they should demonstrate a complete path from storyline to a reviewable booklet.
 
 ### In scope
 
-- The user journey from dashboard entry through mocked final generation
-- The agent's main decisions and stopping rules
+- A demonstrable path from dashboard entry to a generated six-page booklet
+- Agent workflows that exercise the main decisions and stopping rules, even when some handoffs are manual
 - Generative UI for questions, choices, summaries, and reviewable outputs
-- Autosave, draft resume, and a generic retry path
+- Optional product-shell behaviors such as autosave, draft resume, and generic retry when useful for evaluating the flow
 - Inventory-based style and character selection
 - Confirmation of the plot, visual references, character sheet, booklet specifications, and complete story
+- Story, character-sheet, panel-image, and booklet generation
+- Basic editing and regeneration of selected artifacts
+- Human review of story coherence and visual consistency
 - A combined user-and-agent flowchart
 
 ### Out of scope
 
-- A clickable or implemented UI
-- A working agent or dynamic question generation
-- Real image generation or booklet generation
-- Production persistence, authentication, accessibility validation, or observability
-- Detailed service-specific failure handling
-- Completion of the final generation job after the **Generating** state
+- Production-ready architecture, schemas, scalability, reliability, security hardening, or comprehensive automated testing
+- Polished UX, exhaustive editing tools, or a fully automated workflow with no manual intervention
+- Production user accounts, roles, permissions, payments, or subscriptions
+- Social sharing, collaboration, communities, marketplaces, or creator publishing
+- Commercial printing, distribution, or publishing-platform integrations
+- Animation, interactive stories, narration, translation, sequels, or broader artwork types
+- Production-grade analytics, observability, support tooling, or detailed service-specific failure handling
 
 ## Experience principles
 
@@ -131,9 +140,9 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 ### 11. Start generation
 
 1. The user confirms final generation or leaves the booklet as an autosaved draft.
-2. Confirmation starts mocked asynchronous generation.
+2. Confirmation starts asynchronous booklet generation.
 3. The user returns immediately to the dashboard.
-4. The new booklet appears with **Generating** status. Later status changes are outside v0.
+4. The new booklet appears with **Generating** status and becomes available for review when generation completes.
 
 ## Generative UI components
 
@@ -189,5 +198,6 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 - The agent can progress from an open-ended storyline without fixed story fields or a fixed questionnaire.
 - The sequence clearly covers plot, style, characters, locked references, character sheet, booklet specifications, and the complete page-by-page story before generation.
 - Each story page exposes enough information to review setting, props, layout, panels, and panel-level prompts.
-- Autosave, resume, and generic recovery preserve progress without dominating the happy path.
+- The working POC produces a reviewable six-page booklet with a coherent story and recognizably consistent characters and visual style.
+- Manual handoffs and disposable implementations are acceptable when they still provide useful evidence about the flow, models, agent patterns, and generative UI.
 - The artifact is simple enough to compare with other workshop flows and revise into a shared v0.
