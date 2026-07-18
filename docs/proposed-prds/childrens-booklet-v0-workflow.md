@@ -58,6 +58,17 @@ This POC specifies the experience and agent decisions; it does not implement the
 | Story artifact cards | Reviewing the cover and complete story | Confirm or edit cover, narrative, dialogue, setting, props, and layout cards |
 | Panel card | Reviewing an individual panel | Confirm or edit characters, action, continuity notes, and illustration prompt |
 
+## Card scrolling behavior
+
+- Use one vertical scroll container for the agent chat and its cards.
+- When a new card appears, bring it into view without hiding the agent message that introduced it.
+- Keep only the current card active. Collapse completed cards into compact summaries that the user can reopen.
+- Let text, forms, and review cards expand within the main scroll; avoid nested vertical scrolling.
+- Allow style and character galleries to scroll horizontally. Show part of the next item to make the interaction discoverable.
+- Present full-story review as a vertical card list with a sticky progress indicator and **Previous incomplete** and **Next incomplete** navigation.
+- Preserve the user's position after editing, regenerating, navigating, or resuming a draft.
+- Do not force-scroll while the user is reading. Show a **Jump to latest** control when newer agent content is below the viewport.
+
 ## Proposed workflow
 
 ### 1. Start or resume
