@@ -28,7 +28,7 @@ This POC specifies the experience and agent decisions; it does not implement the
 
 - A clickable or implemented UI
 - A working agent or dynamic question generation
-- Real speech recognition, image generation, or booklet generation
+- Real image generation or booklet generation
 - Production persistence, authentication, accessibility validation, or observability
 - Detailed service-specific failure handling
 - Completion of the final generation job after the **Generating** state
@@ -53,7 +53,7 @@ This POC specifies the experience and agent decisions; it does not implement the
 ### 2. Capture the story
 
 1. The user enters a short storyline.
-2. Any free-text input supports optional voice entry with mocked transcription.
+2. Any free-text input supports optional voice input.
 3. The draft autosaves after the storyline and every subsequent meaningful change.
 
 ### 3. Complete the plot
@@ -88,7 +88,7 @@ This POC specifies the experience and agent decisions; it does not implement the
 4. The system generates one mocked illustration panel.
 5. The user may:
    - accept the first preview; or
-   - give text or mocked-voice feedback and regenerate the preview once.
+   - give text or voice feedback and regenerate the preview once.
 
 ### 7. Start final generation
 

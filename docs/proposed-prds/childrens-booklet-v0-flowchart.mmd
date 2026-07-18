@@ -8,7 +8,7 @@ flowchart TD
     B -- Resume incomplete draft --> G[Restore the last incomplete step]
     G --> CONTINUE[Continue at the restored workflow step]
 
-    E --> H[User provides a short storyline<br/>by text or mocked voice]
+    E --> H[User provides a short storyline<br/>by text or voice]
     H --> I[Autosave draft]
     I --> J[Agent assesses story coherence]
     J --> K{More information needed<br/>and fewer than 8 questions asked?}
@@ -29,7 +29,7 @@ flowchart TD
     W --> X[Agent creates cover + 5-page structure<br/>and selects a representative moment]
     X --> Y[Generate mocked preview panel]
     Y --> Z{User accepts preview?}
-    Z -- No, first feedback --> AA[User gives text or mocked<br/>voice feedback]
+    Z -- No, first feedback --> AA[User gives text or voice feedback]
     AA --> AB[Regenerate and show preview once]
     AB --> AC{Confirm final generation?}
     Z -- Yes --> AC
