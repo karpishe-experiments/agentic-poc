@@ -42,32 +42,9 @@ This POC specifies the experience and agent decisions; it does not implement the
 - Autosave meaningful progress so the user can safely leave and resume.
 - Preserve the draft and offer a retry when a recoverable failure occurs.
 
-## Generative UI components
+## Flowchart
 
-| Component | Used for | Primary interactions |
-| --- | --- | --- |
-| Agent chat shell | Hosting the creation flow on mobile and desktop | Read agent guidance, move through sequential steps |
-| Storyline composer | Capturing the initial idea and later free-text feedback | Type, use voice input, submit |
-| Question card | Answering plot-gap questions through free-text, single-choice, or multiple-choice variants | Type, use voice input, select options, accept recommendations, or choose **Generate for me** |
-| Editable plot overview card | Reviewing the generated whole plot | Confirm or edit plot details |
-| Style gallery card | Comparing recommended inventory styles | Review title, description, and example gallery; select one style |
-| Character card | Building the inventory-based cast | Select, confirm, rename, or adjust simple traits and style attributes |
-| Locked-reference card | Reviewing the prompts or assets that preserve style and character consistency | Confirm or edit reference details |
-| Character-sheet card | Reviewing the generated cast appearance | Confirm or request edits |
-| Booklet-specifications card | Reviewing global booklet decisions | Confirm or edit cover direction, dialogue usage, and other fields; review the fixed page count |
-| Story artifact cards | Reviewing the cover and complete story | Confirm or edit cover, narrative, dialogue, setting, props, and layout cards |
-| Panel card | Reviewing an individual panel | Confirm or edit characters, action, continuity notes, and illustration prompt |
-
-## Card scrolling behavior
-
-- Use one vertical scroll container for the agent chat and its cards.
-- When a new card appears, bring it into view without hiding the agent message that introduced it.
-- Keep only the current card active. Collapse completed cards into compact summaries that the user can reopen.
-- Let text, forms, and review cards expand within the main scroll; avoid nested vertical scrolling.
-- Allow style and character galleries to scroll horizontally. Show part of the next item to make the interaction discoverable.
-- Present full-story review as a vertical card list with a sticky progress indicator and **Previous incomplete** and **Next incomplete** navigation.
-- Preserve the user's position after editing, regenerating, navigating, or resuming a draft.
-- Do not force-scroll while the user is reading. Show a **Jump to latest** control when newer agent content is below the viewport.
+See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowchart.mmd). The diagram is stored separately so it can be rendered, edited, and compared independently during the workshop.
 
 ## Proposed workflow
 
@@ -158,6 +135,33 @@ This POC specifies the experience and agent decisions; it does not implement the
 3. The user returns immediately to the dashboard.
 4. The new booklet appears with **Generating** status. Later status changes are outside v0.
 
+## Generative UI components
+
+| Component | Used for | Primary interactions |
+| --- | --- | --- |
+| Agent chat shell | Hosting the creation flow on mobile and desktop | Read agent guidance, move through sequential steps |
+| Storyline composer | Capturing the initial idea and later free-text feedback | Type, use voice input, submit |
+| Question card | Answering plot-gap questions through free-text, single-choice, or multiple-choice variants | Type, use voice input, select options, accept recommendations, or choose **Generate for me** |
+| Editable plot overview card | Reviewing the generated whole plot | Confirm or edit plot details |
+| Style gallery card | Comparing recommended inventory styles | Review title, description, and example gallery; select one style |
+| Character card | Building the inventory-based cast | Select, confirm, rename, or adjust simple traits and style attributes |
+| Locked-reference card | Reviewing the prompts or assets that preserve style and character consistency | Confirm or edit reference details |
+| Character-sheet card | Reviewing the generated cast appearance | Confirm or request edits |
+| Booklet-specifications card | Reviewing global booklet decisions | Confirm or edit cover direction, dialogue usage, and other fields; review the fixed page count |
+| Story artifact cards | Reviewing the cover and complete story | Confirm or edit cover, narrative, dialogue, setting, props, and layout cards |
+| Panel card | Reviewing an individual panel | Confirm or edit characters, action, continuity notes, and illustration prompt |
+
+## Card scrolling behavior
+
+- Use one vertical scroll container for the agent chat and its cards.
+- When a new card appears, bring it into view without hiding the agent message that introduced it.
+- Keep only the current card active. Collapse completed cards into compact summaries that the user can reopen.
+- Let text, forms, and review cards expand within the main scroll; avoid nested vertical scrolling.
+- Allow style and character galleries to scroll horizontally. Show part of the next item to make the interaction discoverable.
+- Present full-story review as a vertical card list with a sticky progress indicator and **Previous incomplete** and **Next incomplete** navigation.
+- Preserve the user's position after editing, regenerating, navigating, or resuming a draft.
+- Do not force-scroll while the user is reading. Show a **Jump to latest** control when newer agent content is below the viewport.
+
 ## Agent decision rules
 
 - Infer missing story information from context; do not require fixed story fields.
@@ -176,10 +180,6 @@ This POC specifies the experience and agent decisions; it does not implement the
 - Resume an incomplete draft at its last incomplete step.
 - For a recoverable error, explain the failure, keep the saved draft intact, and offer retry.
 - Use one generic recovery path in v0 rather than service-specific error branches.
-
-## Flowchart
-
-See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowchart.mmd). The diagram is stored separately so it can be rendered, edited, and compared independently during the workshop.
 
 ## Success criteria
 
