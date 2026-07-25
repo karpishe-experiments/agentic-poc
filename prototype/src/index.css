@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { background: #f5f6f4; }
+body { margin: 0; min-width: 320px; min-height: 100vh; color: #24302e; background: #f5f6f4; }
+button, input, textarea { font: inherit; }
