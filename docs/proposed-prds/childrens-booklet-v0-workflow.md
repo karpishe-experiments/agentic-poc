@@ -8,7 +8,7 @@ This proposed PRD was produced for a 30-minute workshop. The process is the prim
 
 ## Hypothesis
 
-An adaptive agent can turn a short storyline into a generation-ready booklet by progressively filling narrative gaps and asking the user to confirm the plot, visual direction, characters, booklet specifications, and complete page-by-page story.
+An adaptive agent can turn a short storyline into a generation-ready booklet by progressively filling narrative gaps and asking the user to confirm the plot, visual direction, characters, booklet specifications, aspect ratio, and complete page-by-page story before exporting the result as a PDF or images.
 
 ## Related work
 
@@ -28,6 +28,8 @@ This POC is a working prototype of the proposed flow. Its stages may use disposa
 - Inventory-based style and character selection
 - Confirmation of the plot, visual references, character sheet, booklet specifications, and complete story
 - Story, character-sheet, panel-image, and booklet generation
+- User selection of the booklet aspect ratio
+- Review and export of the completed booklet as a PDF or page images
 - Basic editing and regeneration of selected artifacts
 - Human review of story coherence and visual consistency
 - A combined user-and-agent flowchart
@@ -120,9 +122,11 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 2. The specifications include at least:
    - cover style and composition;
    - the fixed workshop page count of one cover plus five story pages, shown for confirmation but not editing;
+   - the booklet aspect ratio, selected by the user from the supported options;
    - whether the booklet uses dialogue;
    - any other global format decisions needed for consistent page generation.
-3. The user confirms the specifications and may edit every field except the fixed page count.
+3. The agent may recommend an aspect ratio, but the user must explicitly choose one before continuing.
+4. The user confirms the specifications and may edit every field except the fixed page count.
 
 ### 10. Generate and confirm the full story
 
@@ -144,6 +148,16 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 3. The user returns immediately to the dashboard.
 4. The new booklet appears with **Generating** status and becomes available for review when generation completes.
 
+### 12. Review and export the completed booklet
+
+1. When generation completes, the user opens the booklet and reviews the cover and story pages in the chosen aspect ratio.
+2. The user may return to the relevant artifact to edit or regenerate selected content before exporting.
+3. The user chooses an export format:
+   - **PDF:** export the complete booklet as one PDF;
+   - **Images:** export the cover and each story page as separate image files, with an option to download all page images together.
+4. Export preserves the selected aspect ratio and the confirmed page order.
+5. If export fails, the completed booklet remains available and the user can retry without regenerating it.
+
 ## Generative UI components
 
 | Component | Used for | Primary interactions |
@@ -156,9 +170,10 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 | Character card | Building the inventory-based cast | Select, confirm, rename, or adjust simple traits and style attributes |
 | Locked-reference card | Reviewing the prompts or assets that preserve style and character consistency | Confirm or edit reference details |
 | Character-sheet card | Reviewing the generated cast appearance | Confirm or request edits |
-| Booklet-specifications card | Reviewing global booklet decisions | Confirm or edit cover direction, dialogue usage, and other fields; review the fixed page count |
+| Booklet-specifications card | Reviewing global booklet decisions | Choose the aspect ratio; confirm or edit cover direction, dialogue usage, and other fields; review the fixed page count |
 | Story artifact cards | Reviewing the cover and complete story | Confirm or edit cover, narrative, dialogue, setting, props, and layout cards |
 | Panel card | Reviewing an individual panel | Confirm or edit characters, action, continuity notes, and illustration prompt |
+| Completed-booklet viewer and export card | Reviewing and downloading the generated booklet | Preview pages in order; choose PDF or image export; download one page image or all page images |
 
 ## Card scrolling behavior
 
@@ -180,14 +195,17 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 - Decide style before selecting characters so character suggestions fit the visual direction.
 - Use only inventory styles and characters.
 - Lock reusable style and character references before generating the character sheet or page prompts.
+- Require the user to choose a supported aspect ratio before booklet specifications can be confirmed.
 - Preserve confirmed constraints when updating an individual story card.
 - Do not offer final generation until the plot, style, cast, references, character sheet, booklet specifications, and all story cards are confirmed.
+- Preserve the confirmed aspect ratio and page order in PDF and image exports.
 
 ## State and recovery
 
 - Autosave after the initial storyline, every answer, and every confirmed or edited artifact.
 - Resume an incomplete draft at its last incomplete step.
 - For a recoverable error, explain the failure, keep the saved draft intact, and offer retry.
+- If export fails, retry export from the completed booklet rather than rerunning booklet generation.
 - Use one generic recovery path in v0 rather than service-specific error branches.
 
 ## Success criteria
@@ -196,8 +214,9 @@ See the [combined user and agent Mermaid flowchart](childrens-booklet-v0-flowcha
 - The flow shows both user actions and the agent's important decisions without implementation detail.
 - Relevant steps use generative UI to make questions, choices, and generated artifacts easy to review and edit.
 - The agent can progress from an open-ended storyline without fixed story fields or a fixed questionnaire.
-- The sequence clearly covers plot, style, characters, locked references, character sheet, booklet specifications, and the complete page-by-page story before generation.
+- The sequence clearly covers plot, style, characters, locked references, character sheet, user-selected aspect ratio, booklet specifications, and the complete page-by-page story before generation.
 - Each story page exposes enough information to review setting, props, layout, panels, and panel-level prompts.
 - The working POC produces a reviewable six-page booklet with a coherent story and recognizably consistent characters and visual style.
+- The completed booklet can be exported as one PDF or as separate page images while preserving the chosen aspect ratio and confirmed page order.
 - Manual handoffs and disposable implementations are acceptable when they still provide useful evidence about the flow, models, agent patterns, and generative UI.
 - The artifact is simple enough to compare with other workshop flows and revise into a shared v0.
