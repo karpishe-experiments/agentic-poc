@@ -46,6 +46,18 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 6. Run verification proportional to the change and summarize the result.
 7. After verified work reveals durable knowledge, use the `capture-project-learnings` skill to update canonical docs and record reusable lessons.
 
+## Delegation and multi-agent work
+
+- The primary agent owns the implementation sequence, shared architecture, integration, verification, commits, and project-management updates.
+- Delegate only concrete, bounded work that can proceed independently and materially improves speed, context hygiene, or review quality.
+- Good delegation candidates include repository exploration, focused tests, log analysis, requirement traceability, UI review, and generated-artifact inspection.
+- Avoid concurrent edits to shared files, migrations, central contracts, or adjacent implementation slices.
+- Give every subagent explicit scope, expected output, relevant constraints, and whether it may edit files.
+- The primary agent must inspect and validate subagent results before relying on or integrating them.
+- Subagents do not commit, push, change project status, or make cross-cutting product or architecture decisions unless explicitly authorized.
+- Follow model, reasoning, concurrency, and escalation defaults from the trusted project configuration and the approved implementation plan.
+- Prefer a stronger review model only for unresolved complex failures, consequential architecture conflicts, or final compliance review.
+
 ## Project management and GitHub
 
 - Use the [Agentic POC GitHub project](https://github.com/orgs/karpishe-experiments/projects/2) as the project-management source for implementation work, status, and sequencing.
@@ -56,7 +68,7 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 
 ## Implementation planning
 
-Before implementation begins, create a root `PLAN.md` and obtain user approval. The plan must be decision-complete enough to implement without rediscovering the architecture, while staying proportional to this disposable POC.
+Before implementation begins, locate and read the canonical implementation plan identified by the active PRD or project-management issue and obtain user approval. Do not create a second plan when an approved canonical plan already exists. For the Kids Booklet POC, the canonical implementation plan is `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md`.
 
 The plan must:
 

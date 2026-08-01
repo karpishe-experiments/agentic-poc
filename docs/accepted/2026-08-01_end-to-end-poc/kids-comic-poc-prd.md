@@ -247,6 +247,14 @@ type ArtifactState =
 - **FR-043:** Export failure shall retain final pages and allow PDF assembly to be retried independently.
 - **FR-044:** PDF shall be the only required user-facing export; source images, prompts, schemas, traces, and intermediates remain available under the local data root.
 
+### 6.7 Managed visual entities and scenes
+
+- **FR-045:** Characters and locations shall be managed as individually editable booklet-scoped sub-artifacts inside the Visual Bible, not as additional workflow stages or global library records.
+- **FR-046:** Every named or continuity-relevant character and location shall have a stable entity ID and textual definition. Incidental unnamed subjects and background details may remain inline in the relevant Page Package.
+- **FR-047:** Canonical reference images shall be required only for recurring visual subjects. A character or location may have a stable definition without requiring a separate reference image.
+- **FR-048:** One Page Package shall represent one scene and one intended illustration. The POC shall not introduce a separate Scene artifact, reusable scene graph, multi-panel layout, or multiple structured scene beats per page.
+- **FR-049:** Revising a character or location shall create a new Visual Bible version, identify Page Packages that reference its stable ID, and mark dependent artifacts `needs_review`; regeneration shall remain selective and user-initiated.
+
 ## 7. Generative UI contract
 
 Use Vercel AI SDK UI for the React conversation/message contract while retaining OpenAI Agents SDK on the server. Use `useChat`, `createUIMessageStream`, typed `UIMessage` parts, and custom typed data parts. Persist completed display-oriented messages and validate them when loading.
@@ -459,6 +467,8 @@ Adapters serialize this plan into provider-appropriate prompts. Prompts should d
 - **IMG-011:** User-correctable, blocked, invalid, or unavailable-provider errors shall not loop automatically; they shall produce an issue/recovery card.
 - **IMG-012:** Every successful result shall be persisted before the next generation item begins.
 - **IMG-013:** Retained evidence shall include the normalized request, compiled provider prompt, relevant reference IDs, provider/model, result metadata, source asset, and revision lineage.
+- **IMG-014:** A normalized request with one or more input references or an edit target shall use the provider's `edit` operation; `generate` shall be used only when no input image is supplied. Routing shall reject unsupported reference counts or edit capability before provider invocation.
+- **IMG-015:** The selected seeded style sample shall guide booklet style, character, and location reference generation. Only the approved booklet style reference shall guide page generation, and no generation item shall depend on an unfinished item from the same job.
 
 OpenAI documents multiple reference images and high-fidelity editing, as well as remaining limitations in recurring-character consistency, exact composition, and text rendering. These limitations justify canonical references, relevant-reference selection, and deterministic typography. See the [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation).
 
@@ -593,7 +603,7 @@ Implementation references:
 
 Versioned Zod schemas are required for:
 
-- `Booklet`, `AudienceProfile`, `StoryPlan`, `VisualStyle`, `VisualBible`, `BookletSpecification`, `PagePlan`, `PagePackage`, and `FinalPage`.
+- `Booklet`, `AudienceProfile`, `StoryPlan`, `StoryCharacter`, `StorySetting`, `VisualStyle`, `CharacterDefinition`, `LocationDefinition`, `VisualBible`, `BookletSpecification`, `PagePlan`, `PagePackage`, and `FinalPage`.
 - `ConversationMessage`/display `UIMessage`, `GenUICard`, and `CardResponse`.
 - `Artifact`, `ArtifactVersion`, `ArtifactDependency`, and `ApprovalRecord`.
 - `SkillDefinition` inputs/outputs, `ReadinessAssessment`, and quality/revision results.
@@ -616,6 +626,11 @@ Versioned Zod schemas are required for:
 - **DATA-012:** The Drizzle repository layer shall hide the libSQL driver from workflow, route, UI, and agent code without introducing a generic repository framework.
 - **DATA-013:** The following compound writes shall be transactional: artifact version plus current pointer; approval plus workflow advancement; job plus its generation items; and completed generation item plus its asset record.
 - **DATA-014:** A submitted `CardResponse.responseId` shall be used for duplicate-submit protection across retries and reloads.
+- **DATA-015:** Stable character and location IDs shall connect Story Plan concepts, Visual Bible definitions, Page Packages, relevant image references, and generated-asset lineage.
+- **DATA-016:** Character, location, and page-scene documents shall remain validated JSON within their owning immutable artifact version; separate relational tables are not required.
+- **DATA-017:** A Page Plan shall not pass generation readiness while it contains an unknown character/location ID or lacks an approved reference required by a recurring visual subject.
+- **DATA-018:** Subject approval shall not create an artifact version. When a revision creates a new Visual Bible or Final Pages version, unchanged subject approvals may be carried to that exact version as application-derived approval records with source provenance; changed subjects shall return to unapproved. Artifact approval shall always target the exact current version.
+- **DATA-019:** Persistent character and location IDs shall be assigned by deterministic application code. Model outputs may reference allowed existing IDs or propose new entity drafts without persistent IDs, but shall not create or replace application IDs.
 
 Checksums, atomic-move protocols, exhaustive append-only storage rules, stale-write APIs, event sourcing, and generic repository infrastructure are not POC requirements.
 
