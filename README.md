@@ -21,7 +21,7 @@ Setup and run instructions will be added alongside the first implementation.
 
 ## Agentic coding workflow
 
-Coding agents should follow [AGENTS.md](AGENTS.md). Start each experiment by copying and completing the [experiment brief](docs/experiment-brief.md), then review and approve an implementation plan before code changes begin.
+Coding agents should follow [AGENTS.md](AGENTS.md). For the current kids booklet experiment, read the completed [experiment brief](docs/experiment-brief.md) and its authoritative [PRD](docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md), then create and obtain approval for a root `PLAN.md` before application code changes begin. For later experiments, copy and complete a new brief rather than overwriting the current one.
 
 After verified work, use the repository's `capture-project-learnings` skill to keep documentation accurate and identify lessons worth promoting into the main project.
 
