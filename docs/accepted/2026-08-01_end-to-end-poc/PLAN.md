@@ -160,7 +160,7 @@ The registry baseline verified on 2026-08-01 is:
 | --- | ---: | --- |
 | `next` | `16.2.12` | App Router, Route Handlers, Node server |
 | `react`, `react-dom` | `19.2.8` | UI runtime |
-| `typescript` | `7.0.2` | Strict typing |
+| `typescript` | `6.0.3` | Strict typing |
 | `ai` | `7.0.47` | `UIMessage`, streams, transport helpers |
 | `@ai-sdk/react` | `4.0.50` | `useChat` |
 | `@openai/agents` | `0.14.2` | Manager, specialist agents, function tools, tracing |
@@ -180,7 +180,7 @@ The registry baseline verified on 2026-08-01 is:
 | `pdf-lib` | `1.17.1` | PDF assembly |
 | `vitest` | `4.1.10` | Unit/integration/fixture runner |
 | `@playwright/test` | `1.62.1` | Checked-in desktop Chromium golden path |
-| `eslint` | `10.8.0` | Lint runner |
+| `eslint` | `9.39.5` | Lint runner |
 | `eslint-config-next` | `16.2.12` | Next/React rules |
 | `@types/node` | `24.13.3` | Node types matching the Node 24 baseline |
 | `@types/react` | `19.2.18` | React types |
@@ -194,6 +194,8 @@ The registry baseline verified on 2026-08-01 is:
 | `jsdom` | `26.1.0` | Node 22-compatible component-test DOM |
 
 Use `shadcn@4.16.1` only as a pinned CLI to initialize configuration and copy Button, Card, Input, Textarea, Select, Checkbox, Radio Group, Progress, Badge, Dialog, Sheet, Scroll Area, Separator, Tooltip, and Form source. Do not add a shadcn runtime package. Do not add animation or theme dependencies unless a selected component demonstrably requires one; static state transitions are sufficient for the POC.
+
+**Bootstrap correction (2026-08-01):** The planned `typescript@7.0.2` pin installed but was rejected by the version-matched `typescript-eslint@8.65.0` bundled by `eslint-config-next@16.2.12` (`typescript` peer range `<6.1.0`). Use `typescript@6.0.3`, the newest compatible TypeScript 6 patch verified from npm, until the locked lint integration supports TypeScript 7. The planned `eslint@10.8.0` pin also failed because the same Next configuration resolves `eslint-plugin-react@7.37.5`, which calls an ESLint 9 API. Use `eslint@9.39.5`, the compatible peer version resolved by npm, until those locked plugins support ESLint 10.
 
 ### 5.2 Version-sensitive implementation references
 
@@ -1088,11 +1090,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions**
 
-- [ ] Read authoritative files and current Issue #6/Project 2 state.
-- [ ] If needed, make the sole permitted preflight edit: add `.env.local` and `.env.*.local` to `.gitignore`; never stage `.env.local`.
-- [ ] Validate `.env.local` and authenticated model availability using Section 4.1 without printing secrets.
-- [ ] Confirm the current branch is clean and synchronized, then create the implementation branch outside the sandbox.
-- [ ] Move Issue #6 to In Progress if that Project field/option exists.
+- [x] Read authoritative files and current Issue #6/Project 2 state.
+- [x] Confirmed `.env.local` and `.env.*.local` were already ignored; `.env.local` was never staged.
+- [x] Validated `.env.local` and authenticated model availability using Section 4.1 without printing secrets.
+- [x] Confirmed the planning branch was clean and synchronized, then created `feat/kids-booklet-poc` outside the sandbox.
+- [x] Verified Issue #6 was already In progress in Project 2.
 
 **Files/contracts:** `.gitignore` only if required. No application files.
 
@@ -1114,24 +1116,24 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Scaffold root `package.json`, exact dependencies, lockfile, `tsconfig.json`, Next/Tailwind/PostCSS/ESLint/Vitest/Playwright configs, `components.json`, and app shell without modifying `prototype/`.
-- [ ] Add required npm scripts: `preflight`, `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:generate`, `db:migrate`, `seed`, and `eval:real`.
-- [ ] Add `.env.example`, Zod server configuration, `.gitignore`, `scripts/preflight-env.mjs`, and `server-only` boundaries.
-- [ ] Add Drizzle client/schema/config, initial migration, repository interfaces, filesystem AssetStore, and temporary test-data helpers.
-- [ ] Generate/check in the three accepted style images using the locked primary/fallback path, record prompts/provenance, and seed their records plus Nunito files/licenses. The seed command itself makes no provider call.
-- [ ] Add `instrumentation.ts` and a no-op guarded Node runner bootstrap proving server readiness is not blocked.
-- [ ] Add initial README quick-start structure marked unverified until commands pass.
-- [ ] Create `LESSONS-LEARNED.md` from the repository skill template and keep it empty except for verified lessons; create the User Guide outline for later validation.
+- [x] Scaffolded root `package.json`, exact dependencies, lockfile, `tsconfig.json`, Next/Tailwind/PostCSS/ESLint/Vitest/Playwright configs, `components.json`, and app shell without modifying `prototype/`.
+- [x] Added required npm scripts: `preflight`, `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:generate`, `db:migrate`, `seed`, and `eval:real`.
+- [x] Added `.env.example`, Zod server configuration, `.gitignore`, `scripts/preflight-env.mjs`, and an explicit Next-only server configuration boundary.
+- [x] Added Drizzle client/schema/config, initial migration, repository interfaces, filesystem AssetStore, and a safe temporary test-data-root helper.
+- [x] Generated and checked in the three accepted style images, recorded prompts/provenance, and seeded their records plus Nunito files, license, and metadata. The seed command makes no provider call.
+- [x] Added `instrumentation.ts` and a guarded Node runner bootstrap with a focused no-duplicate-start test.
+- [x] Added and verified the README quick start.
+- [x] Created `LESSONS-LEARNED.md` from the repository skill template with only verified candidate lessons, and created the User Guide outline for later validation.
 
 **Contracts:** common IDs/timestamps/schema version, configuration, `Asset`, basic `Booklet`, repository/AssetStore interfaces.
 
-**Migration/seed:** migration `0000_initial`; inserts three stable style assets/records and font metadata idempotently.
+**Migration/seed:** generated migration `0000_left_sleepwalker`; inserts three stable style assets/records and font metadata idempotently.
 
 **PRD coverage:** technical stack and hosting boundaries; DATA-001, DATA-002, DATA-006, DATA-011, DATA-012; deliverables 1-2 and required script names.
 
 **Commands:** `npm install`, `npm run preflight`, `npm run db:generate`, inspect generated SQL, `npm run db:migrate`, `npm run seed`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run start` smoke check.
 
-**Evidence:** clean install/migration/build log, seeded asset listing, no-op runner start log without duplicate loop, root Home response.
+**Evidence:** P0 and Slice 0 verification passed on 2026-08-01: safe model preflight; migration generation/inspection; clean local migration; idempotent seed with three visual styles and Nunito metadata; typecheck; lint; four unit tests; agent-fixture command; production build; and `next start` smoke responses of 200 for Home and Help. In this host the commands used `npm.cmd` because PowerShell blocked `npm.ps1`.
 
 **Lessons checkpoint:** document only verified setup/runtime/package issues.
 

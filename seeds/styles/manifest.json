@@ -1,0 +1,29 @@
+[
+  {
+    "id": "soft-watercolor",
+    "name": "Soft watercolor",
+    "description": "Layered watercolor washes with delicate pencil texture and a warm, gentle atmosphere.",
+    "file": "soft-watercolor.png",
+    "prompt": "A charming woodland clearing with one tiny cottage, rounded trees, flowers, and a winding path; soft watercolor illustration with handmade paper grain, gentle layered washes, delicate pencil details, warm early-morning light; no text or watermark.",
+    "provenance": "Generated with Codex built-in image generation on 2026-08-01; project-owned catalog seed.",
+    "sortOrder": 1
+  },
+  {
+    "id": "cut-paper-collage",
+    "name": "Cut-paper collage",
+    "description": "Bold, tactile cut-paper layers with visible fibers, torn edges, and cheerful color blocks.",
+    "file": "cut-paper-collage.png",
+    "prompt": "A whimsical garden with a small greenhouse, broad leaf plants, mushrooms, and a stepping-stone path; handcrafted cut-paper collage, layered torn paper edges, visible fibers, bold simple shapes; no text or watermark.",
+    "provenance": "Generated with Codex built-in image generation on 2026-08-01; project-owned catalog seed.",
+    "sortOrder": 2
+  },
+  {
+    "id": "colored-pencil",
+    "name": "Colored pencil",
+    "description": "Rich colored-pencil strokes and soft crosshatching with a tactile, contemplative finish.",
+    "file": "colored-pencil.png",
+    "prompt": "A cozy seaside reading nook with a striped window seat, ocean view, shells, a potted plant, and a sleeping orange cat; richly colored pencil illustration, layered pencil strokes and soft crosshatching; no text or watermark.",
+    "provenance": "Generated with Codex built-in image generation on 2026-08-01; project-owned catalog seed.",
+    "sortOrder": 3
+  }
+]

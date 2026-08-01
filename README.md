@@ -1,30 +1,47 @@
-# agentic-poc
+# Kids Booklet POC
 
-`agentic-poc` is a playground and proof-of-concept project for exploring how to build an agentic application with generative UI.
+Kids Booklet is a local, single-user experiment that guides a creator from a rough story idea to an illustrated children’s picture-story PDF. It deliberately favors clear, inspectable workflow behavior over production hardening.
 
-The repository is intended for quick experiments, learning, and validating ideas such as:
+## Requirements
 
-- agent-driven workflows and tool use
-- dynamically generated user interfaces
-- interactions between agents, application state, and UI components
-- rapid prototyping of agentic product patterns
+- Node.js 24 recommended (Node 22 minimum)
+- npm
+- An OpenAI account and API key with access to the configured models
+- Poppler for the final PDF visual-inspection workflow (introduced with retained evaluations)
 
-## Project status
+## Quick start
 
-This is an experimental sandbox. Production-ready code, comprehensive tests, stable APIs, and long-term compatibility are explicitly out of scope.
+1. Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY`.
+2. Install dependencies: `npm install`.
+3. Validate credentials and model access: `npm run preflight`.
+4. Create local tables: `npm run db:migrate`.
+5. Register the bundled visual styles and Nunito font: `npm run seed`.
+6. Start the app: `npm run dev`, then visit `http://localhost:3000`.
 
-Expect the implementation and structure to change as ideas are tested.
+If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
-## Getting started
+The quick-start commands were verified in Slice 0 on 2026-08-01. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
 
-Setup and run instructions will be added alongside the first implementation.
+## Commands
 
-## Agentic coding workflow
+| Command | Purpose |
+| --- | --- |
+| `preflight` | Safely validate the local credential and configured model aliases. |
+| `dev`, `build`, `start` | Run the Next.js application. |
+| `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
+| `test:agent`, `test:e2e` | Run deterministic agent fixtures and the desktop Chromium golden path when those slices are available. |
+| `db:generate`, `db:migrate`, `seed` | Generate migrations, migrate the local database, and register checked-in seed assets. |
+| `eval:real` | Run a named retained real-provider evaluation after the evaluation slice is available. |
 
-Coding agents should follow [AGENTS.md](AGENTS.md). For the current kids booklet experiment, read the completed [experiment brief](docs/experiment-brief.md) and its authoritative [PRD](docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md), then create and obtain approval for a root `PLAN.md` before application code changes begin. For later experiments, copy and complete a new brief rather than overwriting the current one.
+Automated commands never make paid model or image calls. Real-provider work is limited to the explicit evaluation workflow.
 
-After verified work, use the repository's `capture-project-learnings` skill to keep documentation accurate and identify lessons worth promoting into the main project.
+## Local data and project references
 
-## Contributing
+Runtime state lives under `data/` and is intentionally Git-ignored. Removing it is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
 
-Keep experiments small, easy to understand, and disposable. When adding an experiment, document what it is intended to prove and any important limitations.
+- [Experiment brief](docs/experiment-brief.md)
+- [Canonical PRD](docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md)
+- [Accepted implementation plan](docs/accepted/2026-08-01_end-to-end-poc/PLAN.md)
+- [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)
+- [Verified lessons](docs/accepted/2026-08-01_end-to-end-poc/LESSONS-LEARNED.md)
+- [Implementation issue #6](https://github.com/karpishe-experiments/agentic-poc/issues/6)
