@@ -1,7 +1,7 @@
 # Product Requirements Document: Kids Booklet End-to-End POC
 
 **Status:** Canonical implementation specification
-**Version:** 2.1
+**Version:** 2.2
 **Date:** 2026-08-01
 **Language:** English
 **Initial runtime:** Local, single-user web application
@@ -88,8 +88,11 @@ The core POC is complete when:
 - Multi-panel comic layouts, freeform canvas editing, manual masks, pose controls, or general-purpose image editing.
 - Automatic regeneration of every downstream artifact after an upstream edit.
 - Candidate-comparison generation for every image.
+- User-uploaded character, location, style, or other reference images; the core POC generates its canonical references.
 - Redis, distributed workers, job leasing, workflow engines, message brokers, horizontal scaling, high availability, or disaster recovery.
 - LangSmith, ChatKit, Agent Builder, MCP, sandbox agents, or a Python runtime.
+- Mobile-specific layouts and Safari, Firefox, or other cross-browser acceptance.
+- Application-enforced per-booklet or aggregate spending caps.
 - Searchable/tagged PDF accessibility, print bleed, crop marks, or print-production color management.
 - Comprehensive automated testing or production operational readiness.
 
@@ -218,7 +221,7 @@ type ArtifactState =
 - **FR-023:** The visual-direction skill shall recommend a style with rationale while allowing the user to choose another style.
 - **FR-024:** Characters and locations shall be booklet-scoped and custom rather than selected from a global asset library.
 - **FR-025:** The agent shall recommend no more than three recurring characters and three recurring locations, explain consistency/cost implications when proposing more, and allow the user to continue.
-- **FR-026:** Before page generation, the user shall approve one canonical image per recurring character and compact references for recurring locations and selected style.
+- **FR-026:** The core POC shall generate, and before page generation the user shall approve, one canonical image per recurring character and compact references for recurring locations and selected style; user-uploaded references are not accepted.
 - **FR-027:** Each reference image shall produce one candidate; the user may request a targeted revision or regenerate that reference.
 
 ### 6.5 Booklet and page planning
@@ -379,7 +382,7 @@ Required skills:
 - **AR-012:** Each run shall record workflow name, booklet ID, skill ID, artifact ID when applicable, operation, and trace ID.
 - **AR-013:** Agents shall not directly access the filesystem, database, provider credentials, or mutation services except through the narrowly scoped skill/application interfaces defined here.
 - **AR-014:** Material turns shall preserve the two-operation manager-then-specialist boundary in traces and cost records; the specialist call shall not be collapsed into manager prompt logic.
-- **AR-015:** The manager shall use the configured economical manager-model alias, routine skills the balanced skill-model alias, and quality review/repair the stronger review-model alias. Aliases may resolve to the same concrete model during local development.
+- **AR-015:** Through the Agents SDK native OpenAI Responses path, the default manager shall use `gpt-5.6-luna` with low reasoning, routine skills shall use `gpt-5.6-terra` with medium reasoning, and quality review/repair shall use `gpt-5.6-sol` with medium reasoning. Environment configuration may override each model and reasoning value without changing skill code.
 
 PDF composition, job execution, persistence, approval, and invalidation are application services rather than agent skills.
 
@@ -502,6 +505,8 @@ Separate reviewer agents per artifact, configurable rule engines, and repair-unt
 
 Framework package versions shall not be hard-coded in this PRD. The implementation shall choose compatible stable versions, pin the resolved dependency graph in `package-lock.json`, and record the Node engine constraint in `package.json`.
 
+The only required client acceptance target is current stable desktop Chromium; automated browser acceptance shall use Playwright's bundled Chromium. Windows is the reference local-development environment. Responsive mobile behavior and cross-browser verification are not POC deliverables, while server code shall remain compatible with the documented Node/container hosting path.
+
 ### 11.2 System flow
 
 ```mermaid
@@ -559,10 +564,13 @@ Server configuration shall be parsed once and validated with Zod at startup. The
 
 ```dotenv
 OPENAI_API_KEY=
-OPENAI_MANAGER_MODEL=
-OPENAI_SKILL_MODEL=
-OPENAI_REVIEW_MODEL=
-OPENAI_IMAGE_MODEL=
+OPENAI_MANAGER_MODEL=gpt-5.6-luna
+OPENAI_MANAGER_REASONING=low
+OPENAI_SKILL_MODEL=gpt-5.6-terra
+OPENAI_SKILL_REASONING=medium
+OPENAI_REVIEW_MODEL=gpt-5.6-sol
+OPENAI_REVIEW_REASONING=medium
+OPENAI_IMAGE_MODEL=gpt-image-2
 DATABASE_URL=file:./data/booklets.db
 DATA_ROOT=./data/assets
 IMAGE_QUALITY=balanced
@@ -573,6 +581,8 @@ No credential may use a `NEXT_PUBLIC_` name. Optional future-provider credential
 Implementation references:
 
 - [OpenAI Agents SDK AI SDK integration guidance](https://openai.github.io/openai-agents-js/extensions/ai-sdk/)
+- [OpenAI model selection](https://developers.openai.com/api/docs/models)
+- [GPT Image 2 model](https://developers.openai.com/api/docs/models/gpt-image-2)
 - [AI SDK UI streaming custom data](https://ai-sdk.dev/docs/ai-sdk-ui/streaming-data)
 - [Next.js instrumentation](https://nextjs.org/docs/app/guides/instrumentation)
 - [Drizzle SQLite/libSQL setup](https://orm.drizzle.team/docs/get-started/sqlite-new)
@@ -630,6 +640,7 @@ No detailed startup transition algorithm, provider-side polling mechanism, fixed
 - **OBS-004:** Label cost estimates separately from provider-returned actual cost and keep pricing assumptions inspectable.
 - **OBS-005:** Provide a simple per-booklet engineering summary of skills, calls, latency, retries, failures, cost, and quality findings. A dashboard is not required.
 - **OBS-006:** API keys and secrets shall never be written to messages, prompts, traces, jobs, assets, or the ledger.
+- **OBS-007:** Cost tracking shall remain observational and shall not block a generation or require an application-level spending-cap workflow; provider-account limits remain external constraints.
 
 ## 14. Deliverables
 
@@ -667,7 +678,7 @@ Automated tests use deterministic fake text/image providers where practical. Rea
 | Composition | All geometries avoid stretching; safe-region text is readable or fails recoverably; order is deterministic. |
 | PDF | Cover is first, page count/order/geometry are correct, and export retries without image regeneration. |
 | Evidence | Fake calls reconcile to skill/operation, status, latency, retry, usage/cost, and artifact/job linkage. |
-| Browser | Create, intake, card decisions, artifact approvals, generation, page review, export, restart, and resume. |
+| Browser | In Playwright-bundled desktop Chromium: create, intake, card decisions, artifact approvals, generation, page review, export, restart, and resume. |
 
 ### 15.2 Agent fixture eval set
 
@@ -743,18 +754,22 @@ A critical defect is blocked completion/download, a missing or duplicated page, 
 - LLM manager-led orchestration with stage-scoped runtime skill tools and one skill per material run.
 - Each material turn uses a manager routing model call followed by one specialist skill model call.
 - Model roles are configurable through manager, skill, review, and image model aliases.
+- Default roles are Luna/low for manager routing, Terra/medium for specialist skills, Sol/medium for review and repair, and GPT Image 2/balanced for images.
 - Vercel AI SDK UI with four card families; ChatKit and Agent Builder are not used.
 - Chat uses transient working status followed by an atomic validated response; token-by-token agent narration is not part of the POC.
 - Persisted application data is authoritative; there is no second authoritative agent-session store.
 - OpenAI Image API is the required core image path.
 - One image candidate per generation and relevant canonical references per page.
+- Canonical references are generated by the POC; user reference-image upload is not included.
 - The agent recommends, but does not enforce, at most three recurring characters and three recurring locations.
 - Balanced image quality is the default and is configurable for evaluation.
 - Provider/model selection is invisible to creators.
 - The baseline is Node.js 24 LTS with Node.js 22 minimum, npm, one strict-TypeScript Next.js App Router project, and Node runtime only.
+- Desktop Chromium is the only client acceptance target; mobile-specific and cross-browser support are excluded.
 - The application uses Route Handlers, AI SDK UI SSE for chat, and active-job database polling for background progress.
 - Page generation is sequential in one persistent local runner started through Node-only `instrumentation.ts`; there is no custom server or separate worker.
 - Local persistence uses Drizzle, `@libsql/client/node`, a file database, and filesystem assets behind small interfaces.
 - OpenAI agents use the native provider; the beta AI SDK model adapter and optional AI SDK UI stream bridge are not core dependencies.
 - PDF is the only required user-facing export.
+- Cost is recorded but does not trigger an application-enforced spending cap.
 - Learning, agent/GenUI evidence, visual continuity, recoverability, cost visibility, and readable PDFs take priority over production readiness.
