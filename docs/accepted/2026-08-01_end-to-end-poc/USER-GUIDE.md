@@ -6,11 +6,11 @@ Kids Booklet is a local, single-user proof of concept for turning a story idea i
 
 ## Create or resume a booklet
 
-Home will list saved booklets. Choose **Create booklet** to start from a rough idea, or reopen a saved booklet to resume its last saved workflow state.
+On Home, enter a rough story idea and choose **Create booklet**. The application creates the saved booklet, its initial user message, and all eight empty artifact stages before opening the workspace. Reopen any saved booklet from Home to resume it. Selecting a stage in the workspace rail puts that choice in the URL, so a bookmarked or reloaded workspace opens the same selected stage while its active workflow stage remains saved in the booklet.
 
 ## Cards and the eight artifact stages
 
-Questions, recommendations, reviews, progress, and recoverable problems appear as typed cards. Advancing from a reviewed artifact approves its displayed version. The visible stages are Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan, Final Pages, and PDF Export.
+The workspace always shows Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan, Final Pages, and PDF Export. Questions, recommendations, reviews, progress, and recoverable problems will appear as typed cards as the guided workflow is added. The current persisted shell shows each stage’s saved status and the initial idea.
 
 ## References, generation, and revision
 

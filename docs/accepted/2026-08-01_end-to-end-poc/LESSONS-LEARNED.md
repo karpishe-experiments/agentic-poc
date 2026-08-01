@@ -21,3 +21,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** Slice 0 failures and passing corrections documented in `PLAN.md` under “Bootstrap correction (2026-08-01)”; `npm.cmd run typecheck` and `npm.cmd run lint` then passed.
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
+
+### Keep native libSQL integration databases in OS temporary storage on this Windows host
+
+- **Context:** Vitest integration tests that run checked-in migrations against a native libSQL file database on Windows.
+- **Observation:** Closing the libSQL client did not release the temporary database file before Vitest teardown; immediate deletion repeatedly failed with `EBUSY` even after retrying. The integration assertions and client close succeeded.
+- **Guidance:** Create these disposable migration fixtures under the operating system temporary directory and close the client after each test. Do not couple test correctness to immediate Windows file deletion; keep project data out of the fixture path.
+- **Evidence:** `tests/integration/booklets.test.ts` uses `mkdtemp(os.tmpdir())` and closes `database.$client`; the focused test passed on 2026-08-01 after teardown stopped deleting the host-held file.
+- **Promotion target:** Documentation.
+- **Status:** Candidate.

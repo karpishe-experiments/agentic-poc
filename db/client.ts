@@ -8,7 +8,7 @@ import * as schema from "@/db/schema";
 export function createDatabase(databaseUrl = getServerEnv().DATABASE_URL) {
   if (databaseUrl.startsWith("file:")) {
     const localPath = databaseUrl.slice("file:".length);
-    mkdirSync(path.dirname(path.resolve(process.cwd(), localPath)), { recursive: true });
+    mkdirSync(path.dirname(path.resolve(/* turbopackIgnore: true */ process.cwd(), localPath)), { recursive: true });
   }
   const client = createClient({ url: databaseUrl });
   return drizzle({ client, schema });

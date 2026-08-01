@@ -25,5 +25,5 @@ export function getServerEnv(source: NodeJS.ProcessEnv = process.env): ServerEnv
 }
 
 export function resolveDataRoot(env: Pick<ServerEnv, "DATA_ROOT">): string {
-  return path.resolve(process.cwd(), env.DATA_ROOT);
+  return path.resolve(/* turbopackIgnore: true */ process.cwd(), env.DATA_ROOT);
 }

@@ -1147,12 +1147,12 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement complete database tables/repositories for booklets, artifacts, messages, cards, jobs, assets, evidence, reviews, and exports.
-- [ ] Implement `BookletService.create/list/getWorkspaceSnapshot` and initial eight artifact placeholders.
-- [ ] Implement Home and Workspace routes/components, artifact rail, shell layout, state badges, progress derivation, cover placeholder, updated sorting, error/not-found states, and Help links.
-- [ ] Implement `GET/POST /api/booklets`, booklet snapshot route, and controlled asset route.
-- [ ] Persist selected artifact/review position as booklet workspace state or deterministic URL query (`?artifact=<type>&page=<index>`); choose URL query to avoid another persistence field, while the active stage/card remains database-backed.
-- [ ] Add deterministic fake data builders and repository/service integration tests.
+- [x] Implement complete database tables/repositories for booklets, artifacts, messages, cards, jobs, assets, evidence, reviews, and exports.
+- [x] Implement `BookletService.create/list/getWorkspaceSnapshot` and initial eight artifact placeholders.
+- [x] Implement Home and Workspace routes/components, artifact rail, shell layout, state badges, progress derivation, cover placeholder, updated sorting, error/not-found states, and Help links.
+- [x] Implement `GET/POST /api/booklets`, booklet snapshot route, and controlled asset route.
+- [x] Persist selected artifact/review position as booklet workspace state or deterministic URL query (`?artifact=<type>&page=<index>`); choose URL query to avoid another persistence field, while the active stage/card remains database-backed.
+- [x] Add deterministic fake data builders and repository/service integration tests.
 
 **Contracts:** full `Booklet`, artifact summaries/state, workspace snapshot, job summary, route envelopes.
 
