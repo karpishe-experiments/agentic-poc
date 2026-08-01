@@ -46,6 +46,14 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 6. Run verification proportional to the change and summarize the result.
 7. After verified work reveals durable knowledge, use the `capture-project-learnings` skill to update canonical docs and record reusable lessons.
 
+## Project management and GitHub
+
+- Use the [Agentic POC GitHub project](https://github.com/orgs/karpishe-experiments/projects/2) as the project-management source for implementation work, status, and sequencing.
+- Use the configured GitHub MCP server for GitHub project, issue, pull-request, and other GitHub API operations when it exposes the required capability.
+- If the required GitHub capability is unavailable through MCP, fall back to the `gh` CLI.
+- Use the `git` CLI for basic local repository operations such as status, diff, branch, add, commit, log, and push; do not route basic Git operations through GitHub MCP.
+- Run all Git and GitHub operations outside the sandbox because repository metadata access and remote operations may require permissions or network access. Request the necessary escalation when the execution environment requires approval.
+
 ## Implementation planning
 
 Before implementation begins, create a root `PLAN.md` and obtain user approval. The plan must be decision-complete enough to implement without rediscovering the architecture, while staying proportional to this disposable POC.
