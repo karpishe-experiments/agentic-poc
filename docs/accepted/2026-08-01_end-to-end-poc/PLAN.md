@@ -1176,13 +1176,13 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement message/card/response Zod unions and AI SDK `BookletUIMessage` typing.
-- [ ] Implement AI SDK 7 `DefaultChatTransport`, `useChat`, `/api/chat/[bookletId]`, `createUIMessageStream`, transient working status, atomic text/card output, and `validateUIMessages` on load.
-- [ ] Implement finite card registry and all family/variant components using selected shadcn controls.
-- [ ] Implement application-created progress, validation, generation failure, quality, and recovery card factories.
-- [ ] Implement card-response route/service with response-ID idempotency and reopen behavior.
-- [ ] Implement conversation scroll/focus behavior and labeled keyboard-operable controls.
-- [ ] Use a scripted fake conversation runtime; no Agents SDK call yet.
+- [x] Implement message/card/response Zod unions and AI SDK `BookletUIMessage` typing.
+- [x] Implement AI SDK 7 `DefaultChatTransport`, `useChat`, `/api/chat/[bookletId]`, `createUIMessageStream`, transient working status, atomic text/card output, and `validateUIMessages` on load.
+- [x] Implement finite card registry and all family/variant components using selected shadcn controls.
+- [x] Implement application-created progress, validation, generation failure, quality, and recovery card factories.
+- [x] Implement card-response route/service with response-ID idempotency and reopen behavior.
+- [x] Implement conversation scroll/focus behavior and labeled keyboard-operable controls.
+- [x] Use a scripted fake conversation runtime; no Agents SDK call yet.
 
 **Contracts:** every `GenUICard` variant, `CardResponse`, message metadata/data parts, safe error envelope.
 

@@ -40,7 +40,7 @@ export const homeBookletSchema = bookletSchema.extend({
 });
 
 export const persistedMessageSchema = z.object({
-  id: opaqueIdSchema,
+  id: z.string().min(1),
   role: z.enum(["user", "assistant"]),
   sequence: z.number().int().nonnegative(),
   message: z.unknown(),

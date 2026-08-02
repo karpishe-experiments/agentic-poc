@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { BookletNotFoundError } from "@/lib/application/booklet-service";
 
 export type ErrorEnvelope = {
@@ -29,6 +30,13 @@ export function toErrorEnvelope(error: unknown): { status: number; body: ErrorEn
           details: error.issues.map(({ path, message }) => ({ path, message })),
         },
       },
+    };
+  }
+
+  if (error instanceof RecoverableApplicationError) {
+    return {
+      status: error.status,
+      body: { error: { code: error.code, message: error.message, recoverable: true } },
     };
   }
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { validateUIMessages } from "ai";
 import { createDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import {
@@ -9,6 +10,7 @@ import {
   type BookletSummary,
 } from "@/lib/contracts/booklets";
 import { BOOKLET_ARTIFACT_TYPES } from "@/lib/contracts/domain";
+import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
 
 export class BookletNotFoundError extends Error {
   public constructor(bookletId: string) {
@@ -90,10 +92,16 @@ export class BookletService {
       return artifact;
     });
 
+    const validatedMessages = await validateUIMessages<BookletUIMessage>({
+      messages: messages.map((message) => message.message),
+      metadataSchema: bookletMessageMetadataSchema,
+      dataSchemas: bookletUIMessageDataSchemas,
+    });
+
     return workspaceSnapshotSchema.parse({
       booklet,
       artifacts: orderedArtifacts,
-      messages,
+      messages: messages.map((message, index) => ({ ...message, message: validatedMessages[index] })),
       activeCard,
       activeJobs,
       exports,

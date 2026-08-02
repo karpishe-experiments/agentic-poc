@@ -30,3 +30,21 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `tests/integration/booklets.test.ts` uses `mkdtemp(os.tmpdir())` and closes `database.$client`; the focused test passed on 2026-08-01 after teardown stopped deleting the host-held file.
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
+
+### Persist card lifecycle changes in both authoritative and display records
+
+- **Context:** An AI SDK UI chat persists complete display messages alongside authoritative card rows.
+- **Observation:** Updating only a `cards` row left the saved `data-card` part active after a page reload, even though the decision had been submitted.
+- **Guidance:** Update the validated card row and its originating UI-message projection in the same transaction for submit and supersede transitions; validate the restored message history before rendering it.
+- **Evidence:** `db/repositories.ts` updates both records; `tests/integration/booklets.test.ts` verifies the submitted status after reload, and `tests/e2e/typed-card-flow.spec.ts` passed on 2026-08-01.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Treat AI SDK `messageId` as a replacement target, not a client-generated ID
+
+- **Context:** Sending a new message through AI SDK 7 `useChat` with `DefaultChatTransport`.
+- **Observation:** Passing a new `messageId` to `sendMessage` attempted to replace a message that did not exist; sending the text and metadata without it created the new turn correctly.
+- **Guidance:** Use `prepareSendMessagesRequest` to send only the latest user message to the authoritative server, and omit `messageId` when adding a new message.
+- **Evidence:** `components/workspace/workspace-conversation.tsx` uses the last-message transport request and no new-message ID; the persisted-card browser flow passed on 2026-08-01.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
