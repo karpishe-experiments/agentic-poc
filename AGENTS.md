@@ -66,22 +66,17 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 - Use the `git` CLI for basic local repository operations such as status, diff, branch, add, commit, log, and push; do not route basic Git operations through GitHub MCP.
 - Run all Git and GitHub operations outside the sandbox because repository metadata access and remote operations may require permissions or network access. Request the necessary escalation when the execution environment requires approval.
 
-## Implementation planning
+## PLAN.md files
 
-Before implementation begins, locate and read the canonical implementation plan identified by the active PRD or project-management issue and obtain user approval. Do not create a second plan when an approved canonical plan already exists. For the Kids Booklet POC, the canonical implementation plan is `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md`.
-
-The plan must:
-
-- Organize work into incremental vertical slices and map each slice to applicable PRD requirements and acceptance criteria.
-- Define architecture and ownership boundaries, including deterministic application responsibilities versus manager and skill responsibilities.
-- Define the database, artifact, generative-UI card, runtime skill, image-provider, job, and asset contracts needed by the slices.
-- Identify the application routes and end-to-end user flows each slice makes usable.
-- Cover dependency setup, environment configuration, migrations, seeded assets, and local data handling.
-- Specify focused verification, agent fixtures, the browser golden path, the three retained evaluation booklets, tracing, cost evidence, and PDF inspection.
-- Record material risks, assumptions, and intentionally deferred production concerns.
-- Resolve consequential implementation choices or explicitly return them to the user before implementation begins.
-
-Do not treat `prototype/docs/ui-design-plan.md` as an implementation plan. Do not begin application implementation until the root `PLAN.md` is approved.
+- Locate the canonical `PLAN.md` from the active PRD or project issue; do not create a competing plan. The Kids Booklet POC plan is `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md`.
+- Obtain user approval before implementation. Treat prototype planning documents as research only.
+- Create new plans from [`.agents/PLAN.template.md`](.agents/PLAN.template.md) and follow [`.agents/EXECUTION-PLANS.md`](.agents/EXECUTION-PLANS.md).
+- Make plans decision-complete, organized into ordered vertical slices, mapped to requirements and acceptance evidence, and explicit about architecture, ownership, risks, verification, and deferred scope.
+- During implementation, execute one slice at a time. Do not start a later slice before its predecessor is validated and closed or explicitly blocked, and do not combine slices in a checkpoint commit.
+- For each slice, classify subagent use as `not_necessary`, `optional`, or `mandatory`, and select concrete primary and delegated models from current official guidance with rationale, fallback, and escalation rules.
+- Keep `PLAN.md` current with slice state and concise evidence. At slice start, record the UTC time, starting commit, selected primary model/reasoning, and planned subagents or explicit non-use. Before the checkpoint commit, record finish time, checks, test-coverage analysis, actual delegation and disposition, the intended checkpoint label, `remote: pending`, and primary/subagent token usage when surfaced by the runtime; write `unavailable` rather than estimating missing usage or coverage percentages. Record the resulting commit SHA in the remote report, not inside the commit itself.
+- Append approved deviations and discovered constraints to the plan's amendment log; do not rewrite completed history or original requirements.
+- After each closed or blocked slice, record progress and verification in `PLAN.md` and create the local checkpoint commit even if GitHub or push is unavailable. Attempt the project issue update and checkpoint push separately, then update `PLAN.md` to `synced` or `failed/pending retry` and create a slice-scoped `[Sxx sync]` bookkeeping commit before later slice work. That status describes the slice checkpoint and project report; pushing the bookkeeping commit is best-effort and must not recursively create another sync commit. Retry failed remote synchronization without blocking later locally valid work. Capture verified durable lessons or record that none were found.
 
 ## Implementation guidelines
 
@@ -95,4 +90,5 @@ Do not treat `prototype/docs/ui-design-plan.md` as an implementation plan. Do no
 
 - Run the relevant build, type checks, lint checks, and focused tests when they exist.
 - Add only the tests needed to demonstrate the experiment's success criteria.
+- At every slice and at final integration, analyze whether changed behaviors, requirements, failure paths, and regressions are covered. Record covered areas, gaps, deferred tests with rationale, and tool-reported coverage when available.
 - Report what passed, what failed, and what was not run.
