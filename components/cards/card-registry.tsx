@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useState } from "react";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 
@@ -34,7 +35,7 @@ function QuestionCard({ card, busy, submitResponse }: CardProps) {
     return <CardFrame card={card}>
       <form className="grid gap-2" onSubmit={submit}>
         <label className="text-sm font-medium" htmlFor={`card-${card.cardId}`}>{card.payload.prompt}</label>
-        <textarea id={`card-${card.cardId}`} className="min-h-20 rounded-lg border border-[var(--border)] p-2" disabled={disabled} maxLength={card.payload.maximumLength} minLength={card.payload.minimumLength} onChange={(event) => setValue(event.target.value)} placeholder={card.payload.placeholder} required value={typeof value === "string" ? value : ""} />
+        <textarea autoComplete="off" id={`card-${card.cardId}`} name={`card-${card.cardId}`} className="min-h-20 rounded-lg border border-[var(--border)] p-2" disabled={disabled} maxLength={card.payload.maximumLength} minLength={card.payload.minimumLength} onChange={(event) => setValue(event.target.value)} placeholder={card.payload.placeholder} required value={typeof value === "string" ? value : ""} />
         <button className="w-fit rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled} type="submit">{busy ? "Saving…" : card.status === "active" ? "Continue" : "Submitted"}</button>
       </form>
     </CardFrame>;
@@ -62,14 +63,23 @@ function QuestionCard({ card, busy, submitResponse }: CardProps) {
 }
 
 function ArtifactReviewCard({ card, busy, submitResponse }: CardProps) {
+  const [revisionInstruction, setRevisionInstruction] = useState("");
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   if (card.family !== "artifact_review") return null;
   const disabled = card.status !== "active" || !submitResponse || busy;
   const action = card.allowedActions.includes("approve_and_continue") ? "approve_and_continue" : card.allowedActions[0];
   return <CardFrame card={card}>
-    {card.variant === "summary" ? <dl className="grid gap-1 text-sm">{card.payload.summary.map((item) => <div className="flex gap-2" key={item.label}><dt className="font-medium">{item.label}:</dt><dd>{item.value}</dd></div>)}</dl> : null}
+    {card.variant === "summary" ? <><dl className="grid gap-1 text-sm">{card.payload.summary.map((item) => <div className="flex gap-2" key={item.label}><dt className="font-medium">{item.label}:</dt><dd>{item.value}</dd></div>)}</dl>{card.payload.downloadAssetId ? <a className="mt-3 inline-block rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white" href={`/api/assets/${card.payload.downloadAssetId}`}>Download PDF</a> : null}</> : null}
     {card.variant === "editable_form" ? <dl className="grid gap-1 text-sm">{card.payload.fields.map((field) => <div key={field.key}><dt className="font-medium">{field.label}</dt><dd>{field.value}</dd></div>)}</dl> : null}
-    {card.variant === "visual_gallery" ? <ul className="grid gap-1 text-sm">{card.payload.items.map((item) => <li className="rounded border border-[var(--border)] p-2" key={item.assetId}>{item.label}{item.selected ? " (selected)" : ""}</li>)}</ul> : null}
-    <button className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled || !action} onClick={() => action && submitResponse?.({ action })} type="button">{busy ? "Saving…" : card.status === "active" ? "Approve and continue" : "Submitted"}</button>
+    {card.variant === "visual_gallery" ? <fieldset className="grid gap-2 sm:grid-cols-2"><legend className="sr-only">Select every item you have reviewed</legend>{card.payload.items.map((item) => { const checked = selectedAssetIds.includes(item.assetId); return <label className="cursor-pointer overflow-hidden rounded border border-[var(--border)] p-2 text-sm" key={item.assetId}><Image alt={item.label} className="h-32 w-full rounded object-cover" height={160} src={`/api/assets/${item.assetId}`} unoptimized width={200} /><span className="mt-2 flex gap-2"><input checked={checked} disabled={disabled} onChange={() => setSelectedAssetIds((current) => checked ? current.filter((assetId) => assetId !== item.assetId) : [...current, item.assetId])} type="checkbox" value={item.assetId} /><span><span className="font-medium">{item.label}</span>{item.description ? <span className="block text-[var(--muted-ink)]">{item.description}</span> : null}</span></span></label>; })}</fieldset> : null}
+    <div className="mt-3 flex flex-wrap gap-2">
+      {action ? <button className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled || (card.variant === "visual_gallery" && selectedAssetIds.length !== card.payload.items.length)} onClick={() => submitResponse?.({ action, ...(card.variant === "visual_gallery" ? { value: selectedAssetIds } : {}) })} type="button">{busy ? "Saving…" : card.status === "active" ? "Approve and continue" : "Submitted"}</button> : null}
+      {card.allowedActions.includes("request_revision") ? <>
+        <label className="sr-only" htmlFor={`revision-${card.cardId}`}>Describe the revision</label>
+        <input autoComplete="off" className="min-w-44 flex-1 rounded-lg border border-[var(--border)] px-2 py-1 text-sm" disabled={disabled} id={`revision-${card.cardId}`} name={`revision-${card.cardId}`} onChange={(event) => setRevisionInstruction(event.target.value)} placeholder="Describe a revision…" value={revisionInstruction} />
+        <button className="rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled || !revisionInstruction.trim()} onClick={() => submitResponse?.({ action: "request_revision", revisionInstruction })} type="button">Request revision</button>
+      </> : null}
+    </div>
   </CardFrame>;
 }
 
@@ -82,8 +92,8 @@ function ProgressCard({ card }: CardProps) {
 function IssueCard({ card, busy, submitResponse }: CardProps) {
   if (card.family !== "issue") return null;
   const disabled = card.status !== "active" || !submitResponse || busy;
-  const action = card.allowedActions.includes("retry") ? "retry" : card.allowedActions[0];
-  return <CardFrame card={card}><p className="text-sm">{card.payload.summary}</p>{card.payload.details.length ? <ul className="mt-2 list-disc pl-5 text-sm">{card.payload.details.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}{action ? <button className="mt-3 rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled} onClick={() => submitResponse?.({ action })} type="button">{busy ? "Saving…" : action.replaceAll("_", " ")}</button> : null}</CardFrame>;
+  const labels: Partial<Record<CardAction, string>> = { retry: "Retry review", edit: "Revise", accept_with_issue: "Accept remaining issue", continue: "Continue" };
+  return <CardFrame card={card}><p className="text-sm">{card.payload.summary}</p>{card.payload.details.length ? <ul className="mt-2 list-disc pl-5 text-sm">{card.payload.details.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}<div className="mt-3 flex flex-wrap gap-2">{card.allowedActions.map((action) => <button className="rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled} key={action} onClick={() => submitResponse?.({ action })} type="button">{busy ? "Saving…" : labels[action] ?? action.replaceAll("_", " ")}</button>)}</div></CardFrame>;
 }
 
 type CardKey = "question:free_text" | "question:single_select" | "question:multi_select" | "artifact_review:summary" | "artifact_review:editable_form" | "artifact_review:visual_gallery" | "progress:artifact_generation" | "progress:page_batch" | "progress:export" | "issue:quality" | "issue:generation_failure" | "issue:validation_failure" | "issue:recovery";

@@ -5,6 +5,8 @@ const reasoningSchema = z.enum(["low", "medium", "high"]);
 
 export const serverEnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
+  MODEL_RUNTIME: z.enum(["fake", "real"]).default("fake"),
+  IMAGE_PROVIDER_MODE: z.enum(["fake", "real"]).default("fake"),
   OPENAI_MANAGER_MODEL: z.string().min(1).default("gpt-5.6-luna"),
   OPENAI_MANAGER_REASONING: reasoningSchema.default("low"),
   OPENAI_SKILL_MODEL: z.string().min(1).default("gpt-5.6-terra"),

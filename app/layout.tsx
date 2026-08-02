@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import localFont from "next/font/local";
 import "./globals.css";
+
+const nunito = localFont({ src: "../seeds/fonts/nunito/Nunito-Variable.ttf", display: "swap", variable: "--font-nunito" });
 
 export const metadata: Metadata = {
   title: "Kids Booklet",
@@ -9,8 +12,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html className={nunito.variable} lang="en">
       <body>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         <header className="border-b border-[var(--border)] bg-[var(--surface)] px-6 py-4">
           <nav aria-label="Main navigation" className="mx-auto flex max-w-6xl items-center justify-between">
             <Link className="font-semibold no-underline" href="/">
@@ -21,7 +25,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Link>
           </nav>
         </header>
-        <main className="mx-auto w-full max-w-6xl px-6 py-10">{children}</main>
+        <main className="mx-auto w-full max-w-6xl px-6 py-10" id="main-content">{children}</main>
       </body>
     </html>
   );

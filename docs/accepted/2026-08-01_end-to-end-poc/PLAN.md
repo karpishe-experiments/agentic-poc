@@ -1,6 +1,6 @@
 # Kids Booklet End-to-End POC Implementation Plan
 
-**Status:** Draft with implementation decisions locked; pending final user approval
+**Status:** Approved 2026-08-01; implementation verification in progress. Retained real-provider evaluations are blocked by the configured OpenAI account's `credit_balance_exhausted` response on 2026-08-02.
 
 **Plan issue:** [#6](https://github.com/karpishe-experiments/agentic-poc/issues/6)
 

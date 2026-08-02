@@ -2,8 +2,11 @@ import type { BookletSnapshot } from "@/lib/contracts/booklets";
 import type { ArtifactType } from "@/lib/contracts/domain";
 import { ArtifactRail, artifactLabel } from "@/components/workspace/artifact-rail";
 import { WorkspaceConversation } from "@/components/workspace/workspace-conversation";
+import { ArtifactViewer } from "@/components/workspace/artifact-viewer";
 import type { BookletUIMessage } from "@/lib/contracts/messages";
-import Image from "next/image";
+import type { ArtifactDetail } from "@/lib/contracts/artifacts";
+import Link from "next/link";
+import { JobProgressPanel } from "@/components/workspace/job-progress-panel";
 
 function progressText(snapshot: BookletSnapshot): string {
   if (snapshot.activeJobs.length === 0) return "No generation is running.";
@@ -12,8 +15,7 @@ function progressText(snapshot: BookletSnapshot): string {
   return `Generating ${completed} of ${total} items.`;
 }
 
-export function WorkspaceShell({ snapshot, selectedArtifact }: Readonly<{ snapshot: BookletSnapshot; selectedArtifact: ArtifactType }>) {
-  const selected = snapshot.artifacts.find((artifact) => artifact.artifactType === selectedArtifact);
+export function WorkspaceShell({ snapshot, selectedArtifact, selectedArtifactDetail, pageItems }: Readonly<{ snapshot: BookletSnapshot; selectedArtifact: ArtifactType; selectedArtifactDetail: ArtifactDetail; pageItems: Array<{ pageId: string; pageIndex: number; kind: "cover" | "story" }> }>) {
 
   return (
     <section className="space-y-5">
@@ -23,26 +25,17 @@ export function WorkspaceShell({ snapshot, selectedArtifact }: Readonly<{ snapsh
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">{snapshot.booklet.workingTitle}</h1>
           <p className="mt-1 text-sm text-[var(--muted-ink)]">Active stage: {artifactLabel(snapshot.booklet.currentStage)}</p>
         </div>
-        <p className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted-ink)]">{progressText(snapshot)}</p>
+        <div className="flex flex-wrap items-center gap-2"><p className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted-ink)]">{progressText(snapshot)}</p><Link className="text-sm font-semibold text-[var(--accent)]" href={`/api/booklets/${snapshot.booklet.id}/evidence`}>Evidence JSON</Link></div>
       </header>
 
+      <JobProgressPanel jobs={snapshot.activeJobs} />
+
       <div className="grid gap-5 xl:grid-cols-[13rem_minmax(20rem,25rem)_minmax(0,1fr)]">
-        <ArtifactRail bookletId={snapshot.booklet.id} artifacts={snapshot.artifacts} selectedArtifact={selectedArtifact} />
+        <ArtifactRail bookletId={snapshot.booklet.id} artifacts={snapshot.artifacts} pageItems={pageItems} selectedArtifact={selectedArtifact} />
 
         <WorkspaceConversation bookletId={snapshot.booklet.id} initialMessages={snapshot.messages.map((message) => message.message as BookletUIMessage)} />
 
-        <section aria-label="Selected artifact" className="min-h-80 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-          <p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Selected artifact</p>
-          <h2 className="mt-1 text-2xl font-semibold">{artifactLabel(selectedArtifact)}</h2>
-          <p className="mt-3 text-sm text-[var(--muted-ink)]">
-            {selected?.state === "empty"
-              ? "This stage is ready for guided work. Its saved history and review controls appear as the workflow is implemented."
-              : `Status: ${selected?.state.replaceAll("_", " ")}.`}
-          </p>
-          <div className="relative mt-6 flex aspect-[5/4] items-center justify-center overflow-hidden rounded-xl border border-dashed border-[var(--border)] bg-[#fffaf2] text-center text-sm text-[var(--muted-ink)]">
-            {snapshot.booklet.coverAssetId ? <Image alt="Booklet cover" className="object-cover" fill sizes="(max-width: 1280px) 100vw, 50vw" src={`/api/assets/${snapshot.booklet.coverAssetId}`} unoptimized /> : "Illustrations and the cover will appear here once generated."}
-          </div>
-        </section>
+        <ArtifactViewer artifactType={selectedArtifact} bookletId={snapshot.booklet.id} detail={selectedArtifactDetail} key={`${selectedArtifact}:${selectedArtifactDetail.currentVersion?.id ?? "empty"}`} label={artifactLabel(selectedArtifact)} />
       </div>
     </section>
   );

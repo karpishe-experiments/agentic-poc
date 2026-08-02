@@ -1,7 +1,11 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import type { Database } from "@/db/client";
 import {
   artifacts,
+  artifactDependencies,
+  artifactVersions,
+  approvals,
   assets,
   booklets,
   cards,
@@ -22,7 +26,19 @@ import type {
 } from "@/lib/contracts/booklets";
 import { cardResponseSchema, genUICardSchema, validateCardResponseValue, type CardResponse, type GenUICard } from "@/lib/contracts/cards";
 import { artifactStateSchema, artifactTypeSchema, bookletLifecycleSchema, type ArtifactType, type Booklet } from "@/lib/contracts/domain";
+import {
+  approvalSchema,
+  artifactDetailSchema,
+  artifactVersionSchema,
+  finalPagesSchema,
+  parseArtifactDocument,
+  visualBibleSchema,
+  type ArtifactApproval,
+  type ArtifactDetail,
+  type ArtifactVersion,
+} from "@/lib/contracts/artifacts";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
+import { qualityReviewSchema, type QualityReview } from "@/lib/contracts/quality";
 
 const activeJobStatuses = new Set(["pending", "running", "partial"]);
 
@@ -61,6 +77,37 @@ function responseSummary(card: GenUICard, response: CardResponse): string {
   return `${card.title}: ${response.action}`;
 }
 
+function unchangedScopedSubjects(artifactType: ArtifactType, previous: unknown, next: unknown): Set<string> {
+  if (artifactType === "visual_bible") {
+    const previousBible = visualBibleSchema.parse(previous);
+    const nextBible = visualBibleSchema.parse(next);
+    const previousDefinitions = new Map([...previousBible.characters, ...previousBible.locations].map((definition) => [definition.entityId, JSON.stringify(definition)]));
+    return new Set([...nextBible.characters, ...nextBible.locations]
+      .filter((definition) => previousDefinitions.get(definition.entityId) === JSON.stringify(definition))
+      .map((definition) => definition.entityId));
+  }
+  if (artifactType === "final_pages") {
+    const previousPages = finalPagesSchema.parse(previous);
+    const nextPages = finalPagesSchema.parse(next);
+    const previousById = new Map(previousPages.pages.map((page) => [page.pageId, JSON.stringify(page)]));
+    return new Set(nextPages.pages.filter((page) => previousById.get(page.pageId) === JSON.stringify(page)).map((page) => page.pageId));
+  }
+  return new Set();
+}
+
+function visualBibleDefinitionsUnchanged(previous: unknown, next: unknown): boolean {
+  const comparable = (value: unknown) => {
+    const bible = visualBibleSchema.parse(value);
+    const withoutReference = (definition: { currentReferenceAssetId: string | null }) => ({ ...definition, currentReferenceAssetId: null });
+    return JSON.stringify({
+      characters: bible.characters.map(withoutReference),
+      locations: bible.locations.map(withoutReference),
+      styleReferences: bible.styleReferences,
+    });
+  };
+  return comparable(previous) === comparable(next);
+}
+
 function toBooklet(row: typeof booklets.$inferSelect): Booklet {
   return {
     id: row.id,
@@ -83,6 +130,31 @@ function toArtifactSummary(row: typeof artifacts.$inferSelect): ArtifactSummary 
     createdAt: iso(row.createdAtMs),
     updatedAt: iso(row.updatedAtMs),
   };
+}
+
+function toArtifactVersion(row: typeof artifactVersions.$inferSelect, artifactType: ArtifactType): ArtifactVersion {
+  return artifactVersionSchema.parse({
+    id: row.id,
+    artifactId: row.artifactId,
+    versionNumber: row.versionNumber,
+    schemaVersion: SCHEMA_VERSION,
+    content: parseArtifactDocument(artifactType, parseJson(row.contentJson)),
+    createdBy: row.createdBy,
+    sourceVersionId: row.sourceVersionId,
+    createdAt: iso(row.createdAtMs),
+  });
+}
+
+function toArtifactApproval(row: typeof approvals.$inferSelect): ArtifactApproval {
+  return approvalSchema.parse({
+    id: row.id,
+    artifactVersionId: row.artifactVersionId,
+    scope: row.scope,
+    subjectKey: row.subjectKey,
+    action: row.action,
+    origin: row.origin,
+    createdAt: iso(row.createdAtMs),
+  });
 }
 
 function toAsset(row: typeof assets.$inferSelect): Asset {
@@ -115,6 +187,17 @@ export type BookletRepository = {
 
 export type ArtifactRepository = {
   listByBooklet(bookletId: string): Promise<ArtifactSummary[]>;
+  getDetail(bookletId: string, artifactType: ArtifactType): Promise<ArtifactDetail | null>;
+  createVersion(input: {
+    id: string;
+    bookletId: string;
+    artifactType: ArtifactType;
+    content: unknown;
+    dependencyVersionIds: string[];
+    createdBy: "agent" | "user_edit" | "repair" | "application";
+    createdAtMs: number;
+  }): Promise<ArtifactVersion>;
+  approve(input: { id: string; bookletId: string; artifactType: ArtifactType; artifactVersionId: string; scope?: "artifact_content" | "reference" | "page" | "artifact"; subjectKey?: string | null; createdAtMs: number }): Promise<void>;
 };
 
 export type ConversationRepository = {
@@ -135,23 +218,72 @@ export type ConversationRepository = {
   >;
   completeCardFollowup(input: { responseId: string; assistantMessageId: string }): Promise<void>;
   resetRunningCardFollowup(responseId: string): Promise<void>;
+  recoverInterruptedFollowups(): Promise<number>;
 };
 
 export type JobRepository = {
   listActiveByBooklet(bookletId: string): Promise<ActiveJobSummary[]>;
+  getStatus(jobId: string): Promise<{ id: string; bookletId: string; jobType: "references" | "pages" | "export"; status: "pending" | "running" | "partial" | "succeeded" | "failed" | "cancelled"; updatedAt: string; items: Array<{ id: string; itemKey: string; position: number; status: "pending" | "running" | "succeeded" | "failed"; attemptCount: number; error: unknown | null }> } | null>;
+  createOrGet(input: { id: string; bookletId: string; jobType: "references" | "pages" | "export"; idempotencyKey: string; input: unknown; items: Array<{ id: string; itemKey: string; position: number; input: unknown }>; createdAtMs: number }): Promise<{ id: string; status: string; reused: boolean }>;
+  getItems(jobId: string): Promise<Array<{ id: string; itemKey: string; position: number; status: string; attemptCount: number; input: unknown; result: unknown | null; assetId: string | null; error: unknown | null }>>;
+  claimNextPending(jobId: string, startedAtMs: number): Promise<{ id: string; itemKey: string; position: number; attemptCount: number; input: unknown } | null>;
+  completeItem(input: { jobId: string; itemId: string; result: unknown; assets: Asset[]; primaryAssetId: string; finishedAtMs: number }): Promise<void>;
+  failItem(input: { jobId: string; itemId: string; error: unknown; finishedAtMs: number }): Promise<void>;
+  retryItem(jobId: string, itemId: string): Promise<void>;
+  recoverInterrupted(): Promise<number>;
+  listRunnable(): Promise<Array<{ id: string; bookletId: string; jobType: "references" | "pages" | "export" }>>;
 };
 
 export type AssetRepository = {
   get(id: string): Promise<Asset | null>;
+  create(asset: Asset): Promise<void>;
+  listByBooklet(bookletId: string, kind?: Asset["kind"]): Promise<Asset[]>;
 };
 
 export type EvidenceRepository = {
   countModelCalls(bookletId: string): Promise<number>;
   countQualityReviews(bookletId: string): Promise<number>;
+  recordModelCall(input: {
+    id: string;
+    bookletId: string;
+    operation: string;
+    skillId: string | null;
+    artifactVersionId?: string | null;
+    jobId?: string | null;
+    provider: string;
+    model: string;
+    traceId: string | null;
+    status: "succeeded" | "failed";
+    attempt: number;
+    startedAtMs: number;
+    latencyMs: number;
+    inputReference: unknown;
+    outputReference?: unknown;
+    usage?: { inputTokens: number; outputTokens: number } | null;
+    providerRequestId?: string | null;
+    actualCostUsd?: string | null;
+    estimatedCostUsd?: string | null;
+    pricingVersion?: string | null;
+    errorMessage?: string;
+    errorKind?: string | null;
+  }): Promise<void>;
+  recordQualityReview(input: {
+    id: string;
+    bookletId: string;
+    review: QualityReview;
+    artifactVersionIds: string[];
+    repairVersionIds: string[];
+    createdAtMs: number;
+  }): Promise<void>;
+  acceptLatestUnresolvedQualityReview(bookletId: string, acceptedAtMs: number): Promise<boolean>;
+  listModelCalls(bookletId: string): Promise<Array<{ operation: string; skillId: string | null; artifactVersionId: string | null; jobId: string | null; provider: string; model: string; traceId: string | null; providerRequestId: string | null; status: string; attempt: number; latencyMs: number; usage: unknown | null; actualCostUsd: string | null; estimatedCostUsd: string | null; pricingVersion: string | null; errorKind: string | null }>>;
 };
 
 export type ExportRepository = {
   listByBooklet(bookletId: string): Promise<ExportSummary[]>;
+  create(input: { id: string; bookletId: string; artifactVersionId: string; pageAssetIds: string[]; createdAtMs: number }): Promise<void>;
+  complete(input: { id: string; assetId: string; preflight: unknown; updatedAtMs: number }): Promise<void>;
+  fail(input: { id: string; error: unknown; updatedAtMs: number }): Promise<void>;
 };
 
 export type Repositories = {
@@ -234,6 +366,152 @@ export function createRepositories(database: Database): Repositories {
       async listByBooklet(bookletId) {
         const rows = await database.select().from(artifacts).where(eq(artifacts.bookletId, bookletId));
         return rows.map(toArtifactSummary);
+      },
+      async getDetail(bookletId, artifactType) {
+        const artifact = await database.select().from(artifacts)
+          .where(sql`${artifacts.bookletId} = ${bookletId} and ${artifacts.artifactType} = ${artifactType}`)
+          .limit(1);
+        const row = artifact[0];
+        if (!row) return null;
+        const versions = await database.select().from(artifactVersions)
+          .where(eq(artifactVersions.artifactId, row.id))
+          .orderBy(desc(artifactVersions.versionNumber));
+        const versionIds = versions.map((version) => version.id);
+        const approvalRows = versionIds.length === 0
+          ? []
+          : (await Promise.all(versionIds.map((id) => database.select().from(approvals).where(eq(approvals.artifactVersionId, id))))).flat();
+        const history = versions.map((version) => toArtifactVersion(version, artifactType));
+        const currentVersion = row.currentVersionId ? history.find((version) => version.id === row.currentVersionId) ?? null : null;
+        return artifactDetailSchema.parse({
+          artifactType,
+          state: artifactStateSchema.parse(row.state),
+          currentVersion,
+          history,
+          approvals: approvalRows.map(toArtifactApproval),
+        });
+      },
+      async createVersion(input) {
+        const content = parseArtifactDocument(input.artifactType, input.content);
+        return database.transaction(async (transaction) => {
+          const artifactRows = await transaction.select().from(artifacts)
+            .where(sql`${artifacts.bookletId} = ${input.bookletId} and ${artifacts.artifactType} = ${input.artifactType}`)
+            .limit(1);
+          const artifact = artifactRows[0];
+          if (!artifact) throw new Error(`The ${input.artifactType} artifact was not found.`);
+          const currentVersionId = artifact.currentVersionId;
+          const maximum = await transaction.select({ value: sql<number>`max(${artifactVersions.versionNumber})` })
+            .from(artifactVersions).where(eq(artifactVersions.artifactId, artifact.id));
+          const versionNumber = Number(maximum[0]?.value ?? 0) + 1;
+          await transaction.insert(artifactVersions).values({
+            id: input.id,
+            artifactId: artifact.id,
+            versionNumber,
+            schemaVersion: SCHEMA_VERSION,
+            contentJson: JSON.stringify(content),
+            createdBy: input.createdBy,
+            sourceVersionId: currentVersionId,
+            createdAtMs: input.createdAtMs,
+          });
+          if (input.dependencyVersionIds.length) {
+            await transaction.insert(artifactDependencies).values(input.dependencyVersionIds.map((upstreamVersionId, index) => ({
+              id: `${input.id}:dependency:${index}`,
+              downstreamVersionId: input.id,
+              upstreamVersionId,
+              createdAtMs: input.createdAtMs,
+            })));
+          }
+          if (currentVersionId) {
+            const previousVersion = await transaction.select().from(artifactVersions).where(eq(artifactVersions.id, currentVersionId)).limit(1);
+            if (previousVersion[0]) {
+              const previousContent = parseJson(previousVersion[0].contentJson);
+              const retainedSubjects = unchangedScopedSubjects(input.artifactType, previousContent, content);
+              const carryVisualBibleContent = input.artifactType === "visual_bible" && visualBibleDefinitionsUnchanged(previousContent, content);
+              const previousApprovals = await transaction.select().from(approvals).where(eq(approvals.artifactVersionId, currentVersionId));
+              const carried = previousApprovals.filter((approval) =>
+                (approval.scope !== "artifact" && approval.subjectKey && retainedSubjects.has(approval.subjectKey))
+                || (carryVisualBibleContent && approval.scope === "artifact_content"),
+              );
+              if (carried.length) {
+                await transaction.insert(approvals).values(carried.map((approval) => ({
+                  id: randomUUID(),
+                  bookletId: input.bookletId,
+                  artifactVersionId: input.id,
+                  scope: approval.scope,
+                  subjectKey: approval.subjectKey,
+                  action: approval.action,
+                  origin: "carried_forward",
+                  sourceApprovalId: approval.id,
+                  cardResponseId: null,
+                  qualityReviewId: null,
+                  createdAtMs: input.createdAtMs,
+                })));
+              }
+            }
+          }
+          await transaction.update(artifacts).set({ currentVersionId: input.id, state: "draft", updatedAtMs: input.createdAtMs })
+            .where(eq(artifacts.id, artifact.id));
+
+          if (currentVersionId) {
+            const pendingVersionIds = [currentVersionId];
+            const invalidatedArtifactIds = new Set<string>();
+            while (pendingVersionIds.length) {
+              const upstreamVersionId = pendingVersionIds.shift();
+              if (!upstreamVersionId) continue;
+              const dependencies = await transaction.select({ downstreamVersionId: artifactDependencies.downstreamVersionId })
+                .from(artifactDependencies).where(eq(artifactDependencies.upstreamVersionId, upstreamVersionId));
+              for (const dependency of dependencies) {
+                const downstreamVersion = await transaction.select().from(artifactVersions)
+                  .where(eq(artifactVersions.id, dependency.downstreamVersionId)).limit(1);
+                const downstreamArtifact = downstreamVersion[0]
+                  ? (await transaction.select().from(artifacts).where(eq(artifacts.id, downstreamVersion[0].artifactId)).limit(1))[0]
+                  : null;
+                if (!downstreamVersion[0] || !downstreamArtifact || downstreamArtifact.currentVersionId !== downstreamVersion[0].id || invalidatedArtifactIds.has(downstreamArtifact.id)) continue;
+                invalidatedArtifactIds.add(downstreamArtifact.id);
+                await transaction.update(artifacts).set({ state: "needs_review", updatedAtMs: input.createdAtMs })
+                  .where(eq(artifacts.id, downstreamArtifact.id));
+                pendingVersionIds.push(downstreamVersion[0].id);
+              }
+            }
+          }
+
+          return toArtifactVersion({
+            id: input.id,
+            artifactId: artifact.id,
+            versionNumber,
+            schemaVersion: SCHEMA_VERSION,
+            contentJson: JSON.stringify(content),
+            createdBy: input.createdBy,
+            sourceVersionId: currentVersionId,
+            createdAtMs: input.createdAtMs,
+          }, input.artifactType);
+        });
+      },
+      async approve(input) {
+        await database.transaction(async (transaction) => {
+          const artifactRows = await transaction.select().from(artifacts)
+            .where(sql`${artifacts.bookletId} = ${input.bookletId} and ${artifacts.artifactType} = ${input.artifactType}`)
+            .limit(1);
+          const artifact = artifactRows[0];
+          if (!artifact || artifact.currentVersionId !== input.artifactVersionId) throw new Error("Only the current artifact version can be approved.");
+          const scope = input.scope ?? "artifact";
+          await transaction.insert(approvals).values({
+            id: input.id,
+            bookletId: input.bookletId,
+            artifactVersionId: input.artifactVersionId,
+            scope,
+            subjectKey: input.subjectKey ?? null,
+            action: "approve",
+            origin: "user",
+            sourceApprovalId: null,
+            cardResponseId: null,
+            qualityReviewId: null,
+            createdAtMs: input.createdAtMs,
+          });
+          if (scope === "artifact") {
+            await transaction.update(artifacts).set({ state: "approved", updatedAtMs: input.createdAtMs })
+              .where(eq(artifacts.id, artifact.id));
+          }
+        });
       },
     },
     conversation: {
@@ -375,6 +653,8 @@ export function createRepositories(database: Database): Repositories {
 
           const submittedCard = genUICardSchema.parse({ ...card, status: "submitted" });
           const summary = responseSummary(card, validatedResponse);
+          const followupRequired = !(card.family === "artifact_review" && validatedResponse.action === "approve_and_continue")
+            && !(card.family === "issue" && validatedResponse.action === "accept_with_issue");
           await transaction.update(cards).set({ status: "submitted", cardJson: JSON.stringify(submittedCard), updatedAtMs: input.createdAtMs })
             .where(eq(cards.id, card.cardId));
           if (cardRow.messageId) {
@@ -391,11 +671,11 @@ export function createRepositories(database: Database): Repositories {
             action: validatedResponse.action,
             valueJson: validatedResponse.value === undefined ? null : JSON.stringify(validatedResponse.value),
             revisionInstruction: validatedResponse.revisionInstruction ?? null,
-            followupStatus: "pending",
+            followupStatus: followupRequired ? "pending" : "not_required",
             followupMessageId: null,
             createdAtMs: input.createdAtMs,
           });
-          return { kind: "saved" as const, duplicate: false, followupRequired: true, summary };
+          return { kind: "saved" as const, duplicate: false, followupRequired, summary };
         });
       },
       async claimCardFollowup(input) {
@@ -443,8 +723,94 @@ export function createRepositories(database: Database): Repositories {
         await database.update(cardResponses).set({ followupStatus: "pending" })
           .where(sql`${cardResponses.id} = ${responseId} and ${cardResponses.followupStatus} = 'running'`);
       },
+      async recoverInterruptedFollowups() {
+        const recovered = await database.update(cardResponses).set({ followupStatus: "pending" })
+          .where(eq(cardResponses.followupStatus, "running"))
+          .returning({ id: cardResponses.id });
+        return recovered.length;
+      },
     },
     jobs: {
+      async createOrGet(input) {
+        return database.transaction(async (transaction) => {
+          const existing = await transaction.select({ id: generationJobs.id, status: generationJobs.status }).from(generationJobs)
+            .where(eq(generationJobs.idempotencyKey, input.idempotencyKey)).limit(1);
+          if (existing[0]) return { ...existing[0], reused: true };
+          await transaction.insert(generationJobs).values({
+            id: input.id, bookletId: input.bookletId, jobType: input.jobType, status: "pending", idempotencyKey: input.idempotencyKey,
+            inputJson: JSON.stringify(input.input), errorJson: null, createdAtMs: input.createdAtMs, startedAtMs: null, finishedAtMs: null, updatedAtMs: input.createdAtMs,
+          });
+          if (input.items.length) {
+            await transaction.insert(generationItems).values(input.items.map((item) => ({
+              id: item.id, jobId: input.id, itemKey: item.itemKey, position: item.position, status: "pending", attemptCount: 0,
+              inputJson: JSON.stringify(item.input), resultJson: null, assetId: null, errorJson: null, startedAtMs: null, finishedAtMs: null,
+            })));
+          }
+          return { id: input.id, status: "pending", reused: false };
+        });
+      },
+      async getItems(jobId) {
+        const rows = await database.select().from(generationItems).where(eq(generationItems.jobId, jobId)).orderBy(asc(generationItems.position));
+        return rows.map((item) => ({ id: item.id, itemKey: item.itemKey, position: item.position, status: item.status, attemptCount: item.attemptCount, input: parseJson(item.inputJson), result: item.resultJson ? parseJson(item.resultJson) : null, assetId: item.assetId, error: item.errorJson ? parseJson(item.errorJson) : null }));
+      },
+      async claimNextPending(jobId, startedAtMs) {
+        return database.transaction(async (transaction) => {
+          const item = (await transaction.select().from(generationItems)
+            .where(sql`${generationItems.jobId} = ${jobId} and ${generationItems.status} = 'pending'`)
+            .orderBy(asc(generationItems.position)).limit(1))[0];
+          if (!item) return null;
+          const claimed = await transaction.update(generationItems).set({ status: "running", attemptCount: item.attemptCount + 1, startedAtMs, finishedAtMs: null })
+            .where(sql`${generationItems.id} = ${item.id} and ${generationItems.status} = 'pending'`).returning({ id: generationItems.id });
+          if (!claimed[0]) return null;
+          await transaction.update(generationJobs).set({ status: "running", startedAtMs, updatedAtMs: startedAtMs }).where(eq(generationJobs.id, jobId));
+          return { id: item.id, itemKey: item.itemKey, position: item.position, attemptCount: item.attemptCount + 1, input: parseJson(item.inputJson) };
+        });
+      },
+      async completeItem(input) {
+        await database.transaction(async (transaction) => {
+          await transaction.insert(assets).values(input.assets.map((asset) => ({
+            id: asset.id, bookletId: asset.bookletId, kind: asset.kind, uri: asset.uri, mimeType: asset.mimeType,
+            width: asset.width, height: asset.height, sourceAssetId: asset.sourceAssetId, metadataJson: asset.metadata ? JSON.stringify(asset.metadata) : null, createdAtMs: asset.createdAtMs,
+          })));
+          await transaction.update(generationItems).set({ status: "succeeded", resultJson: JSON.stringify(input.result), assetId: input.primaryAssetId, errorJson: null, finishedAtMs: input.finishedAtMs })
+            .where(eq(generationItems.id, input.itemId));
+          const remaining = await transaction.select({ count: sql<number>`count(*)` }).from(generationItems)
+            .where(sql`${generationItems.jobId} = ${input.jobId} and ${generationItems.status} != 'succeeded'`);
+          await transaction.update(generationJobs).set({ status: Number(remaining[0]?.count ?? 0) === 0 ? "succeeded" : "running", finishedAtMs: Number(remaining[0]?.count ?? 0) === 0 ? input.finishedAtMs : null, updatedAtMs: input.finishedAtMs })
+            .where(eq(generationJobs.id, input.jobId));
+        });
+      },
+      async failItem(input) {
+        await database.transaction(async (transaction) => {
+          await transaction.update(generationItems).set({ status: "failed", errorJson: JSON.stringify(input.error), finishedAtMs: input.finishedAtMs }).where(eq(generationItems.id, input.itemId));
+          await transaction.update(generationJobs).set({ status: "partial", errorJson: JSON.stringify(input.error), updatedAtMs: input.finishedAtMs }).where(eq(generationJobs.id, input.jobId));
+        });
+      },
+      async retryItem(jobId, itemId) {
+        await database.transaction(async (transaction) => {
+          await transaction.update(generationItems).set({ status: "pending", errorJson: null, finishedAtMs: null }).where(sql`${generationItems.id} = ${itemId} and ${generationItems.jobId} = ${jobId} and ${generationItems.status} = 'failed'`);
+          await transaction.update(generationJobs).set({ status: "pending", errorJson: null, finishedAtMs: null, updatedAtMs: Date.now() }).where(eq(generationJobs.id, jobId));
+        });
+      },
+      async recoverInterrupted() {
+        return database.transaction(async (transaction) => {
+          const recovered = await transaction.update(generationItems).set({ status: "pending", startedAtMs: null })
+            .where(eq(generationItems.status, "running"))
+            .returning({ id: generationItems.id });
+          await transaction.update(generationJobs).set({ status: "pending", startedAtMs: null, finishedAtMs: null, updatedAtMs: Date.now() })
+            .where(eq(generationJobs.status, "running"));
+          return recovered.length;
+        });
+      },
+      async listRunnable() {
+        const rows = await database.select({ id: generationJobs.id, bookletId: generationJobs.bookletId, jobType: generationJobs.jobType })
+          .from(generationJobs)
+          .where(sql`${generationJobs.status} in ('pending', 'partial', 'running')`)
+          .orderBy(asc(generationJobs.createdAtMs));
+        return rows
+          .filter((row): row is typeof row & { jobType: "references" | "pages" | "export" } => row.jobType === "references" || row.jobType === "pages" || row.jobType === "export")
+          .map((row) => ({ id: row.id, bookletId: row.bookletId, jobType: row.jobType }));
+      },
       async listActiveByBooklet(bookletId) {
         const rows = await database.select().from(generationJobs).where(eq(generationJobs.bookletId, bookletId));
         const active = rows.filter((row) => activeJobStatuses.has(row.status));
@@ -462,11 +828,32 @@ export function createRepositories(database: Database): Repositories {
           };
         }));
       },
+      async getStatus(jobId) {
+        const job = await database.select().from(generationJobs).where(eq(generationJobs.id, jobId)).limit(1);
+        if (!job[0]) return null;
+        const items = await database.select().from(generationItems).where(eq(generationItems.jobId, jobId)).orderBy(asc(generationItems.position));
+        const row = job[0];
+        if (row.jobType !== "references" && row.jobType !== "pages" && row.jobType !== "export") throw new Error("Unknown generation job type.");
+        return {
+          id: row.id, bookletId: row.bookletId, jobType: row.jobType, status: row.status as "pending" | "running" | "partial" | "succeeded" | "failed" | "cancelled", updatedAt: iso(row.updatedAtMs),
+          items: items.map((item) => ({ id: item.id, itemKey: item.itemKey, position: item.position, status: item.status as "pending" | "running" | "succeeded" | "failed", attemptCount: item.attemptCount, error: item.errorJson ? parseJson(item.errorJson) : null })),
+        };
+      },
     },
     assets: {
       async get(id) {
         const row = await database.select().from(assets).where(eq(assets.id, id)).limit(1);
         return row[0] ? toAsset(row[0]) : null;
+      },
+      async create(asset) {
+        await database.insert(assets).values({
+          id: asset.id, bookletId: asset.bookletId, kind: asset.kind, uri: asset.uri, mimeType: asset.mimeType, width: asset.width, height: asset.height,
+          sourceAssetId: asset.sourceAssetId, metadataJson: asset.metadata ? JSON.stringify(asset.metadata) : null, createdAtMs: asset.createdAtMs,
+        });
+      },
+      async listByBooklet(bookletId, kind) {
+        const rows = await database.select().from(assets).where(kind ? sql`${assets.bookletId} = ${bookletId} and ${assets.kind} = ${kind}` : eq(assets.bookletId, bookletId)).orderBy(desc(assets.createdAtMs));
+        return rows.map(toAsset);
       },
     },
     evidence: {
@@ -480,8 +867,71 @@ export function createRepositories(database: Database): Repositories {
           .where(eq(qualityReviews.bookletId, bookletId));
         return Number(result[0]?.count ?? 0);
       },
+      async recordModelCall(input) {
+        await database.insert(modelCalls).values({
+          id: input.id,
+          bookletId: input.bookletId,
+          operation: input.operation,
+          skillId: input.skillId,
+          artifactVersionId: input.artifactVersionId ?? null,
+          jobId: input.jobId ?? null,
+          provider: input.provider,
+          model: input.model,
+          traceId: input.traceId,
+          providerRequestId: input.providerRequestId ?? null,
+          status: input.status,
+          attempt: input.attempt,
+          startedAtMs: input.startedAtMs,
+          latencyMs: input.latencyMs,
+          inputRefJson: JSON.stringify(input.inputReference),
+          outputRefJson: input.outputReference === undefined ? null : JSON.stringify(input.outputReference),
+          usageJson: input.usage ? JSON.stringify(input.usage) : null,
+          actualCostUsd: input.actualCostUsd ?? null,
+          estimatedCostUsd: input.estimatedCostUsd ?? null,
+          pricingVersion: input.pricingVersion ?? null,
+          errorKind: input.status === "failed" ? input.errorKind ?? "validation" : null,
+          errorMessage: input.errorMessage ?? null,
+        });
+      },
+      async recordQualityReview(input) {
+        const review = qualityReviewSchema.parse(input.review);
+        await database.insert(qualityReviews).values({
+          id: input.id,
+          bookletId: input.bookletId,
+          gate: review.gate,
+          attempt: review.attempt,
+          status: review.status,
+          artifactVersionIdsJson: JSON.stringify(input.artifactVersionIds),
+          issuesJson: JSON.stringify(review.issues),
+          repairVersionIdsJson: input.repairVersionIds.length ? JSON.stringify(input.repairVersionIds) : null,
+          acceptedAtMs: null,
+          createdAtMs: input.createdAtMs,
+        });
+      },
+      async acceptLatestUnresolvedQualityReview(bookletId, acceptedAtMs) {
+        const review = await database.select({ id: qualityReviews.id }).from(qualityReviews)
+          .where(sql`${qualityReviews.bookletId} = ${bookletId} and ${qualityReviews.status} = 'unresolved' and ${qualityReviews.acceptedAtMs} is null`)
+          .orderBy(desc(qualityReviews.createdAtMs)).limit(1);
+        if (!review[0]) return false;
+        await database.update(qualityReviews).set({ acceptedAtMs }).where(eq(qualityReviews.id, review[0].id));
+        return true;
+      },
+      async listModelCalls(bookletId) {
+        const rows = await database.select({ operation: modelCalls.operation, skillId: modelCalls.skillId, artifactVersionId: modelCalls.artifactVersionId, jobId: modelCalls.jobId, provider: modelCalls.provider, model: modelCalls.model, traceId: modelCalls.traceId, providerRequestId: modelCalls.providerRequestId, status: modelCalls.status, attempt: modelCalls.attempt, latencyMs: modelCalls.latencyMs, usageJson: modelCalls.usageJson, actualCostUsd: modelCalls.actualCostUsd, estimatedCostUsd: modelCalls.estimatedCostUsd, pricingVersion: modelCalls.pricingVersion, errorKind: modelCalls.errorKind })
+          .from(modelCalls).where(eq(modelCalls.bookletId, bookletId)).orderBy(asc(modelCalls.startedAtMs));
+        return rows.map((row) => ({ ...row, usage: row.usageJson ? parseJson(row.usageJson) : null }));
+      },
     },
     exports: {
+      async create(input) {
+        await database.insert(exportsTable).values({ id: input.id, bookletId: input.bookletId, artifactVersionId: input.artifactVersionId, status: "running", assetId: null, pageAssetIdsJson: JSON.stringify(input.pageAssetIds), preflightJson: null, errorJson: null, createdAtMs: input.createdAtMs, updatedAtMs: input.createdAtMs });
+      },
+      async complete(input) {
+        await database.update(exportsTable).set({ status: "succeeded", assetId: input.assetId, preflightJson: JSON.stringify(input.preflight), errorJson: null, updatedAtMs: input.updatedAtMs }).where(eq(exportsTable.id, input.id));
+      },
+      async fail(input) {
+        await database.update(exportsTable).set({ status: "failed", errorJson: JSON.stringify(input.error), updatedAtMs: input.updatedAtMs }).where(eq(exportsTable.id, input.id));
+      },
       async listByBooklet(bookletId) {
         const rows = await database.select().from(exportsTable)
           .where(eq(exportsTable.bookletId, bookletId))

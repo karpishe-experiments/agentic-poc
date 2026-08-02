@@ -17,9 +17,10 @@ export function artifactLabel(type: ArtifactType): string {
   return artifactLabels[type];
 }
 
-export function ArtifactRail({ bookletId, artifacts, selectedArtifact }: Readonly<{
+export function ArtifactRail({ bookletId, artifacts, pageItems, selectedArtifact }: Readonly<{
   bookletId: string;
   artifacts: ArtifactSummary[];
+  pageItems: Array<{ pageId: string; pageIndex: number; kind: "cover" | "story" }>;
   selectedArtifact: ArtifactType;
 }>) {
   return (
@@ -37,6 +38,7 @@ export function ArtifactRail({ bookletId, artifacts, selectedArtifact }: Readonl
                 <span>{index + 1}. {artifactLabel(artifact.artifactType)}</span>
                 <span className="text-xs capitalize text-[var(--muted-ink)]">{artifact.state.replaceAll("_", " ")}</span>
               </Link>
+              {artifact.artifactType === "page_plan" && pageItems.length ? <ol className="ml-4 mt-1 grid gap-1 border-l border-[var(--border)] pl-2">{pageItems.map((page) => <li key={page.pageId}><Link className="block rounded px-2 py-1 text-xs text-[var(--muted-ink)] no-underline hover:bg-[#fff7ee] focus-visible:outline-2 focus-visible:outline-[var(--accent)]" href={`/booklets/${bookletId}?artifact=page_plan#page-${page.pageId}`}>{page.pageIndex === 0 ? "Cover" : `Page ${page.pageIndex}`} · {page.kind}</Link></li>)}</ol> : null}
             </li>
           );
         })}

@@ -3,13 +3,15 @@
 import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CardRegistry } from "@/components/cards/card-registry";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 import type { BookletUIMessage } from "@/lib/contracts/messages";
 
-type CardResponseBody = { data?: { summary: string; followupRequired: boolean }; error?: { message?: string } };
+type CardResponseBody = { data?: { summary: string; followupRequired: boolean; refreshRequired?: boolean }; error?: { message?: string } };
 
 export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{ bookletId: string; initialMessages: BookletUIMessage[] }>) {
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [workingStatus, setWorkingStatus] = useState<string | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
@@ -22,16 +24,27 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
     api: `/api/chat/${bookletId}`,
     prepareSendMessagesRequest: ({ messages }) => ({ body: { message: messages.at(-1) } }),
   }), [bookletId]);
-  const { messages, sendMessage, status, error } = useChat<BookletUIMessage>({
+  const { messages, sendMessage, setMessages, status, error } = useChat<BookletUIMessage>({
     id: bookletId,
     messages: initialMessages,
     transport,
     onData: (dataPart) => {
       if (dataPart.type === "data-workingStatus") setWorkingStatus(dataPart.data.label);
     },
-    onFinish: () => setWorkingStatus(null),
+    onFinish: () => {
+      setWorkingStatus(null);
+      router.refresh();
+    },
     onError: () => setWorkingStatus(null),
   });
+
+  useEffect(() => {
+    const serverLatest = initialMessages.at(-1)?.id;
+    const clientLatest = messages.at(-1)?.id;
+    if (initialMessages.length > messages.length || (initialMessages.length === messages.length && serverLatest && clientLatest && serverLatest !== clientLatest)) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages, messages, setMessages]);
 
   useEffect(() => {
     const container = conversationRef.current;
@@ -79,6 +92,7 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
       if (!result.ok || !body.data) throw new Error(body.error?.message ?? "We could not save that decision.");
       setSubmittedCardIds((submitted) => new Set(submitted).add(card.cardId));
       if (body.data.followupRequired) await sendText(body.data.summary, responseId);
+      else if (body.data.refreshRequired || (card.family === "artifact_review" && response.action === "approve_and_continue" && (card.payload.artifactType === "page_plan" || (card.payload.artifactType === "visual_bible" && card.variant === "summary")))) router.refresh();
     } catch (submissionError) {
       setCardError(submissionError instanceof Error ? submissionError.message : "We could not save that decision.");
     } finally {
@@ -129,7 +143,7 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
       {hasUnseenMessages ? <button className="mt-2 w-fit rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)]" onClick={jumpToLatest} type="button">Jump to latest</button> : null}
       <form className="mt-3 flex gap-2" onSubmit={onSubmit}>
         <label className="sr-only" htmlFor="chat-message">Tell the creative partner what to change</label>
-        <input className="min-w-0 flex-1 rounded-lg border border-[var(--border)] px-3 py-2" disabled={status !== "ready"} id="chat-message" onChange={(event) => setInput(event.target.value)} placeholder="Add a story detail or ask to begin" value={input} />
+        <input autoComplete="off" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] px-3 py-2" disabled={status !== "ready"} id="chat-message" name="message" onChange={(event) => setInput(event.target.value)} placeholder="Add a story detail or ask to begin…" value={input} />
         <button className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={status !== "ready" || !input.trim()} type="submit">Send</button>
       </form>
       {messages.length === initialMessages.length ? <button className="mt-2 w-fit text-sm font-semibold text-[var(--accent)]" disabled={status !== "ready"} onClick={() => void sendText("Please begin the guided questions.")} type="button">Start guided questions</button> : null}

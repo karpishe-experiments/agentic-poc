@@ -33,6 +33,7 @@ export async function POST(request: Request, { params }: RouteProperties) {
     });
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
+    console.error("Kids Booklet chat turn failed", error);
     if (error instanceof BookletNotFoundError) {
       const response = toErrorEnvelope(error);
       return Response.json(response.body, { status: response.status });

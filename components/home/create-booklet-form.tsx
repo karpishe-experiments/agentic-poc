@@ -42,10 +42,11 @@ export function CreateBookletForm() {
       <textarea
         id="story-idea"
         name="idea"
+        autoComplete="off"
         value={idea}
         onChange={(event) => setIdea(event.target.value)}
         className="mt-3 min-h-28 w-full rounded-xl border border-[var(--border)] bg-white p-3 text-base outline-offset-2 focus:border-[var(--accent)]"
-        placeholder="For example: A shy fox learns to ask for help while building a kite."
+        placeholder="For example: A shy fox learns to ask for help while building a kite…"
         required
         maxLength={5000}
         disabled={isSubmitting}

@@ -6,8 +6,8 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 - Node.js 24 recommended (Node 22 minimum)
 - npm
-- An OpenAI account and API key with access to the configured models
-- Poppler for the final PDF visual-inspection workflow (introduced with retained evaluations)
+- An OpenAI account and API key with access to the configured models and available API billing credits for retained evaluations
+- Poppler for PDF visual inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
 
 ## Quick start
 
@@ -20,7 +20,7 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
-The quick-start commands were verified in Slice 0 on 2026-08-01. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
+The command path was re-verified on 2026-08-02 with deterministic fake providers. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
 
 ## Commands
 
@@ -29,11 +29,28 @@ The quick-start commands were verified in Slice 0 on 2026-08-01. In this Windows
 | `preflight` | Safely validate the local credential and configured model aliases. |
 | `dev`, `build`, `start` | Run the Next.js application. |
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
-| `test:agent`, `test:e2e` | Run deterministic agent fixtures and the desktop Chromium golden path when those slices are available. |
+| `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
 | `db:generate`, `db:migrate`, `seed` | Generate migrations, migrate the local database, and register checked-in seed assets. |
-| `eval:real` | Run a named retained real-provider evaluation after the evaluation slice is available. |
+| `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
-Automated commands never make paid model or image calls. Real-provider work is limited to the explicit evaluation workflow.
+Automated commands never make paid model or image calls. The workspace defaults to deterministic fake model and image providers; real-provider work is limited to the explicit evaluation workflow. The workspace exposes an Evidence JSON link for the selected booklet, and each successful PDF export persists the same summary under the local data root.
+
+Run retained evaluations individually: `npm run eval:real -- --fixture early-reader`, then `developing-reader`, then `older-reader`. These require API billing credits in addition to model access; the 2026-08-02 run plan estimates $5–$15 total for all three at the configured medium image quality.
+
+## Workflow at a glance
+
+```mermaid
+flowchart LR
+  idea[Story idea] --> intake[Guided intake cards]
+  intake --> reviews[Review & approve artifacts]
+  reviews --> refs[Canonical references]
+  refs --> pages[Compose cover & story pages]
+  pages --> final[Approve Final Pages]
+  final --> pdf[Export & download PDF]
+  reviews --> evidence[Local versions, traces & evidence]
+  pages --> evidence
+  pdf --> evidence
+```
 
 ## Local data and project references
 

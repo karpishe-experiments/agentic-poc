@@ -71,6 +71,7 @@ const artifactReviewCardSchema = baseCardSchema.extend({
     artifactType: artifactTypeSchema,
     versionId: opaqueIdSchema.nullable(),
     summary: z.array(z.object({ label: z.string().min(1), value: z.string().min(1) })).min(1).max(16),
+    downloadAssetId: opaqueIdSchema.optional(),
   }),
 });
 
@@ -147,6 +148,17 @@ export type CardResponse = z.infer<typeof cardResponseSchema>;
 export type CardAction = z.infer<typeof cardActionSchema>;
 
 export function validateCardResponseValue(card: GenUICard, response: CardResponse): CardResponse {
+  if (!card.allowedActions.includes(response.action)) {
+    throw new z.ZodError([{ code: "custom", path: ["action"], message: "That action is not available for this card." }]);
+  }
+  if (response.action === "request_revision") {
+    const revisionInstruction = z.string().trim().min(1).max(5_000).parse(response.revisionInstruction);
+    if (response.value !== undefined) throw new z.ZodError([{ code: "custom", path: ["value"], message: "A revision request accepts an instruction, not a separate value." }]);
+    return { ...response, revisionInstruction };
+  }
+  if (response.revisionInstruction !== undefined) {
+    throw new z.ZodError([{ code: "custom", path: ["revisionInstruction"], message: "Only revision requests accept an instruction." }]);
+  }
   if (card.family === "question") {
     if (card.variant === "free_text") {
       const value = z.string().trim()
@@ -166,7 +178,7 @@ export function validateCardResponseValue(card: GenUICard, response: CardRespons
     return { ...response, value: card.variant === "multi_select" ? selectedValues : selectedValues[0] };
   }
 
-  if (card.family === "artifact_review" && card.variant === "visual_gallery" && response.action === "select") {
+  if (card.family === "artifact_review" && card.variant === "visual_gallery" && (response.action === "select" || response.action === "approve_and_continue")) {
     const values = z.array(z.string().uuid()).min(1).parse(response.value);
     const assets = new Set(card.payload.items.map((item) => item.assetId));
     if (new Set(values).size !== values.length || values.some((value) => !assets.has(value))) {

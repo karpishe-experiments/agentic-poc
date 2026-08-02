@@ -26,7 +26,7 @@ export function BookletList({ booklets }: Readonly<{ booklets: BookletSummary[] 
     <ul className="grid gap-3" aria-label="Your booklets">
       {booklets.map((booklet) => (
         <li key={booklet.id}>
-          <Link className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 no-underline shadow-sm transition hover:border-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]" href={`/booklets/${booklet.id}`}>
+          <Link className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 no-underline shadow-sm transition-colors hover:border-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]" href={`/booklets/${booklet.id}`}>
             <span className="flex gap-3">
               {booklet.coverAssetId ? <Image alt="" className="h-16 w-16 rounded-lg object-cover" height={64} src={`/api/assets/${booklet.coverAssetId}`} unoptimized width={64} /> : null}
               <span className="grid min-w-0 flex-1 gap-2">
