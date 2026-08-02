@@ -1,5 +1,3 @@
-import "server-only";
-
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";

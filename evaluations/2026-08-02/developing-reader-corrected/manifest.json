@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1",
+  "fixture": "developing-reader",
+  "runLabel": "corrected",
+  "label": "Developing reader",
+  "bookletId": "903d5f69-4caa-4a98-9d8a-ab3a24d4c9fe",
+  "ageBand": "6-8",
+  "storyPages": 6,
+  "geometry": "landscape_5_4",
+  "providerMode": "real",
+  "startedAt": "2026-08-02T07:38:42.768Z",
+  "completedAt": "2026-08-02T07:53:03.724Z",
+  "localSourceAssets": "data/evaluations/2026-08-02/developing-reader-corrected/assets"
+}

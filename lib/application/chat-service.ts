@@ -20,6 +20,9 @@ import { bookletSpecificationResultSchema } from "@/lib/skills/booklet-specifica
 import { pagePlanningResultSchema } from "@/lib/skills/page-planning-writing";
 import { imagePromptCompilationResultSchema } from "@/lib/skills/image-prompt-compilation";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
+import { materializePagePlan, materializeStoryPlan } from "@/lib/application/entity-materialization";
+import { pagePlanSchema, storyPlanSchema } from "@/lib/contracts/artifacts";
+import { pagePlanDraftSchema, storyPlanDraftSchema } from "@/lib/contracts/drafts";
 import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
 
 export type ChatTurn = { userMessage: BookletUIMessage; assistantMessage: BookletUIMessage };
@@ -152,8 +155,15 @@ export class ChatService {
       const specificationDraft = bookletSpecificationResultSchema.safeParse(managerResult.output);
       const pagePlanDraft = pagePlanningResultSchema.safeParse(managerResult.output);
       const finalPagesReview = imagePromptCompilationResultSchema.safeParse(managerResult.output);
-      const result = assessment.success && assessment.data.questionCard
-        ? { narration: "I’ll shape this around the idea you shared. First, let’s choose the reading audience.", card: assessment.data.questionCard }
+      const selectedAgeBand = /\b(3[-–]5|6[-–]8|9[-–]12)\b/.exec(authoritativeText)?.[1]?.replace("–", "-") as "3-5" | "6-8" | "9-12" | undefined;
+      const result = selectedAgeBand && booklet.currentStage === "audience_profile"
+        // This response is a validated application decision, not a creative
+        // model choice. Advance deterministically so a model cannot reopen it.
+        ? await this.createAudienceReview(bookletId, originalIdea, [`Audience is ages ${selectedAgeBand}.`])
+        : assessment.success && assessment.data.questionCard
+        // Age-band identifiers drive application routing, so this UI decision is
+        // application-owned even when the specialist identifies it as the gap.
+        ? createFakeConversationResult({ bookletId, cardId: randomUUID(), idea: originalIdea })
         : assessment.success && assessment.data.ready && booklet.currentStage === "audience_profile"
           ? await this.createAudienceReview(bookletId, originalIdea, assessment.data.knownFacts)
           : storyDraft.success && booklet.currentStage === "story_plan"
@@ -231,7 +241,8 @@ export class ChatService {
   }
 
   private async createStoryReview(bookletId: string, draft: unknown, narration: string) {
-    const story = await this.artifacts.revise(bookletId, "story_plan", draft, { createdBy: "agent" });
+    const current = await this.artifacts.get(bookletId, "story_plan");
+    const story = await this.artifacts.revise(bookletId, "story_plan", materializeStoryPlan(storyPlanDraftSchema.parse(draft), current.currentVersion ? storyPlanSchema.parse(current.currentVersion.content) : null), { createdBy: "agent" });
     if (!story.currentVersion || !story.currentVersion.content || typeof story.currentVersion.content !== "object") {
       throw new RecoverableApplicationError({ code: "story_plan_missing", message: "The Story Plan needs a saved version before it can be reviewed.", status: 409 });
     }
@@ -299,7 +310,7 @@ export class ChatService {
         card: {
           schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "question" as const, variant: "single_select" as const, status: "active" as const,
           title: "Choose visual style", explanation: "Soft watercolor is recommended, but each seeded direction remains available.", allowedActions: ["select" as const],
-          payload: { prompt: "Choose the booklet's visual direction.", recommendedChoiceId: output.content.styleId, choices: [
+          payload: { prompt: "Choose the booklet's visual direction.", recommendedChoiceId: "soft-watercolor", choices: [
             { id: "soft-watercolor", label: "Soft watercolor", description: "Warm, forgiving shapes for gentle stories." },
             { id: "cut-paper-collage", label: "Cut-paper collage", description: "Bold handmade shapes and clear silhouettes." },
             { id: "colored-pencil", label: "Colored pencil", description: "Textured lines and familiar storybook warmth." },
@@ -337,7 +348,9 @@ export class ChatService {
   }
 
   private async createPagePlanReview(bookletId: string, content: unknown, narration: string) {
-    const detail = await this.artifacts.revise(bookletId, "page_plan", content, { createdBy: "agent" });
+    const current = await this.artifacts.get(bookletId, "page_plan");
+    const draft = pagePlanDraftSchema.parse(content);
+    const detail = await this.artifacts.revise(bookletId, "page_plan", materializePagePlan(draft, current.currentVersion ? pagePlanSchema.parse(current.currentVersion.content) : null), { createdBy: "agent" });
     const plan = detail.currentVersion?.content as { storyPageCount: number; geometry: string; pages: unknown[] };
     return {
       narration,

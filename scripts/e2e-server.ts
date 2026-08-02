@@ -1,8 +1,9 @@
 import { spawn, spawnSync } from "node:child_process";
 
 await import("./prepare-e2e");
+const port = process.env.E2E_PORT ?? "3001";
 
-const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", "3001"], {
+const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", port], {
   env: process.env,
   stdio: "inherit",
 });

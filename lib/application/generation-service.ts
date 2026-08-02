@@ -40,6 +40,15 @@ function referenceUri(bookletId: string, item: ReferenceItem, assetId: string): 
   return `${bookletId}/references/${item.kind === "character" ? "characters" : "locations"}/${item.entityId}/${assetId}.png`;
 }
 
+function compactPromptField(value: string, maximum = 480): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= maximum ? normalized : `${normalized.slice(0, maximum - 3).trimEnd()}...`;
+}
+
+function compactPromptItems(values: string[], maximumPerItem = 240, maximumItems = 12): string[] {
+  return [...new Set(values.filter(Boolean).map((value) => compactPromptField(value, maximumPerItem)))].slice(0, maximumItems);
+}
+
 export class GenerationService {
   private readonly repositories: Repositories;
   private readonly artifacts: ArtifactService;
@@ -142,11 +151,21 @@ export class GenerationService {
   public async createPageJob(bookletId: string, options: { pageIds?: string[]; revisionKey?: string } = {}) {
     const plan = await this.artifacts.get(bookletId, "page_plan");
     if (!plan.currentVersion) throw new Error("Page generation needs an approved Page Plan.");
-    const content = plan.currentVersion.content as { geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5"; pages: Array<{ pageId: string; pageIndex: number; kind: "cover" | "story"; readerText: string; sceneAction: string; relevantReferenceIds: string[]; textSafeRegion: { x: number; y: number; width: number; height: number } }> };
-    const bible = await this.artifacts.get(bookletId, "visual_bible");
-    const bibleContent = bible.currentVersion?.content as { styleReferences?: string[]; characters?: Array<{ currentReferenceAssetId: string | null }>; locations?: Array<{ currentReferenceAssetId: string | null }> } | undefined;
+    const content = plan.currentVersion.content as { geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5"; pages: Array<{ pageId: string; pageIndex: number; kind: "cover" | "story"; readerText: string; sceneAction: string; characterIds: string[]; locationIds: string[]; continuityNotes: string[]; relevantReferenceIds: string[]; textSafeRegion: { x: number; y: number; width: number; height: number } }> };
+    const [bible, visualStyle] = await Promise.all([
+      this.artifacts.get(bookletId, "visual_bible"),
+      this.artifacts.get(bookletId, "visual_style"),
+    ]);
+    const bibleContent = bible.currentVersion?.content as {
+      styleReferences?: string[];
+      characters?: Array<{ entityId: string; name: string; visualDetails: string[]; continuityConstraints: string[]; currentReferenceAssetId: string | null }>;
+      locations?: Array<{ entityId: string; name: string; visualDetails: string[]; continuityConstraints: string[]; currentReferenceAssetId: string | null }>;
+    } | undefined;
+    const styleContent = visualStyle.currentVersion?.content as { visualDirection?: string; texture?: string; lighting?: string } | undefined;
     const styleIds = new Set(bibleContent?.styleReferences ?? []);
     const locationIds = new Set((bibleContent?.locations ?? []).map((location) => location.currentReferenceAssetId).filter((id): id is string => Boolean(id)));
+    const charactersById = new Map((bibleContent?.characters ?? []).map((character) => [character.entityId, character]));
+    const locationsById = new Map((bibleContent?.locations ?? []).map((location) => [location.entityId, location]));
     const selectedPageIds = options.pageIds ? new Set(options.pageIds) : null;
     const selectedPages = selectedPageIds ? content.pages.filter((page) => selectedPageIds.has(page.pageId)) : content.pages;
     if (!selectedPages.length || (selectedPageIds && selectedPages.length !== selectedPageIds.size)) throw new Error("Choose one or more pages from the current Page Plan to regenerate.");
@@ -154,7 +173,34 @@ export class GenerationService {
     return this.repositories.jobs.createOrGet({
       id: jobId, bookletId, jobType: "pages", idempotencyKey: `pages:${plan.currentVersion.id}${options.revisionKey ? `:revision:${options.revisionKey}` : ""}`, input: { pagePlanVersionId: plan.currentVersion.id, pageIds: options.pageIds ?? null }, createdAtMs: Date.now(),
       items: selectedPages.map((page) => {
-        const promptPlan = { purpose: page.kind === "cover" ? "booklet cover illustration" : `story page ${page.pageIndex} illustration`, subject: "Approved Story Plan subjects", action: page.sceneAction, location: "Approved Visual Bible location", visualStyle: "Use the approved visual style and canonical references.", continuityConstraints: [], textSafeRegion: page.textSafeRegion, preserve: ["Canonical character and location identity"] };
+        const pageCharacters = page.characterIds.map((entityId) => charactersById.get(entityId)).filter((item): item is NonNullable<typeof item> => Boolean(item));
+        const pageLocations = page.locationIds.map((entityId) => locationsById.get(entityId)).filter((item): item is NonNullable<typeof item> => Boolean(item));
+        const subject = pageCharacters.length
+          ? compactPromptField(pageCharacters.map((character) => `${character.name}: ${character.visualDetails.slice(0, 2).join(", ")}`).join("; "))
+          : "The approved story subjects";
+        const location = pageLocations.length
+          ? compactPromptField(pageLocations.map((item) => `${item.name}: ${item.visualDetails.slice(0, 2).join(", ")}`).join("; "))
+          : "The approved story setting";
+        const continuityConstraints = compactPromptItems([
+          ...page.continuityNotes,
+          ...pageCharacters.flatMap((character) => character.continuityConstraints),
+          ...pageLocations.flatMap((item) => item.continuityConstraints),
+        ]);
+        const preserve = compactPromptItems([
+          ...pageCharacters.flatMap((character) => [`Keep ${character.name} recognizable.`, ...character.visualDetails]),
+          ...pageLocations.flatMap((item) => [`Keep ${item.name} recognizable.`, ...item.visualDetails]),
+          "Keep the approved visual style consistent with the supplied references.",
+        ]);
+        const promptPlan = {
+          purpose: page.kind === "cover" ? "booklet cover illustration" : `story page ${page.pageIndex} illustration`,
+          subject,
+          action: page.sceneAction,
+          location,
+          visualStyle: [styleContent?.visualDirection, styleContent?.texture, styleContent?.lighting].filter(Boolean).join("; ") || "Use the approved visual style and canonical references.",
+          continuityConstraints,
+          textSafeRegion: page.textSafeRegion,
+          preserve,
+        };
         const references = page.relevantReferenceIds.map((assetId) => ({
           assetId,
           role: styleIds.has(assetId) ? "style" as const : locationIds.has(assetId) ? "location_continuity" as const : "character_identity" as const,

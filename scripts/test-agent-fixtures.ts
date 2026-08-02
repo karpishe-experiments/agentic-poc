@@ -61,7 +61,7 @@ for (const file of files) {
   }
   if (route.skillId === "story_planning_revision@1") {
     const result = await planOrReviseStory({ intent: fixture.intent, currentStory: fixture.id === "preserve-approved-story-constraints" ? sampleStory : null }, context);
-    if (fixture.id === "preserve-approved-story-constraints" && (result.storyPlan.characters[0]?.entityId !== sampleStory.characters[0]?.entityId || !result.storyPlan.storyArc.includes(fixture.intent))) throw new Error("Story revision did not preserve approved constraints.");
+    if (fixture.id === "preserve-approved-story-constraints" && (result.storyPlan.characters[0]?.kind !== "existing" || result.storyPlan.characters[0].entityId !== sampleStory.characters[0]?.entityId || !result.storyPlan.storyArc.includes(fixture.intent))) throw new Error("Story revision did not preserve approved constraints.");
   }
   if (route.skillId === "quality_review_targeted_repair@1") {
     const needsRepair = fixture.id === "repair-invalid-structured-output-once" ? { ...sampleStory, characters: [], settings: [], continuityConstraints: [] } : sampleStory;

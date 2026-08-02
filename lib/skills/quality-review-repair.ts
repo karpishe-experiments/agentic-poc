@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { storyPlanSchema } from "@/lib/contracts/artifacts";
+import { storyPlanAsExistingChanges, storyPlanDraftSchema } from "@/lib/contracts/drafts";
 import { qualityReviewSchema } from "@/lib/contracts/quality";
 import type { SkillContext } from "@/lib/contracts/skills";
 
@@ -11,7 +12,7 @@ export const storyQualityInputSchema = z.object({
 
 export const storyQualityResultSchema = z.object({
   review: qualityReviewSchema,
-  repairedStory: storyPlanSchema.nullable(),
+  repairedStory: storyPlanDraftSchema.nullable(),
   forceValidationFailure: z.boolean(),
 });
 
@@ -33,12 +34,12 @@ export async function reviewAndRepairStory(input: z.infer<typeof storyQualityInp
   }
 
   const repairedStory = {
-    ...parsed.storyPlan,
-    characters: parsed.storyPlan.characters.length ? parsed.storyPlan.characters : [{
-      entityId: randomUUID(), name: "The young hero", narrativeRole: "hero", goal: "Help a friend solve a gentle problem.", relationships: [], named: false, continuityRelevant: true, recurringVisualSubject: true,
+    ...storyPlanAsExistingChanges(parsed.storyPlan),
+    characters: parsed.storyPlan.characters.length ? storyPlanAsExistingChanges(parsed.storyPlan).characters : [{
+      kind: "new" as const, clientKey: "quality-hero", name: "The young hero", narrativeRole: "hero", goal: "Help a friend solve a gentle problem.", relationships: [], named: false, continuityRelevant: true, recurringVisualSubject: true,
     }],
-    settings: parsed.storyPlan.settings.length ? parsed.storyPlan.settings : [{
-      entityId: randomUUID(), name: "A welcoming story place", narrativeRole: "main setting", named: false, continuityRelevant: true, recurringVisualSubject: true,
+    settings: parsed.storyPlan.settings.length ? storyPlanAsExistingChanges(parsed.storyPlan).settings : [{
+      kind: "new" as const, clientKey: "quality-setting", name: "A welcoming story place", narrativeRole: "main setting", named: false, continuityRelevant: true, recurringVisualSubject: true,
     }],
     continuityConstraints: parsed.storyPlan.continuityConstraints.length ? parsed.storyPlan.continuityConstraints : ["Keep the visual world calm and consistent."],
   };

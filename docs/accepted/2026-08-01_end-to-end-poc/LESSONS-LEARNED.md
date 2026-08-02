@@ -36,7 +36,7 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Context:** A retained-evaluation script creates a real local libSQL database and must clean up a failed attempt without deleting successful retained evidence.
 - **Observation:** Closing the client and immediately removing its SQLite file in the same Node process still produced `EBUSY`; the error could mask the provider failure that caused cleanup.
 - **Guidance:** Remove only the public failed-run directory in the failing process. Before the next attempt creates its database, clear the ignored source-data directory after the previous Node process has exited and released the Windows handle.
-- **Evidence:** `scripts/eval-real.ts` closes its database, preserves the original provider error, removes the public attempt directory, and clears the source path before the next run; the final 2026-08-02 no-credit probe ended only with the provider `credit_balance_exhausted` error.
+- **Evidence:** `scripts/eval-real.ts` closes its database, preserves the original provider error, removes the public attempt directory, and clears the source path before the next run; the initial 2026-08-02 no-credit probe ended only with the provider `credit_balance_exhausted` error.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -89,7 +89,34 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 - **Context:** Running an isolated Next.js development server for desktop Playwright checks through PowerShell on Windows.
 - **Observation:** Playwright completed its assertions but did not reliably terminate nested `next dev` descendants, causing the normal test command to time out.
-- **Guidance:** Start the prepared fake-provider server in a project-owned runner, invoke Playwright with `PLAYWRIGHT_REUSE_SERVER=1`, and terminate that exact child process tree in `finally`.
-- **Evidence:** `scripts/run-e2e.ts` and `npm.cmd run test:e2e -- --workers=1 --reporter=line` completed all 3 specs in 39.2 seconds on 2026-08-02.
+- **Guidance:** Start the prepared fake-provider server in a project-owned runner, invoke Playwright with `PLAYWRIGHT_REUSE_SERVER=1`, terminate that exact child process tree in `finally`, and allow a configurable isolated port when a developer already uses the default.
+- **Evidence:** `scripts/run-e2e.ts`, `scripts/e2e-server.ts`, and `playwright.config.ts`; all 3 specs passed on `E2E_PORT=3101` on 2026-08-02 without touching the pre-existing server on port 3001.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Make discriminated agent output stage-specific when a skill spans workflow stages
+
+- **Context:** A single structured visual-direction skill supports both `visual_style` and `visual_bible` stages.
+- **Observation:** During real evaluation, the specialist could return another `visual_style` result after the user had already selected a style, leaving a valid but incorrect active card for the current stage.
+- **Guidance:** Include the current stage in the specialist's output instructions and explicitly require the matching discriminated variant; application routing should never treat a structurally valid variant as interchangeable across workflow stages.
+- **Evidence:** `lib/agents/specialist.ts` now constrains `visual_direction_reference_planning@1` by `context.stage`; the accepted `developing-reader-corrected` and `older-reader-corrected-v2` runs completed the style-to-Visual-Bible transition with 26 and 28 traced calls respectively.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Encode excluded image layouts in the provider-neutral prompt and verify rendered output
+
+- **Context:** A picture-storybook POC forbids multi-panel comic layouts while using a generative image provider for one illustration per Page Package.
+- **Observation:** A successful provider run still produced a sequential multi-panel image for one older-reader page because the prompt described the scene but did not explicitly prohibit panels.
+- **Guidance:** State the single-full-page, no-panel constraint in the shared prompt serializer, then render and visually inspect every final PDF page; a successful image response is not sufficient acceptance evidence.
+- **Evidence:** `lib/images/prompt-serializer.ts` and `tests/unit/images/contracts.test.ts`; `evaluations/2026-08-02/older-reader-corrected/findings.md` records the rejected run, while the rendered `older-reader-corrected-v2` PDF passed the no-panel rubric.
+- **Promotion target:** Documentation.
+- **Status:** Candidate.
+
+### Treat model entity descriptions as drafts, never durable identifiers
+
+- **Context:** A structured story-planning skill must describe characters and locations that later connect to visual references and page packages.
+- **Observation:** Validating UUID-shaped model output does not establish application ownership; it lets a model silently replace the persistent identity that downstream artifacts depend on.
+- **Guidance:** Use a discriminated `existing`/`new` entity-change contract. Accept existing IDs only from the supplied current artifact, require a nonpersistent client key for new drafts, and materialize durable IDs in application code before persistence. Apply the same boundary to generated page IDs.
+- **Evidence:** `lib/contracts/drafts.ts`, `lib/application/entity-materialization.ts`, and `tests/unit/application/entity-materialization.test.ts` added on 2026-08-02; the single-worker Vitest run passed 59 tests.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.

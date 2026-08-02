@@ -14,7 +14,7 @@ export function createFakeConversationResult(input: { bookletId: string; cardId:
       status: "active",
       title: "Who is this story for?",
       explanation: "A reading age helps set the language, page count, and story rhythm.",
-      allowedActions: ["submit"],
+      allowedActions: ["select", "submit"],
       payload: {
         prompt: `Which age band best fits “${input.idea.slice(0, 120)}”?`,
         choices: [

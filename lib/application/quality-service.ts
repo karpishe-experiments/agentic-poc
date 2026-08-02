@@ -4,6 +4,7 @@ import { createRepositories, type Repositories } from "@/db/repositories";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { createQualityIssueCard } from "@/lib/application/card-factories";
 import { storyPlanSchema } from "@/lib/contracts/artifacts";
+import { materializeStoryPlan } from "@/lib/application/entity-materialization";
 import { getModelRoleConfig } from "@/lib/config/models";
 import { OpenAISpecialistRuntime } from "@/lib/agents/openai-specialist-runtime";
 import { createDefaultSkillRegistry } from "@/lib/skills/default-registry";
@@ -109,7 +110,7 @@ export class QualityService {
     let repairVersionId: string | null = null;
     try {
       if (result.forceValidationFailure) throw new Error("The structured repair was rejected by deterministic validation.");
-      const repaired = storyPlanSchema.parse(result.repairedStory);
+      const repaired = materializeStoryPlan(result.repairedStory!, storyPlanSchema.parse(current.currentVersion.content));
       const detail = await this.artifacts.revise(bookletId, "story_plan", repaired, { createdBy: "repair" });
       repairVersionId = detail.currentVersion?.id ?? null;
       if (!repairVersionId) throw new Error("The repair did not create a Story Plan version.");

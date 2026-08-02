@@ -1,0 +1,566 @@
+{
+  "schemaVersion": "1",
+  "bookletId": "045a7d7a-a2dd-4593-9ee7-1cbe5d6547fa",
+  "generatedAt": "2026-08-02T07:02:57.823Z",
+  "totals": {
+    "modelCalls": 24,
+    "qualityReviews": 3,
+    "assets": 15,
+    "actualCostUsd": null,
+    "estimatedCostUsd": "0.784413"
+  },
+  "byOperation": {
+    "manager": {
+      "calls": 7,
+      "failures": 0,
+      "latencyMs": 10158
+    },
+    "skill": {
+      "calls": 7,
+      "failures": 0,
+      "latencyMs": 50566
+    },
+    "quality_review": {
+      "calls": 1,
+      "failures": 0,
+      "latencyMs": 2995
+    },
+    "image_reference": {
+      "calls": 5,
+      "failures": 0,
+      "latencyMs": 323645
+    },
+    "image_page": {
+      "calls": 4,
+      "failures": 0,
+      "latencyMs": 320515
+    }
+  },
+  "calls": [
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_0fa84826354b4f94820fc013661ad3ac",
+      "providerRequestId": "resp_04b9a2b17bade180006a6ee8d93d2481a3bee0cc0d0d533771",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1964,
+      "usage": {
+        "inputTokens": 304,
+        "outputTokens": 47
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000117",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "intake_readiness@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_0fa84826354b4f94820fc013661ad3ac",
+      "providerRequestId": "resp_036ab130e56d9085006a6ee8daa06481a2bc85a3beb0e90a6c",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 4127,
+      "usage": {
+        "inputTokens": 1836,
+        "outputTokens": 368
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.008088",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_431c87c456c1428985dafdf97e6d4851",
+      "providerRequestId": "resp_04f8e5f34f57ff4b006a6ee8debc70819c8c2304361437b199",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1654,
+      "usage": {
+        "inputTokens": 310,
+        "outputTokens": 53
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000126",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "intake_readiness@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_431c87c456c1428985dafdf97e6d4851",
+      "providerRequestId": "resp_081255f649c6a635006a6ee8e073d081a29ec57c7bfeaf0b0a",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 4339,
+      "usage": {
+        "inputTokens": 2353,
+        "outputTokens": 397
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.009470",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_bb8f2ec4150543f2a8dca5308d10ac0d",
+      "providerRequestId": "resp_08c52b93abb37a36006a6ee8e4e674819d949b04271e019abc",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1246,
+      "usage": {
+        "inputTokens": 373,
+        "outputTokens": 30
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000111",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "story_planning_revision@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_bb8f2ec4150543f2a8dca5308d10ac0d",
+      "providerRequestId": "resp_0c7273c714319632006a6ee8e617fc81a0b068a4c7a5295d48",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 8482,
+      "usage": {
+        "inputTokens": 1581,
+        "outputTokens": 923
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.014238",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "quality_review",
+      "skillId": "quality_review_targeted_repair@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "traceId": "0000b9e0-eac6-45d4-b772-b4696f60004d",
+      "providerRequestId": "resp_0bca1a6b56703c2f006a6ee8eea5c4819d8c99731cbf2e62ff",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 2995,
+      "usage": {
+        "inputTokens": 1328,
+        "outputTokens": 150
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.011140",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_106ade042e7c421197eff3b8b8dd27a5",
+      "providerRequestId": "resp_06340ca350e0c617006a6ee8f1b05081a39ce2cb4f9ddcaec5",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1275,
+      "usage": {
+        "inputTokens": 307,
+        "outputTokens": 27
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000094",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_106ade042e7c421197eff3b8b8dd27a5",
+      "providerRequestId": "resp_0c9504b7e5692f2c006a6ee8f2fed4819daaed66a554504096",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 4429,
+      "usage": {
+        "inputTokens": 3004,
+        "outputTokens": 323
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.009884",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_bbbf401e1066422a919eb494e3a8ef04",
+      "providerRequestId": "resp_0b89ba1a73753133006a6ee8f78d30819e9002aaa6402257e1",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1169,
+      "usage": {
+        "inputTokens": 310,
+        "outputTokens": 28
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000096",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_bbbf401e1066422a919eb494e3a8ef04",
+      "providerRequestId": "resp_0692e2ca94b834b2006a6ee8f8c074819c9715fd3cd2e235c6",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 11793,
+      "usage": {
+        "inputTokens": 3655,
+        "outputTokens": 929
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.018458",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_reference",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 67600,
+      "usage": {
+        "inputTokens": 171,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.054048",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_reference",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 59497,
+      "usage": {
+        "inputTokens": 158,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.053944",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_reference",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 64428,
+      "usage": {
+        "inputTokens": 146,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.053848",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_reference",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 59903,
+      "usage": {
+        "inputTokens": 149,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.053872",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_reference",
+      "skillId": "visual_direction_reference_planning@1",
+      "artifactVersionId": null,
+      "jobId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 72217,
+      "usage": {
+        "inputTokens": 152,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.053896",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_ad2bab4615b14a10b07756a3494f26ab",
+      "providerRequestId": "resp_06848b2a1a38e38e006a6eea48c32481a084a01102778eb1ae",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1365,
+      "usage": {
+        "inputTokens": 308,
+        "outputTokens": 32
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000100",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "booklet_specification@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_ad2bab4615b14a10b07756a3494f26ab",
+      "providerRequestId": "resp_072d22bb92dcdab9006a6eea4a39a481a0afcfe8a46deeb862",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 3835,
+      "usage": {
+        "inputTokens": 4516,
+        "outputTokens": 265
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.012212",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "manager",
+      "skillId": null,
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "traceId": "trace_bdb87f6df270495aa3a542565d9eb211",
+      "providerRequestId": "resp_0cfae3ca87df66d4006a6eea4e0fb881929cc1d55a677c6928",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 1485,
+      "usage": {
+        "inputTokens": 315,
+        "outputTokens": 32
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.000101",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "skill",
+      "skillId": "page_planning_writing@1",
+      "artifactVersionId": null,
+      "jobId": null,
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "traceId": "trace_bdb87f6df270495aa3a542565d9eb211",
+      "providerRequestId": "resp_01bdd1658e05bd50006a6eea4fada481a3b0f5cbae714502ef",
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 13561,
+      "usage": {
+        "inputTokens": 5813,
+        "outputTokens": 2062
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.036370",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_page",
+      "skillId": "image_prompt_compilation@1",
+      "artifactVersionId": null,
+      "jobId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 75289,
+      "usage": {
+        "inputTokens": 5746,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.098648",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_page",
+      "skillId": "image_prompt_compilation@1",
+      "artifactVersionId": null,
+      "jobId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 85773,
+      "usage": {
+        "inputTokens": 5722,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.098456",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_page",
+      "skillId": "image_prompt_compilation@1",
+      "artifactVersionId": null,
+      "jobId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 79467,
+      "usage": {
+        "inputTokens": 5733,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.098544",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    },
+    {
+      "operation": "image_page",
+      "skillId": "image_prompt_compilation@1",
+      "artifactVersionId": null,
+      "jobId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "traceId": "bd651d51-6fdf-4f47-999d-a1ea4ffea954",
+      "providerRequestId": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "latencyMs": 79986,
+      "usage": {
+        "inputTokens": 5734,
+        "outputTokens": 1756
+      },
+      "actualCostUsd": null,
+      "estimatedCostUsd": "0.098552",
+      "pricingVersion": "poc-estimate-2026-08-02",
+      "errorKind": null
+    }
+  ],
+  "exports": [
+    {
+      "id": "75678f69-981b-49a9-a6a7-20aa591a8f79",
+      "status": "succeeded",
+      "assetId": "5f4be271-eaa4-4f6a-8fb2-d434c742193e",
+      "createdAt": "2026-08-02T07:02:55.247Z",
+      "updatedAt": "2026-08-02T07:02:57.769Z"
+    }
+  ],
+  "traceIds": [
+    "trace_0fa84826354b4f94820fc013661ad3ac",
+    "trace_431c87c456c1428985dafdf97e6d4851",
+    "trace_bb8f2ec4150543f2a8dca5308d10ac0d",
+    "0000b9e0-eac6-45d4-b772-b4696f60004d",
+    "trace_106ade042e7c421197eff3b8b8dd27a5",
+    "trace_bbbf401e1066422a919eb494e3a8ef04",
+    "b7344649-156d-400e-87a6-d3b1ffe2e0e8",
+    "trace_ad2bab4615b14a10b07756a3494f26ab",
+    "trace_bdb87f6df270495aa3a542565d9eb211",
+    "bd651d51-6fdf-4f47-999d-a1ea4ffea954"
+  ]
+}

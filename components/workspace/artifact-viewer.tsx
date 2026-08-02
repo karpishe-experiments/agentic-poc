@@ -6,6 +6,7 @@ import type { ArtifactDetail } from "@/lib/contracts/artifacts";
 import type { ArtifactType } from "@/lib/contracts/domain";
 
 type ApiResponse = { data?: ArtifactDetail; error?: { message?: string } };
+type VisualDefinition = { entityId: string; name: string; visualDetails: string[]; continuityConstraints: string[]; referenceRequired: boolean; currentReferenceAssetId: string | null; revisionNumber: number };
 
 function stateLabel(state: ArtifactDetail["state"]): string {
   return state.replaceAll("_", " ");
@@ -30,6 +31,15 @@ export function ArtifactViewer({ bookletId, artifactType, detail, label }: Reado
   const specification = artifactType === "booklet_specification" && detail.currentVersion?.content && typeof detail.currentVersion.content === "object" && "storyPageCount" in detail.currentVersion.content
     ? detail.currentVersion.content as { storyPageCount: number }
     : null;
+  let visualBible: { characters: VisualDefinition[]; locations: VisualDefinition[] } | null = null;
+  if (artifactType === "visual_bible") {
+    try {
+      const candidate = JSON.parse(draft) as { characters?: VisualDefinition[]; locations?: VisualDefinition[] };
+      if (Array.isArray(candidate.characters) && Array.isArray(candidate.locations)) visualBible = { characters: candidate.characters, locations: candidate.locations };
+    } catch {
+      // The raw editor deliberately allows incomplete JSON while the user is typing.
+    }
+  }
   const [storyPageCount, setStoryPageCount] = useState(() => specification?.storyPageCount ?? 3);
   const [pageText, setPageText] = useState<Record<string, string>>(() => Object.fromEntries(finalPages.map((page) => [page.pageId, page.readerText])));
 
@@ -111,6 +121,20 @@ export function ArtifactViewer({ bookletId, artifactType, detail, label }: Reado
     }
   }
 
+  function updateVisualDefinition(entityId: string, field: "name" | "visualDetails" | "continuityConstraints", value: string) {
+    try {
+      const content = JSON.parse(draft) as { characters?: VisualDefinition[]; locations?: VisualDefinition[] };
+      const update = (definition: VisualDefinition) => definition.entityId !== entityId ? definition : {
+        ...definition,
+        [field]: field === "name" ? value : value.split("\n").map((item) => item.trim()).filter(Boolean),
+      };
+      setDraft(JSON.stringify({ ...content, characters: content.characters?.map(update), locations: content.locations?.map(update) }, null, 2));
+      setError(null);
+    } catch {
+      setError("The structured document must be valid JSON before editing an entity card.");
+    }
+  }
+
   return (
     <section aria-label="Selected artifact" className="min-h-80 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -123,6 +147,7 @@ export function ArtifactViewer({ bookletId, artifactType, detail, label }: Reado
       <p className="mt-3 text-sm text-[var(--muted-ink)]">{detail.currentVersion ? `Version ${detail.currentVersion.versionNumber} is the current structured document.` : "No version has been created yet. Paste a valid structured document to begin."}</p>
       {specification ? <section className="mt-4 rounded-lg bg-[#fffaf2] p-3" aria-label="Story page count"><h3 className="text-sm font-semibold">Story page count</h3><p className="mt-1 text-sm text-[var(--muted-ink)]">Choose 3–8 story pages, apply the change to the draft below, save it as a new version, then confirm geometry.</p><div className="mt-2 flex flex-wrap items-center gap-2"><label className="sr-only" htmlFor="story-page-count">Story page count</label><input className="w-20 rounded border border-[var(--border)] px-2 py-1 text-sm" id="story-page-count" max={8} min={3} onChange={(event) => setStoryPageCount(Math.max(3, Math.min(8, Number(event.target.value) || 3)))} type="number" value={storyPageCount} /><button className="rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)]" onClick={applyStoryPageCount} type="button">Apply page count</button></div></section> : null}
       {pagePackages.length ? <section className="mt-4 grid gap-2" aria-label="Page packages"><h3 className="text-sm font-semibold">Page packages</h3>{pagePackages.map((page) => <article className="rounded-lg bg-[#fffaf2] p-3 text-sm" id={`page-${page.pageId}`} key={page.pageId}><h4 className="font-medium">{page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`}</h4><p className="mt-1">{page.readerText}</p><p className="mt-1 text-[var(--muted-ink)]">Scene: {page.sceneAction}</p><p className="mt-1 text-[var(--muted-ink)]">Composition: {page.compositionIntent}</p></article>)}</section> : null}
+      {visualBible ? <section className="mt-4 grid gap-3" aria-label="Visual Bible definitions"><h3 className="text-sm font-semibold">Character & location definitions</h3><p className="text-sm text-[var(--muted-ink)]">Edit each nested definition here; the saved Visual Bible remains one versioned document.</p>{([['Character', visualBible.characters], ['Location', visualBible.locations]] as const).flatMap(([kind, definitions]) => definitions.map((definition) => <article className="rounded-lg bg-[#fffaf2] p-3" key={definition.entityId}><p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">{kind}{definition.referenceRequired ? " · canonical reference required" : ""}</p><label className="mt-2 block text-sm font-medium" htmlFor={`entity-name-${definition.entityId}`}>Name</label><input autoComplete="off" className="mt-1 w-full rounded border border-[var(--border)] bg-white px-2 py-1 text-sm" id={`entity-name-${definition.entityId}`} name={`entity-name-${definition.entityId}`} onChange={(event) => updateVisualDefinition(definition.entityId, "name", event.target.value)} value={definition.name} /><label className="mt-2 block text-sm font-medium" htmlFor={`entity-details-${definition.entityId}`}>Canonical visual details</label><textarea autoComplete="off" className="mt-1 min-h-20 w-full rounded border border-[var(--border)] bg-white p-2 text-sm" id={`entity-details-${definition.entityId}`} name={`entity-details-${definition.entityId}`} onChange={(event) => updateVisualDefinition(definition.entityId, "visualDetails", event.target.value)} value={definition.visualDetails.join("\n")} /><label className="mt-2 block text-sm font-medium" htmlFor={`entity-continuity-${definition.entityId}`}>Continuity constraints</label><textarea autoComplete="off" className="mt-1 min-h-16 w-full rounded border border-[var(--border)] bg-white p-2 text-sm" id={`entity-continuity-${definition.entityId}`} name={`entity-continuity-${definition.entityId}`} onChange={(event) => updateVisualDefinition(definition.entityId, "continuityConstraints", event.target.value)} value={definition.continuityConstraints.join("\n")} /></article>))}</section> : null}
       <label className="mt-4 block text-sm font-semibold" htmlFor={`artifact-${artifactType}`}>Structured document</label>
       <textarea autoComplete="off" className="mt-2 min-h-72 w-full rounded-xl border border-[var(--border)] bg-white p-3 font-mono text-xs leading-5" id={`artifact-${artifactType}`} name={`artifact-${artifactType}`} onChange={(event) => setDraft(event.target.value)} spellCheck={false} value={draft} />
       <div className="mt-3 flex flex-wrap gap-2">

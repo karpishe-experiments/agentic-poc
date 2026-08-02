@@ -24,6 +24,8 @@ describe("image contracts", () => {
   it("serializes prompt plans without requesting embedded reader text", () => {
     const prompt = serializeImagePrompt(request.promptPlan);
     expect(prompt).toContain("Keep the red chest");
+    expect(prompt).toMatch(/single full-page storybook illustration/i);
+    expect(prompt).toMatch(/Do not use comic panels/i);
     expect(prompt).not.toMatch(/dialogue|page numbers/i);
   });
 });

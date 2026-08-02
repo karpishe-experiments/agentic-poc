@@ -40,7 +40,7 @@ describe("manager and fake model runtime", () => {
     expect(complete).toMatchObject({ ready: true, questionCard: null });
   });
 
-  it("keeps a real specialist model call bounded to its one application-owned skill tool", () => {
+  it("keeps a real specialist model call tool-free and schema-bounded", () => {
     const registry = createDefaultSkillRegistry();
     const specialist = createSpecialistAgent(
       registry.get("intake_readiness@1"),
@@ -48,9 +48,8 @@ describe("manager and fake model runtime", () => {
       context,
     );
 
-    expect(specialist.toolUseBehavior).toBe("stop_on_first_tool");
-    expect(specialist.tools).toHaveLength(1);
-    expect(specialist.modelSettings.toolChoice).toBe("required");
-    expect(specialist.modelSettings.parallelToolCalls).toBe(false);
+    expect(specialist.tools).toHaveLength(0);
+    expect(specialist.outputType).toBeDefined();
+    expect(specialist.modelSettings.toolChoice).toBeUndefined();
   });
 });

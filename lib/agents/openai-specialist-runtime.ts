@@ -1,4 +1,5 @@
 import { Runner } from "@openai/agents";
+import { z } from "zod";
 import { createSpecialistAgent } from "@/lib/agents/specialist";
 import { getModelRoleConfig, type ModelRole } from "@/lib/config/models";
 import { getServerEnv } from "@/lib/config/env";
@@ -21,6 +22,7 @@ export class OpenAISpecialistRuntime {
   public async runWithMetadata(definition: SkillDefinition, input: unknown, context: SkillContext): Promise<SpecialistRunResult> {
     const role = getModelRoleConfig(this.role);
     const agent = createSpecialistAgent(definition, input, context, role);
+    const outputEnvelope = z.object({ result: definition.outputSchema });
     const result = await this.runner.run(agent, JSON.stringify({
       skillId: definition.id,
       stage: context.stage,
@@ -32,9 +34,9 @@ export class OpenAISpecialistRuntime {
         recentMessages: context.recentMessages,
         approvedArtifactVersionIds: context.approvedArtifactVersionIds,
       },
-    }), { maxTurns: 2 });
+    }), { maxTurns: 1 });
     return {
-      output: definition.outputSchema.parse(result.finalOutput),
+      output: definition.outputSchema.parse(outputEnvelope.parse(result.finalOutput).result),
       runMetadata: extractAgentRunMetadata(result),
     };
   }

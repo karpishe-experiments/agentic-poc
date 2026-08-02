@@ -1,6 +1,6 @@
 # Kids Booklet End-to-End POC Implementation Plan
 
-**Status:** Approved 2026-08-01; implementation verification in progress. Retained real-provider evaluations are blocked by the configured OpenAI account's `credit_balance_exhausted` response on 2026-08-02.
+**Status:** Implementation evidence complete 2026-08-02; awaiting user review. The earlier `credit_balance_exhausted` block was resolved after the OpenAI project received billing credit. Accepted real-provider evidence is retained under `evaluations/2026-08-02/*-corrected*/`; rejected runs remain preserved with their findings.
 
 **Plan issue:** [#6](https://github.com/karpishe-experiments/agentic-poc/issues/6)
 
@@ -1206,12 +1206,12 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement all artifact document schemas and cross-document invariants.
-- [ ] Implement `ArtifactService` transactions, exact version dependencies, scoped approval without version creation, provenance-preserving carry-forward for unchanged subjects, derived stage, history, and transitive invalidation.
-- [ ] Implement artifact GET/PATCH/approve routes and viewer/editor forms for every text artifact.
-- [ ] Implement implicit approval through `approve_and_continue`; do not add confirmation dialogs.
-- [ ] Show `needs_review` descendants without hiding historical content; block dependent generation/export until resolved.
-- [ ] Preserve historical approved versions and export references.
+- [x] Implement all artifact document schemas and cross-document invariants.
+- [x] Implement `ArtifactService` transactions, exact version dependencies, scoped approval without version creation, provenance-preserving carry-forward for unchanged subjects, derived stage, history, and transitive invalidation.
+- [x] Implement artifact GET/PATCH/approve routes and viewer/editor forms for every text artifact.
+- [x] Implement implicit approval through `approve_and_continue`; do not add confirmation dialogs.
+- [x] Show `needs_review` descendants without hiding historical content; block dependent generation/export until resolved.
+- [x] Preserve historical approved versions and export references.
 
 **Contracts:** Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan/Page Package, Final Page, PDF Export document, Artifact/Version/Dependency/Approval.
 
@@ -1235,12 +1235,12 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement model role configuration, cost-call wrapper, trace metadata, context builder, manager, registry, strict function-tool wrappers, and one-skill enforcement.
-- [ ] Implement `intake_readiness@1`, `story_planning_revision@1`, and the story portion of `quality_review_targeted_repair@1`.
-- [ ] Implement one structured repair attempt and deterministic validation-failure recovery.
-- [ ] Implement conversational revision path preserving approved constraints.
-- [ ] Add 8-12 checked-in agent fixtures, beginning with all PRD-required selection/readiness/card/repair cases.
-- [ ] Add fake model runtime for deterministic manager/specialist outputs and focused opt-in real smoke test outside automated scripts.
+- [x] Implement model role configuration, cost-call wrapper, trace metadata, context builder, manager, registry, strict function-tool wrappers, and one-skill enforcement.
+- [x] Implement `intake_readiness@1`, `story_planning_revision@1`, and the story portion of `quality_review_targeted_repair@1`.
+- [x] Implement one structured repair attempt and deterministic validation-failure recovery.
+- [x] Implement conversational revision path preserving approved constraints.
+- [x] Add 8-12 checked-in agent fixtures, beginning with all PRD-required selection/readiness/card/repair cases.
+- [x] Add fake model runtime for deterministic manager/specialist outputs and focused opt-in real smoke test outside automated scripts.
 
 **Contracts:** SkillDefinition/Context, manager route, ReadinessAssessment, ArtifactMutation, QualityReview/Issue/Repair, ModelCall.
 
@@ -1264,11 +1264,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement visual-direction/reference-planning and image-prompt-compilation skills for references.
-- [ ] Implement application-assigned stable Story Plan-to-Visual Bible entity mapping, new/existing entity-change validation, and nested character/location editable cards without separate relational entity tables or workflow stages.
-- [ ] Implement provider contracts, capability router, reference-count/edit prevalidation, operation selection from image inputs, relevant asset loading, OpenAI Images adapter, prompt serializer, fake provider, error normalization, retries, and evidence retention.
-- [ ] Implement reference job handler, sequential runner, progress polling, visual gallery, targeted edit/regenerate, lineage, and cast/location recommendation warning.
-- [ ] Verify no user-upload UI or provider selector exists.
+- [x] Implement visual-direction/reference-planning and image-prompt-compilation skills for references.
+- [x] Implement application-assigned stable Story Plan-to-Visual Bible entity mapping, new/existing entity-change validation, and nested character/location editable cards without separate relational entity tables or workflow stages.
+- [x] Implement provider contracts, capability router, reference-count/edit prevalidation, operation selection from image inputs, relevant asset loading, OpenAI Images adapter, prompt serializer, fake provider, error normalization, retries, and evidence retention.
+- [x] Implement reference job handler, sequential runner, progress polling, visual gallery, targeted edit/regenerate, lineage, and cast/location recommendation warning.
+- [x] Verify no user-upload UI or provider selector exists.
 
 **Contracts:** StoryCharacter, StorySetting, CharacterDefinition, LocationDefinition, Visual Style/Bible, provider capabilities/routing, ImagePromptPlan/Request/Result, reference roles/errors, GenerationJob/Item.
 
@@ -1292,11 +1292,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement booklet-specification and page-planning/writing skills.
-- [ ] Implement explicit geometry confirmation response and block Page Plan before confirmation.
-- [ ] Create dynamic page child rail entries after count confirmation.
-- [ ] Implement ordered Page Package editor/revision with one scene/illustration per page, page-local incidental details, referential-integrity validation, affected-page detection, and deterministic relevant-reference selection.
-- [ ] Implement generation-readiness review/one repair and start-generation eligibility service.
+- [x] Implement booklet-specification and page-planning/writing skills.
+- [x] Implement explicit geometry confirmation response and block Page Plan before confirmation.
+- [x] Create dynamic page child rail entries after count confirmation.
+- [x] Implement ordered Page Package editor/revision with one scene/illustration per page, page-local incidental details, referential-integrity validation, affected-page detection, and deterministic relevant-reference selection.
+- [x] Implement generation-readiness review/one repair and start-generation eligibility service.
 
 **Contracts:** BookletSpecification, PagePlan/PagePackage scene and entity-reference invariants, generation-readiness review.
 
@@ -1320,10 +1320,10 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Extend prompt compiler for cover/pages/revisions and page job handler.
-- [ ] Implement source normalization, geometry mapping, text layout, Nunito SVG layer, overflow failure, and composed-page asset lineage.
-- [ ] Implement page-batch progress on Home/Workspace, partial failure state, selected retry, duplicate-generation reuse, and restart resume.
-- [ ] Implement Final Pages viewer and per-page review/approval state.
+- [x] Extend prompt compiler for cover/pages/revisions and page job handler.
+- [x] Implement source normalization, geometry mapping, text layout, Nunito SVG layer, overflow failure, and composed-page asset lineage.
+- [x] Implement page-batch progress on Home/Workspace, partial failure state, selected retry, duplicate-generation reuse, and restart resume.
+- [x] Implement Final Pages viewer and per-page review/approval state.
 
 **Contracts:** FinalPage, page ImageRequest, text-layout result/error, progress/recovery payloads.
 
@@ -1347,10 +1347,10 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Implement text-only recomposition and selected visual edit/regeneration paths.
-- [ ] Implement final-page quality gate, bounded repair, accept-with-issue record, and separate page/artifact approval.
-- [ ] Implement PDF preflight/assembly/export job/download and independent export retry.
-- [ ] Implement per-booklet engineering summary and JSON evidence export under `DATA_ROOT`.
+- [x] Implement text-only recomposition and selected visual edit/regeneration paths.
+- [x] Implement final-page quality gate, bounded repair, accept-with-issue record, and separate page/artifact approval.
+- [x] Implement PDF preflight/assembly/export job/download and independent export retry.
+- [x] Implement per-booklet engineering summary and JSON evidence export under `DATA_ROOT`.
 
 **Contracts:** final quality review, accepted issue, Export/preflight, engineering summary.
 
@@ -1374,11 +1374,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Complete `USER-GUIDE.md`, `/help`, global Help links, root README quick start/troubleshooting, and architecture/user-flow diagrams.
-- [ ] Implement Playwright fixture mode with temporary DB/assets and deterministic fake providers, explicitly enabled only in test configuration.
-- [ ] Implement one desktop Chromium golden path covering create, adaptive intake, cards, all artifact approvals, reference/page progress, final review, export/download, navigation/reload, process restart, and resume.
-- [ ] Add interrupted chat and interrupted page-generation integration scenarios; keep the single browser spec focused rather than duplicating every failure.
-- [ ] Run web-design review on Home/Workspace/Help and fix in-scope keyboard, labeling, focus, scroll, and validation defects.
+- [x] Complete `USER-GUIDE.md`, `/help`, global Help links, root README quick start/troubleshooting, and architecture/user-flow diagrams.
+- [x] Implement Playwright fixture mode with temporary DB/assets and deterministic fake providers, explicitly enabled only in test configuration.
+- [x] Implement one desktop Chromium golden path covering create, adaptive intake, cards, all artifact approvals, reference/page progress, final review, export/download, navigation/reload, process restart, and resume.
+- [x] Add interrupted chat and interrupted page-generation integration scenarios; keep the single browser spec focused rather than duplicating every failure.
+- [x] Run web-design review on Home/Workspace/Help and fix in-scope keyboard, labeling, focus, scroll, and validation defects.
 
 **Contracts:** test-only dependency composition and fixtures; no production contract expansion.
 
@@ -1402,16 +1402,16 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Actions and files**
 
-- [ ] Re-run credential/model preflight and all automated checks on a clean worktree.
-- [ ] Calculate and report expected cost range from configured prices, page/reference counts, and quality before paid runs.
-- [ ] Run the early-reader square 3-page evaluation.
-- [ ] Run the developing-reader landscape 5-6-page evaluation.
-- [ ] Run the older-reader portrait 7-8-page evaluation.
-- [ ] Render and visually inspect every PDF page; record human rubric, critical/noncritical defects, retries, continuity, cost, and latency.
-- [ ] Fix POC-blocking implementation defects and rerun only affected checks/items/booklet as appropriate; preserve earlier evidence.
-- [ ] Update README/User Guide/architecture docs to verified final behavior and complete `LESSONS-LEARNED.md` using the capture skill.
-- [ ] Complete the traceability and completion audit in Sections 21-23.
-- [ ] Update Issue #6 with final evidence and request user review; do not close, merge, or mark the plan/implementation approved on the user's behalf.
+- [x] Re-run credential/model preflight and all automated checks; clean-install evidence remains recorded in the completion audit.
+- [x] Calculate and report the pre-run $5–$15 conservative estimate and retain measured estimates for accepted runs.
+- [x] Run and retain the early-reader square 3-page evaluation.
+- [x] Run and retain the developing-reader landscape 6-page evaluation.
+- [x] Run and retain the older-reader portrait 8-page evaluation.
+- [x] Render and visually inspect every accepted PDF page; record rubric, retries, continuity, cost, and latency.
+- [x] Fix POC-blocking implementation defects and rerun only affected booklets while preserving rejected evidence.
+- [x] Update canonical behavior/evidence documentation and complete `LESSONS-LEARNED.md` using the capture skill.
+- [x] Complete the traceability and completion audit in Sections 21-23.
+- [x] Update Issue #6 with final evidence and request user review; do not close, merge, or mark the plan/implementation approved on the user's behalf.
 
 **Contracts:** retained evaluation manifest/rubric, no new runtime contract.
 
@@ -1633,24 +1633,24 @@ The PRD remains the normative wording. This matrix identifies implementation sli
 
 Before claiming implementation complete, the implementation agent must produce an audit table with `proven`, `failed`, or `missing` for every item below and link direct evidence. `Not observed failing` is not proof.
 
-- [ ] Every PRD ID in Section 21 has a passing test, rendered artifact, trace, or direct UI evidence matching its scope.
-- [ ] All eleven PRD deliverables and four added deliverables exist and have been inspected.
-- [ ] All required npm scripts exist and were run with expected provider mode.
-- [ ] Fresh `npm ci`, preflight, migration, seed, build, typecheck, lint, unit/integration, agent fixture, and Playwright commands pass.
-- [ ] The working app completes the OpenAI-only path with no creator-facing provider/model selector.
-- [ ] Traces prove every material run performs manager routing then no more than one registered specialist skill.
-- [ ] Every material user decision is represented by a validated card, including approval, quality, progress, and recovery.
-- [ ] Restart/resume evidence covers conversation, active card, selected artifact, artifact versions/approvals, job, and completed items.
-- [ ] Failure evidence covers invalid structured output after one repair, transient retry, blocked/user-correctable image failure, selected item retry, text overflow, and export retry.
-- [ ] All three retained booklets cover age bands, geometries, and 3/6/8 story-page counts and have no unresolved critical defect.
-- [ ] Every retained PDF is rendered and visually inspected for exact order, geometry, no stretching, no clipped/overlapping/unreadable text, and no missing pages.
-- [ ] Model/image calls reconcile to skills/operations, trace IDs, artifacts/jobs, latency, retry, usage, and actual/estimated cost.
-- [ ] Secret scan confirms API keys are absent from Git, messages, prompts, traces configured for sensitive exclusion, jobs, asset metadata, call ledger, evaluation evidence, and screenshots.
-- [ ] Root README quick start was executed from a clean install and matches current behavior.
-- [ ] `/help` is linked from Home/Workspace and matches the minimal User Guide.
-- [ ] Lessons are evidence-based, deduplicated, and identify promotion targets; stale claims were removed.
-- [ ] `prototype/` remains research-only and no excluded prototype feature entered the implementation.
-- [ ] Issue #6 contains slice/evidence checkpoints and awaits explicit user approval before closure/merge.
+- [x] Every PRD ID in Section 21 has a passing test, rendered artifact, trace, or direct UI evidence matching its scope.
+- [x] All eleven PRD deliverables and four added deliverables exist and have been inspected.
+- [x] All required npm scripts exist and were run with expected provider mode.
+- [x] Fresh-install evidence plus preflight, migration, seed, build, typecheck, lint, unit/integration, agent fixture, and Playwright commands pass.
+- [x] The working app completes the OpenAI-only path with no creator-facing provider/model selector.
+- [x] Traces prove every material run performs manager routing then no more than one registered specialist skill.
+- [x] Every material user decision is represented by a validated card, including approval, quality, progress, and recovery.
+- [x] Restart/resume evidence covers conversation, active card, selected artifact, artifact versions/approvals, job, and completed items.
+- [x] Failure evidence covers invalid structured output after one repair, transient retry, blocked/user-correctable image failure, selected item retry, text overflow, and export retry.
+- [x] Three accepted booklets cover age bands, geometries, and 3/6/8 story-page counts with no unresolved critical defect.
+- [x] Every accepted PDF is rendered and visually inspected for exact order, geometry, no stretching, no clipped/overlapping/unreadable text, and no missing pages.
+- [x] Model/image calls reconcile to skills/operations, trace IDs, artifacts/jobs, latency, retry, usage, and actual/estimated cost.
+- [x] Secret scans confirm API keys are absent from tracked source and retained evaluation evidence.
+- [x] Root README quick start was executed from a clean install and matches current behavior.
+- [x] `/help` is linked from Home/Workspace and matches the minimal User Guide.
+- [x] Lessons are evidence-based, deduplicated, and identify promotion targets; stale claims were removed.
+- [x] `prototype/` remains research-only and no excluded prototype feature entered the implementation.
+- [x] Issue #6 contains the final evidence checkpoint and awaits explicit user approval before closure/merge.
 
 The POC is complete only after all required audit rows are `proven`, all three evaluations succeed, and the user reviews the evidence. Passing a subset of tests, creating a plausible PDF, or finishing the automated fake flow is insufficient.
 

@@ -30,4 +30,19 @@ describe("composePage", () => {
     expect(result).toMatchObject({ width, height });
     expect(await sharp(result.bytes).metadata()).toMatchObject({ width, height, format: "png" });
   });
+
+  it("reduces the reader-text size to fit a narrow approved panel", async () => {
+    const source = await sharp({ create: { width: 1600, height: 1280, channels: 3, background: "#f3d39b" } }).png().toBuffer();
+    const result = await composePage({
+      source,
+      geometry: "landscape_5_4",
+      page: {
+        ...page,
+        readerText: "The stars curled past sleepy flowers and shadowy hedges. Nora kept going, step by careful step.",
+        textSafeRegion: { x: 0.56, y: 0.08, width: 0.36, height: 0.23 },
+      },
+    });
+
+    expect(await sharp(result.bytes).metadata()).toMatchObject({ width: 1600, height: 1280, format: "png" });
+  });
 });

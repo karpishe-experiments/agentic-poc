@@ -5,8 +5,10 @@ process.env.DATA_ROOT = "./output/playwright/runtime/assets";
 process.env.MODEL_RUNTIME = "fake";
 process.env.IMAGE_PROVIDER_MODE = "fake";
 await import("./prepare-e2e");
+const port = process.env.E2E_PORT ?? "3001";
+const baseUrl = `http://127.0.0.1:${port}`;
 
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", "3001"], { env: process.env, stdio: "inherit" });
+const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", port], { env: process.env, stdio: "inherit" });
 
 function stopServer(): void {
   if (server.killed) return;
@@ -18,7 +20,7 @@ async function waitForServer(): Promise<void> {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch("http://127.0.0.1:3001");
+      const response = await fetch(baseUrl);
       if (response.ok) return;
     } catch {
       // The server is still warming up.
@@ -32,7 +34,7 @@ let exitCode = 1;
 try {
   await waitForServer();
   const playwright = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(2)], {
-    env: { ...process.env, PLAYWRIGHT_REUSE_SERVER: "1" }, stdio: "inherit",
+    env: { ...process.env, PLAYWRIGHT_REUSE_SERVER: "1", PLAYWRIGHT_BASE_URL: baseUrl }, stdio: "inherit",
   });
   const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => playwright.once("exit", (code, signal) => resolve({ code, signal })));
   exitCode = result.code ?? (result.signal ? 1 : 0);

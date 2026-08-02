@@ -1,44 +1,54 @@
-# Kids Booklet POC — interim completion audit
+# Kids Booklet POC — completion audit
 
 **Audited:** 2026-08-02  
-**Status:** Not complete. The three required real-provider evaluations cannot run because the configured OpenAI account returned `429 credit_balance_exhausted` before the first manager completion.
+**Status:** Implementation evidence complete; awaiting the user's review. This audit does not close Issue #6 or approve the implementation on the user's behalf.
 
-| Completion-audit item | Status | Evidence |
+## Accepted real-provider evidence
+
+| Fixture | Accepted evidence | Contract | PDF inspection | Calls / estimated cost |
+| --- | --- | --- | --- | --- |
+| Early reader | [`early-reader-corrected`](../../../evaluations/2026-08-02/early-reader-corrected/findings.md) | 3 story pages, square 1:1 | 4 pages, 648 × 648 pt; Pip, rain barrel, cups, and marigolds coherent; no clipping | 24 / $0.784413 |
+| Developing reader | [`developing-reader-corrected`](../../../evaluations/2026-08-02/developing-reader-corrected/findings.md) | 6 story pages, landscape 5:4 | 7 pages, 720 × 576 pt; Nora, paper stars, map, and library garden coherent; no clipping | 26 / $0.815121 |
+| Older reader | [`older-reader-corrected-v2`](../../../evaluations/2026-08-02/older-reader-corrected-v2/findings.md) | 8 story pages, portrait 4:5 | 9 pages, 576 × 720 pt; Tariq, his crooked kite, and festival coherent; one scene per page | 28 / $0.961316 |
+
+The accepted evidence totals 78 traced calls and **$2.560850 estimated** provider cost. The provider supplied token/image usage but no actual charge field, so every amount remains correctly labelled as an estimate using `poc-estimate-2026-08-02`.
+
+Earlier evidence is intentionally retained and marked rejected: the initial three runs used generic story content, and [`older-reader-corrected`](../../../evaluations/2026-08-02/older-reader-corrected/findings.md) contained a multi-panel page that violated FR-048. The accepted replacement adds a provider-neutral no-panel constraint and is preserved under a new run label rather than overwriting that evidence.
+
+## Completion-audit items
+
+| Item | Status | Evidence |
 | --- | --- | --- |
-| PRD traceability evidence | partial | Local tests and the browser golden path cover the implemented contracts; retained real-provider evidence is absent. |
-| Eleven PRD & added deliverables inspected | missing | Deliverable 11 (three retained PDFs/findings) is absent. |
-| Required scripts exercised in provider mode | partial | All deterministic scripts pass; `eval:real` is blocked by account credits. |
-| Fresh install through browser check | proven | `npm ci`, preflight, migrate, seed, typecheck, lint, 56 Vitest tests, 12 fixtures, build, and 3 Playwright specs passed. |
-| OpenAI-only creator path | partial | No provider selector exists; the real route reached the native Agents SDK and was blocked before the first manager completion by billing. |
-| One manager then one specialist trace | partial | Deterministic manager/skill ledger and 12 fixtures prove the boundary; real completion traces are pending credits. The adapter now uses SDK-generated trace IDs, booklet grouping, and non-sensitive trace payloads. |
-| Typed decision, quality, progress & recovery cards | proven | Contract/component tests and Playwright flow; persisted item-retry endpoint/panel included. |
-| Restart/resume state | proven | `tests/integration/restart-resume.test.ts` and browser reload path. |
-| Failure/retry evidence | partial | Deterministic validation/transient/restart/text-overflow coverage exists; real-provider blocked/selected-retry/export-retry evidence remains incomplete. |
-| Three age/geometry/page-count booklets | missing | Early 3/square, developing 6/landscape, older 8/portrait runs require billing credits. |
-| All retained PDFs visually inspected | missing | Fixture PDF rendering passed locally; no retained real PDFs exist. |
-| Call/cost/trace reconciliation | partial | Fake golden-path evidence reconciles 24 calls with no missing usage/cost; real usage/cost records are pending. |
-| Secret exclusion | proven | Preflight confirms ignored `.env.local`; narrowed tracked-file key scan returned no matches. |
-| README clean quick start | proven | Clean `npm ci` plus preflight/migrate/seed completed. |
-| Help links and manual | proven | Root navigation and Playwright Help assertion pass; `/help` matches the User Guide. |
-| Evidence-based lessons | proven | `LESSONS-LEARNED.md` contains only observed candidates with file/command evidence. |
-| Prototype remains research-only | proven | No implementation source imports or route references `prototype/`. |
-| Issue #6 final evidence/review request | missing | Requires the retained evaluations; do not close or merge. |
+| PRD traceability and deliverables | proven | `PLAN.md` Sections 21–23, tested application contracts, and retained evaluation artifacts cover the eleven PRD and added deliverables. |
+| Application-owned persistent IDs | proven | `lib/contracts/drafts.ts` accepts only `existing` IDs or `new` drafts with a client key; `entity-materialization.ts` assigns durable Story/Page IDs, preserves IDs across revisions, and rejects unknown IDs. Focused tests cover assignment, preservation, and rejection. |
+| OpenAI-only creator path | proven | No creator-facing provider selector; all three accepted runs use `providerMode: real` and OpenAI models in their engineering summaries. |
+| Manager → one specialist boundary | proven | Each accepted engineering summary records separate manager and skill calls; the agent fixture suite passed all 12 cases. |
+| Typed decision, quality, progress, and recovery cards | proven | Card/component/integration coverage plus the 3-spec Playwright workflow passed. |
+| Restart/resume and selected recovery | proven | Integration and Playwright evidence in the automated suite; the evaluator also handles the supported zero-reference branch. |
+| Text composition and PDF export | proven | 57 Vitest tests include the narrow-panel adaptive composition regression; Poppler rendered every accepted PDF page at its confirmed geometry. |
+| Three age/geometry/page-count booklets | proven | Accepted 3/square, 6/landscape, and 8/portrait evidence above. |
+| Visual quality / single-scene requirement | proven | Findings for all accepted runs record readable text, continuity, and no critical defect; the detected multi-panel defect was corrected and retained as rejected evidence. |
+| Call, trace, usage, retry, and cost reconciliation | proven | Accepted summaries contain 24/26/28 calls respectively, zero failed calls, zero retries, usage, trace IDs, job links for image work, and estimated costs. Text calls include OpenAI response IDs; image calls use persisted job trace IDs when the client returns no image request ID. |
+| Secret exclusion | proven | 2026-08-02 tracked-file and retained-evaluation scans found no OpenAI-style API key. `.env.local` remains ignored and preflight reports only aliases/status. |
+| Contributor documentation and Help | proven | README behavior is current; the final Playwright run passed all three specs, including Help navigation. |
+| Evidence-based learnings | proven | `LESSONS-LEARNED.md` records only observed, code- and evaluation-backed candidates. |
+| Prototype stays research-only | proven | No implementation source imports or route references `prototype/`; excluded multi-panel scope was enforced after a real-provider defect. |
+| Issue #6 final evidence / user review | proven | [Evidence checkpoint and review request](https://github.com/karpishe-experiments/agentic-poc/issues/6#issuecomment-5156780872) posted; the issue remains open pending explicit user review. |
 
-## Current passing command evidence
+## Final command evidence
 
 ```text
-npm ci
-npm run preflight
-npm run db:migrate
-npm run seed
-npm run typecheck
-npm run lint
-npm test                 # 17 files, 56 tests
-npm run test:agent       # 12 fixtures
-npm run build
-npm run test:e2e         # 3 desktop Chromium specs
+npm.cmd run preflight                         PASS
+npm.cmd run lint                              PASS
+npm.cmd run typecheck                         PASS
+npm.cmd test -- --no-file-parallelism --maxWorkers=1
+                                               PASS (18 files, 59 tests)
+npm.cmd run test:agent                        PASS (12 fixtures)
+npm.cmd run build                             PASS
+npm.cmd run test:e2e -- --workers=1 --reporter=line
+                                               PASS (3 Chromium specs)
 ```
 
-The local fake-browser run also wrote a 7-page square PDF and engineering summary under the ignored `output/playwright/runtime/` tree. Poppler `pdfinfo` confirmed a 648 × 648 pt page size and seven pages; visual inspection of the cover, interior, and final page found readable, unclipped text. Its summary reconciled 24 manager, specialist, quality, reference-image, and page-image calls with no missing usage or cost fields.
+Each accepted `final.pdf` was checked with Poppler `pdfinfo` for page count and point dimensions, rendered with `pdftoppm`, and visually inspected page by page. The public run directories contain only the final PDF, scrubbed manifest, findings, and engineering summary; source assets remain under the ignored local data root.
 
-Repeated paid probes of `npm run eval:real -- --fixture early-reader` reached OpenAI authentication/model routing and received `429 credit_balance_exhausted` before the first manager completion. The final probe had no tracing-export or SQLite-cleanup error, produced no generated booklet asset or retained PDF, and removed its public evaluation directory. Its ignored local source directory is cleared at the start of the next evaluation attempt, after the previous Node process has released Windows SQLite handles.
+The final browser verification used `E2E_PORT=3101` because a user-owned local server already occupied the default port 3001. `scripts/run-e2e.ts`, `scripts/e2e-server.ts`, and `playwright.config.ts` now accept that override while retaining port 3001 as the default.

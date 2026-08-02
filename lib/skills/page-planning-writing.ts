@@ -1,11 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { bookletSpecificationSchema, pagePlanSchema, storyPlanSchema, visualBibleSchema } from "@/lib/contracts/artifacts";
+import { bookletSpecificationSchema, storyPlanSchema, visualBibleSchema } from "@/lib/contracts/artifacts";
+import { pagePlanDraftSchema } from "@/lib/contracts/drafts";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import type { SkillContext } from "@/lib/contracts/skills";
 
 export const pagePlanningInputSchema = z.object({ intent: z.string().trim().min(1).max(5_000), storyPlan: storyPlanSchema, visualBible: visualBibleSchema, specification: bookletSpecificationSchema });
-export const pagePlanningResultSchema = z.object({ content: pagePlanSchema, summary: z.string().min(1) });
+export const pagePlanningResultSchema = z.object({ content: pagePlanDraftSchema, summary: z.string().min(1) });
 
 export async function planAndWritePages(input: z.infer<typeof pagePlanningInputSchema>, context: SkillContext) {
   void context;
@@ -19,7 +19,7 @@ export async function planAndWritePages(input: z.infer<typeof pagePlanningInputS
     ...parsed.visualBible.locations.map((location) => location.currentReferenceAssetId).filter((id): id is string => Boolean(id)),
   ];
   const pages = Array.from({ length: parsed.specification.storyPageCount + 1 }, (_, pageIndex) => ({
-    pageId: randomUUID(), pageIndex, kind: pageIndex === 0 ? "cover" as const : "story" as const,
+    pageIndex, kind: pageIndex === 0 ? "cover" as const : "story" as const,
     readerText: pageIndex === 0 ? parsed.specification.title : pageIndex === parsed.specification.storyPageCount ? parsed.storyPlan.ending : parsed.storyPlan.keyEvents[Math.min(pageIndex - 1, parsed.storyPlan.keyEvents.length - 1)] ?? "The friends continue their gentle adventure.",
     sceneAction: pageIndex === 0 ? "Introduce the hero and welcoming story setting." : pageIndex === parsed.specification.storyPageCount ? "Show the gentle resolution shared by the friends." : "Show one clear story beat with a readable emotional change.",
     characterIds, locationIds, incidentalVisualDetails: [], compositionIntent: pageIndex === 0 ? "A welcoming focal cover composition." : "One uncluttered scene with an open text-safe area.", continuityNotes: parsed.storyPlan.continuityConstraints, relevantReferenceIds: referenceIds,

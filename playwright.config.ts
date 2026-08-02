@@ -1,18 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const browserChannel = process.env.PLAYWRIGHT_BROWSER_CHANNEL;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3001";
 
 export default defineConfig({
   testDir: "./tests/e2e",
   outputDir: "output/playwright/test-results",
   use: {
-    baseURL: "http://127.0.0.1:3001",
+    baseURL,
     ...devices["Desktop Chrome"],
     ...(browserChannel ? { channel: browserChannel } : {}),
   },
   webServer: {
     command: "node --import tsx scripts/e2e-server.ts",
-    url: "http://127.0.0.1:3001",
+    url: baseURL,
     reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
     timeout: 120_000,
     env: {

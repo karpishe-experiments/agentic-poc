@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { storyPlanSchema } from "@/lib/contracts/artifacts";
+import { storyPlanAsExistingChanges, storyPlanDraftSchema } from "@/lib/contracts/drafts";
 import type { SkillContext } from "@/lib/contracts/skills";
 
 export const storyPlanningInputSchema = z.object({
@@ -10,7 +10,7 @@ export const storyPlanningInputSchema = z.object({
 });
 
 export const storyPlanningResultSchema = z.object({
-  storyPlan: storyPlanSchema,
+  storyPlan: storyPlanDraftSchema,
   preservedConstraints: z.array(z.string()),
   summary: z.string().min(1),
 });
@@ -26,7 +26,7 @@ export async function planOrReviseStory(input: z.infer<typeof storyPlanningInput
   if (parsed.currentStory) {
     return storyPlanningResultSchema.parse({
       storyPlan: {
-        ...parsed.currentStory,
+        ...storyPlanAsExistingChanges(parsed.currentStory),
         storyArc: `${parsed.currentStory.storyArc} Revision request: ${parsed.intent}`,
         continuityConstraints: [...new Set([...parsed.currentStory.continuityConstraints, "Preserve the approved reading age, named subjects, and gentle resolution."])],
       },
@@ -43,7 +43,8 @@ export async function planOrReviseStory(input: z.infer<typeof storyPlanningInput
       premise: idea,
       theme: "Small acts of care help a community grow.",
       characters: [{
-        entityId: randomUUID(),
+        kind: "new",
+        clientKey: "main-character",
         name: "The young hero",
         narrativeRole: "hero",
         goal: "Help a friend solve a gentle problem.",
@@ -53,7 +54,8 @@ export async function planOrReviseStory(input: z.infer<typeof storyPlanningInput
         recurringVisualSubject: true,
       }],
       settings: [{
-        entityId: randomUUID(),
+        kind: "new",
+        clientKey: "main-setting",
         name: "A welcoming story place",
         narrativeRole: "main setting",
         named: false,
