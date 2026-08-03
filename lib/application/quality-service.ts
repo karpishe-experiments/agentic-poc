@@ -117,7 +117,7 @@ export class QualityService {
       await this.record(bookletId, result.review, [current.currentVersion.id], [repairVersionId]);
       const passed = qualityReviewSchema.parse({ gate: "story_readiness", attempt: 2, status: "passed", issues: [] });
       await this.record(bookletId, passed, [repairVersionId], []);
-      return { kind: "repaired" as const, versionId: repairVersionId };
+      return { kind: "repaired" as const, versionId: repairVersionId, issues: result.review.issues };
     } catch (error) {
       const unresolved = qualityReviewSchema.parse({
         ...result.review,

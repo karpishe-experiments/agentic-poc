@@ -27,30 +27,38 @@ export class CardService {
     const card = await this.repositories.conversation.getCard(bookletId, parsed.cardId);
     if (!card) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
     if (card.family === "artifact_review" && card.variant === "summary" && parsed.action === "approve_and_continue" && card.payload.artifactType === "story_plan") {
-      const outcome = await this.quality.runStoryReadiness(bookletId);
-      if (outcome.kind !== "passed") {
-        const refreshed = await this.artifacts.get(bookletId, "story_plan");
-        const replacement = outcome.kind === "unresolved"
-          ? outcome.card
-          : {
-            schemaVersion: "1" as const,
-            cardId: randomUUID(),
-            family: "artifact_review" as const,
-            variant: "summary" as const,
-            status: "active" as const,
-            title: "Review the repaired Story Plan",
-            explanation: "One targeted repair was applied. Review this new version before continuing.",
-            allowedActions: ["approve_and_continue" as const, "request_revision" as const],
-            payload: { artifactType: "story_plan" as const, versionId: refreshed.currentVersion?.id ?? null, summary: [{ label: "Status", value: "Targeted repair ready" }] },
-          };
-        await this.repositories.conversation.persistAssistantCard({
-          bookletId,
-          messageId: randomUUID(),
-          narration: outcome.kind === "unresolved" ? "The Story Plan needs your decision before visual development." : "One targeted Story Plan repair is ready for your review.",
-          card: replacement,
-          createdAtMs: Date.now(),
-        });
-        return { kind: "saved" as const, duplicate: false, followupRequired: false, summary: "Story quality requires an updated review.", refreshRequired: true };
+      const readinessAlreadyPassed = card.payload.versionId
+        ? await this.repositories.evidence.hasPassedQualityReview({ bookletId, gate: "story_readiness", artifactVersionId: card.payload.versionId })
+        : false;
+      if (!readinessAlreadyPassed) {
+        const outcome = await this.quality.runStoryReadiness(bookletId);
+        if (outcome.kind === "passed") {
+          // The original Story Plan card was produced outside the normal chat
+          // flow, so this defensive gate is the only needed review.
+        } else {
+          const refreshed = await this.artifacts.get(bookletId, "story_plan");
+          const replacement = outcome.kind === "unresolved"
+            ? outcome.card
+            : {
+              schemaVersion: "1" as const,
+              cardId: randomUUID(),
+              family: "artifact_review" as const,
+              variant: "summary" as const,
+              status: "active" as const,
+              title: "Review the repaired Story Plan",
+              explanation: "One targeted repair was applied. Review this new version before continuing.",
+              allowedActions: ["approve_and_continue" as const, "request_revision" as const],
+              payload: { artifactType: "story_plan" as const, versionId: refreshed.currentVersion?.id ?? null, summary: [{ label: "Status", value: "Targeted repair ready" }] },
+            };
+          await this.repositories.conversation.persistAssistantCard({
+            bookletId,
+            messageId: randomUUID(),
+            narration: outcome.kind === "unresolved" ? "The Story Plan needs your decision before visual development." : "One targeted Story Plan repair is ready for your review.",
+            card: replacement,
+            createdAtMs: Date.now(),
+          });
+          return { kind: "saved" as const, duplicate: false, followupRequired: false, summary: "Story quality requires an updated review.", refreshRequired: true };
+        }
       }
     }
     if (card.family === "artifact_review" && parsed.action === "approve_and_continue" && card.payload.artifactType === "page_plan") {
@@ -119,9 +127,8 @@ export class CardService {
           const content = visualBible.currentVersion?.content as { characters?: Array<{ entityId: string; currentReferenceAssetId: string | null }>; locations?: Array<{ entityId: string; currentReferenceAssetId: string | null }> } | undefined;
           const entities = [...(content?.characters ?? []), ...(content?.locations ?? [])].filter((entity) => entity.currentReferenceAssetId);
           if (!entities.length) throw new RecoverableApplicationError({ code: "references_missing", message: "Generate canonical references before approving the Visual Bible.", status: 409 });
-          const selected = new Set(Array.isArray(parsed.value) ? parsed.value.filter((value): value is string => typeof value === "string") : []);
           const requiredAssets = new Set(entities.map((entity) => entity.currentReferenceAssetId!));
-          if (selected.size !== requiredAssets.size || [...requiredAssets].some((assetId) => !selected.has(assetId))) throw new RecoverableApplicationError({ code: "reference_review_incomplete", message: "Select every canonical reference after reviewing it before approving the Visual Bible.", status: 409 });
+          if (!requiredAssets.size) throw new RecoverableApplicationError({ code: "references_missing", message: "Generate canonical references before approving the Visual Bible.", status: 409 });
           for (const entity of entities) {
             await this.artifacts.approve(bookletId, "visual_bible", card.payload.versionId!, { scope: "reference", subjectKey: entity.entityId });
           }
@@ -131,9 +138,8 @@ export class CardService {
           const pages = finalPages.currentVersion?.content as { pages?: Array<{ pageId: string }> } | undefined;
           if (!pages?.pages?.length) throw new RecoverableApplicationError({ code: "final_pages_missing", message: "Composed pages need to be available before approval.", status: 409 });
           const finalContent = finalPages.currentVersion?.content as { pages?: Array<{ pageId: string; composedAssetId: string }> } | undefined;
-          const selected = new Set(Array.isArray(parsed.value) ? parsed.value.filter((value): value is string => typeof value === "string") : []);
           const requiredAssets = new Set((finalContent?.pages ?? []).map((page) => page.composedAssetId));
-          if (selected.size !== requiredAssets.size || [...requiredAssets].some((assetId) => !selected.has(assetId))) throw new RecoverableApplicationError({ code: "page_review_incomplete", message: "Select every final page after reviewing it before approval.", status: 409 });
+          if (!requiredAssets.size) throw new RecoverableApplicationError({ code: "final_pages_missing", message: "Composed pages need to be available before approval.", status: 409 });
           for (const page of pages.pages) {
             await this.artifacts.approve(bookletId, "final_pages", card.payload.versionId!, { scope: "page", subjectKey: page.pageId });
           }

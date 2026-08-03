@@ -4,9 +4,10 @@ import path from "node:path";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it } from "vitest";
 import { BookletService, type Clock, type IdGenerator } from "@/lib/application/booklet-service";
-import { ChatService } from "@/lib/application/chat-service";
+import { ChatService, isTypedWorkflowRecovery } from "@/lib/application/chat-service";
 import { CardService } from "@/lib/application/card-service";
 import { ArtifactService } from "@/lib/application/artifact-service";
+import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { createDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
@@ -188,8 +189,59 @@ describe("BookletService", () => {
     expect((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard).toMatchObject({ cardId: reopened.cardId, status: "active" });
   });
 
-  it("advances from the approved audience review to the persisted Story Plan review", async () => {
+  it("persists a safe Visual Bible retry card without losing the saved booklet", async () => {
+    const { bookletService, chatService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
+    const booklet = await bookletService.create({ idea: "A small lantern helps a moonflower bloom." });
+
+    const recovery = await chatService.createRecoveryTurn(booklet.id, new RecoverableApplicationError({
+      code: "visual_bible_entities_mismatch",
+      message: "Visual Bible entity mismatch.",
+    }));
+    const card = recovery.parts.find((part) => part.type === "data-card");
+
+    expect(card).toMatchObject({
+      type: "data-card",
+      data: { family: "issue", variant: "recovery", title: "Retry Visual Bible", allowedActions: ["retry"] },
+    });
+    expect((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard).toMatchObject({
+      family: "issue",
+      variant: "recovery",
+      status: "active",
+    });
+  });
+
+  it("persists an idempotent Page Plan recovery that preserves approved decisions", async () => {
     const { bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
+    const booklet = await bookletService.create({ idea: "A small lantern helps a moonflower bloom." });
+    const error = new RecoverableApplicationError({
+      code: "page_plan_specification_mismatch",
+      message: "The Page Plan must use the current confirmed page count and geometry.",
+    });
+
+    expect(isTypedWorkflowRecovery(error)).toBe(true);
+    expect(isTypedWorkflowRecovery(new RecoverableApplicationError({ code: "active_card_required", message: "Keep the current card." }))).toBe(false);
+    const recovery = await chatService.createRecoveryTurn(booklet.id, error);
+    const card = recovery.parts.find((part) => part.type === "data-card");
+    if (!card || card.type !== "data-card") throw new Error("Expected Page Plan recovery card.");
+
+    expect(card.data).toMatchObject({
+      family: "issue",
+      variant: "recovery",
+      title: "Retry Page Plan",
+      allowedActions: ["retry"],
+      explanation: expect.stringContaining("No page images were created"),
+      payload: { details: expect.arrayContaining([expect.stringContaining("does not change approved decisions")]) },
+    });
+    const response = { cardId: card.data.cardId, responseId: "00000000-0000-4000-8000-000000000911", action: "retry" as const };
+    expect(await cardService.submit(booklet.id, response)).toMatchObject({ kind: "saved", duplicate: false, followupRequired: true });
+    expect(await cardService.submit(booklet.id, response)).toMatchObject({ duplicate: true });
+    const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);
+    expect(snapshot.messages).toHaveLength(2);
+    expect(snapshot.activeCard).toBeNull();
+  });
+
+  it("advances from the approved audience review to the persisted Story Plan review", async () => {
+    const { database, bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A robin learns to share rainwater in a bright garden." });
     const first = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000921", role: "user", parts: [{ type: "text", text: "Please begin." }] });
     const question = first.assistantMessage.parts.find((part) => part.type === "data-card");
@@ -209,6 +261,7 @@ describe("BookletService", () => {
     const storyReview = storyTurn.assistantMessage.parts.find((part) => part.type === "data-card");
 
     expect(storyReview).toMatchObject({ type: "data-card", data: { family: "artifact_review", variant: "summary", payload: { artifactType: "story_plan" } } });
+    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);
   });
 
   it("revises a Story Plan conversationally while preserving its existing visual subjects", async () => {

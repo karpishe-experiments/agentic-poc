@@ -26,7 +26,7 @@ export function createSpecialistAgent(definition: SkillDefinition, input: unknow
       definition.id === "visual_direction_reference_planning@1"
         ? context.stage === "visual_style"
           ? "This is the visual-style stage: return only the visual_style result; do not return a Visual Bible yet."
-          : "This is the Visual Bible stage: return only the visual_bible result using the already selected style; do not ask for or return another visual-style choice."
+          : "This is the Visual Bible stage: return only the visual_bible result using the already selected style; do not ask for or return another visual-style choice. Define only the supplied Story Plan entities, preserve their exact IDs when possible, and do not add incidental props or background subjects. The application owns the final entity membership, IDs, reference requirement, and asset lineage."
         : "",
       "Do not write workflow state, issue approvals, access tools, or add prose outside the structured result.",
     ].join(" "),

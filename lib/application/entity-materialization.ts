@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { pagePlanSchema, storyPlanSchema } from "@/lib/contracts/artifacts";
+import { pagePlanSchema, storyPlanSchema, visualBibleSchema, visualStyleSchema } from "@/lib/contracts/artifacts";
 import type { PagePlanDraft, StoryPlanDraft } from "@/lib/contracts/drafts";
 
 type StoryPlan = ReturnType<typeof storyPlanSchema.parse>;
 type PagePlan = ReturnType<typeof pagePlanSchema.parse>;
+type VisualBible = ReturnType<typeof visualBibleSchema.parse>;
+type VisualStyle = ReturnType<typeof visualStyleSchema.parse>;
 type NewId = () => string;
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -52,5 +54,57 @@ export function materializePagePlan(draft: PagePlanDraft, previous: PagePlan | n
       usedIds.add(pageId);
       return { ...page, pageId };
     }),
+  });
+}
+
+function normalizedName(value: string): string {
+  return value.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase();
+}
+
+/**
+ * A Visual Bible's membership is not a model decision. The Story Plan owns the
+ * stable entity IDs; the specialist contributes only the descriptive details.
+ * Matching by name is deliberately a best-effort convenience for a model that
+ * echoed an entity with an unexpected ID. Missing detail falls back to a small,
+ * reviewable default instead of making the booklet impossible to continue.
+ */
+export function materializeVisualBible(draft: VisualBible, story: StoryPlan, style: VisualStyle, previous: VisualBible | null): VisualBible {
+  const previousDefinitions = new Map([...previous?.characters ?? [], ...previous?.locations ?? []].map((definition) => [definition.entityId, definition]));
+  const draftedDefinitions = [...draft.characters, ...draft.locations];
+  const byDraftId = new Map(draftedDefinitions.map((definition) => [definition.entityId, definition]));
+  const byDraftName = new Map(draftedDefinitions.map((definition) => [normalizedName(definition.name), definition]));
+
+  const definitionFor = (entity: { entityId: string; name: string; recurringVisualSubject: boolean }, kind: "character" | "location") => {
+    const generated = byDraftId.get(entity.entityId) ?? byDraftName.get(normalizedName(entity.name));
+    const previousDefinition = previousDefinitions.get(entity.entityId);
+    const fallbackDetails = kind === "character"
+      ? ["A clear, kind expression", "A distinctive silhouette that remains readable at booklet size"]
+      : ["A memorable establishing shape", "Consistent calm colors and welcoming scale"];
+    const visualDetails = generated?.visualDetails.length ? generated.visualDetails : previousDefinition?.visualDetails.length ? previousDefinition.visualDetails : fallbackDetails;
+    const continuityConstraints = [...new Set([
+      ...story.continuityConstraints,
+      ...(generated?.continuityConstraints ?? previousDefinition?.continuityConstraints ?? []),
+      `Keep ${entity.name} recognizable across every appearance.`,
+    ])];
+    return {
+      entityId: entity.entityId,
+      name: entity.name,
+      visualDetails,
+      continuityConstraints,
+      referenceRequired: entity.recurringVisualSubject,
+      currentReferenceAssetId: previousDefinition?.currentReferenceAssetId ?? null,
+      revisionNumber: (previousDefinition?.revisionNumber ?? 0) + 1,
+    };
+  };
+
+  return visualBibleSchema.parse({
+    schemaVersion: story.schemaVersion,
+    characters: story.characters
+      .filter((character) => character.named || character.continuityRelevant)
+      .map((character) => definitionFor(character, "character")),
+    locations: story.settings
+      .filter((setting) => setting.named || setting.continuityRelevant)
+      .map((setting) => definitionFor(setting, "location")),
+    styleReferences: style.styleReferenceAssetIds,
   });
 }

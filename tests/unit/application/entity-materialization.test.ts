@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { materializePagePlan, materializeStoryPlan } from "@/lib/application/entity-materialization";
+import { materializePagePlan, materializeStoryPlan, materializeVisualBible } from "@/lib/application/entity-materialization";
 import type { PagePlanDraft, StoryPlanDraft } from "@/lib/contracts/drafts";
 
 const ids = [
@@ -45,5 +45,46 @@ describe("application-owned identity materialization", () => {
     const first = materializePagePlan(draft, null, idFactory());
     const second = materializePagePlan({ ...draft, pages: draft.pages.map((item) => ({ ...item, readerText: `${item.readerText} Revised` })) }, first, idFactory());
     expect(second.pages.map((item) => item.pageId)).toEqual(first.pages.map((item) => item.pageId));
+  });
+
+  it("owns Visual Bible membership and stable IDs even when a specialist returns mismatched subjects", () => {
+    const story = materializeStoryPlan(newStory, null, idFactory());
+    const visualBible = materializeVisualBible({
+      schemaVersion: "1",
+      characters: [{
+        entityId: ids[5]!,
+        name: "Robin",
+        visualDetails: ["A cheerful red scarf"],
+        continuityConstraints: ["Keep the scarf visible."],
+        referenceRequired: false,
+        currentReferenceAssetId: null,
+        revisionNumber: 1,
+      }],
+      locations: [],
+      styleReferences: [],
+    }, story, {
+      schemaVersion: "1",
+      styleId: "soft-watercolor",
+      name: "Soft watercolor",
+      rationale: "A calm fit for the story.",
+      visualDirection: "Rounded watercolor forms.",
+      palette: ["blue"],
+      texture: "Paper grain",
+      lighting: "Soft light",
+      styleReferenceAssetIds: [ids[4]!],
+    }, null);
+
+    expect(visualBible.characters).toEqual([expect.objectContaining({
+      entityId: story.characters[0]!.entityId,
+      name: "Robin",
+      visualDetails: ["A cheerful red scarf"],
+      referenceRequired: true,
+    })]);
+    expect(visualBible.locations).toEqual([expect.objectContaining({
+      entityId: story.settings[0]!.entityId,
+      name: "Garden",
+      referenceRequired: true,
+    })]);
+    expect(visualBible.styleReferences).toEqual([ids[4]]);
   });
 });

@@ -22,6 +22,10 @@ If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent comm
 
 The command path was re-verified on 2026-08-02 with deterministic fake providers. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
 
+### Local development recovery
+
+If the browser reports a failed chunk or cannot read a response after local code changes, use **Reload workspace** first; saved booklet data is not affected. If that does not resolve it, stop only the affected development server, delete only its `.next/dev` cache, run `npm.cmd run build`, and restart `npm.cmd run dev`. Do not delete `data/` or retained evaluation output as part of this recovery.
+
 ## Commands
 
 | Command | Purpose |

@@ -13,12 +13,12 @@ On Home, enter a rough story idea and choose **Create booklet**. The application
 The workspace always shows Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan, Final Pages, and PDF Export. Follow the active typed card rather than editing a future stage out of sequence:
 
 1. Start guided intake and choose the reader age when asked.
-2. Review and approve the Audience Profile and Story Plan.
-3. Select one of the three bundled style directions, approve the Visual Bible definitions, then review and select every generated character/location reference before approving the Visual Bible.
-4. Review the recommended story-page count. You can change it from three to eight in the Booklet Specification editor, save the new version, explicitly confirm the page geometry, and approve the Page Plan.
-5. Review the composed Final Pages, select every page after checking it, then approve the page set before requesting PDF export.
+2. Review and approve the Audience Profile and Story Plan. The next guided decision opens automatically after either approval.
+3. Select one of the three bundled style directions, approve the Visual Bible definitions, then review every generated character/location reference and approve the reviewed set together.
+4. Review the recommended story-page count. You can change it from three to eight with the visible Booklet Specification control, save that count in one action, explicitly confirm the page geometry, and approve the Page Plan.
+5. Review the composed Final Pages, then approve the reviewed page set together before requesting PDF export.
 
-The rail and conversation persist card state. Reloading a workspace keeps the selected rail item, saved message history, artifact versions, and current active card.
+The rail and conversation persist card state. Reloading a workspace keeps the selected rail item, saved message history, artifact versions, and current active card. If a local browser session cannot load current files, choose **Reload workspace**; it does not discard saved booklet work.
 
 ## How the local workflow fits together
 
@@ -40,7 +40,7 @@ The POC generates canonical references for recurring subjects, then creates one 
 
 When a reference or page item fails, open the visible **Generation progress** panel and choose **Retry item**. Only the failed item is retried; completed items remain intact.
 
-Once page count is confirmed, the artifact rail exposes an indented Cover/Page list that links to each Page Package. Select **Final pages** in the rail to make a focused change. **Recompose text** preserves that page’s source illustration and creates only a new composed PNG. **Regenerate visual** starts a persisted background job for only that page; it does not replace other Final Pages. Review and select every changed Final Page before exporting again.
+Once page count is confirmed, the artifact rail exposes an indented Cover/Page list that links to each Page Package. Select **Final pages** in the rail to make a focused change. **Recompose text** preserves that page’s source illustration and creates only a new composed PNG. **Regenerate visual** starts a persisted background job for only that page; it does not replace other Final Pages. Review every changed Final Page, then approve the reviewed set before exporting again.
 
 ## Quality issues and approval
 

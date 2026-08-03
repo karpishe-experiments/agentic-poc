@@ -243,6 +243,7 @@ export type AssetRepository = {
 export type EvidenceRepository = {
   countModelCalls(bookletId: string): Promise<number>;
   countQualityReviews(bookletId: string): Promise<number>;
+  hasPassedQualityReview(input: { bookletId: string; gate: string; artifactVersionId: string }): Promise<boolean>;
   recordModelCall(input: {
     id: string;
     bookletId: string;
@@ -866,6 +867,12 @@ export function createRepositories(database: Database): Repositories {
         const result = await database.select({ count: sql<number>`count(*)` }).from(qualityReviews)
           .where(eq(qualityReviews.bookletId, bookletId));
         return Number(result[0]?.count ?? 0);
+      },
+      async hasPassedQualityReview(input) {
+        const result = await database.select({ id: qualityReviews.id }).from(qualityReviews)
+          .where(sql`${qualityReviews.bookletId} = ${input.bookletId} and ${qualityReviews.gate} = ${input.gate} and ${qualityReviews.status} = 'passed' and ${qualityReviews.artifactVersionIdsJson} like ${`%"${input.artifactVersionId}"%`}`)
+          .limit(1);
+        return Boolean(result[0]);
       },
       async recordModelCall(input) {
         await database.insert(modelCalls).values({

@@ -179,6 +179,7 @@ export function validateCardResponseValue(card: GenUICard, response: CardRespons
   }
 
   if (card.family === "artifact_review" && card.variant === "visual_gallery" && (response.action === "select" || response.action === "approve_and_continue")) {
+    if (response.action === "approve_and_continue" && response.value === undefined) return response;
     const values = z.array(z.string().uuid()).min(1).parse(response.value);
     const assets = new Set(card.payload.items.map((item) => item.assetId));
     if (new Set(values).size !== values.length || values.some((value) => !assets.has(value))) {

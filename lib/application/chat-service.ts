@@ -3,6 +3,7 @@ import { validateUIMessages } from "ai";
 import { z } from "zod";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
+import { createRecoveryCard } from "@/lib/application/card-factories";
 import { createDatabase, type Database } from "@/db/client";
 import { BookletNotFoundError } from "@/lib/application/booklet-service";
 import { ArtifactService } from "@/lib/application/artifact-service";
@@ -20,12 +21,27 @@ import { bookletSpecificationResultSchema } from "@/lib/skills/booklet-specifica
 import { pagePlanningResultSchema } from "@/lib/skills/page-planning-writing";
 import { imagePromptCompilationResultSchema } from "@/lib/skills/image-prompt-compilation";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
-import { materializePagePlan, materializeStoryPlan } from "@/lib/application/entity-materialization";
-import { pagePlanSchema, storyPlanSchema } from "@/lib/contracts/artifacts";
+import { materializePagePlan, materializeStoryPlan, materializeVisualBible } from "@/lib/application/entity-materialization";
+import { pagePlanSchema, storyPlanSchema, visualBibleSchema, visualStyleSchema } from "@/lib/contracts/artifacts";
 import { pagePlanDraftSchema, storyPlanDraftSchema } from "@/lib/contracts/drafts";
 import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
 
 export type ChatTurn = { userMessage: BookletUIMessage; assistantMessage: BookletUIMessage };
+
+const typedRecoveryCodes = new Set([
+  "visual_bible_entities_mismatch",
+  "page_plan_specification_mismatch",
+  "page_plan_reference_mismatch",
+]);
+
+/**
+ * Only these validation failures safely replace the active decision with a
+ * retry card. Other recoverable errors may need the existing card to remain
+ * available, so they continue through the normal error envelope.
+ */
+export function isTypedWorkflowRecovery(error: unknown): error is RecoverableApplicationError {
+  return error instanceof RecoverableApplicationError && typedRecoveryCodes.has(error.code);
+}
 
 export class ChatService {
   private readonly repositories: Repositories;
@@ -203,6 +219,64 @@ export class ChatService {
     }
   }
 
+  /** Persist a typed recovery card for expected workflow errors so useChat stays usable. */
+  public async createRecoveryTurn(bookletId: string, error: RecoverableApplicationError): Promise<BookletUIMessage> {
+    const booklet = await this.repositories.booklets.get(bookletId);
+    if (!booklet) throw new BookletNotFoundError(bookletId);
+    const now = Date.now();
+    const visualBibleFailure = error.code === "visual_bible_entities_mismatch";
+    const pagePlanFailure = error.code === "page_plan_specification_mismatch" || error.code === "page_plan_reference_mismatch";
+    const recovery = visualBibleFailure
+      ? {
+        title: "Retry Visual Bible",
+        explanation: "Your approved Story Plan and visual style are still saved. No canonical references or page images were created.",
+        summary: "The visual definitions did not line up with the Story Plan. Retrying will rebuild the required subjects from your approved Story Plan.",
+        details: [error.message, "Retry does not change the approved story or visual style."],
+        narration: "I kept your story and style. The Visual Bible needs one safe retry before reference generation.",
+      }
+      : pagePlanFailure
+        ? {
+          title: "Retry Page Plan",
+          explanation: "Your approved Story Plan, Visual Bible, and Booklet Specification are still saved. No page images were created.",
+          summary: "The Page Plan did not line up with the confirmed booklet settings. Retrying uses your current approved Story Plan, Visual Bible, and geometry.",
+          details: [error.message, "Retry does not change approved decisions or start image generation."],
+          narration: "I kept your approved booklet decisions. The Page Plan needs one safe retry before page images can be generated.",
+        }
+        : {
+          title: "Retry this step",
+          explanation: "Your saved booklet work is still available. Retry only the step that needs attention.",
+          summary: error.message,
+          details: [error.message],
+          narration: "This step needs a retry, but your saved work is retained.",
+        };
+    const card = createRecoveryCard({
+      cardId: randomUUID(),
+      title: recovery.title,
+      explanation: recovery.explanation,
+      code: error.code,
+      summary: recovery.summary,
+      details: recovery.details,
+      allowedActions: ["retry"],
+    });
+    const assistantMessageId = randomUUID();
+    await this.repositories.conversation.persistAssistantCard({
+      bookletId,
+      messageId: assistantMessageId,
+      narration: recovery.narration,
+      card,
+      createdAtMs: now,
+    });
+    return {
+      id: assistantMessageId,
+      role: "assistant",
+      metadata: { schemaVersion: "1", bookletId, persistedAt: new Date(now).toISOString() },
+      parts: [
+        { type: "text", text: recovery.narration },
+        { type: "data-card", id: card.cardId, data: card },
+      ],
+    };
+  }
+
   private async createAudienceReview(bookletId: string, idea: string, knownFacts: string[]) {
     const ageBand = knownFacts.find((fact) => /3[-–]5/.test(fact)) ? "3-5" as const
       : knownFacts.find((fact) => /9[-–]12/.test(fact)) ? "9-12" as const
@@ -246,9 +320,16 @@ export class ChatService {
     if (!story.currentVersion || !story.currentVersion.content || typeof story.currentVersion.content !== "object") {
       throw new RecoverableApplicationError({ code: "story_plan_missing", message: "The Story Plan needs a saved version before it can be reviewed.", status: 409 });
     }
-    const content = story.currentVersion.content as { premise?: string; theme?: string; ending?: string };
+    const readiness = await this.quality.runStoryReadiness(bookletId);
+    if (readiness.kind === "unresolved") {
+      return { narration: "The Story Plan needs a focused change before your review.", card: readiness.card };
+    }
+    const reviewedStory = await this.artifacts.get(bookletId, "story_plan");
+    const content = reviewedStory.currentVersion?.content as { premise?: string; theme?: string; ending?: string } | undefined;
+    const repaired = readiness.kind === "repaired";
+    const repairSummary = repaired ? readiness.issues.map((issue) => `${issue.target}: ${issue.message}`).join(" ") : null;
     return {
-      narration,
+      narration: repaired ? "I applied one targeted quality repair before your review, so you only need to approve the ready Story Plan once." : narration,
       card: {
         schemaVersion: SCHEMA_VERSION,
         cardId: randomUUID(),
@@ -256,15 +337,17 @@ export class ChatService {
         variant: "summary" as const,
         status: "active" as const,
         title: "Review the Story Plan",
-        explanation: "Approve it to carry these story constraints into visual direction.",
+        explanation: repaired ? "A targeted quality repair was applied before this review. Approve this ready version to continue into visual direction." : "The Story Plan passed its readiness check. Approve it to carry these constraints into visual direction.",
         allowedActions: ["approve_and_continue" as const, "request_revision" as const],
         payload: {
           artifactType: "story_plan" as const,
-          versionId: story.currentVersion.id,
+          versionId: reviewedStory.currentVersion?.id ?? null,
           summary: [
-            { label: "Premise", value: content.premise ?? "A gentle story is being drafted." },
-            { label: "Theme", value: content.theme ?? "Kindness" },
-            { label: "Ending", value: content.ending ?? "A hopeful ending" },
+            { label: "Premise", value: content?.premise ?? "A gentle story is being drafted." },
+            { label: "Theme", value: content?.theme ?? "Kindness" },
+            { label: "Ending", value: content?.ending ?? "A hopeful ending" },
+            { label: "Quality", value: repaired ? "One targeted repair applied" : "Readiness checked" },
+            ...(repairSummary ? [{ label: "Repair", value: repairSummary }] : []),
           ],
         },
       },
@@ -318,7 +401,14 @@ export class ChatService {
         },
       };
     }
-    await this.artifacts.revise(bookletId, "visual_bible", output.content, { createdBy: "agent" });
+    const [story, style, existingBible] = await Promise.all([
+      this.artifacts.get(bookletId, "story_plan"),
+      this.artifacts.get(bookletId, "visual_style"),
+      this.artifacts.get(bookletId, "visual_bible"),
+    ]);
+    const storyContent = storyPlanSchema.parse(story.currentVersion?.content);
+    const styleContent = visualStyleSchema.parse(style.currentVersion?.content);
+    await this.artifacts.revise(bookletId, "visual_bible", materializeVisualBible(output.content, storyContent, styleContent, existingBible.currentVersion ? visualBibleSchema.parse(existingBible.currentVersion.content) : null), { createdBy: "agent" });
     const detail = await this.artifacts.get(bookletId, "visual_bible");
     const bible = detail.currentVersion?.content as { characters: Array<{ name: string; referenceRequired: boolean }>; locations: Array<{ name: string; referenceRequired: boolean }> };
     const requiredReferences = [...bible.characters, ...bible.locations].filter((item) => item.referenceRequired).length;

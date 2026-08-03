@@ -9,12 +9,15 @@ import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 import type { BookletUIMessage } from "@/lib/contracts/messages";
 
 type CardResponseBody = { data?: { summary: string; followupRequired: boolean; refreshRequired?: boolean }; error?: { message?: string } };
+const workspaceRefreshMessage = "The workspace needs a refresh. Your saved work is still available.";
 
 export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{ bookletId: string; initialMessages: BookletUIMessage[] }>) {
   const router = useRouter();
   const [input, setInput] = useState("");
   const [workingStatus, setWorkingStatus] = useState<string | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
+  const [transportError, setTransportError] = useState<string | null>(null);
+  const [reloadSuggested, setReloadSuggested] = useState(false);
   const [busyCardId, setBusyCardId] = useState<string | null>(null);
   const [submittedCardIds, setSubmittedCardIds] = useState<Set<string>>(() => new Set());
   const [hasUnseenMessages, setHasUnseenMessages] = useState(false);
@@ -24,7 +27,7 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
     api: `/api/chat/${bookletId}`,
     prepareSendMessagesRequest: ({ messages }) => ({ body: { message: messages.at(-1) } }),
   }), [bookletId]);
-  const { messages, sendMessage, setMessages, status, error } = useChat<BookletUIMessage>({
+  const { messages, sendMessage, setMessages, status, clearError } = useChat<BookletUIMessage>({
     id: bookletId,
     messages: initialMessages,
     transport,
@@ -33,9 +36,13 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
     },
     onFinish: () => {
       setWorkingStatus(null);
+      setTransportError(null);
       router.refresh();
     },
-    onError: () => setWorkingStatus(null),
+    onError: () => {
+      setWorkingStatus(null);
+      setTransportError("The connection was interrupted. Your saved work is still available.");
+    },
   });
 
   useEffect(() => {
@@ -70,6 +77,15 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
     });
   }
 
+  async function readCardResponse(result: Response): Promise<CardResponseBody> {
+    try {
+      return await result.json() as CardResponseBody;
+    } catch {
+      setReloadSuggested(true);
+      throw new Error(workspaceRefreshMessage);
+    }
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = input.trim();
@@ -80,6 +96,7 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
 
   async function submitCard(card: GenUICard, response: { action: CardAction; value?: unknown; revisionInstruction?: string }) {
     setCardError(null);
+    setReloadSuggested(false);
     setBusyCardId(card.cardId);
     try {
       const responseId = crypto.randomUUID();
@@ -88,11 +105,16 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ responseId, ...response }),
       });
-      const body = await result.json() as CardResponseBody;
+      const body = await readCardResponse(result);
       if (!result.ok || !body.data) throw new Error(body.error?.message ?? "We could not save that decision.");
       setSubmittedCardIds((submitted) => new Set(submitted).add(card.cardId));
+      const advancesGuidedFlow = card.family === "artifact_review" && response.action === "approve_and_continue" && (
+        (card.variant === "summary" && (card.payload.artifactType === "audience_profile" || card.payload.artifactType === "story_plan"))
+        || (card.variant === "visual_gallery" && card.payload.artifactType === "visual_bible")
+      );
       if (body.data.followupRequired) await sendText(body.data.summary, responseId);
-      else if (body.data.refreshRequired || (card.family === "artifact_review" && response.action === "approve_and_continue" && (card.payload.artifactType === "page_plan" || (card.payload.artifactType === "visual_bible" && card.variant === "summary")))) router.refresh();
+      else if (advancesGuidedFlow) await sendText(body.data.summary);
+      else router.refresh();
     } catch (submissionError) {
       setCardError(submissionError instanceof Error ? submissionError.message : "We could not save that decision.");
     } finally {
@@ -102,10 +124,11 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
 
   async function reopenCard(cardId: string) {
     setCardError(null);
+    setReloadSuggested(false);
     setBusyCardId(cardId);
     try {
       const result = await fetch(`/api/booklets/${bookletId}/cards/${cardId}/reopen`, { method: "POST" });
-      const body = await result.json() as CardResponseBody;
+      const body = await readCardResponse(result);
       if (!result.ok || !body.data) throw new Error(body.error?.message ?? "We could not reopen that decision.");
       window.location.reload();
     } catch (reopenError) {
@@ -122,23 +145,29 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
     setHasUnseenMessages(false);
   }
 
+  const hasStartedGuidedFlow = messages.some((message) => message.role === "assistant" || Boolean(message.metadata?.responseId));
+  const earlierMessages = messages.slice(0, -5);
+  const currentMessages = messages.slice(-5);
+  const renderMessage = (message: BookletUIMessage) => <article className={`rounded-xl p-3 text-sm ${message.role === "user" ? "bg-[#fff7ee]" : "bg-white"}`} key={message.id}>
+    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-ink)]">{message.role}</p>
+    {message.parts.map((part, index) => {
+      if (part.type === "text") return <p key={`${message.id}-${index}`}>{part.text}</p>;
+      if (part.type === "data-card") {
+        const card = submittedCardIds.has(part.data.cardId) ? { ...part.data, status: "submitted" as const } : part.data;
+        return <CardRegistry busy={busyCardId === card.cardId} card={card} key={part.id ?? card.cardId} reopenCard={() => reopenCard(card.cardId)} submitResponse={(response) => submitCard(card, response)} />;
+      }
+      return null;
+    })}
+  </article>;
+
   return (
     <section aria-label="Conversation" className="flex min-h-80 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <h2 className="text-lg font-semibold">Creative partner</h2>
       <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" ref={conversationRef}>
-        {messages.map((message) => <article className={`rounded-xl p-3 text-sm ${message.role === "user" ? "bg-[#fff7ee]" : "bg-white"}`} key={message.id}>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-ink)]">{message.role}</p>
-          {message.parts.map((part, index) => {
-            if (part.type === "text") return <p key={`${message.id}-${index}`}>{part.text}</p>;
-            if (part.type === "data-card") {
-              const card = submittedCardIds.has(part.data.cardId) ? { ...part.data, status: "submitted" as const } : part.data;
-              return <CardRegistry busy={busyCardId === card.cardId} card={card} key={part.id ?? card.cardId} reopenCard={() => reopenCard(card.cardId)} submitResponse={(response) => submitCard(card, response)} />;
-            }
-            return null;
-          })}
-        </article>)}
+        {earlierMessages.length ? <details className="rounded-xl border border-[var(--border)] bg-[#fffaf2] p-3"><summary className="cursor-pointer text-sm font-semibold">Show {earlierMessages.length} earlier message{earlierMessages.length === 1 ? "" : "s"}</summary><div className="mt-3 space-y-3">{earlierMessages.map(renderMessage)}</div></details> : null}
+        {currentMessages.map(renderMessage)}
         {workingStatus ? <p aria-live="polite" className="rounded-lg bg-[#f3e5d8] p-2 text-sm">{workingStatus}</p> : null}
-        {error || cardError ? <p className="rounded-lg border border-red-300 p-2 text-sm text-red-700" role="alert">{error?.message ?? cardError}</p> : null}
+        {transportError || cardError ? <div className="rounded-lg border border-red-300 p-2 text-sm text-red-700" role="alert"><p>{transportError ?? cardError}</p>{transportError || reloadSuggested ? <button className="mt-2 rounded border border-red-500 px-2 py-1 font-semibold" onClick={() => { clearError(); setCardError(null); setTransportError(null); setReloadSuggested(false); router.refresh(); }} type="button">Reload workspace</button> : null}</div> : null}
       </div>
       {hasUnseenMessages ? <button className="mt-2 w-fit rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)]" onClick={jumpToLatest} type="button">Jump to latest</button> : null}
       <form className="mt-3 flex gap-2" onSubmit={onSubmit}>
@@ -146,7 +175,7 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
         <input autoComplete="off" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] px-3 py-2" disabled={status !== "ready"} id="chat-message" name="message" onChange={(event) => setInput(event.target.value)} placeholder="Add a story detail or ask to begin…" value={input} />
         <button className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={status !== "ready" || !input.trim()} type="submit">Send</button>
       </form>
-      {messages.length === initialMessages.length ? <button className="mt-2 w-fit text-sm font-semibold text-[var(--accent)]" disabled={status !== "ready"} onClick={() => void sendText("Please begin the guided questions.")} type="button">Start guided questions</button> : null}
+      {!hasStartedGuidedFlow ? <button className="mt-2 w-fit text-sm font-semibold text-[var(--accent)]" disabled={status !== "ready"} onClick={() => void sendText("Please begin the guided questions.")} type="button">Start guided questions</button> : null}
     </section>
   );
 }

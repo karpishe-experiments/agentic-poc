@@ -306,7 +306,7 @@ export class GenerationService {
       variant: "visual_gallery",
       status: "active",
       title: "Review canonical references",
-      explanation: "Review every canonical reference, select each one, then approve the Visual Bible.",
+      explanation: "Review every canonical reference, then approve them together to continue.",
       allowedActions: ["approve_and_continue"],
       payload: { artifactType: "visual_bible", versionId: revised.currentVersion.id, items: galleryItems },
     };
@@ -344,7 +344,7 @@ export class GenerationService {
       variant: "visual_gallery",
       status: "active",
       title: "Review final pages",
-      explanation: "Review every composed page, select each one, then approve Final Pages for PDF export.",
+      explanation: "Review every composed page, then approve them together for PDF export.",
       allowedActions: ["approve_and_continue"],
       payload: {
         artifactType: "final_pages",

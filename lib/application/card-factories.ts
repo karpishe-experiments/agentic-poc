@@ -58,6 +58,6 @@ export function createValidationFailureCard(input: CardIdentity & { code: string
   return createIssueCard({ ...input, variant: "validation_failure", allowedActions: ["retry", "edit"] });
 }
 
-export function createRecoveryCard(input: CardIdentity & { code: string; summary: string; details?: string[] }): GenUICard {
-  return createIssueCard({ ...input, variant: "recovery", allowedActions: ["continue", "retry"] });
+export function createRecoveryCard(input: CardIdentity & { code: string; summary: string; details?: string[]; allowedActions?: GenUICard["allowedActions"] }): GenUICard {
+  return createIssueCard({ ...input, variant: "recovery", allowedActions: input.allowedActions ?? ["retry"] });
 }

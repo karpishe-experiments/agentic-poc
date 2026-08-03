@@ -6,6 +6,9 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3001";
 export default defineConfig({
   testDir: "./tests/e2e",
   outputDir: "output/playwright/test-results",
+  // The isolated POC server uses one SQLite database. Serial browser tests keep
+  // independent booklets from contending for the same write lock.
+  workers: 1,
   use: {
     baseURL,
     ...devices["Desktop Chrome"],

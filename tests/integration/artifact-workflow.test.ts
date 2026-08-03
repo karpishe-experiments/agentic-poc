@@ -183,6 +183,57 @@ describe("ArtifactService", () => {
     expect(revised.approvals.some((approval) => approval.subjectKey === story.settings[0].entityId)).toBe(false);
   });
 
+  it("approves every reviewed canonical reference from one gallery decision", async () => {
+    const { database, booklets, artifacts } = await createServices({ now: () => Date.UTC(2026, 7, 1, 12, 0, 0) });
+    const booklet = await booklets.create({ idea: "A robin keeps a garden bright." });
+    await artifacts.revise(booklet.id, "audience_profile", audience);
+    await artifacts.revise(booklet.id, "story_plan", story);
+    await artifacts.revise(booklet.id, "visual_style", visualStyle);
+    const withReference = {
+      ...visualBible,
+      characters: [{
+        ...visualBible.characters[0],
+        currentReferenceAssetId: "00000000-0000-4000-8000-000000000804",
+      }],
+    };
+    const detail = await artifacts.revise(booklet.id, "visual_bible", withReference);
+    await artifacts.approve(booklet.id, "visual_bible", detail.currentVersion!.id, { scope: "artifact_content" });
+    const cardId = "00000000-0000-4000-8000-000000000805";
+    await createRepositories(database).conversation.persistAssistantCard({
+      bookletId: booklet.id,
+      messageId: "00000000-0000-4000-8000-000000000806",
+      narration: "Review every canonical reference, then approve them together.",
+      card: {
+        schemaVersion: SCHEMA_VERSION,
+        cardId,
+        family: "artifact_review",
+        variant: "visual_gallery",
+        status: "active",
+        title: "Review canonical references",
+        allowedActions: ["approve_and_continue"],
+        payload: {
+          artifactType: "visual_bible",
+          versionId: detail.currentVersion!.id,
+          items: [{ assetId: "00000000-0000-4000-8000-000000000804", label: "Robin", selected: false }],
+        },
+      },
+      createdAtMs: Date.UTC(2026, 7, 1, 12, 0, 1),
+    });
+
+    const result = await new CardService({ database }).submit(booklet.id, {
+      responseId: "00000000-0000-4000-8000-000000000807",
+      cardId,
+      action: "approve_and_continue",
+    });
+
+    expect(result).toMatchObject({ kind: "saved", followupRequired: false });
+    expect(await artifacts.get(booklet.id, "visual_bible")).toMatchObject({ state: "approved" });
+    expect((await artifacts.get(booklet.id, "visual_bible")).approvals).toContainEqual(expect.objectContaining({
+      scope: "reference",
+      subjectKey: story.characters[0].entityId,
+    }));
+  });
+
   it("applies an artifact-review approve-and-continue action without starting a follow-up turn", async () => {
     const { database, booklets, artifacts } = await createServices({ now: () => Date.UTC(2026, 7, 1, 12, 0, 0) });
     const booklet = await booklets.create({ idea: "A robin shares a watering can." });

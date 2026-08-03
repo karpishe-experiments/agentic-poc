@@ -111,7 +111,17 @@ export class ArtifactService {
       const actualCharacterIds = bible.characters.map((character) => character.entityId).sort();
       const actualLocationIds = bible.locations.map((location) => location.entityId).sort();
       if (JSON.stringify(expectedCharacterIds) !== JSON.stringify(actualCharacterIds) || JSON.stringify(expectedLocationIds) !== JSON.stringify(actualLocationIds)) {
-        throw new RecoverableApplicationError({ code: "visual_bible_entities_mismatch", message: "The Visual Bible must define every named or continuity-relevant Story Plan character and location, and no incidental subjects.", status: 400 });
+        const describeMismatch = (expected: string[], actual: string[], entities: Array<{ entityId: string; name: string }>, label: string) => {
+          const names = new Map(entities.map((entity) => [entity.entityId, entity.name]));
+          const missing = expected.filter((id) => !actual.includes(id)).map((id) => names.get(id) ?? id);
+          const extra = actual.filter((id) => !expected.includes(id)).map((id) => names.get(id) ?? id);
+          return [missing.length ? `missing ${label}: ${missing.join(", ")}` : null, extra.length ? `unexpected ${label}: ${extra.join(", ")}` : null].filter(Boolean).join("; ");
+        };
+        const details = [
+          describeMismatch(expectedCharacterIds, actualCharacterIds, story.characters, "characters"),
+          describeMismatch(expectedLocationIds, actualLocationIds, story.settings, "locations"),
+        ].filter(Boolean).join("; ");
+        throw new RecoverableApplicationError({ code: "visual_bible_entities_mismatch", message: `The Visual Bible must define every named or continuity-relevant Story Plan subject and no incidental subjects.${details ? ` Please revise: ${details}.` : ""}`, status: 400 });
       }
     }
 

@@ -88,9 +88,9 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 ### Own the Playwright server lifecycle on Windows
 
 - **Context:** Running an isolated Next.js development server for desktop Playwright checks through PowerShell on Windows.
-- **Observation:** Playwright completed its assertions but did not reliably terminate nested `next dev` descendants, causing the normal test command to time out.
-- **Guidance:** Start the prepared fake-provider server in a project-owned runner, invoke Playwright with `PLAYWRIGHT_REUSE_SERVER=1`, terminate that exact child process tree in `finally`, and allow a configurable isolated port when a developer already uses the default.
-- **Evidence:** `scripts/run-e2e.ts`, `scripts/e2e-server.ts`, and `playwright.config.ts`; all 3 specs passed on `E2E_PORT=3101` on 2026-08-02 without touching the pre-existing server on port 3001.
+- **Observation:** Playwright completed its assertions but did not reliably terminate nested `next dev` descendants, causing the normal test command to time out. Parallel browser workers also contended for the one isolated SQLite database and produced `SQLITE_BUSY`.
+- **Guidance:** Start the prepared fake-provider server in a project-owned runner, invoke Playwright with `PLAYWRIGHT_REUSE_SERVER=1`, terminate that exact child process tree in `finally`, and allow a configurable isolated port when a developer already uses the default. Keep `workers: 1` unless the test harness gives every worker an independent database.
+- **Evidence:** `scripts/run-e2e.ts`, `scripts/e2e-server.ts`, and `playwright.config.ts`; the three serial specs passed on 2026-08-03 without touching a pre-existing developer server.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -118,5 +118,41 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Observation:** Validating UUID-shaped model output does not establish application ownership; it lets a model silently replace the persistent identity that downstream artifacts depend on.
 - **Guidance:** Use a discriminated `existing`/`new` entity-change contract. Accept existing IDs only from the supplied current artifact, require a nonpersistent client key for new drafts, and materialize durable IDs in application code before persistence. Apply the same boundary to generated page IDs.
 - **Evidence:** `lib/contracts/drafts.ts`, `lib/application/entity-materialization.ts`, and `tests/unit/application/entity-materialization.test.ts` added on 2026-08-02; the single-worker Vitest run passed 59 tests.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Let the application own Visual Bible membership and identity
+
+- **Context:** A Visual Bible specialist turns an approved Story Plan and visual style into canonical-reference definitions.
+- **Observation:** A real specialist result can contain valid-looking but mismatched character/location subjects; accepting its membership directly blocks the workflow or lets the model alter downstream identity.
+- **Guidance:** Derive the Visual Bible’s eligible character/location set, stable IDs, reference requirement, reference-asset lineage, and style references in application code from the approved Story Plan and selected style. Use model output only to enrich visual details matched by ID or normalized name.
+- **Evidence:** `lib/application/entity-materialization.ts`, `lib/application/chat-service.ts`, and `tests/unit/application/entity-materialization.test.ts`; the focused identity test and full 62-test suite passed on 2026-08-03.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Advance a guided card only when no persisted job owns the next step
+
+- **Context:** A card response in an AI SDK conversation can either require server-side follow-up, create a persisted generation job, or safely begin the next deterministic stage.
+- **Observation:** Treating every successful response as a passive refresh left the creator at an empty stage with a disabled composer. Reusing a submitted response ID for a non-follow-up stage returned `card_response_not_found`.
+- **Guidance:** Send the server-declared response continuation only when `followupRequired` is true. For safe non-job transitions, send a fresh staged turn without the old response ID; for reference/page generation and final-page approval, refresh and let the persisted job or later export stage own the next action.
+- **Evidence:** `components/workspace/workspace-conversation.tsx` and `tests/e2e/golden-path.spec.ts`; the fake-provider browser journey automatically advanced Audience → Story, Story → Style, and references → Booklet Specification, then passed through Final Pages on 2026-08-03.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Stream safe cross-document retries as typed workflow cards
+
+- **Context:** A deterministic artifact guard rejects a Visual Bible or Page Plan that no longer agrees with approved upstream artifacts.
+- **Observation:** Returning its expected 400 envelope through the chat transport leaves the conversation unavailable even though saved state can safely continue.
+- **Guidance:** Convert only errors known to safely replace the current decision into a persisted recovery card with a stage-specific explanation, named retry, and no-generation guarantee. Leave card-state conflicts on the normal envelope so the original active card remains available.
+- **Evidence:** `ChatService.isTypedWorkflowRecovery`, `app/api/chat/[bookletId]/route.ts`, and the Page Plan recovery integration test; focused and full checks passed on 2026-08-03.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Start the persistent job runner when Next omits `NEXT_RUNTIME`
+
+- **Context:** Production startup of the local Next.js workspace, where reference and page jobs are persisted for background execution.
+- **Observation:** A production bootstrap can omit `NEXT_RUNTIME`; treating only the literal `"nodejs"` value as executable left queued image jobs at zero progress despite a healthy request server.
+- **Guidance:** Exclude the Edge runtime explicitly and treat an unset runtime as Node when starting this local persistent runner. Keep job recovery at runner startup so an interrupted item can be claimed again after a known server restart.
+- **Evidence:** `instrumentation.ts` now starts the runner unless the runtime is Edge. During the 2026-08-03 real booklet evaluation, the previously queued three-reference job resumed after restart and completed all items; `npm.cmd run build` and the three browser specs passed.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
