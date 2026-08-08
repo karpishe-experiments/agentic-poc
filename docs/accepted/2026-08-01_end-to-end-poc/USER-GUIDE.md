@@ -16,13 +16,13 @@ The workspace always shows Audience Profile, Story Plan, Visual Style, Visual Bi
 2. Review and approve the Audience Profile and Story Plan. The next guided decision opens automatically after either approval.
 3. Select one of the three bundled style directions, approve the Visual Bible definitions, then review every generated character/location reference and approve the reviewed set together.
 4. Review the recommended story-page count. You can change it from three to eight with the visible Booklet Specification control, save that count in one action, explicitly confirm the page geometry, and approve the Page Plan.
-5. Review the composed Final Pages, then approve the reviewed page set together before requesting PDF export.
+5. Review the professionally lettered Final Pages at full size, then approve the reviewed page set together before requesting PDF export.
 
 The rail and conversation persist card state. Reloading a workspace keeps the selected rail item, saved message history, artifact versions, and current active card. If a local browser session cannot load current files, choose **Reload workspace**; it does not discard saved booklet work.
 
 ## Choose image speed for local development
 
-Set `IMAGE_PROVIDER_MODE=fast` in `.env.local` when you want real OpenAI images with development speed prioritized over fidelity. Fast mode forces low image quality, requests compressed JPEG output for lower generation/transfer latency, and converts the result to the PNG format used by saved booklet assets. It ignores `IMAGE_QUALITY` by design. Use `IMAGE_PROVIDER_MODE=real` when you want the quality selected by `IMAGE_QUALITY`, or `fake` for deterministic no-cost placeholders. Restart the development server after changing the mode.
+Set `IMAGE_PROVIDER_MODE=fast` in `.env.local` when you want real OpenAI images with development speed prioritized over fidelity. Fast mode uses low quality for text-free references and compressed JPEG transfer, but lettered pages keep a medium-quality minimum for readability before conversion to saved PNG assets. Use `IMAGE_PROVIDER_MODE=real` when you want the quality selected by `IMAGE_QUALITY`, or `fake` for deterministic no-cost placeholders. Set `COMIC_COPY_MODE=creative` (default) to let the writing specialist adapt beats into comic copy before review, or `exact` to classify/split existing words without rewriting them. Restart the development server after changing either mode.
 
 ## How the local workflow fits together
 
@@ -42,11 +42,11 @@ flowchart TD
 
 The POC generates canonical references for recurring subjects, then creates one cover plus one illustration per story page. These persisted jobs run in the background: the workspace keeps its progress panel visible and updates to the next review card when the job finishes. Completed assets remain saved if a later item fails or the process restarts. The selected style sample, relevant character references, and relevant location references are included in a page-generation request.
 
-If an approved Page Plan reaches **Final pages** before its page-generation job starts, use **Start page generation** (or the saved retry card in an older workspace). It starts or resumes the persisted page job from the approved Page Plan; it does not re-draft the plan or send Final Pages through the creative-partner chat.
+If an approved Page Plan reaches **Final pages** before its page-generation job starts, use **Start page generation** (or the saved retry card in an older workspace). Legacy Page Plans first show **Upgrade to Comic Lettering**: this creates a revised, reviewable plan and preserves existing images. Approve that structured lettering plan before starting or resuming generation.
 
 Any reference or page failure immediately stops the job; there are no automatic retries and later items remain pending without consuming attempts. Choose **Retry failed page** or **Retry failed reference** to regenerate only that item. If it succeeds while pending items remain, the job stays paused and shows **Continue generating images**. Continue resumes the same saved queue until completion or the next failure, without replacing completed images.
 
-Once page count is confirmed, the artifact rail exposes an indented Cover/Page list that links to each Page Package. Select **Final pages** in the rail to make a focused change. **Recompose text** preserves that page’s source illustration and creates only a new composed PNG. **Regenerate visual** starts a persisted background job for only that page; it does not replace other Final Pages. Review every changed Final Page, then approve the reviewed set before exporting again.
+Once page count is confirmed, the artifact rail exposes an indented Cover/Page list that links to each Page Package. Copy changes belong in a revised Page Plan and must be approved before generation. In a Visual Bible or Final Pages gallery, click a thumbnail for the full-size preview. Each card has an optional regeneration instruction and a **Regenerate This Page/Reference** action. Use the instruction for visual corrections or lettering-rendering fixes, not silent story rewrites. The current asset stays active until its replacement succeeds, and unrelated images are never regenerated. Review every changed Final Page, then approve the reviewed set before exporting again.
 
 ## Quality issues and approval
 

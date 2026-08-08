@@ -62,6 +62,7 @@ describe("OpenAI image provider", () => {
 
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({
       quality: "low",
+      size: "1536x1536",
       output_format: "jpeg",
       output_compression: 60,
     }));

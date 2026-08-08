@@ -41,7 +41,7 @@ The user accepted all twelve proposed defaults on 2026-08-01. The credential dec
 | PD-02 | Implementation agents may create an implementation branch, commit and push after each verified slice, and update Issue #6/Project 2; they may not merge or close the issue without approval. | Accepted |
 | PD-03 | Before the first implementation edit, require `.env.local` with a nonempty `OPENAI_API_KEY` and verify authenticated access to all configured text/image models without printing the key. Missing or insufficient credentials are a strict implementation blocker. Real development and retained evaluation calls are authorized; report expected evaluation cost before the three retained runs. | Accepted and superseding |
 | PD-04 | Unit, integration, agent-fixture, recovery, and Playwright tests use deterministic fake providers; only retained evaluations use real providers. | Accepted |
-| PD-05 | Check in three project-owned style samples: soft watercolor, cut-paper collage, and colored pencil. Bundle Nunito under the SIL OFL for all reader-facing typography. | Accepted |
+| PD-05 | Check in three project-owned style samples: soft watercolor, cut-paper collage, and colored pencil. Reader-facing comic lettering is planned by the writing specialist and rendered in-image; bundled fonts remain only for application UI/legacy assets. | Accepted; revised for professional comic lettering |
 | PD-06 | Final raster canvases are 1600x1280 landscape, 1280x1600 portrait, and 1536x1536 square. PDF pages are 720x576 pt, 576x720 pt, and 648x648 pt respectively. | Accepted |
 | PD-07 | Transient external failures receive at most two automatic retries after the initial attempt; interrupted running items return to pending on restart. Other error classes require user action. | Accepted |
 | PD-08 | Use `crypto.randomUUID()`, UTC ISO timestamps, schema version `"1"`, validated JSON documents, and relative asset URIs. Do not build deletion or cleanup UI. | Accepted |
@@ -176,7 +176,7 @@ The registry baseline verified on 2026-08-01 is:
 | `class-variance-authority` | `0.7.1` | shadcn variants |
 | `clsx` | `2.1.1` | Conditional classes |
 | `tailwind-merge` | `3.6.0` | Class merging |
-| `sharp` | `0.35.3` | Image normalization and typography |
+| `sharp` | `0.35.3` | Geometry and format normalization only |
 | `pdf-lib` | `1.17.1` | PDF assembly |
 | `vitest` | `4.1.10` | Unit/integration/fixture runner |
 | `@playwright/test` | `1.62.1` | Checked-in desktop Chromium golden path |
@@ -363,7 +363,7 @@ flowchart TB
     Services --> Assets[AssetStore]
     Services --> Runner[Persistent sequential runner]
     Runner --> ImageProvider[OpenAI ImageProvider]
-    Runner --> Composer[Sharp page composer]
+    Runner --> Composer[Sharp geometry normalizer]
     Runner --> Pdf[pdf-lib assembler]
     Repos --> DB[(libSQL/SQLite)]
     Assets --> FS[(DATA_ROOT)]
@@ -385,7 +385,7 @@ Application code exclusively owns:
 - Job creation/deduplication, item ordering, progress, retries, restart recovery, and failure cards.
 - Database transactions and asset writes.
 - Provider enablement and capability selection.
-- Text layout, image normalization, page composition, PDF preflight, assembly, and download.
+- Lettering-contract validation, image normalization, geometry-only page composition, PDF preflight, assembly, and download.
 - Cost-ledger persistence and engineering summaries.
 
 Agents may propose typed content only. They never write the database, filesystem, job state, approval state, provider configuration, HTML, JSX, component names, or executable code.
@@ -585,9 +585,10 @@ Define these minimum fields:
 - `LocationDefinition`: the matching application-assigned `entityId`, name, canonical visual details/distinguishing features, continuity constraints, `referenceRequired`, nullable current reference asset ID, and revision number.
 - `VisualBible`: `characters: CharacterDefinition[]`, `locations: LocationDefinition[]`, and `styleReferences[]`. It contains definitions only for named or continuity-relevant entities from the Story Plan; incidental unnamed subjects remain page-local details. `referenceRequired` is true only for recurring visual subjects.
 - `BookletSpecification`: `title`, `coverDirection`, `storyPageCount` integer 3-8, `geometry`, `geometryConfirmed`, `typographyTheme`, `dialoguePolicy`, `castLimitWarningAccepted`, `locationLimitWarningAccepted`.
-- `PagePackage`: `pageId`, `pageIndex` integer 0-8, `kind` (`cover` or `story`), `readerText`, one `sceneAction`, `characterIds[]`, `locationIds[]`, `incidentalVisualDetails[]`, `compositionIntent`, `continuityNotes[]`, `relevantReferenceIds[]`, and `textSafeRegion`. It is the only scene record and maps to one intended illustration.
+- `LetteringElement`: `kind` (`title`, `narration`, `dialogue`, `thought`, or `sound_effect`), exact `text`, optional `speakerEntityId`, concise `delivery`, and `placementHint`.
+- `PagePackage`: `pageId`, `pageIndex` integer 0-8, `kind` (`cover` or `story`), ordered `lettering[]`, accessible reading-order `readerText`, one `sceneAction`, `characterIds[]`, `locationIds[]`, `incidentalVisualDetails[]`, `compositionIntent`, `continuityNotes[]`, `relevantReferenceIds[]`, and `textSafeRegion` placement guidance. It is the only scene record and maps to one intended illustration. Story pages permit at most five lettering elements and approximately 45 words; dialogue/thought speakers must appear on the page.
 - `PagePlan`: ordered `pages[]`, exact `storyPageCount`, and `geometry` matching the approved specification.
-- `FinalPage`: `pageId`, `pageIndex`, `sourceIllustrationAssetId`, `composedAssetId`, `readerText`, `textSafeRegion`, `revisionNumber`, and accepted quality issue IDs.
+- `FinalPage`: `pageId`, `pageIndex`, `sourceIllustrationAssetId`, geometry-normalized `composedAssetId`, `lettering[]`, `readerText`, `textSafeRegion`, `revisionNumber`, and accepted quality issue IDs.
 - `PdfExportDocument`: `exportId`, ordered final-page version/asset IDs, preflight summary, PDF asset ID, and creation timestamp.
 
 Enforce cover index 0, story indices 1 through N, no gaps/duplicates, one cover, exact configured page count, character/location IDs drawn from the approved Visual Bible, and reference IDs drawn from its current approved assets. Reject generation readiness for dangling entity IDs or missing required references.
@@ -600,7 +601,7 @@ Characters, locations, and page scenes are validated nested documents inside the
 
 Skill output uses an entity-change union: `{ kind: "existing", entityId, ...changes }` or `{ kind: "new", clientKey, ...draft }`. Context lists the allowed existing IDs. Application validation rejects unknown/duplicate IDs, assigns each accepted new draft an ID, resolves same-output `clientKey` relationships, and persists only fully assigned artifact documents. Direct form additions follow the same application service. Agents cannot replace an existing ID or submit an ID for a new entity.
 
-In the workspace, render character and location definitions as individually editable cards within the Visual Bible artifact review. Show canonical assets in the same stage's visual gallery. Do not add a separate entity workspace, global library, or Scene editor. The Page Plan editor is the scene editor: one page card exposes its text, scene/action, participants, location, incidental visual details, composition, continuity, and safe region.
+In the workspace, render character and location definitions as individually editable cards within the Visual Bible artifact review. Show canonical assets in the same stage's visual gallery. Do not add a separate entity workspace, global library, or Scene editor. The Page Plan editor is the scene and copy editor: one page card exposes ordered comic lettering, scene/action, participants, location, incidental visual details, composition, continuity, and placement guidance. Legacy plans remain readable but must be upgraded and approved before new page generation.
 
 ### 10.2 Messages and cards
 
@@ -674,6 +675,8 @@ All mutating routes use `POST` or `PATCH`, validate body/params with Zod, call a
 | `POST /api/chat/[bookletId]` | Accept only the latest validated free message or a persisted card-response follow-up, rebuild authoritative context server-side, run manager/specialist, and return AI SDK UI SSE. |
 | `GET /api/jobs/[jobId]` | Return persisted job and ordered item progress. |
 | `POST /api/jobs/[jobId]/items/[itemId]/retry` | Reset only an eligible failed item and signal runner. |
+| `POST /api/booklets/[bookletId]/page-plan/comic-lettering` | Upgrade the current legacy Page Plan through the writing specialist and create a reviewable version without replacing images. |
+| `POST /api/booklets/[bookletId]/images/regenerate` | Validate a page/reference target plus optional visual instruction and start a selective job while retaining the active asset until success. |
 | `POST /api/exports/[bookletId]` | Create-or-get the active export job after final-page approval. |
 | `GET /api/exports/[exportId]/download` | Resolve the PDF asset and stream it with attachment headers. |
 | `GET /api/assets/[assetId]` | Resolve a known asset record and stream its bytes with MIME/cache headers; never accept or reveal a filesystem path. No authentication/authorization layer is added. |
@@ -758,7 +761,7 @@ Never include the entire artifact history, all image references, secrets, raw bi
 | `story_planning_revision@1` | Audience Profile/Story Plan: `draft`, `revise` | Valid artifact document/patch preserving constraints plus review card. |
 | `visual_direction_reference_planning@1` | Visual Style/Visual Bible: `recommend`, `draft`, `revise` | Seeded-style recommendation, custom recurring entity definitions, reference-generation plan, and review/gallery card. |
 | `booklet_specification@1` | Booklet Specification: `draft`, `revise`, `recommend_geometry` | Page-count/geometry recommendation and specification; never sets `geometryConfirmed` without a user card response. |
-| `page_planning_writing@1` | Page Plan: `draft`, `revise_page_text`, `revise_plan` | Ordered cover plus 3-8 story Page Packages with safe regions and relevant reference IDs. |
+| `page_planning_writing@1` | Page Plan: `draft`, `revise_page_text`, `revise_plan` | Ordered cover plus 3-8 story Page Packages with approved structured comic lettering, placement guidance, and relevant reference IDs. |
 | `image_prompt_compilation@1` | Visual Bible/Page Plan/Final Pages: `compile_references`, `compile_pages`, `compile_revision` | Provider-neutral `ImageRequest[]`; the only skill allowed to produce image requests. |
 | `quality_review_targeted_repair@1` | Story, generation, final-page gates: `review`, `repair` | Structured evidence/issues or one bounded repair; never loops and never approves. |
 
@@ -829,7 +832,7 @@ The OpenAI adapter:
 - Serializes the provider-neutral prompt plan inside the adapter.
 - Converts relevant `AssetStore` assets to the SDK's accepted upload/input form without exposing paths outside the adapter.
 - Validates edit support and maximum reference count against provider capabilities before loading assets or invoking the provider; unsupported requests become deterministic user-correctable failures.
-- Requests one candidate and the closest supported native size.
+- Requests one candidate at the confirmed page dimensions supported by `gpt-image-2`; page requests containing lettering use at least medium quality, including in fast mode.
 - Normalizes returned bytes/base64/URL immediately into an `AssetStore` write; it does not retain expiring provider URLs as asset URIs.
 - Records provider request ID, returned usage, dimensions, format, seed if returned, latency, and safe errors.
 
@@ -846,9 +849,11 @@ Only `image_prompt_compilation@1` converts approved artifacts to `ImageRequest[]
 5. Composition/framing/camera intent.
 6. Approved visual style.
 7. Continuity constraints.
-8. Normalized text-safe region.
-9. Preserve list for edits.
-10. Explicit instruction to leave the text-safe region visually quiet and render no reader-facing text.
+8. Ordered exact lettering with kind, speaker/name relationship, delivery, placement, and reading order.
+9. Professional treatment: expressive titles, bordered narration, speech-balloon tails to speakers, cloud-style thoughts, and action-integrated sound effects.
+10. Legibility/hierarchy constraints and the normalized lettering region.
+11. Preserve list and optional targeted visual instruction for edits.
+12. Exact-once/verbatim requirements and a prohibition on every unapproved word, number, sign, label, logo, or watermark. Reference prompts prohibit all text.
 
 The OpenAI serializer uses positive outcome language and places identity/style/location references in explicit roles. Provider-specific syntax and options remain inside `providerOptions.openai` and adapter code.
 
@@ -872,6 +877,7 @@ For each Page Package, include:
 - The canonical reference for each reference-required location ID appearing on the page.
 - The approved booklet style reference.
 - No image references for incidental subjects, absent characters/locations, or historical versions.
+- At most seven canonical references when an edit target is present, reserving one provider input slot for the current selected asset.
 
 The selector is deterministic and tested independently. If a required canonical reference is missing, fail before provider invocation with a user-correctable recovery card.
 
@@ -882,10 +888,10 @@ Provider-native output is normalized with Sharp:
 - Apply EXIF orientation.
 - Convert to sRGB PNG.
 - Preserve aspect ratio.
-- Use composition-aware cover crop when enough image area exists; otherwise contain/pad with a color derived from edge pixels.
+- Use defensive crop/contain/pad only when provider output does not already match confirmed geometry.
 - Never stretch.
 - Produce the accepted PD-06 canvas for the confirmed geometry.
-- Persist normalized source illustration before composition.
+- Persist normalized source illustration before geometry-only composition and preserve source/final lineage.
 
 The adapter records the native provider output metadata; the normalized asset record contains final dimensions. The POC does not retain multiple candidate formats unless the provider response itself must be retained for evidence.
 
@@ -933,38 +939,30 @@ Within a transaction, return the existing pending/running/partial job for the sa
 
 Successful item output is never discarded because another item fails. A failed item leaves the job `partial` when other items succeeded. Selected retry changes only that item to pending after validating the requested correction/current dependencies.
 
-## 16. Typography, page composition, and PDF
+## 16. Comic lettering, page composition, and PDF
 
 ### 16.1 Bundled assets
 
-Check in Nunito Regular, SemiBold, Bold, and ExtraBold font files plus the SIL OFL license. Use ExtraBold/Bold for title/cover and Regular/SemiBold for story text. Do not download fonts at runtime.
+Existing bundled font assets may remain for UI and legacy evidence, but the page composer does not use them to draw reader-facing text.
 
 Check in three project-owned seeded style images and a manifest containing stable style ID, name, description, asset path, creation prompt, model/tool provenance, and redistribution statement. Produce them through the Codex `imagegen` capability during Slice 0; if that host capability is unavailable, use the authorized OpenAI Image API with the same recorded prompts after dependencies are installed. This fallback does not require a product decision. Do not reuse prototype images.
 
-### 16.2 Text layout
+### 16.2 Lettering planning and review
 
-The text-layout service receives text, normalized safe region, canvas size, font role, and minimum readable configuration. It:
+`COMIC_COPY_MODE=creative|exact` defaults to `creative`. The page-planning specialist returns ordered structured lettering. Creative mode may rewrite beats into concise, age-appropriate comic copy; exact mode may only classify and split the supplied words. Both modes require Page Plan review and approval before generation. `readerText` is the exact accessible reading-order join of approved lettering.
 
-1. Converts the normalized rectangle to pixels.
-2. Applies internal padding.
-3. Wraps by measured glyph width using Sharp/Pango-compatible SVG text spans.
-4. Tries a bounded descending font-size sequence appropriate to the available region, not an age-specific hard threshold.
-5. Enforces line-height and maximum lines.
-6. Returns positioned SVG plus metrics, or a typed `text_overflow` failure.
-
-Do not silently truncate, shrink below the configured readable floor, or place text outside the safe region. Overflow becomes a recovery card offering edit text or revise safe region/page composition.
+Legacy Page Plans remain readable. An **Upgrade to Comic Lettering** action invokes the same specialist, creates a reviewable Page Plan version, invalidates dependent Final Pages to `needs_review`, and preserves every existing image. Page generation rejects an approved legacy plan until its upgraded version is approved.
 
 ### 16.3 Page composition
 
 For each approved source illustration:
 
 - Normalize to target canvas without stretching.
-- Draw an optional subtle contrast backing inside the safe region when required by the typography theme.
-- Composite SVG typography and deterministic page number only if the approved specification requests page numbers; never ask the image model to draw it.
+- Do not draw text, balloons, captions, sound effects, white panels, or page numbers with Sharp.
 - Produce PNG with embedded sRGB profile.
 - Store source illustration and composed page as separate assets with lineage.
 
-A text-only revision reuses the exact source illustration asset and creates a new composed asset/final-page version. A visual revision creates or edits only the selected source illustration, then recomposes that page.
+Copy changes create a revised Page Plan. A visual or lettering-rendering correction uses one validated regeneration endpoint and affects only the selected page/reference. With an optional instruction, use the current asset as the edit target and preserve all approved lettering and continuity except the requested detail; without an instruction, generate a fresh candidate from the approved plan and canonical references. Keep the current asset active until replacement succeeds.
 
 ### 16.4 PDF preflight and assembly
 
@@ -974,7 +972,7 @@ Preflight fails recoverably unless:
 - Approved story pages exactly match indices 1 through configured N.
 - No index is missing or duplicated.
 - Every composed asset exists, decodes, and matches confirmed geometry.
-- Text layout succeeded for every page.
+- Every page has approved structured lettering and a decodable geometry-normalized asset.
 - Final Pages has no unresolved `needs_review` dependency.
 
 `pdf-lib` creates one page per approved composed asset using PD-06 page points, embeds PNGs to fill the page without changing aspect ratio, writes cover first then story order, and sets basic title/creator metadata. It writes one PDF asset and export record. Export retry reruns preflight/assembly only and never regenerates images.
@@ -1043,7 +1041,7 @@ The user selects/revises Visual Style, approves textual Visual Bible, watches ca
 
 ### 18.5 Final review and export
 
-The user reviews every composed page, edits text without image regeneration, or revises only a selected visual. After all pages are approved, final quality review and accepted issue handling complete. PDF Export runs deterministic preflight and assembly; the user previews/downloads the PDF and sees the engineering summary.
+The user reviews every generated page at full size, revises copy through a new Page Plan version, or regenerates only a selected page/reference with an optional visual or lettering-rendering instruction. After all pages are approved, final quality review and accepted issue handling complete. PDF Export runs deterministic preflight and assembly; the user previews/downloads the PDF and sees the engineering summary.
 
 ### 18.6 Resume and interruption
 
@@ -1312,20 +1310,20 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Commit:** `feat: add specification and page planning`.
 
-### Slice 7 - persisted page generation and deterministic composition
+### Slice 7 - persisted page generation and geometry-only composition
 
-**Outcome:** approved Page Plans generate one page candidate sequentially, preserve successes, expose item progress/retry, and produce readable composed Final Pages.
+**Outcome:** approved structured-lettering Page Plans generate one professionally lettered page candidate sequentially, preserve successes, expose item progress/retry, and produce exact-geometry Final Pages without post-generation overlays.
 
 **Primary files:** `lib/jobs/handlers/page-generation.ts`, page paths in `lib/skills/image-prompt-compilation.ts`, `lib/composition/*`, page/final-page components, job/retry API routes, and composition/page-generation/restart tests.
 
 **Actions and files**
 
 - [x] Extend prompt compiler for cover/pages/revisions and page job handler.
-- [x] Implement source normalization, geometry mapping, text layout, Nunito SVG layer, overflow failure, and composed-page asset lineage.
+- [x] Implement exact-dimension requests, structured in-image comic lettering prompts, source normalization, geometry-only composition, and source/final asset lineage.
 - [x] Implement page-batch progress on Home/Workspace, partial failure state, selected retry, duplicate-generation reuse, and restart resume.
 - [x] Implement Final Pages viewer and per-page review/approval state.
 
-**Contracts:** FinalPage, page ImageRequest, text-layout result/error, progress/recovery payloads.
+**Contracts:** LetteringElement, FinalPage, page ImageRequest, regeneration request/target, progress/recovery payloads.
 
 **Migration/seed:** none; asset/job schema already final.
 
@@ -1333,7 +1331,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Commands:** `npm run typecheck`, `npm run lint`, `npm test -- tests/unit/composition tests/integration/page-generation.test.ts tests/integration/page-retry.test.ts tests/integration/restart-resume.test.ts`, `npm run build`.
 
-**Evidence:** all three canvases without stretching, readable safe-region typography, forced overflow recovery, forced middle-page failure retaining other pages, selected retry only, duplicate submit returns active job.
+**Evidence:** all three canvases without stretching, prompt snapshots for exact lettering and professional treatments, proof of no Sharp text overlay, forced middle-page failure retaining other pages, selected retry only, duplicate submit returns active job.
 
 **Lessons checkpoint:** record verified Sharp/font/provider geometry behavior.
 
@@ -1341,13 +1339,13 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 ### Slice 8 - revision, final quality, PDF export, and evidence summary
 
-**Outcome:** users revise selected text/images, approve all pages, run final quality, export/retry PDF, and inspect reconciled evidence.
+**Outcome:** users upgrade/revise approved Page Plan lettering, preview and selectively regenerate images, approve all pages, run final quality, export/retry PDF, and inspect reconciled evidence.
 
 **Primary files:** revision/final paths in application and quality services, `lib/pdf/*`, `lib/application/export-service.ts`, `app/api/exports/**`, final review/export/evidence components, and revision/PDF/evidence tests.
 
 **Actions and files**
 
-- [x] Implement text-only recomposition and selected visual edit/regeneration paths.
+- [x] Replace text-only recomposition with Page Plan copy revision and selected page/reference edit/regeneration paths that preserve the active asset until success.
 - [x] Implement final-page quality gate, bounded repair, accept-with-issue record, and separate page/artifact approval.
 - [x] Implement PDF preflight/assembly/export job/download and independent export retry.
 - [x] Implement per-booklet engineering summary and JSON evidence export under `DATA_ROOT`.
@@ -1360,7 +1358,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Commands:** `npm run typecheck`, `npm run lint`, `npm test -- tests/unit/pdf tests/integration/revision.test.ts tests/integration/export.test.ts tests/integration/evidence-reconciliation.test.ts`, `npm run build`; render the generated fixture PDF with required Poppler tools.
 
-**Evidence:** text revision proves source asset reuse; visual revision affects one page; PDF count/order/geometry; export failure retry without image calls; ledger reconciliation report.
+**Evidence:** legacy-plan upgrade preserves images; selective regeneration affects one target and retains its old asset on failure; accessible native-dialog preview and inline recovery; PDF count/order/geometry; export failure retry without image calls; ledger reconciliation report.
 
 **Lessons checkpoint:** use PDF skill visual workflow and record verified composition/export lessons.
 
@@ -1431,7 +1429,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 ### 20.1 Test boundaries
 
-- Unit tests: Zod contracts, state transitions, dependency traversal, registry filtering, context selection, reference selection, prompt serialization, retry classification, geometry, text layout, PDF ordering, pricing math.
+- Unit tests: Zod contracts including lettering/speakers/limits, state transitions, dependency traversal, registry filtering, context selection, reference selection, prompt serialization, retry classification, geometry-only composition, PDF ordering, pricing math.
 - Integration tests: real application services, Drizzle/libSQL temporary file database, temporary filesystem AssetStore, fake model/image providers, fake clock/IDs, job runner, route handlers where transport behavior matters.
 - Agent fixtures: deterministic or recorded fake manager/specialist outputs plus optional explicitly invoked real comparison; never part of general `npm test`.
 - Browser: one Playwright desktop Chromium golden path using application-level fake providers selected by test-only server environment; no network model calls.
@@ -1473,7 +1471,7 @@ Each fixture declares stage, operation, approved dependencies, recent messages, 
 - Transient retry versus user-correctable/blocked/unavailable failure.
 - Job duplicate prevention, item ordering, restart recovery, partial failure, and selected retry.
 - Geometry normalization without stretch for all three canvases.
-- Text overflow recovery and text-only source reuse.
+- Legacy Page Plan upgrade, lettering-contract recovery, and active-asset retention after failed selective regeneration.
 - PDF cover/order/count/geometry, export retry, missing asset preflight.
 - Call/cost/trace reconciliation and secret exclusion.
 
@@ -1487,7 +1485,7 @@ The one spec uses a story fixture that can exercise all workflow stages within r
 4. Select a recommended style, approve Visual Bible, and observe reference progress.
 5. Accept recommended page count/geometry, explicitly confirm geometry, approve Page Plan.
 6. Observe sequential fake page generation and retained progress.
-7. Perform one text-only page revision and prove other pages remain unchanged.
+7. Regenerate one page with an optional visual/lettering-rendering instruction and prove every unrelated page remains unchanged.
 8. Approve all pages, pass final gate, export, and download PDF.
 9. Navigate Home/workspace and reload during the flow; verify exact state/card/artifact selection.
 10. Stop/restart the test server once during a prepared generation scenario and verify completed item retention/resume.
@@ -1620,7 +1618,7 @@ The PRD remains the normative wording. This matrix identifies implementation sli
 | Intake repeats or never stops | Known-fact inference, recent relevant messages, readiness schema, fixtures | Fixed questionnaire or hard question cap |
 | Visual identity drifts | Canonical references, exact entity IDs, page-relevant selection, one-candidate revision | Seeds as guarantee, candidate grids, pose/mask tools |
 | Provider cost/latency grows | 3-8 pages, sequential work, one candidate, retained successes, cost evidence | In-app spending caps or routing UI |
-| Image contains bad text/composition | No requested typography, safe region, deterministic Sharp text/crop/pad | OCR-driven auto-layout loop |
+| Image contains bad lettering/composition | Concise approved structured lettering, exact prompt quoting, professional treatment instructions, medium-quality floor, full-size preview, and selective regeneration | OCR-driven auto-layout loop |
 | Text does not fit | Measured layout and recoverable overflow | Silent truncation or unreadable shrinking |
 | Upstream edit causes accidental regeneration | Exact dependencies, transitive `needs_review`, deliberate jobs | Automatic cascade regeneration |
 | Process stops mid-job | Persist-before-run, item completion transactions, restart pending recovery | Leases, queues, separate workers |

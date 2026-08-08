@@ -3,7 +3,7 @@ import { createDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
-import { getServerEnv, resolveDataRoot, resolveImageProviderProfile } from "@/lib/config/env";
+import { getServerEnv, resolveDataRoot, resolveImageProviderProfile, resolvePageImageQuality } from "@/lib/config/env";
 import { imageRequestSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
 import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
 import { FakeImageProvider } from "@/lib/images/fake-image-provider";
@@ -14,6 +14,7 @@ import { estimateImageCostUsd, pricingVersion } from "@/lib/config/pricing";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import type { GenUICard } from "@/lib/contracts/cards";
 import { describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
+import { pagePlanSchema } from "@/lib/contracts/artifacts";
 
 type ReferenceItem = {
   entityId: string;
@@ -72,25 +73,28 @@ export class GenerationService {
     this.diagnosticWaitMs = dependencies.diagnosticWaitMs ?? 30_000;
   }
 
-  public async createReferenceJob(bookletId: string) {
+  public async createReferenceJob(bookletId: string, options: { entityIds?: string[]; revisionKey?: string; revisionInstruction?: string; editTargetAssetId?: string } = {}) {
     const bible = await this.artifacts.get(bookletId, "visual_bible");
     if (!bible.currentVersion) throw new Error("Visual Bible needs a saved version before reference generation.");
     const content = bible.currentVersion.content as { characters: ReferenceItem[]; locations: ReferenceItem[] };
+    const selectedIds = options.entityIds ? new Set(options.entityIds) : null;
     const items = [...content.characters.map((item) => ({ ...item, kind: "character" as const })), ...content.locations.map((item) => ({ ...item, kind: "location" as const }))]
-      .filter((item) => item.referenceRequired);
+      .filter((item) => item.referenceRequired && (!selectedIds || selectedIds.has(item.entityId)));
+    if (!items.length || (selectedIds && items.length !== selectedIds.size)) throw new Error("Choose a current canonical reference to regenerate.");
+    if ((options.revisionInstruction || options.editTargetAssetId) && items.length !== 1) throw new Error("A targeted reference revision must select exactly one image.");
     const jobId = randomUUID();
     return this.repositories.jobs.createOrGet({
       id: jobId,
       bookletId,
       jobType: "references",
-      idempotencyKey: `references:${bible.currentVersion.id}`,
-      input: { visualBibleVersionId: bible.currentVersion.id },
+      idempotencyKey: `references:${bible.currentVersion.id}${options.revisionKey ? `:revision:${options.revisionKey}` : ""}`,
+      input: { visualBibleVersionId: bible.currentVersion.id, entityIds: options.entityIds ?? null },
       items: items.map((item, position) => {
         const promptPlan = {
           purpose: `${item.kind} canonical visual reference`, subject: item.name, action: `Create a clear reference pose or establishing view for ${item.name}.`, location: item.kind === "location" ? item.name : "a calm neutral story setting",
-          visualStyle: "Use the approved booklet visual direction.", continuityConstraints: item.continuityConstraints, preserve: item.visualDetails,
+          visualStyle: "Use the approved booklet visual direction.", continuityConstraints: item.continuityConstraints, revisionInstruction: options.revisionInstruction, preserve: item.visualDetails,
         };
-        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: "square_1_1", quality: this.imageQuality, references: [], editTargetAssetId: null });
+        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: options.editTargetAssetId ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: "square_1_1", quality: this.imageQuality, references: [], editTargetAssetId: options.editTargetAssetId ?? null });
         return { id: randomUUID(), itemKey: `${item.kind}:${item.entityId}`, position, input: { item, request } };
       }),
       createdAtMs: Date.now(),
@@ -111,7 +115,10 @@ export class GenerationService {
         operation: request.operation, providerRuntime: this.provider.runtime, model: request.model, geometry: request.geometry, referenceCount: request.references.length,
       });
       try {
-        const { result, startedAtMs } = await this.executeImageWithDiagnostics({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, request });
+        const editTarget = request.editTargetAssetId ? await this.repositories.assets.get(request.editTargetAssetId) : null;
+        if (request.editTargetAssetId && !editTarget) throw new Error("The reference image selected for editing is missing.");
+        const inputAssets = editTarget ? [{ assetId: editTarget.id, bytes: Buffer.from(await (await this.getAssetStore()).get(editTarget.uri)) }] : [];
+        const { result, startedAtMs } = await this.executeImageWithDiagnostics({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, request, inputAssets });
         await this.repositories.evidence.recordModelCall({
           id: randomUUID(), bookletId, operation: "image_reference", skillId: "visual_direction_reference_planning@1", jobId,
           provider: this.provider.runtime === "fake" ? "fake" : result.provider, model: result.model, traceId: jobId,
@@ -161,10 +168,10 @@ export class GenerationService {
     return this.runReferenceJob(bookletId, jobId, { retryItemId: itemId });
   }
 
-  public async createPageJob(bookletId: string, options: { pageIds?: string[]; revisionKey?: string } = {}) {
+  public async createPageJob(bookletId: string, options: { pageIds?: string[]; revisionKey?: string; revisionInstruction?: string; editTargetAssetId?: string } = {}) {
     const plan = await this.artifacts.get(bookletId, "page_plan");
     if (!plan.currentVersion) throw new Error("Page generation needs an approved Page Plan.");
-    const content = plan.currentVersion.content as { geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5"; pages: Array<{ pageId: string; pageIndex: number; kind: "cover" | "story"; readerText: string; sceneAction: string; characterIds: string[]; locationIds: string[]; continuityNotes: string[]; relevantReferenceIds: string[]; textSafeRegion: { x: number; y: number; width: number; height: number } }> };
+    const content = pagePlanSchema.parse(plan.currentVersion.content);
     const [bible, visualStyle] = await Promise.all([
       this.artifacts.get(bookletId, "visual_bible"),
       this.artifacts.get(bookletId, "visual_style"),
@@ -182,6 +189,8 @@ export class GenerationService {
     const selectedPageIds = options.pageIds ? new Set(options.pageIds) : null;
     const selectedPages = selectedPageIds ? content.pages.filter((page) => selectedPageIds.has(page.pageId)) : content.pages;
     if (!selectedPages.length || (selectedPageIds && selectedPages.length !== selectedPageIds.size)) throw new Error("Choose one or more pages from the current Page Plan to regenerate.");
+    if (selectedPages.some((page) => !page.lettering?.length)) throw new Error("Upgrade and approve the Page Plan with professional comic lettering before generating pages.");
+    if ((options.revisionInstruction || options.editTargetAssetId) && selectedPages.length !== 1) throw new Error("A targeted page revision must select exactly one image.");
     const jobId = randomUUID();
     return this.repositories.jobs.createOrGet({
       id: jobId, bookletId, jobType: "pages", idempotencyKey: `pages:${plan.currentVersion.id}${options.revisionKey ? `:revision:${options.revisionKey}` : ""}`, input: { pagePlanVersionId: plan.currentVersion.id, pageIds: options.pageIds ?? null }, createdAtMs: Date.now(),
@@ -212,13 +221,17 @@ export class GenerationService {
           visualStyle: [styleContent?.visualDirection, styleContent?.texture, styleContent?.lighting].filter(Boolean).join("; ") || "Use the approved visual style and canonical references.",
           continuityConstraints,
           textSafeRegion: page.textSafeRegion,
+          lettering: page.lettering,
+          speakerNames: Object.fromEntries(pageCharacters.map((character) => [character.entityId, character.name])),
+          revisionInstruction: options.revisionInstruction,
           preserve,
         };
-        const references = page.relevantReferenceIds.map((assetId) => ({
+        const referenceLimit = options.editTargetAssetId ? 7 : 8;
+        const references = page.relevantReferenceIds.slice(0, referenceLimit).map((assetId) => ({
           assetId,
           role: styleIds.has(assetId) ? "style" as const : locationIds.has(assetId) ? "location_continuity" as const : "character_identity" as const,
         }));
-        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: references.length ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: content.geometry, quality: this.imageQuality, references, editTargetAssetId: null });
+        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: references.length || options.editTargetAssetId ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: content.geometry, quality: resolvePageImageQuality(this.imageQuality), references, editTargetAssetId: options.editTargetAssetId ?? null });
         return { id: randomUUID(), itemKey: `page:${page.pageId}`, position: page.pageIndex, input: { page, geometry: content.geometry, request } };
       }),
     });
@@ -248,7 +261,15 @@ export class GenerationService {
           await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: error.message }, finishedAtMs: Date.now(), haltJob: true });
           break;
         }
+        const editTarget = request.editTargetAssetId ? await this.repositories.assets.get(request.editTargetAssetId) : null;
+        if (request.editTargetAssetId && !editTarget) {
+          const error = new Error("The page image selected for editing is missing.");
+          await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: error.message }, finishedAtMs: Date.now(), haltJob: true });
+          break;
+        }
         const usableReferences = sourceReferences.filter((reference) => reference !== null);
+        if (editTarget) usableReferences.unshift({ assetId: editTarget.id, bytes: Buffer.from(await (await this.getAssetStore()).get(editTarget.uri)) });
         const { result: generated, startedAtMs } = await this.executeImageWithDiagnostics({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, request, inputAssets: usableReferences });
         await this.repositories.evidence.recordModelCall({
           id: randomUUID(), bookletId, operation: "image_page", skillId: "image_prompt_compilation@1", jobId,
@@ -317,7 +338,7 @@ export class GenerationService {
     }, { createdBy: "application" });
     const content = revised.currentVersion?.content as { characters?: Array<{ entityId: string; name: string; currentReferenceAssetId: string | null }>; locations?: Array<{ entityId: string; name: string; currentReferenceAssetId: string | null }> } | undefined;
     const galleryItems = [...(content?.characters ?? []), ...(content?.locations ?? [])]
-      .flatMap((entity) => entity.currentReferenceAssetId ? [{ assetId: entity.currentReferenceAssetId, label: entity.name, description: "Review this canonical reference before continuing.", selected: false }] : []);
+      .flatMap((entity) => entity.currentReferenceAssetId ? [{ assetId: entity.currentReferenceAssetId, label: entity.name, selected: false, regenerationTarget: { kind: "reference" as const, entityId: entity.entityId } }] : []);
     if (!revised.currentVersion || !galleryItems.length) return;
     const card: GenUICard = {
       schemaVersion: SCHEMA_VERSION,
@@ -358,12 +379,12 @@ export class GenerationService {
     const plan = await this.artifacts.get(bookletId, "page_plan");
     if (!plan.currentVersion) return;
     const previous = await this.artifacts.get(bookletId, "final_pages");
-    const existingByPageId = new Map(((previous.currentVersion?.content as { pages?: Array<{ pageId: string; pageIndex: number; sourceIllustrationAssetId: string; composedAssetId: string; readerText: string; textSafeRegion: { x: number; y: number; width: number; height: number }; revisionNumber: number; acceptedQualityIssueIds: string[] }> } | undefined)?.pages ?? []).map((page) => [page.pageId, page]));
+    const existingByPageId = new Map(((previous.currentVersion?.content as { pages?: Array<{ pageId: string; pageIndex: number; sourceIllustrationAssetId: string; composedAssetId: string; readerText: string; lettering?: unknown[]; textSafeRegion: { x: number; y: number; width: number; height: number }; revisionNumber: number; acceptedQualityIssueIds: string[] }> } | undefined)?.pages ?? []).map((page) => [page.pageId, page]));
     const generatedByPageId = new Map(items.map((item) => {
-      const source = item.input as { page: { pageId: string; pageIndex: number; readerText: string; textSafeRegion: { x: number; y: number; width: number; height: number } } };
+      const source = item.input as { page: { pageId: string; pageIndex: number; readerText: string; lettering?: unknown[]; textSafeRegion: { x: number; y: number; width: number; height: number } } };
       const result = item.result as { sourceAssetId: string; composedAssetId: string };
       const previousPage = existingByPageId.get(source.page.pageId);
-      return [source.page.pageId, { pageId: source.page.pageId, pageIndex: source.page.pageIndex, sourceIllustrationAssetId: result.sourceAssetId, composedAssetId: result.composedAssetId, readerText: source.page.readerText, textSafeRegion: source.page.textSafeRegion, revisionNumber: (previousPage?.revisionNumber ?? 0) + 1, acceptedQualityIssueIds: [] }] as const;
+      return [source.page.pageId, { pageId: source.page.pageId, pageIndex: source.page.pageIndex, sourceIllustrationAssetId: result.sourceAssetId, composedAssetId: result.composedAssetId, readerText: source.page.readerText, lettering: source.page.lettering, textSafeRegion: source.page.textSafeRegion, revisionNumber: (previousPage?.revisionNumber ?? 0) + 1, acceptedQualityIssueIds: [] }] as const;
     }));
     const plannedPages = (plan.currentVersion.content as { pages: Array<{ pageId: string }> }).pages;
     const pages = plannedPages.map((page) => generatedByPageId.get(page.pageId) ?? existingByPageId.get(page.pageId)).filter((page): page is NonNullable<typeof page> => Boolean(page));
@@ -382,7 +403,7 @@ export class GenerationService {
       payload: {
         artifactType: "final_pages",
         versionId: revised.currentVersion.id,
-        items: pages.map((page) => ({ assetId: page.composedAssetId, label: page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`, description: "Check composition and reader-facing text.", selected: false })),
+        items: pages.map((page) => ({ assetId: page.composedAssetId, label: page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`, selected: false, regenerationTarget: { kind: "page" as const, pageId: page.pageId } })),
       },
     };
     await this.repositories.conversation.persistAssistantCard({

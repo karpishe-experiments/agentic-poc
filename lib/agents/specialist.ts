@@ -23,6 +23,9 @@ export function createSpecialistAgent(definition: SkillDefinition, input: unknow
       "Keep reader-facing titles and text concise enough to fit their specified booklet page region.",
       "For Story Plan entity changes, use kind 'existing' only with an ID supplied in the input; use kind 'new' with a clientKey and never invent a persistent ID.",
       "For Page Plan drafts, never supply pageId values; the application assigns and preserves them.",
+      definition.id === "page_planning_writing@1"
+        ? "Create professional single-scene comic lettering. Each page lettering array is the exact reading order and may contain title, narration, dialogue, thought, and sound_effect elements. Use dialogue or effects only when they strengthen the supplied beat. Dialogue and thought elements must name a supplied on-page character ID as speakerEntityId. Keep story pages to at most five elements and 45 total words. readerText must equal the lettering texts joined with one space. The input copyMode controls authorship: creative may rewrite the beat into concise age-appropriate comic copy; exact must preserve the supplied reader-facing wording and only classify or split it. Never ask the image model to invent story copy."
+        : "",
       definition.id === "visual_direction_reference_planning@1"
         ? context.stage === "visual_style"
           ? "This is the visual-style stage: return only the visual_style result; do not return a Visual Bible yet."

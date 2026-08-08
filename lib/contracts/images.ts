@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { opaqueIdSchema, schemaVersionSchema } from "@/lib/contracts/common";
-import { geometrySchema } from "@/lib/contracts/artifacts";
+import { geometrySchema, letteringElementSchema } from "@/lib/contracts/artifacts";
 
 export const imageOperationSchema = z.enum(["generate", "edit"]);
 export const referenceRoleSchema = z.enum(["character_identity", "location_continuity", "style"]);
@@ -10,7 +10,7 @@ export const imageProviderCapabilitiesSchema = z.object({
   provider: z.literal("openai"),
   supportsEdit: z.boolean(),
   maxReferenceImages: z.number().int().positive(),
-  supportedSizes: z.array(z.enum(["1024x1024", "1536x1024", "1024x1536"])).min(1),
+  supportedSizes: z.array(z.enum(["1024x1024", "1536x1024", "1024x1536", "1536x1536", "1600x1280", "1280x1600"])).min(1),
 });
 
 export const imagePromptPlanSchema = z.object({
@@ -21,6 +21,9 @@ export const imagePromptPlanSchema = z.object({
   visualStyle: z.string().min(1).max(2_000),
   continuityConstraints: z.array(z.string().min(1)).max(20),
   textSafeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional(),
+  lettering: z.array(letteringElementSchema).min(1).max(5).optional(),
+  speakerNames: z.record(z.string(), z.string().min(1).max(240)).optional(),
+  revisionInstruction: z.string().trim().min(1).max(1_000).optional(),
   preserve: z.array(z.string().min(1)).max(20),
 });
 

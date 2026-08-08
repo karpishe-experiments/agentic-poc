@@ -23,6 +23,7 @@ import { imagePromptCompilationResultSchema } from "@/lib/skills/image-prompt-co
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { materializePagePlan, materializeStoryPlan, materializeVisualBible } from "@/lib/application/entity-materialization";
 import { pagePlanSchema, storyPlanSchema, visualBibleSchema, visualStyleSchema } from "@/lib/contracts/artifacts";
+import { resolveComicCopyMode } from "@/lib/config/env";
 import { pagePlanDraftSchema, storyPlanDraftSchema } from "@/lib/contracts/drafts";
 import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
 
@@ -138,6 +139,7 @@ export class ChatService {
       const visualStyle = booklet.currentStage === "visual_bible" ? await this.artifacts.get(bookletId, "visual_style") : null;
       const visualBible = ["booklet_specification", "page_plan"].includes(booklet.currentStage) ? await this.artifacts.get(bookletId, "visual_bible") : null;
       const specification = booklet.currentStage === "page_plan" ? await this.artifacts.get(bookletId, "booklet_specification") : null;
+      const currentPagePlan = booklet.currentStage === "page_plan" ? await this.artifacts.get(bookletId, "page_plan") : null;
       const finalPages = booklet.currentStage === "final_pages" ? await this.artifacts.get(bookletId, "final_pages") : null;
       const requestsQuality = Boolean(currentStory?.currentVersion) && /\b(quality|review|check)\b/i.test(authoritativeText);
       const artifactSummaries = await this.repositories.artifacts.listByBooklet(bookletId);
@@ -160,7 +162,7 @@ export class ChatService {
               : booklet.currentStage === "booklet_specification"
                 ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content }
                 : booklet.currentStage === "page_plan"
-                  ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualBible: visualBible?.currentVersion?.content, specification: specification?.currentVersion?.content }
+                  ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualBible: visualBible?.currentVersion?.content, specification: specification?.currentVersion?.content, currentPagePlan: currentPagePlan?.currentVersion?.content ?? null, copyMode: resolveComicCopyMode() }
                   : booklet.currentStage === "final_pages"
                     ? { intent: authoritativeText, finalPages: finalPages?.currentVersion?.content }
               : undefined,
@@ -462,7 +464,7 @@ export class ChatService {
       card: {
         schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "artifact_review" as const, variant: "visual_gallery" as const, status: "active" as const,
         title: "Review final pages", explanation: "Approve every composed page set before PDF export.", allowedActions: ["approve_and_continue" as const],
-        payload: { artifactType: "final_pages" as const, versionId: detail.currentVersion.id, items: pages.pages.map((page) => ({ assetId: page.composedAssetId, label: page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`, selected: false })) },
+        payload: { artifactType: "final_pages" as const, versionId: detail.currentVersion.id, items: pages.pages.map((page) => ({ assetId: page.composedAssetId, label: page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`, selected: false, regenerationTarget: { kind: "page" as const, pageId: page.pageId } })) },
       },
     };
   }

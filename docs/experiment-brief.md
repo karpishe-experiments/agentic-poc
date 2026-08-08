@@ -6,11 +6,11 @@ This brief summarizes the experiment. The canonical, detailed requirements are i
 
 **Name:** Agentic kids booklet generation with typed generative UI
 
-**Hypothesis:** A creator can turn a short idea into a coherent illustrated picture storybook when an LLM manager invokes bounded, stage-valid skills; typed generative UI captures every material decision; canonical visual references guide image generation; and deterministic application services persist, recover, compose, and export the result.
+**Hypothesis:** A creator can turn a short idea into a coherent illustrated picture storybook when an LLM manager invokes bounded, stage-valid skills; typed generative UI captures every material decision; canonical visual references and approved structured comic copy guide image generation; and deterministic application services persist, recover, normalize, and export the result.
 
 ## User experience
 
-A creator starts or resumes a locally persisted booklet from Home. In the workspace, an agent adaptively gathers missing information one question at a time and guides the creator through eight visible artifacts: Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan, Final Pages, and PDF Export. Typed cards handle material questions, recommendations, reviews, progress, issues, and recovery. The system generates canonical references and pages, preserves completed work across failures and restarts, composites typography deterministically, and exports a readable PDF.
+A creator starts or resumes a locally persisted booklet from Home. In the workspace, an agent adaptively gathers missing information one question at a time and guides the creator through eight visible artifacts: Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan, Final Pages, and PDF Export. Typed cards handle material questions, recommendations, reviews, progress, issues, and recovery. The system generates canonical references and professionally lettered pages, preserves completed work across failures and restarts, normalizes geometry without post-generation text overlays, and exports a readable PDF.
 
 ## Success criteria
 
@@ -30,7 +30,7 @@ A creator starts or resumes a locally persisted booklet from Home. In the worksp
 - Typed generative UI for the complete decision and recovery flow.
 - Eight versioned artifact stages with approvals and dependency invalidation.
 - OpenAI-first text and image generation behind configurable contracts.
-- Canonical visual references, persisted sequential page generation, selected-page retry, deterministic typography, and PDF export.
+- Canonical visual references, approved structured comic lettering, persisted sequential page generation, selected-image regeneration, geometry-only composition, and PDF export.
 - Local persistence, trace and cost evidence, focused automated verification, and three retained evaluation runs.
 
 **Out of scope**
@@ -51,7 +51,7 @@ Use the stack and exact boundaries specified by the canonical PRD: a strict Type
 
 - Translate the PRD into small vertical slices without weakening the agentic-skill or generative-UI proof.
 - Choose concrete package versions, directory boundaries, database tables, server/UI contracts, and worker execution details during planning.
-- Keep provider inconsistency, model failures, interrupted generation, typography overflow, and PDF defects visible and recoverable without adding production infrastructure.
+- Keep provider inconsistency, model failures, interrupted generation, lettering-rendering defects, and PDF defects visible and recoverable without adding production infrastructure.
 - Treat the existing prototype and `prototype/docs/ui-design-plan.md` as research only. Their fixed six-page, voice-input, inventory-character, multi-panel, and mobile-specific assumptions are not requirements.
 
 ## Verification

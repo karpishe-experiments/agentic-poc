@@ -17,7 +17,7 @@ export const storyPlanDraftSchema = z.object({ ...storyPlanSchema.shape,
   settings: z.array(storySettingChangeSchema).max(12),
 });
 
-export const pagePackageDraftSchema = pagePackageSchema.omit({ pageId: true });
+export const pagePackageDraftSchema = z.object(pagePackageSchema.shape).omit({ pageId: true });
 export const pagePlanDraftSchema = z.object({ ...pagePlanSchema.shape,
   pages: z.array(pagePackageDraftSchema).min(4).max(9),
 });

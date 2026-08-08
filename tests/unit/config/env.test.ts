@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getServerEnv, resolveImageProviderProfile } from "@/lib/config/env";
+import { getServerEnv, resolveComicCopyMode, resolveImageProviderProfile, resolvePageImageQuality } from "@/lib/config/env";
 
 describe("image provider environment", () => {
   it("uses the real provider and forces low-latency settings in fast mode", () => {
@@ -30,5 +30,12 @@ describe("image provider environment", () => {
       quality: "high",
       fastOutput: false,
     });
+  });
+
+  it("defaults comic copy to creative and keeps lettered pages at medium or above", () => {
+    expect(resolveComicCopyMode({})).toBe("creative");
+    expect(resolveComicCopyMode({ COMIC_COPY_MODE: "exact" })).toBe("exact");
+    expect(resolvePageImageQuality("low")).toBe("medium");
+    expect(resolvePageImageQuality("high")).toBe("high");
   });
 });

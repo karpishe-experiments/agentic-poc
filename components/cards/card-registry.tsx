@@ -1,13 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 import { publishJobStatus, subscribeToJobStatus, type PolledJobItem, type PolledJobStatus } from "@/components/workspace/job-status-poller";
+import type { RegenerationRequest } from "@/lib/contracts/regeneration";
 
 type SubmitCard = (input: { action: CardAction; value?: unknown; revisionInstruction?: string }) => Promise<void>;
 type ReopenCard = () => Promise<void>;
-type CardProps = { card: GenUICard; busy?: boolean; submitResponse?: SubmitCard; reopenCard?: ReopenCard };
+type CardProps = { card: GenUICard; bookletId?: string; busy?: boolean; submitResponse?: SubmitCard; reopenCard?: ReopenCard; refreshWorkspace?: () => void };
 type CardComponent = (properties: CardProps) => React.ReactNode;
 
 function CardFrame({ card, children }: Readonly<{ card: GenUICard; children: React.ReactNode }>) {
@@ -23,7 +24,7 @@ function CardFrame({ card, children }: Readonly<{ card: GenUICard; children: Rea
 function QuestionCard({ card, busy, submitResponse }: CardProps) {
   const [value, setValue] = useState<string | string[]>("");
   if (card.family !== "question") return null;
-  const disabled = card.status !== "active" || !submitResponse || busy;
+  const disabled = card.status !== "active" || !submitResponse || Boolean(busy);
   const isMulti = card.variant === "multi_select";
   const action = card.allowedActions.includes("submit") ? "submit" : card.allowedActions.includes("select") ? "select" : card.allowedActions[0];
 
@@ -63,15 +64,90 @@ function QuestionCard({ card, busy, submitResponse }: CardProps) {
   </CardFrame>;
 }
 
-function ArtifactReviewCard({ card, busy, submitResponse }: CardProps) {
+type GalleryCard = Extract<GenUICard, { family: "artifact_review"; variant: "visual_gallery" }>;
+type GalleryItem = GalleryCard["payload"]["items"][number];
+
+function VisualGallery({ card, bookletId, disabled, refreshWorkspace }: Readonly<{ card: GalleryCard; bookletId?: string; disabled: boolean; refreshWorkspace?: () => void }>) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [preview, setPreview] = useState<GalleryItem | null>(null);
+  const [instructions, setInstructions] = useState<Record<string, string>>({});
+  const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function openPreview(item: GalleryItem) {
+    setPreview(item);
+    dialogRef.current?.showModal();
+  }
+
+  function closePreview() {
+    dialogRef.current?.close();
+    setPreview(null);
+  }
+
+  async function regenerate(item: GalleryItem, target: RegenerationRequest["target"]) {
+    if (!bookletId) return;
+    setRegenerating(item.assetId);
+    setStatus(null);
+    setError(null);
+    try {
+      const instruction = instructions[item.assetId]?.trim();
+      const response = await fetch(`/api/booklets/${bookletId}/images/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target, ...(instruction ? { instruction } : {}) }),
+      });
+      const body = await response.json() as { data?: PolledJobStatus; error?: { message?: string } };
+      if (!response.ok || !body.data) throw new Error(body.error?.message ?? "The selected image could not be regenerated.");
+      if (body.data.id) publishJobStatus(body.data.id, body.data);
+      setStatus(`${item.label} regeneration started. The current image remains available until its replacement succeeds.`);
+      refreshWorkspace?.();
+    } catch (regenerationError) {
+      setError(regenerationError instanceof Error ? regenerationError.message : "The selected image could not be regenerated.");
+    } finally {
+      setRegenerating(null);
+    }
+  }
+
+  return <>
+    <section aria-label="Review every item before approving" className="grid gap-3 sm:grid-cols-2">
+      {card.payload.items.map((item) => {
+        const instructionId = `regeneration-instruction-${card.cardId}-${item.assetId}`;
+        const regenerationTarget = item.regenerationTarget ?? (card.payload.artifactType === "final_pages" || card.payload.artifactType === "visual_bible" ? { kind: "asset" as const, assetId: item.assetId } : null);
+        return <article className="min-w-0 overflow-hidden rounded border border-[var(--border)] p-2 text-sm" key={item.assetId}>
+          <button aria-label={`Preview ${item.label}`} className="block w-full rounded focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2" onClick={() => openPreview(item)} type="button">
+            <Image alt={item.label} className="h-40 w-full rounded object-cover hover:brightness-95" height={320} loading="lazy" src={`/api/assets/${item.assetId}`} unoptimized width={400} />
+          </button>
+          <p className="mt-2 break-words font-medium">{item.label}</p>
+          {item.description && item.description !== "Check composition and reader-facing text." ? <p className="break-words text-[var(--muted-ink)]">{item.description}</p> : null}
+          {regenerationTarget && bookletId ? <div className="mt-3 border-t border-[var(--border)] pt-3">
+            <label className="block font-medium" htmlFor={instructionId}>Optional Regeneration Instruction</label>
+            <textarea autoComplete="off" className="mt-1 min-h-20 w-full rounded border border-[var(--border)] bg-white p-2 focus-visible:ring-2 focus-visible:ring-[var(--accent)]" disabled={disabled || regenerating !== null} id={instructionId} maxLength={1000} name={instructionId} onChange={(event) => setInstructions((current) => ({ ...current, [item.assetId]: event.target.value }))} placeholder="Example: Make the speech balloon larger…" value={instructions[item.assetId] ?? ""} />
+            <button className="mt-2 rounded-lg border border-[var(--accent)] px-3 py-2 font-semibold text-[var(--accent)] hover:bg-[#fff2e4] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 disabled:opacity-50" disabled={disabled || regenerating !== null} onClick={() => void regenerate(item, regenerationTarget)} type="button">{regenerating === item.assetId ? "Regenerating…" : `Regenerate This ${card.payload.artifactType === "final_pages" ? "Page" : "Reference"}`}</button>
+          </div> : null}
+        </article>;
+      })}
+    </section>
+    <dialog aria-label={preview ? `${preview.label} preview` : "Image preview"} className="m-auto max-h-[90vh] w-[min(94vw,72rem)] overscroll-contain rounded-2xl border border-[var(--border)] bg-white p-4 shadow-2xl backdrop:bg-black/70" onClick={(event) => { if (event.target === event.currentTarget) closePreview(); }} onClose={() => setPreview(null)} ref={dialogRef}>
+      {preview ? <div className="grid max-h-[85vh] gap-3 overflow-auto">
+        <div className="flex items-center justify-between gap-3"><h4 className="text-lg font-semibold text-pretty">{preview.label}</h4><button className="rounded-lg border border-[var(--accent)] px-3 py-2 font-semibold text-[var(--accent)] hover:bg-[#fff2e4] focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onClick={closePreview} type="button">Close Preview</button></div>
+        <Image alt={preview.label} className="max-h-[76vh] h-auto w-full rounded-lg object-contain" height={1600} src={`/api/assets/${preview.assetId}`} unoptimized width={1600} />
+      </div> : null}
+    </dialog>
+    {status ? <p aria-live="polite" className="mt-3 rounded-lg border border-green-300 p-2 text-sm text-green-800">{status}</p> : null}
+    {error ? <p className="mt-3 rounded-lg border border-red-300 p-2 text-sm text-red-700" role="alert">{error}</p> : null}
+  </>;
+}
+
+function ArtifactReviewCard({ card, bookletId, busy, submitResponse, refreshWorkspace }: CardProps) {
   const [revisionInstruction, setRevisionInstruction] = useState("");
   if (card.family !== "artifact_review") return null;
-  const disabled = card.status !== "active" || !submitResponse || busy;
+  const disabled = card.status !== "active" || !submitResponse || Boolean(busy);
   const action = card.allowedActions.includes("approve_and_continue") ? "approve_and_continue" : card.allowedActions[0];
   return <CardFrame card={card}>
     {card.variant === "summary" ? <><dl className="grid gap-1 text-sm">{card.payload.summary.map((item) => <div className="flex gap-2" key={item.label}><dt className="font-medium">{item.label}:</dt><dd>{item.value}</dd></div>)}</dl>{card.payload.downloadAssetId ? <a className="mt-3 inline-block rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white" href={`/api/assets/${card.payload.downloadAssetId}`}>Download PDF</a> : null}</> : null}
     {card.variant === "editable_form" ? <dl className="grid gap-1 text-sm">{card.payload.fields.map((field) => <div key={field.key}><dt className="font-medium">{field.label}</dt><dd>{field.value}</dd></div>)}</dl> : null}
-    {card.variant === "visual_gallery" ? <section aria-label="Review every item before approving" className="grid gap-2 sm:grid-cols-2">{card.payload.items.map((item) => <article className="overflow-hidden rounded border border-[var(--border)] p-2 text-sm" key={item.assetId}><Image alt={item.label} className="h-32 w-full rounded object-cover" height={160} src={`/api/assets/${item.assetId}`} unoptimized width={200} /><p className="mt-2 font-medium">{item.label}</p>{item.description ? <p className="text-[var(--muted-ink)]">{item.description}</p> : null}</article>)}</section> : null}
+    {card.variant === "visual_gallery" ? <VisualGallery bookletId={bookletId} card={card} disabled={disabled} refreshWorkspace={refreshWorkspace} /> : null}
     <div className="mt-3 flex flex-wrap gap-2">
       {action ? <button className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled} onClick={() => submitResponse?.({ action })} type="button">{busy ? "Saving…" : card.status === "active" ? card.variant === "visual_gallery" ? `Approve all reviewed ${card.payload.artifactType === "visual_bible" ? "references" : "pages"}` : "Approve and continue" : "Submitted"}</button> : null}
       {card.allowedActions.includes("request_revision") ? <>

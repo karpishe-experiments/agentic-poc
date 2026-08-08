@@ -5,9 +5,9 @@ import { imageRequestSchema, imageResultSchema, type ImageRequest, type ImageRes
 import type { ImageProvider } from "@/lib/images/provider";
 
 const sizeByGeometry = {
-  square_1_1: "1024x1024",
-  landscape_5_4: "1536x1024",
-  portrait_4_5: "1024x1536",
+  square_1_1: "1536x1536",
+  landscape_5_4: "1600x1280",
+  portrait_4_5: "1280x1600",
 } as const;
 
 function errorKind(error: unknown): "transient" | "user_correctable" | "blocked" | "unavailable" {
@@ -32,7 +32,7 @@ function providerErrorDetails(error: unknown): { status: number | null; code: st
 
 export class OpenAIImageProvider implements ImageProvider {
   public readonly runtime = "real" as const;
-  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1024x1024", "1536x1024", "1024x1536"] as ["1024x1024", "1536x1024", "1024x1536"] };
+  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1536x1536", "1600x1280", "1280x1600"] as ["1536x1536", "1600x1280", "1280x1600"] };
   private readonly client: OpenAI;
   private readonly fastOutput: boolean;
 
@@ -60,9 +60,10 @@ export class OpenAIImageProvider implements ImageProvider {
       const outputBytes = this.fastOutput
         ? await sharp(Buffer.from(bytesBase64, "base64")).png().toBuffer()
         : Buffer.from(bytesBase64, "base64");
+      const metadata = await sharp(outputBytes).metadata();
       const usage = "usage" in response && response.usage ? response.usage : null;
       return imageResultSchema.parse({
-        status: "succeeded", provider: "openai", model: request.model, providerRequestId: response._request_id ?? null, mimeType: "image/png", bytesBase64: outputBytes.toString("base64"), width: size.startsWith("1536") ? 1536 : 1024, height: size.endsWith("1536") ? 1536 : 1024,
+        status: "succeeded", provider: "openai", model: request.model, providerRequestId: response._request_id ?? null, mimeType: "image/png", bytesBase64: outputBytes.toString("base64"), width: metadata.width ?? Number(size.split("x")[0]), height: metadata.height ?? Number(size.split("x")[1]),
         usage: usage ? { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0 } : null, error: null,
       });
     } catch (error) {

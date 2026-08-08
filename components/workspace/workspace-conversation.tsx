@@ -155,7 +155,7 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
       if (part.type === "text") return <p key={`${message.id}-${index}`}>{part.text}</p>;
       if (part.type === "data-card") {
         const card = submittedCardIds.has(part.data.cardId) ? { ...part.data, status: "submitted" as const } : part.data;
-        return <CardRegistry busy={busyCardId === card.cardId} card={card} key={part.id ?? card.cardId} reopenCard={() => reopenCard(card.cardId)} submitResponse={(response) => submitCard(card, response)} />;
+        return <CardRegistry bookletId={bookletId} busy={busyCardId === card.cardId} card={card} key={part.id ?? card.cardId} refreshWorkspace={() => router.refresh()} reopenCard={() => reopenCard(card.cardId)} submitResponse={(response) => submitCard(card, response)} />;
       }
       return null;
     })}

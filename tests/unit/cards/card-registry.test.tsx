@@ -46,6 +46,29 @@ describe("CardRegistry", () => {
     expect(screen.getByRole("img", { name: "Watercolor" })).toBeTruthy();
   });
 
+  it("previews and selectively regenerates a gallery image with an optional instruction", async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value(this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event("close")); } });
+    const pageId = "00000000-0000-4000-8000-000000000120";
+    const jobId = "00000000-0000-4000-8000-000000000121";
+    const gallery = { ...base, family: "artifact_review" as const, variant: "visual_gallery" as const, title: "Review final pages", allowedActions: ["approve_and_continue" as const], payload: { artifactType: "final_pages" as const, versionId: id, items: [{ assetId, label: "Story page 1", description: "Check composition and reader-facing text.", selected: false, regenerationTarget: { kind: "page" as const, pageId } }] } };
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { id: jobId, jobType: "pages", status: "pending", items: [] } })));
+    render(<CardRegistry bookletId={id} card={gallery} submitResponse={async () => {}} />);
+
+    expect(screen.queryByText("Check composition and reader-facing text.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Preview Story page 1" }));
+    expect(screen.getByRole("dialog", { name: "Story page 1 preview" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close Preview" }));
+
+    fireEvent.change(screen.getByLabelText("Optional Regeneration Instruction"), { target: { value: "Make the speech balloon larger." } });
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate This Page" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/booklets/${id}/images/regenerate`, expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ target: { kind: "page", pageId }, instruction: "Make the speech balloon larger." }),
+    })));
+    expect(await screen.findByText(/regeneration started/i)).toBeTruthy();
+  });
+
   it("keeps a persisted progress card aligned with its live job status", async () => {
     const progress = { ...base, family: "progress" as const, variant: "page_batch" as const, title: "Generating pages", allowedActions: [], payload: { jobId: "00000000-0000-4000-8000-000000000103", completed: 0, total: 4, currentLabel: "Preparing the cover" } };
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { status: "succeeded", items: [{ status: "succeeded" }, { status: "succeeded" }, { status: "succeeded" }, { status: "succeeded" }] } })));

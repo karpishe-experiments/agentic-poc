@@ -101,6 +101,10 @@ const visualGalleryCardSchema = baseCardSchema.extend({
       label: z.string().min(1).max(240),
       description: z.string().min(1).max(1_000).optional(),
       selected: z.boolean(),
+      regenerationTarget: z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("page"), pageId: opaqueIdSchema }),
+        z.object({ kind: z.literal("reference"), entityId: opaqueIdSchema }),
+      ]).optional(),
     })).min(1).max(12),
   }),
 });

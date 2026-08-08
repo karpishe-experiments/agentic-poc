@@ -24,7 +24,7 @@ export async function recommendBookletSpecification(input: z.infer<typeof bookle
       geometry: recommendation.geometry,
       geometryConfirmed: false,
       typographyTheme: "Warm Nunito display text with short readable paragraphs.",
-      dialoguePolicy: "Use short narration rather than speech balloons for this first booklet.",
+      dialoguePolicy: "Use concise professional comic lettering: narration captions, character dialogue or thoughts when natural, and restrained sound effects when they strengthen the action.",
       castLimitWarningAccepted: true,
       locationLimitWarningAccepted: true,
     },

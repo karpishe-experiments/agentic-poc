@@ -76,13 +76,13 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
 
-### Render reader-facing text with Sharp's explicit font file input
+### Keep approved comic copy structured through the image-provider boundary
 
-- **Context:** Composing local final-page PNGs from an SVG overlay on this Windows host.
-- **Observation:** SVG font-family declarations fell back to a serif font even when the Nunito TTF was embedded; Sharp's text input with `fontfile` rendered the bundled Nunito correctly.
-- **Guidance:** Use Sharp text rendering with the checked-in font file for required reader typography, then composite the raster text layer. Visually inspect a rendered PDF instead of trusting the declared CSS font family.
-- **Evidence:** `lib/composition/compose-page.ts`, `tests/unit/composition/compose-page.test.ts`, and Poppler-rendered `tmp/font-check.png` verified on 2026-08-02.
-- **Promotion target:** Agent skill.
+- **Context:** Generating a single-scene comic page whose title, narration, dialogue, thoughts, and sound effects must participate naturally in the illustration.
+- **Observation:** Post-generation text panels obscured the composition and could not express speaker tails, narration hierarchy, thoughts, or action-integrated sound effects. A structured lettering contract allows prompt snapshots, speaker validation, accessible reading order, and selective recovery while leaving Sharp responsible only for geometry.
+- **Guidance:** Approve ordered lettering elements before generation; quote each exact string with its kind, speaker, delivery, placement, and reading order in the provider prompt; prohibit unapproved text; keep a medium-quality minimum for lettered pages; and use full-size review plus selective regeneration for provider-rendering defects. Do not draw reader-facing text or panels during image normalization.
+- **Evidence:** `lib/contracts/artifacts.ts`, `lib/images/prompt-serializer.ts`, `lib/composition/compose-page.ts`, and their focused tests; the full 85-test suite and production build passed on 2026-08-08.
+- **Promotion target:** Documentation.
 - **Status:** Candidate.
 
 ### Own the Playwright server lifecycle on Windows
@@ -202,12 +202,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
-### Resolve image runtime profiles before constructing persisted requests
+### Resolve image runtime profiles and content-specific quality floors before constructing persisted requests
 
 - **Context:** A local generative-image workflow supports deterministic fake images, configured-quality real images, and a low-latency real development profile.
-- **Observation:** Selecting the provider alone is insufficient when job creation hardcodes image quality; a named `fast` mode can otherwise fall through to the fake provider or still persist normal-quality requests. The Image API also supports JPEG output, which OpenAI documents as faster than PNG for latency-sensitive work.
-- **Guidance:** Resolve a named image profile once into provider runtime, request quality, and provider output options. Persist the resolved quality in every job request, make fast-mode overrides explicit, and normalize optimized transport formats at the provider boundary when downstream asset contracts require another format.
-- **Evidence:** `lib/config/env.ts`, `lib/application/generation-service.ts`, and `lib/images/openai-image-provider.ts`; `tests/unit/config/env.test.ts`, `tests/unit/images/openai-image-provider.test.ts`, and `tests/integration/reference-generation.test.ts` verify real-provider selection, forced low quality, compressed JPEG transport, PNG normalization, persisted request quality, and omission of `input_fidelity`. A live `gpt-image-2` edit rejected that SDK-typed parameter with HTTP 400, and the current Image API OpenAPI contract does not list it for the edit endpoint; the corrected full suite passed 80 tests on 2026-08-08.
+- **Observation:** Selecting the provider alone is insufficient when job creation hardcodes image quality; a named `fast` mode can otherwise fall through to the fake provider or still persist normal-quality requests. Low quality improves reference-generation latency but is inappropriate for pages that must render approved lettering. The Image API also supports JPEG output, which OpenAI documents as faster than PNG for latency-sensitive work.
+- **Guidance:** Resolve a named image profile once into provider runtime, request quality, and provider output options, then apply a content-specific quality floor before persisting each request. Fast mode may use low quality for text-free references, but lettered pages require at least medium. Normalize optimized transport formats at the provider boundary when downstream asset contracts require another format.
+- **Evidence:** `lib/config/env.ts`, `lib/application/generation-service.ts`, and `lib/images/openai-image-provider.ts`; focused environment/provider tests verify real-provider selection, reference low quality, lettered-page medium floor, compressed JPEG transport, exact requested dimensions, PNG normalization, and omission of `input_fidelity`. A live `gpt-image-2` edit rejected that SDK-typed parameter with HTTP 400; the corrected full suite passed 85 tests on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -226,5 +226,14 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Observation:** Giving each view its own timer produced two simultaneous requests to the same status endpoint every two seconds.
 - **Guidance:** Coordinate polling by resource identity outside individual views so subscribers share one in-flight request, cached status, and timer. Poll running work frequently enough for useful feedback, back off for non-running states, and publish action responses through the same coordinator so every subscriber updates immediately.
 - **Evidence:** `components/workspace/job-status-poller.ts`, `components/workspace/job-progress-panel.tsx`, and `components/cards/card-registry.tsx` share one poller per job with 5-second running and 15-second idle intervals; `tests/unit/workspace/job-status-poller.test.ts` verifies subscriber deduplication and cadence, and the full 81-test suite passed on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Resolve selective image regeneration from current server-owned lineage
+
+- **Context:** A gallery lets a user regenerate one page or canonical reference, optionally by editing the current image with a correction instruction.
+- **Observation:** Sending only an asset ID from a persisted gallery is insufficient because old cards can become stale and a failed replacement must not erase the working image. Resolving a typed page/reference target against the current artifact provides both authorization scope and the correct edit target.
+- **Guidance:** Put typed regeneration metadata on new gallery items, accept legacy asset targets only as a compatibility input, and resolve every target server-side against the booklet’s current artifact. Create a one-item persisted job, reserve provider input capacity for the edit target, and publish the new asset into a revised artifact only after generation succeeds; otherwise retain the active asset unchanged.
+- **Evidence:** `lib/contracts/regeneration.ts`, `lib/application/revision-service.ts`, `lib/application/generation-service.ts`, and `tests/integration/specification-page-plan.test.ts`; the integration test upgrades a legacy plan, regenerates one instructed page, and verifies all unrelated pages retain their asset IDs.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.

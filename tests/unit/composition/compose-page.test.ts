@@ -31,7 +31,7 @@ describe("composePage", () => {
     expect(await sharp(result.bytes).metadata()).toMatchObject({ width, height, format: "png" });
   });
 
-  it("reduces the reader-text size to fit a narrow approved panel", async () => {
+  it("does not draw a text panel over the model-rendered page", async () => {
     const source = await sharp({ create: { width: 1600, height: 1280, channels: 3, background: "#f3d39b" } }).png().toBuffer();
     const result = await composePage({
       source,
@@ -44,5 +44,7 @@ describe("composePage", () => {
     });
 
     expect(await sharp(result.bytes).metadata()).toMatchObject({ width: 1600, height: 1280, format: "png" });
+    const pixel = await sharp(result.bytes).extract({ left: 130, top: 100, width: 1, height: 1 }).raw().toBuffer();
+    expect([...pixel.slice(0, 3)]).toEqual([243, 211, 155]);
   });
 });

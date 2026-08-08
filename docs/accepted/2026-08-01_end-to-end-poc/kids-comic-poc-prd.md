@@ -72,7 +72,7 @@ The core POC is complete when:
 - OpenAI-first text and image generation through configurable model aliases.
 - A small image-provider interface with generic extension seams for Gemini and BFL.
 - Three milestone quality gates with one automatic repair attempt per gate.
-- Deterministic typography and PDF assembly.
+- Approved in-image comic lettering, geometry normalization, and deterministic PDF assembly.
 - OpenAI tracing and a local normalized model-call/cost ledger.
 
 ### 3.2 Out of scope
@@ -110,7 +110,7 @@ The primary user is a creator evaluating how AI could help make a short custom p
 - **Approval is lightweight.** Moving forward approves the displayed artifact version; separate confirmation dialogs are unnecessary.
 - **Failures are recoverable.** Saved work and completed pages survive retry and restart.
 - **Rework is explicit.** Upstream edits show which dependent artifacts need review before deliberate regeneration.
-- **Text is deterministic.** Image models do not create reader-facing text; the application typesets it.
+- **Comic copy is approved before rendering.** The writing specialist structures exact reader-facing copy; the image model renders only that approved lettering, and the application never adds post-generation text.
 - **The POC stays small.** Prefer one understandable implementation path over production abstractions or configuration surfaces.
 
 ## 5. End-to-end user flow
@@ -132,7 +132,7 @@ flowchart TD
     GQ --> G[Start background page generation]
     G --> PR[Observe page-level progress]
     PR --> FP[Review and approve final pages]
-    FP -->|Revise| ED[Edit text or regenerate selected image]
+    FP -->|Revise| ED[Revise Page Plan copy or regenerate selected image]
     ED --> FP
     FP --> FQ[Final-page quality gate]
     FQ --> PDF[Compose and review PDF]
@@ -166,7 +166,7 @@ The eight visible artifact stages are:
 3. **Visual Style:** selected seeded style and booklet-specific visual direction.
 4. **Visual Bible:** recurring character/location definitions and approved canonical reference images.
 5. **Booklet Specification:** title, cover direction, page count, confirmed geometry, typography theme, and dialogue policy.
-6. **Page Plan:** ordered cover/story page packages containing text, scene, composition, continuity, relevant reference IDs, and text-safe region.
+6. **Page Plan:** ordered cover/story page packages containing structured comic lettering, accessible reading-order text, scene, composition, continuity, relevant reference IDs, and placement guidance.
 7. **Final Pages:** composed, individually reviewable final pages.
 8. **PDF Export:** ordered PDF derived from approved final pages.
 
@@ -229,9 +229,9 @@ type ArtifactState =
 - **FR-028:** The agent shall recommend a story-page count from three through eight based on age, story complexity, and pacing; the user may change it within that range.
 - **FR-029:** The agent shall recommend 5:4 landscape, 4:5 portrait, or 1:1 square with rationale; the user must explicitly confirm geometry before page planning.
 - **FR-030:** Page order shall be deterministic: cover first, followed by story pages 1 through N.
-- **FR-031:** Every Page Package shall include reader-facing text, scene/action, characters/locations, composition intent, continuity notes, relevant reference IDs, and a normalized text-safe region.
-- **FR-032:** Illustrations shall exclude narration, dialogue, page numbers, and other reader-facing typography.
-- **FR-033:** The user shall be able to edit page text or request a visual revision for a selected page without regenerating unrelated pages.
+- **FR-031:** Every Page Package shall include ordered structured lettering, accessible `readerText`, scene/action, characters/locations, composition intent, continuity notes, relevant reference IDs, and placement guidance. Lettering kinds are title, narration, dialogue, thought, and sound effect; story pages allow at most five elements and approximately 45 total words.
+- **FR-032:** The image request shall contain every approved lettering string and its speaker, delivery, placement, and reading-order relationship. It shall require each string exactly once and prohibit unapproved words, numbers, signs, labels, logos, and watermarks.
+- **FR-033:** Copy changes shall create and approve a revised Page Plan. A selected page or reference may be regenerated with an optional visual or lettering-rendering correction without changing unrelated pages or silently rewriting approved copy.
 
 ### 6.6 Generation, review, and export
 
@@ -241,7 +241,7 @@ type ArtifactState =
 - **FR-037:** A failed page shall offer retry or edit/regenerate recovery without discarding successful pages.
 - **FR-038:** Normal generation shall produce one candidate per reference or page.
 - **FR-039:** The user shall review and approve every final page before approving the Final Pages artifact.
-- **FR-040:** The application shall typeset reader-facing text inside the approved safe region using bundled fonts and shall fail recoverably when text cannot fit readably.
+- **FR-040:** The image model shall render approved lettering using professional comic conventions: speech balloons with correct speaker tails, cloud-style thought balloons, bordered narration captions, expressive cover titles, and action-integrated sound effects. Sharp may normalize geometry or format but shall not draw text, balloons, captions, or panels.
 - **FR-041:** Composition shall preserve confirmed geometry and shall never stretch an illustration.
 - **FR-042:** PDF assembly shall use approved final pages in deterministic order.
 - **FR-043:** Export failure shall retain final pages and allow PDF assembly to be retried independently.
@@ -254,6 +254,9 @@ type ArtifactState =
 - **FR-047:** Canonical reference images shall be required only for recurring visual subjects. A character or location may have a stable definition without requiring a separate reference image.
 - **FR-048:** One Page Package shall represent one scene and one intended illustration. The POC shall not introduce a separate Scene artifact, reusable scene graph, multi-panel layout, or multiple structured scene beats per page.
 - **FR-049:** Revising a character or location shall create a new Visual Bible version, identify Page Packages that reference its stable ID, and mark dependent artifacts `needs_review`; regeneration shall remain selective and user-initiated.
+- **FR-050:** `COMIC_COPY_MODE` shall be `creative` or `exact`, defaulting to `creative`. Creative mode may rewrite story beats into age-appropriate comic copy before approval; exact mode may classify and split supplied words but shall not alter them.
+- **FR-051:** Legacy Page Plans remain readable but shall not authorize new page generation until an Upgrade to Comic Lettering action creates and the user approves a structured revised plan. Existing images remain available and Final Pages becomes `needs_review`.
+- **FR-052:** Every page and canonical-reference thumbnail shall open an accessible full-size preview and support selective regeneration with an optional correction instruction. The active asset shall remain unchanged until its replacement succeeds.
 
 ## 7. Generative UI contract
 
@@ -457,9 +460,9 @@ Adapters serialize this plan into provider-appropriate prompts. Prompts should d
 - **IMG-004:** Normal generation shall request one candidate.
 - **IMG-005:** A localized visual revision shall use an edit operation when the configured provider supports it; otherwise only the selected asset shall regenerate.
 - **IMG-006:** Seeds may be recorded when supported but shall not be required or treated as the primary consistency mechanism.
-- **IMG-007:** The configured default image quality shall be `balanced`; engineering configuration may raise it for retained evaluation runs.
-- **IMG-008:** If a provider cannot generate the exact geometry, its adapter may request the closest supported dimensions and use composition-aware crop or padding. It shall never stretch the result.
-- **IMG-009:** Prompts shall reserve text-safe space and shall not request embedded narration, dialogue, or page numbers.
+- **IMG-007:** The configured default image quality shall be `balanced`; page images containing lettering shall use at least medium quality even when `IMAGE_PROVIDER_MODE=fast`, while text-free canonical references may use low quality.
+- **IMG-008:** Page requests shall use the confirmed page dimensions supported by the configured model. Sharp may rotate, crop, pad, or resize defensively to exact geometry but shall never stretch the result.
+- **IMG-009:** Page prompts shall request approved in-image comic lettering verbatim, natural left-to-right/top-to-bottom hierarchy, and legible placement that avoids faces, hands, and critical action. Reference prompts shall prohibit all text.
 
 ### 9.4 Failure behavior and retained evidence
 
@@ -470,7 +473,7 @@ Adapters serialize this plan into provider-appropriate prompts. Prompts should d
 - **IMG-014:** A normalized request with one or more input references or an edit target shall use the provider's `edit` operation; `generate` shall be used only when no input image is supplied. Routing shall reject unsupported reference counts or edit capability before provider invocation.
 - **IMG-015:** The selected seeded style sample shall guide booklet style, character, and location reference generation. Only the approved booklet style reference shall guide page generation, and no generation item shall depend on an unfinished item from the same job.
 
-OpenAI documents multiple reference images and high-fidelity editing, as well as remaining limitations in recurring-character consistency, exact composition, and text rendering. These limitations justify canonical references, relevant-reference selection, and deterministic typography. See the [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation).
+OpenAI documents multiple reference images and editing, as well as remaining limitations in recurring-character consistency, exact composition, and text rendering. These limitations justify canonical references, exact approved prompt copy, full-size review, and selective regeneration. See the [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation).
 
 ## 10. Quality and repair
 
@@ -480,7 +483,7 @@ Automated quality review runs at three gates:
 2. **Generation readiness:** after Visual Style, Visual Bible, Booklet Specification, and Page Plan.
 3. **Final-page quality:** after all final pages are composed and before approval/export.
 
-The relevant gate checks schema completeness, age fit, story coherence, pacing, character/location continuity, approved style, reference readiness, page order, text-safe regions, and text legibility. PDF assembly then runs a deterministic preflight for page count, order, geometry, readability, and missing assets; it does not invoke another model review.
+The relevant gate checks schema completeness, age fit, story coherence, pacing, character/location continuity, approved style, reference readiness, page order, lettering limits, speaker relationships, reading order, and text legibility. PDF assembly then runs a deterministic preflight for page count, order, geometry, readability, and missing assets; it does not invoke another model review.
 
 - **QA-001:** A quality skill shall return a short structured issue list with evidence and severity.
 - **QA-002:** Each gate may attempt one targeted automatic repair.
@@ -509,7 +512,7 @@ Separate reviewer agents per artifact, configurable rule engines, and repair-unt
 | Migrations | drizzle-kit with checked-in migrations | Repeatable local setup without custom schema bootstrapping. |
 | Binary assets | Filesystem `AssetStore` | Local simplicity behind a replaceable interface. |
 | Image client | Official OpenAI JavaScript SDK calling the Image API | Supported core image generation/edit path behind `ImageProvider`. |
-| Composition | Sharp with SVG text layers | Deterministic crop, resize, and typography. |
+| Composition | Sharp geometry-only normalization | Preserve exact page geometry and source/final lineage without drawing text or panels. |
 | PDF | pdf-lib | Deterministic ordered assembly. |
 | Tests | Vitest and Playwright | Focused contracts/services plus one browser flow. |
 
@@ -533,7 +536,7 @@ flowchart TB
     IP --> OAI[OpenAI Image API]
     RUN --> DB[(libSQL / SQLite)]
     RUN --> FS[Filesystem AssetStore]
-    RUN --> CMP[Sharp composition]
+    RUN --> CMP[Sharp geometry normalization]
     CMP --> PDF[pdf-lib assembly]
     API --> DB
     API --> FS
@@ -631,6 +634,8 @@ Versioned Zod schemas are required for:
 - **DATA-017:** A Page Plan shall not pass generation readiness while it contains an unknown character/location ID or lacks an approved reference required by a recurring visual subject.
 - **DATA-018:** Subject approval shall not create an artifact version. When a revision creates a new Visual Bible or Final Pages version, unchanged subject approvals may be carried to that exact version as application-derived approval records with source provenance; changed subjects shall return to unapproved. Artifact approval shall always target the exact current version.
 - **DATA-019:** Persistent character and location IDs shall be assigned by deterministic application code. Model outputs may reference allowed existing IDs or propose new entity drafts without persistent IDs, but shall not create or replace application IDs.
+- **DATA-020:** Each Page Package may contain up to five ordered lettering elements with `kind`, exact `text`, optional `speakerEntityId`, `delivery`, and `placementHint`. Dialogue and thought speakers shall be page characters, and `readerText` shall equal the lettering strings in reading order.
+- **DATA-021:** Gallery items shall carry a validated page/reference regeneration target. A regeneration request may include a visual instruction but shall resolve the target server-side, preserve source/final lineage, and keep the current asset active until success.
 
 Checksums, atomic-move protocols, exhaustive append-only storage rules, stale-write APIs, event sourcing, and generic repository infrastructure are not POC requirements.
 
@@ -735,9 +740,9 @@ A critical defect is blocked completion/download, a missing or duplicated page, 
 - **AC-007:** Restart restores messages/cards, current stage, selected artifact, versions, approvals, and generation progress.
 - **AC-008:** A failed page retains successful pages and exposes a typed recovery card; retry affects only the failed/selected page.
 - **AC-009:** Each quality gate attempts at most one targeted repair and then presents user recovery controls if an issue remains.
-- **AC-010:** Text-only page revision reuses the source illustration; visual revision edits or regenerates only the selected image.
+- **AC-010:** Copy revision creates a reviewable Page Plan version; visual or lettering-rendering correction edits or regenerates only the selected image and retains the active asset if replacement fails.
 - **AC-011:** The POC completes with only OpenAI credentials and no provider/model selection in the creator UI.
-- **AC-012:** The final PDF contains the cover and exact approved page order/geometry with readable application-rendered text, and its run summary reconciles calls, skills, latency, retries, and cost.
+- **AC-012:** The final PDF contains the cover and exact approved page order/geometry with readable approved in-image lettering, and its run summary reconciles calls, skills, latency, retries, and cost.
 
 ## 16. Risks and POC mitigations
 
@@ -749,7 +754,7 @@ A critical defect is blocked completion/download, a missing or duplicated page, 
 | Intake becomes long or repetitive. | Readiness schema, infer known facts, ask one question at a time, aim for eight or fewer. |
 | Character identity drifts. | Canonical references, relevant-reference selection, bounded cast recommendation, and selected-page repair. |
 | Dynamic length increases cost and latency. | Bound story pages to 3–8, generate one candidate sequentially, preserve results, record cost. |
-| Image models render text or composition poorly. | Reserve safe regions and typeset deterministically after generation. |
+| Image models render text or composition poorly. | Approve concise structured copy first, use explicit professional lettering prompts and a medium-quality floor, review full size, and selectively regenerate the affected image. |
 | Upstream edits cause expensive rework. | Exact dependencies, `needs_review`, and deliberate selective regeneration. |
 | Local process stops during generation. | Persist item progress and resume incomplete work without losing completed items. |
 | Provider interfaces grow prematurely. | Implement OpenAI Image API first and keep optional provider seams generic and invisible to users. |

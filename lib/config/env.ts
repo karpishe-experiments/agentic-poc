@@ -18,6 +18,7 @@ export const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1).default("file:./data/booklets.db"),
   DATA_ROOT: z.string().min(1).default("./data/assets"),
   IMAGE_QUALITY: imageQualitySchema.default("balanced"),
+  COMIC_COPY_MODE: z.enum(["creative", "exact"]).default("creative"),
   OPENAI_TRACE_INCLUDE_SENSITIVE_DATA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 });
 
@@ -41,4 +42,12 @@ export function resolveImageProviderProfile(env: Pick<ServerEnv, "IMAGE_PROVIDER
   }
 
   return { runtime: "real", quality: env.IMAGE_QUALITY, fastOutput: false } as const;
+}
+
+export function resolvePageImageQuality(quality: "low" | "medium" | "high" | "balanced") {
+  return quality === "low" ? "medium" as const : quality;
+}
+
+export function resolveComicCopyMode(source: Record<string, string | undefined> = process.env) {
+  return source.COMIC_COPY_MODE === "exact" ? "exact" as const : "creative" as const;
 }

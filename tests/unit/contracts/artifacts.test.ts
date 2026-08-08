@@ -37,4 +37,15 @@ describe("artifact contracts", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("validates professional lettering speakers, reading order, and word limits", () => {
+    const base = { pageId: "00000000-0000-4000-8000-000000000321", pageIndex: 1, kind: "story" as const, readerText: "We can do it! SPLASH!", sceneAction: "Robin tips the watering can.", characterIds: [characterId], locationIds: [settingId], incidentalVisualDetails: [], compositionIntent: "A close view", continuityNotes: [], relevantReferenceIds: [], textSafeRegion: { x: 0.1, y: 0.1, width: 0.8, height: 0.3 } };
+    const valid = pagePlanSchema.shape.pages.element.safeParse({ ...base, lettering: [
+      { kind: "dialogue", text: "We can do it!", speakerEntityId: characterId, delivery: "brave", placementHint: "near Robin" },
+      { kind: "sound_effect", text: "SPLASH!", speakerEntityId: null, delivery: "playful", placementHint: "by the water" },
+    ] });
+    const invalidSpeaker = pagePlanSchema.shape.pages.element.safeParse({ ...base, lettering: [{ kind: "dialogue", text: base.readerText, speakerEntityId: settingId, delivery: "brave", placementHint: "near Robin" }] });
+    expect(valid.success).toBe(true);
+    expect(invalidSpeaker.success).toBe(false);
+  });
 });

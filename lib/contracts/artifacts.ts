@@ -97,6 +97,19 @@ export const bookletSpecificationSchema = z.object({
   locationLimitWarningAccepted: z.boolean(),
 });
 
+export const letteringKindSchema = z.enum(["title", "narration", "dialogue", "thought", "sound_effect"]);
+export const letteringElementSchema = z.object({
+  kind: letteringKindSchema,
+  text: z.string().trim().min(1).max(240),
+  speakerEntityId: opaqueIdSchema.nullable().optional(),
+  delivery: z.string().trim().min(1).max(120),
+  placementHint: z.string().trim().min(1).max(240),
+});
+
+export function letteringReaderText(lettering: z.infer<typeof letteringElementSchema>[]): string {
+  return lettering.map((element) => element.text).join(" ");
+}
+
 export const pagePackageSchema = z.object({
   pageId: opaqueIdSchema,
   pageIndex: z.number().int().min(0).max(8),
@@ -110,6 +123,18 @@ export const pagePackageSchema = z.object({
   continuityNotes: textList(),
   relevantReferenceIds: z.array(opaqueIdSchema).max(12),
   textSafeRegion: normalizedRectSchema,
+  lettering: z.array(letteringElementSchema).min(1).max(5).optional(),
+}).superRefine((page, context) => {
+  if (!page.lettering) return;
+  const words = page.lettering.reduce((total, element) => total + element.text.split(/\s+/).filter(Boolean).length, 0);
+  if (page.kind === "story" && words > 45) context.addIssue({ code: "custom", path: ["lettering"], message: "Story-page comic lettering must stay within 45 words." });
+  for (const [index, element] of page.lettering.entries()) {
+    const needsSpeaker = element.kind === "dialogue" || element.kind === "thought";
+    if (needsSpeaker && !element.speakerEntityId) context.addIssue({ code: "custom", path: ["lettering", index, "speakerEntityId"], message: `${element.kind} needs a speaker.` });
+    if (element.speakerEntityId && !page.characterIds.includes(element.speakerEntityId)) context.addIssue({ code: "custom", path: ["lettering", index, "speakerEntityId"], message: "The lettering speaker must appear on this page." });
+    if (!needsSpeaker && element.speakerEntityId) context.addIssue({ code: "custom", path: ["lettering", index, "speakerEntityId"], message: `${element.kind} cannot have a speaker.` });
+  }
+  if (letteringReaderText(page.lettering) !== page.readerText) context.addIssue({ code: "custom", path: ["readerText"], message: "Reader text must match lettering in reading order." });
 });
 
 export const pagePlanSchema = z.object({
@@ -134,6 +159,7 @@ export const finalPagesSchema = z.object({
     sourceIllustrationAssetId: opaqueIdSchema,
     composedAssetId: opaqueIdSchema,
     readerText: z.string().max(5_000),
+    lettering: z.array(letteringElementSchema).min(1).max(5).optional(),
     textSafeRegion: normalizedRectSchema,
     revisionNumber: z.number().int().positive(),
     acceptedQualityIssueIds: z.array(opaqueIdSchema),
