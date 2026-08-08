@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CardRegistry } from "@/components/cards/card-registry";
 import type { GenUICard } from "@/lib/contracts/cards";
@@ -69,6 +69,50 @@ describe("CardRegistry", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(screen.getByText("Generating: 2 of 4")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    rendered.unmount();
+  });
+
+  it("shows the stopped page and retries it from the progress card", async () => {
+    const progress = { ...base, family: "progress" as const, variant: "page_batch" as const, title: "Generating pages", allowedActions: [], payload: { jobId: "00000000-0000-4000-8000-000000000105", completed: 0, total: 3 } };
+    let retried = false;
+    const failedItems = [
+      { id: "00000000-0000-4000-8000-000000000201", itemKey: "page:cover", position: 0, status: "succeeded", error: null },
+      { id: "00000000-0000-4000-8000-000000000202", itemKey: "page:one", position: 1, status: "failed", error: { message: "No credits remain." } },
+      { id: "00000000-0000-4000-8000-000000000203", itemKey: "page:two", position: 2, status: "pending", error: null },
+    ];
+    const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      if (init?.method === "POST") {
+        retried = true;
+        return new Response(JSON.stringify({ data: { status: "pending", items: failedItems.map((item) => item.status === "failed" ? { ...item, status: "pending", error: null } : item) } }));
+      }
+      return new Response(JSON.stringify({ data: retried
+        ? { status: "running", items: failedItems.map((item) => item.status === "failed" ? { ...item, status: "running", error: null } : item) }
+        : { status: "failed", items: failedItems } }));
+    });
+    const rendered = render(<CardRegistry card={progress} />);
+
+    await waitFor(() => expect(screen.getByText("Stopped: 1 of 3")).toBeTruthy());
+    expect(screen.getByText(/Stopped on Page 1: No credits remain/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed page" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/jobs/${progress.payload.jobId}/items/${failedItems[1]!.id}/retry`, { method: "POST" }));
+    await waitFor(() => expect(screen.getByText("Generating: 1 of 3")).toBeTruthy());
+    rendered.unmount();
+  });
+
+  it("offers Continue when pending work is idle without a failed or running item", async () => {
+    const progress = { ...base, family: "progress" as const, variant: "page_batch" as const, title: "Generating pages", allowedActions: [], payload: { jobId: "00000000-0000-4000-8000-000000000106", completed: 1, total: 2 } };
+    const items = [
+      { id: "00000000-0000-4000-8000-000000000211", itemKey: "page:cover", position: 0, status: "succeeded", error: null },
+      { id: "00000000-0000-4000-8000-000000000212", itemKey: "page:one", position: 1, status: "pending", error: null },
+    ];
+    const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (_input, init) => new Response(JSON.stringify({ data: { status: init?.method === "POST" ? "running" : "pending", items } })));
+    const rendered = render(<CardRegistry card={progress} />);
+
+    const continueButton = await screen.findByRole("button", { name: "Continue generating images" });
+    fireEvent.click(continueButton);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/jobs/${progress.payload.jobId}/continue`, { method: "POST" }));
     rendered.unmount();
   });
 });

@@ -82,7 +82,9 @@ function ArtifactReviewCard({ card, busy, submitResponse }: CardProps) {
   </CardFrame>;
 }
 
-type JobProgressStatus = { data?: { status?: string; items?: Array<{ status?: string }> } };
+type JobProgressItem = { id: string; itemKey: string; position: number; status: string; error?: { message?: string } | null };
+type JobProgressData = { status?: string; items?: JobProgressItem[] };
+type JobProgressStatus = { data?: JobProgressData; error?: { message?: string } };
 type ProgressGenUICard = Extract<GenUICard, { family: "progress" }>;
 const liveJobStatuses = new Set(["pending", "running", "partial"]);
 
@@ -93,6 +95,17 @@ function ProgressCard({ card }: CardProps) {
 
 function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
   const [progress, setProgress] = useState({ completed: card.payload.completed, total: card.payload.total, isLive: false });
+  const [job, setJob] = useState<JobProgressData | null>(null);
+  const [pollVersion, setPollVersion] = useState(0);
+  const [workingItemId, setWorkingItemId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const applyJob = (nextJob: JobProgressData) => {
+    const items = nextJob.items;
+    if (!items?.length) return;
+    setJob(nextJob);
+    setProgress({ completed: items.filter((item) => item.status === "succeeded").length, total: items.length, isLive: true });
+  };
 
   useEffect(() => {
     if (!card.payload.jobId || card.status !== "active") return;
@@ -104,7 +117,7 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
         const body = await response.json() as JobProgressStatus;
         const items = body.data?.items;
         if (cancelled || !response.ok || !items?.length) return;
-        setProgress({ completed: items.filter((item) => item.status === "succeeded").length, total: items.length, isLive: true });
+        applyJob(body.data!);
         if (liveJobStatuses.has(body.data?.status ?? "")) timer = window.setTimeout(() => void refresh(), 2_000);
       } catch {
         // Retain the persisted card snapshot if the local status endpoint is unavailable.
@@ -112,11 +125,45 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
     };
     void refresh();
     return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [card.payload.completed, card.payload.jobId, card.payload.total, card.status]);
+  }, [card.payload.completed, card.payload.jobId, card.payload.total, card.status, pollVersion]);
+
+  const runAction = async (url: string, itemId: string) => {
+    setWorkingItemId(itemId);
+    setActionError(null);
+    try {
+      const response = await fetch(url, { method: "POST" });
+      const body = await response.json() as JobProgressStatus;
+      if (!response.ok || !body.data) throw new Error(body.error?.message ?? "Generation could not be continued.");
+      applyJob(body.data);
+      setPollVersion((version) => version + 1);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Generation could not be continued.");
+    } finally {
+      setWorkingItemId(null);
+    }
+  };
 
   const percent = Math.round((progress.completed / progress.total) * 100);
-  const label = progress.isLive ? "Generating" : card.payload.currentLabel ?? "Working";
-  return <CardFrame card={card}><p aria-live="polite" className="text-sm">{label}: {progress.completed} of {progress.total}</p><div aria-label={`${percent}% complete`} className="mt-2 h-2 overflow-hidden rounded bg-[#f3e5d8]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div></CardFrame>;
+  const items = job?.items ?? [];
+  const failedItems = items.filter((item) => item.status === "failed");
+  const hasRunning = items.some((item) => item.status === "running");
+  const hasPending = items.some((item) => item.status === "pending");
+  const canContinue = Boolean(card.payload.jobId && items.length && !failedItems.length && !hasRunning && hasPending);
+  const label = failedItems.length ? "Stopped" : progress.isLive ? "Generating" : card.payload.currentLabel ?? "Working";
+  const itemLabel = (item: JobProgressItem) => card.variant === "page_batch"
+    ? item.position === 0 ? "Cover" : `Page ${item.position}`
+    : "Reference";
+
+  return <CardFrame card={card}>
+    <p aria-live="polite" className="text-sm">{label}: {progress.completed} of {progress.total}</p>
+    <div aria-label={`${percent}% complete`} className="mt-2 h-2 overflow-hidden rounded bg-[#f3e5d8]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div>
+    {failedItems.map((item) => <div className="mt-3" key={item.id}>
+      <p className="text-sm text-red-700">Stopped on {itemLabel(item)}: {item.error?.message ?? "Generation failed."}</p>
+      <button className="mt-2 rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={workingItemId !== null} onClick={() => void runAction(`/api/jobs/${card.payload.jobId}/items/${item.id}/retry`, item.id)} type="button">{workingItemId === item.id ? "Retrying…" : `Retry failed ${card.variant === "page_batch" ? "page" : "reference"}`}</button>
+    </div>)}
+    {canContinue ? <button className="mt-3 rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={workingItemId !== null} onClick={() => void runAction(`/api/jobs/${card.payload.jobId}/continue`, "continue")} type="button">{workingItemId === "continue" ? "Continuing…" : "Continue generating images"}</button> : null}
+    {actionError ? <p className="mt-2 text-sm text-red-700" role="alert">{actionError}</p> : null}
+  </CardFrame>;
 }
 
 function IssueCard({ card, busy, submitResponse }: CardProps) {

@@ -210,3 +210,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `lib/config/env.ts`, `lib/application/generation-service.ts`, and `lib/images/openai-image-provider.ts`; `tests/unit/config/env.test.ts`, `tests/unit/images/openai-image-provider.test.ts`, and `tests/integration/reference-generation.test.ts` verify real-provider selection, forced low quality, compressed JPEG transport, low edit fidelity, PNG normalization, and persisted request quality. The full suite passed 76 tests and the production build passed on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
+
+### Distinguish exhausted quota from retryable rate limiting
+
+- **Context:** A persisted batch job generates paid images sequentially and normally retries temporary HTTP 429 responses.
+- **Observation:** `credit_balance_exhausted` also arrives as HTTP 429, but retrying it cannot succeed until external billing state changes. Treating every 429 as transient consumed all item retries and then claimed later pages, multiplying predictable failures.
+- **Guidance:** Classify stable provider codes before generic HTTP status handling. On exhausted billing or insufficient quota, fail the current item once, put the job in a terminal paused state that the runner will not reclaim, and retain later items as pending. Render actions from item state: show Retry while any item is failed, show Continue only when pending items exist with no failed or running item, and show neither while work is running. Both actions must reuse the same job without touching completed assets.
+- **Evidence:** `lib/images/openai-image-provider.ts`, `lib/application/generation-service.ts`, `db/repositories.ts`, `components/cards/card-registry.tsx`, and `app/api/jobs/[jobId]/continue/route.ts`; provider and generation tests verify blocked classification and preserved continuation, while `tests/unit/cards/card-registry.test.tsx` verifies the failed-page Retry and idle-pending Continue states. The full suite passed 80 tests and the production build exposed the continue route on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.

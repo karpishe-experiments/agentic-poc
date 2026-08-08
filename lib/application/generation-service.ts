@@ -50,6 +50,14 @@ function compactPromptItems(values: string[], maximumPerItem = 240, maximumItems
   return [...new Set(values.filter(Boolean).map((value) => compactPromptField(value, maximumPerItem)))].slice(0, maximumItems);
 }
 
+function isExhaustedBillingFailure(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const providerError = (error as { providerError?: unknown }).providerError;
+  if (!providerError || typeof providerError !== "object") return false;
+  const { code, type } = providerError as { code?: unknown; type?: unknown };
+  return code === "credit_balance_exhausted" || code === "insufficient_quota" || type === "insufficient_quota";
+}
+
 export class GenerationService {
   private readonly repositories: Repositories;
   private readonly artifacts: ArtifactService;
@@ -104,6 +112,7 @@ export class GenerationService {
 
   public async runReferenceJob(bookletId: string, jobId: string) {
     return this.runExclusively(jobId, async () => {
+    if (await this.haltForSavedBillingBlock(jobId)) return;
     for (;;) {
       const item = await this.repositories.jobs.claimNextPending(jobId, Date.now());
       if (!item) break;
@@ -126,7 +135,8 @@ export class GenerationService {
         if (result.status === "failed" || !result.bytesBase64 || !result.mimeType || !result.width || !result.height) {
           const failure = result.error ?? { kind: "unavailable" as const, message: "Image provider returned no image." };
           await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error: new Error(failure.message) });
-          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now() });
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now(), haltJob: failure.kind === "blocked" });
+          if (failure.kind === "blocked") break;
           if (result.error?.kind === "transient" && item.attemptCount <= 2) {
             await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
             await this.repositories.jobs.retryItem(jobId, item.id);
@@ -230,6 +240,7 @@ export class GenerationService {
 
   public async runPageJob(bookletId: string, jobId: string) {
     return this.runExclusively(jobId, async () => {
+    if (await this.haltForSavedBillingBlock(jobId)) return;
     for (;;) {
       const item = await this.repositories.jobs.claimNextPending(jobId, Date.now());
       if (!item) break;
@@ -263,7 +274,8 @@ export class GenerationService {
         if (generated.status === "failed" || !generated.bytesBase64 || !generated.mimeType || !generated.width || !generated.height) {
           const failure = generated.error ?? { kind: "unavailable" as const, message: "Image provider returned no page image." };
           await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error: new Error(failure.message) });
-          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now() });
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now(), haltJob: failure.kind === "blocked" });
+          if (failure.kind === "blocked") break;
           if (generated.error?.kind === "transient" && item.attemptCount <= 2) {
             await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
             await this.repositories.jobs.retryItem(jobId, item.id);
@@ -341,6 +353,20 @@ export class GenerationService {
       card,
       createdAtMs: Date.now(),
     });
+  }
+
+  private async haltForSavedBillingBlock(jobId: string): Promise<boolean> {
+    const blockedItem = (await this.repositories.jobs.getItems(jobId))
+      .find((item) => item.status === "failed" && isExhaustedBillingFailure(item.error));
+    if (!blockedItem) return false;
+    await this.repositories.jobs.failItem({
+      jobId,
+      itemId: blockedItem.id,
+      error: blockedItem.error,
+      finishedAtMs: Date.now(),
+      haltJob: true,
+    });
+    return true;
   }
 
   private async finalizePages(bookletId: string, jobId: string) {

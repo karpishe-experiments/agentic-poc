@@ -12,6 +12,7 @@ const sizeByGeometry = {
 
 function errorKind(error: unknown): "transient" | "user_correctable" | "blocked" | "unavailable" {
   if (error instanceof OpenAI.APIError) {
+    if (error.code === "credit_balance_exhausted" || error.code === "insufficient_quota" || error.type === "insufficient_quota") return "blocked";
     if (error.status === 429 || (error.status !== undefined && error.status >= 500)) return "transient";
     if (error.status === 401 || error.status === 403) return "unavailable";
     if (error.status === 400 || error.status === 422) return "user_correctable";

@@ -40,7 +40,8 @@ import {
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { qualityReviewSchema, type QualityReview } from "@/lib/contracts/quality";
 
-const activeJobStatuses = new Set(["pending", "running", "partial"]);
+// Keep terminally blocked jobs visible so their failed item can reactivate the retained queue.
+const activeJobStatuses = new Set(["pending", "running", "partial", "failed"]);
 
 function iso(timestamp: number): string {
   return new Date(timestamp).toISOString();
@@ -228,7 +229,7 @@ export type JobRepository = {
   getItems(jobId: string): Promise<Array<{ id: string; itemKey: string; position: number; status: string; attemptCount: number; input: unknown; result: unknown | null; assetId: string | null; error: unknown | null }>>;
   claimNextPending(jobId: string, startedAtMs: number): Promise<{ id: string; itemKey: string; position: number; attemptCount: number; input: unknown } | null>;
   completeItem(input: { jobId: string; itemId: string; result: unknown; assets: Asset[]; primaryAssetId: string; finishedAtMs: number }): Promise<void>;
-  failItem(input: { jobId: string; itemId: string; error: unknown; finishedAtMs: number }): Promise<void>;
+  failItem(input: { jobId: string; itemId: string; error: unknown; finishedAtMs: number; haltJob?: boolean }): Promise<void>;
   retryItem(jobId: string, itemId: string): Promise<void>;
   recoverInterrupted(): Promise<number>;
   listRunnable(): Promise<Array<{ id: string; bookletId: string; jobType: "references" | "pages" | "export" }>>;
@@ -784,7 +785,12 @@ export function createRepositories(database: Database): Repositories {
       async failItem(input) {
         await database.transaction(async (transaction) => {
           await transaction.update(generationItems).set({ status: "failed", errorJson: JSON.stringify(input.error), finishedAtMs: input.finishedAtMs }).where(eq(generationItems.id, input.itemId));
-          await transaction.update(generationJobs).set({ status: "partial", errorJson: JSON.stringify(input.error), updatedAtMs: input.finishedAtMs }).where(eq(generationJobs.id, input.jobId));
+          await transaction.update(generationJobs).set({
+            status: input.haltJob ? "failed" : "partial",
+            errorJson: JSON.stringify(input.error),
+            finishedAtMs: input.haltJob ? input.finishedAtMs : null,
+            updatedAtMs: input.finishedAtMs,
+          }).where(eq(generationJobs.id, input.jobId));
         });
       },
       async retryItem(jobId, itemId) {

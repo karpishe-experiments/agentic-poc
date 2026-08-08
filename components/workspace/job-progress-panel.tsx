@@ -55,6 +55,7 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
         return <article className="rounded-lg border border-[var(--border)] bg-white p-2" key={job.id}>
           <p className="font-medium capitalize">{job.jobType} — {job.status}</p>
           <p aria-live="polite" className="text-[var(--muted-ink)]">{completed} of {total} items completed</p>
+          {job.status === "failed" ? <p className="mt-1 text-[var(--muted-ink)]">Generation is paused. Fix the provider balance or access, then regenerate the failed item; retained pending items will continue afterward.</p> : null}
           {details.filter((item) => item.status === "failed").map((item) => <div className="mt-2 flex flex-wrap items-center gap-2" key={item.id}>
             <span className="text-red-700">{item.itemKey}: {item.error?.message ?? "Generation failed."}</span>
             <button className="rounded border border-[var(--accent)] px-2 py-1 font-semibold text-[var(--accent)] disabled:opacity-50" disabled={retrying === item.id} onClick={async () => {
@@ -67,7 +68,7 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
               } catch (error) {
                 setRetryError(error instanceof Error ? error.message : "The item could not be queued for retry.");
               } finally { setRetrying(null); }
-            }} type="button">{retrying === item.id ? "Retrying…" : "Retry item"}</button>
+            }} type="button">{retrying === item.id ? "Retrying…" : `Retry failed ${job.jobType === "pages" ? "page" : "reference"}`}</button>
           </div>)}
           {retryError ? <p className="mt-2 text-red-700" role="alert">{retryError}</p> : null}
         </article>;

@@ -25,6 +25,31 @@ const request: ImageRequest = {
 };
 
 describe("OpenAI image provider", () => {
+  it("classifies exhausted billing as blocked rather than retryable", async () => {
+    const generate = vi.fn(async () => {
+      throw new OpenAI.APIError(429, {
+        code: "credit_balance_exhausted",
+        type: "insufficient_quota",
+      }, "You have no credits remaining.", new Headers());
+    });
+    const client = { images: { generate } } as unknown as OpenAI;
+
+    const result = await new OpenAIImageProvider(client).execute(request);
+
+    expect(generate).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      status: "failed",
+      error: {
+        kind: "blocked",
+        providerError: {
+          status: 429,
+          code: "credit_balance_exhausted",
+          type: "insufficient_quota",
+        },
+      },
+    });
+  });
+
   it("requests compressed JPEG output in fast mode and normalizes it for persisted PNG assets", async () => {
     const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: "orange" } }).jpeg().toBuffer();
     const generate = vi.fn(async () => ({
