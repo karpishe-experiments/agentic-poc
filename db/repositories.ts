@@ -41,7 +41,7 @@ import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { qualityReviewSchema, type QualityReview } from "@/lib/contracts/quality";
 
 // Keep terminally blocked jobs visible so their failed item can reactivate the retained queue.
-const activeJobStatuses = new Set(["pending", "running", "partial", "failed"]);
+const activeJobStatuses = new Set(["pending", "running", "partial", "paused", "failed"]);
 
 function iso(timestamp: number): string {
   return new Date(timestamp).toISOString();
@@ -224,13 +224,14 @@ export type ConversationRepository = {
 
 export type JobRepository = {
   listActiveByBooklet(bookletId: string): Promise<ActiveJobSummary[]>;
-  getStatus(jobId: string): Promise<{ id: string; bookletId: string; jobType: "references" | "pages" | "export"; status: "pending" | "running" | "partial" | "succeeded" | "failed" | "cancelled"; updatedAt: string; items: Array<{ id: string; itemKey: string; position: number; status: "pending" | "running" | "succeeded" | "failed"; attemptCount: number; error: unknown | null }> } | null>;
+  getStatus(jobId: string): Promise<{ id: string; bookletId: string; jobType: "references" | "pages" | "export"; status: "pending" | "running" | "partial" | "paused" | "succeeded" | "failed" | "cancelled"; updatedAt: string; items: Array<{ id: string; itemKey: string; position: number; status: "pending" | "running" | "succeeded" | "failed"; attemptCount: number; error: unknown | null }> } | null>;
   createOrGet(input: { id: string; bookletId: string; jobType: "references" | "pages" | "export"; idempotencyKey: string; input: unknown; items: Array<{ id: string; itemKey: string; position: number; input: unknown }>; createdAtMs: number }): Promise<{ id: string; status: string; reused: boolean }>;
   getItems(jobId: string): Promise<Array<{ id: string; itemKey: string; position: number; status: string; attemptCount: number; input: unknown; result: unknown | null; assetId: string | null; error: unknown | null }>>;
-  claimNextPending(jobId: string, startedAtMs: number): Promise<{ id: string; itemKey: string; position: number; attemptCount: number; input: unknown } | null>;
-  completeItem(input: { jobId: string; itemId: string; result: unknown; assets: Asset[]; primaryAssetId: string; finishedAtMs: number }): Promise<void>;
+  claimNextPending(jobId: string, startedAtMs: number, keepJobPaused?: boolean): Promise<{ id: string; itemKey: string; position: number; attemptCount: number; input: unknown } | null>;
+  completeItem(input: { jobId: string; itemId: string; result: unknown; assets: Asset[]; primaryAssetId: string; finishedAtMs: number; pauseWithPending?: boolean }): Promise<void>;
   failItem(input: { jobId: string; itemId: string; error: unknown; finishedAtMs: number; haltJob?: boolean }): Promise<void>;
   retryItem(jobId: string, itemId: string): Promise<void>;
+  continueJob(jobId: string): Promise<void>;
   recoverInterrupted(): Promise<number>;
   listRunnable(): Promise<Array<{ id: string; bookletId: string; jobType: "references" | "pages" | "export" }>>;
 };
@@ -755,7 +756,7 @@ export function createRepositories(database: Database): Repositories {
         const rows = await database.select().from(generationItems).where(eq(generationItems.jobId, jobId)).orderBy(asc(generationItems.position));
         return rows.map((item) => ({ id: item.id, itemKey: item.itemKey, position: item.position, status: item.status, attemptCount: item.attemptCount, input: parseJson(item.inputJson), result: item.resultJson ? parseJson(item.resultJson) : null, assetId: item.assetId, error: item.errorJson ? parseJson(item.errorJson) : null }));
       },
-      async claimNextPending(jobId, startedAtMs) {
+      async claimNextPending(jobId, startedAtMs, keepJobPaused = false) {
         return database.transaction(async (transaction) => {
           const item = (await transaction.select().from(generationItems)
             .where(sql`${generationItems.jobId} = ${jobId} and ${generationItems.status} = 'pending'`)
@@ -764,7 +765,7 @@ export function createRepositories(database: Database): Repositories {
           const claimed = await transaction.update(generationItems).set({ status: "running", attemptCount: item.attemptCount + 1, startedAtMs, finishedAtMs: null })
             .where(sql`${generationItems.id} = ${item.id} and ${generationItems.status} = 'pending'`).returning({ id: generationItems.id });
           if (!claimed[0]) return null;
-          await transaction.update(generationJobs).set({ status: "running", startedAtMs, updatedAtMs: startedAtMs }).where(eq(generationJobs.id, jobId));
+          await transaction.update(generationJobs).set({ status: keepJobPaused ? "paused" : "running", startedAtMs, updatedAtMs: startedAtMs }).where(eq(generationJobs.id, jobId));
           return { id: item.id, itemKey: item.itemKey, position: item.position, attemptCount: item.attemptCount + 1, input: parseJson(item.inputJson) };
         });
       },
@@ -778,7 +779,8 @@ export function createRepositories(database: Database): Repositories {
             .where(eq(generationItems.id, input.itemId));
           const remaining = await transaction.select({ count: sql<number>`count(*)` }).from(generationItems)
             .where(sql`${generationItems.jobId} = ${input.jobId} and ${generationItems.status} != 'succeeded'`);
-          await transaction.update(generationJobs).set({ status: Number(remaining[0]?.count ?? 0) === 0 ? "succeeded" : "running", finishedAtMs: Number(remaining[0]?.count ?? 0) === 0 ? input.finishedAtMs : null, updatedAtMs: input.finishedAtMs })
+          const remainingCount = Number(remaining[0]?.count ?? 0);
+          await transaction.update(generationJobs).set({ status: remainingCount === 0 ? "succeeded" : input.pauseWithPending ? "paused" : "running", finishedAtMs: remainingCount === 0 ? input.finishedAtMs : null, updatedAtMs: input.finishedAtMs })
             .where(eq(generationJobs.id, input.jobId));
         });
       },
@@ -796,8 +798,12 @@ export function createRepositories(database: Database): Repositories {
       async retryItem(jobId, itemId) {
         await database.transaction(async (transaction) => {
           await transaction.update(generationItems).set({ status: "pending", errorJson: null, finishedAtMs: null }).where(sql`${generationItems.id} = ${itemId} and ${generationItems.jobId} = ${jobId} and ${generationItems.status} = 'failed'`);
-          await transaction.update(generationJobs).set({ status: "pending", errorJson: null, finishedAtMs: null, updatedAtMs: Date.now() }).where(eq(generationJobs.id, jobId));
+          await transaction.update(generationJobs).set({ status: "paused", errorJson: null, finishedAtMs: null, updatedAtMs: Date.now() }).where(eq(generationJobs.id, jobId));
         });
+      },
+      async continueJob(jobId) {
+        await database.update(generationJobs).set({ status: "pending", errorJson: null, finishedAtMs: null, updatedAtMs: Date.now() })
+          .where(sql`${generationJobs.id} = ${jobId} and ${generationJobs.status} = 'paused'`);
       },
       async recoverInterrupted() {
         return database.transaction(async (transaction) => {
@@ -842,7 +848,7 @@ export function createRepositories(database: Database): Repositories {
         const row = job[0];
         if (row.jobType !== "references" && row.jobType !== "pages" && row.jobType !== "export") throw new Error("Unknown generation job type.");
         return {
-          id: row.id, bookletId: row.bookletId, jobType: row.jobType, status: row.status as "pending" | "running" | "partial" | "succeeded" | "failed" | "cancelled", updatedAt: iso(row.updatedAtMs),
+          id: row.id, bookletId: row.bookletId, jobType: row.jobType, status: row.status as "pending" | "running" | "partial" | "paused" | "succeeded" | "failed" | "cancelled", updatedAt: iso(row.updatedAtMs),
           items: items.map((item) => ({ id: item.id, itemKey: item.itemKey, position: item.position, status: item.status as "pending" | "running" | "succeeded" | "failed", attemptCount: item.attemptCount, error: item.errorJson ? parseJson(item.errorJson) : null })),
         };
       },

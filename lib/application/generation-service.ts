@@ -24,11 +24,6 @@ type ReferenceItem = {
   referenceRequired: boolean;
 };
 
-function retryDelay(attempt: number): number {
-  // attempt is the completed attempt count: retry once after ~1s, then ~3s.
-  return attempt === 1 ? 1_000 : 3_000;
-}
-
 const ACTIVE_JOB_RUNS = Symbol.for("kids-booklet-poc.active-generation-jobs");
 
 function activeJobRuns(): Map<string, Promise<void>> {
@@ -48,14 +43,6 @@ function compactPromptField(value: string, maximum = 480): string {
 
 function compactPromptItems(values: string[], maximumPerItem = 240, maximumItems = 12): string[] {
   return [...new Set(values.filter(Boolean).map((value) => compactPromptField(value, maximumPerItem)))].slice(0, maximumItems);
-}
-
-function isExhaustedBillingFailure(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const providerError = (error as { providerError?: unknown }).providerError;
-  if (!providerError || typeof providerError !== "object") return false;
-  const { code, type } = providerError as { code?: unknown; type?: unknown };
-  return code === "credit_balance_exhausted" || code === "insufficient_quota" || type === "insufficient_quota";
 }
 
 export class GenerationService {
@@ -110,12 +97,13 @@ export class GenerationService {
     });
   }
 
-  public async runReferenceJob(bookletId: string, jobId: string) {
+  public async runReferenceJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}) {
     return this.runExclusively(jobId, async () => {
-    if (await this.haltForSavedBillingBlock(jobId)) return;
+    if (!options.retryItemId && await this.haltForSavedFailure(jobId)) return;
     for (;;) {
-      const item = await this.repositories.jobs.claimNextPending(jobId, Date.now());
+      const item = await this.repositories.jobs.claimNextPending(jobId, Date.now(), Boolean(options.retryItemId));
       if (!item) break;
+      if (options.retryItemId && item.id !== options.retryItemId) throw new Error("The requested failed reference is not the next pending item.");
       const input = item.input as { item: ReferenceItem; request: ImageRequest };
       const request = imageRequestSchema.parse(input.request);
       await this.diagnostics.record({
@@ -135,13 +123,8 @@ export class GenerationService {
         if (result.status === "failed" || !result.bytesBase64 || !result.mimeType || !result.width || !result.height) {
           const failure = result.error ?? { kind: "unavailable" as const, message: "Image provider returned no image." };
           await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error: new Error(failure.message) });
-          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now(), haltJob: failure.kind === "blocked" });
-          if (failure.kind === "blocked") break;
-          if (result.error?.kind === "transient" && item.attemptCount <= 2) {
-            await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
-            await this.repositories.jobs.retryItem(jobId, item.id);
-          }
-          continue;
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now(), haltJob: true });
+          break;
         }
         const assetId = randomUUID();
         const bytes = Buffer.from(result.bytesBase64, "base64");
@@ -154,25 +137,28 @@ export class GenerationService {
           assets: [{ id: assetId, bookletId, kind: "reference", uri, mimeType: result.mimeType, width: result.width, height: result.height, sourceAssetId: null, metadata: { role: input.item.kind === "character" ? "character_identity" : "location_continuity", entityId: input.item.entityId, jobId, request }, createdAtMs: Date.now() }],
           primaryAssetId: assetId,
           finishedAtMs: Date.now(),
+          pauseWithPending: Boolean(options.retryItemId),
         });
+        if (options.retryItemId) break;
       } catch (error) {
         await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
-        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "unavailable", message: describeGenerationError(error).message }, finishedAtMs: Date.now() });
+        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "unavailable", message: describeGenerationError(error).message }, finishedAtMs: Date.now(), haltJob: true });
+        break;
       }
     }
     await this.finalizeReferences(bookletId, jobId);
     });
   }
 
-  public startReferenceJob(bookletId: string, jobId: string): void {
-    void this.runReferenceJob(bookletId, jobId).catch((error) => {
+  public startReferenceJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}): void {
+    void this.runReferenceJob(bookletId, jobId, options).catch((error) => {
       console.error(`Reference job ${jobId} stopped unexpectedly:`, error);
     });
   }
 
   public async retryReferenceItem(bookletId: string, jobId: string, itemId: string) {
     await this.repositories.jobs.retryItem(jobId, itemId);
-    if (process.env.VITEST) return this.runReferenceJob(bookletId, jobId);
+    return this.runReferenceJob(bookletId, jobId, { retryItemId: itemId });
   }
 
   public async createPageJob(bookletId: string, options: { pageIds?: string[]; revisionKey?: string } = {}) {
@@ -238,12 +224,13 @@ export class GenerationService {
     });
   }
 
-  public async runPageJob(bookletId: string, jobId: string) {
+  public async runPageJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}) {
     return this.runExclusively(jobId, async () => {
-    if (await this.haltForSavedBillingBlock(jobId)) return;
+    if (!options.retryItemId && await this.haltForSavedFailure(jobId)) return;
     for (;;) {
-      const item = await this.repositories.jobs.claimNextPending(jobId, Date.now());
+      const item = await this.repositories.jobs.claimNextPending(jobId, Date.now(), Boolean(options.retryItemId));
       if (!item) break;
+      if (options.retryItemId && item.id !== options.retryItemId) throw new Error("The requested failed page is not the next pending item.");
       const input = item.input as { page: Parameters<typeof composePage>[0]["page"]; geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5"; request: ImageRequest };
       const request = imageRequestSchema.parse(input.request);
       await this.diagnostics.record({
@@ -258,8 +245,8 @@ export class GenerationService {
         if (sourceReferences.some((reference) => reference === null)) {
           const error = new Error("A Page Plan reference asset is missing.");
           await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
-          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: error.message }, finishedAtMs: Date.now() });
-          continue;
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: error.message }, finishedAtMs: Date.now(), haltJob: true });
+          break;
         }
         const usableReferences = sourceReferences.filter((reference) => reference !== null);
         const { result: generated, startedAtMs } = await this.executeImageWithDiagnostics({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, request, inputAssets: usableReferences });
@@ -274,13 +261,8 @@ export class GenerationService {
         if (generated.status === "failed" || !generated.bytesBase64 || !generated.mimeType || !generated.width || !generated.height) {
           const failure = generated.error ?? { kind: "unavailable" as const, message: "Image provider returned no page image." };
           await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error: new Error(failure.message) });
-          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now(), haltJob: failure.kind === "blocked" });
-          if (failure.kind === "blocked") break;
-          if (generated.error?.kind === "transient" && item.attemptCount <= 2) {
-            await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
-            await this.repositories.jobs.retryItem(jobId, item.id);
-          }
-          continue;
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now(), haltJob: true });
+          break;
         }
         const sourceId = randomUUID();
         const sourceBytes = Buffer.from(generated.bytesBase64, "base64");
@@ -292,31 +274,33 @@ export class GenerationService {
         await (await this.getAssetStore()).put(composedUri, composed.bytes, "image/png");
         const now = Date.now();
         await this.repositories.jobs.completeItem({
-          jobId, itemId: item.id, primaryAssetId: composedId, finishedAtMs: now,
+          jobId, itemId: item.id, primaryAssetId: composedId, finishedAtMs: now, pauseWithPending: Boolean(options.retryItemId),
           result: { sourceAssetId: sourceId, composedAssetId: composedId, request, provider: generated.provider, model: generated.model, usage: generated.usage },
           assets: [
             { id: sourceId, bookletId, kind: "page_source", uri: sourceUri, mimeType: generated.mimeType, width: generated.width, height: generated.height, sourceAssetId: null, metadata: { jobId, request }, createdAtMs: now },
             { id: composedId, bookletId, kind: "page_composed", uri: composedUri, mimeType: "image/png", width: composed.width, height: composed.height, sourceAssetId: sourceId, metadata: { jobId, pageIndex: item.position }, createdAtMs: now },
           ],
         });
+        if (options.retryItemId) break;
       } catch (error) {
         await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
-        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "unavailable", message: describeGenerationError(error).message }, finishedAtMs: Date.now() });
+        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "unavailable", message: describeGenerationError(error).message }, finishedAtMs: Date.now(), haltJob: true });
+        break;
       }
     }
     await this.finalizePages(bookletId, jobId);
     });
   }
 
-  public startPageJob(bookletId: string, jobId: string): void {
-    void this.runPageJob(bookletId, jobId).catch((error) => {
+  public startPageJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}): void {
+    void this.runPageJob(bookletId, jobId, options).catch((error) => {
       console.error(`Page job ${jobId} stopped unexpectedly:`, error);
     });
   }
 
   public async retryPageItem(bookletId: string, jobId: string, itemId: string) {
     await this.repositories.jobs.retryItem(jobId, itemId);
-    if (process.env.VITEST) return this.runPageJob(bookletId, jobId);
+    return this.runPageJob(bookletId, jobId, { retryItemId: itemId });
   }
 
   private async finalizeReferences(bookletId: string, jobId: string) {
@@ -355,14 +339,13 @@ export class GenerationService {
     });
   }
 
-  private async haltForSavedBillingBlock(jobId: string): Promise<boolean> {
-    const blockedItem = (await this.repositories.jobs.getItems(jobId))
-      .find((item) => item.status === "failed" && isExhaustedBillingFailure(item.error));
-    if (!blockedItem) return false;
+  private async haltForSavedFailure(jobId: string): Promise<boolean> {
+    const failedItem = (await this.repositories.jobs.getItems(jobId)).find((item) => item.status === "failed");
+    if (!failedItem) return false;
     await this.repositories.jobs.failItem({
       jobId,
-      itemId: blockedItem.id,
-      error: blockedItem.error,
+      itemId: failedItem.id,
+      error: failedItem.error,
       finishedAtMs: Date.now(),
       haltJob: true,
     });

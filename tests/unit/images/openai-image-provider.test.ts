@@ -70,13 +70,16 @@ describe("OpenAI image provider", () => {
     expect((await sharp(Buffer.from(result.bytesBase64!, "base64")).metadata()).format).toBe("png");
   });
 
-  it("keeps edit input fidelity low in fast mode", async () => {
+  it("omits unsupported input fidelity from gpt-image-2 edits in fast mode", async () => {
     const source = await sharp({ create: { width: 8, height: 8, channels: 4, background: "blue" } }).png().toBuffer();
     const jpeg = await sharp(source).jpeg().toBuffer();
-    const edit = vi.fn(async () => ({
-      _request_id: "request-fast-edit",
-      data: [{ b64_json: jpeg.toString("base64") }],
-    }));
+    const edit = vi.fn(async (input: unknown) => {
+      void input;
+      return {
+        _request_id: "request-fast-edit",
+        data: [{ b64_json: jpeg.toString("base64") }],
+      };
+    });
     const client = { images: { edit } } as unknown as OpenAI;
     const editRequest: ImageRequest = {
       ...request,
@@ -91,10 +94,10 @@ describe("OpenAI image provider", () => {
 
     expect(edit).toHaveBeenCalledWith(expect.objectContaining({
       quality: "low",
-      input_fidelity: "low",
       output_format: "jpeg",
       output_compression: 60,
     }));
+    expect(edit.mock.calls[0]?.[0]).not.toHaveProperty("input_fidelity");
     expect(result.status).toBe("succeeded");
   });
 });

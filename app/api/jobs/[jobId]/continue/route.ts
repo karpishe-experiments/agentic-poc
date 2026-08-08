@@ -18,6 +18,7 @@ export async function POST(_request: Request, { params }: RouteProperties) {
     if (job.items.some((item) => item.status === "running")) return Response.json({ error: { code: "job_already_running", message: "Generation is already running." } }, { status: 409 });
     if (!job.items.some((item) => item.status === "pending")) return Response.json({ error: { code: "nothing_to_continue", message: "This job has no pending items." } }, { status: 409 });
 
+    await repositories.jobs.continueJob(job.id);
     const generation = new GenerationService({ database, repositories });
     if (job.jobType === "references") generation.startReferenceJob(job.bookletId, job.id);
     else if (job.jobType === "pages") generation.startPageJob(job.bookletId, job.id);

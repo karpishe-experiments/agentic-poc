@@ -12,7 +12,7 @@ function progressText(snapshot: BookletSnapshot): string {
   if (snapshot.activeJobs.length === 0) return "No generation is running.";
   const completed = snapshot.activeJobs.reduce((sum, job) => sum + job.progress.completed, 0);
   const total = snapshot.activeJobs.reduce((sum, job) => sum + job.progress.total, 0);
-  if (snapshot.activeJobs.some((job) => job.status === "failed")) return `Generation paused: ${completed} of ${total} items completed.`;
+  if (snapshot.activeJobs.some((job) => job.status === "failed" || job.status === "paused")) return `Generation paused: ${completed} of ${total} items completed.`;
   return `Generating ${completed} of ${total} items.`;
 }
 

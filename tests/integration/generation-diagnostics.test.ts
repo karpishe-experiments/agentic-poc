@@ -52,7 +52,7 @@ function request() {
 }
 
 describe("generation diagnostics", () => {
-  it("persists a safe failure trail, a waiting heartbeat, and continues to the next item", async () => {
+  it("persists a safe failure trail and leaves the next item pending", async () => {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const directory = await mkdtemp(path.join(os.tmpdir(), "kids-generation-diagnostics-"));
     const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
@@ -106,18 +106,16 @@ describe("generation diagnostics", () => {
       .split("\n")
       .map((line) => JSON.parse(line) as { event: string; error?: { status?: number; code?: string; requestId?: string } });
 
-    expect(items.map((item) => item.status)).toEqual(["failed", "succeeded"]);
+    expect(items.map((item) => item.status)).toEqual(["failed", "pending"]);
     expect(trail).toEqual(expect.arrayContaining([
       expect.objectContaining({ event: "provider_request_started", itemId: firstItemId }),
       expect.objectContaining({ event: "provider_request_threw", itemId: firstItemId, error: expect.objectContaining({ status: 503, code: "ECONNRESET", requestId: "req_diagnostic" }) }),
       expect.objectContaining({ event: "job_item_failed", itemId: firstItemId }),
-      expect.objectContaining({ event: "provider_request_still_waiting", itemId: secondItemId }),
-      expect.objectContaining({ event: "provider_request_completed", itemId: secondItemId, resultStatus: "succeeded" }),
     ]));
     expect(JSON.stringify(trail)).not.toContain("A safe test prompt");
   });
 
-  it("halts on exhausted billing and resumes the failed item plus retained pending items after retry", async () => {
+  it("retries one failed item, pauses, and requires Continue for retained pending items", async () => {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const directory = await mkdtemp(path.join(os.tmpdir(), "kids-generation-blocked-"));
     const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
@@ -208,6 +206,18 @@ describe("generation diagnostics", () => {
 
     balanceAvailable = true;
     await generation.retryReferenceItem(booklet.id, jobId, failedItemId);
+
+    expect(calls).toBe(2);
+    expect(await repositories.jobs.getStatus(jobId)).toMatchObject({
+      status: "paused",
+      items: [
+        { id: failedItemId, status: "succeeded", attemptCount: 2 },
+        { id: pendingItemId, status: "pending", attemptCount: 0 },
+      ],
+    });
+
+    await repositories.jobs.continueJob(jobId);
+    await generation.runReferenceJob(booklet.id, jobId);
 
     expect(calls).toBe(3);
     expect(await repositories.jobs.getStatus(jobId)).toMatchObject({

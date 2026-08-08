@@ -30,7 +30,7 @@ export const generationProgressSchema = z.object({
 export const activeJobSummarySchema = z.object({
   id: opaqueIdSchema,
   jobType: z.enum(["references", "pages", "export"]),
-  status: z.enum(["pending", "running", "partial", "succeeded", "failed", "cancelled"]),
+  status: z.enum(["pending", "running", "partial", "paused", "succeeded", "failed", "cancelled"]),
   progress: generationProgressSchema,
   updatedAt: utcIsoTimestampSchema,
 });

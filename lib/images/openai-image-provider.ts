@@ -52,7 +52,7 @@ export class OpenAIImageProvider implements ImageProvider {
         ? { output_format: "jpeg" as const, output_compression: 60 }
         : {};
       const response = request.operation === "edit"
-        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, quality: request.quality === "balanced" ? "medium" : request.quality, ...(this.fastOutput ? { input_fidelity: "low" as const } : {}), ...fastOutputOptions })
+        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, quality: request.quality === "balanced" ? "medium" : request.quality, ...fastOutputOptions })
         : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, quality: request.quality === "balanced" ? "medium" : request.quality, ...fastOutputOptions });
       const data = "data" in response && response.data ? response.data[0] : undefined;
       const bytesBase64 = data?.b64_json ?? null;

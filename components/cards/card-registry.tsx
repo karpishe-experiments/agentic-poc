@@ -149,7 +149,7 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
   const hasRunning = items.some((item) => item.status === "running");
   const hasPending = items.some((item) => item.status === "pending");
   const canContinue = Boolean(card.payload.jobId && items.length && !failedItems.length && !hasRunning && hasPending);
-  const label = failedItems.length ? "Stopped" : progress.isLive ? "Generating" : card.payload.currentLabel ?? "Working";
+  const label = failedItems.length ? "Stopped" : job?.status === "paused" ? "Paused" : progress.isLive ? "Generating" : card.payload.currentLabel ?? "Working";
   const itemLabel = (item: JobProgressItem) => card.variant === "page_batch"
     ? item.position === 0 ? "Cover" : `Page ${item.position}`
     : "Reference";

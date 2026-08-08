@@ -83,10 +83,10 @@ describe("CardRegistry", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       if (init?.method === "POST") {
         retried = true;
-        return new Response(JSON.stringify({ data: { status: "pending", items: failedItems.map((item) => item.status === "failed" ? { ...item, status: "pending", error: null } : item) } }));
+        return new Response(JSON.stringify({ data: { status: "paused", items: failedItems.map((item) => item.status === "failed" ? { ...item, status: "succeeded", error: null } : item) } }));
       }
       return new Response(JSON.stringify({ data: retried
-        ? { status: "running", items: failedItems.map((item) => item.status === "failed" ? { ...item, status: "running", error: null } : item) }
+        ? { status: "paused", items: failedItems.map((item) => item.status === "failed" ? { ...item, status: "succeeded", error: null } : item) }
         : { status: "failed", items: failedItems } }));
     });
     const rendered = render(<CardRegistry card={progress} />);
@@ -96,7 +96,8 @@ describe("CardRegistry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry failed page" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/jobs/${progress.payload.jobId}/items/${failedItems[1]!.id}/retry`, { method: "POST" }));
-    await waitFor(() => expect(screen.getByText("Generating: 1 of 3")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Paused: 2 of 3")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Continue generating images" })).toBeTruthy();
     rendered.unmount();
   });
 
