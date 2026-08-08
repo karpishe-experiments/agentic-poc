@@ -10,7 +10,7 @@ export const imageProviderCapabilitiesSchema = z.object({
   provider: z.literal("openai"),
   supportsEdit: z.boolean(),
   maxReferenceImages: z.number().int().positive(),
-  supportedSizes: z.array(z.enum(["1024x1024", "1536x1024", "1024x1536", "1536x1536", "1600x1280", "1280x1600"])).min(1),
+  supportedSizes: z.array(z.enum(["1024x1024", "1536x1024", "1024x1536"])).min(1),
 });
 
 export const imagePromptPlanSchema = z.object({
@@ -34,7 +34,7 @@ export const imageRequestSchema = z.object({
   promptPlan: imagePromptPlanSchema,
   prompt: z.string().min(1).max(8_000),
   geometry: geometrySchema,
-  quality: z.enum(["low", "medium", "high", "balanced"]),
+  quality: z.enum(["disabled", "low", "high"]),
   references: z.array(z.object({ assetId: opaqueIdSchema, role: referenceRoleSchema })).max(8),
   editTargetAssetId: opaqueIdSchema.nullable(),
 }).superRefine((request, context) => {

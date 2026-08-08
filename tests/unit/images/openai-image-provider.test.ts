@@ -50,35 +50,37 @@ describe("OpenAI image provider", () => {
     });
   });
 
-  it("requests compressed JPEG output in fast mode and normalizes it for persisted PNG assets", async () => {
-    const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: "orange" } }).jpeg().toBuffer();
-    const generate = vi.fn(async () => ({
-      _request_id: "request-fast",
-      data: [{ b64_json: jpeg.toString("base64") }],
-    }));
+  it("sends configured output quality and supported native sizes", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "orange" } }).png().toBuffer();
+    const generate = vi.fn(async (input: unknown) => {
+      void input;
+      return { _request_id: "request-quality", data: [{ b64_json: png.toString("base64") }] };
+    });
     const client = { images: { generate } } as unknown as OpenAI;
 
-    const result = await new OpenAIImageProvider(client, { fastOutput: true }).execute(request);
-
-    expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-      quality: "low",
-      size: "1536x1536",
-      output_format: "jpeg",
-      output_compression: 60,
-    }));
-    expect(result.status).toBe("succeeded");
-    expect(result.mimeType).toBe("image/png");
-    expect((await sharp(Buffer.from(result.bytesBase64!, "base64")).metadata()).format).toBe("png");
+    const cases = [
+      ["square_1_1", "1024x1024"],
+      ["landscape_5_4", "1536x1024"],
+      ["portrait_4_5", "1024x1536"],
+    ] as const;
+    const provider = new OpenAIImageProvider(client);
+    for (const [geometry, size] of cases) {
+      const result = await provider.execute({ ...request, geometry });
+      expect(generate).toHaveBeenLastCalledWith(expect.objectContaining({ quality: "low", size }));
+      expect(result.status).toBe("succeeded");
+      expect(result.mimeType).toBe("image/png");
+      expect((await sharp(Buffer.from(result.bytesBase64!, "base64")).metadata()).format).toBe("png");
+    }
+    expect(generate.mock.calls[0]?.[0]).not.toHaveProperty("output_format");
   });
 
-  it("omits unsupported input fidelity from gpt-image-2 edits in fast mode", async () => {
+  it("omits input fidelity from gpt-image-2 edits while preserving output quality", async () => {
     const source = await sharp({ create: { width: 8, height: 8, channels: 4, background: "blue" } }).png().toBuffer();
-    const jpeg = await sharp(source).jpeg().toBuffer();
     const edit = vi.fn(async (input: unknown) => {
       void input;
       return {
-        _request_id: "request-fast-edit",
-        data: [{ b64_json: jpeg.toString("base64") }],
+        _request_id: "request-gpt-image-2-edit",
+        data: [{ b64_json: source.toString("base64") }],
       };
     });
     const client = { images: { edit } } as unknown as OpenAI;
@@ -88,17 +90,46 @@ describe("OpenAI image provider", () => {
       references: [{ assetId: "00000000-0000-4000-8000-000000000701", role: "character_identity" }],
     };
 
-    const result = await new OpenAIImageProvider(client, { fastOutput: true }).execute(editRequest, [{
+    const result = await new OpenAIImageProvider(client).execute(editRequest, [{
       assetId: editRequest.references[0]!.assetId,
       bytes: source,
     }]);
 
     expect(edit).toHaveBeenCalledWith(expect.objectContaining({
       quality: "low",
-      output_format: "jpeg",
-      output_compression: 60,
     }));
     expect(edit.mock.calls[0]?.[0]).not.toHaveProperty("input_fidelity");
     expect(result.status).toBe("succeeded");
+  });
+
+  it("sends matching output quality and input fidelity for supported edits", async () => {
+    const source = await sharp({ create: { width: 8, height: 8, channels: 4, background: "green" } }).png().toBuffer();
+    const edit = vi.fn(async () => ({ _request_id: "request-fidelity", data: [{ b64_json: source.toString("base64") }] }));
+    const client = { images: { edit } } as unknown as OpenAI;
+    const editRequest: ImageRequest = {
+      ...request,
+      model: "gpt-image-1.5",
+      operation: "edit",
+      quality: "high",
+      references: [{ assetId: "00000000-0000-4000-8000-000000000702", role: "character_identity" }],
+    };
+
+    await new OpenAIImageProvider(client).execute(editRequest, [{ assetId: editRequest.references[0]!.assetId, bytes: source }]);
+
+    expect(edit).toHaveBeenCalledWith(expect.objectContaining({ quality: "high", input_fidelity: "high" }));
+  });
+
+  it("omits both quality controls when disabled", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "white" } }).png().toBuffer();
+    const generate = vi.fn(async (input: unknown) => {
+      void input;
+      return { _request_id: "request-default", data: [{ b64_json: png.toString("base64") }] };
+    });
+    const client = { images: { generate } } as unknown as OpenAI;
+
+    await new OpenAIImageProvider(client).execute({ ...request, quality: "disabled" });
+
+    expect(generate.mock.calls[0]?.[0]).not.toHaveProperty("quality");
+    expect(generate.mock.calls[0]?.[0]).not.toHaveProperty("input_fidelity");
   });
 });

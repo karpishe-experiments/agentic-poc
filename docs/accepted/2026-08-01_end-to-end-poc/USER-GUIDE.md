@@ -20,9 +20,9 @@ The workspace always shows Audience Profile, Story Plan, Visual Style, Visual Bi
 
 The rail and conversation persist card state. Reloading a workspace keeps the selected rail item, saved message history, artifact versions, and current active card. If a local browser session cannot load current files, choose **Reload workspace**; it does not discard saved booklet work.
 
-## Choose image speed for local development
+## Choose image provider and quality
 
-Set `IMAGE_PROVIDER_MODE=fast` in `.env.local` when you want real OpenAI images with development speed prioritized over fidelity. Fast mode uses low quality for text-free references and compressed JPEG transfer, but lettered pages keep a medium-quality minimum for readability before conversion to saved PNG assets. Use `IMAGE_PROVIDER_MODE=real` when you want the quality selected by `IMAGE_QUALITY`, or `fake` for deterministic no-cost placeholders. Set `COMIC_COPY_MODE=creative` (default) to let the writing specialist adapt beats into comic copy before review, or `exact` to classify/split existing words without rewriting them. Restart the development server after changing either mode.
+Set `IMAGE_PROVIDER_MODE=real` in `.env.local` for OpenAI images, or `fake` for deterministic no-cost placeholders. Set `OPENAI_IMAGE_QUALITY=disabled` to use provider defaults, or `low`/`high` to apply that output quality to every reference and page. Supported edit models also receive the same input fidelity; `gpt-image-2` safely omits input fidelity because it does not accept the parameter. Set `COMIC_COPY_MODE=creative` (default) to let the writing specialist adapt beats into comic copy before review, or `exact` to classify/split existing words without rewriting them. Restart the development server after changing these values.
 
 ## How the local workflow fits together
 

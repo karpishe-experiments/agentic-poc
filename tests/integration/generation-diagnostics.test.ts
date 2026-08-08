@@ -45,7 +45,7 @@ function request() {
     },
     prompt: "A safe test prompt that must not appear in diagnostics.",
     geometry: "square_1_1",
-    quality: "balanced",
+    quality: "disabled",
     references: [],
     editTargetAssetId: null,
   });

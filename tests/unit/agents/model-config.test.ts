@@ -13,9 +13,9 @@ describe("model role configuration", () => {
     OPENAI_REVIEW_MODEL: "review-model",
     OPENAI_REVIEW_REASONING: "high",
     OPENAI_IMAGE_MODEL: "image-model",
+    OPENAI_IMAGE_QUALITY: "disabled",
     DATABASE_URL: "file:./test.db",
     DATA_ROOT: "./test-assets",
-    IMAGE_QUALITY: "balanced",
     OPENAI_TRACE_INCLUDE_SENSITIVE_DATA: "false",
   };
 

@@ -1,41 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { getServerEnv, resolveComicCopyMode, resolveImageProviderProfile, resolvePageImageQuality } from "@/lib/config/env";
+import { getServerEnv, resolveComicCopyMode, resolveImageProviderProfile } from "@/lib/config/env";
 
 describe("image provider environment", () => {
-  it("uses the real provider and forces low-latency settings in fast mode", () => {
-    const env = getServerEnv({
-      NODE_ENV: "test",
-      OPENAI_API_KEY: "test-key",
-      IMAGE_PROVIDER_MODE: "fast",
-      IMAGE_QUALITY: "high",
-    });
-
-    expect(resolveImageProviderProfile(env)).toEqual({
-      runtime: "real",
-      quality: "low",
-      fastOutput: true,
-    });
-  });
-
-  it("preserves configured quality for normal real mode", () => {
+  it("supports only fake and real provider modes with an independent quality control", () => {
     const env = getServerEnv({
       NODE_ENV: "test",
       OPENAI_API_KEY: "test-key",
       IMAGE_PROVIDER_MODE: "real",
-      IMAGE_QUALITY: "high",
+      OPENAI_IMAGE_QUALITY: "high",
     });
 
     expect(resolveImageProviderProfile(env)).toEqual({
       runtime: "real",
       quality: "high",
-      fastOutput: false,
     });
+    expect(() => getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key", IMAGE_PROVIDER_MODE: "fast" })).toThrow();
   });
 
-  it("defaults comic copy to creative and keeps lettered pages at medium or above", () => {
+  it("defaults image quality to disabled and comic copy to creative", () => {
+    const env = getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key" });
+    expect(env.OPENAI_IMAGE_QUALITY).toBe("disabled");
     expect(resolveComicCopyMode({})).toBe("creative");
     expect(resolveComicCopyMode({ COMIC_COPY_MODE: "exact" })).toBe("exact");
-    expect(resolvePageImageQuality("low")).toBe("medium");
-    expect(resolvePageImageQuality("high")).toBe("high");
   });
 });

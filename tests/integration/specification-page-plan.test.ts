@@ -96,7 +96,7 @@ describe("specification and Page Plan workflow", () => {
     await artifacts.approve(booklet.id, "page_plan", upgradedPlan.currentVersion!.id);
     const initialPageJob = await generation.createPageJob(booklet.id);
     const initialItems = await createRepositories(database).jobs.getItems(initialPageJob.id);
-    expect((initialItems[0]!.input as { request: { quality: string; promptPlan: { lettering?: unknown[] } } }).request).toMatchObject({ quality: "medium", promptPlan: { lettering: expect.any(Array) } });
+    expect((initialItems[0]!.input as { request: { quality: string; promptPlan: { lettering?: unknown[] } } }).request).toMatchObject({ quality: "low", promptPlan: { lettering: expect.any(Array) } });
     await generation.runPageJob(booklet.id, initialPageJob.id);
     const finalReview = await waitForCard(bookletService, booklet.id, "Review final pages");
     await cardService.submit(booklet.id, { cardId: finalReview.cardId, responseId: "00000000-0000-4000-8000-000000000736", action: "approve_and_continue", value: finalReview.payload.items?.map((item) => item.assetId) });

@@ -5,10 +5,14 @@ import { imageRequestSchema, imageResultSchema, type ImageRequest, type ImageRes
 import type { ImageProvider } from "@/lib/images/provider";
 
 const sizeByGeometry = {
-  square_1_1: "1536x1536",
-  landscape_5_4: "1600x1280",
-  portrait_4_5: "1280x1600",
+  square_1_1: "1024x1024",
+  landscape_5_4: "1536x1024",
+  portrait_4_5: "1024x1536",
 } as const;
+
+function supportsInputFidelity(model: string): boolean {
+  return ["gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"].some((supported) => model === supported || model.startsWith(`${supported}-`));
+}
 
 function errorKind(error: unknown): "transient" | "user_correctable" | "blocked" | "unavailable" {
   if (error instanceof OpenAI.APIError) {
@@ -32,13 +36,11 @@ function providerErrorDetails(error: unknown): { status: number | null; code: st
 
 export class OpenAIImageProvider implements ImageProvider {
   public readonly runtime = "real" as const;
-  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1536x1536", "1600x1280", "1280x1600"] as ["1536x1536", "1600x1280", "1280x1600"] };
+  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1024x1024", "1536x1024", "1024x1536"] as ["1024x1024", "1536x1024", "1024x1536"] };
   private readonly client: OpenAI;
-  private readonly fastOutput: boolean;
 
-  public constructor(client?: OpenAI, options: { fastOutput?: boolean } = {}) {
+  public constructor(client?: OpenAI) {
     this.client = client ?? new OpenAI({ apiKey: getServerEnv().OPENAI_API_KEY });
-    this.fastOutput = options.fastOutput ?? false;
   }
 
   public async execute(input: ImageRequest, inputAssets: Array<{ assetId: string; bytes: Buffer }> = []): Promise<ImageResult> {
@@ -48,18 +50,17 @@ export class OpenAIImageProvider implements ImageProvider {
     }
     try {
       const size = sizeByGeometry[request.geometry];
-      const fastOutputOptions = this.fastOutput
-        ? { output_format: "jpeg" as const, output_compression: 60 }
+      const qualityOptions = request.quality === "disabled" ? {} : { quality: request.quality };
+      const fidelityOptions = request.quality !== "disabled" && supportsInputFidelity(request.model)
+        ? { input_fidelity: request.quality }
         : {};
       const response = request.operation === "edit"
-        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, quality: request.quality === "balanced" ? "medium" : request.quality, ...fastOutputOptions })
-        : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, quality: request.quality === "balanced" ? "medium" : request.quality, ...fastOutputOptions });
+        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, ...qualityOptions, ...fidelityOptions })
+        : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, ...qualityOptions });
       const data = "data" in response && response.data ? response.data[0] : undefined;
       const bytesBase64 = data?.b64_json ?? null;
       if (!bytesBase64) throw new Error("The image provider did not return image bytes.");
-      const outputBytes = this.fastOutput
-        ? await sharp(Buffer.from(bytesBase64, "base64")).png().toBuffer()
-        : Buffer.from(bytesBase64, "base64");
+      const outputBytes = Buffer.from(bytesBase64, "base64");
       const metadata = await sharp(outputBytes).metadata();
       const usage = "usage" in response && response.usage ? response.usage : null;
       return imageResultSchema.parse({

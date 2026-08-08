@@ -9,7 +9,7 @@ const request = {
   promptPlan: { purpose: "reference", subject: "Robin", action: "A clear reference pose", location: "a quiet garden", visualStyle: "soft watercolor", continuityConstraints: ["Keep the red chest."], preserve: ["Round silhouette"] },
   prompt: "reference prompt",
   geometry: "square_1_1" as const,
-  quality: "balanced" as const,
+  quality: "disabled" as const,
   references: [],
   editTargetAssetId: null,
 };

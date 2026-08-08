@@ -80,8 +80,8 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 - **Context:** Generating a single-scene comic page whose title, narration, dialogue, thoughts, and sound effects must participate naturally in the illustration.
 - **Observation:** Post-generation text panels obscured the composition and could not express speaker tails, narration hierarchy, thoughts, or action-integrated sound effects. A structured lettering contract allows prompt snapshots, speaker validation, accessible reading order, and selective recovery while leaving Sharp responsible only for geometry.
-- **Guidance:** Approve ordered lettering elements before generation; quote each exact string with its kind, speaker, delivery, placement, and reading order in the provider prompt; prohibit unapproved text; keep a medium-quality minimum for lettered pages; and use full-size review plus selective regeneration for provider-rendering defects. Do not draw reader-facing text or panels during image normalization.
-- **Evidence:** `lib/contracts/artifacts.ts`, `lib/images/prompt-serializer.ts`, `lib/composition/compose-page.ts`, and their focused tests; the full 85-test suite and production build passed on 2026-08-08.
+- **Guidance:** Approve ordered lettering elements before generation; quote each exact string with its kind, speaker, delivery, placement, and reading order in the provider prompt; prohibit unapproved text; expose quality as an explicit engineering choice; and use full-size review plus selective regeneration for provider-rendering defects. Do not draw reader-facing text or panels during image normalization.
+- **Evidence:** `lib/contracts/artifacts.ts`, `lib/images/prompt-serializer.ts`, `lib/composition/compose-page.ts`, and their focused tests; the full 86-test suite and production build passed on 2026-08-08.
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
 
@@ -202,12 +202,21 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
-### Resolve image runtime profiles and content-specific quality floors before constructing persisted requests
+### Keep provider selection separate from explicit image quality controls
 
-- **Context:** A local generative-image workflow supports deterministic fake images, configured-quality real images, and a low-latency real development profile.
-- **Observation:** Selecting the provider alone is insufficient when job creation hardcodes image quality; a named `fast` mode can otherwise fall through to the fake provider or still persist normal-quality requests. Low quality improves reference-generation latency but is inappropriate for pages that must render approved lettering. The Image API also supports JPEG output, which OpenAI documents as faster than PNG for latency-sensitive work.
-- **Guidance:** Resolve a named image profile once into provider runtime, request quality, and provider output options, then apply a content-specific quality floor before persisting each request. Fast mode may use low quality for text-free references, but lettered pages require at least medium. Normalize optimized transport formats at the provider boundary when downstream asset contracts require another format.
-- **Evidence:** `lib/config/env.ts`, `lib/application/generation-service.ts`, and `lib/images/openai-image-provider.ts`; focused environment/provider tests verify real-provider selection, reference low quality, lettered-page medium floor, compressed JPEG transport, exact requested dimensions, PNG normalization, and omission of `input_fidelity`. A live `gpt-image-2` edit rejected that SDK-typed parameter with HTTP 400; the corrected full suite passed 85 tests on 2026-08-08.
+- **Context:** A local generative-image workflow supports deterministic fake images and configured-quality real images across models with different edit capabilities.
+- **Observation:** Combining provider choice, transport optimization, output quality, and input fidelity in one `fast` mode obscured the actual request and introduced hidden page-quality overrides. Output `quality` is valid for generation and editing, while `input_fidelity` is edit-only and model-dependent; `gpt-image-2` rejects it because high input fidelity is already the default.
+- **Guidance:** Keep provider mode limited to fake/real and expose `disabled|low|high` quality independently. Persist that explicit setting without content-specific overrides. Omit both API controls when disabled; otherwise send `quality` for all requests and matching `input_fidelity` only for edits on a documented supporting-model allowlist. Unknown or unsupported models should omit input fidelity safely.
+- **Evidence:** `lib/config/env.ts`, `lib/application/generation-service.ts`, and `lib/images/openai-image-provider.ts`; focused tests verify provider-mode rejection, disabled omission, low/high output quality, supported edit fidelity, and `gpt-image-2` fidelity omission. A live `gpt-image-2` edit previously rejected `input_fidelity` with HTTP 400; the full 86-test suite and production build passed on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Separate provider-native request sizes from final composition canvases
+
+- **Context:** A booklet supports square, 5:4 landscape, and 4:5 portrait output while configured GPT Image models may accept only fixed native request sizes.
+- **Observation:** Requesting final canvas dimensions such as `1536x1536` directly caused a provider HTTP 400 on a fixed-size model, even though those dimensions are valid for the application’s composed asset. The supported native sizes do not exactly match every final booklet ratio.
+- **Guidance:** Declare and test a provider-specific geometry map independently from final canvas dimensions. Request `1024x1024`, `1536x1024`, or `1024x1536`, then normalize to the approved final canvas with crop/pad/resize that preserves aspect ratio and never stretches. Keep both contracts explicit so changing a provider does not silently change PDF geometry.
+- **Evidence:** `lib/images/openai-image-provider.ts`, `lib/composition/compose-page.ts`, and their focused tests verify all three request mappings and all three final canvases; the full 86-test suite and production build passed on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 

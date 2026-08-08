@@ -832,7 +832,7 @@ The OpenAI adapter:
 - Serializes the provider-neutral prompt plan inside the adapter.
 - Converts relevant `AssetStore` assets to the SDK's accepted upload/input form without exposing paths outside the adapter.
 - Validates edit support and maximum reference count against provider capabilities before loading assets or invoking the provider; unsupported requests become deterministic user-correctable failures.
-- Requests one candidate at the confirmed page dimensions supported by `gpt-image-2`; page requests containing lettering use at least medium quality, including in fast mode.
+- Requests one candidate at a supported native size: `1024x1024` square, `1536x1024` landscape, or `1024x1536` portrait. Geometry-only composition then normalizes to the confirmed PD-06 canvas without stretching. The request preserves configured `disabled`, `low`, or `high` quality without a page-specific override; the provider omits disabled controls, sends low/high as `quality`, and sends matching edit-only `input_fidelity` only for models that support it.
 - Normalizes returned bytes/base64/URL immediately into an `AssetStore` write; it does not retain expiring provider URLs as asset URIs.
 - Records provider request ID, returned usage, dimensions, format, seed if returned, latency, and safe errors.
 
@@ -997,9 +997,9 @@ OPENAI_SKILL_REASONING=medium
 OPENAI_REVIEW_MODEL=gpt-5.6-sol
 OPENAI_REVIEW_REASONING=medium
 OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_QUALITY=disabled
 DATABASE_URL=file:./data/booklets.db
 DATA_ROOT=./data/assets
-IMAGE_QUALITY=balanced
 OPENAI_TRACE_INCLUDE_SENSITIVE_DATA=false
 ```
 
@@ -1618,8 +1618,8 @@ The PRD remains the normative wording. This matrix identifies implementation sli
 | Intake repeats or never stops | Known-fact inference, recent relevant messages, readiness schema, fixtures | Fixed questionnaire or hard question cap |
 | Visual identity drifts | Canonical references, exact entity IDs, page-relevant selection, one-candidate revision | Seeds as guarantee, candidate grids, pose/mask tools |
 | Provider cost/latency grows | 3-8 pages, sequential work, one candidate, retained successes, cost evidence | In-app spending caps or routing UI |
-| Image contains bad lettering/composition | Concise approved structured lettering, exact prompt quoting, professional treatment instructions, medium-quality floor, full-size preview, and selective regeneration | OCR-driven auto-layout loop |
-| Text does not fit | Measured layout and recoverable overflow | Silent truncation or unreadable shrinking |
+| Image contains bad lettering/composition | Concise approved structured lettering, exact prompt quoting, professional treatment instructions, explicit quality configuration, full-size preview, and selective regeneration | OCR-driven auto-layout loop |
+| Provider-rendered lettering is inaccurate or unreadable | Full-size review and selective page regeneration against the approved Page Plan | Silent acceptance or post-generation text overlays |
 | Upstream edit causes accidental regeneration | Exact dependencies, transitive `needs_review`, deliberate jobs | Automatic cascade regeneration |
 | Process stops mid-job | Persist-before-run, item completion transactions, restart pending recovery | Leases, queues, separate workers |
 | Local filesystem/database mismatch after crash | Unique filenames, asset record transactions, visible failure | Cleanup daemon, atomic cross-resource transaction |

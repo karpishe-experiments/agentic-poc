@@ -411,7 +411,7 @@ type ImageRequest = {
   purpose: "character_reference" | "location_reference" | "page" | "revision";
   promptPlan: ImagePromptPlan;
   geometry: "landscape_5_4" | "portrait_4_5" | "square_1_1";
-  quality: "draft" | "balanced" | "high";
+  quality: "disabled" | "low" | "high";
   references: Array<{ assetId: string; role: string }>;
   editTargetAssetId?: string;
   preserve: string[];
@@ -460,8 +460,9 @@ Adapters serialize this plan into provider-appropriate prompts. Prompts should d
 - **IMG-004:** Normal generation shall request one candidate.
 - **IMG-005:** A localized visual revision shall use an edit operation when the configured provider supports it; otherwise only the selected asset shall regenerate.
 - **IMG-006:** Seeds may be recorded when supported but shall not be required or treated as the primary consistency mechanism.
-- **IMG-007:** The configured default image quality shall be `balanced`; page images containing lettering shall use at least medium quality even when `IMAGE_PROVIDER_MODE=fast`, while text-free canonical references may use low quality.
-- **IMG-008:** Page requests shall use the confirmed page dimensions supported by the configured model. Sharp may rotate, crop, pad, or resize defensively to exact geometry but shall never stretch the result.
+- **IMG-007:** `IMAGE_PROVIDER_MODE` shall be `fake` or `real`. `OPENAI_IMAGE_QUALITY` shall be `disabled`, `low`, or `high`, defaulting to `disabled`, and shall apply equally to references and lettered pages without a hidden quality floor.
+- **IMG-007A:** When image quality is disabled, omit output quality and input fidelity. When it is low or high, send it as Images API `quality` for generation and editing, and as edit-only `input_fidelity` only when the configured model supports that parameter. In particular, omit `input_fidelity` for `gpt-image-2`.
+- **IMG-008:** Provider requests shall use `1024x1024` for square, `1536x1024` for landscape, and `1024x1536` for portrait. Sharp shall crop, pad, or resize the result to the confirmed final canvas without stretching it.
 - **IMG-009:** Page prompts shall request approved in-image comic lettering verbatim, natural left-to-right/top-to-bottom hierarchy, and legible placement that avoids faces, hands, and critical action. Reference prompts shall prohibit all text.
 
 ### 9.4 Failure behavior and retained evidence
@@ -584,9 +585,9 @@ OPENAI_SKILL_REASONING=medium
 OPENAI_REVIEW_MODEL=gpt-5.6-sol
 OPENAI_REVIEW_REASONING=medium
 OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_QUALITY=disabled
 DATABASE_URL=file:./data/booklets.db
 DATA_ROOT=./data/assets
-IMAGE_QUALITY=balanced
 ```
 
 No credential may use a `NEXT_PUBLIC_` name. Optional future-provider credentials and aliases may be added without affecting startup when their adapters are not enabled. The beta `@openai/agents-extensions/ai-sdk` model adapter shall not be used; agents shall use the Agents SDK native OpenAI provider. The `@openai/agents-extensions/ai-sdk-ui` streaming bridge is also not required by the confirmed atomic-response design.
@@ -754,7 +755,7 @@ A critical defect is blocked completion/download, a missing or duplicated page, 
 | Intake becomes long or repetitive. | Readiness schema, infer known facts, ask one question at a time, aim for eight or fewer. |
 | Character identity drifts. | Canonical references, relevant-reference selection, bounded cast recommendation, and selected-page repair. |
 | Dynamic length increases cost and latency. | Bound story pages to 3–8, generate one candidate sequentially, preserve results, record cost. |
-| Image models render text or composition poorly. | Approve concise structured copy first, use explicit professional lettering prompts and a medium-quality floor, review full size, and selectively regenerate the affected image. |
+| Image models render text or composition poorly. | Approve concise structured copy first, use explicit professional lettering prompts, select an appropriate explicit quality setting, review full size, and selectively regenerate the affected image. |
 | Upstream edits cause expensive rework. | Exact dependencies, `needs_review`, and deliberate selective regeneration. |
 | Local process stops during generation. | Persist item progress and resume incomplete work without losing completed items. |
 | Provider interfaces grow prematurely. | Implement OpenAI Image API first and keep optional provider seams generic and invisible to users. |
@@ -774,7 +775,7 @@ A critical defect is blocked completion/download, a missing or duplicated page, 
 - LLM manager-led orchestration with stage-scoped runtime skill tools and one skill per material run.
 - Each material turn uses a manager routing model call followed by one specialist skill model call.
 - Model roles are configurable through manager, skill, review, and image model aliases.
-- Default roles are Luna/low for manager routing, Terra/medium for specialist skills, Sol/medium for review and repair, and GPT Image 2/balanced for images.
+- Default roles are Luna/low for manager routing, Terra/medium for specialist skills, Sol/medium for review and repair, and GPT Image 2 with provider-default image quality.
 - Vercel AI SDK UI with four card families; ChatKit and Agent Builder are not used.
 - Chat uses transient working status followed by an atomic validated response; token-by-token agent narration is not part of the POC.
 - Persisted application data is authoritative; there is no second authoritative agent-session store.
