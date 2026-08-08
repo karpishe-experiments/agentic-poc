@@ -8,6 +8,7 @@ import { ChatService, isTypedWorkflowRecovery } from "@/lib/application/chat-ser
 import { CardService } from "@/lib/application/card-service";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
+import type { GenerationService } from "@/lib/application/generation-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { createDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
@@ -40,6 +41,54 @@ async function createServices(clock: Clock): Promise<{ database: ReturnType<type
     chatService: new ChatService({ database }),
     cardService: new CardService({ database }),
   };
+}
+
+async function approvePagePlanWithoutStartingGeneration(database: ReturnType<typeof createDatabase>, bookletId: string) {
+  const artifacts = new ArtifactService({ database });
+  const characterId = "00000000-0000-4000-8000-000000000961";
+  const pages = Array.from({ length: 4 }, (_, pageIndex) => ({
+    pageId: `00000000-0000-4000-8000-${String(962 + pageIndex).padStart(12, "0")}`,
+    pageIndex,
+    kind: pageIndex === 0 ? "cover" as const : "story" as const,
+    readerText: pageIndex === 0 ? "Robin Shares Rainwater" : "Robin shares a drop of rainwater.",
+    sceneAction: "Show one clear, kind action.",
+    characterIds: [characterId],
+    locationIds: [],
+    incidentalVisualDetails: [],
+    compositionIntent: "Keep one clear focal action.",
+    continuityNotes: ["Keep Robin’s red scarf visible."],
+    relevantReferenceIds: [],
+    textSafeRegion: { x: 0.08, y: 0.07, width: 0.84, height: 0.22 },
+  }));
+  await artifacts.revise(bookletId, "audience_profile", {
+    schemaVersion: SCHEMA_VERSION, ageBand: "6-8", interests: ["kindness"], readingNeeds: "Short, clear sentences.", tone: "Warm", avoidList: [], knownFacts: ["Robin shares rainwater."], openAssumptions: [],
+  }, { createdBy: "agent" });
+  const audience = await artifacts.get(bookletId, "audience_profile");
+  await artifacts.approve(bookletId, "audience_profile", audience.currentVersion!.id);
+  await artifacts.revise(bookletId, "story_plan", {
+    schemaVersion: SCHEMA_VERSION, premise: "Robin learns to share rainwater.", theme: "Kindness", characters: [{ entityId: characterId, name: "Robin", narrativeRole: "hero", goal: "Share the rainwater", relationships: [], named: true, continuityRelevant: true, recurringVisualSubject: true }], settings: [], storyArc: "Robin sees a thirsty friend and shares.", keyEvents: ["Robin finds rainwater."], ending: "Robin and friends share every drop.", ageFitNotes: "Suitable for ages 6–8.", continuityConstraints: ["Keep Robin’s red scarf visible."],
+  }, { createdBy: "agent" });
+  const story = await artifacts.get(bookletId, "story_plan");
+  await artifacts.approve(bookletId, "story_plan", story.currentVersion!.id);
+  await artifacts.revise(bookletId, "visual_style", {
+    schemaVersion: SCHEMA_VERSION, styleId: "soft-watercolor", name: "Soft watercolor", rationale: "Gentle and clear.", visualDirection: "Rounded watercolor forms.", palette: ["blue"], texture: "Watercolor paper", lighting: "Warm daylight", styleReferenceAssetIds: [],
+  }, { createdBy: "agent" });
+  const visualStyle = await artifacts.get(bookletId, "visual_style");
+  await artifacts.approve(bookletId, "visual_style", visualStyle.currentVersion!.id);
+  await artifacts.revise(bookletId, "visual_bible", {
+    schemaVersion: SCHEMA_VERSION, characters: [{ entityId: characterId, name: "Robin", visualDetails: ["A red scarf"], continuityConstraints: ["Keep the red scarf visible."], referenceRequired: false, currentReferenceAssetId: null, revisionNumber: 1 }], locations: [], styleReferences: [],
+  }, { createdBy: "agent" });
+  const visualBible = await artifacts.get(bookletId, "visual_bible");
+  await artifacts.approve(bookletId, "visual_bible", visualBible.currentVersion!.id, { scope: "artifact_content" });
+  await artifacts.approve(bookletId, "visual_bible", visualBible.currentVersion!.id);
+  await artifacts.revise(bookletId, "booklet_specification", {
+    schemaVersion: SCHEMA_VERSION, title: "Robin Shares Rainwater", coverDirection: "Robin shares a raindrop.", storyPageCount: 3, geometry: "square_1_1", geometryConfirmed: true, typographyTheme: "Friendly", dialoguePolicy: "Narration only", castLimitWarningAccepted: false, locationLimitWarningAccepted: false,
+  }, { createdBy: "agent" });
+  const specification = await artifacts.get(bookletId, "booklet_specification");
+  await artifacts.approve(bookletId, "booklet_specification", specification.currentVersion!.id);
+  await artifacts.revise(bookletId, "page_plan", { schemaVersion: SCHEMA_VERSION, storyPageCount: 3, geometry: "square_1_1", pages }, { createdBy: "agent" });
+  const pagePlan = await artifacts.get(bookletId, "page_plan");
+  await artifacts.approve(bookletId, "page_plan", pagePlan.currentVersion!.id);
 }
 
 describe("BookletService", () => {
@@ -246,6 +295,52 @@ describe("BookletService", () => {
     const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);
     expect(snapshot.messages).toHaveLength(2);
     expect(snapshot.activeCard).toBeNull();
+  });
+
+  it("starts missing page generation from Final Pages recovery without calling the manager", async () => {
+    const { database, bookletService, chatService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
+    const booklet = await bookletService.create({ idea: "Robin shares rainwater." });
+    await approvePagePlanWithoutStartingGeneration(database, booklet.id);
+    const repositories = createRepositories(database);
+    let startedJobId: string | null = null;
+    let startedInTest = 0;
+    const generation = {
+      async createPageJob(bookletId: string) {
+        const job = await repositories.jobs.createOrGet({
+          id: "00000000-0000-4000-8000-000000000981",
+          bookletId,
+          jobType: "pages",
+          idempotencyKey: `page-recovery:${bookletId}`,
+          input: { pagePlanVersionId: "approved" },
+          items: [{ id: "00000000-0000-4000-8000-000000000982", itemKey: "page:cover", position: 0, input: {} }],
+          createdAtMs: Date.now(),
+        });
+        startedJobId = job.id;
+        return job;
+      },
+      startPageJob() { startedInTest += 1; },
+    } as unknown as GenerationService;
+    const recovery = await chatService.createRecoveryTurn(booklet.id, new RecoverableApplicationError({
+      code: "skill_contract_mismatch",
+      message: "The saved step could not be prepared.",
+      status: 409,
+    }));
+    const card = recovery.parts.find((part) => part.type === "data-card");
+    if (!card || card.type !== "data-card") throw new Error("Expected Final Pages recovery card.");
+
+    const result = await new CardService({ database, generation }).submit(booklet.id, {
+      cardId: card.data.cardId,
+      responseId: "00000000-0000-4000-8000-000000000983",
+      action: "retry",
+    });
+    const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);
+
+    expect(result).toMatchObject({ kind: "saved", followupRequired: false, refreshRequired: true });
+    expect(startedInTest).toBe(1);
+    expect(startedJobId).not.toBeNull();
+    expect(await repositories.jobs.getStatus(startedJobId!)).toMatchObject({ jobType: "pages", status: "pending" });
+    expect(snapshot.activeCard).toMatchObject({ family: "progress", variant: "page_batch", payload: { jobId: startedJobId } });
+    expect(await repositories.evidence.listModelCalls(booklet.id)).toEqual([]);
   });
 
   it("advances from the approved audience review to the persisted Story Plan review", async () => {

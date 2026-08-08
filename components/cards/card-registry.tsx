@@ -122,7 +122,7 @@ function IssueCard({ card, busy, submitResponse }: CardProps) {
   if (card.family !== "issue") return null;
   const disabled = card.status !== "active" || !submitResponse || busy;
   const labels: Partial<Record<CardAction, string>> = { retry: "Retry review", edit: "Revise", accept_with_issue: "Accept remaining issue", continue: "Continue" };
-  const actionLabel = (action: CardAction) => action === "retry" && card.variant === "recovery" && card.title.startsWith("Retry ")
+  const actionLabel = (action: CardAction) => action === "retry" && card.variant === "recovery" && (card.title.startsWith("Retry ") || card.title.startsWith("Start "))
     ? card.title
     : labels[action] ?? action.replaceAll("_", " ");
   return <CardFrame card={card}><p className="text-sm">{card.payload.summary}</p>{card.payload.details.length ? <ul className="mt-2 list-disc pl-5 text-sm">{card.payload.details.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}<div className="mt-3 flex flex-wrap gap-2">{card.allowedActions.map((action) => <button className="rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled} key={action} onClick={() => submitResponse?.({ action })} type="button">{busy ? "Saving…" : actionLabel(action)}</button>)}</div></CardFrame>;

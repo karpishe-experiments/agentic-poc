@@ -6,7 +6,9 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import type { GenerationService } from "@/lib/application/generation-service";
 import { createProgressCard, createRecoveryCard } from "@/lib/application/card-factories";
 import { QualityService } from "@/lib/application/quality-service";
-import { cardResponseSchema, genUICardSchema } from "@/lib/contracts/cards";
+import { cardResponseSchema, genUICardSchema, type CardResponse, type GenUICard } from "@/lib/contracts/cards";
+
+type PageGenerationStart = { jobId: string; total: number; reused: boolean; generation: Pick<GenerationService, "startPageJob"> };
 
 export class CardService {
   private readonly repositories: Repositories;
@@ -26,6 +28,9 @@ export class CardService {
     const parsed = cardResponseSchema.parse(input);
     const card = await this.repositories.conversation.getCard(bookletId, parsed.cardId);
     if (!card) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
+    if (await this.isMissingPageGenerationRecovery(bookletId, card, parsed.action)) {
+      return this.retryMissingPageGeneration(bookletId, parsed);
+    }
     if (card.family === "artifact_review" && card.variant === "summary" && parsed.action === "approve_and_continue" && card.payload.artifactType === "story_plan") {
       const readinessAlreadyPassed = card.payload.versionId
         ? await this.repositories.evidence.hasPassedQualityReview({ bookletId, gate: "story_readiness", artifactVersionId: card.payload.versionId })
@@ -146,18 +151,19 @@ export class CardService {
         }
         await this.artifacts.approve(bookletId, card.payload.artifactType, card.payload.versionId);
         if (card.payload.artifactType === "page_plan") {
-          const generation = this.generation ?? new (await import("@/lib/application/generation-service")).GenerationService();
-          const job = await generation.createPageJob(bookletId);
-          const items = await this.repositories.jobs.getItems(job.id);
-          await this.repositories.conversation.persistAssistantCard({
-            bookletId,
-            messageId: randomUUID(),
-            narration: "Page illustrations are generating in sequence in the background. Completed pages remain available if another page needs recovery.",
-            card: createProgressCard({ cardId: randomUUID(), jobId: job.id, title: "Generating booklet pages", explanation: "You can keep using the workspace while each page completes.", variant: "page_batch", completed: 0, total: Math.max(1, items.length), currentLabel: "Preparing the cover illustration" }),
-            createdAtMs: Date.now(),
-          });
-          // See the reference-job note above: avoid racing the in-process runner.
-          if (process.env.VITEST) generation.startPageJob(bookletId, job.id);
+          try {
+            const started = await this.preparePageGeneration(bookletId);
+            await this.persistPageGenerationProgress(bookletId, started);
+            this.startPageGenerationInTests(bookletId, started);
+          } catch (error) {
+            await this.persistPageGenerationStartFailure(bookletId, error);
+            return {
+              ...result,
+              followupRequired: false,
+              refreshRequired: true,
+              summary: "Page generation did not start. Retry it without changing the approved Page Plan.",
+            };
+          }
         }
       }
       if (result.kind === "saved" && card.family === "question" && parsed.action === "confirm_geometry" && typeof parsed.value === "string") {
@@ -199,6 +205,104 @@ export class CardService {
       createdAtMs: now,
     });
     return { ...result, recoveryCard };
+  }
+
+  /**
+   * Final Pages is owned by the page-generation job, not the manager. If an
+   * earlier Page Plan approval was saved but process work never started, turn
+   * that old generic recovery card into a deterministic job start instead of
+   * sending `finalPages: undefined` through the Final Pages skill again.
+   */
+  private async isMissingPageGenerationRecovery(bookletId: string, card: GenUICard, action: CardResponse["action"]): Promise<boolean> {
+    if (action !== "retry" || card.family !== "issue" || card.variant !== "recovery") return false;
+    if (card.payload.code !== "skill_contract_mismatch" && card.payload.code !== "page_generation_start_failed") return false;
+    const [booklet, pagePlan, finalPages] = await Promise.all([
+      this.repositories.booklets.get(bookletId),
+      this.artifacts.get(bookletId, "page_plan"),
+      this.artifacts.get(bookletId, "final_pages"),
+    ]);
+    return booklet?.currentStage === "final_pages" && pagePlan.state === "approved" && !finalPages.currentVersion;
+  }
+
+  private async retryMissingPageGeneration(bookletId: string, response: CardResponse) {
+    let started: PageGenerationStart;
+    try {
+      started = await this.preparePageGeneration(bookletId);
+    } catch (error) {
+      await this.persistPageGenerationStartFailure(bookletId, error);
+      return {
+        kind: "saved" as const,
+        duplicate: false,
+        followupRequired: false,
+        refreshRequired: true,
+        summary: "Page generation could not start. Your approved Page Plan is still saved.",
+      };
+    }
+    const result = await this.repositories.conversation.submitCardResponse({ bookletId, response, createdAtMs: Date.now() });
+    if (result.kind !== "conflict") {
+      await this.persistPageGenerationProgress(bookletId, started);
+      this.startPageGenerationInTests(bookletId, started);
+    }
+    return {
+      ...result,
+      followupRequired: false,
+      refreshRequired: true,
+      summary: started.reused ? "Page generation is resuming from the saved job." : "Page generation has started from the approved Page Plan.",
+    };
+  }
+
+  private async preparePageGeneration(bookletId: string): Promise<PageGenerationStart> {
+    const generation = this.generation ?? new (await import("@/lib/application/generation-service")).GenerationService();
+    const job = await generation.createPageJob(bookletId);
+    const items = await this.repositories.jobs.getItems(job.id);
+    if (!items.length) throw new Error("The approved Page Plan did not provide any pages to generate.");
+    return { jobId: job.id, total: items.length, reused: job.reused, generation };
+  }
+
+  private startPageGenerationInTests(bookletId: string, started: PageGenerationStart): void {
+    // The persistent Node runner owns normal execution. Vitest disables it to
+    // keep fixtures deterministic, so tests start the same job in-process.
+    if (process.env.VITEST) started.generation.startPageJob(bookletId, started.jobId);
+  }
+
+  private async persistPageGenerationProgress(bookletId: string, started: PageGenerationStart) {
+    await this.repositories.conversation.persistAssistantCard({
+      bookletId,
+      messageId: randomUUID(),
+      narration: started.reused
+        ? "Page illustrations are resuming from the saved generation job."
+        : "Page illustrations are generating in sequence in the background. Completed pages remain available if another page needs recovery.",
+      card: createProgressCard({
+        cardId: randomUUID(),
+        jobId: started.jobId,
+        title: "Generating booklet pages",
+        explanation: "You can keep using the workspace while each page completes.",
+        variant: "page_batch",
+        completed: 0,
+        total: started.total,
+        currentLabel: started.reused ? "Resuming saved page illustrations" : "Preparing the cover illustration",
+      }),
+      createdAtMs: Date.now(),
+    });
+  }
+
+  private async persistPageGenerationStartFailure(bookletId: string, error: unknown) {
+    const message = error instanceof Error ? error.message : "Page generation could not be prepared.";
+    await this.repositories.conversation.persistAssistantCard({
+      bookletId,
+      messageId: randomUUID(),
+      narration: "Your Page Plan is approved, but page generation did not start. You can retry without changing the plan.",
+      card: createRecoveryCard({
+        cardId: randomUUID(),
+        title: "Start page generation",
+        explanation: "Your approved Page Plan is saved. Retrying starts its page illustrations without changing any approved decisions.",
+        code: "page_generation_start_failed",
+        summary: "Page generation could not start.",
+        details: [message],
+        allowedActions: ["retry"],
+      }),
+      createdAtMs: Date.now(),
+    });
   }
 
   public async reopen(bookletId: string, cardId: string) {

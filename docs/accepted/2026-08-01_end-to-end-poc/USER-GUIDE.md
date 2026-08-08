@@ -38,6 +38,8 @@ flowchart TD
 
 The POC generates canonical references for recurring subjects, then creates one cover plus one illustration per story page. These persisted jobs run in the background: the workspace keeps its progress panel visible and updates to the next review card when the job finishes. Completed assets remain saved if a later item fails or the process restarts. The selected style sample, relevant character references, and relevant location references are included in a page-generation request.
 
+If an approved Page Plan reaches **Final pages** before its page-generation job starts, use **Start page generation** (or the saved retry card in an older workspace). It starts or resumes the persisted page job from the approved Page Plan; it does not re-draft the plan or send Final Pages through the creative-partner chat.
+
 When a reference or page item fails, open the visible **Generation progress** panel and choose **Retry item**. Only the failed item is retried; completed items remain intact.
 
 Once page count is confirmed, the artifact rail exposes an indented Cover/Page list that links to each Page Package. Select **Final pages** in the rail to make a focused change. **Recompose text** preserves that page’s source illustration and creates only a new composed PNG. **Regenerate visual** starts a persisted background job for only that page; it does not replace other Final Pages. Review every changed Final Page, then approve the reviewed set before exporting again.

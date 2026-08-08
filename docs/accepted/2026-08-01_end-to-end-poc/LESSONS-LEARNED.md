@@ -192,3 +192,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `lib/application/manager-service.ts`, `lib/agents/openai-manager-runtime.ts`, and `lib/agents/manager.ts`; `tests/integration/manager-contracts.test.ts` covers Final Pages and Story Plan eligibility, while the full 70-test suite and 12 agent fixtures passed on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
+
+### Route recovery to the component that owns the incomplete workflow state
+
+- **Context:** A typed recovery card appears after an artifact transition, where the next state may be owned by a persisted job rather than a manager-routed specialist.
+- **Observation:** An approved Page Plan with no persisted page-generation job reached the Final Pages stage. The generic retry sent the stage through the Final Pages specialist, which correctly rejected its missing `finalPages` input and produced an endless retry loop.
+- **Guidance:** Determine recovery from persisted artifact and job state. When the Page Plan is approved but Final Pages are absent, create or reuse the idempotent page job and show its authoritative progress instead of invoking the manager. If creating the job fails, retain a named generation-start recovery card that preserves the approved plan.
+- **Evidence:** `lib/application/card-service.ts` routes this state to `GenerationService.createPageJob`; `tests/integration/booklets.test.ts` recreates the approved-Page-Plan/no-job state and verifies that retry creates a page job without manager or specialist calls. The full suite passed 71 tests on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
