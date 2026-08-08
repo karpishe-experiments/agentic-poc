@@ -56,7 +56,7 @@ describe("CardRegistry", () => {
     rendered.unmount();
   });
 
-  it("continues polling when the first job status is pending", async () => {
+  it("polls an idle pending job on the slower interval", async () => {
     vi.useFakeTimers();
     const progress = { ...base, family: "progress" as const, variant: "page_batch" as const, title: "Generating pages", allowedActions: [], payload: { jobId: "00000000-0000-4000-8000-000000000104", completed: 0, total: 4, currentLabel: "Preparing the cover" } };
     const fetchMock = vi.spyOn(global, "fetch")
@@ -66,7 +66,9 @@ describe("CardRegistry", () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(screen.getByText("Generating: 0 of 4")).toBeTruthy();
-    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(14_999); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(screen.getByText("Generating: 2 of 4")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     rendered.unmount();

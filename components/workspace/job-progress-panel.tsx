@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ActiveJobSummary } from "@/lib/contracts/booklets";
+import { publishJobStatus, subscribeToJobStatus, type PolledJobStatus } from "@/components/workspace/job-status-poller";
 
-type JobStatus = {
+type JobStatus = PolledJobStatus & {
   id: string;
   jobType: "references" | "pages" | "export";
   status: string;
-  items: Array<{ id: string; itemKey: string; position: number; status: string; attemptCount: number; error: { message?: string } | null }>;
+  items: NonNullable<PolledJobStatus["items"]>;
 };
 
 export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }>) {
@@ -25,12 +26,14 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
 
   useEffect(() => {
     let cancelled = false;
-    async function refresh() {
-      const result = await Promise.all(jobs.map(async (job) => {
-        const response = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" });
-        return response.ok ? (await response.json() as { data: JobStatus }).data : null;
-      }));
-      const nextStatuses = result.filter((item): item is JobStatus => Boolean(item));
+    const nextById = new Map<string, JobStatus>();
+    const subscriptions = jobs.map((job) => subscribeToJobStatus(job.id, (status) => {
+      if (!status.id || !status.jobType || !status.status || !status.items) return;
+      nextById.set(job.id, status as JobStatus);
+      const nextStatuses = jobs.flatMap((candidate) => {
+        const next = nextById.get(candidate.id);
+        return next ? [next] : [];
+      });
       if (!cancelled) {
         setStatuses(nextStatuses);
         if (!refreshedTerminalState.current && nextStatuses.length === jobs.length && nextStatuses.every((job) => ["succeeded", "failed", "partial", "paused", "cancelled"].includes(job.status))) {
@@ -38,10 +41,8 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
           router.refresh();
         }
       }
-    }
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 2_000);
-    return () => { cancelled = true; window.clearInterval(interval); };
+    }));
+    return () => { cancelled = true; subscriptions.forEach((unsubscribe) => unsubscribe()); };
   }, [jobs, router]);
 
   if (!jobs.length) return null;
@@ -67,6 +68,8 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
               try {
                 const response = await fetch(`/api/jobs/${job.id}/items/${item.id}/retry`, { method: "POST" });
                 if (!response.ok) throw new Error("The item could not be queued for retry.");
+                const body = await response.json() as { data?: PolledJobStatus };
+                if (body.data) publishJobStatus(job.id, body.data);
                 router.refresh();
               } catch (error) {
                 setRetryError(error instanceof Error ? error.message : "The item could not be queued for retry.");
@@ -79,6 +82,8 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
             try {
               const response = await fetch(`/api/jobs/${job.id}/continue`, { method: "POST" });
               if (!response.ok) throw new Error("The pending generation could not be continued.");
+              const body = await response.json() as { data?: PolledJobStatus };
+              if (body.data) publishJobStatus(job.id, body.data);
               router.refresh();
             } catch (error) {
               setRetryError(error instanceof Error ? error.message : "The pending generation could not be continued.");

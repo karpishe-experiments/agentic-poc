@@ -219,3 +219,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `lib/application/generation-service.ts`, `db/repositories.ts`, `components/cards/card-registry.tsx`, `components/workspace/job-progress-panel.tsx`, and `app/api/jobs/[jobId]/continue/route.ts`; `tests/integration/generation-diagnostics.test.ts` verifies stop, single-item retry, pause, and explicit continuation, `tests/integration/restart-resume.test.ts` verifies restart semantics, and `tests/unit/cards/card-registry.test.tsx` verifies Retry and Continue states. The full suite passed 80 tests on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
+
+### Share one poller when multiple views observe the same job
+
+- **Context:** A workspace renders the same persisted job in both a global progress panel and a conversation progress card.
+- **Observation:** Giving each view its own timer produced two simultaneous requests to the same status endpoint every two seconds.
+- **Guidance:** Coordinate polling by resource identity outside individual views so subscribers share one in-flight request, cached status, and timer. Poll running work frequently enough for useful feedback, back off for non-running states, and publish action responses through the same coordinator so every subscriber updates immediately.
+- **Evidence:** `components/workspace/job-status-poller.ts`, `components/workspace/job-progress-panel.tsx`, and `components/cards/card-registry.tsx` share one poller per job with 5-second running and 15-second idle intervals; `tests/unit/workspace/job-status-poller.test.ts` verifies subscriber deduplication and cadence, and the full 81-test suite passed on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.

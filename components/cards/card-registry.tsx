@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
+import { publishJobStatus, subscribeToJobStatus, type PolledJobItem, type PolledJobStatus } from "@/components/workspace/job-status-poller";
 
 type SubmitCard = (input: { action: CardAction; value?: unknown; revisionInstruction?: string }) => Promise<void>;
 type ReopenCard = () => Promise<void>;
@@ -82,11 +83,10 @@ function ArtifactReviewCard({ card, busy, submitResponse }: CardProps) {
   </CardFrame>;
 }
 
-type JobProgressItem = { id: string; itemKey: string; position: number; status: string; error?: { message?: string } | null };
-type JobProgressData = { status?: string; items?: JobProgressItem[] };
+type JobProgressItem = PolledJobItem;
+type JobProgressData = PolledJobStatus;
 type JobProgressStatus = { data?: JobProgressData; error?: { message?: string } };
 type ProgressGenUICard = Extract<GenUICard, { family: "progress" }>;
-const liveJobStatuses = new Set(["pending", "running", "partial"]);
 
 function ProgressCard({ card }: CardProps) {
   if (card.family !== "progress") return null;
@@ -96,7 +96,6 @@ function ProgressCard({ card }: CardProps) {
 function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
   const [progress, setProgress] = useState({ completed: card.payload.completed, total: card.payload.total, isLive: false });
   const [job, setJob] = useState<JobProgressData | null>(null);
-  const [pollVersion, setPollVersion] = useState(0);
   const [workingItemId, setWorkingItemId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -109,23 +108,10 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
 
   useEffect(() => {
     if (!card.payload.jobId || card.status !== "active") return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const refresh = async () => {
-      try {
-        const response = await fetch(`/api/jobs/${card.payload.jobId}`, { cache: "no-store" });
-        const body = await response.json() as JobProgressStatus;
-        const items = body.data?.items;
-        if (cancelled || !response.ok || !items?.length) return;
-        applyJob(body.data!);
-        if (liveJobStatuses.has(body.data?.status ?? "")) timer = window.setTimeout(() => void refresh(), 2_000);
-      } catch {
-        // Retain the persisted card snapshot if the local status endpoint is unavailable.
-      }
-    };
-    void refresh();
-    return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [card.payload.completed, card.payload.jobId, card.payload.total, card.status, pollVersion]);
+    return subscribeToJobStatus(card.payload.jobId, (status) => {
+      if (status.items?.length) applyJob(status);
+    });
+  }, [card.payload.completed, card.payload.jobId, card.payload.total, card.status]);
 
   const runAction = async (url: string, itemId: string) => {
     setWorkingItemId(itemId);
@@ -135,7 +121,7 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
       const body = await response.json() as JobProgressStatus;
       if (!response.ok || !body.data) throw new Error(body.error?.message ?? "Generation could not be continued.");
       applyJob(body.data);
-      setPollVersion((version) => version + 1);
+      if (card.payload.jobId) publishJobStatus(card.payload.jobId, body.data);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Generation could not be continued.");
     } finally {
