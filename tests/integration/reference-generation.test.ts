@@ -43,7 +43,7 @@ describe("reference generation", () => {
     await artifacts.revise(booklet.id, "visual_bible", { schemaVersion: SCHEMA_VERSION, characters: [{ entityId: robin, name: "Robin", visualDetails: ["Red chest"], continuityConstraints: ["Keep red chest."], referenceRequired: true, currentReferenceAssetId: null, revisionNumber: 1 }], locations: [{ entityId: garden, name: "Garden", visualDetails: ["Round pond"], continuityConstraints: ["Keep pond."], referenceRequired: true, currentReferenceAssetId: null, revisionNumber: 1 }], styleReferences: ["00000000-0000-4000-8000-000000000001"] }, { createdBy: "agent" });
 
     const assets = new MemoryAssetStore();
-    const generation = new GenerationService({ database, artifacts, assets, provider: new FakeImageProvider(), imageModel: "fake-image" });
+    const generation = new GenerationService({ database, artifacts, assets, provider: new FakeImageProvider(), imageModel: "fake-image", imageQuality: "low" });
     const job = await generation.createReferenceJob(booklet.id);
     await generation.runReferenceJob(booklet.id, job.id);
     const items = await (await import("@/db/repositories")).createRepositories(database).jobs.getItems(job.id);
@@ -51,6 +51,7 @@ describe("reference generation", () => {
     const content = bible.currentVersion?.content as { characters: Array<{ currentReferenceAssetId: string | null }>; locations: Array<{ currentReferenceAssetId: string | null }> };
 
     expect(items.map((item) => item.status)).toEqual(["succeeded", "succeeded"]);
+    expect(items.map((item) => (item.input as { request: { quality: string } }).request.quality)).toEqual(["low", "low"]);
     expect(content.characters[0]?.currentReferenceAssetId).toBeTruthy();
     expect(content.locations[0]?.currentReferenceAssetId).toBeTruthy();
     expect(await assets.exists(`${booklet.id}/references/characters/${robin}/${content.characters[0]?.currentReferenceAssetId}.png`)).toBe(true);

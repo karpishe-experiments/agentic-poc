@@ -160,9 +160,9 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 ### Link persisted progress cards to the authoritative job status
 
 - **Context:** A saved chat transcript displays progress for a local generation job that continues after the message is written.
-- **Observation:** A persisted progress-card snapshot remained at `Preparing: 0` while the separate job panel completed its items, which made the otherwise successful real booklet flow look stalled.
-- **Guidance:** Put the authoritative job ID in the validated progress-card payload and have an active card poll the existing job-status endpoint. Retain the persisted count as the fallback when that endpoint is unavailable; do not create a second progress source.
-- **Evidence:** `lib/contracts/cards.ts`, `lib/application/card-factories.ts`, `lib/application/card-service.ts`, and `components/cards/card-registry.tsx`; `tests/unit/cards/card-registry.test.tsx` verifies live rendering, and the full 66-test suite plus the real remediation booklet passed.
+- **Observation:** A persisted progress-card snapshot remained at `Preparing: 0` while the separate job panel completed its items. After linking the card to the live endpoint, an initial `pending` response still left it at `Generating: 0` because the client scheduled another poll only for `running`; the runner changed state after that first request.
+- **Guidance:** Put the authoritative job ID in the validated progress-card payload and have an active card poll the existing job-status endpoint. Continue polling every nonterminal local status (`pending`, `running`, and `partial`), and stop only at a terminal status. Retain the persisted count as the fallback when that endpoint is unavailable; do not create a second progress source.
+- **Evidence:** `lib/contracts/cards.ts`, `lib/application/card-factories.ts`, `lib/application/card-service.ts`, and `components/cards/card-registry.tsx`; `tests/unit/cards/card-registry.test.tsx` verifies terminal rendering and the `pending`-to-completed polling transition. The serial full suite passed 72 tests on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -199,5 +199,14 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Observation:** An approved Page Plan with no persisted page-generation job reached the Final Pages stage. The generic retry sent the stage through the Final Pages specialist, which correctly rejected its missing `finalPages` input and produced an endless retry loop.
 - **Guidance:** Determine recovery from persisted artifact and job state. When the Page Plan is approved but Final Pages are absent, create or reuse the idempotent page job and show its authoritative progress instead of invoking the manager. If creating the job fails, retain a named generation-start recovery card that preserves the approved plan.
 - **Evidence:** `lib/application/card-service.ts` routes this state to `GenerationService.createPageJob`; `tests/integration/booklets.test.ts` recreates the approved-Page-Plan/no-job state and verifies that retry creates a page job without manager or specialist calls. The full suite passed 71 tests on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Resolve image runtime profiles before constructing persisted requests
+
+- **Context:** A local generative-image workflow supports deterministic fake images, configured-quality real images, and a low-latency real development profile.
+- **Observation:** Selecting the provider alone is insufficient when job creation hardcodes image quality; a named `fast` mode can otherwise fall through to the fake provider or still persist normal-quality requests. The Image API also supports JPEG output, which OpenAI documents as faster than PNG for latency-sensitive work.
+- **Guidance:** Resolve a named image profile once into provider runtime, request quality, and provider output options. Persist the resolved quality in every job request, make fast-mode overrides explicit, and normalize optimized transport formats at the provider boundary when downstream asset contracts require another format.
+- **Evidence:** `lib/config/env.ts`, `lib/application/generation-service.ts`, and `lib/images/openai-image-provider.ts`; `tests/unit/config/env.test.ts`, `tests/unit/images/openai-image-provider.test.ts`, and `tests/integration/reference-generation.test.ts` verify real-provider selection, forced low quality, compressed JPEG transport, low edit fidelity, PNG normalization, and persisted request quality. The full suite passed 76 tests and the production build passed on 2026-08-08.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.

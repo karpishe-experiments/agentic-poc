@@ -3,7 +3,7 @@ import { createDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
+import { getServerEnv, resolveDataRoot, resolveImageProviderProfile } from "@/lib/config/env";
 import { imageRequestSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
 import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
 import { FakeImageProvider } from "@/lib/images/fake-image-provider";
@@ -56,20 +56,23 @@ export class GenerationService {
   private assets?: AssetStore;
   private readonly provider: ImageProvider;
   private readonly imageModel: string;
+  private readonly imageQuality: ImageRequest["quality"];
   private readonly dataRoot?: string;
   private readonly diagnostics: GenerationDiagnostics;
   private readonly diagnosticWaitMs: number;
 
-  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; provider?: ImageProvider; imageModel?: string; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
+  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; provider?: ImageProvider; imageModel?: string; imageQuality?: ImageRequest["quality"]; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
     const database = dependencies.database ?? createDatabase();
     const needsEnvironment = !dependencies.assets || !dependencies.provider || !dependencies.imageModel;
     const env = needsEnvironment ? getServerEnv() : null;
+    const imageProfile = env ? resolveImageProviderProfile(env) : null;
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database });
     this.assets = dependencies.assets;
     this.dataRoot = env ? resolveDataRoot(env) : undefined;
-    this.provider = dependencies.provider ?? (process.env.IMAGE_PROVIDER_MODE === "real" ? new OpenAIImageProvider() : new FakeImageProvider());
+    this.provider = dependencies.provider ?? (imageProfile!.runtime === "real" ? new OpenAIImageProvider(undefined, { fastOutput: imageProfile!.fastOutput }) : new FakeImageProvider());
     this.imageModel = dependencies.imageModel ?? env!.OPENAI_IMAGE_MODEL;
+    this.imageQuality = dependencies.imageQuality ?? imageProfile?.quality ?? "balanced";
     this.diagnostics = dependencies.diagnostics ?? new GenerationDiagnostics(this.dataRoot);
     this.diagnosticWaitMs = dependencies.diagnosticWaitMs ?? 30_000;
   }
@@ -92,7 +95,7 @@ export class GenerationService {
           purpose: `${item.kind} canonical visual reference`, subject: item.name, action: `Create a clear reference pose or establishing view for ${item.name}.`, location: item.kind === "location" ? item.name : "a calm neutral story setting",
           visualStyle: "Use the approved booklet visual direction.", continuityConstraints: item.continuityConstraints, preserve: item.visualDetails,
         };
-        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: "square_1_1", quality: "balanced", references: [], editTargetAssetId: null });
+        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: "square_1_1", quality: this.imageQuality, references: [], editTargetAssetId: null });
         return { id: randomUUID(), itemKey: `${item.kind}:${item.entityId}`, position, input: { item, request } };
       }),
       createdAtMs: Date.now(),
@@ -219,7 +222,7 @@ export class GenerationService {
           assetId,
           role: styleIds.has(assetId) ? "style" as const : locationIds.has(assetId) ? "location_continuity" as const : "character_identity" as const,
         }));
-        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: references.length ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: content.geometry, quality: "balanced", references, editTargetAssetId: null });
+        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: references.length ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: content.geometry, quality: this.imageQuality, references, editTargetAssetId: null });
         return { id: randomUUID(), itemKey: `page:${page.pageId}`, position: page.pageIndex, input: { page, geometry: content.geometry, request } };
       }),
     });

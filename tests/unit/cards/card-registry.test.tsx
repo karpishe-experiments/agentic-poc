@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CardRegistry } from "@/components/cards/card-registry";
 import type { GenUICard } from "@/lib/contracts/cards";
@@ -26,7 +26,10 @@ const cards = [
 ] satisfies GenUICard[];
 
 describe("CardRegistry", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it.each(cards)("renders the finite $family/$variant card", (card) => {
     render(<CardRegistry card={card} submitResponse={async () => {}} />);
@@ -50,6 +53,22 @@ describe("CardRegistry", () => {
 
     await waitFor(() => expect(screen.getByText("Generating: 4 of 4")).toBeTruthy());
     expect(fetchMock).toHaveBeenCalledWith(`/api/jobs/${progress.payload.jobId}`, { cache: "no-store" });
+    rendered.unmount();
+  });
+
+  it("continues polling when the first job status is pending", async () => {
+    vi.useFakeTimers();
+    const progress = { ...base, family: "progress" as const, variant: "page_batch" as const, title: "Generating pages", allowedActions: [], payload: { jobId: "00000000-0000-4000-8000-000000000104", completed: 0, total: 4, currentLabel: "Preparing the cover" } };
+    const fetchMock = vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { status: "pending", items: [{ status: "pending" }, { status: "pending" }, { status: "pending" }, { status: "pending" }] } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { status: "succeeded", items: [{ status: "succeeded" }, { status: "succeeded" }, { status: "pending" }, { status: "pending" }] } })));
+    const rendered = render(<CardRegistry card={progress} />);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText("Generating: 0 of 4")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.getByText("Generating: 2 of 4")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     rendered.unmount();
   });
 });

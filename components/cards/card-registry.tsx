@@ -84,6 +84,7 @@ function ArtifactReviewCard({ card, busy, submitResponse }: CardProps) {
 
 type JobProgressStatus = { data?: { status?: string; items?: Array<{ status?: string }> } };
 type ProgressGenUICard = Extract<GenUICard, { family: "progress" }>;
+const liveJobStatuses = new Set(["pending", "running", "partial"]);
 
 function ProgressCard({ card }: CardProps) {
   if (card.family !== "progress") return null;
@@ -104,7 +105,7 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
         const items = body.data?.items;
         if (cancelled || !response.ok || !items?.length) return;
         setProgress({ completed: items.filter((item) => item.status === "succeeded").length, total: items.length, isLive: true });
-        if (body.data?.status === "running") timer = window.setTimeout(() => void refresh(), 2_000);
+        if (liveJobStatuses.has(body.data?.status ?? "")) timer = window.setTimeout(() => void refresh(), 2_000);
       } catch {
         // Retain the persisted card snapshot if the local status endpoint is unavailable.
       }

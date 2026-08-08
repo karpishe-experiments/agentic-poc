@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from "openai";
+import sharp from "sharp";
 import { getServerEnv } from "@/lib/config/env";
 import { imageRequestSchema, imageResultSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
 import type { ImageProvider } from "@/lib/images/provider";
@@ -32,9 +33,11 @@ export class OpenAIImageProvider implements ImageProvider {
   public readonly runtime = "real" as const;
   public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1024x1024", "1536x1024", "1024x1536"] as ["1024x1024", "1536x1024", "1024x1536"] };
   private readonly client: OpenAI;
+  private readonly fastOutput: boolean;
 
-  public constructor(client?: OpenAI) {
+  public constructor(client?: OpenAI, options: { fastOutput?: boolean } = {}) {
     this.client = client ?? new OpenAI({ apiKey: getServerEnv().OPENAI_API_KEY });
+    this.fastOutput = options.fastOutput ?? false;
   }
 
   public async execute(input: ImageRequest, inputAssets: Array<{ assetId: string; bytes: Buffer }> = []): Promise<ImageResult> {
@@ -44,15 +47,21 @@ export class OpenAIImageProvider implements ImageProvider {
     }
     try {
       const size = sizeByGeometry[request.geometry];
+      const fastOutputOptions = this.fastOutput
+        ? { output_format: "jpeg" as const, output_compression: 60 }
+        : {};
       const response = request.operation === "edit"
-        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, quality: request.quality === "balanced" ? "medium" : request.quality })
-        : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, quality: request.quality === "balanced" ? "medium" : request.quality });
+        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, quality: request.quality === "balanced" ? "medium" : request.quality, ...(this.fastOutput ? { input_fidelity: "low" as const } : {}), ...fastOutputOptions })
+        : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, quality: request.quality === "balanced" ? "medium" : request.quality, ...fastOutputOptions });
       const data = "data" in response && response.data ? response.data[0] : undefined;
       const bytesBase64 = data?.b64_json ?? null;
-      if (!bytesBase64) throw new Error("The image provider did not return PNG image bytes.");
+      if (!bytesBase64) throw new Error("The image provider did not return image bytes.");
+      const outputBytes = this.fastOutput
+        ? await sharp(Buffer.from(bytesBase64, "base64")).png().toBuffer()
+        : Buffer.from(bytesBase64, "base64");
       const usage = "usage" in response && response.usage ? response.usage : null;
       return imageResultSchema.parse({
-        status: "succeeded", provider: "openai", model: request.model, providerRequestId: response._request_id ?? null, mimeType: "image/png", bytesBase64, width: size.startsWith("1536") ? 1536 : 1024, height: size.endsWith("1536") ? 1536 : 1024,
+        status: "succeeded", provider: "openai", model: request.model, providerRequestId: response._request_id ?? null, mimeType: "image/png", bytesBase64: outputBytes.toString("base64"), width: size.startsWith("1536") ? 1536 : 1024, height: size.endsWith("1536") ? 1536 : 1024,
         usage: usage ? { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0 } : null, error: null,
       });
     } catch (error) {

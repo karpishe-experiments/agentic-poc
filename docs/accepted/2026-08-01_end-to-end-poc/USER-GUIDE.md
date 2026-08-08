@@ -20,6 +20,10 @@ The workspace always shows Audience Profile, Story Plan, Visual Style, Visual Bi
 
 The rail and conversation persist card state. Reloading a workspace keeps the selected rail item, saved message history, artifact versions, and current active card. If a local browser session cannot load current files, choose **Reload workspace**; it does not discard saved booklet work.
 
+## Choose image speed for local development
+
+Set `IMAGE_PROVIDER_MODE=fast` in `.env.local` when you want real OpenAI images with development speed prioritized over fidelity. Fast mode forces low image quality, requests compressed JPEG output for lower generation/transfer latency, and converts the result to the PNG format used by saved booklet assets. It ignores `IMAGE_QUALITY` by design. Use `IMAGE_PROVIDER_MODE=real` when you want the quality selected by `IMAGE_QUALITY`, or `fake` for deterministic no-cost placeholders. Restart the development server after changing the mode.
+
 ## How the local workflow fits together
 
 ```mermaid

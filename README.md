@@ -20,6 +20,8 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
+For real images during interactive development, set `IMAGE_PROVIDER_MODE=fast`. This uses the configured OpenAI image model with low quality and compressed JPEG transport, then normalizes the result to the PNG assets expected by the booklet workflow. `IMAGE_PROVIDER_MODE=real` uses `IMAGE_QUALITY`; `fake` remains deterministic and free. Restart the development server after changing these values.
+
 The command path was re-verified on 2026-08-02 with deterministic fake providers. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
 
 ### Local development recovery
