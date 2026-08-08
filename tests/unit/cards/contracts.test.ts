@@ -88,7 +88,7 @@ describe("generative UI contracts", () => {
 
   it("creates only validated application-owned progress and issue cards", () => {
     const cards = [
-      createProgressCard({ cardId, title: "Generating pages", variant: "page_batch", completed: 1, total: 3 }),
+      createProgressCard({ cardId, jobId: "00000000-0000-4000-8000-000000000105", title: "Generating pages", variant: "page_batch", completed: 1, total: 3 }),
       createQualityIssueCard({ cardId, title: "Review needed", code: "quality", summary: "One detail needs review." }),
       createGenerationFailureCard({ cardId, title: "Generation paused", code: "temporary", summary: "Try again." }),
       createValidationFailureCard({ cardId, title: "Fix this detail", code: "invalid", summary: "Choose a valid value." }),

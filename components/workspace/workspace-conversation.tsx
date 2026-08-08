@@ -110,9 +110,10 @@ export function WorkspaceConversation({ bookletId, initialMessages }: Readonly<{
       setSubmittedCardIds((submitted) => new Set(submitted).add(card.cardId));
       const advancesGuidedFlow = card.family === "artifact_review" && response.action === "approve_and_continue" && (
         (card.variant === "summary" && (card.payload.artifactType === "audience_profile" || card.payload.artifactType === "story_plan"))
-        || (card.variant === "visual_gallery" && card.payload.artifactType === "visual_bible")
+        || (card.variant === "visual_gallery" && (card.payload.artifactType === "visual_bible" || card.payload.artifactType === "final_pages"))
       );
       if (body.data.followupRequired) await sendText(body.data.summary, responseId);
+      else if (body.data.refreshRequired) router.refresh();
       else if (advancesGuidedFlow) await sendText(body.data.summary);
       else router.refresh();
     } catch (submissionError) {

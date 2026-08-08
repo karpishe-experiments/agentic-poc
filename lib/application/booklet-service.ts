@@ -27,7 +27,8 @@ const systemClock: Clock = { now: Date.now };
 
 function titleFromIdea(idea: string): string {
   const firstSentence = idea.split(/[.!?]/, 1)[0]?.replaceAll(/\s+/g, " ").trim() ?? "";
-  return firstSentence.slice(0, 140) || "Untitled booklet";
+  if (!firstSentence) return "Untitled booklet";
+  return firstSentence.length > 140 ? `${firstSentence.slice(0, 139).trimEnd()}…` : firstSentence;
 }
 
 export type BookletServiceDependencies = {

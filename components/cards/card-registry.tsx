@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 
 type SubmitCard = (input: { action: CardAction; value?: unknown; revisionInstruction?: string }) => Promise<void>;
@@ -82,10 +82,40 @@ function ArtifactReviewCard({ card, busy, submitResponse }: CardProps) {
   </CardFrame>;
 }
 
+type JobProgressStatus = { data?: { status?: string; items?: Array<{ status?: string }> } };
+type ProgressGenUICard = Extract<GenUICard, { family: "progress" }>;
+
 function ProgressCard({ card }: CardProps) {
   if (card.family !== "progress") return null;
-  const percent = Math.round((card.payload.completed / card.payload.total) * 100);
-  return <CardFrame card={card}><p className="text-sm">{card.payload.currentLabel ?? "Working"}: {card.payload.completed} of {card.payload.total}</p><div aria-label={`${percent}% complete`} className="mt-2 h-2 overflow-hidden rounded bg-[#f3e5d8]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div></CardFrame>;
+  return <LiveProgressCard card={card} key={`${card.cardId}:${card.payload.jobId ?? "snapshot"}:${card.payload.completed}:${card.payload.total}`} />;
+}
+
+function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
+  const [progress, setProgress] = useState({ completed: card.payload.completed, total: card.payload.total, isLive: false });
+
+  useEffect(() => {
+    if (!card.payload.jobId || card.status !== "active") return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/jobs/${card.payload.jobId}`, { cache: "no-store" });
+        const body = await response.json() as JobProgressStatus;
+        const items = body.data?.items;
+        if (cancelled || !response.ok || !items?.length) return;
+        setProgress({ completed: items.filter((item) => item.status === "succeeded").length, total: items.length, isLive: true });
+        if (body.data?.status === "running") timer = window.setTimeout(() => void refresh(), 2_000);
+      } catch {
+        // Retain the persisted card snapshot if the local status endpoint is unavailable.
+      }
+    };
+    void refresh();
+    return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
+  }, [card.payload.completed, card.payload.jobId, card.payload.total, card.status]);
+
+  const percent = Math.round((progress.completed / progress.total) * 100);
+  const label = progress.isLive ? "Generating" : card.payload.currentLabel ?? "Working";
+  return <CardFrame card={card}><p aria-live="polite" className="text-sm">{label}: {progress.completed} of {progress.total}</p><div aria-label={`${percent}% complete`} className="mt-2 h-2 overflow-hidden rounded bg-[#f3e5d8]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div></CardFrame>;
 }
 
 function IssueCard({ card, busy, submitResponse }: CardProps) {

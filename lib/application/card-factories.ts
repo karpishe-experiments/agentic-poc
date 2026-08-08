@@ -4,6 +4,7 @@ import type { GenUICard } from "@/lib/contracts/cards";
 type CardIdentity = { cardId: string; title: string; explanation?: string };
 
 export function createProgressCard(input: CardIdentity & {
+  jobId?: string;
   variant: "artifact_generation" | "page_batch" | "export";
   completed: number;
   total: number;
@@ -19,6 +20,7 @@ export function createProgressCard(input: CardIdentity & {
     explanation: input.explanation,
     allowedActions: [],
     payload: {
+      jobId: input.jobId,
       completed: input.completed,
       total: input.total,
       currentLabel: input.currentLabel,

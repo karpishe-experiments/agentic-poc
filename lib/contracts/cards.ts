@@ -109,6 +109,7 @@ const progressCardSchema = baseCardSchema.extend({
   family: z.literal("progress"),
   variant: z.enum(["artifact_generation", "page_batch", "export"]),
   payload: z.object({
+    jobId: opaqueIdSchema.optional(),
     completed: z.number().int().nonnegative(),
     total: z.number().int().positive(),
     currentLabel: z.string().min(1).max(240).optional(),

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CardRegistry } from "@/components/cards/card-registry";
 import type { GenUICard } from "@/lib/contracts/cards";
 
@@ -15,7 +15,7 @@ const cards = [
   { ...base, family: "question", variant: "multi_select", title: "Many choices", allowedActions: ["select"], payload: { prompt: "Choose more", choices: [{ id: "one", label: "One" }, { id: "two", label: "Two" }] } },
   { ...base, family: "artifact_review", variant: "summary", title: "Summary review", allowedActions: ["approve_and_continue"], payload: { artifactType: "audience_profile", versionId: null, summary: [{ label: "Age", value: "6–8" }] } },
   { ...base, family: "artifact_review", variant: "editable_form", title: "Editable review", allowedActions: ["approve_and_continue"], payload: { artifactType: "story_plan", versionId: null, fields: [{ key: "title", label: "Title", value: "Moon boat", multiline: false }] } },
-  { ...base, family: "artifact_review", variant: "visual_gallery", title: "Gallery review", allowedActions: ["select"], payload: { artifactType: "visual_bible", versionId: null, items: [{ assetId, label: "Watercolor", selected: true }] } },
+  { ...base, family: "artifact_review", variant: "visual_gallery", title: "Gallery review", allowedActions: ["approve_and_continue"], payload: { artifactType: "visual_bible", versionId: null, items: [{ assetId, label: "Watercolor", selected: true }] } },
   { ...base, family: "progress", variant: "artifact_generation", title: "Artifact progress", allowedActions: [], payload: { completed: 1, total: 2 } },
   { ...base, family: "progress", variant: "page_batch", title: "Page progress", allowedActions: [], payload: { completed: 1, total: 3 } },
   { ...base, family: "progress", variant: "export", title: "Export progress", allowedActions: [], payload: { completed: 1, total: 1 } },
@@ -26,8 +26,30 @@ const cards = [
 ] satisfies GenUICard[];
 
 describe("CardRegistry", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it.each(cards)("renders the finite $family/$variant card", (card) => {
     render(<CardRegistry card={card} submitResponse={async () => {}} />);
     expect(screen.getByRole("heading", { name: card.title })).toBeTruthy();
+  });
+
+  it("uses one explicit grouped approval after every gallery item has been presented", () => {
+    const gallery = cards.find((card) => card.title === "Gallery review");
+    if (!gallery) throw new Error("Expected gallery fixture.");
+    render(<CardRegistry card={gallery} submitResponse={async () => {}} />);
+
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Approve all reviewed references" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Watercolor" })).toBeTruthy();
+  });
+
+  it("keeps a persisted progress card aligned with its live job status", async () => {
+    const progress = { ...base, family: "progress" as const, variant: "page_batch" as const, title: "Generating pages", allowedActions: [], payload: { jobId: "00000000-0000-4000-8000-000000000103", completed: 0, total: 4, currentLabel: "Preparing the cover" } };
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { status: "succeeded", items: [{ status: "succeeded" }, { status: "succeeded" }, { status: "succeeded" }, { status: "succeeded" }] } })));
+    const rendered = render(<CardRegistry card={progress} />);
+
+    await waitFor(() => expect(screen.getByText("Generating: 4 of 4")).toBeTruthy());
+    expect(fetchMock).toHaveBeenCalledWith(`/api/jobs/${progress.payload.jobId}`, { cache: "no-store" });
+    rendered.unmount();
   });
 });

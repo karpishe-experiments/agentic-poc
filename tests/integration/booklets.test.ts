@@ -74,6 +74,14 @@ describe("BookletService", () => {
     expect(snapshot.exports).toEqual([]);
   });
 
+  it("marks a truncated idea-derived working title instead of cutting it mid-sentence", async () => {
+    const { bookletService: service } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
+    const booklet = await service.create({ idea: `${"A gentle garden story ".repeat(12)}blooms.` });
+
+    expect(booklet.workingTitle).toHaveLength(140);
+    expect(booklet.workingTitle).toMatch(/…$/u);
+  });
+
   it("returns a dedicated not-found error for a missing workspace", async () => {
     const { bookletService: service } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     await expect(service.getWorkspaceSnapshot("00000000-0000-4000-8000-000000000999")).rejects.toMatchObject({ name: "BookletNotFoundError" });

@@ -156,3 +156,21 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `instrumentation.ts` now starts the runner unless the runtime is Edge. During the 2026-08-03 real booklet evaluation, the previously queued three-reference job resumed after restart and completed all items; `npm.cmd run build` and the three browser specs passed.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
+
+### Link persisted progress cards to the authoritative job status
+
+- **Context:** A saved chat transcript displays progress for a local generation job that continues after the message is written.
+- **Observation:** A persisted progress-card snapshot remained at `Preparing: 0` while the separate job panel completed its items, which made the otherwise successful real booklet flow look stalled.
+- **Guidance:** Put the authoritative job ID in the validated progress-card payload and have an active card poll the existing job-status endpoint. Retain the persisted count as the fallback when that endpoint is unavailable; do not create a second progress source.
+- **Evidence:** `lib/contracts/cards.ts`, `lib/application/card-factories.ts`, `lib/application/card-service.ts`, and `components/cards/card-registry.tsx`; `tests/unit/cards/card-registry.test.tsx` verifies live rendering, and the full 66-test suite plus the real remediation booklet passed.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Keep batch gallery approval ergonomic while recording precise scope
+
+- **Context:** A creator must review several paid reference or final-page images before the workflow can advance.
+- **Observation:** Requiring a checkbox beside every image made the review checkpoint feel like data entry, even though the server still needs durable evidence of which individual assets were approved.
+- **Guidance:** Present every image with a single, clearly named approval action after review. On that action, record the individual asset/page approval scopes server-side in the same authoritative transition instead of weakening approval traceability.
+- **Evidence:** `components/cards/card-registry.tsx` presents one gallery action; `lib/application/card-service.ts` persists the individual scopes; `tests/integration/artifact-workflow.test.ts` and `tests/e2e/golden-path.spec.ts` cover the grouped approval path.
+- **Promotion target:** Documentation.
+- **Status:** Candidate.

@@ -2,11 +2,21 @@
 
 ## Purpose and status
 
-This remediation plan was approved for implementation after a hands-on real-provider run on 2026-08-02. It remains a companion to, not an amendment of, the accepted POC plan. Working-flow implementation is complete through Final Pages; PDF export verification is deliberately deferred as a final-stage feature.
+This remediation plan was approved for implementation after a hands-on real-provider run on 2026-08-02. It remains a companion to, not an amendment of, the accepted POC plan. Its five slices are now implemented and verified, including a bounded real-provider PDF export.
 
 The run created booklet `2cec7640-c4f6-418d-be98-b75d5ffd7b14` from the prompt *“Nia and her tiny lantern help a closed moonflower listen to three kind nighttime sounds before it blooms for her sleepy neighbors.”* It used the real OpenAI manager and specialist providers. Twelve successful model calls were recorded before the workflow blocked; estimated model cost was $0.133630. No image, page, or PDF asset was created.
 
 The visual record of the blocked state is retained at `output/playwright-realux-visual-bible-blocker.png` (ignored evaluation output).
+
+## Implementation and verification result
+
+The repaired flow completed a new, bounded real-provider booklet from guided intake to an actual downloaded PDF. The creator selected three story pages, reviewed one grouped reference gallery and one grouped final-page gallery, and the application produced five canonical references plus a four-page square PDF (cover plus three story pages). The estimated model/image cost recorded by the local ledger was $0.775029; the provider did not supply an actual-cost value.
+
+The remediation run found and corrected two final display defects while exercising the real path: persisted transcript progress cards now poll their owning job instead of remaining at their initial count, and long idea-derived working titles end with an ellipsis instead of silently cutting off. The rendered PDF kept the application-composed reader text legible and within page bounds.
+
+The real image provider still introduced incidental lettering in some background artwork and did not maintain Pip's wardrobe/accessories perfectly between pages. Those are visible human-review findings, not workflow blockers. The POC has no OCR or automated identity-consistency gate, so creators should use the existing revision/approval path when those defects matter. This local remediation evidence is ignored workspace output and is not a substitute for the PRD's separately retained evaluation booklet packet.
+
+Verified commands: `npm.cmd test` (66 tests), `npm.cmd run test:agent` (12 fixtures), `npm.cmd run typecheck`, `npm.cmd run lint`, `npm.cmd run build`, and `npm.cmd run test:e2e` (3 browser specs).
 
 ## Observed flow and findings
 
@@ -91,7 +101,7 @@ On the already-running development server, creating a booklet first encountered 
 3. Run one bounded real-provider evaluation booklet (3 story pages) through reference generation, final-page approval, and PDF export. Capture evidence JSON, stage screenshots, estimated/actual costs, and render the downloaded PDF for layout inspection.
 4. Document a narrow dev-server recovery procedure for stale Next chunks and add a user-facing reload control in the boundary. Do not add broad cache-clearing logic or production infrastructure solely for this POC.
 
-**Acceptance criteria:** A new real booklet completes from idea to reviewed PDF without internal API workarounds; the retained evaluation packet includes evidence, screenshots, and rendered PDF pages.
+**Acceptance criteria:** Met for the bounded remediation run: a new real booklet completed from idea to reviewed PDF without internal API workarounds, with local evidence, screenshots, and rendered PDF pages. The retained PRD evaluation packet remains governed by the accepted POC plan.
 
 ## Sequencing and scope
 
@@ -101,4 +111,4 @@ Implement Slices 1–3 as the first vertical slice before spending on another re
 
 - The live model can still return semantically weak visual details. The deterministic shell must protect membership and IDs, while review cards retain human approval before images are generated.
 - The targeted Story repair cost was material in the failed run. Surface the reason before a repair is created and verify that only one repair/review is issued per approval attempt.
-- Do not judge final illustrated-booklet UX until a repaired real run reaches PDF export; the current run is valid evidence of the upstream UX failure but not of image or PDF quality.
+- The repaired real run reached PDF export and passed layout inspection, but provider artwork still needs human inspection for incidental lettering and visual-identity drift. Do not infer provider-level OCR or character-consistency guarantees from a successful PDF export.

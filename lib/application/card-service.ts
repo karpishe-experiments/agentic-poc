@@ -115,7 +115,7 @@ export class CardService {
               bookletId,
               messageId: randomUUID(),
               narration: "Canonical references are generating in the background. You can keep using the workspace while progress updates.",
-              card: createProgressCard({ cardId: randomUUID(), title: "Generating canonical references", explanation: "Completed references are retained if another item needs recovery.", variant: "artifact_generation", completed: 0, total: Math.max(1, items.length), currentLabel: "Preparing reference images" }),
+              card: createProgressCard({ cardId: randomUUID(), jobId: job.id, title: "Generating canonical references", explanation: "Completed references are retained if another item needs recovery.", variant: "artifact_generation", completed: 0, total: Math.max(1, items.length), currentLabel: "Preparing reference images" }),
               createdAtMs: Date.now(),
             });
             // The persistent Node runner owns normal execution. Vitest disables it to
@@ -153,7 +153,7 @@ export class CardService {
             bookletId,
             messageId: randomUUID(),
             narration: "Page illustrations are generating in sequence in the background. Completed pages remain available if another page needs recovery.",
-            card: createProgressCard({ cardId: randomUUID(), title: "Generating booklet pages", explanation: "You can keep using the workspace while each page completes.", variant: "page_batch", completed: 0, total: Math.max(1, items.length), currentLabel: "Preparing the cover illustration" }),
+            card: createProgressCard({ cardId: randomUUID(), jobId: job.id, title: "Generating booklet pages", explanation: "You can keep using the workspace while each page completes.", variant: "page_batch", completed: 0, total: Math.max(1, items.length), currentLabel: "Preparing the cover illustration" }),
             createdAtMs: Date.now(),
           });
           // See the reference-job note above: avoid racing the in-process runner.
