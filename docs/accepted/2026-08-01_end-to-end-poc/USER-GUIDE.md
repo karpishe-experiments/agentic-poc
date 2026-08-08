@@ -52,4 +52,4 @@ After all final pages are approved, ask the creative partner to export the PDF. 
 
 ## Local data and limitations
 
-Booklet data and generated assets are stored under the configured `data/` directory. Preserve that directory to retain local work. Provider policy blocks, generation failures, and visual inconsistency remain possible and are surfaced as recoverable POC conditions. This POC has no accounts, sharing, publishing, payments, or deletion workflow.
+Booklet data and generated assets are stored under the configured `data/` directory. Preserve that directory to retain local work. If a generation appears stalled, inspect the server terminal for `GENERATION_DIAGNOSTIC` records and the matching `$DATA_ROOT/diagnostics/jobs/<job-id>.ndjson` file. These records identify the job/item, runtime, model, request timing, and safe provider error metadata; they never include prompts, image bytes, or credentials. Provider policy blocks, generation failures, and visual inconsistency remain possible and are surfaced as recoverable POC conditions. This POC has no accounts, sharing, publishing, payments, or deletion workflow.

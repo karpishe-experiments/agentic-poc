@@ -9,10 +9,20 @@ import { getModelRoleConfig } from "@/lib/config/models";
 import { skillContextSchema, type SkillContext } from "@/lib/contracts/skills";
 import { classifyModelError, type AgentRunMetadata } from "@/lib/agents/run-metadata";
 import { modelCallCost } from "@/lib/application/model-call-cost";
+import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { withTrace } from "@openai/agents";
+import { ZodError } from "zod";
 
 type SpecialistRuntime = Pick<OpenAISpecialistRuntime, "run"> & Partial<Pick<OpenAISpecialistRuntime, "runWithMetadata">>;
 const fakeRunMetadata: AgentRunMetadata = { usage: { inputTokens: 0, outputTokens: 0 }, providerRequestId: null };
+
+function allowedSkillsForContext(context: SkillContext, registry: ReturnType<typeof createDefaultSkillRegistry>) {
+  const stageSkills = registry.getAllowed(context.stage);
+  if (context.stage !== "story_plan") return stageSkills;
+  return stageSkills.filter((skill) => context.operation === "story_quality"
+    ? skill.id === "quality_review_targeted_repair@1"
+    : skill.id === "story_planning_revision@1");
+}
 
 export class ManagerService {
   private readonly repositories: Repositories;
@@ -47,7 +57,7 @@ export class ManagerService {
 
   private async runWithContext(context: SkillContext, input: { cardId: string; skillInput?: unknown }): Promise<{ traceId: string; route: string; output: unknown }> {
     const registry = createDefaultSkillRegistry();
-    const allowed = registry.getAllowed(context.stage);
+    const allowed = allowedSkillsForContext(context, registry);
     const startedAtMs = Date.now();
     let route: Awaited<ReturnType<typeof this.runtime.route>>;
     try {
@@ -63,6 +73,20 @@ export class ManagerService {
         provider: this.runtimeMode === "real" ? "openai" : "fake", model: this.runtimeMode === "real" ? getModelRoleConfig("manager").model : "fake-manager-v1",
         traceId: context.traceId, status: "failed", attempt: 1, startedAtMs, latencyMs: Math.max(0, Date.now() - startedAtMs),
         inputReference: { stage: context.stage, operation: context.operation }, errorMessage: error instanceof Error ? error.message : "Manager routing failed.", errorKind: classifyModelError(error),
+        ...modelCallCost({ runtimeMode: this.runtimeMode, role: "manager", usage: this.runtimeMode === "fake" ? fakeRunMetadata.usage : null }),
+      });
+      if (error instanceof ZodError) {
+        throw new RecoverableApplicationError({ code: "skill_contract_mismatch", message: "This step returned an incompatible result. Your booklet work is unchanged; retry this step.", status: 409 });
+      }
+      throw error;
+    }
+    if (!allowed.some((skill) => skill.id === route.skillId)) {
+      const error = new RecoverableApplicationError({ code: "skill_contract_mismatch", message: "The selected step is not valid for the saved booklet state. Retry this step.", status: 409 });
+      await this.repositories.evidence.recordModelCall({
+        id: randomUUID(), bookletId: context.bookletId, operation: "manager", skillId: null,
+        provider: this.runtimeMode === "real" ? "openai" : "fake", model: this.runtimeMode === "real" ? getModelRoleConfig("manager").model : "fake-manager-v1",
+        traceId: context.traceId, status: "failed", attempt: 1, startedAtMs, latencyMs: Math.max(0, Date.now() - startedAtMs),
+        inputReference: { stage: context.stage, operation: context.operation }, outputReference: { skillId: route.skillId }, errorMessage: error.message, errorKind: "validation",
         ...modelCallCost({ runtimeMode: this.runtimeMode, role: "manager", usage: this.runtimeMode === "fake" ? fakeRunMetadata.usage : null }),
       });
       throw error;
@@ -89,10 +113,22 @@ export class ManagerService {
     });
     const skill = registry.get(route.skillId);
     const rawInput = input.skillInput ?? (route.skillId === "intake_readiness@1" ? { cardId: input.cardId } : { intent: context.intent });
-    const parsedInput = skill.inputSchema.parse(rawInput);
     const specialistStartedAtMs = Date.now();
-    let rawOutput: unknown;
     let specialistRunMetadata: AgentRunMetadata | null = this.runtimeMode === "fake" ? fakeRunMetadata : null;
+    let parsedInput: unknown;
+    try {
+      parsedInput = skill.inputSchema.parse(rawInput);
+    } catch (error) {
+      await this.repositories.evidence.recordModelCall({
+        id: randomUUID(), bookletId: context.bookletId, operation: "skill", skillId: skill.id,
+        provider: this.runtimeMode === "real" ? "openai" : "fake", model: this.runtimeMode === "real" ? getModelRoleConfig("skill").model : "fake-skill-v1",
+        traceId: context.traceId, status: "failed", attempt: 1, startedAtMs: specialistStartedAtMs, latencyMs: Math.max(0, Date.now() - specialistStartedAtMs),
+        inputReference: rawInput, errorMessage: error instanceof Error ? error.message : "Skill input validation failed.", errorKind: classifyModelError(error),
+        ...modelCallCost({ runtimeMode: this.runtimeMode, role: "skill", usage: specialistRunMetadata?.usage ?? null }),
+      });
+      throw new RecoverableApplicationError({ code: "skill_contract_mismatch", message: "The saved step could not be prepared. Your booklet work is unchanged; retry this step.", status: 409 });
+    }
+    let rawOutput: unknown;
     try {
       if (this.specialistRuntime?.runWithMetadata) {
         const result = await this.specialistRuntime.runWithMetadata(skill, parsedInput, context);
@@ -111,9 +147,24 @@ export class ManagerService {
         inputReference: rawInput, errorMessage: error instanceof Error ? error.message : "Specialist execution failed.", errorKind: classifyModelError(error),
         ...modelCallCost({ runtimeMode: this.runtimeMode, role: "skill", usage: specialistRunMetadata?.usage ?? null }),
       });
+      if (error instanceof ZodError) {
+        throw new RecoverableApplicationError({ code: "skill_contract_mismatch", message: "This step returned an incompatible result. Your booklet work is unchanged; retry this step.", status: 409 });
+      }
       throw error;
     }
-    const output = skill.outputSchema.parse(rawOutput);
+    let output: unknown;
+    try {
+      output = skill.outputSchema.parse(rawOutput);
+    } catch (error) {
+      await this.repositories.evidence.recordModelCall({
+        id: randomUUID(), bookletId: context.bookletId, operation: "skill", skillId: skill.id,
+        provider: this.runtimeMode === "real" ? "openai" : "fake", model: this.runtimeMode === "real" ? getModelRoleConfig("skill").model : "fake-skill-v1",
+        traceId: context.traceId, status: "failed", attempt: 1, startedAtMs: specialistStartedAtMs, latencyMs: Math.max(0, Date.now() - specialistStartedAtMs),
+        inputReference: rawInput, errorMessage: error instanceof Error ? error.message : "Skill output validation failed.", errorKind: classifyModelError(error),
+        ...modelCallCost({ runtimeMode: this.runtimeMode, role: "skill", usage: specialistRunMetadata?.usage ?? null }),
+      });
+      throw new RecoverableApplicationError({ code: "skill_contract_mismatch", message: "This step returned an incompatible result. Your booklet work is unchanged; retry this step.", status: 409 });
+    }
     await this.repositories.evidence.recordModelCall({
       id: randomUUID(),
       bookletId: context.bookletId,

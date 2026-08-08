@@ -50,7 +50,16 @@ export const imageResultSchema = z.object({
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   usage: z.object({ inputTokens: z.number().int().nonnegative(), outputTokens: z.number().int().nonnegative() }).nullable(),
-  error: z.object({ kind: imageErrorKindSchema, message: z.string().min(1) }).nullable(),
+  error: z.object({
+    kind: imageErrorKindSchema,
+    message: z.string().min(1),
+    providerError: z.object({
+      status: z.number().int().nullable(),
+      code: z.string().nullable(),
+      type: z.string().nullable(),
+      requestId: z.string().nullable(),
+    }).optional(),
+  }).nullable(),
 });
 
 export type ImageProviderCapabilities = z.infer<typeof imageProviderCapabilitiesSchema>;

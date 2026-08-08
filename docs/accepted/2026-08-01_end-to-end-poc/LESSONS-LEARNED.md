@@ -174,3 +174,21 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `components/cards/card-registry.tsx` presents one gallery action; `lib/application/card-service.ts` persists the individual scopes; `tests/integration/artifact-workflow.test.ts` and `tests/e2e/golden-path.spec.ts` cover the grouped approval path.
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
+
+### Record a safe provider boundary before awaiting background generation
+
+- **Context:** A local persisted job runner awaits external image-provider requests one item at a time.
+- **Observation:** A terminal model-call record is written only after a provider request returns. If that request throws or remains unresolved, the saved item can stay `running` without enough evidence to distinguish a provider wait from an application failure.
+- **Guidance:** Before calling the provider, record a safe job/item event with runtime, model, operation, and reference count; write periodic waiting heartbeats and a terminal success/failure event. Persist the trail under the local data root and keep errors scoped to the job loop so a thrown item does not stop later work. Never record prompts, image bytes, credentials, or arbitrary provider response bodies.
+- **Evidence:** `lib/jobs/generation-diagnostics.ts`, `lib/application/generation-service.ts`, `lib/jobs/runner-bootstrap.ts`, and `tests/integration/generation-diagnostics.test.ts`; the test verifies a provider exception, a waiting heartbeat, and completion of the next item, and the full 67-test suite passed on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Make the manager's actual tool list match workflow eligibility
+
+- **Context:** A manager routes among structured specialists whose input schemas differ, including stages that can expose more than one specialist.
+- **Observation:** Supplying a filtered skill list only in the manager prompt was insufficient when the real manager agent still registered every stage-level tool. It selected a Story Plan quality specialist at Final Pages, whose required `storyPlan` input was unavailable, and the schema failure escaped before a specialist ledger record existed.
+- **Guidance:** Determine eligibility in application code from both stage and operation, build the manager agent with exactly that eligible tool set, and reject any returned route outside it before input parsing. Record input/output schema failures as failed model calls and surface them as typed recoveries rather than terminal chat errors.
+- **Evidence:** `lib/application/manager-service.ts`, `lib/agents/openai-manager-runtime.ts`, and `lib/agents/manager.ts`; `tests/integration/manager-contracts.test.ts` covers Final Pages and Story Plan eligibility, while the full 70-test suite and 12 agent fixtures passed on 2026-08-08.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.

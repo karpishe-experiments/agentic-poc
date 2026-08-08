@@ -19,7 +19,8 @@ export class OpenAIManagerRuntime {
   public async route(input: ManagerRouteInput): Promise<RoutedManagerResult> {
     const parsed = managerRouteInputSchema.parse(input);
     const model = getModelRoleConfig("manager");
-    const result = await this.runner.run(createManagerAgent(this.registry, parsed.stage, { model: model.model, reasoning: model.reasoning }), JSON.stringify({
+    const allowedSkills = parsed.availableSkills.map((skill) => this.registry.get(skill.id));
+    const result = await this.runner.run(createManagerAgent(allowedSkills, parsed.stage, { model: model.model, reasoning: model.reasoning }), JSON.stringify({
       stage: parsed.stage,
       operation: parsed.operation,
       intent: parsed.intent,

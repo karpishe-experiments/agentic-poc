@@ -4,7 +4,7 @@ import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
-import { imageRequestSchema, type ImageRequest } from "@/lib/contracts/images";
+import { imageRequestSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
 import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
 import { FakeImageProvider } from "@/lib/images/fake-image-provider";
 import { OpenAIImageProvider } from "@/lib/images/openai-image-provider";
@@ -13,6 +13,7 @@ import { composePage } from "@/lib/composition/compose-page";
 import { estimateImageCostUsd, pricingVersion } from "@/lib/config/pricing";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import type { GenUICard } from "@/lib/contracts/cards";
+import { describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
 
 type ReferenceItem = {
   entityId: string;
@@ -56,8 +57,10 @@ export class GenerationService {
   private readonly provider: ImageProvider;
   private readonly imageModel: string;
   private readonly dataRoot?: string;
+  private readonly diagnostics: GenerationDiagnostics;
+  private readonly diagnosticWaitMs: number;
 
-  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; provider?: ImageProvider; imageModel?: string } = {}) {
+  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; provider?: ImageProvider; imageModel?: string; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
     const database = dependencies.database ?? createDatabase();
     const needsEnvironment = !dependencies.assets || !dependencies.provider || !dependencies.imageModel;
     const env = needsEnvironment ? getServerEnv() : null;
@@ -67,6 +70,8 @@ export class GenerationService {
     this.dataRoot = env ? resolveDataRoot(env) : undefined;
     this.provider = dependencies.provider ?? (process.env.IMAGE_PROVIDER_MODE === "real" ? new OpenAIImageProvider() : new FakeImageProvider());
     this.imageModel = dependencies.imageModel ?? env!.OPENAI_IMAGE_MODEL;
+    this.diagnostics = dependencies.diagnostics ?? new GenerationDiagnostics(this.dataRoot);
+    this.diagnosticWaitMs = dependencies.diagnosticWaitMs ?? 30_000;
   }
 
   public async createReferenceJob(bookletId: string) {
@@ -101,37 +106,46 @@ export class GenerationService {
       if (!item) break;
       const input = item.input as { item: ReferenceItem; request: ImageRequest };
       const request = imageRequestSchema.parse(input.request);
-      const startedAtMs = Date.now();
-      const result = await this.provider.execute(request);
-      await this.repositories.evidence.recordModelCall({
-        id: randomUUID(), bookletId, operation: "image_reference", skillId: "visual_direction_reference_planning@1", jobId,
-        provider: this.provider.runtime === "fake" ? "fake" : result.provider, model: result.model, traceId: jobId,
-        status: result.status === "succeeded" ? "succeeded" : "failed", attempt: item.attemptCount, startedAtMs, latencyMs: Math.max(0, Date.now() - startedAtMs),
-        inputReference: { itemKey: item.itemKey, request }, outputReference: result.status === "succeeded" ? { providerRequestId: result.providerRequestId } : undefined,
-        usage: result.usage, actualCostUsd: this.provider.runtime === "fake" ? "0" : null, estimatedCostUsd: this.provider.runtime === "fake" ? "0" : estimateImageCostUsd(result.usage)?.toFixed(6) ?? null, pricingVersion: this.provider.runtime === "fake" ? "fake-runtime-v1" : pricingVersion,
-        errorMessage: result.error?.message,
+      await this.diagnostics.record({
+        event: "job_item_claimed", bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount,
+        operation: request.operation, providerRuntime: this.provider.runtime, model: request.model, geometry: request.geometry, referenceCount: request.references.length,
       });
-      if (result.status === "failed" || !result.bytesBase64 || !result.mimeType || !result.width || !result.height) {
-        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: result.error ?? { kind: "unavailable", message: "Image provider returned no image." }, finishedAtMs: Date.now() });
-        if (result.error?.kind === "transient" && item.attemptCount <= 2) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
-          await this.repositories.jobs.retryItem(jobId, item.id);
+      try {
+        const { result, startedAtMs } = await this.executeImageWithDiagnostics({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, request });
+        await this.repositories.evidence.recordModelCall({
+          id: randomUUID(), bookletId, operation: "image_reference", skillId: "visual_direction_reference_planning@1", jobId,
+          provider: this.provider.runtime === "fake" ? "fake" : result.provider, model: result.model, traceId: jobId,
+          status: result.status === "succeeded" ? "succeeded" : "failed", attempt: item.attemptCount, startedAtMs, latencyMs: Math.max(0, Date.now() - startedAtMs),
+          inputReference: { itemKey: item.itemKey, request }, outputReference: result.status === "succeeded" ? { providerRequestId: result.providerRequestId } : undefined,
+          usage: result.usage, actualCostUsd: this.provider.runtime === "fake" ? "0" : null, estimatedCostUsd: this.provider.runtime === "fake" ? "0" : estimateImageCostUsd(result.usage)?.toFixed(6) ?? null, pricingVersion: this.provider.runtime === "fake" ? "fake-runtime-v1" : pricingVersion,
+          errorMessage: result.error?.message,
+        });
+        if (result.status === "failed" || !result.bytesBase64 || !result.mimeType || !result.width || !result.height) {
+          const failure = result.error ?? { kind: "unavailable" as const, message: "Image provider returned no image." };
+          await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error: new Error(failure.message) });
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now() });
+          if (result.error?.kind === "transient" && item.attemptCount <= 2) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
+            await this.repositories.jobs.retryItem(jobId, item.id);
+          }
           continue;
         }
-        continue;
+        const assetId = randomUUID();
+        const bytes = Buffer.from(result.bytesBase64, "base64");
+        const uri = referenceUri(bookletId, input.item, assetId);
+        await (await this.getAssetStore()).put(uri, bytes, result.mimeType);
+        await this.repositories.jobs.completeItem({
+          jobId,
+          itemId: item.id,
+          result: { provider: result.provider, model: result.model, providerRequestId: result.providerRequestId, usage: result.usage, request },
+          assets: [{ id: assetId, bookletId, kind: "reference", uri, mimeType: result.mimeType, width: result.width, height: result.height, sourceAssetId: null, metadata: { role: input.item.kind === "character" ? "character_identity" : "location_continuity", entityId: input.item.entityId, jobId, request }, createdAtMs: Date.now() }],
+          primaryAssetId: assetId,
+          finishedAtMs: Date.now(),
+        });
+      } catch (error) {
+        await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
+        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "unavailable", message: describeGenerationError(error).message }, finishedAtMs: Date.now() });
       }
-      const assetId = randomUUID();
-      const bytes = Buffer.from(result.bytesBase64, "base64");
-      const uri = referenceUri(bookletId, input.item, assetId);
-      await (await this.getAssetStore()).put(uri, bytes, result.mimeType);
-      await this.repositories.jobs.completeItem({
-        jobId,
-        itemId: item.id,
-        result: { provider: result.provider, model: result.model, providerRequestId: result.providerRequestId, usage: result.usage, request },
-        assets: [{ id: assetId, bookletId, kind: "reference", uri, mimeType: result.mimeType, width: result.width, height: result.height, sourceAssetId: null, metadata: { role: input.item.kind === "character" ? "character_identity" : "location_continuity", entityId: input.item.entityId, jobId, request }, createdAtMs: Date.now() }],
-        primaryAssetId: assetId,
-        finishedAtMs: Date.now(),
-      });
     }
     await this.finalizeReferences(bookletId, jobId);
     });
@@ -218,35 +232,41 @@ export class GenerationService {
       if (!item) break;
       const input = item.input as { page: Parameters<typeof composePage>[0]["page"]; geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5"; request: ImageRequest };
       const request = imageRequestSchema.parse(input.request);
-      const sourceReferences = await Promise.all(request.references.map(async (reference) => {
-        const asset = await this.repositories.assets.get(reference.assetId);
-        return asset ? { assetId: asset.id, bytes: Buffer.from(await (await this.getAssetStore()).get(asset.uri)) } : null;
-      }));
-      if (sourceReferences.some((reference) => reference === null)) {
-        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: "A Page Plan reference asset is missing." }, finishedAtMs: Date.now() });
-        continue;
-      }
-      const usableReferences = sourceReferences.filter((reference) => reference !== null);
-      const startedAtMs = Date.now();
-      const generated = await this.provider.execute(request, usableReferences);
-      await this.repositories.evidence.recordModelCall({
-        id: randomUUID(), bookletId, operation: "image_page", skillId: "image_prompt_compilation@1", jobId,
-        provider: this.provider.runtime === "fake" ? "fake" : generated.provider, model: generated.model, traceId: jobId,
-        status: generated.status === "succeeded" ? "succeeded" : "failed", attempt: item.attemptCount, startedAtMs, latencyMs: Math.max(0, Date.now() - startedAtMs),
-        inputReference: { itemKey: item.itemKey, request }, outputReference: generated.status === "succeeded" ? { providerRequestId: generated.providerRequestId } : undefined,
-        usage: generated.usage, actualCostUsd: this.provider.runtime === "fake" ? "0" : null, estimatedCostUsd: this.provider.runtime === "fake" ? "0" : estimateImageCostUsd(generated.usage)?.toFixed(6) ?? null, pricingVersion: this.provider.runtime === "fake" ? "fake-runtime-v1" : pricingVersion,
-        errorMessage: generated.error?.message,
+      await this.diagnostics.record({
+        event: "job_item_claimed", bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount,
+        operation: request.operation, providerRuntime: this.provider.runtime, model: request.model, geometry: request.geometry, referenceCount: request.references.length,
       });
-      if (generated.status === "failed" || !generated.bytesBase64 || !generated.mimeType || !generated.width || !generated.height) {
-        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: generated.error ?? { kind: "unavailable", message: "Image provider returned no page image." }, finishedAtMs: Date.now() });
-        if (generated.error?.kind === "transient" && item.attemptCount <= 2) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
-          await this.repositories.jobs.retryItem(jobId, item.id);
+      try {
+        const sourceReferences = await Promise.all(request.references.map(async (reference) => {
+          const asset = await this.repositories.assets.get(reference.assetId);
+          return asset ? { assetId: asset.id, bytes: Buffer.from(await (await this.getAssetStore()).get(asset.uri)) } : null;
+        }));
+        if (sourceReferences.some((reference) => reference === null)) {
+          const error = new Error("A Page Plan reference asset is missing.");
+          await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: error.message }, finishedAtMs: Date.now() });
           continue;
         }
-        continue;
-      }
-      try {
+        const usableReferences = sourceReferences.filter((reference) => reference !== null);
+        const { result: generated, startedAtMs } = await this.executeImageWithDiagnostics({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, request, inputAssets: usableReferences });
+        await this.repositories.evidence.recordModelCall({
+          id: randomUUID(), bookletId, operation: "image_page", skillId: "image_prompt_compilation@1", jobId,
+          provider: this.provider.runtime === "fake" ? "fake" : generated.provider, model: generated.model, traceId: jobId,
+          status: generated.status === "succeeded" ? "succeeded" : "failed", attempt: item.attemptCount, startedAtMs, latencyMs: Math.max(0, Date.now() - startedAtMs),
+          inputReference: { itemKey: item.itemKey, request }, outputReference: generated.status === "succeeded" ? { providerRequestId: generated.providerRequestId } : undefined,
+          usage: generated.usage, actualCostUsd: this.provider.runtime === "fake" ? "0" : null, estimatedCostUsd: this.provider.runtime === "fake" ? "0" : estimateImageCostUsd(generated.usage)?.toFixed(6) ?? null, pricingVersion: this.provider.runtime === "fake" ? "fake-runtime-v1" : pricingVersion,
+          errorMessage: generated.error?.message,
+        });
+        if (generated.status === "failed" || !generated.bytesBase64 || !generated.mimeType || !generated.width || !generated.height) {
+          const failure = generated.error ?? { kind: "unavailable" as const, message: "Image provider returned no page image." };
+          await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error: new Error(failure.message) });
+          await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: failure, finishedAtMs: Date.now() });
+          if (generated.error?.kind === "transient" && item.attemptCount <= 2) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelay(item.attemptCount)));
+            await this.repositories.jobs.retryItem(jobId, item.id);
+          }
+          continue;
+        }
         const sourceId = randomUUID();
         const sourceBytes = Buffer.from(generated.bytesBase64, "base64");
         const sourceUri = `${bookletId}/pages/source/${item.position}/${sourceId}.png`;
@@ -265,7 +285,8 @@ export class GenerationService {
           ],
         });
       } catch (error) {
-        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "user_correctable", message: error instanceof Error ? error.message : "Page composition failed." }, finishedAtMs: Date.now() });
+        await this.recordItemFailure({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, attempt: item.attemptCount, error });
+        await this.repositories.jobs.failItem({ jobId, itemId: item.id, error: { kind: "unavailable", message: describeGenerationError(error).message }, finishedAtMs: Date.now() });
       }
     }
     await this.finalizePages(bookletId, jobId);
@@ -358,6 +379,77 @@ export class GenerationService {
       narration: "Every page is composed and ready for review.",
       card,
       createdAtMs: Date.now(),
+    });
+  }
+
+  private async executeImageWithDiagnostics(input: {
+    bookletId: string;
+    jobId: string;
+    itemId: string;
+    itemKey: string;
+    attempt: number;
+    request: ImageRequest;
+    inputAssets?: Array<{ assetId: string; bytes: Buffer }>;
+  }): Promise<{ result: ImageResult; startedAtMs: number }> {
+    const startedAtMs = Date.now();
+    const shared = {
+      bookletId: input.bookletId,
+      jobId: input.jobId,
+      itemId: input.itemId,
+      itemKey: input.itemKey,
+      attempt: input.attempt,
+      operation: input.request.operation,
+      providerRuntime: this.provider.runtime,
+      model: input.request.model,
+      geometry: input.request.geometry,
+      referenceCount: input.request.references.length,
+    } as const;
+    await this.diagnostics.record({ event: "provider_request_started", ...shared });
+    const heartbeat = this.diagnosticWaitMs > 0
+      ? setInterval(() => {
+        void this.diagnostics.record({ event: "provider_request_still_waiting", ...shared, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
+      }, this.diagnosticWaitMs)
+      : undefined;
+
+    try {
+      const result = await this.provider.execute(input.request, input.inputAssets);
+      await this.diagnostics.record({
+        event: "provider_request_completed",
+        ...shared,
+        elapsedMs: Math.max(0, Date.now() - startedAtMs),
+        resultStatus: result.status,
+        providerRequestId: result.providerRequestId,
+        error: result.error ? {
+          ...describeGenerationError(new Error(result.error.message)),
+          status: result.error.providerError?.status ?? null,
+          code: result.error.providerError?.code ?? null,
+          type: result.error.providerError?.type ?? null,
+          requestId: result.error.providerError?.requestId ?? null,
+        } : undefined,
+      });
+      return { result, startedAtMs };
+    } catch (error) {
+      await this.diagnostics.record({
+        event: "provider_request_threw",
+        ...shared,
+        elapsedMs: Math.max(0, Date.now() - startedAtMs),
+        error: describeGenerationError(error),
+      });
+      throw error;
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+    }
+  }
+
+  private async recordItemFailure(input: { bookletId: string; jobId: string; itemId: string; itemKey: string; attempt: number; error: unknown }): Promise<void> {
+    await this.diagnostics.record({
+      event: "job_item_failed",
+      bookletId: input.bookletId,
+      jobId: input.jobId,
+      itemId: input.itemId,
+      itemKey: input.itemKey,
+      attempt: input.attempt,
+      error: describeGenerationError(input.error),
     });
   }
 

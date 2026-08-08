@@ -19,12 +19,13 @@ const context = {
 describe("manager and fake model runtime", () => {
   it("exposes only allowed strict specialist tools and routes to exactly one", () => {
     const registry = createDefaultSkillRegistry();
-    const manager = createManagerAgent(registry, "audience_profile");
+    const allowedSkills = registry.getAllowed("audience_profile");
+    const manager = createManagerAgent(allowedSkills, "audience_profile");
     const route = new FakeModelRuntime().route({
       stage: "audience_profile",
       operation: "intake",
       intent: context.intent,
-      availableSkills: registry.getAllowed("audience_profile").map((skill) => ({ id: skill.id, description: skill.description })),
+      availableSkills: allowedSkills.map((skill) => ({ id: skill.id, description: skill.description })),
     });
 
     expect(manager.toolUseBehavior).toBe("stop_on_first_tool");

@@ -62,7 +62,9 @@ export function createDefaultSkillRegistry(): SkillRegistry {
   registry.register({
     id: "quality_review_targeted_repair@1",
     description: "Review one quality gate and propose at most one targeted repair.",
-    stages: ["story_plan", "final_pages", "pdf_export"],
+    // This specialist's input and repair contract are Story Plan-specific.
+    // Final-page and export quality remain deterministic application gates.
+    stages: ["story_plan"],
     inputSchema: storyQualityInputSchema,
     outputSchema: storyQualityResultSchema,
     run: reviewAndRepairStory,

@@ -18,6 +18,16 @@ function errorKind(error: unknown): "transient" | "user_correctable" | "blocked"
   return "unavailable";
 }
 
+function providerErrorDetails(error: unknown): { status: number | null; code: string | null; type: string | null; requestId: string | null } {
+  const source = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  return {
+    status: typeof source.status === "number" && Number.isFinite(source.status) ? source.status : null,
+    code: typeof source.code === "string" ? source.code : null,
+    type: typeof source.type === "string" ? source.type : null,
+    requestId: typeof source.request_id === "string" ? source.request_id : typeof source.requestId === "string" ? source.requestId : null,
+  };
+}
+
 export class OpenAIImageProvider implements ImageProvider {
   public readonly runtime = "real" as const;
   public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1024x1024", "1536x1024", "1024x1536"] as ["1024x1024", "1536x1024", "1024x1536"] };
@@ -46,7 +56,7 @@ export class OpenAIImageProvider implements ImageProvider {
         usage: usage ? { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0 } : null, error: null,
       });
     } catch (error) {
-      return imageResultSchema.parse({ status: "failed", provider: "openai", model: request.model, providerRequestId: null, mimeType: null, bytesBase64: null, width: null, height: null, usage: null, error: { kind: errorKind(error), message: error instanceof Error ? error.message : "Image generation failed." } });
+      return imageResultSchema.parse({ status: "failed", provider: "openai", model: request.model, providerRequestId: null, mimeType: null, bytesBase64: null, width: null, height: null, usage: null, error: { kind: errorKind(error), message: error instanceof Error ? error.message : "Image generation failed.", providerError: providerErrorDetails(error) } });
     }
   }
 }

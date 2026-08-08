@@ -1,12 +1,13 @@
 import { Agent, tool } from "@openai/agents";
 import { z } from "zod";
 import { managerRouteResultSchema, type ManagerRouteResult } from "@/lib/contracts/skills";
-import type { SkillRegistry } from "@/lib/skills/registry";
+import type { ArtifactType } from "@/lib/contracts/domain";
+import type { SkillDefinition } from "@/lib/skills/registry";
 
 const toolParameters = z.object({ intent: z.string().min(1) });
 
-export function createManagerAgent(registry: SkillRegistry, stage: Parameters<SkillRegistry["getAllowed"]>[0], options: { model?: string; reasoning?: "low" | "medium" | "high" } = {}) {
-  const tools = registry.getAllowed(stage).map((definition) => tool({
+export function createManagerAgent(allowedSkills: SkillDefinition[], stage: ArtifactType, options: { model?: string; reasoning?: "low" | "medium" | "high" } = {}) {
+  const tools = allowedSkills.map((definition) => tool({
     name: definition.id.replaceAll("@", "_").replaceAll("-", "_"),
     description: definition.description,
     parameters: toolParameters,

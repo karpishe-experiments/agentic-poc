@@ -32,6 +32,7 @@ const typedRecoveryCodes = new Set([
   "visual_bible_entities_mismatch",
   "page_plan_specification_mismatch",
   "page_plan_reference_mismatch",
+  "skill_contract_mismatch",
 ]);
 
 /**
