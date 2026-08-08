@@ -217,7 +217,7 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
     : "Reference";
 
   return <CardFrame card={card}>
-    <p aria-live="polite" className="text-sm">{label}: {progress.completed} of {progress.total}</p>
+    <p aria-live="polite" className="text-sm">{label}: {(progress.completed + (progress.isLive ? 1 : 0))} of {progress.total}</p>
     <div aria-label={`${percent}% complete`} className="mt-2 h-2 overflow-hidden rounded bg-[#f3e5d8]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div>
     {failedItems.map((item) => <div className="mt-3" key={item.id}>
       <p className="text-sm text-red-700">Stopped on {itemLabel(item)}: {item.error?.message ?? "Generation failed."}</p>
