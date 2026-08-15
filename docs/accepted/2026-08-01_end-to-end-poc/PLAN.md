@@ -43,7 +43,7 @@ The user accepted all twelve proposed defaults on 2026-08-01. The credential dec
 | PD-04 | Unit, integration, agent-fixture, recovery, and Playwright tests use deterministic fake providers; only retained evaluations use real providers. | Accepted |
 | PD-05 | Check in three project-owned style samples: soft watercolor, cut-paper collage, and colored pencil. Reader-facing comic lettering is planned by the writing specialist and rendered in-image; bundled fonts remain only for application UI/legacy assets. | Accepted; revised for professional comic lettering |
 | PD-06 | Final raster canvases are 1600x1280 landscape, 1280x1600 portrait, and 1536x1536 square. PDF pages are 720x576 pt, 576x720 pt, and 648x648 pt respectively. | Accepted |
-| PD-07 | Transient external failures receive at most two automatic retries after the initial attempt; interrupted running items return to pending on restart. Other error classes require user action. | Accepted |
+| PD-07 | Every image-generation failure stops the sequential batch without automatic retry. The user retries only the selected failed item, then explicitly continues any remaining queue; interrupted running items return to pending on restart while paused work remains paused. | Accepted; revised after provider-failure evaluation |
 | PD-08 | Use `crypto.randomUUID()`, UTC ISO timestamps, schema version `"1"`, validated JSON documents, and relative asset URIs. Do not build deletion or cleanup UI. | Accepted |
 | PD-09 | Install exact compatible top-level dependency versions verified at implementation bootstrap and commit the npm lockfile. | Accepted |
 | PD-10 | A user may accept a remaining quality issue and then separately approve/export; an evaluation with an unresolved critical defect still fails POC acceptance. | Accepted |
@@ -708,7 +708,7 @@ If the request aborts before persistence, retain prior state and show applicatio
 
 ### 11.2 Active job polling
 
-The workspace polls `GET /api/jobs/[jobId]` every 1000 ms only while a job is pending/running/partial with retryable pending work. Stop on terminal success/failure or unmount. Home refreshes active summaries on navigation and may poll only while visible rows have active jobs. Do not add WebSockets, Redis, or SSE for background jobs.
+The progress panel and persisted progress cards share one poller per job. It polls `GET /api/jobs/[jobId]` every 5000 ms while the job is running and every 15000 ms for other observable states, publishes action responses through the same coordinator, and stops after the final subscriber unmounts. Home refreshes active summaries on navigation. Do not add WebSockets, Redis, or SSE for background jobs.
 
 ## 12. Agent and runtime-skill implementation
 
@@ -899,10 +899,12 @@ The adapter records the native provider output metadata; the normalized asset re
 
 Normalize:
 
-- `transient`: timeouts, connection resets, HTTP 429, and provider 5xx. Retry automatically at most twice after the initial attempt, honor `Retry-After`, otherwise wait approximately 1 second then 3 seconds with small jitter.
-- `user_correctable`: invalid prompt/reference/size or text that must be revised. Do not retry unchanged.
-- `blocked`: provider policy refusal. Do not retry automatically; display provider-safe explanation and edit action.
-- `unavailable`: missing/disabled provider/model or credential/account capability failure. Do not retry automatically.
+- `transient`: timeouts, connection resets, HTTP 429, and provider 5xx. Save the failure and stop the batch; retry only after the user selects the failed item.
+- `user_correctable`: invalid prompt/reference/size or text that must be revised. Stop the batch and require a user correction or selected retry.
+- `blocked`: provider policy refusal. Stop the batch and display a provider-safe explanation and edit action.
+- `unavailable`: missing/disabled provider/model or credential/account capability failure. Stop the batch and require user action.
+
+A successful selected-item retry leaves the job paused when later items remain pending. The runner claims those items only after the user explicitly chooses Continue. Completed items and active assets remain unchanged throughout failure, retry, and continuation.
 
 Every attempt receives a separate `model_calls.attempt` value or call row linked to the same job item. The item persists the terminal normalized error.
 
@@ -1276,7 +1278,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Commands:** `npm run typecheck`, `npm run lint`, `npm test -- tests/unit/images tests/integration/reference-generation.test.ts tests/integration/job-recovery.test.ts`, `npm run build`; one authorized real OpenAI reference smoke test.
 
-**Evidence:** one approved canonical asset per recurring entity/style, relevant metadata/prompt/call record, transient retry and blocked/user-correctable recovery demonstrations, restart retains completed reference.
+**Evidence:** one approved canonical asset per recurring entity/style, relevant metadata/prompt/call record, stop-on-failure and blocked/user-correctable recovery demonstrations, selected retry plus explicit continuation, and restart retention of completed references.
 
 **Lessons checkpoint:** capture verified OpenAI image-reference/edit and consistency findings.
 
@@ -1468,7 +1470,7 @@ Each fixture declares stage, operation, approved dependencies, recent messages, 
 - Stable Story Plan-to-Visual Bible entity identity; named/continuity-relevant versus incidental classification; references required only for recurring visual subjects.
 - Character/location revision or removal invalidates dependent plans, identifies affected pages, rejects dangling IDs, and never regenerates automatically.
 - One Page Package maps to one scene and intended illustration; no independent Scene persistence exists.
-- Transient retry versus user-correctable/blocked/unavailable failure.
+- Stop-on-failure classification for transient, user-correctable, blocked, and unavailable provider errors; selected retry and explicit continuation.
 - Job duplicate prevention, item ordering, restart recovery, partial failure, and selected retry.
 - Geometry normalization without stretch for all three canvases.
 - Legacy Page Plan upgrade, lettering-contract recovery, and active-asset retention after failed selective regeneration.
@@ -1639,7 +1641,7 @@ Before claiming implementation complete, the implementation agent must produce a
 - [x] Traces prove every material run performs manager routing then no more than one registered specialist skill.
 - [x] Every material user decision is represented by a validated card, including approval, quality, progress, and recovery.
 - [x] Restart/resume evidence covers conversation, active card, selected artifact, artifact versions/approvals, job, and completed items.
-- [x] Failure evidence covers invalid structured output after one repair, transient retry, blocked/user-correctable image failure, selected item retry, text overflow, and export retry.
+- [x] Failure evidence covers invalid structured output after one repair, stop-on-failure behavior across provider error classes, selected item retry, explicit continuation, lettering validation, and export retry.
 - [x] Three accepted booklets cover age bands, geometries, and 3/6/8 story-page counts with no unresolved critical defect.
 - [x] Every accepted PDF is rendered and visually inspected for exact order, geometry, no stretching, no clipped/overlapping/unreadable text, and no missing pages.
 - [x] Model/image calls reconcile to skills/operations, trace IDs, artifacts/jobs, latency, retry, usage, and actual/estimated cost.

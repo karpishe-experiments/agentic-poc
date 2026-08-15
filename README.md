@@ -20,7 +20,7 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
-For real images during interactive development, set `IMAGE_PROVIDER_MODE=fast`. This uses the configured OpenAI image model with low quality and compressed JPEG transport, then normalizes the result to the PNG assets expected by the booklet workflow. `IMAGE_PROVIDER_MODE=real` uses `IMAGE_QUALITY`; `fake` remains deterministic and free. Restart the development server after changing these values.
+For real images during interactive development, set `IMAGE_PROVIDER_MODE=real`; use `fake` for deterministic no-cost placeholders. Image quality is configured independently with `OPENAI_IMAGE_QUALITY=disabled|low|high`. `disabled` uses provider defaults, while `low` or `high` applies that output quality to every reference and page. Restart the development server after changing these values.
 
 The command path was re-verified on 2026-08-02 with deterministic fake providers. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
 
@@ -60,11 +60,14 @@ flowchart LR
   pdf --> evidence
 ```
 
+The application uses an application-controlled agent handoff: a stage-filtered manager selects exactly one bounded runtime skill, one specialist returns a validated structured proposal, deterministic services persist the result, and typed cards capture material creator decisions. Agents never own durable IDs, approvals, stage transitions, jobs, or assets. See the [current architecture guide](docs/architecture.md) for prompt ownership, component boundaries, runtime skills, extension steps, and recovery mechanics.
+
 ## Local data and project references
 
 Runtime state lives under `data/` and is intentionally Git-ignored. Removing it is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
 
 - [Experiment brief](docs/experiment-brief.md)
+- [Current architecture](docs/architecture.md)
 - [Canonical PRD](docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md)
 - [Accepted implementation plan](docs/accepted/2026-08-01_end-to-end-poc/PLAN.md)
 - [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)

@@ -39,6 +39,7 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 ## Workflow
 
 1. Read the experiment brief and inspect the relevant repository code.
+   Before changing runtime agents, skills, contracts, stage transitions, jobs, or persistence, also read `docs/architecture.md`. Keep that current-state guide aligned when a verified change materially alters those boundaries; it does not override the canonical PRD.
 2. Resolve discoverable questions from the repository before asking the user.
 3. Present an explicit implementation plan before changing code.
 4. Wait for plan approval.
