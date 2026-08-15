@@ -1,5 +1,7 @@
 # Kid Comics UI Design Plan
 
+> **Research input only.** This document describes the earlier prototype and is not an implementation plan or authoritative requirements source. For the end-to-end POC, the canonical PRD at `docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md` takes precedence. In particular, do not inherit this document's fixed six-page, voice-input, inventory-character, multi-panel, or mobile-specific assumptions where they conflict with the PRD.
+
 ## Design direction
 
 Kid Comics should feel like a guided book-building workspace rather than a traditional form wizard. The agent leads the conversation, while the user progressively reviews and locks the creative decisions needed to generate a six-page children's booklet.

@@ -1,0 +1,162 @@
+# Kids Booklet POC architecture
+
+This document describes the current implementation for contributors and coding agents. The [canonical PRD](accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md) remains authoritative for product requirements and scope. The [accepted plan](accepted/2026-08-01_end-to-end-poc/PLAN.md) records implementation decisions and evidence; when source code changes, keep this current-state guide aligned with the verified behavior.
+
+## System boundaries
+
+Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser renders a persisted workspace and uses Vercel AI SDK UI for chat transport. Route handlers call deterministic application services, which are the only owners of workflow state, durable IDs, artifact versions, approvals, jobs, assets, and exports. OpenAI Agents SDK agents may route or author validated proposals, but they cannot persist data or advance the workflow directly.
+
+```mermaid
+flowchart TB
+  UI[Next.js workspace and typed cards] --> API[Route handlers]
+  API --> CHAT[Chat and card services]
+  CHAT --> MGR[Manager agent]
+  MGR --> SPEC[One bounded specialist]
+  SPEC --> CHAT
+  CHAT --> ART[Artifact and approval services]
+  ART --> DB[(SQLite through Drizzle repositories)]
+  CHAT --> JOB[Persisted sequential jobs]
+  JOB --> IMG[ImageProvider and prompt serializer]
+  IMG --> FS[Filesystem AssetStore]
+  JOB --> PDF[pdf-lib export]
+  CHAT --> EVID[Traces, model calls, quality and cost evidence]
+  EVID --> DB
+```
+
+The root responsibilities are:
+
+| Area | Owner | Responsibility |
+| --- | --- | --- |
+| Browser UI | `app/`, `components/` | Workspace, AI SDK UI transport, typed cards, artifact views, progress and recovery controls. |
+| Contracts | `lib/contracts/` | Versioned Zod schemas for every persisted or transported domain value. |
+| Agent definitions | `lib/agents/` | Manager and specialist instructions, OpenAI runtime adapters, and run metadata normalization. |
+| Runtime skills | `lib/skills/` | Versioned skill definitions, schemas, deterministic fake behavior, and the stage-filtered registry. |
+| Workflow | `lib/application/` | Context building, routing orchestration, validation, persistence, approvals, quality gates, generation and export. |
+| Jobs | `lib/jobs/` | Startup recovery, sequential execution bootstrap, and safe diagnostics. |
+| Image pipeline | `lib/images/`, `lib/composition/` | Provider seam, prompt serialization, image calls, and geometry-only normalization. |
+| Persistence | `db/` | Drizzle schema, repositories, migration, and seed registration. |
+
+## Artifact and decision flow
+
+Every booklet has eight ordered artifact records:
+
+```text
+Audience Profile → Story Plan → Visual Style → Visual Bible
+→ Booklet Specification → Page Plan → Final Pages → PDF Export
+```
+
+`BOOKLET_ARTIFACT_TYPES` in `lib/contracts/domain.ts` defines this order. `ArtifactService` records explicit upstream-version dependencies and derives the current stage as the first artifact that is not approved. Revising an upstream artifact creates a new immutable version and can mark dependent work for review.
+
+Three actors have deliberately separate authority:
+
+- **Agents** select a bounded skill or propose structured content.
+- **Application services** validate cross-document invariants, assign persistent IDs, create versions, start jobs, and calculate transitions.
+- **The creator** makes material decisions through validated cards and explicitly approves current artifact versions.
+
+The four card families are `question`, `artifact_review`, `progress`, and `issue`. Cards and their responses are persisted with the conversation. Submitting a card updates both its authoritative row and its saved UI-message projection, so reload and restart restore the same decision state. Expected workflow failures become typed recovery cards only when replacing the current decision is safe.
+
+The chat route returns an AI SDK UI message stream with a transient working status followed by one atomic, already-persisted narration and `data-card` result. Token-by-token model narration and a second agent-session store are intentionally absent.
+
+## Agents, skills, and handoffs
+
+### Manager
+
+For a material conversational turn, `ChatService` builds a `SkillContext` from the saved stage, requested operation, user intent, known facts, recent messages, approved artifact-version IDs, and a trace ID. `ManagerService` filters the registry by stage and, for Story Plan work, by operation.
+
+The manager agent receives only those eligible skills as function tools. Its configuration requires a tool call, disables parallel tool calls, stops after the first tool, and permits at most two runner turns. The application rejects a route outside the supplied allowlist before parsing specialist input.
+
+### Specialist
+
+After routing, the application resolves one `SkillDefinition`, validates its input, and invokes one specialist. The generic specialist agent receives the skill ID, stage, operation, intent, validated skill input, known facts, recent messages, and approved artifact-version IDs. It runs for one turn and must return the skill's structured result inside a validated output envelope.
+
+Specialists cannot write workflow state, issue approvals, access arbitrary tools, or create durable entity/page IDs. Their result is transient until an application service validates, materializes, and persists it. This is an application-controlled handoff, not a free-form SDK handoff:
+
+```text
+manager selection → route validation → specialist execution
+→ output validation → application persistence → creator decision
+```
+
+`MODEL_RUNTIME=fake` uses deterministic routing and each registered skill's `run` function for tests and local no-cost work. `MODEL_RUNTIME=real` uses the OpenAI manager and generic specialist agents. Manager and specialist calls are recorded separately with provider/model, status, latency, usage, request/trace IDs, and actual or estimated cost.
+
+Story readiness may invoke the review specialist through `QualityService`; generation-readiness and final-page quality are deterministic application gates. In every case, application services retain transition authority.
+
+### Runtime skill contract
+
+`SkillDefinition` contains a versioned ID, routing description, eligible stages, input schema, output schema, and deterministic `run` implementation. `lib/contracts/skills.ts` owns the closed skill-ID and shared context contracts; `lib/skills/default-registry.ts` is the active registry.
+
+The registered skills are:
+
+| Skill | Eligible stage |
+| --- | --- |
+| `intake_readiness@1` | Audience Profile |
+| `story_planning_revision@1` | Story Plan |
+| `quality_review_targeted_repair@1` | Story Plan quality operation |
+| `visual_direction_reference_planning@1` | Visual Style and Visual Bible |
+| `booklet_specification@1` | Booklet Specification |
+| `page_planning_writing@1` | Page Plan |
+| `image_prompt_compilation@1` | Final Pages review |
+
+Runtime skills in `lib/skills/` are unrelated to `.agents/skills/`. The latter are repository-local instructions used by coding agents while developing this project and are not loaded by the booklet application.
+
+## Prompt ownership
+
+There is no standalone prompt file per runtime skill.
+
+- `lib/agents/manager.ts` owns the manager instruction and exposes eligible skill descriptions as tools.
+- `lib/agents/specialist.ts` owns the shared specialist instruction plus conditional rules for Page Plan writing and the two visual-direction stages.
+- `lib/agents/openai-specialist-runtime.ts` serializes the validated skill input and bounded `SkillContext` into the runtime request.
+- Skill input/output Zod schemas constrain what the model can receive and return.
+- `lib/images/prompt-serializer.ts` deterministically serializes the provider-neutral image prompt plan, including exact approved lettering, continuity, no-panel constraints, relevant references, and targeted revision instructions.
+
+Change prompts at the narrowest owner. Shared safety and authorship rules belong in the specialist definition; stage- or skill-specific behavior belongs in a conditional specialist instruction and its schema; image-provider wording belongs in the shared image serializer. Keep prompts, schemas, application materialization, and their focused tests consistent.
+
+## Persistent generation and recovery
+
+Reference and page work is stored as idempotent jobs with ordered items. The Node instrumentation bootstrap starts one in-process runner, recovers interrupted follow-ups/items, and processes runnable jobs sequentially. A global per-job promise map prevents duplicate same-process execution.
+
+Every generation failure is a user-controlled pause:
+
+1. The failing item is saved as failed and later items remain pending.
+2. No provider error is retried automatically.
+3. The creator retries only the selected failed item.
+4. A successful retry leaves the job paused when pending items remain.
+5. The creator explicitly chooses Continue before the runner processes the remaining queue.
+
+Completed items and active assets are never discarded because another item fails. Selective regeneration resolves the current page/reference target and asset lineage on the server, creates a one-item job, and publishes a replacement only after it succeeds.
+
+The progress panel and persisted progress cards share one poller per job. Running jobs poll every five seconds; non-running observable states poll every fifteen seconds. Publishing a retry or Continue response updates the same coordinator immediately. Diagnostics record safe job/item boundaries and waiting heartbeats without prompts, image bytes, credentials, or arbitrary provider response bodies.
+
+`IMAGE_PROVIDER_MODE` selects only `fake` or `real`. `OPENAI_IMAGE_QUALITY` independently selects `disabled`, `low`, or `high`; `disabled` omits provider quality/fidelity controls. Real requests use provider-native square, landscape, or portrait sizes, then Sharp normalizes them to the approved final canvas without stretching or drawing text. PDF export uses approved composed assets in deterministic cover-first order.
+
+## Changing the architecture
+
+### Add or revise a skill
+
+1. Define or version the skill's input and output schemas. Use a new `@N` ID for an incompatible contract.
+2. Add the ID to the closed skill-ID schema and implement the deterministic `run` behavior under `lib/skills/`.
+3. Register its description, stages, schemas, and implementation in the default registry.
+4. For a conversational skill, extend `ChatService` to assemble authoritative input and convert the validated result into an artifact/card outcome. For a non-conversational skill, extend its owning application service with equivalent validated input, persistence, and evidence handling.
+5. Add or update the applicable routing fixtures, schema tests, service/manager-contract tests, and artifact-flow integration test.
+
+### Change the artifact flow
+
+1. Update the artifact-type contract and ordered stage list.
+2. Update upstream dependency rules, content parsing, persistence initialization, and derived-stage behavior.
+3. Update stage-specific agent input/result handling, cards, approvals, quality gates, jobs, workspace rendering, and recovery paths.
+4. Add migration/seed changes only when persisted storage requires them, then cover the complete transition and restart path.
+
+Do not encode stage advancement only in a prompt. The application must be able to derive and validate every transition from persisted state.
+
+### Add a distinct agent role
+
+Most new capabilities should be runtime skills wrapped by the existing generic specialist. Add a distinct agent only when it needs different instructions, tools, model-role configuration, execution limits, or evidence semantics. In that case, add an agent factory and runtime adapter, route it explicitly from an application service, validate its inputs/outputs, and record its model calls. Preserve the one-specialist-per-material-turn contract unless the PRD and fixtures are deliberately revised.
+
+## Verification and evidence
+
+- `npm run typecheck`, `npm run lint`, and `npm test` validate contracts and services.
+- `npm run test:agent` verifies stage eligibility, expected routing, bounded calls, and structured repair behavior.
+- Integration tests cover artifact dependencies, approvals, restart/resume, generation failure, selected retry, explicit Continue, and evidence records.
+- Playwright covers the persisted typed-card golden path in desktop Chromium with fake providers.
+- Retained real-provider evaluations preserve accepted and rejected PDFs, findings, manifests, traces, usage, latency, and estimated cost.
+
+When behavior or architecture changes, update this guide after verification. Keep reusable failure modes and guidance deduplicated in `LESSONS-LEARNED.md`; do not turn this guide into a chronological work log.

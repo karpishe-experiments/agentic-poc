@@ -1,0 +1,15 @@
+node_modules/
+.next/
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+data/
+output/
+tmp/pdfs/
+playwright-report/
+test-results/
+.playwright-cli/
+*.tsbuildinfo

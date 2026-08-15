@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Kids Booklet</title>
+  <rect width="64" height="64" rx="14" fill="#fffaf2"/>
+  <path d="M14 16c9-3 18-1 18 6v28c0-7-9-9-18-6V16Zm36 0c-9-3-18-1-18 6v28c0-7 9-9 18-6V16Z" fill="#c75f35"/>
+  <path d="M19 24h8m-8 7h8m10-7h8m-8 7h8" stroke="#fffaf2" stroke-linecap="round" stroke-width="3"/>
+</svg>

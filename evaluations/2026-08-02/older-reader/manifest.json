@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1",
+  "fixture": "older-reader",
+  "label": "Older reader",
+  "bookletId": "b17b4e88-240c-43f0-8983-acb99e5c34f9",
+  "ageBand": "9-12",
+  "storyPages": 8,
+  "geometry": "portrait_4_5",
+  "providerMode": "real",
+  "startedAt": "2026-08-02T05:35:13.692Z",
+  "completedAt": "2026-08-02T05:46:37.928Z",
+  "localSourceAssets": "data/evaluations/2026-08-02/older-reader/assets"
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1",
+  "fixture": "early-reader",
+  "runLabel": "corrected",
+  "label": "Early reader",
+  "bookletId": "045a7d7a-a2dd-4593-9ee7-1cbe5d6547fa",
+  "ageBand": "3-5",
+  "storyPages": 3,
+  "geometry": "square_1_1",
+  "providerMode": "real",
+  "startedAt": "2026-08-02T06:51:04.159Z",
+  "completedAt": "2026-08-02T07:02:57.842Z",
+  "localSourceAssets": "data/evaluations/2026-08-02/early-reader-corrected/assets"
+}
