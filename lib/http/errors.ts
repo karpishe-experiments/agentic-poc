@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { BookletNotFoundError } from "@/lib/application/booklet-service";
+import { AgentConfigurationUnavailableError } from "@/lib/application/agent-resolver";
 
 export type ErrorEnvelope = {
   error: {
@@ -31,6 +32,10 @@ export function toErrorEnvelope(error: unknown): { status: number; body: ErrorEn
         },
       },
     };
+  }
+
+  if (error instanceof AgentConfigurationUnavailableError) {
+    return { status: error.status, body: { error: { code: error.code, message: error.message, recoverable: true, details: { adminPath: "/admin/agents", target: error.target } } } };
   }
 
   if (error instanceof RecoverableApplicationError) {

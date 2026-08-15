@@ -194,6 +194,9 @@ describe("BookletService", () => {
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
     const responseId = "00000000-0000-4000-8000-000000000905";
     await cardService.submit(booklet.id, { cardId: card.data.cardId, responseId, action: "submit", value: "6-8" });
+    await expect(bookletService.getWorkspaceSnapshot(booklet.id)).resolves.toMatchObject({
+      pendingCardFollowup: { responseId, summary: expect.any(String) },
+    });
 
     const followup = await chatService.createFakeTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000906",
@@ -213,6 +216,7 @@ describe("BookletService", () => {
 
     expect(followup.assistantMessage.id).toBe(duplicateFollowup.assistantMessage.id);
     expect(snapshot.messages).toHaveLength(5);
+    expect(snapshot.pendingCardFollowup).toBeNull();
     expect(persistedFirstCard?.data?.status).toBe("submitted");
     expect(snapshot.activeCard).toMatchObject({ status: "active", family: "artifact_review", variant: "summary", payload: { artifactType: "audience_profile" } });
   });

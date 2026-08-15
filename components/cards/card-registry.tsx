@@ -145,7 +145,7 @@ function ArtifactReviewCard({ card, bookletId, busy, submitResponse, refreshWork
   const disabled = card.status !== "active" || !submitResponse || Boolean(busy);
   const action = card.allowedActions.includes("approve_and_continue") ? "approve_and_continue" : card.allowedActions[0];
   return <CardFrame card={card}>
-    {card.variant === "summary" ? <><dl className="grid gap-1 text-sm">{card.payload.summary.map((item) => <div className="flex gap-2" key={item.label}><dt className="font-medium">{item.label}:</dt><dd>{item.value}</dd></div>)}</dl>{card.payload.downloadAssetId ? <a className="mt-3 inline-block rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white" href={`/api/assets/${card.payload.downloadAssetId}`}>Download PDF</a> : null}</> : null}
+    {card.variant === "summary" ? <><dl className="grid gap-1 text-sm">{card.payload.summary.map((item) => <div className="flex gap-2" key={item.label}><dt className="font-medium">{item.label}:</dt><dd>{item.value}</dd></div>)}</dl>{card.payload.downloadAssetId ? <a className="mt-3 inline-block rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white" download href={`/api/assets/${card.payload.downloadAssetId}`}>Download PDF</a> : null}</> : null}
     {card.variant === "editable_form" ? <dl className="grid gap-1 text-sm">{card.payload.fields.map((field) => <div key={field.key}><dt className="font-medium">{field.label}</dt><dd>{field.value}</dd></div>)}</dl> : null}
     {card.variant === "visual_gallery" ? <VisualGallery bookletId={bookletId} card={card} disabled={disabled} refreshWorkspace={refreshWorkspace} /> : null}
     <div className="mt-3 flex flex-wrap gap-2">
@@ -217,7 +217,7 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
     : "Reference";
 
   return <CardFrame card={card}>
-    <p aria-live="polite" className="text-sm">{label}: {(progress.completed + (progress.isLive ? 1 : 0))} of {progress.total}</p>
+    <p aria-live="polite" className="text-sm">{label}: {progress.completed} of {progress.total}</p>
     <div aria-label={`${percent}% complete`} className="mt-2 h-2 overflow-hidden rounded bg-[#f3e5d8]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div>
     {failedItems.map((item) => <div className="mt-3" key={item.id}>
       <p className="text-sm text-red-700">Stopped on {itemLabel(item)}: {item.error?.message ?? "Generation failed."}</p>

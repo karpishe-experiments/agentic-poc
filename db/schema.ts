@@ -1,4 +1,5 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 const requiredText = (name: string) => text(name).notNull();
 const timestamp = (name: string) => integer(name, { mode: "number" }).notNull();
@@ -156,7 +157,68 @@ export const modelCalls = sqliteTable("model_calls", {
   pricingVersion: text("pricing_version"),
   errorKind: text("error_kind"),
   errorMessage: text("error_message"),
+  agentDefinitionId: text("agent_definition_id").references(() => agentDefinitions.id),
+  agentVersionId: text("agent_version_id").references(() => agentVersions.id),
+  agentConfigSnapshotJson: text("agent_config_snapshot_json"),
 });
+
+export const agentDefinitions = sqliteTable("agent_definitions", {
+  id: text("id").primaryKey(),
+  createdAtMs: timestamp("created_at_ms"),
+  createdBy: requiredText("created_by"),
+});
+
+export const agentVersions = sqliteTable("agent_versions", {
+  id: text("id").primaryKey(),
+  agentId: requiredText("agent_id").references(() => agentDefinitions.id),
+  versionNumber: integer("version_number").notNull(),
+  parentVersionId: text("parent_version_id").references((): ReturnType<typeof text> => agentVersions.id),
+  displayName: requiredText("display_name"),
+  purpose: requiredText("purpose"),
+  role: requiredText("role"),
+  skillId: text("skill_id"),
+  instructions: requiredText("instructions"),
+  provider: requiredText("provider"),
+  modelId: requiredText("model_id"),
+  reasoningEffort: requiredText("reasoning_effort"),
+  maxTurns: integer("max_turns").notNull(),
+  status: requiredText("status"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull(),
+  revision: integer("revision").notNull(),
+  createdAtMs: timestamp("created_at_ms"),
+  updatedAtMs: timestamp("updated_at_ms"),
+  createdBy: requiredText("created_by"),
+  updatedBy: requiredText("updated_by"),
+}, (table) => [
+  uniqueIndex("agent_versions_agent_number_unique").on(table.agentId, table.versionNumber),
+  uniqueIndex("agent_versions_active_manager_unique").on(table.role).where(sql`${table.isActive} = 1 and ${table.role} = 'manager'`),
+  uniqueIndex("agent_versions_active_specialist_unique").on(table.skillId).where(sql`${table.isActive} = 1 and ${table.role} = 'specialist'`),
+  uniqueIndex("agent_versions_active_agent_unique").on(table.agentId).where(sql`${table.isActive} = 1`),
+  index("agent_versions_agent_created_idx").on(table.agentId, table.createdAtMs),
+  index("agent_versions_skill_active_idx").on(table.skillId, table.isActive),
+  index("agent_versions_parent_idx").on(table.parentVersionId),
+  check("agent_versions_role_check", sql`${table.role} in ('manager', 'specialist')`),
+  check("agent_versions_status_check", sql`${table.status} in ('draft', 'confirmed', 'retired')`),
+  check("agent_versions_provider_check", sql`${table.provider} = 'openai'`),
+  check("agent_versions_reasoning_check", sql`${table.reasoningEffort} in ('low', 'medium', 'high')`),
+  check("agent_versions_role_skill_check", sql`(${table.role} = 'manager' and ${table.skillId} is null and ${table.maxTurns} between 1 and 2) or (${table.role} = 'specialist' and ${table.skillId} is not null and ${table.maxTurns} = 1)`),
+  check("agent_versions_positive_check", sql`${table.versionNumber} > 0 and ${table.revision} > 0`),
+  check("agent_versions_retired_inactive_check", sql`${table.status} != 'retired' or ${table.isActive} = 0`),
+]);
+
+export const agentVersionEvents = sqliteTable("agent_version_events", {
+  id: text("id").primaryKey(),
+  agentId: requiredText("agent_id"),
+  agentVersionId: requiredText("agent_version_id"),
+  action: requiredText("action"),
+  actor: requiredText("actor"),
+  metadataJson: text("metadata_json"),
+  createdAtMs: timestamp("created_at_ms"),
+}, (table) => [
+  index("agent_version_events_version_created_idx").on(table.agentVersionId, table.createdAtMs),
+  check("agent_version_events_action_check", sql`${table.action} in ('create', 'edit', 'fork', 'confirm', 'activate', 'deactivate', 'retire', 'delete')`),
+  check("agent_version_events_metadata_size_check", sql`${table.metadataJson} is null or length(${table.metadataJson}) <= 4096`),
+]);
 
 export const qualityReviews = sqliteTable("quality_reviews", {
   id: text("id").primaryKey(),

@@ -29,7 +29,7 @@ The root responsibilities are:
 | --- | --- | --- |
 | Browser UI | `app/`, `components/` | Workspace, AI SDK UI transport, typed cards, artifact views, progress and recovery controls. |
 | Contracts | `lib/contracts/` | Versioned Zod schemas for every persisted or transported domain value. |
-| Agent definitions | `lib/agents/` | Manager and specialist instructions, OpenAI runtime adapters, and run metadata normalization. |
+| Agent definitions | `db/agent-repository.ts`, `lib/application/agent-resolver.ts`, `lib/agents/` | Versioned persisted configuration, fresh immutable resolution, OpenAI runtime adapters, and run metadata normalization. |
 | Runtime skills | `lib/skills/` | Versioned skill definitions, schemas, deterministic fake behavior, and the stage-filtered registry. |
 | Workflow | `lib/application/` | Context building, routing orchestration, validation, persistence, approvals, quality gates, generation and export. |
 | Jobs | `lib/jobs/` | Startup recovery, sequential execution bootstrap, and safe diagnostics. |
@@ -63,11 +63,11 @@ The chat route returns an AI SDK UI message stream with a transient working stat
 
 For a material conversational turn, `ChatService` builds a `SkillContext` from the saved stage, requested operation, user intent, known facts, recent messages, approved artifact-version IDs, and a trace ID. `ManagerService` filters the registry by stage and, for Story Plan work, by operation.
 
-The manager agent receives only those eligible skills as function tools. Its configuration requires a tool call, disables parallel tool calls, stops after the first tool, and permits at most two runner turns. The application rejects a route outside the supplied allowlist before parsing specialist input.
+The manager agent receives only those eligible skills as function tools. Its persisted active version supplies its display name, complete instruction text, OpenAI model, reasoning effort, and one-to-two turn bound; code still requires a tool call, disables parallel tool calls, stops after the first tool, and rejects a route outside the supplied allowlist before parsing specialist input.
 
 ### Specialist
 
-After routing, the application resolves one `SkillDefinition`, validates its input, and invokes one specialist. The generic specialist agent receives the skill ID, stage, operation, intent, validated skill input, known facts, recent messages, and approved artifact-version IDs. It runs for one turn and must return the skill's structured result inside a validated output envelope.
+Before a material call, `AgentResolver` reads one complete active SQLite snapshot: one manager plus one specialist for each registered skill. It freezes the resolved manager/specialists for that invocation, so an activation affects only later calls. After routing, the application selects the frozen specialist for the selected skill, validates its input, and invokes it with the persisted version's configuration. The generic specialist receives the skill ID, stage, operation, intent, validated skill input, known facts, recent messages, and approved artifact-version IDs. It returns the code-owned structured output envelope.
 
 Specialists cannot write workflow state, issue approvals, access arbitrary tools, or create durable entity/page IDs. Their result is transient until an application service validates, materializes, and persists it. This is an application-controlled handoff, not a free-form SDK handoff:
 
@@ -76,7 +76,7 @@ manager selection → route validation → specialist execution
 → output validation → application persistence → creator decision
 ```
 
-`MODEL_RUNTIME=fake` uses deterministic routing and each registered skill's `run` function for tests and local no-cost work. `MODEL_RUNTIME=real` uses the OpenAI manager and generic specialist agents. Manager and specialist calls are recorded separately with provider/model, status, latency, usage, request/trace IDs, and actual or estimated cost.
+`MODEL_RUNTIME=fake` uses deterministic routing and each registered skill's `run` function for tests and local no-cost work while still resolving persisted versions. `MODEL_RUNTIME=real` uses the OpenAI manager and generic specialist adapters. Manager and specialist calls are recorded separately with provider/model, status, latency, usage, request/trace IDs, cost, resolved definition/version IDs, and immutable effective-configuration snapshots. `ChatService` passes its single preflighted active set to both the manager turn and automatic Story Plan quality review, so an in-flight activation applies only to a later turn. Direct quality review resolves a fresh persisted quality specialist immediately before its call.
 
 Story readiness may invoke the review specialist through `QualityService`; generation-readiness and final-page quality are deterministic application gates. In every case, application services retain transition authority.
 
@@ -100,15 +100,17 @@ Runtime skills in `lib/skills/` are unrelated to `.agents/skills/`. The latter a
 
 ## Prompt ownership
 
-There is no standalone prompt file per runtime skill.
+Runtime prompts are versioned SQLite records, not environment variables or standalone prompt files. The checked-in migration seeds the current manager and seven specialist defaults; runtime never falls back to those TypeScript seed values. `/admin/agents` is the trusted-local-only lifecycle surface. Its Server Component performs one snapshot read and passes only serializable coverage, definition, version, and skill-choice data to a client controller. Pure view-model helpers derive slot/agent/version selection; focused form, version-workspace, and native-dialog components reuse the existing Server Actions for creation, draft editing, confirmation, replacement activation, retirement, and eligible draft deletion.
 
-- `lib/agents/manager.ts` owns the manager instruction and exposes eligible skill descriptions as tools.
-- `lib/agents/specialist.ts` owns the shared specialist instruction plus conditional rules for Page Plan writing and the two visual-direction stages.
+- `db/agent-defaults.ts` holds the migration-verification seed manifest only; it is not a runtime fallback.
+- `lib/agents/manager.ts` and `lib/agents/specialist.ts` receive persisted names, instructions, models, and reasoning settings, while retaining code-owned tools, output schemas, and turn constraints.
 - `lib/agents/openai-specialist-runtime.ts` serializes the validated skill input and bounded `SkillContext` into the runtime request.
 - Skill input/output Zod schemas constrain what the model can receive and return.
 - `lib/images/prompt-serializer.ts` deterministically serializes the provider-neutral image prompt plan, including exact approved lettering, continuity, no-panel constraints, relevant references, and targeted revision instructions.
 
-Change prompts at the narrowest owner. Shared safety and authorship rules belong in the specialist definition; stage- or skill-specific behavior belongs in a conditional specialist instruction and its schema; image-provider wording belongs in the shared image serializer. Keep prompts, schemas, application materialization, and their focused tests consistent.
+Change an agent prompt by forking or editing a draft in `/admin/agents`, then activating it after review. Code changes remain necessary for skill schemas, tool bounds, registry eligibility, or the supported model catalog. Image-provider wording belongs in the shared image serializer. Keep configuration, schemas, application materialization, and focused tests consistent.
+
+If active coverage is missing or malformed, resolution returns a safe recoverable configuration error pointing to `/admin/agents` before a new material message, card, artifact, approval, job, or stage mutation. A previously accepted card response stays pending; the workspace offers exact retry during the session and **Resume saved decision** after reload.
 
 ## Persistent generation and recovery
 

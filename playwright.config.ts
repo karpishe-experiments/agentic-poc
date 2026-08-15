@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const browserChannel = process.env.PLAYWRIGHT_BROWSER_CHANNEL;
+// The Windows development image includes Chrome but not Playwright's separate
+// Chromium download. CI or other platforms can still opt into bundled Chromium.
+const browserChannel = process.env.PLAYWRIGHT_BROWSER_CHANNEL ?? (process.platform === "win32" ? "chrome" : undefined);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3001";
 
 export default defineConfig({

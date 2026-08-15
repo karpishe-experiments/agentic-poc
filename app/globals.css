@@ -25,7 +25,7 @@ a {
   color: inherit;
 }
 
-:where(a, button, input, textarea):focus-visible {
+:where(a, button, input, select, textarea):focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
 }

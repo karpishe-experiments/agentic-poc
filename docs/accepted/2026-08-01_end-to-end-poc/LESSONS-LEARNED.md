@@ -4,6 +4,24 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 ## Candidates
 
+### Prove additive migration safety from the exact prior journal
+
+- **Context:** Adding versioned runtime-agent tables and nullable model-call attribution to an existing SQLite application.
+- **Observation:** A fresh-database migration test verifies seed shape but cannot prove that an existing journal and legacy evidence survive the upgrade.
+- **Guidance:** Build a temporary fixture by applying the exact prior migration and journal, insert a representative legacy row, then apply the full current migration set. Assert preserved values and intentionally-null new columns.
+- **Evidence:** `tests/integration/agent-migration.test.ts` applies `0000_left_sleepwalker` before the current journal and retains a legacy `model_calls` row; the 96-test suite passed on 2026-08-15.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Prefer an installed Chrome channel when Playwright's bundled Chromium is unavailable
+
+- **Context:** Running the isolated deterministic Playwright suite on the Windows development host.
+- **Observation:** The suite could not launch because Playwright's pinned Chromium binary was absent and its download timed out, while the installed Google Chrome channel completed all browser assertions.
+- **Guidance:** Keep Playwright configurable through `PLAYWRIGHT_BROWSER_CHANNEL`; on this Windows host, default to `chrome` so `npm run test:e2e` remains reproducible without a separate browser download. Revalidate that Chrome is present when moving to another environment.
+- **Evidence:** `playwright.config.ts` selects the Windows Chrome channel; `npm run test:e2e` completed all three existing specs and `agent-management.spec.ts` on 2026-08-15.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
 ### Use the CMD npm shim when PowerShell execution policy blocks npm.ps1
 
 - **Context:** Running project npm commands from this Windows PowerShell environment.
@@ -245,4 +263,13 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Guidance:** Put typed regeneration metadata on new gallery items, accept legacy asset targets only as a compatibility input, and resolve every target server-side against the booklet’s current artifact. Create a one-item persisted job, reserve provider input capacity for the edit target, and publish the new asset into a revised artifact only after generation succeeds; otherwise retain the active asset unchanged.
 - **Evidence:** `lib/contracts/regeneration.ts`, `lib/application/revision-service.ts`, `lib/application/generation-service.ts`, and `tests/integration/specification-page-plan.test.ts`; the integration test upgrades a legacy plan, regenerates one instructed page, and verifies all unrelated pages retain their asset IDs.
 - **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Keep Server Action result owners mounted until observers receive the outcome
+
+- **Context:** A React workspace conditionally swaps forms, action controls, and read-only views while a Server Action revalidates the route.
+- **Observation:** Hiding a direct action as soon as its state changed, or keying an edit form by a revision that changes on save, unmounted the component before its result effect could publish the success banner and selection reconciliation.
+- **Guidance:** Keep the `useActionState` owner mounted through result delivery and use stable record identity for its key. Let the controller change modes only after it receives the action result; then reconcile against refreshed server props. Do not keep stale forms mounted after delivery.
+- **Evidence:** `components/admin/agents/agent-action-dialog.tsx`, `components/admin/agents/agent-version-workspace.tsx`, and `components/admin/agents/agent-admin.tsx`; focused Chromium tests prove Save, Confirm, activation, retirement, creation, and fork results reach the workspace banner and preserve deterministic selection. The full 116-test suite and eight browser scenarios passed on 2026-08-15.
+- **Promotion target:** React/Next.js implementation guidance.
 - **Status:** Candidate.

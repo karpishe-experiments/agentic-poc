@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 
+process.env.OPENAI_API_KEY ??= "e2e-fake-key";
+
 await import("./prepare-e2e");
 const port = process.env.E2E_PORT ?? "3001";
 

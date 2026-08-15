@@ -6,7 +6,7 @@ import type { SkillDefinition } from "@/lib/skills/registry";
 
 const toolParameters = z.object({ intent: z.string().min(1) });
 
-export function createManagerAgent(allowedSkills: SkillDefinition[], stage: ArtifactType, options: { model?: string; reasoning?: "low" | "medium" | "high" } = {}) {
+export function createManagerAgent(allowedSkills: SkillDefinition[], stage: ArtifactType, options: { name: string; instructions: string; model: string; reasoning: "low" | "medium" | "high" }) {
   const tools = allowedSkills.map((definition) => tool({
     name: definition.id.replaceAll("@", "_").replaceAll("-", "_"),
     description: definition.description,
@@ -18,8 +18,8 @@ export function createManagerAgent(allowedSkills: SkillDefinition[], stage: Arti
     }),
   }));
   return new Agent({
-    name: "Kids Booklet manager",
-    instructions: "Choose exactly one registered specialist tool. Never write data or perform workflow transitions.",
+    name: options.name,
+    instructions: options.instructions,
     model: options.model,
     modelSettings: {
       toolChoice: "required",

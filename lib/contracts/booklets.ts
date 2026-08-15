@@ -55,6 +55,11 @@ export const exportSummarySchema = z.object({
   updatedAt: utcIsoTimestampSchema,
 });
 
+export const pendingCardFollowupSchema = z.object({
+  responseId: opaqueIdSchema,
+  summary: z.string().min(1),
+});
+
 export const workspaceSnapshotSchema = z.object({
   booklet: bookletSchema,
   artifacts: z.array(artifactSummarySchema),
@@ -62,6 +67,7 @@ export const workspaceSnapshotSchema = z.object({
   activeCard: z.unknown().nullable(),
   activeJobs: z.array(activeJobSummarySchema),
   exports: z.array(exportSummarySchema),
+  pendingCardFollowup: pendingCardFollowupSchema.nullable(),
 });
 
 export const createBookletRequestSchema = z.object({

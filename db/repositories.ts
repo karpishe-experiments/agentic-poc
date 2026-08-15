@@ -39,6 +39,7 @@ import {
 } from "@/lib/contracts/artifacts";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { qualityReviewSchema, type QualityReview } from "@/lib/contracts/quality";
+import { createAgentRepository, type AgentRepository } from "@/db/agent-repository";
 
 // Keep terminally blocked jobs visible so their failed item can reactivate the retained queue.
 const activeJobStatuses = new Set(["pending", "running", "partial", "paused", "failed"]);
@@ -207,6 +208,7 @@ export type ConversationRepository = {
   appendMessage(input: { id: string; bookletId: string; role: "user" | "assistant"; message: unknown; createdAtMs: number }): Promise<void>;
   persistAssistantCard(input: { bookletId: string; messageId: string; card: GenUICard; narration: string; createdAtMs: number }): Promise<void>;
   getCard(bookletId: string, cardId: string): Promise<GenUICard | null>;
+  getPendingCardFollowup(bookletId: string): Promise<{ responseId: string; summary: string } | null>;
   submitCardResponse(input: { bookletId: string; response: CardResponse; createdAtMs: number }): Promise<
     | { kind: "saved" | "duplicate"; duplicate: boolean; followupRequired: boolean; summary: string }
     | { kind: "conflict"; duplicate: false; followupRequired: false; summary: string }
@@ -269,6 +271,9 @@ export type EvidenceRepository = {
     pricingVersion?: string | null;
     errorMessage?: string;
     errorKind?: string | null;
+    agentDefinitionId?: string | null;
+    agentVersionId?: string | null;
+    agentConfigSnapshot?: unknown | null;
   }): Promise<void>;
   recordQualityReview(input: {
     id: string;
@@ -279,7 +284,7 @@ export type EvidenceRepository = {
     createdAtMs: number;
   }): Promise<void>;
   acceptLatestUnresolvedQualityReview(bookletId: string, acceptedAtMs: number): Promise<boolean>;
-  listModelCalls(bookletId: string): Promise<Array<{ operation: string; skillId: string | null; artifactVersionId: string | null; jobId: string | null; provider: string; model: string; traceId: string | null; providerRequestId: string | null; status: string; attempt: number; latencyMs: number; usage: unknown | null; actualCostUsd: string | null; estimatedCostUsd: string | null; pricingVersion: string | null; errorKind: string | null }>>;
+  listModelCalls(bookletId: string): Promise<Array<{ operation: string; skillId: string | null; artifactVersionId: string | null; jobId: string | null; provider: string; model: string; traceId: string | null; providerRequestId: string | null; status: string; attempt: number; latencyMs: number; usage: unknown | null; actualCostUsd: string | null; estimatedCostUsd: string | null; pricingVersion: string | null; errorKind: string | null; agentDefinitionId: string | null; agentVersionId: string | null; agentConfigSnapshot: unknown | null }>>;
 };
 
 export type ExportRepository = {
@@ -297,6 +302,7 @@ export type Repositories = {
   assets: AssetRepository;
   evidence: EvidenceRepository;
   exports: ExportRepository;
+  agents: AgentRepository;
 };
 
 export function createRepositories(database: Database): Repositories {
@@ -618,6 +624,28 @@ export function createRepositories(database: Database): Repositories {
           .limit(1);
         return row[0] ? genUICardSchema.parse(parseJson(row[0].cardJson)) : null;
       },
+      async getPendingCardFollowup(bookletId) {
+        const rows = await database.select({
+          id: cardResponses.id,
+          action: cardResponses.action,
+          valueJson: cardResponses.valueJson,
+          revisionInstruction: cardResponses.revisionInstruction,
+          cardJson: cards.cardJson,
+        }).from(cardResponses).innerJoin(cards, eq(cardResponses.cardId, cards.id))
+          .where(sql`${cards.bookletId} = ${bookletId} and ${cardResponses.followupStatus} = 'pending'`)
+          .orderBy(desc(cardResponses.createdAtMs)).limit(1);
+        const row = rows[0];
+        if (!row) return null;
+        const card = genUICardSchema.parse(parseJson(row.cardJson));
+        const response = cardResponseSchema.parse({
+          cardId: card.cardId,
+          responseId: row.id,
+          action: row.action,
+          value: row.valueJson ? parseJson(row.valueJson) : undefined,
+          revisionInstruction: row.revisionInstruction ?? undefined,
+        });
+        return { responseId: row.id, summary: responseSummary(card, response) };
+      },
       async submitCardResponse(input) {
         const response = cardResponseSchema.parse(input.response);
         const existing = await database.select().from(cardResponses).where(eq(cardResponses.id, response.responseId)).limit(1);
@@ -910,6 +938,9 @@ export function createRepositories(database: Database): Repositories {
           pricingVersion: input.pricingVersion ?? null,
           errorKind: input.status === "failed" ? input.errorKind ?? "validation" : null,
           errorMessage: input.errorMessage ?? null,
+          agentDefinitionId: input.agentDefinitionId ?? null,
+          agentVersionId: input.agentVersionId ?? null,
+          agentConfigSnapshotJson: input.agentConfigSnapshot ? JSON.stringify(input.agentConfigSnapshot) : null,
         });
       },
       async recordQualityReview(input) {
@@ -936,9 +967,9 @@ export function createRepositories(database: Database): Repositories {
         return true;
       },
       async listModelCalls(bookletId) {
-        const rows = await database.select({ operation: modelCalls.operation, skillId: modelCalls.skillId, artifactVersionId: modelCalls.artifactVersionId, jobId: modelCalls.jobId, provider: modelCalls.provider, model: modelCalls.model, traceId: modelCalls.traceId, providerRequestId: modelCalls.providerRequestId, status: modelCalls.status, attempt: modelCalls.attempt, latencyMs: modelCalls.latencyMs, usageJson: modelCalls.usageJson, actualCostUsd: modelCalls.actualCostUsd, estimatedCostUsd: modelCalls.estimatedCostUsd, pricingVersion: modelCalls.pricingVersion, errorKind: modelCalls.errorKind })
+        const rows = await database.select({ operation: modelCalls.operation, skillId: modelCalls.skillId, artifactVersionId: modelCalls.artifactVersionId, jobId: modelCalls.jobId, provider: modelCalls.provider, model: modelCalls.model, traceId: modelCalls.traceId, providerRequestId: modelCalls.providerRequestId, status: modelCalls.status, attempt: modelCalls.attempt, latencyMs: modelCalls.latencyMs, usageJson: modelCalls.usageJson, actualCostUsd: modelCalls.actualCostUsd, estimatedCostUsd: modelCalls.estimatedCostUsd, pricingVersion: modelCalls.pricingVersion, errorKind: modelCalls.errorKind, agentDefinitionId: modelCalls.agentDefinitionId, agentVersionId: modelCalls.agentVersionId, agentConfigSnapshotJson: modelCalls.agentConfigSnapshotJson })
           .from(modelCalls).where(eq(modelCalls.bookletId, bookletId)).orderBy(asc(modelCalls.startedAtMs));
-        return rows.map((row) => ({ ...row, usage: row.usageJson ? parseJson(row.usageJson) : null }));
+        return rows.map(({ usageJson, agentConfigSnapshotJson, ...row }) => ({ ...row, usage: usageJson ? parseJson(usageJson) : null, agentConfigSnapshot: agentConfigSnapshotJson ? parseJson(agentConfigSnapshotJson) : null }));
       },
     },
     exports: {
@@ -964,5 +995,6 @@ export function createRepositories(database: Database): Repositories {
         }));
       },
     },
+    agents: createAgentRepository(database),
   };
 }

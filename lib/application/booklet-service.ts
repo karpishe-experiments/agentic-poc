@@ -79,12 +79,13 @@ export class BookletService {
     const booklet = await this.repositories.booklets.get(bookletId);
     if (!booklet) throw new BookletNotFoundError(bookletId);
 
-    const [artifactSummaries, messages, activeCard, activeJobs, exports] = await Promise.all([
+    const [artifactSummaries, messages, activeCard, activeJobs, exports, pendingCardFollowup] = await Promise.all([
       this.repositories.artifacts.listByBooklet(bookletId),
       this.repositories.conversation.listMessages(bookletId),
       this.repositories.conversation.getActiveCard(bookletId),
       this.repositories.jobs.listActiveByBooklet(bookletId),
       this.repositories.exports.listByBooklet(bookletId),
+      this.repositories.conversation.getPendingCardFollowup(bookletId),
     ]);
 
     const orderedArtifacts = BOOKLET_ARTIFACT_TYPES.map((artifactType) => {
@@ -106,6 +107,7 @@ export class BookletService {
       activeCard,
       activeJobs,
       exports,
+      pendingCardFollowup,
     });
   }
 
