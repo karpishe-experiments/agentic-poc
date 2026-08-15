@@ -30,7 +30,7 @@ The plan was prepared against the repository state on 2026-08-15, including:
 - installed versions: Next.js 16.2.12, React 19.2.8, AI SDK 7.0.47, `@ai-sdk/react` 4.0.50, OpenAI Agents SDK 0.14.2, Drizzle ORM 0.45.2, Zod 4.4.3, Vitest 4.1.10, and Playwright 1.62.1;
 - version-matched package source/documentation before using SDK APIs;
 - official OpenAI guidance for the configured GPT-5.6 model family and Agents SDK behavior; and
-- the project-local `ai-sdk`, `next-best-practices`, `vercel-react-best-practices`, `web-design-guidelines`, `playwright`, and `capture-project-learnings` workflows.
+- the system `openai-docs` workflow and the project-local `ai-sdk`, `next-best-practices`, `vercel-react-best-practices`, `web-design-guidelines`, `playwright`, `pdf`, and `capture-project-learnings` workflows.
 
 No dependency addition or upgrade is required. The admin work uses React/Next.js primitives already installed. The Vercel AI SDK chat transport is not redesigned; it receives regression coverage because configuration failures must remain recoverable through the existing typed UI flow.
 
@@ -67,11 +67,15 @@ The POC authoring surface is deliberately closed:
 | Skill binding | `null` for managers; exactly one current `SkillId` for specialists. |
 | Instructions | String, 1–20,000 characters; plain text only. |
 | Provider | Persisted as `openai`; every other value is rejected. |
-| Model ID | Trimmed 1–100 character OpenAI model identifier matching `^[A-Za-z0-9][A-Za-z0-9._:-]*$`. Availability is checked by `preflight`, not by a paid generation call. |
+| Model ID | One value from the code-owned supported text-agent catalog: `gpt-5.6-luna`, `gpt-5.6-terra`, or `gpt-5.6-sol`. |
 | Reasoning effort | `low`, `medium`, or `high`, preserving the current application surface. |
 | Maximum turns | Manager: integer 1–2, seeded as 2. Specialist: exactly 1. |
 
 Temperature, top-p, penalties, text verbosity, tools, MCP, handoffs, output schemas, provider credentials, prompt templates, arbitrary JSON settings, and code are not authorable.
+
+`lib/config/agent-models.ts` owns the closed model catalog. Each entry records provider, allowed roles, allowed reasoning efforts, required function-calling/structured-output capabilities, and optional checked-in pricing. All three initial GPT-5.6 entries permit both roles and the POC reasoning subset (`low`, `medium`, `high`); current official model pages identify function calling and structured outputs as supported. The form renders a select, not a free-form model input. A new model ID is a reviewed code/catalog change with official capability verification and tests; the no-generation preflight only verifies account access and does not substitute for capability validation. Unsupported or catalog-incompatible values are rejected at the contract, Server Action, service, and resolver boundaries before save or activation.
+
+Create-form defaults are deterministic: no role is preselected; name, purpose, skill, and instructions begin empty; provider is read-only `openai`; selecting manager defaults model/reasoning/max turns to Luna/low/2; selecting a normal specialist defaults to Terra/medium/1; selecting the quality skill defaults to Sol/medium/1. Changing role or skill may update untouched defaults but never overwrites a field the operator already changed. Forking remains the safe way to copy complete existing behavior.
 
 ### 3.4 Lifecycle and direct deactivation
 
@@ -84,6 +88,8 @@ Temperature, top-p, penalties, text verbosity, tools, MCP, handoffs, output sche
 - Retirement requires an inactive draft or confirmed version and makes it permanently inactive and immutable.
 - Deletion is limited to an inactive draft with no children and no model-call evidence. If it is the logical agent’s only version, the empty logical-agent row is deleted in the same transaction. An immutable audit event retains the deleted IDs.
 - Every mutation calculates the proposed post-transaction coverage. A role/skill-changing version cannot be activated if deactivating another version of the same logical agent would uncover a different slot.
+
+Coverage repair is explicit rather than deadlocking on corrupt data. When pre-state coverage is exact, every mutation must preserve it. When pre-state coverage is incomplete, read/inspect and inactive create/edit/fork/confirm/retire/delete operations are allowed only when they do not touch an active row or add a new violation. Activation is allowed only when the post-state violation set is a strict subset of the pre-state set and it introduces no duplicate slot, active-retired row, role/skill mismatch, or second active version for a logical agent. This permits repairing two or more missing slots one at a time; once coverage is exact, the normal invariant applies. No action may worsen or merely reshuffle corrupt coverage.
 
 ### 3.5 Concurrency and freshness
 
@@ -106,7 +112,7 @@ The checked-in migration, not `npm run seed`, inserts stable version-1 defaults:
 | `page_planning_writing@1` | `a106` | `b106` | `gpt-5.6-terra` | medium | 1 | Generic instruction plus current comic-lettering rule. |
 | `image_prompt_compilation@1` | `a107` | `b107` | `gpt-5.6-terra` | medium | 1 | Current generic specialist instruction. |
 
-Use full valid UUIDs `00000000-0000-4000-8000-00000000<suffix>` for these stable IDs. All eight versions are active, confirmed, authored by `local-admin`, and use provider `openai`. A checked-in `db/agent-defaults.ts` manifest holds the expected stable seed values for migration verification only; runtime code never imports it as configuration.
+Use full valid UUIDs `00000000-0000-4000-8000-00000000<suffix>` for these stable IDs. All eight versions are active, confirmed, authored by `local-admin`, and use provider `openai`. Use the fixed seed timestamp `1786752000000` (`2026-08-15T00:00:00.000Z`). For each slot suffix, use event ID prefixes `c`/`d`/`e` for the `create`/`confirm`/`activate` events respectively (for example manager events end in `c001`, `d001`, and `e001`). The complete event enum is `create`, `edit`, `fork`, `confirm`, `activate`, `deactivate`, `retire`, and `delete`. Event metadata is a versioned JSON object limited to 4,096 serialized characters and may contain only structural IDs/revisions/replacement information—never instructions, model input/output, credentials, or provider bodies. A checked-in `db/agent-defaults.ts` manifest holds the expected stable seed values and events for migration verification only; runtime code never imports it as configuration.
 
 ### 3.7 Evidence and cost semantics
 
@@ -114,7 +120,7 @@ Use full valid UUIDs `00000000-0000-4000-8000-00000000<suffix>` for these stable
 
 The snapshot contains agent/version IDs, version number, display name, role, skill, full instructions, persisted provider/model/reasoning/max turns, derived code-owned execution settings, and runtime mode. A fake call therefore proves which persisted definition was selected without pretending a paid model ran.
 
-Cost estimates become model-aware. The existing known seeded model IDs retain estimates; a user-entered model without a checked-in price returns null estimate/pricing version rather than a role-based but incorrect number. Real pricing changes remain outside this feature and require the existing verified pricing workflow.
+Cost estimates become catalog-model-aware rather than role-based. The three initial catalog models use their checked-in verified prices. A future reviewed catalog entry may intentionally have null pricing, in which case usage is retained while estimate and pricing version are null. Arbitrary user-entered model IDs are not accepted. Real pricing changes remain outside this feature and require the existing verified pricing workflow.
 
 ### 3.8 Next.js admin boundary
 
@@ -135,7 +141,9 @@ Before the first implementation edit:
 3. Move Issue #12 to In progress and assign it as directed by the user/project.
 4. Continue on `issue-10-database-backed-agent-management` as explicitly directed by the user; do not create another implementation branch unless the user later changes that direction.
 5. Inspect version-matched package docs/source before changing SDK calls. Use official OpenAI documentation for OpenAI behavior.
-6. Use fake providers for all automated checks. Real-provider acceptance and new retained evaluations are outside this PRD.
+6. Record a pre-change fake-provider baseline: `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, and `npm run test:e2e`. Distinguish inherited failures from regressions; do not normalize a failing baseline into acceptance.
+7. Verify `npx` is available. Verify `pdfinfo` and `pdftoppm` before Phase 6; on the reference Windows environment, if Poppler is missing, pause and request approval for the README-documented `winget install --id oschwartz10612.Poppler --exact` prerequisite rather than silently omitting visual PDF verification.
+8. Use fake providers for all automated checks. Real-provider acceptance and new retained evaluations are outside this PRD.
 
 Every phase ends with all of the following steps, in this order:
 
@@ -157,9 +165,9 @@ The next phase begins only after the current phase’s outcome works, required e
 | --- | --- | --- | --- | --- |
 | 1. Schema, migration, and seeded coverage | Not started | — | AM-001, AM-002, AM-012 | — |
 | 2. Management domain and inspect/create/edit/fork UI | Not started | — | AM-003, AM-004, AM-006 | — |
-| 3. Lifecycle, activation, conflicts, and deletion UI | Not started | — | AM-005, AM-006 | — |
-| 4. Database-backed runtime and quality resolution | Not started | — | AM-007–AM-011, AM-013 | — |
-| 5. Evidence, configuration cleanup, and runtime regression | Not started | — | AM-010–AM-014 | — |
+| 3. Database-backed runtime, attribution, and recovery | Not started | — | AM-007–AM-014 | — |
+| 4. Lifecycle, activation, conflicts, and deletion UI | Not started | — | AM-001, AM-005, AM-006, AM-011 | — |
+| 5. Evidence presentation, configuration cleanup, and runtime regression | Not started | — | AM-010–AM-014 | — |
 | 6. Browser proof, documentation, and completion audit | Not started | — | AM-001–AM-014 | — |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. `Verified` requires the mandatory checkpoint.
@@ -182,7 +190,10 @@ Replace the placeholder with confirmed open findings during execution. When fixe
 | Integer revision optimistic concurrency | Timestamp collisions are avoidable and stale writes/activations must fail explicitly. | PRD §§7.2, 10.1 |
 | No runtime cache | The PRD requires every invocation to observe current active configuration. | AM-011 |
 | Quality skill seeded with review model | One persisted specialist must serve manager-routed and direct quality review consistently. | PRD §§4, 9, 10.2 |
-| Unknown configured models have null cost estimate | Evidence must not claim an inaccurate role-based estimate. | PRD §§10.3, 13–14 |
+| Closed compatible model catalog | Official model pages verify the initial GPT-5.6 family supports required function calling and structured outputs; code-owned entries prevent saving an image/audio/incompatible model that merely exists. | PRD §6.3; official OpenAI model catalog |
+| Resolve all required text agents before workflow mutation | Manager/specialist selection, automatic Story Plan quality, and card-follow-up recovery must satisfy the PRD no-mutation guarantee with frozen per-invocation configurations. | PRD §9; AM-009–AM-011 |
+| Runtime attribution precedes activation UI | Database-backed resolution and immutable call attribution ship together before the operator can activate a replacement, so every visible phase is truthful and auditable. | PRD §§2.2, 7.2, 10.3 |
+| Progressive corrupt-coverage repair | Inactive preparation plus strictly reducing activation repairs multiple missing slots without weakening exact coverage in normal state. | PRD §§7.2, 9 |
 | Server actions remain unauthenticated/local-only | Authentication is explicitly out of scope; a weak substitute would misrepresent safety. | PRD §§3.2, 5.1 |
 | Reuse the current branch | The user explicitly approved continuing on `issue-10-database-backed-agent-management`; implementation checkpoints publish there unless redirected. | User direction, 2026-08-15 |
 
@@ -229,7 +240,7 @@ direct Story Plan quality review
 | --- | --- |
 | `agent_definitions` | `id` text PK; `created_at_ms` integer; `created_by` text. It contains stable identity only because all user-visible configuration is versioned. |
 | `agent_versions` | `id` text PK; `agent_id` FK; `version_number` integer; nullable self-FK `parent_version_id`; `display_name`; `purpose`; `role`; nullable `skill_id`; `instructions`; `provider`; `model_id`; `reasoning_effort`; `max_turns`; `status`; integer boolean `is_active`; integer `revision`; `created_at_ms`; `updated_at_ms`; `created_by`; `updated_by`. |
-| `agent_version_events` | `id` text PK; stable `agent_id` and `agent_version_id` text identifiers; `action`; `actor`; nullable bounded `metadata_json`; `created_at_ms`. IDs deliberately remain after an eligible draft/version definition is deleted. |
+| `agent_version_events` | `id` text PK; stable `agent_id` and `agent_version_id` text identifiers; closed `action`; `actor`; nullable `metadata_json` with `length(metadata_json) <= 4096`; `created_at_ms`. IDs deliberately remain after an eligible draft/version definition is deleted. |
 | `model_calls` additions | Nullable `agent_definition_id` FK; nullable `agent_version_id` FK; nullable `agent_config_snapshot_json`. Existing rows remain valid with all three null. |
 
 `agent_versions` requires:
@@ -247,10 +258,14 @@ Database uniqueness prevents duplicates; service transactions enforce exact cove
 
 Generate a new migration after updating `db/schema.ts`, inspect it, then add the stable idempotent seed inserts to that checked-in migration. Do not edit `0000_left_sleepwalker.sql`.
 
+Before applying the new migration to the configured local file database, stop the development server and create a consistent backup with a small checked-in `scripts/backup-local-db.ts` helper. The helper resolves `DATABASE_URL` to an absolute `file:` path, refuses memory/remote/out-of-workspace targets without explicit user direction, checkpoints any SQLite WAL, closes the client, and copies the database into `output/backups/agent-management/<UTC timestamp>/booklets.db`. It writes a manifest containing the source path, byte size, SHA-256, and pre-migration journal state, then reopens the backup read-only enough to verify the journal and a representative booklet count. Temporary migration tests and the isolated e2e database do not require this user-data backup.
+
+If migration fails, do not automatically overwrite the source database. Preserve the failed file, report the verified backup path/hash, and ask before restoring. The documented restore procedure stops all app processes, validates both resolved paths, moves the failed database aside, copies the verified backup into the original location, and rechecks the migration journal/booklet count. This is the only local rollback path.
+
 The migration must:
 
 1. create the three new tables, checks, indexes, and nullable model-call columns without rewriting or deleting existing rows;
-2. insert eight logical definitions, eight active confirmed versions, and creation/activation/confirmation audit events using stable IDs and `INSERT ... ON CONFLICT DO NOTHING` or an equivalent idempotent statement;
+2. insert eight logical definitions, eight active confirmed versions, and the 24 specified create/confirm/activate audit events using the fixed IDs/timestamp and `INSERT ... ON CONFLICT DO NOTHING` or an equivalent idempotent statement;
 3. leave existing booklets/model calls untouched and readable;
 4. produce exact manager + seven-skill coverage immediately after migration, without running `npm run seed`; and
 5. fail atomically on an unexpected incompatible schema. Recovery is restoring the user’s local database backup and correcting the migration; there is no down-migration UI.
@@ -260,7 +275,7 @@ The migration must:
 - a fresh empty database migrated through the complete journal; and
 - a representative pre-change database built by applying only migration 0000 from a temporary migration directory, inserting a booklet and legacy model-call row, then applying the full journal.
 
-It proves stable seed contents, idempotent insert semantics, complete/unique coverage, legacy row readability with null attribution, and preservation of representative data. Temporary databases live under the test data root/output and are removed only through the existing validated test cleanup path.
+It proves stable seed contents/events/timestamps, idempotent insert semantics, complete/unique coverage, legacy row readability with null attribution, and preservation of representative data. A focused backup-helper test uses a temporary file database to prove path refusal, manifest/hash creation, and readable backup contents without touching the configured user database. Temporary databases live under the OS temporary directory or existing validated test roots and are cleaned only through the existing Windows-safe test cleanup path.
 
 ### 7.3 Transaction contracts
 
@@ -287,6 +302,7 @@ Add `lib/contracts/agents.ts` with:
 - `agentDefinitionSchema`, `agentVersionSchema`, `agentCoverageSlotSchema`, `agentAdminSnapshotSchema`, and `agentVersionEventSchema`;
 - `createAgentInputSchema`, `updateAgentDraftInputSchema`, `forkAgentVersionInputSchema`, and lifecycle action schemas carrying UUIDs and expected revision/slot values;
 - `effectiveAgentConfigurationSnapshotSchema` with `schemaVersion: "1"` and derived execution settings; and
+- `agentCoverageFingerprintSchema` plus a serializable `pendingCardFollowupSchema` containing only `responseId`, safe summary, and status for retry/resume;
 - `agentActionStateSchema` for `success`, `validation_error`, `conflict`, and `failure`, including field errors and a safe next step.
 
 Parse at every database, Server Action, runtime, and evidence boundary. Repositories return domain/view types rather than raw rows or JSON strings.
@@ -301,6 +317,7 @@ type AgentRepository = {
   getVersion(id: string): Promise<AgentVersion | null>;
   resolveActiveManager(): Promise<AgentVersion | null>;
   resolveActiveSpecialist(skillId: SkillId): Promise<AgentVersion | null>;
+  resolveCompleteActiveCoverage(): Promise<AgentCoveragePersistenceSnapshot>;
   create(input: CreateAgentRecord): Promise<AgentVersion>;
   updateDraft(input: UpdateAgentDraftRecord): Promise<AgentVersion>;
   fork(input: ForkAgentVersionRecord): Promise<AgentVersion>;
@@ -310,6 +327,8 @@ type AgentRepository = {
   deleteDraft(input: VersionMutationRecord): Promise<void>;
 };
 ```
+
+The existing conversation repository additionally exposes `getLatestPendingCardFollowup(bookletId)` for the workspace read model. It returns only a validated pending/running response identity plus a safe card summary, never raw error/provider text. Startup and request recovery reset an orphaned `running` claim to `pending` using the existing compare-and-set method before offering Resume.
 
 Mutation methods own transactions and compare-and-swap details. `AgentManagementService` owns product validation and error wording. `AgentResolver` owns runtime validation and snapshot derivation. Route/UI code never imports Drizzle or database rows.
 
@@ -322,7 +341,7 @@ Mutation methods own transactions and compare-and-swap details. `AgentManagement
 - deterministic field validation before repository calls; and
 - safe error mapping: `agent_not_found` 404, `agent_invalid_configuration` 400, `agent_immutable` 409, `agent_coverage_conflict` 409, `agent_delete_blocked` 409, and `agent_conflict` 409.
 
-The service calculates complete post-mutation coverage from the current registry. A corrupt/missing slot is visible in the read snapshot, but normal actions cannot worsen or preserve incomplete coverage unless the single action repairs it.
+The service calculates a deterministic set of coverage violations from the current registry before and after each mutation. Exact pre-state must remain exact. Incomplete pre-state follows the progressive-repair rule in Section 3.4: inactive preparation may preserve but not worsen the violation set, while activation must strictly reduce it. The admin snapshot exposes every missing/malformed slot and the next repair action; tests cover two simultaneous missing slots so recovery is demonstrably reachable.
 
 ### 8.4 Runtime resolver behavior
 
@@ -331,31 +350,35 @@ The service calculates complete post-mutation coverage from the current registry
 ```ts
 resolveManager(runtimeMode: "fake" | "real"): Promise<ResolvedAgentConfiguration>;
 resolveSpecialist(skillId: SkillId, runtimeMode: "fake" | "real"): Promise<ResolvedAgentConfiguration>;
+prepareCompleteActiveSet(runtimeMode: "fake" | "real"): Promise<PreparedActiveAgentSet>;
 ```
 
-It performs fresh repository reads, validates the complete row against the same contract, checks role/skill/status/active/registry compatibility, freezes a plain resolved object, and derives the effective snapshot. Missing, duplicate, retired, unsupported, or malformed configuration throws `agent_configuration_unavailable` with the missing manager/skill and `/admin/agents` next step.
+It performs fresh repository reads, validates the complete row against the same contract and supported-model catalog, checks role/skill/status/active/registry compatibility, freezes a plain resolved object, and derives the effective snapshot. `prepareCompleteActiveSet` reads one consistent repository snapshot, validates/freezes the manager plus all seven specialists, and returns the ordered configurations and diagnostic ID/revision fingerprint. Missing, duplicate, retired, unsupported, or malformed configuration throws `agent_configuration_unavailable` with the missing manager/skill and `/admin/agents` next step.
 
-No booklet, message, card, artifact, approval, job, or stage mutation occurs before the manager and selected specialist required for the turn resolve and complete successfully. Move the current user-message append behind that boundary. If manager resolution fails, persist no call row or workflow state. If specialist resolution fails after a successful manager call, retain only the immutable manager evidence row; the conversation and booklet remain unchanged.
+Before `CardService` persists any card response/action that requires an agent follow-up, it calls `prepareCompleteActiveSet` as a no-write preflight; failure leaves the card, response, artifacts, approvals, jobs, messages, and stage unchanged. A successfully accepted creator decision is independently durable and may remain `pending` while its later chat follow-up is retried. The follow-up request prepares its own fresh complete set rather than reusing the earlier one. Normal admin mutations cannot create a gap after preflight because they preserve valid coverage transactionally; later external corruption causes the follow-up to fail without adding chat/workflow state and leaves the saved response pending.
+
+For a manager-routed material turn, prepare one fresh complete active set before any SDK call or durable write, then use its frozen manager and selected specialist (and quality specialist when needed) throughout that turn. No user/assistant message, evidence row, new card, artifact, approval, job, or stage mutation occurs until that preparation succeeds. Once it succeeds, provider/schema attempts may write their own success/failure evidence even if execution later fails, but workflow mutation still waits for successful execution. Application-only paths such as PDF export do not resolve text agents and retain their existing deterministic ordering.
 
 ## 9. Runtime, evidence, and configuration changes
 
 ### 9.1 Manager-routed material turn
 
 1. Build and validate saved `SkillContext` as today.
-2. Resolve/freeze the active manager configuration.
+2. Resolve/freeze one complete active set from a consistent database snapshot; use its manager configuration.
 3. Derive stage/operation-valid `SkillDefinition`s from the code registry.
 4. Run real or fake manager with the resolved configuration and the same allowlist.
 5. Validate the selected skill against that exact allowlist.
-6. Resolve/freeze the active specialist for the selected `SkillId`.
-7. Validate specialist input, run the real adapter or deterministic `SkillDefinition.run`, and validate output.
-8. Record manager and specialist success/failure rows with their own resolved IDs/snapshots.
-9. After both required configurations and the specialist result have succeeded, append the user message and return the transient proposal to the existing application materialization/persistence path.
+6. Select the already frozen active specialist for the chosen `SkillId` from that set.
+7. If the selected skill can produce a Story Plan, prepare the already frozen quality specialist from that set for one-use review.
+8. Validate specialist input, run the real adapter or deterministic `SkillDefinition.run`, and validate output.
+9. Record manager and specialist success/failure rows with their own resolved IDs/snapshots. Pass any pre-resolved quality configuration into `QualityService` so an in-flight activation affects only the next invocation.
+10. After all required configurations and model results have succeeded, append the user message and return the transient proposal to the existing application materialization/persistence path. Preserve the separate deterministic PDF-export branch.
 
 The real manager factory receives persisted name/instructions/model/reasoning and code-owned tools/settings; `Runner.run` receives persisted max turns. The specialist factory receives persisted name/instructions/model/reasoning, no tools, and the registered output envelope; its runner receives one turn.
 
 ### 9.2 Direct quality review
 
-`QualityService.runStoryReadiness` resolves `quality_review_targeted_repair@1` before calling the same specialist runtime. Remove the runtime’s `skill`/`review` constructor role and all hard-coded review model/harness lookup. Deterministic generation-readiness and final-page checks remain application-only and do not resolve or record a text agent.
+`QualityService.prepareStoryReadiness` resolves/freezes `quality_review_targeted_repair@1` and returns a typed prepared invocation that `runStoryReadiness` must consume exactly once. The automatic new-Story-Plan path prepares it before artifact persistence. The card-approval path resolves it before mutating the card response and may then execute immediately. Remove the runtime’s `skill`/`review` constructor role and all hard-coded review model/harness lookup. Deterministic generation-readiness and final-page checks remain application-only and do not resolve or record a text agent.
 
 ### 9.3 Failure behavior
 
@@ -363,18 +386,22 @@ The real manager factory receives persisted name/instructions/model/reasoning an
 | --- | --- | --- |
 | Missing/corrupt active manager | Recoverable configuration issue pointing to `/admin/agents`. | No manager call row because no agent was resolved; no workflow mutation. |
 | Manager chooses disallowed skill | Existing typed recovery behavior. | Failed manager row includes resolved manager IDs/snapshot. |
-| Missing/corrupt selected specialist | Recoverable configuration issue naming the skill. | Successful manager row remains; no specialist call row without a resolved specialist; no message/card/booklet mutation. |
+| Missing/corrupt selected specialist | Recoverable configuration issue naming the skill. | Manager evidence is buffered until required resolution succeeds, so no call row or new chat/workflow mutation is written; a previously accepted creator response remains pending. |
+| Missing/corrupt automatic quality specialist | Recoverable configuration issue naming the quality skill. | It is conservatively resolved before planning-specialist execution or evidence persistence, so no call row or new Story Plan/message/card is written. |
 | Specialist input/output/provider failure | Existing safe retry/validation behavior. | Failed specialist row includes resolved IDs/snapshot. |
 | Stale admin mutation | Inline conflict telling operator to reload/review. | Transaction rolls back; audit event is not written. |
-| Unknown model pricing | Runtime may execute if available. | Usage retained; estimate/pricing version null. |
+| Unsupported/incompatible model | Save, activation, resolver, and preflight reject it with a catalog-safe message. | No runtime call or workflow mutation. |
+| Future supported catalog model without verified price | Runtime may execute after capability review. | Usage retained; estimate/pricing version null. |
 
-Do not add `agent_configuration_unavailable` to the persisted typed-recovery-card set: doing so would itself mutate conversation state. Map it to the existing safe non-2xx JSON error envelope with a closed `code`, user-safe `message`, `recoverable: true`, and `details.adminPath: "/admin/agents"`. In `WorkspaceConversation.onError`, parse only this known envelope from the AI SDK transport error, reconcile optimistic client messages back to the server-provided `initialMessages`, render a non-persisted inline error with an Agents link and Retry/Reload actions, and fall back to the current generic interruption text for malformed or unknown bodies. Never render arbitrary provider/database error text and never auto-mutate configuration.
+Do not add `agent_configuration_unavailable` to the persisted typed-recovery-card set: doing so would create a new decision. Map it to the existing safe non-2xx JSON error envelope with a closed `code`, user-safe `message`, `recoverable: true`, and `details.adminPath: "/admin/agents"`. On this error, `ChatService` resets a claimed card follow-up from `running` to `pending`; it does not delete the independently saved creator response.
+
+`WorkspaceConversation` owns a typed `pendingSend` value containing text plus optional `responseId`. Set it before `sendMessage`; clear it only after successful finish. The installed AI SDK invokes `onError` and then `onFinish` for a failed send, so `onFinish({ isError })` must leave error/retry state intact when `isError` is true. `onError` parses only the known safe envelope from the transport error, reconciles optimistic messages to `initialMessages`, restores free text to the input, and renders a non-persisted error with Agents, Retry, and Reload actions. Retry resends the retained text and exact response ID. On reload, the workspace read model supplies the latest pending card follow-up (`responseId` and safe summary) and renders “Resume saved decision”; this makes the persisted `pending` response recoverable after process/browser restart. Unknown/malformed bodies use the current generic interruption text. Never render arbitrary provider/database error text and never auto-mutate configuration.
 
 ### 9.4 Environment and preflight
 
 After migration, remove `OPENAI_MANAGER_MODEL`, `OPENAI_MANAGER_REASONING`, `OPENAI_SKILL_MODEL`, `OPENAI_SKILL_REASONING`, `OPENAI_REVIEW_MODEL`, and `OPENAI_REVIEW_REASONING` from runtime parsing and `.env.example`. They no longer override the database.
 
-Update `scripts/preflight-env.mjs` to read the migrated database’s active OpenAI text model IDs plus `OPENAI_IMAGE_MODEL`, deduplicate them, and use authenticated no-generation model lookups. If agent tables/coverage are missing, fail safely with “run `npm run db:migrate`” and no secrets. README Quick Start therefore runs migration before preflight. `npm run dev` may continue to invoke preflight.
+Update `scripts/preflight-env.mjs` to read the migrated database’s active OpenAI text model IDs, validate them against the code-owned catalog, add `OPENAI_IMAGE_MODEL`, deduplicate them, and use authenticated no-generation model lookups. This verifies account access only; catalog validation owns capability compatibility. If agent tables/coverage are missing, fail safely with “run `npm run db:migrate`” and no secrets. README Quick Start therefore runs backup/migration before preflight. `npm run dev` may continue to invoke preflight.
 
 Update the opt-in real smoke script to resolve the active manager from the database and use the same runtime contract. It remains paid/networked, explicitly gated, and is not required by this PRD’s acceptance run.
 
@@ -403,7 +430,7 @@ Add an `Agents` navigation link in `app/layout.tsx`. The page is `runtime = "nod
 
 1. `h1` and persistent warning: “Trusted local backoffice — no authentication; do not expose on an untrusted network.”
 2. Coverage summary with one manager card and seven registry-ordered specialist cards showing active version, status/draft warning, model, reasoning, and logical agent.
-3. Create-agent form with role-dependent skill choice and safe defaults.
+3. Create-agent form with no preselected role, role-dependent catalog/defaults, read-only OpenAI provider, and a persistent warning that instructions are snapshotted in evidence and must not contain secrets or private data.
 4. Logical-agent list showing current active version/slot, role, version count, and chronological expandable version panels.
 5. Draft editor with all supported fields and visible immutable/active restrictions.
 6. Version actions: Fork, Confirm, Activate Replacement, Retire, and Delete Eligible Draft. The currently active seeded version remains easy to restore.
@@ -415,7 +442,7 @@ Use semantic headings, lists/tables, labels, buttons, and links. Long prompt/mod
 - Forms use meaningful names, labels, `autocomplete="off"`, and uncontrolled/default values where practical.
 - Pending controls say “Saving…”, “Activating…”, etc. and disable only after submission begins.
 - Field errors render beside controls, link through `aria-describedby`, announce through `aria-live="polite"`, and focus the first invalid field.
-- An edited draft warns before navigation/reload when unsaved.
+- An edited draft installs one deduplicated `beforeunload` listener while dirty and intercepts same-origin anchor navigation in the admin subtree during capture. Both paths use the browser confirmation prompt; cancel preserves the form and focus, while confirm removes the guard and continues. Successful save/reset clears dirty state. Back/forward traversal is covered with a focused browser test; no custom router blocker is assumed.
 - Success and failure messages are specific and include the next action.
 - Activate confirmation names the version currently occupying the slot and explains that only future calls change.
 - Retire and Delete use explicit confirmation UI; deletion is never one click.
@@ -423,6 +450,8 @@ Use semantic headings, lists/tables, labels, buttons, and links. Long prompt/mod
 - Empty/corrupt coverage remains inspectable and points to migration or a valid activation; the page does not invent records client-side.
 - Role/skill fields are disabled for active drafts and all confirmed/retired versions; immutable state is explained in text, not color alone.
 - Keyboard order follows visual order, focus remains visible, and no interaction requires hover, drag, or pointer-only behavior.
+- Reuse the app’s main-content skip link and semantic heading order. Buttons/links have specific Title Case labels plus hover/focus/active states; native selects set explicit foreground/background colors; identifiers use `translate="no"`; all controls retain zoom, paste, and keyboard behavior.
+- Expanded version details use native `<details>`/`<summary>` because they are disclosure-only, not a selected application state. The page has no filters, tabs, or pagination requiring URL synchronization.
 
 Before Phase 6 completion, fetch the then-current Web Interface Guidelines and run a terse file:line review over `app/admin/agents/**`, `components/admin/agents/**`, and affected global navigation/styles. Fix every in-scope finding and rerun the review until the Open Findings Ledger is empty.
 
@@ -435,15 +464,16 @@ Before Phase 6 completion, fetch the then-current Web Interface Guidelines and r
 | `db/migrations/0001_*.sql`, metadata | Generated schema migration plus reviewed stable idempotent default inserts. |
 | `db/agent-defaults.ts` | Test-only stable expected seed manifest and complete extracted current prompts. |
 | `lib/contracts/agents.ts` | New closed domain/action/snapshot/view contracts. |
+| `lib/config/agent-models.ts` | Closed reviewed text-model catalog, role/reasoning/capability compatibility, and optional pricing metadata. |
 | `lib/application/agent-management-service.ts` | New admin lifecycle/coverage policy. |
 | `lib/application/agent-resolver.ts` | New fresh runtime resolution/snapshot/error boundary. |
 | `lib/agents/manager.ts`, `specialist.ts` | Accept resolved configuration; remove hard-coded editable instructions/model settings. |
 | `lib/agents/openai-manager-runtime.ts`, `openai-specialist-runtime.ts` | Per-call resolved config/max turns; one specialist adapter for normal and quality work. |
 | `lib/application/manager-service.ts`, `quality-service.ts` | Fresh resolution, evidence attribution, same quality specialist source, no state mutation on config failure. |
 | `lib/application/evidence-service.ts`, `lib/application/model-call-cost.ts`, `lib/config/pricing.ts` | Expose parsed snapshot/IDs and model-aware nullable estimate. |
-| `lib/application/chat-service.ts`, `lib/http/errors.ts`, `components/workspace/workspace-conversation.tsx` | Defer message mutation until resolution succeeds and show a safe, non-persisted configuration recovery without changing the AI SDK message-stream contract. |
+| `lib/application/card-service.ts`, `lib/application/chat-service.ts`, `lib/http/errors.ts`, `components/workspace/workspace-conversation.tsx` | Preflight follow-up coverage, retain pending response identity, defer chat/workflow mutation until resolution succeeds, and show safe retry/resume recovery without changing the AI SDK message-stream contract. |
 | `lib/config/env.ts`, `lib/config/models.ts`, `.env.example` | Remove database-authoritative text-agent overrides; retain image/runtime/trace settings. Delete `models.ts` if no legitimate imports remain. |
-| `scripts/preflight-env.mjs`, `scripts/smoke-real-agent.ts`, test setup scripts | Database-backed active model discovery/resolution and migrated isolated test data. |
+| `scripts/backup-local-db.ts`, `scripts/preflight-env.mjs`, `scripts/smoke-real-agent.ts`, test setup scripts | Verified local backup, database-backed active model discovery/resolution, and migrated isolated test data. |
 | `app/admin/agents/**`, `components/admin/agents/**`, `app/layout.tsx`, minimal styles | Add the one local backoffice and discoverable navigation. |
 | Tests listed in Sections 12–13 | Migration, contracts, services, runtime, evidence, UI, fixtures, browser, regression. |
 | `docs/architecture.md`, `README.md`, this plan, agent-management PRD tracker, lessons if proven | Align current behavior/setup and record verified evidence. |
@@ -463,6 +493,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 - Implement the closed agent/version/evidence snapshot contracts and validation limits.
 - Add the three tables, constraints/indexes, model-call columns, row mappers, and seed manifest.
 - Generate and inspect migration SQL; add stable default records/events.
+- Implement and test `scripts/backup-local-db.ts`; run it against the configured local file database and record the verified manifest before `db:migrate`. Do not run the migration if backup verification fails.
 - Keep current runtime/config behavior temporarily intact so this slice is migration-only.
 - Add a repository coverage query used by tests and later services.
 
@@ -472,6 +503,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 - Exact eight-version seed manifest and prompt/config equality.
 - One manager + seven unique skill slots + one active per logical agent.
 - Migration seed statements are conflict-safe/idempotent.
+- Seed audit rows have the specified stable IDs, timestamp, action values, actor, and bounded structural metadata; the backup-helper fixture proves checkpoint/copy/hash/readability and refuses unsafe targets.
 - Existing booklet/model-call data remains readable with null attribution.
 - Commands: `npm run db:generate`, inspect SQL/metadata, focused migration tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
 
@@ -507,66 +539,62 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 **Suggested commit:** `feat: add runtime agent draft management`
 
-### Phase 3 — Lifecycle, activation, conflicts, and deletion UI
+### Phase 3 — Database-backed runtime, attribution, and recovery
 
-**Working outcome:** from the same page, the operator can confirm, activate a replacement, retire, and safely delete eligible drafts while coverage remains exact and stale/racing actions fail recoverably.
+**Working outcome:** both fake and real adapters resolve the seeded active manager/specialist from SQLite for each call; every attempted manager, specialist, and direct quality call is attributable to its immutable resolved version/snapshot; configuration failures are safely retryable without workflow mutation. Activation remains unavailable until Phase 4.
 
-**Primary files:** agent repository/service/action/component lifecycle paths and focused lifecycle/concurrency tests.
+**Primary files:** model catalog, resolver, agent factories/runtimes, `ManagerService`, `QualityService`, `CardService`, `ChatService`, evidence repository/service, HTTP error mapping, `WorkspaceConversation`, and runtime/evidence/recovery tests.
+
+**Code changes**
+
+- Implement the closed model catalog, fresh resolver, complete-coverage preflight, and immutable effective snapshots.
+- Refactor manager/specialist factories so fake and real paths use exact persisted instructions/config while skills, tools, schemas, limits, and application authority stay code-owned.
+- Resolve manager, selected specialist, and any automatic Story Plan quality specialist before the first workflow mutation; direct quality review uses the same persisted quality specialist.
+- Persist independent success/failure attribution for each resolved call and expose it through Evidence JSON, preserving legacy null rows and fake execution identity.
+- Preflight card actions that require follow-up, retain a pending response identity, and implement the safe error envelope, optimistic rollback, exact Retry, and reload-time “Resume saved decision” behavior in Section 9.3.
+- Keep deterministic PDF export on its application-only path and leave activation/retirement/deletion actions unavailable.
+
+**Tests and validation**
+
+- Catalog tests cover all three allowed model IDs, roles, reasoning values, and required capabilities; tampered provider/model values fail at contract/action/resolver boundaries.
+- Existing agent fixtures prove stage-valid routing and exact selected-specialist resolution through persisted fake configuration.
+- Missing/corrupt manager, specialist, and automatic quality cases compare messages/evidence/cards/artifacts/approvals/jobs/stage before and after; no new row may remain, while an independently accepted earlier card response stays pending.
+- Chat/client tests prove the installed AI SDK error-then-finish sequence preserves retry state, exact response ID retry, reload resume, optimistic rollback, and safe malformed-body fallback.
+- Success/provider/schema failures retain independent immutable attribution; active draft edits affect only the next invocation; legacy and fake rows stay readable/correct.
+- Existing booklet integration tests pass with seeded DB-backed resolution.
+- Commands: focused catalog/resolver/manager/quality/card/chat/evidence tests, `npm run test:agent`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
+
+**End-of-phase gate:** Section 4 checkpoint; AM-007–AM-014 runtime/evidence portions recorded; `docs/architecture.md` describes verified persisted resolution and recovery; zero open findings before publish.
+
+**Suggested commit:** `feat: resolve and attribute runtime agents from sqlite`
+
+### Phase 4 — Lifecycle, activation, conflicts, and deletion UI
+
+**Working outcome:** the operator can confirm, activate a replacement, retire, and safely delete eligible drafts while coverage remains exact. Because Phase 3 already owns runtime resolution and attribution, activation immediately and observably affects the next matching call.
+
+**Primary files:** agent repository/service/action/component lifecycle paths plus focused lifecycle, concurrency, runtime-freshness, and recovery tests.
 
 **Code changes**
 
 - Implement confirm, activate replacement, retire, and delete transactions/events.
-- Calculate post-mutation manager/seven-skill coverage inside activation.
-- Enforce one active logical version, slot replacement, active role/skill immutability, permanent retirement, child/evidence deletion guards, and last-version logical cleanup.
-- Add inline confirmation/replacement explanations, action eligibility, conflict preservation, and reload/review recovery.
-- Do not expose a standalone deactivate action.
+- Calculate deterministic before/after violation sets inside activation and enforce exact coverage or the progressive multi-gap repair rule.
+- Enforce one active logical version, atomic slot replacement, active role/skill immutability, permanent retirement, child/evidence deletion guards, and last-version cleanup.
+- Add confirmation/replacement explanations, action eligibility, conflict preservation, reload/review recovery, and no standalone deactivate action.
 
 **Tests and validation**
 
-- Complete lifecycle state table, confirm active/inactive behavior, immutable edits, retired reactivation rejection.
-- Atomic slot replacement and same-logical deactivation without cross-slot gaps.
-- Direct deactivation/coverage gap rejection.
-- Delete allowed/blocked for active, confirmed, retired, child, evidence, and only-version cases.
-- Two concurrent/stale activation attempts: one intended state wins; the other receives `agent_conflict`; coverage remains exact.
-- UI action availability and destructive confirmation tests.
-- Commands: focused lifecycle/concurrency/UI tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
+- Complete lifecycle matrix, immutable edits, retired reactivation rejection, delete guards, and audit events.
+- Exact-state coverage remains exact; a fixture with two missing specialist slots can prepare inactive drafts and activate them one at a time, with each activation strictly reducing the violation set.
+- Two competing/stale activations leave one intended winner, return `agent_conflict` to the other, and preserve coverage.
+- Activate an edited draft and prove the next invocation/evidence uses it while an already resolved in-flight snapshot stays unchanged; restore the seeded version and prove the subsequent call changes back.
+- UI action availability, destructive confirmation, unsaved navigation, safe configuration recovery, and conflict preservation tests.
+- Commands: focused lifecycle/concurrency/runtime/UI tests, `npm run test:agent`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
-**End-of-phase gate:** Section 4 checkpoint; AM-005/AM-006 evidence recorded in plan and PRD; review and fix until the Open Findings Ledger is empty; publish and update Issue #12.
+**End-of-phase gate:** Section 4 checkpoint; AM-001/AM-005/AM-006 and activation-freshness evidence updated; zero open findings before publish.
 
 **Suggested commit:** `feat: enforce runtime agent lifecycle coverage`
 
-### Phase 4 — Database-backed manager, specialist, and quality resolution
-
-**Working outcome:** both fake and real adapters resolve the active manager/specialist from SQLite for each call. The existing fake-provider booklet flow works, and activating a replacement affects the next matching call without changing schemas, skills, or application authority.
-
-**Primary files:** `agent-resolver.ts`, agent factories/runtimes, `ManagerService`, `QualityService`, `ChatService`, HTTP error mapping, `WorkspaceConversation`, and runtime/manager/quality/chat/fixture/integration tests.
-
-**Code changes**
-
-- Implement fresh resolver and effective snapshot derivation.
-- Refactor manager/specialist factories to use exact persisted instructions/config and unchanged code-owned enforcement.
-- Resolve manager before routing and the selected specialist before input/execution; pass resolved config through fake and real runtime interfaces.
-- Route direct Story Plan quality review through the same persisted quality specialist.
-- Move user-message persistence behind successful manager/specialist resolution and execution. Configuration failure creates no message/card/booklet/artifact/approval/job/stage mutation and provides the safe non-persisted local-admin recovery in Section 9.3.
-- Keep the Vercel AI SDK UI stream format, typed cards, closed registry, one-specialist limit, output validation, and deterministic `SkillDefinition.run` path unchanged.
-
-**Tests and validation**
-
-- Existing agent fixtures pass and additionally assert persisted manager/specialist IDs selected for eligible/ineligible/stage/operation cases.
-- Manager only receives stage/operation-valid registered skills and rejects an out-of-allowlist route.
-- Selected skill resolves exactly its active specialist; inactive/retired/wrong-role/wrong-skill/missing data fails before state mutation.
-- Missing-manager and missing-specialist tests compare message, active-card, artifact, approval, job, and stage state before/after; the latter may add only the successful manager evidence row.
-- Chat route/component tests accept only the known safe configuration envelope, roll back the optimistic client message, show the Agents link without persisting a recovery card, and fall back safely for malformed/arbitrary error bodies.
-- Direct quality review resolves the same quality specialist and no longer reads review env/harness config.
-- Active draft edit and activation are visible on the next invocation; an in-flight resolved snapshot remains unchanged.
-- Existing booklet integration tests pass with seeded DB-backed fake resolution.
-- Commands: focused resolver/manager/quality tests, `npm run test:agent`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
-
-**End-of-phase gate:** Section 4 checkpoint; AM-007–AM-011 and runtime part of AM-013 updated; `docs/architecture.md` must now describe verified persisted resolution; zero open findings before publish.
-
-**Suggested commit:** `feat: resolve runtime agents from sqlite`
-
-### Phase 5 — Evidence attribution, configuration cleanup, and regression
+### Phase 5 — Evidence presentation, configuration cleanup, and regression
 
 **Working outcome:** every relevant fake/real manager, specialist, and Story Plan quality call is attributable to the resolved version and immutable snapshot. Text-agent environment overrides are gone, preflight reads active database models, and legacy evidence remains readable.
 
@@ -574,8 +602,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 **Code changes**
 
-- Write agent IDs/snapshot on successful and failed call attempts after resolution.
-- Parse/expose attribution in Evidence JSON; preserve nulls for legacy rows.
+- Complete evidence presentation and cost summaries built on the IDs/snapshots already written in Phase 3; preserve nulls for legacy rows.
 - Make estimates exact-model-aware and null for unpriced models.
 - Remove text model/reasoning env overrides and obsolete `ModelRole` configuration.
 - Update preflight order/DB model discovery and opt-in real smoke wiring.
@@ -583,12 +610,11 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 **Tests and validation**
 
-- Manager/specialist/direct-quality success and provider/schema failure rows retain the correct independent snapshots.
-- Edit active draft after a call: old evidence snapshot stays unchanged; next call snapshot changes.
-- Activation after a call preserves old version attribution and uses new version next time.
+- Evidence UI/JSON presents manager/specialist/direct-quality success and provider/schema failure snapshots written in Phase 3 without exposing private prompt text in screenshots or issue comments.
+- Historical snapshots remain unchanged after active-draft edits and activation; the next-call behavior was already proven at the Phase 3/4 boundaries.
 - Legacy model-call row remains readable with null IDs/snapshot.
 - Fake rows retain fake execution provider/model and zero cost while snapshot identifies selected persisted OpenAI config.
-- Known model estimate vs unknown model null estimate.
+- Priced catalog model estimate vs a reviewed catalog fixture with null pricing; arbitrary unknown models are rejected and never reach costing.
 - Environment tests reject removed overrides as runtime authority; preflight failure safely identifies missing migration/coverage.
 - Full existing integration/fixture regression.
 - Commands: focused evidence/config tests, `npm run test:agent`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`; no real smoke required.
@@ -663,11 +689,11 @@ The final serial Playwright flow uses isolated migrated data and no network mode
 
 1. Open `/admin/agents`; verify the local-only warning, active manager, and all seven active skill slots.
 2. Open the seeded `intake_readiness@1` specialist history and fork it.
-3. Edit the draft’s name, instructions, model ID, reasoning, and valid max turns; verify inline invalid-provider/model/max-turn feedback first.
+3. Edit the draft’s name, instructions, catalog model selection, reasoning, and valid max turns. Verify the provider is read-only OpenAI and the role-specific defaults are deterministic. Contract/Server Action tests—not an impossible normal browser state—prove tampered provider/model/max-turn inputs are rejected.
 4. Activate the draft with replacement confirmation; verify the old version becomes inactive and coverage stays complete.
 5. Create a booklet and start the existing guided flow. Verify the first material turn invokes the replacement through Evidence JSON: logical/version IDs and snapshot values match the edited draft.
-6. Continue the existing fake-provider golden path through every artifact, final page approval, PDF export, and download.
-7. Run `pdfinfo` and render every downloaded page with `pdftoppm` into `tmp/pdfs/agent-management-golden/`; inspect page order, dimensions, text/image legibility, clipping, overlap, and blank/missing content, record pass/fail evidence, then delete the temporary renders.
+6. Continue the existing fake-provider golden path through every artifact, final page approval, PDF export, and download; capture the Playwright download and call `saveAs("output/playwright/agent-management-golden.pdf")`.
+7. After the prerequisite check confirms `pdfinfo` and `pdftoppm`, inspect the saved PDF with `pdfinfo` and render every page into `tmp/pdfs/agent-management-golden/`; inspect page order, dimensions, text/image legibility, clipping, overlap, and blank/missing content, record pass/fail evidence, then delete only the temporary renders.
 8. Reload/navigate between Home, workspace, and Agents; verify persisted agent/booklet state and no creator model selector.
 9. Return to Agents, activate the seeded specialist as the replacement, and verify complete restored coverage.
 10. Exercise fork/confirm/retire/delete on a separate unused draft, including confirmation and a blocked deletion case.
@@ -705,20 +731,20 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 
 | Requirement | Phases | Direct implementation/evidence |
 | --- | --- | --- |
-| AM-001 | 1–3 | Three tables, contracts, repository/service and migration tests. |
+| AM-001 | 1–4 | Three tables, contracts, repository/service and migration tests. |
 | AM-002 | 1 | Checked-in migration, stable manifest, fresh/upgrade/coverage assertions. |
 | AM-003 | 2 | Create form/action/service tests and browser create flow. |
 | AM-004 | 2 | Draft edit/fork transactions, lineage/concurrency tests, history UI. |
-| AM-005 | 3 | Confirm/activate/retire/delete matrix and browser actions. |
-| AM-006 | 2–3 | Closed Zod surface, product guards, inline field/conflict/delete feedback. |
-| AM-007 | 4 | Registry allowlist tests and unchanged manager tool bounds. |
-| AM-008 | 4 | Resolver selected-skill lookup and eligible/ineligible/missing tests. |
-| AM-009 | 4 | QualityService same-resolver/specialist test. |
-| AM-010 | 4–6 | Existing schemas/services/fixtures/golden path; no admin-authored tools/state authority. |
-| AM-011 | 4–5 | No-cache fresh lookup tests for edit/activation and in-flight snapshot. |
-| AM-012 | 1, 5 | Nullable schema migration plus success/failure/history/legacy evidence tests. |
-| AM-013 | 4–5 | Persisted factory config; removed env overrides; DB-backed preflight/smoke. |
-| AM-014 | 4–6 | Existing integration suite and activated-specialist full fake browser flow to PDF. |
+| AM-005 | 4 | Confirm/activate/retire/delete matrix and browser actions. |
+| AM-006 | 2, 4 | Closed Zod surface, product guards, inline field/conflict/delete feedback. |
+| AM-007 | 3 | Registry allowlist tests and unchanged manager tool bounds. |
+| AM-008 | 3 | Resolver selected-skill lookup and eligible/ineligible/missing tests. |
+| AM-009 | 3 | QualityService same-resolver/specialist test. |
+| AM-010 | 3–6 | Existing schemas/services/fixtures/golden path; no admin-authored tools/state authority. |
+| AM-011 | 3–5 | No-cache fresh lookup tests for edit/activation and in-flight snapshot. |
+| AM-012 | 1, 3, 5 | Nullable schema migration plus success/failure/history/legacy evidence tests. |
+| AM-013 | 3, 5 | Persisted factory config; removed env overrides; DB-backed preflight/smoke. |
+| AM-014 | 3–6 | Existing integration suite and activated-specialist full fake browser flow to PDF. |
 
 ### 14.1 Acceptance evidence matrix
 
@@ -753,13 +779,14 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 
 | Risk | Control/recovery | Intentionally not added |
 | --- | --- | --- |
-| Migration damages a local database | Additive checked-in migration; fresh/prior tests; user backup/restore is recovery; inspect SQL before run. | Down-migration UI, remote backup service. |
+| Migration damages a local database | Additive checked-in migration; executable checkpointed backup with hash/readability manifest; fresh/prior tests; explicit restore protocol; inspect SQL before run. | Down-migration UI, remote backup service. |
 | Seed prompt drifts from current behavior | Test-only manifest copies current complete prompts; migrated row equality and all fixture regressions. | Runtime fallback to TypeScript defaults. |
 | Active change leaves a slot uncovered | Partial uniqueness + transactional post-state coverage calculation + conflict tests. | Priority/assignment engine. |
 | Concurrent operator overwrites state | Integer revisions and observed slot IDs; compare-and-swap transaction; actionable reload conflict. | Distributed locks/multi-user coordination. |
 | Active draft edit changes historical meaning | Freeze resolved object and snapshot every attempted call. | Per-booklet pinning. |
 | Editable instruction tries to expand authority | No arbitrary tools/schemas/code; output and persistence remain code-owned. | Prompt-only safety claims. |
-| Unknown model fails or has wrong cost | Preflight active IDs; safe provider failure; null unknown estimate. | Provider selector, price service, cost governance UI. |
+| Catalog capability or account access drifts | Reviewed closed catalog owns structural compatibility; authenticated preflight verifies access; safe failure; optional price may be null. | Free-form models, provider selector, live capability inference, price service. |
+| Editable instructions or evidence expose secrets | Admin warns not to paste secrets; snapshots are restricted evidence data; fixtures/screenshots/issues use redacted summaries; final secret scan covers source, DB fixtures, artifacts, screenshots, and comments. | Secret vault, field-level encryption, production audit controls. |
 | Local admin exposed on network | Persistent warning and docs; no claim of authentication. | Weak password or incomplete RBAC. |
 | UI grows beyond POC | One page, chronological history, native forms, no search/diff/merge/bulk. | General agent platform. |
 
@@ -776,7 +803,7 @@ Before claiming Issue #12 implementation-ready for human verification, produce a
 - [ ] Successful and failed relevant calls retain immutable IDs/snapshot; legacy rows remain readable.
 - [ ] Existing skill schemas, one-specialist bound, materialization, persistence, approvals, jobs, and stage authority are unchanged or explicitly reverified.
 - [ ] Admin loading/empty/validation/conflict/failure states and keyboard/focus/destructive confirmation pass.
-- [ ] Missing manager/specialist configuration leaves message/card/booklet state unchanged and exposes only the safe non-persisted Agents recovery UI.
+- [ ] Missing manager/specialist/automatic-quality configuration leaves new message/card/artifact/approval/job/stage state unchanged; any creator response accepted earlier remains explicitly pending and recoverable through exact Retry or reload-time Resume, with only safe non-persisted recovery UI added.
 - [ ] Full activated-specialist browser flow reaches and downloads a PDF; every rendered page passes visual inspection; temporary renders are removed; coverage is restored.
 - [ ] The three named retained real-provider evaluation directories remain present/readable and `git diff -- evaluations` is empty.
 - [ ] Typecheck, lint, all tests, agent fixtures, build, and e2e pass in fake mode.

@@ -289,19 +289,19 @@ This table tracks implementation coverage without changing the approved requirem
 
 | Requirement | Plan phases | Status | Evidence |
 | --- | --- | --- | --- |
-| AM-001 | 1–3 | Not started | — |
+| AM-001 | 1–4 | Not started | — |
 | AM-002 | 1 | Not started | — |
 | AM-003 | 2 | Not started | — |
 | AM-004 | 2 | Not started | — |
-| AM-005 | 3 | Not started | — |
-| AM-006 | 2–3 | Not started | — |
-| AM-007 | 4 | Not started | — |
-| AM-008 | 4 | Not started | — |
-| AM-009 | 4 | Not started | — |
-| AM-010 | 4–6 | Not started | — |
-| AM-011 | 4–5 | Not started | — |
-| AM-012 | 1, 5 | Not started | — |
-| AM-013 | 4–5 | Not started | — |
-| AM-014 | 4–6 | Not started | — |
+| AM-005 | 4 | Not started | — |
+| AM-006 | 2, 4 | Not started | — |
+| AM-007 | 3 | Not started | — |
+| AM-008 | 3 | Not started | — |
+| AM-009 | 3 | Not started | — |
+| AM-010 | 3–6 | Not started | — |
+| AM-011 | 3–5 | Not started | — |
+| AM-012 | 1, 3, 5 | Not started | — |
+| AM-013 | 3, 5 | Not started | — |
+| AM-014 | 3–6 | Not started | — |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. At each implementation phase checkpoint, update this table and the plan’s phase/traceability ledgers together so omissions remain visible.
