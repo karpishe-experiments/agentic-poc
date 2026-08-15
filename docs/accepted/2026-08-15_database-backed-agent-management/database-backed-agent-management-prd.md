@@ -1,6 +1,6 @@
 # Product Requirements Document: Database-backed runtime agent management POC
 
-**Status:** Draft for explicit approval
+**Status:** Approved 2026-08-15
 
 **Issue:** #10 — Agent management discovery
 
