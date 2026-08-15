@@ -5,6 +5,8 @@
 **Issue:** #10 — Agent management discovery
 
 **Parent:** #9 — Database-backed runtime agent definitions and admin management
+
+**Phase 7 improvement:** #15 — Improve runtime-agent admin UX
 **Authoritative scope:** This document extends the accepted Kids Booklet POC PRD. Where they conflict, this document governs the agent-management feature; the Kids Booklet PRD continues to govern the booklet workflow.
 
 ## 1. Product summary
@@ -159,14 +161,18 @@ Active versions apply to all future material turns of every booklet. Past calls 
 
 `/admin/agents` is one purpose-built server-rendered backoffice page, enhanced only where client interaction is needed. It must be workable with keyboard navigation and show loading, empty, validation, conflict, and request-failure states.
 
-The page provides:
+The initial implementation proved the required lifecycle but gave equal visual weight to coverage, blank creation, full version history, editing, and every action. Phase 7 improves that information hierarchy without changing the persisted data, lifecycle, Server Actions, runtime resolution, or creator workflow.
 
-1. A coverage summary showing the active global manager and active version for each of the seven skills, including status, model, and draft warning.
-2. A list of logical agents with their active version, role, skill binding, current status, and version count.
-3. Creation controls for a manager or a skill-bound specialist. Specialist creation selects one of the closed registered skills.
-4. A version editor for drafts with name, purpose, role, skill binding when inactive, complete instructions, provider, model, reasoning, and maximum turns.
-5. Version history and actions to fork, confirm, activate, retire, or safely delete a draft.
-6. Actionable errors explaining invalid configuration, immutable versions, coverage conflicts, and deletion restrictions.
+The improved page provides:
+
+1. A desktop-first two-column workspace. A compact left rail lists the global manager and seven registry-ordered specialist slots; the right workspace shows the selected slot, logical agent, and version. The manager is selected initially. On narrow screens, the rail stacks above the workspace.
+2. Friendly skill and status labels for scanning, with model and version visible in summaries. Raw skill IDs, UUIDs, and other identifiers remain available through a technical-details disclosure.
+3. A compact newest-first version list. Selecting any version shows its complete saved configuration read-only in the same workspace, including instructions and typed runtime settings.
+4. Explicit Edit mode for editable drafts. Read-only configuration is the default; Edit reveals the existing fields with Save and Cancel, inline validation, first-error focus, and unsaved-change protection.
+5. All lifecycle actions valid for the selected version remain visible. Destructive actions are visually separated, and activation uses an accessible contextual dialog naming the incoming and outgoing versions and explaining that only future calls change.
+6. A workspace-level status banner for success, conflict, and request failure, while validation errors remain adjacent to their fields.
+7. A `New Agent` action that replaces the detail workspace with the existing blank creation form. Cancel restores the previously selected slot. Specialist creation continues to select one closed registered skill.
+8. Actionable errors explaining invalid configuration, immutable versions, coverage conflicts, and deletion restrictions.
 
 The UI need not support search, filters, diffing, branch visualization, bulk operations, or rich prompt editing features. Plain textarea editing and chronological version history are sufficient.
 
@@ -227,6 +233,7 @@ The snapshot is required because an active draft may be edited after invocation.
 - **AM-012:** Each relevant model-call record shall retain agent/version attribution and an immutable effective-configuration snapshot.
 - **AM-013:** The database shall be authoritative for text-agent runtime configuration after migration.
 - **AM-014:** The existing booklet flow shall complete with database-backed agents under the fake runtime.
+- **AM-015:** The local agent backoffice shall provide the slot-driven, accessible workspace defined in section 8 while preserving the existing lifecycle, Server Action, persistence, runtime-resolution, and creator-workflow behavior.
 
 ## 12. Acceptance and verification
 
@@ -240,17 +247,19 @@ The snapshot is required because an active draft may be edited after invocation.
 - Evidence tests prove successful and failed calls retain the resolved version and effective configuration snapshot; existing call rows remain readable.
 - Existing deterministic agent fixtures and booklet integration tests pass with database-backed runtime resolution.
 - Typecheck, lint, focused tests, `test:agent`, build, and desktop fake-provider Playwright coverage pass.
+- Focused browser coverage proves initial manager selection, all eight slot selections, friendly labels with technical details available on demand, complete read-only version inspection, explicit draft editing with Save/Cancel and unsaved-change protection, workspace creation with cancel/restore, discoverable valid lifecycle actions, contextual replacement confirmation, workspace-level results, inline field errors, keyboard operation, and narrow-screen stacking.
 
 ### 12.2 Human golden path
 
 On a local fake-runtime environment, the operator:
 
-1. opens `/admin/agents` and verifies active coverage for the manager and all seven skills;
-2. forks or creates an inactive specialist draft for an existing skill;
-3. edits its instructions and typed model configuration, confirms or leaves it as a live-test draft, and activates it as the replacement for that skill;
-4. starts or resumes a booklet through the matching stage and verifies the selected agent version and effective configuration in evidence;
-5. completes the existing fake booklet golden path to a downloadable PDF; and
-6. restores or activates another valid version, confirming coverage remains complete.
+1. opens `/admin/agents`, verifies the manager is initially selected, and scans friendly coverage labels for the manager and all seven skills;
+2. selects a specialist slot, inspects its active configuration and another version read-only, and reveals technical identifiers on demand;
+3. forks or creates an inactive specialist draft for an existing skill, enters explicit Edit mode, edits its instructions and typed model configuration, and verifies Cancel and Save behavior;
+4. confirms or leaves the draft as a live-test draft, activates it through the contextual replacement dialog, and verifies workspace feedback;
+5. starts or resumes a booklet through the matching stage and verifies the selected agent version and effective configuration in evidence;
+6. completes the existing fake booklet golden path to a downloadable PDF; and
+7. restores or activates another valid version, confirming coverage remains complete.
 
 ## 13. Risks and POC mitigations
 
@@ -303,5 +312,6 @@ This table tracks implementation coverage without changing the approved requirem
 | AM-012 | 1, 3, 5 | Verified | Fresh/prior migration, success/failure snapshot, and legacy evidence coverage pass. |
 | AM-013 | 3, 5 | Verified | Persisted factories/resolver and exact-coverage/catalog preflight guard pass. |
 | AM-014 | 3–6 | Verified | Fake-provider booklet e2e completes with database-backed agents; the exported PDF was rendered and inspected, and activation replacement passes in the admin browser flow. |
+| AM-015 | 7 | Not started | Decision-complete Phase 7 is ready for explicit implementation approval; implementation evidence is pending. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. At each implementation phase checkpoint, update this table and the plan’s phase/traceability ledgers together so omissions remain visible.

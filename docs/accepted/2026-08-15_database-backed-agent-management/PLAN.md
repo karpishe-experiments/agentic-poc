@@ -1,10 +1,12 @@
 # Database-backed Runtime Agent Management POC Implementation Plan
 
-**Status:** Draft for explicit approval
+**Status:** Phases 1–6 verified; Phase 7 decision-complete and ready for explicit implementation approval
 
 **Planning issue:** #11 — Agent management planning
 
 **Implementation issue:** #12 — Agent management execution
+
+**Phase 7 implementation issue:** #15 — Improve runtime-agent admin UX
 
 **Parent issue:** #9 — Database-backed runtime agent definitions and admin management
 
@@ -169,6 +171,7 @@ The next phase begins only after the current phase’s outcome works, required e
 | 4. Lifecycle, activation, conflicts, and deletion UI | Verified | `5e1aad7` | AM-001, AM-005, AM-006, AM-011 | Lifecycle, progressive repair, concurrency, deletion guards, and browser activation confirmation pass. |
 | 5. Evidence presentation, configuration cleanup, and runtime regression | Verified | `5e1aad7` | AM-010–AM-014 | DB-authoritative text configuration, catalog-aware preflight, and regression coverage pass. |
 | 6. Browser proof, documentation, and completion audit | Verified | `5e1aad7` | AM-001–AM-014 | Fake golden path/PDF inspection, current UI review, documentation, and completion audit pass; human verification remains. |
+| 7. Slot-driven agent-admin UX improvement | Not started | — | AM-015 | Decision-complete implementation plan recorded; implementation and evidence are pending. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. `Verified` requires the mandatory checkpoint.
 
@@ -196,6 +199,9 @@ Replace the placeholder with confirmed open findings during execution. When fixe
 | Progressive corrupt-coverage repair | Inactive preparation plus strictly reducing activation repairs multiple missing slots without weakening exact coverage in normal state. | PRD §§7.2, 9 |
 | Server actions remain unauthenticated/local-only | Authentication is explicitly out of scope; a weak substitute would misrepresent safety. | PRD §§3.2, 5.1 |
 | Reuse the current branch | The user explicitly approved continuing on `issue-10-database-backed-agent-management`; implementation checkpoints publish there unless redirected. | User direction, 2026-08-15 |
+| Slot list plus focused detail workspace | The primary operator task is understanding and changing one of eight active runtime slots; creation and full history are secondary. | User UX interview, 2026-08-15; PRD §8 |
+| Two columns with explicit Edit mode | A persistent slot rail preserves context while the flexible workspace leaves room for long instructions; read-only defaults reduce accidental edits. | User UX interview, 2026-08-15; AM-015 |
+| Visible valid lifecycle actions | The user chose discoverability over a state-driven single action; destructive actions remain separated and replacement receives contextual confirmation. | User UX interview, 2026-08-15; AM-015 |
 
 ## 6. Architecture and ownership
 
@@ -428,6 +434,8 @@ Add an `Agents` navigation link in `app/layout.tsx`. The page is `runtime = "nod
 
 ### 10.2 Page topology
 
+> Historical Phase 2–6 baseline: Phase 7 §7.1–§7.6 below supersedes this topology and its `<details>`/native-confirm interaction choices for the UX improvement. Keep this section as evidence of the already verified implementation rather than rewriting completed decisions.
+
 1. `h1` and persistent warning: “Trusted local backoffice — no authentication; do not expose on an untrusted network.”
 2. Coverage summary with one manager card and seven registry-ordered specialist cards showing active version, status/draft warning, model, reasoning, and logical agent.
 3. Create-agent form with no preselected role, role-dependent catalog/defaults, read-only OpenAI provider, and a persistent warning that instructions are snapshotted in evidence and must not contain secrets or private data.
@@ -653,6 +661,86 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 **Suggested commit:** `test: verify database-backed agent management`
 
+### Phase 7 — Slot-driven agent-admin UX improvement
+
+**Status:** Not started; decision-complete and ready for explicit implementation approval. This additive phase supersedes the completed Phase 2 page topology only for future `/admin/agents` presentation and interaction work; it does not invalidate Phase 2–6 evidence. Approval of the original plan does not authorize Phase 7 implementation; the user must explicitly approve this phase after this revision.
+
+**Working outcome:** a trusted local operator can scan all eight runtime slots, focus one selected agent/version, inspect any historical configuration, deliberately edit a draft, and perform the existing lifecycle without the blank creation form and full history dominating the page.
+
+#### 7.1 Fixed scope and source ownership
+
+- Keep `/admin/agents` as the existing dynamic Node.js Server Component and retain the current service, repository, database, contracts, migration, runtime resolution, lifecycle rules, and mutation Server Actions. Add no route, dependency, schema, API, cache, auth mechanism, or creator-workflow change.
+- `app/admin/agents/page.tsx` continues the single server read. It passes a plain `AgentAdminViewModel` containing `coverage`, `definitions`, `versions`, and `skillChoices`; omit unused `events` at the Server/Client boundary without changing `AgentManagementService.getAdminSnapshot()`.
+- `components/admin/agents/agent-admin-model.ts` owns the serializable UI types, the closed friendly-label map, slot/agent/version grouping and sorting, state-based action eligibility, and pure selection-fallback helpers. It imports only contract types, not server services.
+- `components/admin/agents/agent-admin.tsx` remains the single client controller for selected IDs, mode, dirty state, pending mutation descriptor, dialog target, and result banner. It renders the page header, slot rail, workspace, and empty/corrupt states.
+- `components/admin/agents/agent-forms.tsx` owns shared fields, deterministic role/skill defaults, create/edit forms, field-level errors, pending labels, Save/Cancel, and the instruction privacy warning.
+- `components/admin/agents/agent-version-workspace.tsx` owns logical-agent selection, compact version selection, read-only configuration, technical details, and the visible action groups.
+- `components/admin/agents/agent-action-dialog.tsx` owns the native modal dialog used for Activate Replacement, Retire, and Delete Draft. Do not introduce Radix or another dialog abstraction for this finite POC.
+- `tests/unit/admin/agent-admin-model.test.ts` covers pure grouping, labels, sorting, eligibility, and fallbacks. `tests/e2e/agent-management.spec.ts` owns interaction, accessibility, mutation, and responsive proof. No new test framework or environment-wide Vitest setting is needed.
+- Continue on the current `issue-10-database-backed-agent-management` branch so Phase 7 builds on the unmerged verified implementation. Issue #15 is the Phase 7 implementation tracker; it is assigned to the user, linked as a child of #9, and tracked in the Agentic POC project. Record explicit Phase 7 implementation approval there; Issue #11 remains the historical approval record for Phases 1–6. Do not reopen #12.
+- For Phase 7, every execution/checkpoint/change-control reference to Issue #12 elsewhere in this plan means Issue #15. Continue major milestone/final evidence on parent #9, and update the existing human-review Issue #13 runbook for the new interaction after automated verification. Do not close #15, #9, or #13 without explicit user authorization.
+
+#### 7.2 View model and deterministic selection
+
+- Define `SlotKey` as `"manager" | SkillId`. Preserve the `snapshot.coverage` order: manager, then the seven registry-ordered skills. Friendly labels are fixed UI copy: `Manager`, `Intake Readiness`, `Story Planning`, `Story Quality`, `Visual Direction`, `Booklet Specification`, `Page Planning`, and `Image Prompts`.
+- A logical agent belongs to a slot when any of its versions has that slot’s role/skill identity. Group all versions by `agentId`; sort each group by descending `versionNumber`. For a slot, sort logical agents by: owner of `activeVersionId` first, then latest `updatedAt` descending, then `agentId` ascending. This exposes alternate logical agents that can replace the active one without adding a third top-level column.
+- Initial state is inspect mode with slot `manager`. For any selected slot, choose the logical agent owning `activeVersionId`; if none exists, choose the first sorted logical agent. Within that logical agent choose its active version; otherwise choose its highest version number. These same rules handle missing or duplicate active coverage without pretending a violation is healthy.
+- Store only explicit `selectedSlotKey`, `selectedAgentId`, and `selectedVersionId`. Derive the effective agent/version from current props during render: preserve a stored ID while it remains in the selected slot, otherwise apply the fallback above. Do not mirror grouped snapshots in state or use effects solely to copy props.
+- Slot selection resets agent/version through the slot fallback. Logical-agent selection chooses that agent’s active version or highest version. Version selection changes only the read-only detail. The top-level layout remains two columns; logical-agent and version selectors are compact stacked lists inside the right workspace, not a third page column.
+- After successful Save, Confirm, Activate, or Retire, keep the same version selected and leave inspect mode. After successful Fork, select the only version ID added to the same logical agent since submission; after successful Create, switch to the created role/skill slot and select the only newly added logical-agent/version IDs. Capture the pre-submit ID sets in the pending mutation descriptor and reconcile them against refreshed props. If the expected addition cannot be identified, apply the normal slot fallback and show the success message—never guess among multiple new IDs.
+- After successful Delete, if the selected version disappeared, select the same logical agent’s active/highest remaining version; if the logical agent disappeared, apply the slot fallback. On conflict/failure, preserve the selection and typed form values.
+- Do not synchronize selection or modes to the URL. They are transient controls on one local page, not navigation, shareable filters, tabs, or pagination.
+
+#### 7.3 Page topology and responsive behavior
+
+- Keep the `Runtime Agents` heading and replace the large warning with a compact persistent local-only notice immediately below it. Place `New Agent` in the header as the only creation entry point.
+- At `lg` and wider, render a `minmax(15rem, 19rem)` slot rail and `minmax(0, 1fr)` workspace. Below `lg`, stack the complete slot rail above the workspace; do not create a horizontal scroller, drawer, or mobile-specific navigation.
+- Each slot button shows friendly label, coverage state, active display name, version, model, and `Active Draft` warning when applicable. Healthy, missing, malformed, and duplicate states use text plus color. The selected button uses `aria-current="true"`; slot controls remain native buttons in a semantic list.
+- The workspace header shows the slot label and coverage status. If several logical agents belong to the slot, show all as compact native buttons with display name and active/draft summary; do not hide alternatives in a dropdown. If none exist, explain the missing candidate and offer `New Agent`.
+- Show the selected logical agent’s versions newest-first as compact buttons with version number, Draft/Confirmed/Retired, Active/Inactive, and updated date. The selected version’s read-only panel shows display name, purpose, role, friendly skill, provider, model, reasoning, maximum turns, and full instructions with preserved whitespace and safe wrapping.
+- `Technical Details` is a native disclosure containing raw skill ID, definition/version/parent IDs, revision, actors, and ISO-backed localized created/updated timestamps. Identifiers use `translate="no"`; dates use one module-level `Intl.DateTimeFormat` with the user locale. Audit-event history remains out of scope.
+- Keep the existing warm theme and global focus treatment. Add only local Tailwind classes unless a shared dialog/backdrop rule is demonstrably needed. Add no animation; therefore no new reduced-motion branch is required. Long names, IDs, purposes, and 20,000-character instructions must wrap without page-level horizontal overflow.
+
+#### 7.4 Inspect, create, and edit modes
+
+- `AdminMode` is exactly `inspect`, `create`, or `edit`. Only one form may exist at a time. `New Agent` changes inspect → create and records the current selection for restoration. Create starts with no role or skill selected and retains the existing deterministic manager/specialist/model defaults as the operator makes choices.
+- Cancel Create restores the recorded slot/agent/version selection. Successful Create returns to inspect mode and follows the new-ID selection rule in §7.2. The form continues to warn that instructions are snapshotted and must not contain secrets or private data.
+- Every version opens read-only. Show `Edit Draft` only for `status === "draft"`. Edit preserves all current fields; active drafts keep role/skill disabled with hidden submitted values. Save success clears dirty state, returns to read-only, and shows the refreshed revision. Validation/conflict/failure stays in edit mode with typed values intact.
+- Cancel Edit restores the persisted snapshot values and returns to read-only. If the form is dirty, Cancel, slot/agent/version selection, New Agent, and other same-page mode changes use the same `Discard unsaved agent changes?` confirmation. A pristine change proceeds immediately.
+- One controller-owned dirty guard installs at most one `beforeunload` listener and one same-origin anchor capture listener. Internal workspace buttons call the same guard explicitly. Confirming discard clears dirty state before navigation; rejecting it preserves form values and focus. Successful Save/Create clears dirty state.
+- Render each field error immediately after its control, connect it with `aria-describedby`, announce the form summary politely, and focus the first invalid enabled control. Do not render the generic field-name error list. Controls use meaningful names, explicit labels, `autocomplete="off"`, and appropriate numeric input attributes.
+
+#### 7.5 Lifecycle actions, dialogs, and feedback
+
+- The visible state-based actions are fixed: Fork for every retained version; Confirm for drafts; Activate Replacement for inactive non-retired versions; Retire for inactive non-retired versions; Delete Draft for inactive drafts. Edit Draft is governed separately by §7.4. Repository-only guards such as children/evidence remain server-authoritative and may return an actionable conflict.
+- Keep Fork and Confirm in the routine action group. Keep Activate Replacement visually prominent but do not present it for an already active version. Place Retire and Delete Draft in a separated `Danger Zone`; do not hide any available action in a menu.
+- Fork and Confirm submit directly. Activate Replacement, Retire, and Delete Draft open a native `<dialog>` via `showModal()`. The dialog has `aria-labelledby`/`aria-describedby`, contained overscroll, a visible close/cancel button, Escape support, focus initially on Cancel, and trigger-focus restoration on close.
+- Activation copy names the incoming display name/version, the current slot occupant display name/version when present, and says the replacement affects future calls only. The confirm button is `Activate Replacement`. Retire states that the version becomes immutable and cannot be activated. Delete states that deletion succeeds only for an unused childless inactive draft and cannot be undone.
+- While an action is pending, disable only that action’s controls and use the exact labels `Forking…`, `Confirming…`, `Activating…`, `Retiring…`, `Deleting…`, `Saving…`, or `Creating…`. Prevent dialog dismissal only during its pending submission.
+- On completion, close a mutation dialog and return focus to its trigger if it still exists. Publish the latest result to one dismissible workspace banner: `role="status"`/polite for success and `role="alert"` for validation, conflict, or failure. A new action replaces the prior banner. Field validation remains inline in addition to the banner.
+- Use the existing Server Action messages and classifications. Do not change `AgentActionState`, action signatures, action return payloads, or service errors; the pre/post snapshot reconciliation in §7.2 supplies selection continuity.
+
+#### 7.6 Empty, corrupt, stale, and refresh behavior
+
+- Always render all eight slot buttons. A violation appears verbatim with an operator next step. The workspace still lists any matching logical agents/versions so an allowed activation can repair coverage; it never creates client-side placeholder records.
+- With no definitions or no candidates for a slot, render a focused empty state and `New Agent`; creation remains blank rather than silently prebinding a role/skill.
+- If refreshed props invalidate a stored selection because another mutation changed or removed it, use the deterministic fallback without throwing. If a stale mutation returns conflict, keep the current workspace/form, show the conflict banner, and offer a normal page reload through the existing browser controls; add no custom fetch or polling.
+- Server revalidation remains the sole refresh path after mutations. Do not add optimistic configuration changes, client fetching, cache invalidation beyond existing `revalidatePath`, or persisted browser storage.
+
+**Tests and validation**
+
+- Unit-test all label entries; slot order; multiple logical agents per slot; active-first and timestamp/ID tie-break sorting; active/highest fallbacks; missing/duplicate coverage; state-based action eligibility; and fallbacks after deleted/unknown IDs.
+- Rewrite the existing admin Playwright cases around the new topology. Prove initial manager selection; all eight slot labels; alternate logical-agent selection; complete read-only historical configuration; technical disclosure; Edit/Save/Cancel; dirty rejection/acceptance for internal selection and same-origin navigation; New Agent/Cancel/restore; Create and Fork selecting their new version; Confirm; contextual Activate Replacement; Retire/Delete dialogs; server-rejected deletion; success/conflict/failure banners; field-adjacent errors and first-error focus; dialog Escape/focus restoration; keyboard-only operation; 20,000-character wrapping; and empty/corrupt coverage fixtures.
+- Use desktop `1440×900` for the primary flow and a focused `390×844` assertion that the rail precedes the workspace, no page-level horizontal overflow exists, and all actions remain reachable. Do not claim equal mobile optimization.
+- Re-run repository lifecycle/coverage/concurrency tests and the full fake-provider booklet golden path to prove domain and creator behavior are unchanged. No paid or retained real-provider run is required.
+- Run the current Web Interface Guidelines review over the changed admin files to zero in-scope findings, then `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, and `npm run test:e2e`. `test:agent` is mandatory for the final Phase 7 checkpoint even though runtime files are out of scope.
+
+**End-of-phase gate:** execute Section 4 in full; mark AM-015 and Phase 7 Verified only after direct focused evidence and affected regressions pass. Update README only if operator instructions materially change; update architecture only if verified component boundaries materially change. Do not alter AM-001–AM-014 evidence.
+
+At the verified checkpoint, add AM-015 evidence and the Phase 7 command results to `IMPLEMENTATION-AUDIT.md`, revise its headline so it no longer implies the pre-Phase-7 UI is the final human-review target, and replace the Issue #13 manual steps with the slot-driven flow. Preserve the prior automated evidence rather than rerunning or rewriting unrelated proof.
+
+**Suggested commit:** `feat: focus agent admin on active slots`
+
 ## 13. Verification design
 
 ### 13.1 Test boundaries and new files
@@ -745,6 +833,7 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 | AM-012 | 1, 3, 5 | Nullable schema migration plus success/failure/history/legacy evidence tests. |
 | AM-013 | 3, 5 | Persisted factory config; removed env overrides; DB-backed preflight/smoke. |
 | AM-014 | 3–6 | Existing integration suite and activated-specialist full fake browser flow to PDF. |
+| AM-015 | 7 | Pure view-model unit tests, focused agent-admin browser evidence, and unchanged lifecycle/fake-booklet regressions. |
 
 ### 14.1 Acceptance evidence matrix
 
@@ -759,6 +848,7 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 | Existing deterministic fixtures/booklet integrations | Full `npm test` and `npm run test:agent`. |
 | Typecheck/lint/build/desktop Playwright | Final command report with fake provider environment. |
 | Human golden path | Issue #13 checklist against the final pushed commit after automated evidence. |
+| Slot-driven agent-admin workspace | Focused browser proof for slot/version selection, read-only inspection, explicit editing, creation, lifecycle discoverability, contextual confirmation, feedback, keyboard use, and narrow-screen stacking. |
 
 ### 14.2 Issue #11 implementation-ready package coverage
 
