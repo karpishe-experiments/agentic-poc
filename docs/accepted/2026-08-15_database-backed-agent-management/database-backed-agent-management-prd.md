@@ -312,6 +312,6 @@ This table tracks implementation coverage without changing the approved requirem
 | AM-012 | 1, 3, 5 | Verified | Fresh/prior migration, success/failure snapshot, and legacy evidence coverage pass. |
 | AM-013 | 3, 5 | Verified | Persisted factories/resolver and exact-coverage/catalog preflight guard pass. |
 | AM-014 | 3–6 | Verified | Fake-provider booklet e2e completes with database-backed agents; the exported PDF was rendered and inspected, and activation replacement passes in the admin browser flow. |
-| AM-015 | 7 | Not started | Decision-complete Phase 7 is ready for explicit implementation approval; implementation evidence is pending. |
+| AM-015 | 7 | Verified | Commit `89a80ea`; pure view-model tests plus five focused Chromium scenarios cover the slot workspace, read-only inspection, editing, creation, lifecycle discoverability/dialogs, feedback, dirty guards, empty/corrupt coverage, and narrow stacking. Full fake-provider regressions pass; human acceptance remains on Issue #13. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. At each implementation phase checkpoint, update this table and the plan’s phase/traceability ledgers together so omissions remain visible.

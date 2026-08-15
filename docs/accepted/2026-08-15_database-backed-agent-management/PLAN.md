@@ -1,6 +1,6 @@
 # Database-backed Runtime Agent Management POC Implementation Plan
 
-**Status:** Phases 1–6 verified; Phase 7 decision-complete and ready for explicit implementation approval
+**Status:** Phases 1–7 verified; Phase 7 awaits human verification
 
 **Planning issue:** #11 — Agent management planning
 
@@ -171,7 +171,7 @@ The next phase begins only after the current phase’s outcome works, required e
 | 4. Lifecycle, activation, conflicts, and deletion UI | Verified | `5e1aad7` | AM-001, AM-005, AM-006, AM-011 | Lifecycle, progressive repair, concurrency, deletion guards, and browser activation confirmation pass. |
 | 5. Evidence presentation, configuration cleanup, and runtime regression | Verified | `5e1aad7` | AM-010–AM-014 | DB-authoritative text configuration, catalog-aware preflight, and regression coverage pass. |
 | 6. Browser proof, documentation, and completion audit | Verified | `5e1aad7` | AM-001–AM-014 | Fake golden path/PDF inspection, current UI review, documentation, and completion audit pass; human verification remains. |
-| 7. Slot-driven agent-admin UX improvement | Not started | — | AM-015 | Decision-complete implementation plan recorded; implementation and evidence are pending. |
+| 7. Slot-driven agent-admin UX improvement | Verified | `89a80ea` | AM-015 | Pure view-model tests and five focused Chromium scenarios prove slot/version focus, editing, creation, lifecycle dialogs, empty/corrupt recovery, dirty guards, and narrow stacking; the full fake-provider regression matrix passes. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. `Verified` requires the mandatory checkpoint.
 
@@ -179,7 +179,7 @@ Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked
 
 | ID | Phase | Severity | Finding | Owner | Status/evidence |
 | --- | --- | --- | --- | --- | --- |
-| — | — | — | No open findings during planning. | — | Empty |
+| — | — | — | No open findings after Phase 7 review and verification. | — | Empty |
 
 Replace the placeholder with confirmed open findings during execution. When fixed and reverified, move the resolution into that phase’s evidence/GitHub checkpoint and remove it from this open ledger. A phase cannot be marked Verified while any row remains.
 
@@ -202,6 +202,7 @@ Replace the placeholder with confirmed open findings during execution. When fixe
 | Slot list plus focused detail workspace | The primary operator task is understanding and changing one of eight active runtime slots; creation and full history are secondary. | User UX interview, 2026-08-15; PRD §8 |
 | Two columns with explicit Edit mode | A persistent slot rail preserves context while the flexible workspace leaves room for long instructions; read-only defaults reduce accidental edits. | User UX interview, 2026-08-15; AM-015 |
 | Visible valid lifecycle actions | The user chose discoverability over a state-driven single action; destructive actions remain separated and replacement receives contextual confirmation. | User UX interview, 2026-08-15; AM-015 |
+| Keep action-state owners mounted through result delivery | Server Action success must reach the controller before conditional UI disappears during revalidation; Save and direct lifecycle controls retain stable identity until their result effect runs. | Phase 7 focused Chromium verification, 2026-08-15 |
 
 ## 6. Architecture and ownership
 
@@ -663,7 +664,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 ### Phase 7 — Slot-driven agent-admin UX improvement
 
-**Status:** Not started; decision-complete and ready for explicit implementation approval. This additive phase supersedes the completed Phase 2 page topology only for future `/admin/agents` presentation and interaction work; it does not invalidate Phase 2–6 evidence. Approval of the original plan does not authorize Phase 7 implementation; the user must explicitly approve this phase after this revision.
+**Status:** Verified in `89a80ea`; automated implementation evidence is complete and human verification remains on Issue #13. This additive phase supersedes the completed Phase 2 page topology for `/admin/agents` presentation and interaction work; it does not invalidate Phase 2–6 evidence.
 
 **Working outcome:** a trusted local operator can scan all eight runtime slots, focus one selected agent/version, inspect any historical configuration, deliberately edit a draft, and perform the existing lifecycle without the blank creation form and full history dominating the page.
 

@@ -100,7 +100,7 @@ Runtime skills in `lib/skills/` are unrelated to `.agents/skills/`. The latter a
 
 ## Prompt ownership
 
-Runtime prompts are versioned SQLite records, not environment variables or standalone prompt files. The checked-in migration seeds the current manager and seven specialist defaults; runtime never falls back to those TypeScript seed values. `/admin/agents` is the trusted-local-only lifecycle surface for creating drafts, editing drafts, confirming, activating a replacement, retiring inactive versions, and deleting eligible unused drafts.
+Runtime prompts are versioned SQLite records, not environment variables or standalone prompt files. The checked-in migration seeds the current manager and seven specialist defaults; runtime never falls back to those TypeScript seed values. `/admin/agents` is the trusted-local-only lifecycle surface. Its Server Component performs one snapshot read and passes only serializable coverage, definition, version, and skill-choice data to a client controller. Pure view-model helpers derive slot/agent/version selection; focused form, version-workspace, and native-dialog components reuse the existing Server Actions for creation, draft editing, confirmation, replacement activation, retirement, and eligible draft deletion.
 
 - `db/agent-defaults.ts` holds the migration-verification seed manifest only; it is not a runtime fallback.
 - `lib/agents/manager.ts` and `lib/agents/specialist.ts` receive persisted names, instructions, models, and reasoning settings, while retaining code-owned tools, output schemas, and turn constraints.

@@ -264,3 +264,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `lib/contracts/regeneration.ts`, `lib/application/revision-service.ts`, `lib/application/generation-service.ts`, and `tests/integration/specification-page-plan.test.ts`; the integration test upgrades a legacy plan, regenerates one instructed page, and verifies all unrelated pages retain their asset IDs.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
+
+### Keep Server Action result owners mounted until observers receive the outcome
+
+- **Context:** A React workspace conditionally swaps forms, action controls, and read-only views while a Server Action revalidates the route.
+- **Observation:** Hiding a direct action as soon as its state changed, or keying an edit form by a revision that changes on save, unmounted the component before its result effect could publish the success banner and selection reconciliation.
+- **Guidance:** Keep the `useActionState` owner mounted through result delivery and use stable record identity for its key. Let the controller change modes only after it receives the action result; then reconcile against refreshed server props. Do not keep stale forms mounted after delivery.
+- **Evidence:** `components/admin/agents/agent-action-dialog.tsx`, `components/admin/agents/agent-version-workspace.tsx`, and `components/admin/agents/agent-admin.tsx`; focused Chromium tests prove Save, Confirm, activation, retirement, creation, and fork results reach the workspace banner and preserve deterministic selection. The full 116-test suite and eight browser scenarios passed on 2026-08-15.
+- **Promotion target:** React/Next.js implementation guidance.
+- **Status:** Candidate.

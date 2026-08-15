@@ -65,7 +65,7 @@ The application uses an application-controlled agent handoff: a stage-filtered m
 
 ## Local runtime-agent management
 
-`/admin/agents` is an unauthenticated, trusted-local-only backoffice. It shows the required active manager plus seven specialist slots and lets an operator create drafts, edit or fork drafts, confirm, activate a replacement, retire inactive versions, and delete eligible unused drafts. Do not expose it on a network.
+`/admin/agents` is an unauthenticated, trusted-local-only backoffice. Its slot rail shows the required manager plus seven specialist slots; selecting a slot opens a focused read-only workspace for its logical agents, version history, technical details, and valid lifecycle actions. Use **New Agent** for a blank inactive draft or **Edit Draft** for deliberate changes, then confirm and activate a reviewed replacement. Destructive actions stay in the workspace’s Danger Zone. On narrow screens, the complete slot rail stacks above the workspace. Do not expose this page on a network.
 
 Text-agent instructions and model settings are versioned SQLite data after migration; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
 
