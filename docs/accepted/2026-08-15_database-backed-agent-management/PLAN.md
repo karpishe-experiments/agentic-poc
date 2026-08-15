@@ -163,12 +163,12 @@ The next phase begins only after the current phase’s outcome works, required e
 
 | Phase | Status | Commit | PRD coverage | Evidence |
 | --- | --- | --- | --- | --- |
-| 1. Schema, migration, and seeded coverage | Verified | Pending final checkpoint commit | AM-001, AM-002, AM-012 | Fresh and representative `0000` → current migration, stable coverage, legacy evidence, and backup tests pass. |
-| 2. Management domain and inspect/create/edit/fork UI | Verified | Pending final checkpoint commit | AM-003, AM-004, AM-006 | Admin route/actions, validation focus, and focused browser create/fork proof pass. |
-| 3. Database-backed runtime, attribution, and recovery | Verified | Pending final checkpoint commit | AM-007–AM-014 | Resolver, manager/specialist/quality frozen attribution, malformed-config recovery, pending resume, and fake booklet flow pass. |
-| 4. Lifecycle, activation, conflicts, and deletion UI | Verified | Pending final checkpoint commit | AM-001, AM-005, AM-006, AM-011 | Lifecycle, progressive repair, concurrency, deletion guards, and browser activation confirmation pass. |
-| 5. Evidence presentation, configuration cleanup, and runtime regression | Verified | Pending final checkpoint commit | AM-010–AM-014 | DB-authoritative text configuration, catalog-aware preflight, and regression coverage pass. |
-| 6. Browser proof, documentation, and completion audit | Verified | Pending final checkpoint commit | AM-001–AM-014 | Fake golden path/PDF inspection, current UI review, documentation, and completion audit pass; human verification remains. |
+| 1. Schema, migration, and seeded coverage | Verified | `5e1aad7` | AM-001, AM-002, AM-012 | Fresh and representative `0000` → current migration, stable coverage, legacy evidence, and backup tests pass. |
+| 2. Management domain and inspect/create/edit/fork UI | Verified | `5e1aad7` | AM-003, AM-004, AM-006 | Admin route/actions, validation focus, and focused browser create/fork proof pass. |
+| 3. Database-backed runtime, attribution, and recovery | Verified | `5e1aad7` | AM-007–AM-014 | Resolver, manager/specialist/quality frozen attribution, malformed-config recovery, pending resume, and fake booklet flow pass. |
+| 4. Lifecycle, activation, conflicts, and deletion UI | Verified | `5e1aad7` | AM-001, AM-005, AM-006, AM-011 | Lifecycle, progressive repair, concurrency, deletion guards, and browser activation confirmation pass. |
+| 5. Evidence presentation, configuration cleanup, and runtime regression | Verified | `5e1aad7` | AM-010–AM-014 | DB-authoritative text configuration, catalog-aware preflight, and regression coverage pass. |
+| 6. Browser proof, documentation, and completion audit | Verified | `5e1aad7` | AM-001–AM-014 | Fake golden path/PDF inspection, current UI review, documentation, and completion audit pass; human verification remains. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. `Verified` requires the mandatory checkpoint.
 
@@ -810,7 +810,7 @@ Before claiming Issue #12 implementation-ready for human verification, produce a
 - [x] Current Web Interface Guidelines review and final defect-first review have zero open findings.
 - [x] `docs/architecture.md`, README, this plan, PRD tracker, and any verified lessons match current behavior.
 - [x] Secret scan confirms no keys/private data in source, snapshots fixtures, screenshots, or issue comments.
-- [ ] Phase commits are pushed and Issue #12/#9 contain evidence and core decisions.
+- [x] Phase commits are pushed and Issue #12/#9 contain evidence and core decisions.
 
 Then provide Issue #13 with:
 
