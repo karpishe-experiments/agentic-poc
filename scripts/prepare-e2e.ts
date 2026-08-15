@@ -12,6 +12,7 @@ process.env.DATABASE_URL = `file:${path.join(runtimeRoot, "booklets.db")}`;
 process.env.DATA_ROOT = path.join(runtimeRoot, "assets");
 process.env.MODEL_RUNTIME = "fake";
 process.env.IMAGE_PROVIDER_MODE = "fake";
+process.env.OPENAI_API_KEY ??= "e2e-fake-key";
 const database = createDatabase(process.env.DATABASE_URL);
 await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
 database.$client.close();

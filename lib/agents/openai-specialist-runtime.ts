@@ -1,8 +1,8 @@
 import { Runner } from "@openai/agents";
 import { z } from "zod";
 import { createSpecialistAgent } from "@/lib/agents/specialist";
-import { getModelRoleConfig, type ModelRole } from "@/lib/config/models";
 import { getServerEnv } from "@/lib/config/env";
+import type { ResolvedAgentConfiguration } from "@/lib/application/agent-resolver";
 import type { SkillContext } from "@/lib/contracts/skills";
 import type { SkillDefinition } from "@/lib/skills/registry";
 import { extractAgentRunMetadata, type AgentRunMetadata } from "@/lib/agents/run-metadata";
@@ -13,15 +13,14 @@ export type SpecialistRunResult = { output: unknown; runMetadata: AgentRunMetada
 export class OpenAISpecialistRuntime {
   private readonly runner = new Runner({ traceIncludeSensitiveData: getServerEnv().OPENAI_TRACE_INCLUDE_SENSITIVE_DATA });
 
-  public constructor(private readonly role: Extract<ModelRole, "skill" | "review"> = "skill") {}
+  public constructor() {}
 
-  public async run(definition: SkillDefinition, input: unknown, context: SkillContext): Promise<unknown> {
-    return (await this.runWithMetadata(definition, input, context)).output;
+  public async run(definition: SkillDefinition, input: unknown, context: SkillContext, configuration: ResolvedAgentConfiguration): Promise<unknown> {
+    return (await this.runWithMetadata(definition, input, context, configuration)).output;
   }
 
-  public async runWithMetadata(definition: SkillDefinition, input: unknown, context: SkillContext): Promise<SpecialistRunResult> {
-    const role = getModelRoleConfig(this.role);
-    const agent = createSpecialistAgent(definition, input, context, role);
+  public async runWithMetadata(definition: SkillDefinition, input: unknown, context: SkillContext, configuration: ResolvedAgentConfiguration): Promise<SpecialistRunResult> {
+    const agent = createSpecialistAgent(definition, input, context, { name: configuration.version.displayName, instructions: configuration.version.instructions, model: configuration.version.modelId, reasoning: configuration.version.reasoningEffort });
     const outputEnvelope = z.object({ result: definition.outputSchema });
     const result = await this.runner.run(agent, JSON.stringify({
       skillId: definition.id,
@@ -34,7 +33,7 @@ export class OpenAISpecialistRuntime {
         recentMessages: context.recentMessages,
         approvedArtifactVersionIds: context.approvedArtifactVersionIds,
       },
-    }), { maxTurns: 1 });
+    }), { maxTurns: configuration.version.maxTurns });
     return {
       output: definition.outputSchema.parse(outputEnvelope.parse(result.finalOutput).result),
       runMetadata: extractAgentRunMetadata(result),

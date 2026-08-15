@@ -20,7 +20,7 @@ describe("manager and fake model runtime", () => {
   it("exposes only allowed strict specialist tools and routes to exactly one", () => {
     const registry = createDefaultSkillRegistry();
     const allowedSkills = registry.getAllowed("audience_profile");
-    const manager = createManagerAgent(allowedSkills, "audience_profile");
+    const manager = createManagerAgent(allowedSkills, "audience_profile", { name: "Test manager", instructions: "Select one registered skill.", model: "gpt-5.6-luna", reasoning: "low" });
     const route = new FakeModelRuntime().route({
       stage: "audience_profile",
       operation: "intake",
@@ -47,6 +47,7 @@ describe("manager and fake model runtime", () => {
       registry.get("intake_readiness@1"),
       { cardId: "00000000-0000-4000-8000-000000000505" },
       context,
+      { name: "Test specialist", instructions: "Return only the structured result.", model: "gpt-5.6-terra", reasoning: "medium" },
     );
 
     expect(specialist.tools).toHaveLength(0);

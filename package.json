@@ -20,6 +20,7 @@
     "test:e2e": "node --import tsx scripts/run-e2e.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "db:backup": "tsx scripts/backup-local-db.ts",
     "seed": "tsx db/seed.ts",
     "eval:real": "tsx scripts/eval-real.ts"
   },

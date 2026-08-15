@@ -289,19 +289,19 @@ This table tracks implementation coverage without changing the approved requirem
 
 | Requirement | Plan phases | Status | Evidence |
 | --- | --- | --- | --- |
-| AM-001 | 1–4 | Not started | — |
-| AM-002 | 1 | Not started | — |
-| AM-003 | 2 | Not started | — |
-| AM-004 | 2 | Not started | — |
-| AM-005 | 4 | Not started | — |
-| AM-006 | 2, 4 | Not started | — |
-| AM-007 | 3 | Not started | — |
-| AM-008 | 3 | Not started | — |
-| AM-009 | 3 | Not started | — |
-| AM-010 | 3–6 | Not started | — |
-| AM-011 | 3–5 | Not started | — |
-| AM-012 | 1, 3, 5 | Not started | — |
-| AM-013 | 3, 5 | Not started | — |
-| AM-014 | 3–6 | Not started | — |
+| AM-001 | 1–4 | Verified | Additive migration plus lifecycle, coverage-repair, conflict, deletion, and concurrency matrix in `agent-management.test.ts`. |
+| AM-002 | 1 | Verified | Fresh seeded coverage and an actual `0000` → current upgrade fixture preserve legacy model-call evidence. |
+| AM-003 | 2 | Verified | `/admin/agents` Server Actions and focused browser create flow pass. |
+| AM-004 | 2 | Verified | Draft edit/fork lineage plus concurrent monotonic fork coverage pass. |
+| AM-005 | 4 | Verified | Lifecycle guards/conflicts and browser fork → confirm → activation replacement confirmation pass. |
+| AM-006 | 2, 4 | Verified | Closed contracts, action validation/focus, conflict feedback, local-only warning, and control review pass. |
+| AM-007 | 3 | Verified | Manager-contract and all deterministic agent fixtures pass. |
+| AM-008 | 3 | Verified | Persisted complete-set resolver, selected-skill lookup, malformed-config recovery, and fake evidence pass. |
+| AM-009 | 3 | Verified | Focused direct fake-quality fixture proves persisted specialist resolution and immutable evidence attribution. |
+| AM-010 | 3–6 | Verified | Existing bounded schemas/services and fake browser flow remain green. |
+| AM-011 | 3–5 | Verified | Fresh active-draft resolution and frozen preflight manager/quality invocation tests pass. |
+| AM-012 | 1, 3, 5 | Verified | Fresh/prior migration, success/failure snapshot, and legacy evidence coverage pass. |
+| AM-013 | 3, 5 | Verified | Persisted factories/resolver and exact-coverage/catalog preflight guard pass. |
+| AM-014 | 3–6 | Verified | Fake-provider booklet e2e completes with database-backed agents; the exported PDF was rendered and inspected, and activation replacement passes in the admin browser flow. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. At each implementation phase checkpoint, update this table and the plan’s phase/traceability ledgers together so omissions remain visible.

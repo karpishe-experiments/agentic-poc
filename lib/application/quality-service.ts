@@ -5,7 +5,7 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { createQualityIssueCard } from "@/lib/application/card-factories";
 import { storyPlanSchema } from "@/lib/contracts/artifacts";
 import { materializeStoryPlan } from "@/lib/application/entity-materialization";
-import { getModelRoleConfig } from "@/lib/config/models";
+import { AgentResolver, type ResolvedAgentConfiguration } from "@/lib/application/agent-resolver";
 import { OpenAISpecialistRuntime } from "@/lib/agents/openai-specialist-runtime";
 import { createDefaultSkillRegistry } from "@/lib/skills/default-registry";
 import { qualityReviewSchema } from "@/lib/contracts/quality";
@@ -24,16 +24,18 @@ export class QualityService {
   private readonly artifacts: ArtifactService;
   private readonly runtimeMode: "fake" | "real";
   private readonly reviewRuntime?: ReviewRuntime;
+  private readonly resolver: AgentResolver;
 
-  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; runtimeMode?: "fake" | "real"; reviewRuntime?: ReviewRuntime } = {}) {
+  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; runtimeMode?: "fake" | "real"; reviewRuntime?: ReviewRuntime; resolver?: AgentResolver } = {}) {
     const database = dependencies.database ?? createDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database });
     this.runtimeMode = dependencies.runtimeMode ?? (process.env.MODEL_RUNTIME === "real" ? "real" : "fake");
-    this.reviewRuntime = dependencies.reviewRuntime ?? (this.runtimeMode === "real" ? new OpenAISpecialistRuntime("review") : undefined);
+    this.reviewRuntime = dependencies.reviewRuntime ?? (this.runtimeMode === "real" ? new OpenAISpecialistRuntime() : undefined);
+    this.resolver = dependencies.resolver ?? new AgentResolver({ repositories: this.repositories });
   }
 
-  public async runStoryReadiness(bookletId: string) {
+  public async runStoryReadiness(bookletId: string, preparedConfiguration?: ResolvedAgentConfiguration) {
     const current = await this.artifacts.get(bookletId, "story_plan");
     if (!current.currentVersion) throw new Error("Story quality needs a saved Story Plan.");
     const context: SkillContext = {
@@ -48,12 +50,14 @@ export class QualityService {
     };
     const input = { intent: context.intent, storyPlan: storyPlanSchema.parse(current.currentVersion.content) };
     const definition = createDefaultSkillRegistry().get("quality_review_targeted_repair@1");
+    const configuration = preparedConfiguration ?? await this.resolver.resolveSpecialist(definition.id, this.runtimeMode);
+    const evidence = { agentDefinitionId: configuration.version.agentId, agentVersionId: configuration.version.id, agentConfigSnapshot: configuration.snapshot };
     const startedAtMs = Date.now();
     try {
       let output: unknown;
       let runMetadata: AgentRunMetadata | null = this.runtimeMode === "fake" ? fakeReviewMetadata : null;
       if (this.reviewRuntime?.runWithMetadata) {
-        const executeReview = (reviewContext: SkillContext = context) => this.reviewRuntime!.runWithMetadata!(definition, input, reviewContext);
+        const executeReview = (reviewContext: SkillContext = context) => this.reviewRuntime!.runWithMetadata!(definition, input, reviewContext, configuration);
         const result = this.runtimeMode === "real"
           ? await withTrace("kids-booklet-poc", (trace) => executeReview({ ...context, traceId: trace.traceId }), {
             groupId: context.bookletId,
@@ -70,28 +74,30 @@ export class QualityService {
         runMetadata = result.runMetadata;
       } else {
         output = this.reviewRuntime
-          ? await this.reviewRuntime.run(definition, input, context)
+          ? await this.reviewRuntime.run(definition, input, context, configuration)
           : await reviewAndRepairStory(input, context);
       }
       const parsed = storyQualityResultSchema.parse(output);
       await this.repositories.evidence.recordModelCall({
         id: randomUUID(), bookletId, operation: "quality_review", skillId: definition.id,
         provider: this.runtimeMode === "real" ? "openai" : "fake",
-        model: this.runtimeMode === "real" ? getModelRoleConfig("review").model : "fake-review-v1",
+        model: this.runtimeMode === "real" ? configuration.version.modelId : "fake-review-v1",
         traceId: context.traceId, status: "succeeded", attempt: 1, startedAtMs,
         latencyMs: Math.max(0, Date.now() - startedAtMs), inputReference: { artifactVersionId: current.currentVersion.id }, outputReference: { status: parsed.review.status },
         usage: runMetadata?.usage ?? null, providerRequestId: runMetadata?.providerRequestId ?? null,
-        ...modelCallCost({ runtimeMode: this.runtimeMode, role: "review", usage: runMetadata?.usage ?? null }),
+        ...modelCallCost({ runtimeMode: this.runtimeMode, modelId: configuration.version.modelId, usage: runMetadata?.usage ?? null }),
+        ...evidence,
       });
       return this.applyStoryReview(bookletId, parsed);
     } catch (error) {
       await this.repositories.evidence.recordModelCall({
         id: randomUUID(), bookletId, operation: "quality_review", skillId: definition.id,
         provider: this.runtimeMode === "real" ? "openai" : "fake",
-        model: this.runtimeMode === "real" ? getModelRoleConfig("review").model : "fake-review-v1",
+        model: this.runtimeMode === "real" ? configuration.version.modelId : "fake-review-v1",
         traceId: context.traceId, status: "failed", attempt: 1, startedAtMs,
         latencyMs: Math.max(0, Date.now() - startedAtMs), inputReference: { artifactVersionId: current.currentVersion.id }, errorMessage: error instanceof Error ? error.message : "Quality review failed.", errorKind: classifyModelError(error),
-        ...modelCallCost({ runtimeMode: this.runtimeMode, role: "review", usage: this.runtimeMode === "fake" ? fakeReviewMetadata.usage : null }),
+        ...modelCallCost({ runtimeMode: this.runtimeMode, modelId: configuration.version.modelId, usage: this.runtimeMode === "fake" ? fakeReviewMetadata.usage : null }),
+        ...evidence,
       });
       throw error;
     }

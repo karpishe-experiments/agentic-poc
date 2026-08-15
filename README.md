@@ -13,10 +13,11 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 1. Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY`.
 2. Install dependencies: `npm install`.
-3. Validate credentials and model access: `npm run preflight`.
-4. Create local tables: `npm run db:migrate`.
-5. Register the bundled visual styles and Nunito font: `npm run seed`.
-6. Start the app: `npm run dev`, then visit `http://localhost:3000`.
+3. Before upgrading an existing local database, stop the development server and create a verified backup: `npm run db:backup`.
+4. Create or upgrade local tables and seed active runtime agents: `npm run db:migrate`.
+5. Validate credentials and the migrated active-model configuration: `npm run preflight`.
+6. Register the bundled visual styles and Nunito font: `npm run seed`.
+7. Start the app: `npm run dev`, then visit `http://localhost:3000`.
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
@@ -36,7 +37,7 @@ If the browser reports a failed chunk or cannot read a response after local code
 | `dev`, `build`, `start` | Run the Next.js application. |
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
 | `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
-| `db:generate`, `db:migrate`, `seed` | Generate migrations, migrate the local database, and register checked-in seed assets. |
+| `db:generate`, `db:backup`, `db:migrate`, `seed` | Generate migrations, create a verified local backup, migrate the local database, and register checked-in seed assets. |
 | `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
 Automated commands never make paid model or image calls. The workspace defaults to deterministic fake model and image providers; real-provider work is limited to the explicit evaluation workflow. The workspace exposes an Evidence JSON link for the selected booklet, and each successful PDF export persists the same summary under the local data root.
@@ -62,6 +63,12 @@ flowchart LR
 
 The application uses an application-controlled agent handoff: a stage-filtered manager selects exactly one bounded runtime skill, one specialist returns a validated structured proposal, deterministic services persist the result, and typed cards capture material creator decisions. Agents never own durable IDs, approvals, stage transitions, jobs, or assets. See the [current architecture guide](docs/architecture.md) for prompt ownership, component boundaries, runtime skills, extension steps, and recovery mechanics.
 
+## Local runtime-agent management
+
+`/admin/agents` is an unauthenticated, trusted-local-only backoffice. It shows the required active manager plus seven specialist slots and lets an operator create drafts, edit or fork drafts, confirm, activate a replacement, retire inactive versions, and delete eligible unused drafts. Do not expose it on a network.
+
+Text-agent instructions and model settings are versioned SQLite data after migration; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
+
 ## Local data and project references
 
 Runtime state lives under `data/` and is intentionally Git-ignored. Removing it is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
@@ -70,6 +77,8 @@ Runtime state lives under `data/` and is intentionally Git-ignored. Removing it 
 - [Current architecture](docs/architecture.md)
 - [Canonical PRD](docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md)
 - [Accepted implementation plan](docs/accepted/2026-08-01_end-to-end-poc/PLAN.md)
+- [Agent-management PRD](docs/accepted/2026-08-15_database-backed-agent-management/database-backed-agent-management-prd.md)
+- [Agent-management implementation plan](docs/accepted/2026-08-15_database-backed-agent-management/PLAN.md)
 - [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)
 - [Verified lessons](docs/accepted/2026-08-01_end-to-end-poc/LESSONS-LEARNED.md)
 - [Implementation issue #6](https://github.com/karpishe-experiments/agentic-poc/issues/6)

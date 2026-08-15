@@ -18,7 +18,7 @@ This is the canonical implementation plan for the approved database-backed runti
 
 The implementation outcome is a local-only agent backoffice and database-backed runtime resolution that preserve the existing application-controlled manager → specialist flow. Runtime skills, schemas, tools, materialization, persistence, approvals, jobs, and stage transitions remain code-owned.
 
-This plan is planning-only until the user explicitly approves it. Do not begin application implementation, run a migration against user data, or move Issue #12 to In progress before that approval is recorded on Issue #11. Approval of this plan does not authorize merging, closing issues, making real-provider calls, or expanding the PRD.
+This plan is planning-only until the user explicitly approves it. Do not begin application implementation, run a migration against user data, or move Issue #12 to In progress before that approval is recorded on Issue #11. Once approved, this plan authorizes the implementation agent to commit and push each verified phase on the approved working branch and to post the required progress/evidence comments on Issues #12 and #9 without requesting separate end-of-phase authorization. Approval does not authorize merging, closing issues, making real-provider calls, or expanding the PRD.
 
 ## 2. Planning basis and verified baseline
 
@@ -152,8 +152,8 @@ Every phase ends with all of the following steps, in this order:
 3. **Update documentation:** update `docs/architecture.md`, README, user/operator guidance, or lessons when verified behavior/setup materially changed or conflicts with current text. Use `capture-project-learnings` for durable verified lessons; do not record hypotheses or a chronological diary.
 4. **Revise the remaining plan:** re-check later phases against discoveries. Adjust file lists, contracts, risks, or verification while preserving PRD scope. Record material plan changes and rationale in the decision log.
 5. **Record coverage and progress:** update the Phase Progress Ledger and traceability status in this plan, plus the implementation tracker in the PRD. Requirement wording stays unchanged; only status/evidence fields change.
-6. **Publish:** commit the coherent phase with a clear message and push the branch. Do not publish failing or partially reviewed phase work as a completed checkpoint.
-7. **Update GitHub:** comment on Issue #12 with phase name, commit SHA, implemented AM IDs, commands/results, evidence paths, resolved findings, documentation changes, core decisions, known nonblocking limitations, and next phase. Update parent #9 at major milestones and final evidence; do not close or merge without user authorization.
+6. **Publish:** commit the coherent phase with a clear message and push the branch. This is authorized by plan approval and does not need another end-of-phase confirmation. Do not publish failing or partially reviewed phase work as a completed checkpoint.
+7. **Update GitHub:** comment on Issue #12 with phase name, commit SHA, implemented AM IDs, commands/results, evidence paths, resolved findings, documentation changes, core decisions, known nonblocking limitations, and next phase. Update parent #9 at major milestones and final evidence. These progress comments are authorized by plan approval; do not close or merge without user authorization.
 
 The next phase begins only after the current phase’s outcome works, required evidence passes, the Open Findings Ledger is empty, docs/trackers are current, and the checkpoint commit is pushed.
 
@@ -163,12 +163,12 @@ The next phase begins only after the current phase’s outcome works, required e
 
 | Phase | Status | Commit | PRD coverage | Evidence |
 | --- | --- | --- | --- | --- |
-| 1. Schema, migration, and seeded coverage | Not started | — | AM-001, AM-002, AM-012 | — |
-| 2. Management domain and inspect/create/edit/fork UI | Not started | — | AM-003, AM-004, AM-006 | — |
-| 3. Database-backed runtime, attribution, and recovery | Not started | — | AM-007–AM-014 | — |
-| 4. Lifecycle, activation, conflicts, and deletion UI | Not started | — | AM-001, AM-005, AM-006, AM-011 | — |
-| 5. Evidence presentation, configuration cleanup, and runtime regression | Not started | — | AM-010–AM-014 | — |
-| 6. Browser proof, documentation, and completion audit | Not started | — | AM-001–AM-014 | — |
+| 1. Schema, migration, and seeded coverage | Verified | Pending final checkpoint commit | AM-001, AM-002, AM-012 | Fresh and representative `0000` → current migration, stable coverage, legacy evidence, and backup tests pass. |
+| 2. Management domain and inspect/create/edit/fork UI | Verified | Pending final checkpoint commit | AM-003, AM-004, AM-006 | Admin route/actions, validation focus, and focused browser create/fork proof pass. |
+| 3. Database-backed runtime, attribution, and recovery | Verified | Pending final checkpoint commit | AM-007–AM-014 | Resolver, manager/specialist/quality frozen attribution, malformed-config recovery, pending resume, and fake booklet flow pass. |
+| 4. Lifecycle, activation, conflicts, and deletion UI | Verified | Pending final checkpoint commit | AM-001, AM-005, AM-006, AM-011 | Lifecycle, progressive repair, concurrency, deletion guards, and browser activation confirmation pass. |
+| 5. Evidence presentation, configuration cleanup, and runtime regression | Verified | Pending final checkpoint commit | AM-010–AM-014 | DB-authoritative text configuration, catalog-aware preflight, and regression coverage pass. |
+| 6. Browser proof, documentation, and completion audit | Verified | Pending final checkpoint commit | AM-001–AM-014 | Fake golden path/PDF inspection, current UI review, documentation, and completion audit pass; human verification remains. |
 
 Allowed status values are `Not started`, `In progress`, `Verified`, and `Blocked by decision`. `Verified` requires the mandatory checkpoint.
 
@@ -794,22 +794,22 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 
 Before claiming Issue #12 implementation-ready for human verification, produce a table marking each item `proven`, `failed`, or `missing` with direct evidence. Fix all in-scope failed/missing items; absence of a failure is not proof.
 
-- [ ] All AM-001–AM-014 rows have scope-matched passing evidence.
-- [ ] Every automated acceptance row in Section 14.1 is proven.
-- [ ] Fresh and prior migration paths preserve data and create exact seeded coverage.
-- [ ] Every lifecycle transition/guard and concurrent activation behavior is proven.
-- [ ] Fake and real adapter seams both require a resolved configuration; automated tests make no paid call.
-- [ ] Manager, selected specialist, and direct quality review use fresh persisted resolution.
-- [ ] Successful and failed relevant calls retain immutable IDs/snapshot; legacy rows remain readable.
-- [ ] Existing skill schemas, one-specialist bound, materialization, persistence, approvals, jobs, and stage authority are unchanged or explicitly reverified.
-- [ ] Admin loading/empty/validation/conflict/failure states and keyboard/focus/destructive confirmation pass.
-- [ ] Missing manager/specialist/automatic-quality configuration leaves new message/card/artifact/approval/job/stage state unchanged; any creator response accepted earlier remains explicitly pending and recoverable through exact Retry or reload-time Resume, with only safe non-persisted recovery UI added.
-- [ ] Full activated-specialist browser flow reaches and downloads a PDF; every rendered page passes visual inspection; temporary renders are removed; coverage is restored.
-- [ ] The three named retained real-provider evaluation directories remain present/readable and `git diff -- evaluations` is empty.
-- [ ] Typecheck, lint, all tests, agent fixtures, build, and e2e pass in fake mode.
-- [ ] Current Web Interface Guidelines review and final defect-first review have zero open findings.
-- [ ] `docs/architecture.md`, README, this plan, PRD tracker, and any verified lessons match current behavior.
-- [ ] Secret scan confirms no keys/private data in source, snapshots fixtures, screenshots, or issue comments.
+- [x] All AM-001–AM-014 rows have scope-matched passing evidence.
+- [x] Every automated acceptance row in Section 14.1 is proven.
+- [x] Fresh and prior migration paths preserve data and create exact seeded coverage.
+- [x] Every lifecycle transition/guard and concurrent activation behavior is proven.
+- [x] Fake and real adapter seams both require a resolved configuration; automated tests make no paid call.
+- [x] Manager, selected specialist, and direct quality review use fresh persisted resolution.
+- [x] Successful and failed relevant calls retain immutable IDs/snapshot; legacy rows remain readable.
+- [x] Existing skill schemas, one-specialist bound, materialization, persistence, approvals, jobs, and stage authority are unchanged or explicitly reverified.
+- [x] Admin loading/empty/validation/conflict/failure states and keyboard/focus/destructive confirmation pass.
+- [x] Missing manager/specialist/automatic-quality configuration leaves new message/card/artifact/approval/job/stage state unchanged; any creator response accepted earlier remains explicitly pending and recoverable through exact Retry or reload-time Resume, with only safe non-persisted recovery UI added.
+- [x] Full activated-specialist browser flow reaches and downloads a PDF; every rendered page passes visual inspection; temporary renders are removed; coverage is restored.
+- [x] The three named retained real-provider evaluation directories remain present/readable and `git diff -- evaluations` is empty.
+- [x] Typecheck, lint, all tests, agent fixtures, build, and e2e pass in fake mode.
+- [x] Current Web Interface Guidelines review and final defect-first review have zero open findings.
+- [x] `docs/architecture.md`, README, this plan, PRD tracker, and any verified lessons match current behavior.
+- [x] Secret scan confirms no keys/private data in source, snapshots fixtures, screenshots, or issue comments.
 - [ ] Phase commits are pushed and Issue #12/#9 contain evidence and core decisions.
 
 Then provide Issue #13 with:
@@ -838,7 +838,7 @@ At implementation completion:
 
 After explicit approval:
 
-- Treat this plan as implementation authority subordinate to the approved PRD.
+- Treat this plan as implementation authority subordinate to the approved PRD. Its approval authorizes coherent phase commits, pushes on the approved working branch, and the progress/evidence comments required by Section 4; do not pause for a separate authorization at each phase boundary.
 - Correct factual file/API details from the current worktree or version-matched primary sources when scope/behavior is unchanged; record material corrections in the decision log and Issue #12.
 - Return to the user before changing product scope, lifecycle semantics, exact coverage, provider support, auth posture, destructive migration strategy, or required verification.
 - Do not weaken tests/requirements, add production infrastructure, or substitute a smaller end state because it is easier to implement.

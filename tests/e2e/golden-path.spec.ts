@@ -36,4 +36,5 @@ test("completes the isolated fake-provider booklet creation flow and downloads i
     page.getByRole("link", { name: "Download PDF" }).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+  await download.saveAs("output/playwright/golden-path-booklet.pdf");
 });

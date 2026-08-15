@@ -1,9 +1,9 @@
 import { estimateModelCostUsd, pricingVersion } from "@/lib/config/pricing";
-import type { ModelRole } from "@/lib/config/models";
+import type { AgentModelId } from "@/lib/config/agent-models";
 
 export function modelCallCost(input: {
   runtimeMode: "fake" | "real";
-  role: ModelRole;
+  modelId: AgentModelId;
   usage: { inputTokens: number; outputTokens: number } | null;
 }) {
   if (input.runtimeMode === "fake") {
@@ -11,7 +11,7 @@ export function modelCallCost(input: {
   }
   return {
     actualCostUsd: null,
-    estimatedCostUsd: input.usage ? estimateModelCostUsd({ role: input.role, ...input.usage }).toFixed(6) : null,
-    pricingVersion: input.usage ? pricingVersion : null,
+    estimatedCostUsd: input.usage ? estimateModelCostUsd({ modelId: input.modelId, ...input.usage })?.toFixed(6) ?? null : null,
+    pricingVersion: input.usage && estimateModelCostUsd({ modelId: input.modelId, ...input.usage }) !== null ? pricingVersion : null,
   };
 }

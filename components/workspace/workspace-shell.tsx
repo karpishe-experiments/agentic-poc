@@ -34,7 +34,7 @@ export function WorkspaceShell({ snapshot, selectedArtifact, selectedArtifactDet
       <div className="grid gap-5 xl:grid-cols-[13rem_minmax(20rem,25rem)_minmax(0,1fr)]">
         <ArtifactRail bookletId={snapshot.booklet.id} artifacts={snapshot.artifacts} pageItems={pageItems} selectedArtifact={selectedArtifact} />
 
-        <WorkspaceConversation bookletId={snapshot.booklet.id} initialMessages={snapshot.messages.map((message) => message.message as BookletUIMessage)} />
+        <WorkspaceConversation bookletId={snapshot.booklet.id} initialMessages={snapshot.messages.map((message) => message.message as BookletUIMessage)} pendingCardFollowup={snapshot.pendingCardFollowup} />
 
         <ArtifactViewer artifactType={selectedArtifact} bookletId={snapshot.booklet.id} detail={selectedArtifactDetail} key={`${selectedArtifact}:${selectedArtifactDetail.currentVersion?.id ?? "empty"}`} label={artifactLabel(selectedArtifact)} />
       </div>

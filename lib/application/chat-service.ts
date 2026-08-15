@@ -10,6 +10,7 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { createFakeConversationResult } from "@/lib/application/fake-conversation-runtime";
 import { ManagerService } from "@/lib/application/manager-service";
 import { QualityService } from "@/lib/application/quality-service";
+import type { PreparedActiveAgentSet } from "@/lib/application/agent-resolver";
 import { buildSkillContext } from "@/lib/application/skill-context";
 import type { GenerationService } from "@/lib/application/generation-service";
 import type { ExportService } from "@/lib/application/export-service";
@@ -122,6 +123,17 @@ export class ChatService {
       },
       parts: [{ type: "text", text: authoritativeText }],
     };
+    // Configuration failures must not add a user message, card, artifact, or
+    // workflow mutation. A saved card response remains independently pending.
+    let prepared: PreparedActiveAgentSet | undefined;
+    if (booklet.currentStage !== "pdf_export") {
+      try {
+        prepared = await this.manager.preflight();
+      } catch (error) {
+        if (claimedResponseId) await this.repositories.conversation.resetRunningCardFollowup(claimedResponseId);
+        throw error;
+      }
+    }
     try {
       await this.repositories.conversation.appendMessage({ id: persistedUserMessage.id, bookletId, role: "user", message: persistedUserMessage, createdAtMs: now });
       if (booklet.currentStage === "pdf_export") {
@@ -166,7 +178,7 @@ export class ChatService {
                   : booklet.currentStage === "final_pages"
                     ? { intent: authoritativeText, finalPages: finalPages?.currentVersion?.content }
               : undefined,
-      });
+      }, prepared);
       const assessment = readinessAssessmentSchema.safeParse(managerResult.output);
       const storyDraft = storyPlanningResultSchema.safeParse(managerResult.output);
       const storyQuality = storyQualityResultSchema.safeParse(managerResult.output);
@@ -186,7 +198,7 @@ export class ChatService {
         : assessment.success && assessment.data.ready && booklet.currentStage === "audience_profile"
           ? await this.createAudienceReview(bookletId, originalIdea, assessment.data.knownFacts)
           : storyDraft.success && booklet.currentStage === "story_plan"
-            ? await this.createStoryReview(bookletId, storyDraft.data.storyPlan, storyDraft.data.summary)
+            ? await this.createStoryReview(bookletId, storyDraft.data.storyPlan, storyDraft.data.summary, prepared!.specialists.get("quality_review_targeted_repair@1"))
             : storyQuality.success && booklet.currentStage === "story_plan"
               ? await this.createQualityResponse(bookletId, storyQuality.data)
               : visualDirection.success && (booklet.currentStage === "visual_style" || booklet.currentStage === "visual_bible")
@@ -317,13 +329,13 @@ export class ChatService {
     };
   }
 
-  private async createStoryReview(bookletId: string, draft: unknown, narration: string) {
+  private async createStoryReview(bookletId: string, draft: unknown, narration: string, qualityConfiguration?: Parameters<QualityService["runStoryReadiness"]>[1]) {
     const current = await this.artifacts.get(bookletId, "story_plan");
     const story = await this.artifacts.revise(bookletId, "story_plan", materializeStoryPlan(storyPlanDraftSchema.parse(draft), current.currentVersion ? storyPlanSchema.parse(current.currentVersion.content) : null), { createdBy: "agent" });
     if (!story.currentVersion || !story.currentVersion.content || typeof story.currentVersion.content !== "object") {
       throw new RecoverableApplicationError({ code: "story_plan_missing", message: "The Story Plan needs a saved version before it can be reviewed.", status: 409 });
     }
-    const readiness = await this.quality.runStoryReadiness(bookletId);
+    const readiness = await this.quality.runStoryReadiness(bookletId, qualityConfiguration);
     if (readiness.kind === "unresolved") {
       return { narration: "The Story Plan needs a focused change before your review.", card: readiness.card };
     }

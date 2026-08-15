@@ -4,6 +4,7 @@ process.env.DATABASE_URL = "file:./output/playwright/runtime/booklets.db";
 process.env.DATA_ROOT = "./output/playwright/runtime/assets";
 process.env.MODEL_RUNTIME = "fake";
 process.env.IMAGE_PROVIDER_MODE = "fake";
+process.env.OPENAI_API_KEY ??= "e2e-fake-key";
 await import("./prepare-e2e");
 const port = process.env.E2E_PORT ?? "3001";
 const baseUrl = `http://127.0.0.1:${port}`;

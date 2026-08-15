@@ -4,6 +4,24 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 ## Candidates
 
+### Prove additive migration safety from the exact prior journal
+
+- **Context:** Adding versioned runtime-agent tables and nullable model-call attribution to an existing SQLite application.
+- **Observation:** A fresh-database migration test verifies seed shape but cannot prove that an existing journal and legacy evidence survive the upgrade.
+- **Guidance:** Build a temporary fixture by applying the exact prior migration and journal, insert a representative legacy row, then apply the full current migration set. Assert preserved values and intentionally-null new columns.
+- **Evidence:** `tests/integration/agent-migration.test.ts` applies `0000_left_sleepwalker` before the current journal and retains a legacy `model_calls` row; the 96-test suite passed on 2026-08-15.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Prefer an installed Chrome channel when Playwright's bundled Chromium is unavailable
+
+- **Context:** Running the isolated deterministic Playwright suite on the Windows development host.
+- **Observation:** The suite could not launch because Playwright's pinned Chromium binary was absent and its download timed out, while the installed Google Chrome channel completed all browser assertions.
+- **Guidance:** Keep Playwright configurable through `PLAYWRIGHT_BROWSER_CHANNEL`; on this Windows host, default to `chrome` so `npm run test:e2e` remains reproducible without a separate browser download. Revalidate that Chrome is present when moving to another environment.
+- **Evidence:** `playwright.config.ts` selects the Windows Chrome channel; `npm run test:e2e` completed all three existing specs and `agent-management.spec.ts` on 2026-08-15.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
 ### Use the CMD npm shim when PowerShell execution policy blocks npm.ps1
 
 - **Context:** Running project npm commands from this Windows PowerShell environment.

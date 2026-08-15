@@ -20,9 +20,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link className="font-semibold no-underline" href="/">
               Kids Booklet
             </Link>
-            <Link className="text-sm text-[var(--muted-ink)]" href="/help">
-              Help
-            </Link>
+            <div className="flex gap-4"><Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link><Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link></div>
           </nav>
         </header>
         <main className="mx-auto w-full max-w-6xl px-6 py-10" id="main-content">{children}</main>
