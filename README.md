@@ -6,7 +6,7 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 - Node.js 24 recommended (Node 22 minimum)
 - npm (the lockfile uses npm 12)
-- A MongoDB Atlas cluster or compatible MongoDB replica set
+- Access to the configured MongoDB database
 - An OpenAI API key with access to the configured models
 - Optional: Poppler for PDF inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
 
@@ -14,17 +14,15 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 1. Install dependencies: `npm install`.
 2. Copy `.env.example` to `.env.local`.
-3. Configure MongoDB and OpenAI in `.env.local`.
+3. Ask the project maintainer for the required values and configure `.env.local`:
 
-For Atlas, create a cluster, add a database user with `readWrite` access to the application database, allow your current IP under **Network Access**, and copy the Node.js driver connection string from **Connect → Drivers**. Set:
-
-```dotenv
-OPENAI_API_KEY=your-key
-MONGODB_URI=mongodb+srv://user:password@cluster.example.mongodb.net/
-MONGODB_DATABASE=kids_booklet
+```text
+OPENAI_API_KEY=...
+MONGODB_URI=...
+MONGODB_DATABASE=...
 ```
 
-Keep `.env.local` untracked. If you use a self-managed MongoDB deployment, it must be a replica set because the application uses transactions. See the official [Atlas getting-started guide](https://www.mongodb.com/docs/atlas/getting-started/) and [application connection guide](https://www.mongodb.com/docs/atlas/connect-your-application/).
+Keep `.env.local` untracked. Developers do not provision MongoDB as part of local application setup.
 
 Initialize the application data once:
 
