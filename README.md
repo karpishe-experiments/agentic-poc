@@ -5,29 +5,53 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 ## Requirements
 
 - Node.js 24 recommended (Node 22 minimum)
-- npm
-- An OpenAI account and API key with access to the configured models and available API billing credits for retained evaluations
-- Poppler for PDF visual inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
+- npm (the lockfile uses npm 12)
+- Access to the configured MongoDB database
+- An OpenAI API key with access to the configured models
+- Optional: Poppler for PDF inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
 
-## Quick start
+## First-time setup
 
-1. Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY`.
-2. Install dependencies: `npm install`.
-3. Before upgrading an existing local database, stop the development server and create a verified backup: `npm run db:backup`.
-4. Create or upgrade local tables and seed active runtime agents: `npm run db:migrate`.
-5. Validate credentials and the migrated active-model configuration: `npm run preflight`.
-6. Register the bundled visual styles and Nunito font: `npm run seed`.
-7. Start the app: `npm run dev`, then visit `http://localhost:3000`.
+1. Install dependencies: `npm install`.
+2. Copy `.env.example` to `.env.local`.
+3. Ask the project maintainer for the required values and configure `.env.local`:
+
+```text
+OPENAI_API_KEY=...
+MONGODB_URI=...
+MONGODB_DATABASE=...
+```
+
+Keep `.env.local` untracked. Developers do not provision MongoDB as part of local application setup.
+
+Initialize the application data once:
+
+```text
+npm run db:setup
+npm run db:init
+npm run seed
+npm run db:verify
+```
+
+These commands are safe to repeat and reject incompatible indexes or conflicting deterministic seed records.
+
+## Run locally
+
+```text
+npm run dev
+```
+
+Open `http://localhost:3000`. The development command runs preflight first, so MongoDB must be reachable and `OPENAI_API_KEY` must be valid even when fake providers are selected.
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
 For real images during interactive development, set `IMAGE_PROVIDER_MODE=real`; use `fake` for deterministic no-cost placeholders. Image quality is configured independently with `OPENAI_IMAGE_QUALITY=disabled|low|high`. `disabled` uses provider defaults, while `low` or `high` applies that output quality to every reference and page. Restart the development server after changing these values.
 
-The command path was re-verified on 2026-08-02 with deterministic fake providers. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
-
 ### Local development recovery
 
 If the browser reports a failed chunk or cannot read a response after local code changes, use **Reload workspace** first; saved booklet data is not affected. If that does not resolve it, stop only the affected development server, delete only its `.next/dev` cache, run `npm.cmd run build`, and restart `npm.cmd run dev`. Do not delete `data/` or retained evaluation output as part of this recovery.
+
+For MongoDB connection failures, check the Atlas IP access list, database-user credentials, and complete connection string. Transaction errors mean the configured deployment is not a replica set. Run `npm run db:verify` after correcting the connection.
 
 ## Commands
 
@@ -37,7 +61,8 @@ If the browser reports a failed chunk or cannot read a response after local code
 | `dev`, `build`, `start` | Run the Next.js application. |
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
 | `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
-| `db:generate`, `db:backup`, `db:migrate`, `seed` | Generate migrations, create a verified local backup, migrate the local database, and register checked-in seed assets. |
+| `db:setup`, `db:init`, `db:verify` | Create/verify MongoDB structure, seed defaults, and validate integrity. |
+| `seed` | Idempotently register checked-in visual assets in MongoDB. |
 | `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
 Automated commands never make paid model or image calls. The workspace defaults to deterministic fake model and image providers; real-provider work is limited to the explicit evaluation workflow. The workspace exposes an Evidence JSON link for the selected booklet, and each successful PDF export persists the same summary under the local data root.
@@ -67,11 +92,11 @@ The application uses an application-controlled agent handoff: a stage-filtered m
 
 `/admin/agents` is an unauthenticated, trusted-local-only backoffice. Its slot rail shows the required manager plus seven specialist slots; selecting a slot opens a focused read-only workspace for its logical agents, version history, technical details, and valid lifecycle actions. Use **New Agent** for a blank inactive draft or **Edit Draft** for deliberate changes, then confirm and activate a reviewed replacement. Destructive actions stay in the workspace’s Danger Zone. On narrow screens, the complete slot rail stacks above the workspace. Do not expose this page on a network.
 
-Text-agent instructions and model settings are versioned SQLite data after migration; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
+Text-agent instructions and model settings are versioned MongoDB data; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
 
 ## Local data and project references
 
-Runtime state lives under `data/` and is intentionally Git-ignored. Removing it is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
+Database state lives in MongoDB. Filesystem assets remain under `data/` and are intentionally Git-ignored. Removing either is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
 
 - [Experiment brief](docs/experiment-brief.md)
 - [Current architecture](docs/architecture.md)

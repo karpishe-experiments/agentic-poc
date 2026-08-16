@@ -1,9 +1,6 @@
-import { mkdtemp } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
 import { BookletService } from "@/lib/application/booklet-service";
 import { CardService } from "@/lib/application/card-service";
@@ -17,8 +14,8 @@ import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { createRepositories } from "@/db/repositories";
 
-const databases: Array<ReturnType<typeof createDatabase>> = [];
-afterEach(() => databases.splice(0).forEach((database) => database.$client.close()));
+const databases: Database[] = [];
+afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 class MemoryAssetStore implements AssetStore {
   private readonly values = new Map<string, Uint8Array>();
@@ -46,10 +43,8 @@ async function waitForCard(booklets: BookletService, bookletId: string, title: s
 
 describe("specification and Page Plan workflow", () => {
   it("requires saved geometry confirmation before creating ordered Page Packages", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "kids-page-plan-"));
-    const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const bookletService = new BookletService({ database });
     const assets = new MemoryAssetStore();
     const styleAssetId = "00000000-0000-4000-8000-000000000001";

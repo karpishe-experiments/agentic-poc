@@ -14,5 +14,9 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
     environment: "node",
     globals: true,
+    globalSetup: ["./tests/global-mongodb.ts"],
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+    maxWorkers: 4,
   },
 });

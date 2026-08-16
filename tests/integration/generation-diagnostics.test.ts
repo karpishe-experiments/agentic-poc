@@ -2,9 +2,9 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { createRepositories } from "@/db/repositories";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
 import { BookletService } from "@/lib/application/booklet-service";
@@ -15,10 +15,10 @@ import { FakeImageProvider } from "@/lib/images/fake-image-provider";
 import type { ImageProvider } from "@/lib/images/provider";
 import { GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
 
-const databases: Array<ReturnType<typeof createDatabase>> = [];
+const databases: Database[] = [];
 
-afterEach(() => {
-  databases.splice(0).forEach((database) => database.$client.close());
+afterEach(async () => {
+  await Promise.all(databases.splice(0).map(closeTestDatabase));
   vi.restoreAllMocks();
 });
 
@@ -55,9 +55,8 @@ describe("generation diagnostics", () => {
   it("persists a safe failure trail and leaves the next item pending", async () => {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const directory = await mkdtemp(path.join(os.tmpdir(), "kids-generation-diagnostics-"));
-    const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "Robin shares rainwater." });
     const repositories = createRepositories(database);
     const fake = new FakeImageProvider();
@@ -118,9 +117,8 @@ describe("generation diagnostics", () => {
   it("retries one failed item, pauses, and requires Continue for retained pending items", async () => {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const directory = await mkdtemp(path.join(os.tmpdir(), "kids-generation-blocked-"));
-    const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "Robin shares rainwater." });
     const repositories = createRepositories(database);
     const fake = new FakeImageProvider();

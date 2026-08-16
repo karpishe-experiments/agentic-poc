@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { createQualityIssueCard } from "@/lib/application/card-factories";
@@ -27,7 +27,7 @@ export class QualityService {
   private readonly resolver: AgentResolver;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; runtimeMode?: "fake" | "real"; reviewRuntime?: ReviewRuntime; resolver?: AgentResolver } = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database });
     this.runtimeMode = dependencies.runtimeMode ?? (process.env.MODEL_RUNTIME === "real" ? "real" : "fake");

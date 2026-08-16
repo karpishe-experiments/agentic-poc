@@ -1,16 +1,16 @@
-import path from "node:path";
-import os from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { migrate } from "drizzle-orm/libsql/migrator";
-import { describe, expect, it } from "vitest";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { AgentManagementService } from "@/lib/application/agent-management-service";
 import { BookletService } from "@/lib/application/booklet-service";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+
+const databases: Database[] = [];
+afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 async function services() {
-  const database = createDatabase(`file:${path.join(os.tmpdir(), "kids-agent-management-tests", `${randomUUID()}.db`).replaceAll("\\", "/")}`);
-  await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
+  const database = await createTestDatabase(); databases.push(database);
   return { database, agents: new AgentManagementService({ database, now: () => 1_786_800_000_000 }) };
 }
 
@@ -129,7 +129,7 @@ describe("AgentManagementService", () => {
 
   it("allows activation only when it strictly repairs incomplete active coverage", async () => {
     const { agents, database } = await services();
-    await database.$client.execute({ sql: "update agent_versions set is_active = 0 where skill_id in (?, ?)", args: ["intake_readiness@1", "story_planning_revision@1"] });
+    await database.collections.agent_versions.updateMany({ skillId: { $in: ["intake_readiness@1", "story_planning_revision@1"] } }, { $set: { isActive: false } });
     const incomplete = await agents.getAdminSnapshot();
     expect(incomplete.coverage.filter((slot) => slot.violation)).toHaveLength(2);
     const healthyQuality = incomplete.versions.find((version) => version.isActive && version.skillId === "quality_review_targeted_repair@1")!;
@@ -144,7 +144,7 @@ describe("AgentManagementService", () => {
 
   it("keeps malformed active configuration inspectable and repairable with a replacement", async () => {
     const { agents, database } = await services();
-    await database.$client.execute({ sql: "update agent_versions set model_id = ? where skill_id = ?", args: ["unsupported-model", "quality_review_targeted_repair@1"] });
+    await database.collections.agent_versions.updateMany({ skillId: "quality_review_targeted_repair@1" }, { $set: { modelId: "unsupported-model" } });
     const malformed = await agents.getAdminSnapshot();
     const qualitySlot = malformed.coverage.find((slot) => slot.skillId === "quality_review_targeted_repair@1")!;
     expect(qualitySlot).toMatchObject({ violation: "Malformed active specialist configuration" });

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { createRecoveryCard } from "@/lib/application/card-factories";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { BookletNotFoundError } from "@/lib/application/booklet-service";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { createFakeConversationResult } from "@/lib/application/fake-conversation-runtime";
@@ -55,7 +55,7 @@ export class ChatService {
   private readonly exporter?: ExportService;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; manager?: ManagerService; artifacts?: ArtifactService; quality?: QualityService; generation?: GenerationService; exporter?: ExportService } = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.database = database;
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.manager = dependencies.manager ?? new ManagerService({ database });

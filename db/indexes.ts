@@ -1,0 +1,41 @@
+import type { CreateIndexesOptions, IndexSpecification } from "mongodb";
+import type { CollectionName } from "@/db/documents";
+
+export type RequiredIndex = { collection: CollectionName; name: string; key: IndexSpecification; options?: Omit<CreateIndexesOptions, "name"> };
+
+export const REQUIRED_INDEXES: RequiredIndex[] = [
+  { collection: "booklets", name: "booklets_updated_at_idx", key: { updatedAtMs: -1 } },
+  { collection: "artifacts", name: "artifacts_booklet_type_unique", key: { bookletId: 1, artifactType: 1 }, options: { unique: true } },
+  { collection: "artifact_versions", name: "artifact_versions_artifact_number_unique", key: { artifactId: 1, versionNumber: 1 }, options: { unique: true } },
+  { collection: "artifact_dependencies", name: "artifact_dependencies_pair_unique", key: { downstreamVersionId: 1, upstreamVersionId: 1 }, options: { unique: true } },
+  { collection: "artifact_dependencies", name: "artifact_dependencies_upstream_idx", key: { upstreamVersionId: 1 } },
+  { collection: "messages", name: "messages_booklet_sequence_unique", key: { bookletId: 1, sequence: 1 }, options: { unique: true } },
+  { collection: "cards", name: "cards_booklet_status_updated_idx", key: { bookletId: 1, status: 1, updatedAtMs: -1 } },
+  { collection: "cards", name: "cards_message_idx", key: { messageId: 1 }, options: { sparse: true } },
+  { collection: "card_responses", name: "card_responses_card_created_idx", key: { cardId: 1, createdAtMs: -1 } },
+  { collection: "card_responses", name: "card_responses_followup_created_idx", key: { followupStatus: 1, createdAtMs: -1, cardId: 1 } },
+  { collection: "assets", name: "assets_uri_unique", key: { uri: 1 }, options: { unique: true } },
+  { collection: "assets", name: "assets_booklet_kind_created_idx", key: { bookletId: 1, kind: 1, createdAtMs: -1 } },
+  { collection: "style_catalog", name: "style_catalog_sort_order_idx", key: { sortOrder: 1 } },
+  { collection: "generation_jobs", name: "generation_jobs_idempotency_unique", key: { idempotencyKey: 1 }, options: { unique: true } },
+  { collection: "generation_jobs", name: "generation_jobs_booklet_status_created_idx", key: { bookletId: 1, status: 1, createdAtMs: 1 } },
+  { collection: "generation_jobs", name: "generation_jobs_runnable_idx", key: { status: 1, createdAtMs: 1 } },
+  { collection: "generation_items", name: "generation_items_job_key_unique", key: { jobId: 1, itemKey: 1 }, options: { unique: true } },
+  { collection: "generation_items", name: "generation_items_job_position_unique", key: { jobId: 1, position: 1 }, options: { unique: true } },
+  { collection: "generation_items", name: "generation_items_claim_idx", key: { jobId: 1, status: 1, position: 1 } },
+  { collection: "model_calls", name: "model_calls_booklet_started_idx", key: { bookletId: 1, startedAtMs: 1 } },
+  { collection: "model_calls", name: "model_calls_job_idx", key: { jobId: 1 }, options: { sparse: true } },
+  { collection: "model_calls", name: "model_calls_agent_version_idx", key: { agentVersionId: 1 }, options: { sparse: true } },
+  { collection: "agent_versions", name: "agent_versions_agent_number_unique", key: { agentId: 1, versionNumber: 1 }, options: { unique: true } },
+  { collection: "agent_versions", name: "agent_versions_active_manager_unique", key: { role: 1 }, options: { unique: true, partialFilterExpression: { isActive: true, role: "manager" } } },
+  { collection: "agent_versions", name: "agent_versions_active_specialist_unique", key: { skillId: 1 }, options: { unique: true, partialFilterExpression: { isActive: true, role: "specialist", skillId: { $type: "string" } } } },
+  { collection: "agent_versions", name: "agent_versions_active_agent_unique", key: { agentId: 1 }, options: { unique: true, partialFilterExpression: { isActive: true } } },
+  { collection: "agent_versions", name: "agent_versions_agent_created_idx", key: { agentId: 1, createdAtMs: 1 } },
+  { collection: "agent_versions", name: "agent_versions_skill_active_idx", key: { skillId: 1, isActive: 1 } },
+  { collection: "agent_versions", name: "agent_versions_parent_idx", key: { parentVersionId: 1 } },
+  { collection: "agent_version_events", name: "agent_version_events_version_created_idx", key: { agentVersionId: 1, createdAtMs: 1 } },
+  { collection: "quality_reviews", name: "quality_reviews_booklet_gate_status_idx", key: { bookletId: 1, gate: 1, status: 1, createdAtMs: -1 } },
+  { collection: "quality_reviews", name: "quality_reviews_booklet_status_created_idx", key: { bookletId: 1, status: 1, createdAtMs: -1 } },
+  { collection: "approvals", name: "approvals_version_scope_subject_idx", key: { artifactVersionId: 1, scope: 1, subjectKey: 1 } },
+  { collection: "exports", name: "exports_booklet_updated_idx", key: { bookletId: 1, updatedAtMs: -1 } },
+];

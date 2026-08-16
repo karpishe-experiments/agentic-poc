@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
@@ -58,7 +58,7 @@ export class GenerationService {
   private readonly diagnosticWaitMs: number;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; provider?: ImageProvider; imageModel?: string; imageQuality?: ImageRequest["quality"]; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     const needsEnvironment = !dependencies.assets || !dependencies.provider || !dependencies.imageModel;
     const env = needsEnvironment ? getServerEnv() : null;
     const imageProfile = env ? resolveImageProviderProfile(env) : null;

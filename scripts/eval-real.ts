@@ -9,7 +9,10 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { EvidenceService } from "@/lib/application/evidence-service";
 import { GenerationService } from "@/lib/application/generation-service";
 import { createRepositories } from "@/db/repositories";
-import { createDatabase, type Database } from "@/db/client";
+import { createMongoDatabase, type Database } from "@/db/client";
+import { seedVisualAssets } from "@/db/seed";
+import { seedDefaultAgents, setupMongoStructure } from "@/db/setup";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { randomUUID } from "node:crypto";
 import { genUICardSchema, type GenUICard } from "@/lib/contracts/cards";
 import type { BookletUIMessage } from "@/lib/contracts/messages";
@@ -48,10 +51,13 @@ const fixtures: Record<string, Fixture> = {
 
 let cleanFailedRun: (() => Promise<void>) | null = null;
 let evaluationDatabase: Database | null = null;
+let evaluationReplicaSet: MongoMemoryReplSet | null = null;
 
-function closeEvaluationDatabase(): void {
-  evaluationDatabase?.$client.close();
+async function closeEvaluationDatabase(): Promise<void> {
+  await evaluationDatabase?.close();
   evaluationDatabase = null;
+  await evaluationReplicaSet?.stop();
+  evaluationReplicaSet = null;
 }
 
 async function removeWithRetry(target: string): Promise<void> {
@@ -84,14 +90,6 @@ function requestedRunLabel(): string | null {
   return label;
 }
 
-function runNpmScript(script: "db:migrate" | "seed"): void {
-  if (process.platform === "win32") {
-    execFileSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `npm.cmd run ${script}`], { stdio: "inherit", env: process.env });
-    return;
-  }
-  execFileSync("npm", ["run", script], { stdio: "inherit", env: process.env });
-}
-
 function cardFromTurn(turn: Awaited<ReturnType<ChatService["createFakeTurn"]>>): GenUICard {
   const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
   if (!card || card.type !== "data-card") throw new Error("The workflow turn did not return a typed decision card.");
@@ -107,7 +105,6 @@ function userMessage(bookletId: string, text: string, responseId?: string): Book
 async function main() {
   const [fixtureName, fixture] = requestedFixture();
   const runLabel = requestedRunLabel();
-  execFileSync(process.execPath, ["scripts/preflight-env.mjs"], { stdio: "inherit" });
   config({ path: ".env.local" });
   process.env.MODEL_RUNTIME = "real";
   process.env.IMAGE_PROVIDER_MODE = "real";
@@ -116,7 +113,6 @@ async function main() {
   const runName = runLabel ? `${fixtureName}-${runLabel}` : fixtureName;
   const runRoot = path.join("evaluations", date, runName);
   const dataRoot = path.join("data", "evaluations", date, runName, "assets");
-  const databasePath = path.join("data", "evaluations", date, runName, "booklets.db");
   await mkdir(path.dirname(path.join(process.cwd(), runRoot)), { recursive: true });
   await mkdir(path.join(process.cwd(), runRoot), { recursive: false }).catch((error: unknown) => {
     if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") throw new Error(`${runRoot} already exists; retained evaluations are never overwritten.`);
@@ -124,21 +120,23 @@ async function main() {
   });
   const runRootAbsolute = path.join(process.cwd(), runRoot);
   const sourceRunRoot = path.join(process.cwd(), "data", "evaluations", date, runName);
-  // A failed run can leave its local SQLite file briefly locked on Windows even
-  // after the client closes. Its public evidence directory is removed on failure;
-  // clear the ignored source directory at the beginning of the next attempt,
-  // when the previous Node process has already released all handles.
+  // A failed run can leave generated asset handles briefly open on Windows. Its
+  // public evidence directory is removed on failure; clear the ignored source
+  // directory at the beginning of the next attempt, after the prior process exits.
   await removeWithRetry(sourceRunRoot);
   cleanFailedRun = async () => {
     await removeWithRetry(runRootAbsolute);
   };
   process.env.DATA_ROOT = `./${dataRoot.replaceAll("\\", "/")}`;
-  process.env.DATABASE_URL = `file:./${databasePath.replaceAll("\\", "/")}`;
-  runNpmScript("db:migrate");
-  runNpmScript("seed");
-
-  const database = createDatabase();
+  evaluationReplicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
+  process.env.MONGODB_URI = evaluationReplicaSet.getUri();
+  process.env.MONGODB_DATABASE = `kids_booklet_eval_${runName.replaceAll("-", "_")}`;
+  const database = createMongoDatabase({ uri: process.env.MONGODB_URI, databaseName: process.env.MONGODB_DATABASE });
   evaluationDatabase = database;
+  await setupMongoStructure(database);
+  await seedDefaultAgents(database);
+  await seedVisualAssets(database, process.env.DATA_ROOT);
+  execFileSync(process.execPath, ["--import", "tsx", "scripts/preflight-env.ts"], { env: process.env, stdio: "inherit" });
   const repositories = createRepositories(database);
   const booklets = new BookletService({ database, repositories });
   // The app's persistent runner owns jobs in normal web-server execution. This
@@ -258,7 +256,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  closeEvaluationDatabase();
+  await closeEvaluationDatabase();
   const cleanup = cleanFailedRun as (() => Promise<void>) | null;
   if (cleanup) {
     try {
@@ -269,5 +267,5 @@ try {
   }
   throw error;
 } finally {
-  closeEvaluationDatabase();
+  await closeEvaluationDatabase();
 }

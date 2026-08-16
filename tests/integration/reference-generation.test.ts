@@ -1,9 +1,6 @@
-import { mkdtemp } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { BookletService } from "@/lib/application/booklet-service";
@@ -11,8 +8,8 @@ import { GenerationService } from "@/lib/application/generation-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { FakeImageProvider } from "@/lib/images/fake-image-provider";
 
-const databases: Array<ReturnType<typeof createDatabase>> = [];
-afterEach(() => databases.splice(0).forEach((database) => database.$client.close()));
+const databases: Database[] = [];
+afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 class MemoryAssetStore implements AssetStore {
   private readonly values = new Map<string, Uint8Array>();
@@ -23,10 +20,8 @@ class MemoryAssetStore implements AssetStore {
 
 describe("reference generation", () => {
   it("generates persisted canonical assets in order and updates only the Visual Bible version", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "kids-reference-generation-"));
-    const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "Robin shares rainwater." });
     const artifacts = new ArtifactService({ database });
     await artifacts.revise(booklet.id, "audience_profile", { schemaVersion: SCHEMA_VERSION, ageBand: "6-8", interests: ["gardens"], readingNeeds: "Clear sentences", tone: "Warm", avoidList: [], knownFacts: ["garden"], openAssumptions: [] }, { createdBy: "agent" });

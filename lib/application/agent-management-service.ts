@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { AgentMutationError, type AgentPersistenceSnapshot } from "@/db/agent-repository";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { agentVersionConfigurationSchema, type AgentVersion } from "@/lib/contracts/agents";
@@ -53,8 +53,8 @@ export class AgentManagementService {
   private readonly now: () => number;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; registry?: SkillRegistry; now?: () => number } = {}) {
-    const database = dependencies.database ?? (dependencies.repositories ? null : createDatabase());
-    this.repositories = dependencies.repositories ?? createRepositories(database!);
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
+    this.repositories = dependencies.repositories ?? createRepositories(database);
     this.registry = dependencies.registry ?? createDefaultSkillRegistry();
     this.now = dependencies.now ?? Date.now;
   }

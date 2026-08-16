@@ -99,9 +99,9 @@ After plan approval, the implementation agent follows these rules:
 
 Delegation follows the durable repository rules in `AGENTS.md` and these POC-specific constraints:
 
-- The primary Terra/high agent remains the sole owner of slice sequencing, shared contracts, migrations, integration decisions, commits, pushes, and GitHub updates.
+- The primary Terra/high agent remains the sole owner of slice sequencing, shared contracts, database structure, integration decisions, commits, pushes, and GitHub updates.
 - Spawn at most two Terra/medium subagents concurrently and only for bounded, independently verifiable work. Default subagent work to read-only analysis, focused verification, or disjoint files explicitly assigned by the primary.
-- Do not parallelize adjacent slices or allow concurrent changes to migrations, shared schemas, workflow state, application composition, or the same files.
+- Do not parallelize adjacent slices or allow concurrent changes to database structure, shared schemas, workflow state, application composition, or the same files.
 - The primary agent reviews every subagent result and reruns relevant verification before integration.
 - Escalate the same problem to Sol/high after two focused implementation or repair attempts fail for the same root cause, or immediately when a consequential PRD/architecture contradiction cannot be resolved from authoritative sources.
 - Run the final completion audit as a read-only Sol/high subagent review. The primary agent fixes findings, reruns affected evidence, and retains sole authority to claim completion.
@@ -166,9 +166,7 @@ The registry baseline verified on 2026-08-01 is:
 | `@openai/agents` | `0.14.2` | Manager, specialist agents, function tools, tracing |
 | `openai` | `7.3.0` | OpenAI Image API |
 | `zod` | `4.4.3` | Runtime schemas |
-| `drizzle-orm` | `0.45.2` | Persistence mapping |
-| `drizzle-kit` | `0.31.10` | Migrations |
-| `@libsql/client` | `0.17.4` | Local libSQL/SQLite driver |
+| `mongodb` | `7.5.0` | Official database driver and transaction support |
 | `tailwindcss` | `4.3.3` | Styling |
 | `@tailwindcss/postcss` | `4.3.3` | Tailwind/PostCSS integration |
 | `radix-ui` | `1.6.7` | Primitives used by copied shadcn components |
@@ -185,8 +183,8 @@ The registry baseline verified on 2026-08-01 is:
 | `@types/node` | `24.13.3` | Node types matching the Node 24 baseline |
 | `@types/react` | `19.2.18` | React types |
 | `@types/react-dom` | `19.2.4` | React DOM types |
-| `tsx` | `4.23.1` | Migration, seed, and fixture scripts |
-| `dotenv` | `17.4.2` | Drizzle/script environment loading after preflight |
+| `tsx` | `4.23.1` | Database, seed, evaluation, and fixture scripts |
+| `dotenv` | `17.4.2` | Script environment loading after preflight |
 | `@testing-library/react` | `16.3.2` | Component tests |
 | `@testing-library/dom` | `10.4.1` | DOM queries |
 | `@testing-library/user-event` | `14.6.1` | Interaction tests |
@@ -203,7 +201,7 @@ Use `shadcn@4.16.1` only as a pinned CLI to initialize configuration and copy Bu
 - AI SDK UI: `DefaultChatTransport`, `useChat`, typed `UIMessage` data parts, `createUIMessageStream`, `createUIMessageStreamResponse`, and `validateUIMessages`.
 - Next.js: App Router Route Handlers, Node-only conditional import from `instrumentation.ts`, `next dev`, `next build`, and `next start`.
 - OpenAI Images: `images.generate` and `images.edit` through `gpt-image-2`, with relevant input references and provider-returned usage/request metadata when available.
-- Drizzle/libSQL: one Node client configured from `DATABASE_URL`, checked-in SQL migrations, and transaction helpers.
+- MongoDB: one official driver client configured from `MONGODB_URI` and `MONGODB_DATABASE`, checked-in collections/indexes, and transaction helpers.
 
 Primary implementation references:
 
@@ -211,7 +209,7 @@ Primary implementation references:
 - [OpenAI model catalog](https://developers.openai.com/api/docs/models), [GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2), and [Image generation guide](https://developers.openai.com/api/docs/guides/image-generation).
 - [AI SDK `useChat`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat), [transport](https://ai-sdk.dev/docs/ai-sdk-ui/transport), [custom data](https://ai-sdk.dev/docs/ai-sdk-ui/streaming-data), [message persistence](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence), and [`validateUIMessages`](https://ai-sdk.dev/docs/reference/ai-sdk-core/validate-ui-messages).
 - [Next.js instrumentation](https://nextjs.org/docs/app/guides/instrumentation) and [deployment](https://nextjs.org/docs/app/getting-started/deploying).
-- [Drizzle SQLite/libSQL](https://orm.drizzle.team/docs/sqlite/get-started-sqlite), [Sharp](https://sharp.pixelplumbing.com/), [pdf-lib](https://pdf-lib.js.org/), and [Zod](https://zod.dev/).
+- [MongoDB Node.js driver](https://www.mongodb.com/docs/drivers/node/current/), [Sharp](https://sharp.pixelplumbing.com/), [pdf-lib](https://pdf-lib.js.org/), and [Zod](https://zod.dev/).
 
 After installation, the bundled package documentation/source for the exact installed version takes precedence for AI SDK and other package signatures. Official remote docs remain the authority for service/model capability.
 
@@ -250,10 +248,11 @@ As accepted in PD-01, create this structure and keep `prototype/` untouched:
 |   |-- ui/
 |   `-- workspace/
 |-- db/
-|   |-- migrations/
 |   |-- client.ts
+|   |-- documents.ts
+|   |-- indexes.ts
 |   |-- repositories.ts
-|   |-- schema.ts
+|   |-- setup.ts
 |   `-- seed.ts
 |-- lib/
 |   |-- agents/
@@ -325,7 +324,7 @@ As accepted in PD-01, create this structure and keep `prototype/` untouched:
 |   |-- PLAN.md
 |   |-- USER-GUIDE.md
 |   `-- LESSONS-LEARNED.md
-|-- scripts/preflight-env.mjs
+|-- scripts/preflight-env.ts
 |-- tests/
 |   |-- agent/fixtures/
 |   |-- integration/
@@ -333,7 +332,6 @@ As accepted in PD-01, create this structure and keep `prototype/` untouched:
 |   `-- e2e/golden-path.spec.ts
 |-- instrumentation.ts
 |-- next.config.ts
-|-- drizzle.config.ts
 |-- playwright.config.ts
 |-- vitest.config.ts
 |-- .codex/config.toml
@@ -359,13 +357,13 @@ flowchart TB
     Workflow --> Registry[Stage-filtered skill registry]
     Registry --> Manager[OpenAI manager agent]
     Manager -->|exactly one function tool| Specialist[Specialist skill agent]
-    Services --> Repos[Drizzle repositories]
+    Services --> Repos[MongoDB repositories]
     Services --> Assets[AssetStore]
     Services --> Runner[Persistent sequential runner]
     Runner --> ImageProvider[OpenAI ImageProvider]
     Runner --> Composer[Sharp geometry normalizer]
     Runner --> Pdf[pdf-lib assembler]
-    Repos --> DB[(libSQL/SQLite)]
+    Repos --> DB[(MongoDB Atlas)]
     Assets --> FS[(DATA_ROOT)]
     Manager -. trace .-> OpenAITrace[OpenAI tracing]
     Specialist -. trace .-> OpenAITrace
@@ -392,7 +390,7 @@ Agents may propose typed content only. They never write the database, filesystem
 
 ### 7.2 Runtime composition
 
-Create one `AppDependencies` object containing configuration, repositories, `AssetStore`, `ImageProvider`, model runtime, clock, ID generator, and task-runner signal. Route Handlers and job handlers receive this object from a server-only composition root. Tests replace only the external model/image runtime, clock, and asset root; they exercise the real services and repositories against a temporary libSQL database.
+Create one `AppDependencies` object containing configuration, repositories, `AssetStore`, `ImageProvider`, model runtime, clock, ID generator, and task-runner signal. Route Handlers and job handlers receive this object from a server-only composition root. Tests replace only the external model/image runtime, clock, and asset root; they exercise the real services and repositories against an isolated in-memory MongoDB replica set.
 
 Avoid module-level mutable request data. The one allowed process-global is a guarded runner bootstrap promise/symbol created by `instrumentation.ts` to prevent duplicate loops during development reloads.
 
@@ -500,29 +498,13 @@ Validate every rectangle so all values are within `[0, 1]`, width and height are
 
 ## 9. Persistence design
 
-### 9.1 Database tables
+### 9.1 MongoDB collections
 
-Use one checked-in initial migration. The schema is intentionally explicit but stores large structured documents as validated JSON text.
+Checked-in document contracts and named indexes define the persistence model. String domain IDs are stored directly as MongoDB `_id`; repositories expose them as `id`. Numeric millisecond timestamps and validated serialized JSON values retain their application-facing forms.
 
-| Table | Required columns and constraints |
-| --- | --- |
-| `booklets` | `id` PK, `schema_version`, `working_title`, `lifecycle`, `current_stage`, nullable `cover_asset_id`, `created_at_ms`, `updated_at_ms`; index `updated_at_ms` descending. |
-| `artifacts` | `id` PK, `booklet_id` FK, `artifact_type`, `state`, nullable `current_version_id`, `created_at_ms`, `updated_at_ms`; unique `(booklet_id, artifact_type)`. |
-| `artifact_versions` | `id` PK, `artifact_id` FK, integer `version_number`, `schema_version`, `content_json`, `created_by` (`agent`, `user_edit`, `repair`, `application`), nullable `source_version_id`, `created_at_ms`; unique `(artifact_id, version_number)`. Versions are immutable. |
-| `artifact_dependencies` | `id` PK, `downstream_version_id` FK, `upstream_version_id` FK, `created_at_ms`; unique pair. |
-| `approvals` | `id` PK, `booklet_id` FK, `artifact_version_id` FK, `scope` (`artifact_content`, `reference`, `page`, `artifact`), nullable `subject_key` (entity/page ID), `action`, `origin` (`user`, `carried_forward`), nullable `source_approval_id` self-FK, nullable `card_response_id`, nullable `quality_review_id`, `created_at_ms`; unique active semantic approval per `(artifact_version_id, scope, subject_key)`, with historical approvals retained across versions. |
-| `messages` | `id` PK, `booklet_id` FK, `sequence`, `role`, `schema_version`, `ui_message_json`, `created_at_ms`; unique `(booklet_id, sequence)`. Store complete display-oriented messages, not model history. |
-| `cards` | `id` PK, `booklet_id` FK, nullable `message_id` FK, nullable `artifact_id` FK, `family`, `variant`, `status`, `schema_version`, `card_json`, `created_at_ms`, `updated_at_ms`; partial application logic ensures at most one active decision card per booklet. |
-| `card_responses` | `id` PK using client/server `responseId`, `card_id` FK, `action`, `value_json`, nullable `revision_instruction`, `followup_status` (`not_required`, `pending`, `running`, `completed`), nullable `followup_message_id`, `created_at_ms`; unique `id` provides duplicate-submit protection. |
-| `assets` | `id` PK, `booklet_id` FK nullable for seeds, `kind`, `uri`, `mime_type`, nullable `width`, nullable `height`, nullable `source_asset_id`, nullable `metadata_json`, `created_at_ms`; unique `uri`. |
-| `style_catalog` | `id` stable PK, `name`, `description`, `preview_asset_id` FK, `prompt`, `provenance`, `sort_order`, `created_at_ms`; read-only after seed. |
-| `generation_jobs` | `id` PK, `booklet_id` FK, `job_type` (`references`, `pages`, `export`), `status`, `idempotency_key`, `input_json`, nullable `error_json`, `created_at_ms`, `started_at_ms`, `finished_at_ms`, `updated_at_ms`; unique active behavior enforced transactionally by idempotency key. |
-| `generation_items` | `id` PK, `job_id` FK, `item_key`, `position`, `status`, `attempt_count`, `input_json`, nullable `result_json`, nullable `asset_id`, nullable `error_json`, nullable `started_at_ms`, nullable `finished_at_ms`; unique `(job_id, item_key)` and `(job_id, position)`. |
-| `model_calls` | `id` PK, `booklet_id` FK, `operation`, nullable `skill_id`, nullable `artifact_version_id`, nullable `job_id`, `provider`, `model`, nullable `trace_id`, nullable `provider_request_id`, `status`, `attempt`, `started_at_ms`, `latency_ms`, `input_ref_json`, nullable `output_ref_json`, nullable `usage_json`, nullable `actual_cost_usd`, nullable `estimated_cost_usd`, nullable `pricing_version`, nullable `error_kind`, nullable `error_message`. |
-| `quality_reviews` | `id` PK, `booklet_id` FK, `gate`, `attempt`, `status`, `artifact_version_ids_json`, `issues_json`, nullable `repair_version_ids_json`, nullable `accepted_at_ms`, `created_at_ms`; unique `(booklet_id, gate, attempt, artifact_version_ids_json)` is not required. |
-| `exports` | `id` PK, `booklet_id` FK, `artifact_version_id` FK, `status`, nullable `asset_id`, `page_asset_ids_json`, nullable `preflight_json`, nullable `error_json`, `created_at_ms`, `updated_at_ms`. |
+Collections cover booklets, artifacts and immutable versions, dependencies, approvals, messages/cards/responses, assets and styles, generation jobs/items, model-call evidence, quality reviews, exports, and runtime-agent definitions/versions/events. Unique and partial indexes enforce artifact type, message sequence, response identity, asset URI, job idempotency, version allocation, and active-agent slots.
 
-Use foreign keys for relational integrity and repository-level validation for JSON references. Cascade-delete behavior is unnecessary because the POC has no deletion workflow.
+MongoDB does not provide cross-collection foreign keys. Repository writes, setup, and `db:verify` validate referenced records and booklet ownership. The POC has no general deletion workflow.
 
 ### 9.2 Required transactions
 
@@ -548,7 +530,7 @@ Create narrow feature repositories, not a generic repository abstraction:
 - `EvidenceRepository`: record/update model calls and quality reviews, build booklet summary.
 - `ExportRepository`: create, update, and load exports.
 
-Repositories expose domain objects, never Drizzle rows or libSQL clients.
+Repositories expose domain objects, never MongoDB documents or driver clients.
 
 ### 9.4 Local asset layout
 
@@ -1000,7 +982,8 @@ OPENAI_REVIEW_MODEL=gpt-5.6-sol
 OPENAI_REVIEW_REASONING=medium
 OPENAI_IMAGE_MODEL=gpt-image-2
 OPENAI_IMAGE_QUALITY=disabled
-DATABASE_URL=file:./data/booklets.db
+MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0
+MONGODB_DATABASE=kids_booklet
 DATA_ROOT=./data/assets
 OPENAI_TRACE_INCLUDE_SENSITIVE_DATA=false
 ```
@@ -1070,13 +1053,13 @@ Implement `/help` as a small application-owned page containing the same user-vis
 Replace the placeholder root README setup section with verified instructions covering:
 
 - Requirements: Node 24 recommended/22 minimum, npm, OpenAI account/key, and Poppler required for final PDF verification.
-- Clone/checkout, `.env.local`, `npm install`, `npm run preflight`, `npm run db:migrate`, `npm run seed`, `npm run dev`.
+- Clone/checkout, `.env.local`, `npm install`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run preflight`, `npm run dev`.
 - Local URL and first-book workflow.
 - Required scripts and what uses fake versus real providers.
 - Local `data/`, retained evaluations, and reset behavior (manual removal only, explicitly destructive and never automated).
 - Build/start commands and later standalone Node/container note.
 - Links to PRD, plan, user guide, lessons, and Issue #6.
-- Troubleshooting for credential/model access, migrations, runner restart, image block/failure, text overflow, and missing Poppler.
+- Troubleshooting for credential/model access, MongoDB setup, runner restart, image block/failure, text overflow, and missing Poppler.
 
 Every command must be run successfully in the reference environment before the README calls it verified.
 
@@ -1098,7 +1081,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Files/contracts:** `.gitignore` only if required. No application files.
 
-**Migration/seed:** none.
+**Persistence/seed:** none.
 
 **Verification:** credential/capability pass summary; `git status`; branch and project item verification.
 
@@ -1110,16 +1093,16 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 ### Slice 0 - reproducible application foundation
 
-**Outcome:** the root Next.js application installs, validates configuration, migrates/seeds local storage, builds, and starts with a basic shell.
+**Outcome:** the root Next.js application installs, validates configuration, initializes MongoDB and filesystem assets, builds, and starts with a basic shell.
 
-**Primary files:** `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `scripts/preflight-env.mjs`, `app/layout.tsx`, `app/page.tsx`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`, `playwright.config.ts`, `drizzle.config.ts`, `instrumentation.ts`, `lib/config/*`, `lib/contracts/common.ts`, `lib/assets/*`, `db/*`, `seeds/*`, `README.md`, initial `USER-GUIDE.md`, and `LESSONS-LEARNED.md`.
+**Primary files:** `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, `scripts/preflight-env.ts`, `app/layout.tsx`, `app/page.tsx`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`, `playwright.config.ts`, `instrumentation.ts`, `lib/config/*`, `lib/contracts/common.ts`, `lib/assets/*`, `db/*`, `seeds/*`, `README.md`, initial `USER-GUIDE.md`, and `LESSONS-LEARNED.md`.
 
 **Actions and files**
 
 - [x] Scaffolded root `package.json`, exact dependencies, lockfile, `tsconfig.json`, Next/Tailwind/PostCSS/ESLint/Vitest/Playwright configs, `components.json`, and app shell without modifying `prototype/`.
-- [x] Added required npm scripts: `preflight`, `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:generate`, `db:migrate`, `seed`, and `eval:real`.
-- [x] Added `.env.example`, Zod server configuration, `.gitignore`, `scripts/preflight-env.mjs`, and an explicit Next-only server configuration boundary.
-- [x] Added Drizzle client/schema/config, initial migration, repository interfaces, filesystem AssetStore, and a safe temporary test-data-root helper.
+- [x] Added required npm scripts: `preflight`, `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:setup`, `db:init`, `db:verify`, `seed`, and `eval:real`.
+- [x] Added `.env.example`, Zod server configuration, `.gitignore`, `scripts/preflight-env.ts`, and an explicit Next-only server configuration boundary.
+- [x] Added the MongoDB driver, document/index definitions, setup/initialization commands, repository interfaces, filesystem AssetStore, and a safe temporary test-data-root helper.
 - [x] Generated and checked in the three accepted style images, recorded prompts/provenance, and seeded their records plus Nunito files, license, and metadata. The seed command makes no provider call.
 - [x] Added `instrumentation.ts` and a guarded Node runner bootstrap with a focused no-duplicate-start test.
 - [x] Added and verified the README quick start.
@@ -1127,13 +1110,13 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** common IDs/timestamps/schema version, configuration, `Asset`, basic `Booklet`, repository/AssetStore interfaces.
 
-**Migration/seed:** generated migration `0000_left_sleepwalker`; inserts three stable style assets/records and font metadata idempotently.
+**Persistence/seed:** checked-in MongoDB structure and deterministic initialization; inserts three stable style assets/records and font metadata idempotently.
 
 **PRD coverage:** technical stack and hosting boundaries; DATA-001, DATA-002, DATA-006, DATA-011, DATA-012; deliverables 1-2 and required script names.
 
-**Commands:** `npm install`, `npm run preflight`, `npm run db:generate`, inspect generated SQL, `npm run db:migrate`, `npm run seed`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run start` smoke check.
+**Commands:** `npm install`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run start` smoke check.
 
-**Evidence:** P0 and Slice 0 verification passed on 2026-08-01: safe model preflight; migration generation/inspection; clean local migration; idempotent seed with three visual styles and Nunito metadata; typecheck; lint; four unit tests; agent-fixture command; production build; and `next start` smoke responses of 200 for Home and Help. In this host the commands used `npm.cmd` because PowerShell blocked `npm.ps1`.
+**Evidence:** P0 and Slice 0 verification passed: safe model preflight; MongoDB structure/initialization verification; idempotent seed with three visual styles and Nunito metadata; typecheck; lint; unit tests; agent-fixture command; production build; and `next start` smoke responses of 200 for Home and Help. In this host the commands used `npm.cmd` because PowerShell blocked `npm.ps1`.
 
 **Lessons checkpoint:** document only verified setup/runtime/package issues.
 
@@ -1156,11 +1139,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** full `Booklet`, artifact summaries/state, workspace snapshot, job summary, route envelopes.
 
-**Migration/seed:** extend `0000_initial` before release or add `0001_workflow_storage`; migrations are never edited after another slice depends on them.
+**Persistence/seed:** finalize booklet workflow document contracts and named indexes before dependent slices.
 
 **PRD coverage:** FR-001 through FR-008, GUI-010, DATA-003 through DATA-007, DATA-011 through DATA-013, JOB-006.
 
-**Commands:** `npm run db:migrate`, `npm run typecheck`, `npm run lint`, `npm test -- tests/integration/booklets.test.ts tests/integration/workspace-resume.test.ts`, `npm run build`.
+**Commands:** `npm run db:setup`, `npm run db:init`, `npm run db:verify`, `npm run typecheck`, `npm run lint`, `npm test -- tests/integration/booklets.test.ts tests/integration/workspace-resume.test.ts`, `npm run build`.
 
 **Evidence:** create two booklets, Home ordering/status screenshot, deep-link/reload returning to selected artifact.
 
@@ -1186,7 +1169,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** every `GenUICard` variant, `CardResponse`, message metadata/data parts, safe error envelope.
 
-**Migration/seed:** message/card/response tables finalized; no seed changes.
+**Persistence/seed:** message/card/response collections finalized; no seed changes.
 
 **PRD coverage:** GUI-001 through GUI-012, FR-005, FR-009, FR-020, FR-035, FR-037, AR-005, DATA-001, DATA-010, DATA-014.
 
@@ -1215,7 +1198,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** Audience Profile, Story Plan, Visual Style, Visual Bible, Booklet Specification, Page Plan/Page Package, Final Page, PDF Export document, Artifact/Version/Dependency/Approval.
 
-**Migration/seed:** artifact/version/dependency/approval schema finalized.
+**Persistence/seed:** artifact/version/dependency/approval document contracts finalized.
 
 **PRD coverage:** FR-006 through FR-015, FR-021, FR-030 through FR-033, FR-045 through FR-049, DATA-003 through DATA-005, DATA-007, DATA-008, DATA-010, DATA-013, DATA-015 through DATA-019, AC-002, AC-006.
 
@@ -1244,7 +1227,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** SkillDefinition/Context, manager route, ReadinessAssessment, ArtifactMutation, QualityReview/Issue/Repair, ModelCall.
 
-**Migration/seed:** model call and quality review storage finalized; fixture seed only.
+**Persistence/seed:** model call and quality review storage finalized; fixture seed only.
 
 **PRD coverage:** FR-016 through FR-021, AR-001 through AR-015, QA-001 through QA-007 for story gate, OBS-001 through OBS-004, AC-001, AC-003, AC-009.
 
@@ -1272,7 +1255,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** StoryCharacter, StorySetting, CharacterDefinition, LocationDefinition, Visual Style/Bible, provider capabilities/routing, ImagePromptPlan/Request/Result, reference roles/errors, GenerationJob/Item.
 
-**Migration/seed:** image request/result/job item fields finalized; no dynamic seed.
+**Persistence/seed:** image request/result/job item fields finalized; no dynamic seed.
 
 **PRD coverage:** FR-022 through FR-027, FR-034 through FR-038 for references, FR-045 through FR-047, FR-049, IMG-001 through IMG-015, JOB-001 through JOB-006, OBS-001 through OBS-004, DATA-015 through DATA-019, AC-004, AC-011.
 
@@ -1300,7 +1283,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** BookletSpecification, PagePlan/PagePackage scene and entity-reference invariants, generation-readiness review.
 
-**Migration/seed:** none after artifact schema finalization.
+**Persistence/seed:** none after artifact contract finalization.
 
 **PRD coverage:** FR-028 through FR-033, FR-039 preconditions, FR-048, FR-049, IMG-001 through IMG-003, QA-001 through QA-007 for generation gate, DATA-015 through DATA-017, AC-004, AC-005, AC-009.
 
@@ -1327,7 +1310,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** LetteringElement, FinalPage, page ImageRequest, regeneration request/target, progress/recovery payloads.
 
-**Migration/seed:** none; asset/job schema already final.
+**Persistence/seed:** none; asset/job contracts already final.
 
 **PRD coverage:** FR-030 through FR-041, IMG-002 through IMG-015, JOB-001 through JOB-006, GUI-005, DATA-007 through DATA-009, AC-007, AC-008, AC-011.
 
@@ -1354,7 +1337,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** final quality review, accepted issue, Export/preflight, engineering summary.
 
-**Migration/seed:** export/review tables final; no seed changes.
+**Persistence/seed:** export/review collections final; no seed changes.
 
 **PRD coverage:** FR-033, FR-039 through FR-044, QA-001 through QA-007, OBS-001 through OBS-007, AC-009, AC-010, AC-012.
 
@@ -1382,11 +1365,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** test-only dependency composition and fixtures; no production contract expansion.
 
-**Migration/seed:** deterministic e2e seed and temporary data root only.
+**Persistence/seed:** deterministic e2e seed and temporary data root only.
 
 **PRD coverage:** all UX principles, FR-001 through FR-049 browser-relevant paths, GUI-001 through GUI-012, AC-001 through AC-012, deliverables 9-10.
 
-**Commands:** fresh `npm install`, `npm run preflight`, `npm run db:migrate`, `npm run seed`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`; manually follow README quick start.
+**Commands:** fresh `npm install`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`; manually follow README quick start.
 
 **Evidence:** Playwright trace/screenshots/downloaded PDF under `output/playwright`, restart/resume proof, README command transcript, Help screenshots.
 
@@ -1415,11 +1398,11 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **Contracts:** retained evaluation manifest/rubric, no new runtime contract.
 
-**Migration/seed:** no schema changes unless a discovered defect requires an explicit migration; never rewrite applied migrations.
+**Persistence/seed:** no structure changes unless a discovered defect requires an explicit reviewed update.
 
 **PRD coverage:** completion criteria, deliverable 11, evaluation section, all ACs.
 
-**Commands:** `npm ci`, `npm run preflight`, `npm run db:migrate`, `npm run seed`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`, `npm run eval:real -- --fixture early-reader`, `... developing-reader`, `... older-reader`; PDF render/inspection commands from README.
+**Commands:** `npm ci`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`, `npm run eval:real -- --fixture early-reader`, `... developing-reader`, `... older-reader`; PDF render/inspection commands from README.
 
 **Evidence:** three PDFs and non-secret run directories, rubric results with no unresolved critical defect, trace/cost reconciliation, complete automated command report.
 
@@ -1432,10 +1415,10 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 ### 20.1 Test boundaries
 
 - Unit tests: Zod contracts including lettering/speakers/limits, state transitions, dependency traversal, registry filtering, context selection, reference selection, prompt serialization, retry classification, geometry-only composition, PDF ordering, pricing math.
-- Integration tests: real application services, Drizzle/libSQL temporary file database, temporary filesystem AssetStore, fake model/image providers, fake clock/IDs, job runner, route handlers where transport behavior matters.
+- Integration tests: real application services, isolated in-memory MongoDB replica set, temporary filesystem AssetStore, fake model/image providers, fake clock/IDs, job runner, route handlers where transport behavior matters.
 - Agent fixtures: deterministic or recorded fake manager/specialist outputs plus optional explicitly invoked real comparison; never part of general `npm test`.
 - Browser: one Playwright desktop Chromium golden path using application-level fake providers selected by test-only server environment; no network model calls.
-- Real evaluations: explicit `eval:real` command, production provider adapters, normal local DB/assets, retained evidence, never run in CI-like scripts.
+- Real evaluations: explicit `eval:real` command, production provider adapters, isolated MongoDB state and filesystem assets, retained evidence, never run in CI-like scripts.
 
 No test may pass because the app bypasses the manager/skill/card workflow. The fake runtime must return through the same manager routing, skill-result validation, application services, persistence, and UI contracts as real execution.
 
@@ -1538,8 +1521,7 @@ A critical defect is any blocked completion/download, missing/duplicate page, un
 | `test` | Vitest unit/integration tests with fake providers; no paid calls. |
 | `test:agent` | Small fixture runner in deterministic fake mode by default; explicit opt-in flag for real comparison. |
 | `test:e2e` | Playwright desktop Chromium golden path with isolated fake-provider server/data. |
-| `db:generate` | `drizzle-kit generate`. |
-| `db:migrate` | Run checked-in migrations against configured local database. |
+| `db:setup`, `db:init`, `db:verify` | Create and verify MongoDB collections/indexes, seed deterministic defaults, and validate integrity. |
 | `seed` | Idempotently register checked-in styles/fonts; no provider call. |
 | `eval:real` | Require preflight and one named evaluation fixture, then use real providers and retain evidence. |
 
@@ -1598,7 +1580,7 @@ The PRD remains the normative wording. This matrix identifies implementation sli
 | PRD deliverable | Planned evidence |
 | --- | --- |
 | 1. Runnable source, lockfile, Node engine, env template | Slice 0 and verified README quick start. |
-| 2. Drizzle/migrations/data root/styles/fonts | Slices 0-1 migration/seed evidence. |
+| 2. MongoDB structure/initialization/data root/styles/fonts | Slices 0-1 setup/seed evidence. |
 | 3. Manager, registry, seven skills, prompts, Zod | Slices 4-6 and agent fixture report. |
 | 4. AI SDK UI and four card families | Slice 2 renderer/transport tests and Slice 9 browser. |
 | 5. OpenAI adapter and provider seam | Slice 5 fake/real smoke evidence. |
@@ -1636,7 +1618,7 @@ Before claiming implementation complete, the implementation agent must produce a
 - [x] Every PRD ID in Section 21 has a passing test, rendered artifact, trace, or direct UI evidence matching its scope.
 - [x] All eleven PRD deliverables and four added deliverables exist and have been inspected.
 - [x] All required npm scripts exist and were run with expected provider mode.
-- [x] Fresh-install evidence plus preflight, migration, seed, build, typecheck, lint, unit/integration, agent fixture, and Playwright commands pass.
+- [x] Fresh-install evidence plus preflight, MongoDB setup/initialization, seed, build, typecheck, lint, unit/integration, agent fixture, and Playwright commands pass.
 - [x] The working app completes the OpenAI-only path with no creator-facing provider/model selector.
 - [x] Traces prove every material run performs manager routing then no more than one registered specialist skill.
 - [x] Every material user decision is represented by a validated card, including approval, quality, progress, and recovery.

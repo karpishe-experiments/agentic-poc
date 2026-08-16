@@ -11,7 +11,7 @@
 
 ## 1. Product summary
 
-The Kids Booklet application currently creates its manager and generic specialist harnesses from TypeScript. This POC moves their editable runtime configuration into SQLite while retaining the application's bounded-skill architecture:
+The Kids Booklet application stores editable manager and specialist runtime configuration in MongoDB while retaining the application's bounded-skill architecture:
 
 ```text
 saved booklet context
@@ -38,7 +38,7 @@ This is an agent-configuration POC, not a general agent platform. Runtime skills
 
 The POC is complete when:
 
-- a migration creates and seeds one active manager and one active specialist for each of the seven currently registered runtime skills;
+- deterministic initialization creates one active manager and one active specialist for each of the seven currently registered runtime skills;
 - the saved definitions reproduce the current default manager/specialist behavior;
 - an operator can create, branch, edit, confirm, activate, retire, and safely delete an eligible draft version from one local admin page;
 - every manager, specialist, and direct quality-review call identifies the selected agent version and records an immutable effective-configuration snapshot;
@@ -49,11 +49,11 @@ The POC is complete when:
 
 ### 3.1 In scope
 
-- SQLite/Drizzle persistence for logical runtime agents and versioned agent configurations.
+- MongoDB persistence for logical runtime agents and versioned agent configurations.
 - The two supported roles: `manager` and `specialist`.
 - One local-only `/admin/agents` backoffice page for list, creation, draft editing, lifecycle actions, coverage visibility, and version history.
 - Full editable manager/specialist instruction text, plus typed OpenAI runtime settings.
-- Seeded migration data for the current manager and all seven current specialist-skill configurations.
+- Deterministic seed data for the current manager and all seven current specialist-skill configurations.
 - Database-backed resolution for normal manager routing and the direct Story Plan quality-review path.
 - Version attribution and configuration snapshots on model-call evidence.
 - Deterministic fake-runtime resolution and automated booklet-flow verification.
@@ -106,7 +106,7 @@ Every version contains:
 - typed runtime configuration: provider, model ID, reasoning effort, and bounded maximum turns;
 - status (`draft`, `confirmed`, or `retired`), active flag, parent-version reference, version number, timestamps, and audit actor.
 
-The provider field is persisted but validation accepts only `openai`. The database is the source of truth for text-agent settings after migration; the current `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` values are not runtime overrides for persisted versions. The migration seeds the repository's current default values as stable data.
+The provider field is persisted but validation accepts only `openai`. MongoDB is the source of truth for text-agent settings; the current `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` values are not runtime overrides for persisted versions. Deterministic initialization seeds the repository's current default values as stable data.
 
 ### 6.2 Skills remain code-owned
 
@@ -187,13 +187,13 @@ For a manager-routed material turn, the application:
 5. loads the unique active specialist for the selected skill; and
 6. runs the bounded specialist, validates its output, and gives the existing application service the result.
 
-`QualityService` resolves the active specialist for `quality_review_targeted_repair@1` before its direct review call. It does not use a hard-coded review harness or model role after migration.
+`QualityService` resolves the active specialist for `quality_review_targeted_repair@1` before its direct review call. It does not use a hard-coded review harness or model role.
 
 `MODEL_RUNTIME=fake` follows the same persisted manager/specialist resolution and evidence path, but retains existing deterministic skill routing and `SkillDefinition.run` behavior. Therefore fake runs prove configuration resolution, version attribution, and workflow compatibility—not model-prompt quality.
 
-If required active configuration cannot be resolved because of data corruption, an incomplete migration, or a stale concurrent change, the application must not mutate booklet state. It returns a recoverable configuration error that identifies the missing manager or skill and points the local operator to `/admin/agents`. Normal valid backoffice actions prevent these gaps.
+If required active configuration cannot be resolved because of data corruption, incomplete initialization, or a stale concurrent change, the application must not mutate booklet state. It returns a recoverable configuration error that identifies the missing manager or skill and points the local operator to `/admin/agents`. Normal valid backoffice actions prevent these gaps.
 
-## 10. Persistence, migration, and evidence
+## 10. Persistence, initialization, and evidence
 
 ### 10.1 Data and repository requirements
 
@@ -201,26 +201,26 @@ The database must store logical agents and agent versions with version lineage, 
 
 Partial uniqueness or equivalent transactional constraints must enforce global manager uniqueness, one active specialist per registered skill, and one active version per logical agent. Mutation races return a recoverable conflict rather than silently replacing an unintended version.
 
-### 10.2 Seeded migration
+### 10.2 Deterministic initialization
 
-The checked-in migration creates the data model and embeds idempotent, stable default records:
+Checked-in MongoDB structure and initialization create the data model and idempotent, stable default records:
 
 - one active confirmed manager configured with the current manager instruction and default OpenAI model/reasoning settings;
 - seven active confirmed specialists, one per registered skill, each carrying the current generic specialist behavior relevant to that skill and its current model/reasoning settings; and
-- stable identifiers that make upgrades and tests repeatable.
+- stable identifiers that make setup and tests repeatable.
 
-Migration alone must leave both fresh and existing local databases able to run the booklet flow. The existing `seed` command continues to own visual style and font assets; it does not become a prerequisite for runtime-agent defaults.
+`db:init` must leave a freshly structured MongoDB database able to run the booklet flow and safely accept an exact repeat. The existing `seed` command continues to own visual style and font assets; it does not become a prerequisite for runtime-agent defaults.
 
 ### 10.3 Model-call attribution and reproducibility
 
 Every manager, specialist, and quality-review model-call record must include the selected logical-agent and agent-version identifiers. It must also retain an immutable snapshot of the effective instruction text and runtime configuration used for that call, including role, skill binding where applicable, provider, model, reasoning, and execution settings.
 
-The snapshot is required because an active draft may be edited after invocation. Historical model-call evidence must remain explainable even if its mutable draft later changes, is confirmed, retired, or becomes inactive. Pre-migration calls remain readable with null agent references and no snapshot.
+The snapshot is required because an active draft may be edited after invocation. Historical model-call evidence must remain explainable even if its mutable draft later changes, is confirmed, retired, or becomes inactive. Records without attribution remain readable with null agent references and no snapshot.
 
 ## 11. Functional requirements
 
-- **AM-001:** The application shall persist manager and specialist logical agents and versions in SQLite.
-- **AM-002:** The application shall seed one active confirmed manager and one active confirmed specialist for each of the seven registered runtime skills through the checked-in migration.
+- **AM-001:** The application shall persist manager and specialist logical agents and versions in MongoDB.
+- **AM-002:** The application shall seed one active confirmed manager and one active confirmed specialist for each of the seven registered runtime skills through deterministic initialization.
 - **AM-003:** The backoffice shall allow a local operator to create a manager or a specialist draft, with specialists bound to one existing registered skill.
 - **AM-004:** The backoffice shall allow draft mutation and arbitrary draft branching while retaining parent lineage and monotonic version numbers.
 - **AM-005:** The backoffice shall permit confirmation, activation, retirement, and safe deletion according to the lifecycle rules in section 7.
@@ -231,7 +231,7 @@ The snapshot is required because an active draft may be edited after invocation.
 - **AM-010:** The application shall retain schema validation, bounded handoff, deterministic fake behavior, and application ownership of all state mutation.
 - **AM-011:** The application shall resolve active versions on every invocation; version changes shall affect only future calls.
 - **AM-012:** Each relevant model-call record shall retain agent/version attribution and an immutable effective-configuration snapshot.
-- **AM-013:** The database shall be authoritative for text-agent runtime configuration after migration.
+- **AM-013:** MongoDB shall be authoritative for text-agent runtime configuration.
 - **AM-014:** The existing booklet flow shall complete with database-backed agents under the fake runtime.
 - **AM-015:** The local agent backoffice shall provide the slot-driven, accessible workspace defined in section 8 while preserving the existing lifecycle, Server Action, persistence, runtime-resolution, and creator-workflow behavior.
 
@@ -239,8 +239,8 @@ The snapshot is required because an active draft may be edited after invocation.
 
 ### 12.1 Automated evidence
 
-- Migrations succeed against an empty database and a representative database created by the prior migration.
-- Post-migration inspection finds the active manager plus seven active skill specialists, with no duplicate active slots.
+- Setup and initialization succeed against an empty database and on exact repeat.
+- Post-initialization inspection finds the active manager plus seven active skill specialists, with no duplicate active slots.
 - Repository/service tests cover lifecycle transitions, branched drafts, mutation guards, activation replacement, coverage conflicts, deletion guards, and concurrent activation conflict handling.
 - Manager tests prove only stage-valid skills are offered, selection stays bounded, and the resolved specialist matches the selected skill's active version.
 - Quality tests prove direct review resolves the persisted quality specialist.
@@ -270,13 +270,13 @@ On a local fake-runtime environment, the operator:
 | Agent changes make routing ambiguous or leave stages unusable. | Enforce one active manager and one active specialist per skill transactionally; prevent gaps. |
 | A local unauthenticated backoffice is exposed. | Mark it local-only and defer authentication; do not represent it as production-safe. |
 | Branching drafts add UI complexity. | Support chronological branches only; omit compare, merge, search, and bulk controls. |
-| Seeded defaults drift from code-owned skills. | Seed stable configurations only for the existing closed registry and verify all seven slots after migration. |
+| Seeded defaults drift from code-owned skills. | Seed stable configurations only for the existing closed registry and verify all seven slots after initialization. |
 
 ## 14. Assumptions and deferred concerns
 
-- The application remains a single local process with SQLite. The transactional uniqueness rules are sufficient for this POC; distributed coordination is deferred.
-- The checked-in migration is the only supported upgrade route from the current schema. Restoring a backup remains the recovery path for a failed local migration; no down-migration UI is required.
-- The prompt/model configuration seeded by the migration uses the repository's current defaults. A local installation that previously changed text-agent settings through environment variables must reapply those choices through the backoffice after migration.
+- The application remains a single process backed by MongoDB. Transactional uniqueness rules are sufficient for this POC; distributed coordination is deferred.
+- Checked-in collection and index definitions plus deterministic initialization are the supported database setup path.
+- Seeded prompt/model configuration uses the repository's current defaults. Operators change those choices through the backoffice.
 - Fake-runtime verification proves the data path and workflow contract, not the quality of an edited prompt. Real-provider evaluation, prompt evaluation metrics, and cost governance are deferred.
 - The unprotected backoffice is permitted only because this is a local POC. Authentication, authorization, audit identities, and secure deployment are explicit follow-on work.
 
@@ -289,7 +289,7 @@ On a local fake-runtime environment, the operator:
 - Drafts may be active and live-edited for prompt/runtime experiments, with evidence snapshots preserving history.
 - Agent settings are database-authoritative; only OpenAI is supported.
 - The admin surface is one trusted local-only page without auth.
-- Default runtime-agent records are embedded in the database migration.
+- Default runtime-agent records are created by deterministic database initialization.
 - Fake end-to-end verification is the required proof; real-provider acceptance is intentionally deferred.
 
 ## 16. Implementation tracking
@@ -298,8 +298,8 @@ This table tracks implementation coverage without changing the approved requirem
 
 | Requirement | Plan phases | Status | Evidence |
 | --- | --- | --- | --- |
-| AM-001 | 1–4 | Verified | Additive migration plus lifecycle, coverage-repair, conflict, deletion, and concurrency matrix in `agent-management.test.ts`. |
-| AM-002 | 1 | Verified | Fresh seeded coverage and an actual `0000` → current upgrade fixture preserve legacy model-call evidence. |
+| AM-001 | 1–4 | Verified | MongoDB structure plus lifecycle, coverage-repair, conflict, deletion, and concurrency matrix in `agent-management.test.ts`. |
+| AM-002 | 1 | Verified | Fresh and repeated deterministic initialization preserve exact seeded coverage. |
 | AM-003 | 2 | Verified | `/admin/agents` Server Actions and focused browser create flow pass. |
 | AM-004 | 2 | Verified | Draft edit/fork lineage plus concurrent monotonic fork coverage pass. |
 | AM-005 | 4 | Verified | Lifecycle guards/conflicts and browser fork → confirm → activation replacement confirmation pass. |
@@ -309,7 +309,7 @@ This table tracks implementation coverage without changing the approved requirem
 | AM-009 | 3 | Verified | Focused direct fake-quality fixture proves persisted specialist resolution and immutable evidence attribution. |
 | AM-010 | 3–6 | Verified | Existing bounded schemas/services and fake browser flow remain green. |
 | AM-011 | 3–5 | Verified | Fresh active-draft resolution and frozen preflight manager/quality invocation tests pass. |
-| AM-012 | 1, 3, 5 | Verified | Fresh/prior migration, success/failure snapshot, and legacy evidence coverage pass. |
+| AM-012 | 1, 3, 5 | Verified | Success/failure snapshot and nullable evidence coverage pass. |
 | AM-013 | 3, 5 | Verified | Persisted factories/resolver and exact-coverage/catalog preflight guard pass. |
 | AM-014 | 3–6 | Verified | Fake-provider booklet e2e completes with database-backed agents; the exported PDF was rendered and inspected, and activation replacement passes in the admin browser flow. |
 | AM-015 | 7 | Verified | Commit `89a80ea`; pure view-model tests plus five focused Chromium scenarios cover the slot workspace, read-only inspection, editing, creation, lifecycle discoverability/dialogs, feedback, dirty guards, empty/corrupt coverage, and narrow stacking. Full fake-provider regressions pass; human acceptance remains on Issue #13. |

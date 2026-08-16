@@ -1,4 +1,4 @@
-import { createDatabase } from "@/db/client";
+import { getDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { GenerationService } from "@/lib/application/generation-service";
 import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
@@ -13,7 +13,7 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 async function runLoop(): Promise<void> {
-  const database = createDatabase();
+  const database = getDatabase();
   const repositories = createRepositories(database);
   const diagnostics = new GenerationDiagnostics(resolveDataRoot(getServerEnv()));
   await diagnostics.record({ event: "runner_started" });

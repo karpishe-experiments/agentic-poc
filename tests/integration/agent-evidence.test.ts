@@ -1,10 +1,6 @@
-import { mkdtemp } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import os from "node:os";
-import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { migrate } from "drizzle-orm/libsql/migrator";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { BookletService } from "@/lib/application/booklet-service";
 import { ManagerService } from "@/lib/application/manager-service";
@@ -15,16 +11,15 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { QualityService } from "@/lib/application/quality-service";
 import { AgentConfigurationUnavailableError, AgentResolver } from "@/lib/application/agent-resolver";
 import { toErrorEnvelope } from "@/lib/http/errors";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
-const databases: Array<ReturnType<typeof createDatabase>> = [];
-afterEach(() => databases.splice(0).forEach((database) => database.$client.close()));
+const databases: Database[] = [];
+afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 describe("persisted agent evidence", () => {
   it("attributes fake manager and specialist calls to immutable resolved snapshots", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-agent-evidence-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
     await new ManagerService({ database, runtimeMode: "fake" }).run({ bookletId: booklet.id, stage: "audience_profile", operation: "guided_intake", intent: "Start guided intake.", knownFacts: [], recentMessages: [], approvedArtifactVersionIds: [], traceId: randomUUID() }, { cardId: randomUUID() });
     const calls = await createRepositories(database).evidence.listModelCalls(booklet.id);
@@ -36,10 +31,8 @@ describe("persisted agent evidence", () => {
   });
 
   it("attributes a direct fake quality review to its persisted quality specialist", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-quality-evidence-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
     const artifacts = new ArtifactService({ database });
     const audience = await artifacts.revise(booklet.id, "audience_profile", {
@@ -55,7 +48,7 @@ describe("persisted agent evidence", () => {
 
     const prepared = await new AgentResolver({ database }).prepareCompleteActiveSet("fake");
     const quality = prepared.specialists.get("quality_review_targeted_repair@1")!;
-    await database.$client.execute({ sql: "update agent_versions set model_id = ? where id = ?", args: ["unsupported-model", quality.version.id] });
+    await database.collections.agent_versions.updateOne({ _id: quality.version.id }, { $set: { modelId: "unsupported-model" } });
     await new QualityService({ database, runtimeMode: "fake" }).runStoryReadiness(booklet.id, quality);
 
     await expect(createRepositories(database).evidence.listModelCalls(booklet.id)).resolves.toContainEqual(expect.objectContaining({
@@ -66,14 +59,9 @@ describe("persisted agent evidence", () => {
   });
 
   it("normalizes malformed active configuration into a repairable specialist error", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-agent-config-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
-    await database.$client.execute({
-      sql: "update agent_versions set model_id = ? where skill_id = ?",
-      args: ["unsupported-model", "quality_review_targeted_repair@1"],
-    });
+    await database.collections.agent_versions.updateMany({ skillId: "quality_review_targeted_repair@1" }, { $set: { modelId: "unsupported-model" } });
 
     const error = await new AgentResolver({ database }).resolveSpecialist("quality_review_targeted_repair@1", "fake").catch((caught) => caught);
 
@@ -82,10 +70,8 @@ describe("persisted agent evidence", () => {
   });
 
   it("uses an active draft edit only for later calls and preserves earlier snapshots", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-agent-freshness-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
     const agents = new AgentManagementService({ database });
     const seeded = await agents.getAdminSnapshot();
@@ -107,19 +93,14 @@ describe("persisted agent evidence", () => {
   });
 
   it("keeps a preflighted active set frozen for the current manager turn", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-agent-frozen-set-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
     const manager = new ManagerService({ database, runtimeMode: "fake" });
     const prepared = await manager.preflight();
     const intake = prepared.specialists.get("intake_readiness@1")!;
 
-    await database.$client.execute({
-      sql: "update agent_versions set instructions = ? where id = ?",
-      args: ["A later database edit must not affect this turn.", intake.version.id],
-    });
+    await database.collections.agent_versions.updateOne({ _id: intake.version.id }, { $set: { instructions: "A later database edit must not affect this turn." } });
     await manager.run({ bookletId: booklet.id, stage: "audience_profile", operation: "guided_intake", intent: "Start guided intake.", knownFacts: [], recentMessages: [], approvedArtifactVersionIds: [], traceId: randomUUID() }, { cardId: randomUUID() }, prepared);
 
     const call = (await createRepositories(database).evidence.listModelCalls(booklet.id)).find((item) => item.operation === "skill");
@@ -127,26 +108,22 @@ describe("persisted agent evidence", () => {
   });
 
   it("records the resolved snapshot for a failed specialist call and prevents preflight mutations", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-agent-failure-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
     const failingManager = new ManagerService({ database, runtimeMode: "fake", specialistRuntime: { run: async () => { throw new Error("fixture specialist failure"); } } });
     await expect(failingManager.run({ bookletId: booklet.id, stage: "audience_profile", operation: "guided_intake", intent: "Start guided intake.", knownFacts: [], recentMessages: [], approvedArtifactVersionIds: [], traceId: randomUUID() }, { cardId: randomUUID() })).rejects.toThrow("fixture specialist failure");
     await expect(createRepositories(database).evidence.listModelCalls(booklet.id)).resolves.toContainEqual(expect.objectContaining({ operation: "skill", skillId: "intake_readiness@1", status: "failed", agentDefinitionId: expect.any(String), agentVersionId: expect.any(String), agentConfigSnapshot: expect.objectContaining({ role: "specialist", skillId: "intake_readiness@1" }) }));
 
     const before = await createRepositories(database).conversation.listMessages(booklet.id);
-    await database.$client.execute({ sql: "update agent_versions set model_id = ? where skill_id = ?", args: ["unsupported-model", "quality_review_targeted_repair@1"] });
+    await database.collections.agent_versions.updateMany({ skillId: "quality_review_targeted_repair@1" }, { $set: { modelId: "unsupported-model" } });
     await expect(new ChatService({ database }).createFakeTurn(booklet.id, { id: randomUUID(), role: "user", parts: [{ type: "text", text: "Start guided intake." }] })).rejects.toBeInstanceOf(AgentConfigurationUnavailableError);
     await expect(createRepositories(database).conversation.listMessages(booklet.id)).resolves.toEqual(before);
   });
 
   it("keeps an accepted card response pending when configuration preflight fails", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "kids-agent-pending-recovery-"));
-    const database = createDatabase(`file:${path.join(root, "booklets.db")}`);
+    const database = await createTestDatabase();
     databases.push(database);
-    await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
     const bookletService = new BookletService({ database });
     const chat = new ChatService({ database });
     const booklet = await bookletService.create({ idea: "A robin shares rainwater." });
@@ -155,7 +132,7 @@ describe("persisted agent evidence", () => {
     if (!card || card.type !== "data-card") throw new Error("Expected an intake card.");
     const responseId = randomUUID();
     await new CardService({ database }).submit(booklet.id, { cardId: card.data.cardId, responseId, action: "submit", value: "6-8" });
-    await database.$client.execute({ sql: "update agent_versions set model_id = ? where skill_id = ?", args: ["unsupported-model", "quality_review_targeted_repair@1"] });
+    await database.collections.agent_versions.updateMany({ skillId: "quality_review_targeted_repair@1" }, { $set: { modelId: "unsupported-model" } });
 
     await expect(chat.createFakeTurn(booklet.id, { id: randomUUID(), role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId }, parts: [{ type: "text", text: "Resume the saved decision." }] })).rejects.toBeInstanceOf(AgentConfigurationUnavailableError);
     await expect(bookletService.getWorkspaceSnapshot(booklet.id)).resolves.toMatchObject({ pendingCardFollowup: { responseId, summary: expect.any(String) } });

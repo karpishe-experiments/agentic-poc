@@ -1,15 +1,25 @@
 import { spawn, spawnSync } from "node:child_process";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
+import { createMongoDatabase } from "@/db/client";
+import { seedVisualAssets } from "@/db/seed";
+import { seedDefaultAgents, setupMongoStructure } from "@/db/setup";
 
-process.env.DATABASE_URL = "file:./output/playwright/runtime/booklets.db";
+const replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
+process.env.MONGODB_URI = replicaSet.getUri();
+process.env.MONGODB_DATABASE = "kids_booklet_e2e";
 process.env.DATA_ROOT = "./output/playwright/runtime/assets";
 process.env.MODEL_RUNTIME = "fake";
 process.env.IMAGE_PROVIDER_MODE = "fake";
 process.env.OPENAI_API_KEY ??= "e2e-fake-key";
-await import("./prepare-e2e");
+const database = createMongoDatabase({ uri: process.env.MONGODB_URI, databaseName: process.env.MONGODB_DATABASE });
+await setupMongoStructure(database);
+await seedDefaultAgents(database);
+await seedVisualAssets(database, process.env.DATA_ROOT);
+await database.close();
 const port = process.env.E2E_PORT ?? "3001";
 const baseUrl = `http://127.0.0.1:${port}`;
 
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", port], { env: process.env, stdio: "inherit" });
+const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--port", port], { env: process.env, stdio: "inherit" });
 
 function stopServer(): void {
   if (server.killed) return;
@@ -41,6 +51,7 @@ try {
   exitCode = result.code ?? (result.signal ? 1 : 0);
 } finally {
   stopServer();
+  await replicaSet.stop();
 }
 // The tsx loader holds a worker handle under Node 24. The isolated server and
 // Playwright child have both exited at this point, so terminate deterministically.

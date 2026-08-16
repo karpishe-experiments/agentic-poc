@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
@@ -22,7 +22,7 @@ export class RevisionService {
   private readonly assets?: AssetStore;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; generation?: GenerationService; manager?: ManagerService } = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database, repositories: this.repositories });
     this.generation = dependencies.generation;
