@@ -5,32 +5,55 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 ## Requirements
 
 - Node.js 24 recommended (Node 22 minimum)
-- npm
-- A MongoDB replica set, or a MongoDB Atlas project and cluster
-- An OpenAI account and API key with access to the configured models and available API billing credits for retained evaluations
-- Poppler for PDF visual inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
+- npm (the lockfile uses npm 12)
+- A MongoDB Atlas cluster or compatible MongoDB replica set
+- An OpenAI API key with access to the configured models
+- Optional: Poppler for PDF inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
 
-## Quick start
+## First-time setup
 
-1. Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY`.
-2. Install dependencies: `npm install`.
-3. Set `MONGODB_URI` and `MONGODB_DATABASE` for the MongoDB deployment.
-4. Create collections and indexes: `npm run db:setup`.
-5. Seed deterministic runtime agents: `npm run db:init`.
-6. Register bundled visual assets and fonts: `npm run seed`.
-7. Verify structure, references, and active-agent coverage: `npm run db:verify`.
-8. Validate credentials and active-model configuration: `npm run preflight`.
-9. Start the app: `npm run dev`, then visit `http://localhost:3000`.
+1. Install dependencies: `npm install`.
+2. Copy `.env.example` to `.env.local`.
+3. Configure MongoDB and OpenAI in `.env.local`.
+
+For Atlas, create a cluster, add a database user with `readWrite` access to the application database, allow your current IP under **Network Access**, and copy the Node.js driver connection string from **Connect → Drivers**. Set:
+
+```dotenv
+OPENAI_API_KEY=your-key
+MONGODB_URI=mongodb+srv://user:password@cluster.example.mongodb.net/
+MONGODB_DATABASE=kids_booklet
+```
+
+Keep `.env.local` untracked. If you use a self-managed MongoDB deployment, it must be a replica set because the application uses transactions. See the official [Atlas getting-started guide](https://www.mongodb.com/docs/atlas/getting-started/) and [application connection guide](https://www.mongodb.com/docs/atlas/connect-your-application/).
+
+Initialize the application data once:
+
+```text
+npm run db:setup
+npm run db:init
+npm run seed
+npm run db:verify
+```
+
+These commands are safe to repeat and reject incompatible indexes or conflicting deterministic seed records.
+
+## Run locally
+
+```text
+npm run dev
+```
+
+Open `http://localhost:3000`. The development command runs preflight first, so MongoDB must be reachable and `OPENAI_API_KEY` must be valid even when fake providers are selected.
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
 For real images during interactive development, set `IMAGE_PROVIDER_MODE=real`; use `fake` for deterministic no-cost placeholders. Image quality is configured independently with `OPENAI_IMAGE_QUALITY=disabled|low|high`. `disabled` uses provider defaults, while `low` or `high` applies that output quality to every reference and page. Restart the development server after changing these values.
 
-The command path was re-verified on 2026-08-02 with deterministic fake providers. In this Windows shell, use `npm.cmd` in place of `npm` when PowerShell execution policy blocks the npm shim.
-
 ### Local development recovery
 
 If the browser reports a failed chunk or cannot read a response after local code changes, use **Reload workspace** first; saved booklet data is not affected. If that does not resolve it, stop only the affected development server, delete only its `.next/dev` cache, run `npm.cmd run build`, and restart `npm.cmd run dev`. Do not delete `data/` or retained evaluation output as part of this recovery.
+
+For MongoDB connection failures, check the Atlas IP access list, database-user credentials, and complete connection string. Transaction errors mean the configured deployment is not a replica set. Run `npm run db:verify` after correcting the connection.
 
 ## Commands
 
