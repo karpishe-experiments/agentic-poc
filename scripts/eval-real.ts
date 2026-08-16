@@ -120,10 +120,9 @@ async function main() {
   });
   const runRootAbsolute = path.join(process.cwd(), runRoot);
   const sourceRunRoot = path.join(process.cwd(), "data", "evaluations", date, runName);
-  // A failed run can leave its local SQLite file briefly locked on Windows even
-  // after the client closes. Its public evidence directory is removed on failure;
-  // clear the ignored source directory at the beginning of the next attempt,
-  // when the previous Node process has already released all handles.
+  // A failed run can leave generated asset handles briefly open on Windows. Its
+  // public evidence directory is removed on failure; clear the ignored source
+  // directory at the beginning of the next attempt, after the prior process exits.
   await removeWithRetry(sourceRunRoot);
   cleanFailedRun = async () => {
     await removeWithRetry(runRootAbsolute);

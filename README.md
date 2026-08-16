@@ -14,7 +14,7 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 1. Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY`.
 2. Install dependencies: `npm install`.
-3. Set `MONGODB_URI` and `MONGODB_DATABASE`. For Atlas provisioning and migration, follow the [Atlas migration runbook](docs/accepted/2026-08-15_mongodb-atlas-migration/ATLAS-RUNBOOK.md).
+3. Set `MONGODB_URI` and `MONGODB_DATABASE` for the MongoDB deployment.
 4. Create collections and indexes: `npm run db:setup`.
 5. Seed deterministic runtime agents: `npm run db:init`.
 6. Register bundled visual assets and fonts: `npm run seed`.
@@ -41,7 +41,6 @@ If the browser reports a failed chunk or cannot read a response after local code
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
 | `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
 | `db:setup`, `db:init`, `db:verify` | Create/verify MongoDB structure, seed defaults, and validate integrity. |
-| `db:import:sqlite -- --source <path> --target-database <name> --confirm-writes-stopped` | Back up and import one stopped SQLite database into MongoDB with reconciliation evidence. |
 | `seed` | Idempotently register checked-in visual assets in MongoDB. |
 | `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
@@ -84,8 +83,6 @@ Database state lives in MongoDB. Filesystem assets remain under `data/` and are 
 - [Accepted implementation plan](docs/accepted/2026-08-01_end-to-end-poc/PLAN.md)
 - [Agent-management PRD](docs/accepted/2026-08-15_database-backed-agent-management/database-backed-agent-management-prd.md)
 - [Agent-management implementation plan](docs/accepted/2026-08-15_database-backed-agent-management/PLAN.md)
-- [MongoDB Atlas migration PRD](docs/accepted/2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md)
-- [MongoDB Atlas migration implementation plan](docs/accepted/2026-08-15_mongodb-atlas-migration/PLAN.md)
 - [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)
 - [Verified lessons](docs/accepted/2026-08-01_end-to-end-poc/LESSONS-LEARNED.md)
 - [Implementation issue #6](https://github.com/karpishe-experiments/agentic-poc/issues/6)

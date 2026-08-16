@@ -4,15 +4,6 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 ## Candidates
 
-### Prove additive migration safety from the exact prior journal
-
-- **Context:** Adding versioned runtime-agent tables and nullable model-call attribution to an existing SQLite application.
-- **Observation:** A fresh-database migration test verifies seed shape but cannot prove that an existing journal and legacy evidence survive the upgrade.
-- **Guidance:** Build a temporary fixture by applying the exact prior migration and journal, insert a representative legacy row, then apply the full current migration set. Assert preserved values and intentionally-null new columns.
-- **Evidence:** `tests/integration/agent-migration.test.ts` applies `0000_left_sleepwalker` before the current journal and retains a legacy `model_calls` row; the 96-test suite passed on 2026-08-15.
-- **Promotion target:** Agent instruction.
-- **Status:** Candidate.
-
 ### Prefer an installed Chrome channel when Playwright's bundled Chromium is unavailable
 
 - **Context:** Running the isolated deterministic Playwright suite on the Windows development host.
@@ -40,24 +31,6 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
 
-### Keep native libSQL integration databases in OS temporary storage on this Windows host
-
-- **Context:** Vitest integration tests that run checked-in migrations against a native libSQL file database on Windows.
-- **Observation:** Closing the libSQL client did not release the temporary database file before Vitest teardown; immediate deletion repeatedly failed with `EBUSY` even after retrying. The integration assertions and client close succeeded.
-- **Guidance:** Create these disposable migration fixtures under the operating system temporary directory and close the client after each test. Do not couple test correctness to immediate Windows file deletion; keep project data out of the fixture path.
-- **Evidence:** `tests/integration/booklets.test.ts` uses `mkdtemp(os.tmpdir())` and closes `database.$client`; the focused test passed on 2026-08-01 after teardown stopped deleting the host-held file.
-- **Promotion target:** Documentation.
-- **Status:** Candidate.
-
-### Clear failed evaluation SQLite data from the next process on Windows
-
-- **Context:** A retained-evaluation script creates a real local libSQL database and must clean up a failed attempt without deleting successful retained evidence.
-- **Observation:** Closing the client and immediately removing its SQLite file in the same Node process still produced `EBUSY`; the error could mask the provider failure that caused cleanup.
-- **Guidance:** Remove only the public failed-run directory in the failing process. Before the next attempt creates its database, clear the ignored source-data directory after the previous Node process has exited and released the Windows handle.
-- **Evidence:** `scripts/eval-real.ts` closes its database, preserves the original provider error, removes the public attempt directory, and clears the source path before the next run; the initial 2026-08-02 no-credit probe ended only with the provider `credit_balance_exhausted` error.
-- **Promotion target:** Agent instruction.
-- **Status:** Candidate.
-
 ### Persist card lifecycle changes in both authoritative and display records
 
 - **Context:** An AI SDK UI chat persists complete display messages alongside authoritative card rows.
@@ -78,7 +51,7 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 ### Let the persistent runner own normal local generation execution
 
-- **Context:** A request handler can create and immediately run a generation job while the in-process restart runner is polling the same local database.
+- **Context:** A request handler can create and immediately run a generation job while the in-process restart runner is polling the same MongoDB database.
 - **Observation:** A request handler and the restart runner could claim different pending items from one job, then race while finalizing its dependent artifact version.
 - **Guidance:** Persist normal jobs from the request path and let the guarded in-process runner execute them. Retain a per-job promise map as a same-process guard; allow direct execution only in isolated tests that intentionally do not bootstrap the runner.
 - **Evidence:** `CardService` and `RevisionService` directly start jobs only under `VITEST`; `GenerationService` retains the global per-job promise map; all three specs in `npm.cmd run test:e2e -- --workers=1 --reporter=line` passed on 2026-08-02, including the reference/page async path.
@@ -106,9 +79,9 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 ### Own the Playwright server lifecycle on Windows
 
 - **Context:** Running an isolated Next.js development server for desktop Playwright checks through PowerShell on Windows.
-- **Observation:** Playwright completed its assertions but did not reliably terminate nested `next dev` descendants, causing the normal test command to time out. Parallel browser workers also contended for the one isolated SQLite database and produced `SQLITE_BUSY`.
+- **Observation:** Playwright completed its assertions but did not reliably terminate nested Next.js descendants, causing the normal test command to time out. Parallel browser workers also shared one isolated database and server process.
 - **Guidance:** Start the prepared fake-provider server in a project-owned runner, invoke Playwright with `PLAYWRIGHT_REUSE_SERVER=1`, terminate that exact child process tree in `finally`, and allow a configurable isolated port when a developer already uses the default. Keep `workers: 1` unless the test harness gives every worker an independent database.
-- **Evidence:** `scripts/run-e2e.ts`, `scripts/e2e-server.ts`, and `playwright.config.ts`; the three serial specs passed on 2026-08-03 without touching a pre-existing developer server.
+- **Evidence:** `scripts/run-e2e.ts` and `playwright.config.ts` own the isolated server, MongoDB replica set, and serial browser run without touching a pre-existing developer server.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -281,13 +254,4 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Guidance:** Never parallelize driver operations that share one transaction session. Await each operation in order inside `withTransaction`; parallelize only independent work outside that session.
 - **Evidence:** `db/agent-repository.ts` performs snapshot and lifecycle reads sequentially. `tests/integration/agent-management.test.ts` verifies concurrent edits, forks, activation, repair, and deletion; the full 127-test suite passed against `MongoMemoryReplSet` on 2026-08-16.
 - **Promotion target:** Agent instruction.
-- **Status:** Candidate.
-
-### Treat SQLite migration input as immutable and migrate only a working copy
-
-- **Context:** A one-time importer must support databases at either checked-in SQLite migration state while preserving rollback evidence on Windows.
-- **Observation:** Applying pending migrations directly would alter the source, and libSQL can retain a short-lived Windows file handle after close. Copying the source first preserved its hash; cleanup of the disposable working copy needed bounded `EBUSY` tolerance.
-- **Guidance:** Hash and back up the source, apply schema upgrades only to a disposable working copy, import stable IDs without rewriting the source, verify the source hash again, and make working-copy cleanup non-fatal after bounded retries. Never add an overwrite mode for conflicting target identities.
-- **Evidence:** `scripts/import-sqlite-to-mongodb.ts` and `tests/integration/sqlite-mongodb-migration.test.ts` verify both migration states, exact and partial reruns, target conflict rejection, pre-write source validation, redacted reports, WAL handling, and unchanged source identities.
-- **Promotion target:** Documentation.
 - **Status:** Candidate.

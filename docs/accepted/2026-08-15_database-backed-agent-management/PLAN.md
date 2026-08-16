@@ -20,7 +20,7 @@ This is the canonical implementation plan for the approved database-backed runti
 
 The implementation outcome is a local-only agent backoffice and database-backed runtime resolution that preserve the existing application-controlled manager → specialist flow. Runtime skills, schemas, tools, materialization, persistence, approvals, jobs, and stage transitions remain code-owned.
 
-This plan is planning-only until the user explicitly approves it. Do not begin application implementation, run a migration against user data, or move Issue #12 to In progress before that approval is recorded on Issue #11. Once approved, this plan authorizes the implementation agent to commit and push each verified phase on the approved working branch and to post the required progress/evidence comments on Issues #12 and #9 without requesting separate end-of-phase authorization. Approval does not authorize merging, closing issues, making real-provider calls, or expanding the PRD.
+This plan is planning-only until the user explicitly approves it. Do not begin application implementation, initialize or modify user data, or move Issue #12 to In progress before that approval is recorded on Issue #11. Once approved, this plan authorizes the implementation agent to commit and push each verified phase on the approved working branch and to post the required progress/evidence comments on Issues #12 and #9 without requesting separate end-of-phase authorization. Approval does not authorize merging, closing issues, making real-provider calls, or expanding the PRD.
 
 ## 2. Planning basis and verified baseline
 
@@ -28,8 +28,8 @@ The plan was prepared against the repository state on 2026-08-15, including:
 
 - the approved agent-management PRD;
 - `docs/architecture.md`, `docs/experiment-brief.md`, and the accepted Kids Booklet PRD/plan;
-- the current Drizzle schema, migration journal, repositories, application services, agent factories/runtimes, configuration, evidence path, admin-adjacent UI patterns, and automated tests;
-- installed versions: Next.js 16.2.12, React 19.2.8, AI SDK 7.0.47, `@ai-sdk/react` 4.0.50, OpenAI Agents SDK 0.14.2, Drizzle ORM 0.45.2, Zod 4.4.3, Vitest 4.1.10, and Playwright 1.62.1;
+- the current MongoDB documents, indexes, repositories, application services, agent factories/runtimes, configuration, evidence path, admin-adjacent UI patterns, and automated tests;
+- installed versions: Next.js 16.2.12, React 19.2.8, AI SDK 7.0.47, `@ai-sdk/react` 4.0.50, OpenAI Agents SDK 0.14.2, MongoDB driver 7.5.0, Zod 4.4.3, Vitest 4.1.10, and Playwright 1.62.1;
 - version-matched package source/documentation before using SDK APIs;
 - official OpenAI guidance for the configured GPT-5.6 model family and Agents SDK behavior; and
 - the system `openai-docs` workflow and the project-local `ai-sdk`, `next-best-practices`, `vercel-react-best-practices`, `web-design-guidelines`, `playwright`, `pdf`, and `capture-project-learnings` workflows.
@@ -53,7 +53,7 @@ This resolves the older issue wording in favor of the approved PRD.
 
 ### 3.2 Persisted prompt is the complete agent instruction
 
-Each agent version stores the complete `instructions` string passed to the OpenAI Agents SDK. The migration copies the current manager instruction and compiles one complete current specialist instruction per registered skill, including the existing Page Plan and visual-direction rules where applicable.
+Each agent version stores the complete `instructions` string passed to the OpenAI Agents SDK. Deterministic initialization copies the current manager instruction and compiles one complete current specialist instruction per registered skill, including the existing Page Plan and visual-direction rules where applicable.
 
 The runtime factory does not silently append editable behavioral prompt text. It continues to enforce the non-editable envelope structurally through the registered tool list, structured output schema, role-aware turn bounds, required manager tool use, disabled parallel tool calls, and stop-on-first-tool behavior.
 
@@ -101,7 +101,7 @@ Runtime resolution performs a database read for the manager immediately before m
 
 ### 3.6 Seed behavior and quality specialist model
 
-The checked-in migration, not `npm run seed`, inserts stable version-1 defaults:
+`npm run db:init`, not `npm run seed`, inserts stable version-1 defaults:
 
 | Slot | Logical ID suffix | Version ID suffix | Seed model | Reasoning | Max turns | Instruction source |
 | --- | --- | --- | --- | --- | ---: | --- |
@@ -114,7 +114,7 @@ The checked-in migration, not `npm run seed`, inserts stable version-1 defaults:
 | `page_planning_writing@1` | `a106` | `b106` | `gpt-5.6-terra` | medium | 1 | Generic instruction plus current comic-lettering rule. |
 | `image_prompt_compilation@1` | `a107` | `b107` | `gpt-5.6-terra` | medium | 1 | Current generic specialist instruction. |
 
-Use full valid UUIDs `00000000-0000-4000-8000-00000000<suffix>` for these stable IDs. All eight versions are active, confirmed, authored by `local-admin`, and use provider `openai`. Use the fixed seed timestamp `1786752000000` (`2026-08-15T00:00:00.000Z`). For each slot suffix, use event ID prefixes `c`/`d`/`e` for the `create`/`confirm`/`activate` events respectively (for example manager events end in `c001`, `d001`, and `e001`). The complete event enum is `create`, `edit`, `fork`, `confirm`, `activate`, `deactivate`, `retire`, and `delete`. Event metadata is a versioned JSON object limited to 4,096 serialized characters and may contain only structural IDs/revisions/replacement information—never instructions, model input/output, credentials, or provider bodies. A checked-in `db/agent-defaults.ts` manifest holds the expected stable seed values and events for migration verification only; runtime code never imports it as configuration.
+Use full valid UUIDs `00000000-0000-4000-8000-00000000<suffix>` for these stable IDs. All eight versions are active, confirmed, authored by `local-admin`, and use provider `openai`. Use the fixed seed timestamp `1786752000000` (`2026-08-15T00:00:00.000Z`). For each slot suffix, use event ID prefixes `c`/`d`/`e` for the `create`/`confirm`/`activate` events respectively (for example manager events end in `c001`, `d001`, and `e001`). The complete event enum is `create`, `edit`, `fork`, `confirm`, `activate`, `deactivate`, `retire`, and `delete`. Event metadata is a versioned JSON object limited to 4,096 serialized characters and may contain only structural IDs/revisions/replacement information—never instructions, model input/output, credentials, or provider bodies. A checked-in `db/agent-defaults.ts` manifest holds the expected stable seed values and events for initialization verification only; runtime code never imports it as configuration.
 
 ### 3.7 Evidence and cost semantics
 
@@ -134,7 +134,7 @@ The page and every action prominently state that the surface is unauthenticated 
 
 ## 4. Execution protocol and mandatory phase checkpoint
 
-After explicit plan approval, the primary implementation agent owns sequencing, cross-cutting decisions, migration integration, verification, commits, pushes, and GitHub updates. Follow `AGENTS.md` and apply the relevant repository skills only within this PRD’s POC scope.
+After explicit plan approval, the primary implementation agent owns sequencing, cross-cutting decisions, database integration, verification, commits, pushes, and GitHub updates. Follow `AGENTS.md` and apply the relevant repository skills only within this PRD’s POC scope.
 
 Before the first implementation edit:
 
@@ -165,7 +165,7 @@ The next phase begins only after the current phase’s outcome works, required e
 
 | Phase | Status | Commit | PRD coverage | Evidence |
 | --- | --- | --- | --- | --- |
-| 1. Schema, migration, and seeded coverage | Verified | `5e1aad7` | AM-001, AM-002, AM-012 | Fresh and representative `0000` → current migration, stable coverage, legacy evidence, and backup tests pass. |
+| 1. MongoDB structure and seeded coverage | Verified | `5e1aad7` | AM-001, AM-002, AM-012 | Fresh and repeated initialization, stable coverage, indexes, and transaction tests pass. |
 | 2. Management domain and inspect/create/edit/fork UI | Verified | `5e1aad7` | AM-003, AM-004, AM-006 | Admin route/actions, validation focus, and focused browser create/fork proof pass. |
 | 3. Database-backed runtime, attribution, and recovery | Verified | `5e1aad7` | AM-007–AM-014 | Resolver, manager/specialist/quality frozen attribution, malformed-config recovery, pending resume, and fake booklet flow pass. |
 | 4. Lifecycle, activation, conflicts, and deletion UI | Verified | `5e1aad7` | AM-001, AM-005, AM-006, AM-011 | Lifecycle, progressive repair, concurrency, deletion guards, and browser activation confirmation pass. |
@@ -208,7 +208,7 @@ Replace the placeholder with confirmed open findings during execution. When fixe
 
 ```text
 /admin/agents Server Component
-  -> AgentManagementService -> AgentRepository -> SQLite/Drizzle
+  -> AgentManagementService -> AgentRepository -> MongoDB
   -> Server Actions ---------^        |
                                       +-> immutable audit events
 
@@ -230,7 +230,7 @@ direct Story Plan quality review
 | --- | --- | --- |
 | Agent contracts | `lib/contracts/agents.ts` | Closed roles/status/provider/reasoning schemas, configuration limits, action inputs, admin view models, effective snapshot. |
 | Logical/version persistence | `db/schema.ts`, `db/repositories.ts` | Rows, indexes/checks, mapping, transactions, optimistic concurrency, audit events. |
-| Seed manifest/migration | `db/agent-defaults.ts`, `db/migrations/0001_*.sql` | Stable expected records and checked-in SQL inserts. Runtime does not read the manifest. |
+| Seed manifest/initialization | `db/agent-defaults.ts`, `db/setup.ts` | Stable expected records and checked-in deterministic inserts. Runtime does not read the manifest as configuration. |
 | Management policy | `lib/application/agent-management-service.ts` | Registry-aware validation, lifecycle/coverage rules, admin snapshot, action errors. |
 | Runtime resolution | `lib/application/agent-resolver.ts` | Fresh manager/specialist lookup, schema parsing, immutable effective snapshot, configuration failure. |
 | Agent construction | `lib/agents/manager.ts`, `lib/agents/specialist.ts` | Construct SDK agents from resolved prompts/config plus code-owned tools/output/limits. |
@@ -239,7 +239,7 @@ direct Story Plan quality review
 | Skill applicability | Existing `lib/contracts/skills.ts`, `lib/skills/**` | Closed IDs, stages, operations, schemas, deterministic fake behavior. Never admin-managed. |
 | Evidence | `model_calls`, `EvidenceRepository`, `EvidenceService` | Actual execution identity plus persisted agent attribution/snapshot. |
 
-## 7. Persistence and migration contract
+## 7. Persistence and initialization contract
 
 ### 7.1 Tables and columns
 
@@ -259,30 +259,23 @@ direct Story Plan quality review
 - indexes for `(agent_id, created_at_ms)`, `(skill_id, is_active)`, and child lookup by `parent_version_id`;
 - check constraints for allowed role/status/provider/reasoning, role/skill compatibility, positive version/revision, role-aware maximum turns, and `status != 'retired' OR is_active = 0`.
 
-Database uniqueness prevents duplicates; service transactions enforce exact coverage and registry membership because SQLite cannot require a row for each code-owned skill.
+Database uniqueness prevents duplicates; service transactions enforce exact coverage and registry membership because database indexes cannot require a row for each code-owned skill.
 
-### 7.2 Migration behavior
+### 7.2 Initialization behavior
 
-Generate a new migration after updating `db/schema.ts`, inspect it, then add the stable idempotent seed inserts to that checked-in migration. Do not edit `0000_left_sleepwalker.sql`.
+Update the checked-in MongoDB document contracts and named index definitions together. `db:setup` creates or verifies collections and indexes without inserting application records; `db:init` adds exact deterministic runtime-agent defaults and rejects conflicts. Both commands are idempotent and fail before silently changing incompatible resident state.
 
-Before applying the new migration to the configured local file database, stop the development server and create a consistent backup with a small checked-in `scripts/backup-local-db.ts` helper. The helper resolves `DATABASE_URL` to an absolute `file:` path, refuses memory/remote/out-of-workspace targets without explicit user direction, checkpoints any SQLite WAL, closes the client, and copies the database into `output/backups/agent-management/<UTC timestamp>/booklets.db`. It writes a manifest containing the source path, byte size, SHA-256, and pre-migration journal state, then reopens the backup read-only enough to verify the journal and a representative booklet count. Temporary migration tests and the isolated e2e database do not require this user-data backup.
+Automated tests use an isolated in-memory replica set. Operator environments use the configured MongoDB deployment and verify structure, references, and active-agent coverage through `db:verify`.
 
-If migration fails, do not automatically overwrite the source database. Preserve the failed file, report the verified backup path/hash, and ask before restoring. The documented restore procedure stops all app processes, validates both resolved paths, moves the failed database aside, copies the verified backup into the original location, and rechecks the migration journal/booklet count. This is the only local rollback path.
+Initialization must:
 
-The migration must:
+1. create the required collections and named indexes without rewriting or deleting existing records;
+2. insert eight logical definitions, eight active confirmed versions, and the specified create/confirm/activate audit events with fixed IDs and timestamps;
+3. accept exact existing defaults and reject conflicting records;
+4. produce exact manager plus seven-skill coverage without running `npm run seed`; and
+5. fail safely on incompatible indexes or resident records.
 
-1. create the three new tables, checks, indexes, and nullable model-call columns without rewriting or deleting existing rows;
-2. insert eight logical definitions, eight active confirmed versions, and the 24 specified create/confirm/activate audit events using the fixed IDs/timestamp and `INSERT ... ON CONFLICT DO NOTHING` or an equivalent idempotent statement;
-3. leave existing booklets/model calls untouched and readable;
-4. produce exact manager + seven-skill coverage immediately after migration, without running `npm run seed`; and
-5. fail atomically on an unexpected incompatible schema. Recovery is restoring the user’s local database backup and correcting the migration; there is no down-migration UI.
-
-`tests/integration/agent-migration.test.ts` creates two isolated databases:
-
-- a fresh empty database migrated through the complete journal; and
-- a representative pre-change database built by applying only migration 0000 from a temporary migration directory, inserting a booklet and legacy model-call row, then applying the full journal.
-
-It proves stable seed contents/events/timestamps, idempotent insert semantics, complete/unique coverage, legacy row readability with null attribution, and preservation of representative data. A focused backup-helper test uses a temporary file database to prove path refusal, manifest/hash creation, and readable backup contents without touching the configured user database. Temporary databases live under the OS temporary directory or existing validated test roots and are cleaned only through the existing Windows-safe test cleanup path.
+`tests/integration/mongodb-foundation.test.ts` proves stable seed contents, idempotent setup, complete unique coverage, incompatible-index rejection, and transaction support against an isolated in-memory replica set.
 
 ### 7.3 Transaction contracts
 
@@ -296,7 +289,7 @@ It proves stable seed contents/events/timestamps, idempotent insert semantics, c
 | Retire | Compare revision; require inactive/non-retired; set retired, increment revision, insert event. |
 | Delete draft | Compare revision; require inactive draft, no child, no `model_calls`; insert delete event; delete version; delete logical row if no versions remain. |
 
-All domain conflicts become typed recoverable errors; raw libSQL/Drizzle messages do not reach the UI.
+All domain conflicts become typed recoverable errors; raw MongoDB driver messages do not reach the UI.
 
 ## 8. Contracts, repository, and services
 
@@ -337,7 +330,7 @@ type AgentRepository = {
 
 The existing conversation repository additionally exposes `getLatestPendingCardFollowup(bookletId)` for the workspace read model. It returns only a validated pending/running response identity plus a safe card summary, never raw error/provider text. Startup and request recovery reset an orphaned `running` claim to `pending` using the existing compare-and-set method before offering Resume.
 
-Mutation methods own transactions and compare-and-swap details. `AgentManagementService` owns product validation and error wording. `AgentResolver` owns runtime validation and snapshot derivation. Route/UI code never imports Drizzle or database rows.
+Mutation methods own transactions and compare-and-swap details. `AgentManagementService` owns product validation and error wording. `AgentResolver` owns runtime validation and snapshot derivation. Route/UI code never imports MongoDB documents or driver clients.
 
 ### 8.3 Management service behavior
 
@@ -406,9 +399,9 @@ Do not add `agent_configuration_unavailable` to the persisted typed-recovery-car
 
 ### 9.4 Environment and preflight
 
-After migration, remove `OPENAI_MANAGER_MODEL`, `OPENAI_MANAGER_REASONING`, `OPENAI_SKILL_MODEL`, `OPENAI_SKILL_REASONING`, `OPENAI_REVIEW_MODEL`, and `OPENAI_REVIEW_REASONING` from runtime parsing and `.env.example`. They no longer override the database.
+Remove `OPENAI_MANAGER_MODEL`, `OPENAI_MANAGER_REASONING`, `OPENAI_SKILL_MODEL`, `OPENAI_SKILL_REASONING`, `OPENAI_REVIEW_MODEL`, and `OPENAI_REVIEW_REASONING` from runtime parsing and `.env.example`. They do not override database-backed agent configuration.
 
-Update `scripts/preflight-env.mjs` to read the migrated database’s active OpenAI text model IDs, validate them against the code-owned catalog, add `OPENAI_IMAGE_MODEL`, deduplicate them, and use authenticated no-generation model lookups. This verifies account access only; catalog validation owns capability compatibility. If agent tables/coverage are missing, fail safely with “run `npm run db:migrate`” and no secrets. README Quick Start therefore runs backup/migration before preflight. `npm run dev` may continue to invoke preflight.
+`scripts/preflight-env.ts` reads active OpenAI text model IDs from MongoDB, validates them against the code-owned catalog, adds `OPENAI_IMAGE_MODEL`, deduplicates them, and uses authenticated no-generation model lookups. This verifies account access only; catalog validation owns capability compatibility. If collections or coverage are missing, it fails safely with guidance to run `npm run db:setup` and `npm run db:init`, without exposing secrets. `npm run dev` may continue to invoke preflight.
 
 Update the opt-in real smoke script to resolve the active manager from the database and use the same runtime contract. It remains paid/networked, explicitly gated, and is not required by this PRD’s acceptance run.
 
@@ -456,7 +449,7 @@ Use semantic headings, lists/tables, labels, buttons, and links. Long prompt/mod
 - Activate confirmation names the version currently occupying the slot and explains that only future calls change.
 - Retire and Delete use explicit confirmation UI; deletion is never one click.
 - Conflicts preserve typed input and tell the operator to reload/review current state.
-- Empty/corrupt coverage remains inspectable and points to migration or a valid activation; the page does not invent records client-side.
+- Empty/corrupt coverage remains inspectable and points to initialization or a valid activation; the page does not invent records client-side.
 - Role/skill fields are disabled for active drafts and all confirmed/retired versions; immutable state is explained in text, not color alone.
 - Keyboard order follows visual order, focus remains visible, and no interaction requires hover, drag, or pointer-only behavior.
 - Reuse the app’s main-content skip link and semantic heading order. Buttons/links have specific Title Case labels plus hover/focus/active states; native selects set explicit foreground/background colors; identifiers use `translate="no"`; all controls retain zoom, paste, and keyboard behavior.
@@ -468,9 +461,9 @@ Before Phase 6 completion, fetch the then-current Web Interface Guidelines and r
 
 | Area | Planned changes |
 | --- | --- |
-| `db/schema.ts` | Add agent definitions/versions/events, constraints/indexes, and nullable model-call attribution/snapshot fields. |
-| `db/repositories.ts` | Add row mappers, `AgentRepository`, transactions, evidence fields, legacy-null parsing. Keep driver details contained. |
-| `db/migrations/0001_*.sql`, metadata | Generated schema migration plus reviewed stable idempotent default inserts. |
+| `db/documents.ts`, `db/indexes.ts` | Define agent documents, model-call attribution fields, and required named indexes. |
+| `db/repositories.ts`, `db/agent-repository.ts` | Add document mappers, transactions, lifecycle operations, and evidence fields while containing driver details. |
+| `db/setup.ts` | Repeatable structure verification and stable idempotent default initialization. |
 | `db/agent-defaults.ts` | Test-only stable expected seed manifest and complete extracted current prompts. |
 | `lib/contracts/agents.ts` | New closed domain/action/snapshot/view contracts. |
 | `lib/config/agent-models.ts` | Closed reviewed text-model catalog, role/reasoning/capability compatibility, and optional pricing metadata. |
@@ -482,41 +475,39 @@ Before Phase 6 completion, fetch the then-current Web Interface Guidelines and r
 | `lib/application/evidence-service.ts`, `lib/application/model-call-cost.ts`, `lib/config/pricing.ts` | Expose parsed snapshot/IDs and model-aware nullable estimate. |
 | `lib/application/card-service.ts`, `lib/application/chat-service.ts`, `lib/http/errors.ts`, `components/workspace/workspace-conversation.tsx` | Preflight follow-up coverage, retain pending response identity, defer chat/workflow mutation until resolution succeeds, and show safe retry/resume recovery without changing the AI SDK message-stream contract. |
 | `lib/config/env.ts`, `lib/config/models.ts`, `.env.example` | Remove database-authoritative text-agent overrides; retain image/runtime/trace settings. Delete `models.ts` if no legitimate imports remain. |
-| `scripts/backup-local-db.ts`, `scripts/preflight-env.mjs`, `scripts/smoke-real-agent.ts`, test setup scripts | Verified local backup, database-backed active model discovery/resolution, and migrated isolated test data. |
+| `scripts/preflight-env.ts`, `scripts/smoke-real-agent.ts`, test setup scripts | Database-backed active model discovery/resolution and isolated MongoDB test data. |
 | `app/admin/agents/**`, `components/admin/agents/**`, `app/layout.tsx`, minimal styles | Add the one local backoffice and discoverable navigation. |
-| Tests listed in Sections 12–13 | Migration, contracts, services, runtime, evidence, UI, fixtures, browser, regression. |
+| Tests listed in Sections 12–13 | Initialization, contracts, services, runtime, evidence, UI, fixtures, browser, regression. |
 | `docs/architecture.md`, `README.md`, this plan, agent-management PRD tracker, lessons if proven | Align current behavior/setup and record verified evidence. |
 
 Do not modify runtime skill schemas/implementations, artifact transitions, image/PDF pipelines, existing retained evaluation artifacts, or creator UI beyond a safe configuration recovery message and global Agents navigation link.
 
 ## 12. Ordered implementation phases
 
-### Phase 1 — Schema, migration, and seeded coverage
+### Phase 1 — MongoDB structure and seeded coverage
 
-**Working outcome:** `npm run db:migrate` upgrades fresh and existing databases to contain one active confirmed manager and seven active confirmed skill specialists. The existing booklet runtime still works through its current hard-coded path while the new data is introduced safely.
+**Working outcome:** `npm run db:setup` and `npm run db:init` create one active confirmed manager and seven active confirmed skill specialists, and exact repeated initialization succeeds.
 
-**Primary files:** `lib/contracts/agents.ts`, `db/schema.ts`, `db/agent-defaults.ts`, new migration/metadata, agent migration tests, evidence repository parsing for nullable new fields.
+**Primary files:** `lib/contracts/agents.ts`, MongoDB document/index/setup modules, `db/agent-defaults.ts`, foundation tests, and evidence repository parsing.
 
 **Code changes**
 
 - Implement the closed agent/version/evidence snapshot contracts and validation limits.
-- Add the three tables, constraints/indexes, model-call columns, row mappers, and seed manifest.
-- Generate and inspect migration SQL; add stable default records/events.
-- Implement and test `scripts/backup-local-db.ts`; run it against the configured local file database and record the verified manifest before `db:migrate`. Do not run the migration if backup verification fails.
-- Keep current runtime/config behavior temporarily intact so this slice is migration-only.
+- Add the three collections, required indexes, model-call fields, document mappers, and seed manifest.
+- Implement repeatable structure setup and stable default records/events.
+- Keep current runtime/config behavior temporarily intact while persistence contracts are introduced.
 - Add a repository coverage query used by tests and later services.
 
 **Tests and validation**
 
-- Fresh migration and prior-migration upgrade scenario.
+- Fresh setup and exact repeat scenario.
 - Exact eight-version seed manifest and prompt/config equality.
 - One manager + seven unique skill slots + one active per logical agent.
-- Migration seed statements are conflict-safe/idempotent.
-- Seed audit rows have the specified stable IDs, timestamp, action values, actor, and bounded structural metadata; the backup-helper fixture proves checkpoint/copy/hash/readability and refuses unsafe targets.
-- Existing booklet/model-call data remains readable with null attribution.
-- Commands: `npm run db:generate`, inspect SQL/metadata, focused migration tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
+- Default inserts are conflict-safe and idempotent.
+- Seed audit rows have the specified stable IDs, timestamp, action values, actor, and bounded structural metadata.
+- Commands: `npm run db:setup`, `npm run db:init`, `npm run db:verify`, focused foundation tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
 
-**Phase evidence:** schema/index inspection, fresh/upgrade database assertions, legacy row assertion, no change to existing booklet runtime behavior.
+**Phase evidence:** collection/index inspection, fresh/repeated initialization assertions, and unchanged booklet runtime behavior.
 
 **End-of-phase gate:** execute every mandatory checkpoint step in Section 4; update both trackers for AM-001/AM-002 and the persistence portion of AM-012; publish only after zero open findings.
 
@@ -541,7 +532,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 - Version 1 creation, arbitrary draft branching, monotonic numbering, stale edit/fork rejection, active-draft role/skill guard, audit actor/event.
 - Admin snapshot orders all seven skill slots and shows draft/coverage warnings.
 - Component tests for loading, empty, long prompt, validation, pending, success, and conflict states.
-- Browser smoke: page loads from seeded migration, keyboard reaches every form/action, no horizontal overflow at desktop acceptance viewport.
+- Browser smoke: page loads from deterministic seeded state, keyboard reaches every form/action, no horizontal overflow at desktop acceptance viewport.
 - Commands: focused unit/integration/component tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`; Playwright CLI smoke as useful, not yet the final spec.
 
 **End-of-phase gate:** Section 4 checkpoint; AM-003/AM-004 and relevant AM-006 tracker rows updated; docs updated only for verified visible/architecture changes; zero open findings before publish.
@@ -550,7 +541,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 ### Phase 3 — Database-backed runtime, attribution, and recovery
 
-**Working outcome:** both fake and real adapters resolve the seeded active manager/specialist from SQLite for each call; every attempted manager, specialist, and direct quality call is attributable to its immutable resolved version/snapshot; configuration failures are safely retryable without workflow mutation. Activation remains unavailable until Phase 4.
+**Working outcome:** both fake and real adapters resolve the seeded active manager/specialist from MongoDB for each call; every attempted manager, specialist, and direct quality call is attributable to its immutable resolved version/snapshot; configuration failures are safely retryable without workflow mutation. Activation remains unavailable until Phase 4.
 
 **Primary files:** model catalog, resolver, agent factories/runtimes, `ManagerService`, `QualityService`, `CardService`, `ChatService`, evidence repository/service, HTTP error mapping, `WorkspaceConversation`, and runtime/evidence/recovery tests.
 
@@ -575,7 +566,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 **End-of-phase gate:** Section 4 checkpoint; AM-007–AM-014 runtime/evidence portions recorded; `docs/architecture.md` describes verified persisted resolution and recovery; zero open findings before publish.
 
-**Suggested commit:** `feat: resolve and attribute runtime agents from sqlite`
+**Suggested commit:** `feat: resolve and attribute runtime agents from mongodb`
 
 ### Phase 4 — Lifecycle, activation, conflicts, and deletion UI
 
@@ -624,7 +615,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 - Legacy model-call row remains readable with null IDs/snapshot.
 - Fake rows retain fake execution provider/model and zero cost while snapshot identifies selected persisted OpenAI config.
 - Priced catalog model estimate vs a reviewed catalog fixture with null pricing; arbitrary unknown models are rejected and never reach costing.
-- Environment tests reject removed overrides as runtime authority; preflight failure safely identifies missing migration/coverage.
+- Environment tests reject removed overrides as runtime authority; preflight failure safely identifies missing initialization or coverage.
 - Full existing integration/fixture regression.
 - Commands: focused evidence/config tests, `npm run test:agent`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`; no real smoke required.
 
@@ -640,20 +631,20 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 **Code/review changes**
 
-- Extend the isolated e2e migration setup; keep one SQLite worker and fake providers.
+- Extend the isolated MongoDB e2e setup; keep one application worker and fake providers.
 - Add/extend the browser golden path in Section 13.3.
 - Render the downloaded fake-provider PDF with Poppler and inspect every page image for page order, legibility, clipping, overlap, and geometry regressions; keep temporary renders under `tmp/pdfs/agent-management-golden/` and remove them after recording the result.
 - Run the current web-design-guidelines review over the complete admin UI and affected navigation; fix and rerun to zero findings.
-- Run a defect-first implementation review against PRD, plan, architecture, migration SQL, service boundaries, and evidence.
+- Run a defect-first implementation review against PRD, plan, architecture, MongoDB structure, service boundaries, and evidence.
 - Update architecture current-state flow, prompt/config ownership, tables, resolution/failure sequence, extension guidance, and verification.
-- Update README migration-before-preflight order, removed env variables, local-only `/admin/agents` usage/warning, model configuration workflow, commands, and PRD/plan/issue links.
+- Update README setup-before-preflight order, removed env variables, local-only `/admin/agents` usage/warning, model configuration workflow, commands, and PRD/plan/issue links.
 - Do not change creator User Guide/Help unless verified creator-facing recovery changed. Do not rerun or rewrite the three retained real-provider evaluation booklets.
 
 **Tests and validation**
 
 - All focused tests and existing regressions.
 - `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`.
-- Fresh and prior database migration checks repeated after final migration diff.
+- Fresh and repeated database setup checks run after the final structure diff.
 - `pdfinfo` plus `pdftoppm` render of the downloaded golden-path PDF, with every rendered page visually inspected and the result recorded.
 - Git diff/status, tracked-secret scan, docs/link/command verification.
 - Complete Section 15 audit with `proven`, `failed`, or `missing`; fix all `failed`/`missing` in scope.
@@ -670,7 +661,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 #### 7.1 Fixed scope and source ownership
 
-- Keep `/admin/agents` as the existing dynamic Node.js Server Component and retain the current service, repository, database, contracts, migration, runtime resolution, lifecycle rules, and mutation Server Actions. Add no route, dependency, schema, API, cache, auth mechanism, or creator-workflow change.
+- Keep `/admin/agents` as the existing dynamic Node.js Server Component and retain the current service, repository, database, contracts, initialization, runtime resolution, lifecycle rules, and mutation Server Actions. Add no route, dependency, schema, API, cache, auth mechanism, or creator-workflow change.
 - `app/admin/agents/page.tsx` continues the single server read. It passes a plain `AgentAdminViewModel` containing `coverage`, `definitions`, `versions`, and `skillChoices`; omit unused `events` at the Server/Client boundary without changing `AgentManagementService.getAdminSnapshot()`.
 - `components/admin/agents/agent-admin-model.ts` owns the serializable UI types, the closed friendly-label map, slot/agent/version grouping and sorting, state-based action eligibility, and pure selection-fallback helpers. It imports only contract types, not server services.
 - `components/admin/agents/agent-admin.tsx` remains the single client controller for selected IDs, mode, dirty state, pending mutation descriptor, dialog target, and result banner. It renders the page header, slot rail, workspace, and empty/corrupt states.
@@ -749,14 +740,14 @@ At the verified checkpoint, add AM-015 evidence and the Phase 7 command results 
 | Layer | Primary files/scenarios |
 | --- | --- |
 | Contract/unit | `tests/unit/agents/contracts.test.ts`, factory tests, pricing tests, admin action-state/component tests. Cross-field schemas, effective snapshot, structural runtime settings, field/action states. |
-| Migration | `tests/integration/agent-migration.test.ts`. Fresh/prior database, seeds, constraints, legacy evidence. |
+| Initialization | `tests/integration/mongodb-foundation.test.ts`. Fresh/repeated setup, seeds, indexes, transactions, and conflicts. |
 | Repository/service | `tests/integration/agent-management.test.ts`. Create/edit/fork/lifecycle/coverage/deletion/concurrency/events. |
 | Runtime | Extend `tests/integration/manager-contracts.test.ts`; add resolver and quality cases. Eligibility, fresh lookup, missing config, fake/real-adapter seam, no state mutation. |
 | Evidence | `tests/integration/agent-evidence.test.ts`. Success/failure, active draft edit, activation history, legacy nulls, fake execution identity. |
 | Agent fixtures | Existing twelve fixtures, augmented by a seeded agent-resolution harness rather than replaced. No paid calls. |
 | Browser | `tests/e2e/agent-management.spec.ts` for focused admin states and extended `golden-path.spec.ts` for activation → invocation → PDF → restore. |
 
-Tests use temporary file databases migrated from checked-in SQL; do not bypass migrations with direct schema pushes. Fake runtimes must still pass through resolver, registry, validation, evidence, and application services. Mocks may isolate the paid SDK adapter but cannot bypass the product boundary being proved.
+Tests use an isolated in-memory MongoDB replica set and the checked-in setup/initialization commands. Fake runtimes must still pass through resolver, registry, validation, evidence, and application services. Mocks may isolate the paid SDK adapter but cannot bypass the product boundary being proved.
 
 ### 13.2 Repository/service scenario matrix
 
@@ -774,7 +765,7 @@ Tests use temporary file databases migrated from checked-in SQL; do not bypass m
 
 ### 13.3 Desktop fake-provider browser golden path
 
-The final serial Playwright flow uses isolated migrated data and no network model/image calls:
+The final serial Playwright flow uses isolated initialized MongoDB data and no network model/image calls:
 
 1. Open `/admin/agents`; verify the local-only warning, active manager, and all seven active skill slots.
 2. Open the seeded `intake_readiness@1` specialist history and fork it.
@@ -794,8 +785,9 @@ Focused Playwright assertions also cover keyboard operation, visible focus, long
 
 | Command | Required proof |
 | --- | --- |
-| `npm run db:generate` | Generated migration matches the intended schema; no destructive rewrite of existing tables/data. |
-| `npm run db:migrate` | Configured local database upgrades; repeat reports no pending failure. |
+| `npm run db:setup` | Required collections and compatible named indexes exist; exact repeat succeeds. |
+| `npm run db:init` | Deterministic runtime-agent defaults and complete coverage exist; exact repeat succeeds. |
+| `npm run db:verify` | Structure, references, assets, and active-agent coverage validate. |
 | Focused Vitest commands | Each phase’s new contracts/services/runtime/UI cases pass. |
 | `npm run typecheck` | Strict TypeScript, Server/Client serialization, and action/runtime contracts pass. |
 | `npm run lint` | Full repository lint passes. |
@@ -820,8 +812,8 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 
 | Requirement | Phases | Direct implementation/evidence |
 | --- | --- | --- |
-| AM-001 | 1–4 | Three tables, contracts, repository/service and migration tests. |
-| AM-002 | 1 | Checked-in migration, stable manifest, fresh/upgrade/coverage assertions. |
+| AM-001 | 1–4 | Three collections, contracts, repository/service and initialization tests. |
+| AM-002 | 1 | Deterministic defaults, stable manifest, fresh/repeat/coverage assertions. |
 | AM-003 | 2 | Create form/action/service tests and browser create flow. |
 | AM-004 | 2 | Draft edit/fork transactions, lineage/concurrency tests, history UI. |
 | AM-005 | 4 | Confirm/activate/retire/delete matrix and browser actions. |
@@ -831,7 +823,7 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 | AM-009 | 3 | QualityService same-resolver/specialist test. |
 | AM-010 | 3–6 | Existing schemas/services/fixtures/golden path; no admin-authored tools/state authority. |
 | AM-011 | 3–5 | No-cache fresh lookup tests for edit/activation and in-flight snapshot. |
-| AM-012 | 1, 3, 5 | Nullable schema migration plus success/failure/history/legacy evidence tests. |
+| AM-012 | 1, 3, 5 | Attribution fields plus success/failure/history evidence tests. |
 | AM-013 | 3, 5 | Persisted factory config; removed env overrides; DB-backed preflight/smoke. |
 | AM-014 | 3–6 | Existing integration suite and activated-specialist full fake browser flow to PDF. |
 | AM-015 | 7 | Pure view-model unit tests, focused agent-admin browser evidence, and unchanged lifecycle/fake-booklet regressions. |
@@ -840,7 +832,7 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 
 | PRD acceptance item | Required proof |
 | --- | --- |
-| Empty and representative prior migration | `agent-migration.test.ts` plus final checked-in SQL inspection. |
+| Fresh and repeated initialization | `mongodb-foundation.test.ts` plus final named-index inspection. |
 | Active manager + seven specialists, no duplicates | Seed manifest/coverage query assertions and admin coverage screenshot. |
 | Lifecycle, branches, guards, replacement, conflicts, concurrent activation | `agent-management.test.ts` matrix and focused browser actions. |
 | Stage-valid manager and matching specialist | Extended manager contracts and agent fixtures. |
@@ -858,7 +850,7 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 | Requirement-to-slice and acceptance traceability | Sections 12–14. |
 | Proposed data model and constraints | Section 7. |
 | API/route and service contracts | Sections 8 and 10; internal Server Actions are the mutation API. |
-| Seed/migration specification | Sections 3.6 and 7.2. |
+| Seed/initialization specification | Sections 3.6 and 7.2. |
 | Admin UI states/interactions | Section 10. |
 | Runtime selection/failure modes | Sections 8.4 and 9. |
 | Verification matrix/browser golden path | Section 13. |
@@ -870,8 +862,8 @@ This PRD does not justify paid reruns or rewrites. At the final checkpoint, veri
 
 | Risk | Control/recovery | Intentionally not added |
 | --- | --- | --- |
-| Migration damages a local database | Additive checked-in migration; executable checkpointed backup with hash/readability manifest; fresh/prior tests; explicit restore protocol; inspect SQL before run. | Down-migration UI, remote backup service. |
-| Seed prompt drifts from current behavior | Test-only manifest copies current complete prompts; migrated row equality and all fixture regressions. | Runtime fallback to TypeScript defaults. |
+| Initialization encounters incompatible resident state | Named-index verification, exact seed comparison, fail-safe setup, and focused conflict tests. | Automatic destructive repair. |
+| Seed prompt drifts from current behavior | Test-only manifest copies current complete prompts; seeded document equality and all fixture regressions. | Runtime fallback to TypeScript defaults. |
 | Active change leaves a slot uncovered | Partial uniqueness + transactional post-state coverage calculation + conflict tests. | Priority/assignment engine. |
 | Concurrent operator overwrites state | Integer revisions and observed slot IDs; compare-and-swap transaction; actionable reload conflict. | Distributed locks/multi-user coordination. |
 | Active draft edit changes historical meaning | Freeze resolved object and snapshot every attempted call. | Per-booklet pinning. |
@@ -887,7 +879,7 @@ Before claiming Issue #12 implementation-ready for human verification, produce a
 
 - [x] All AM-001–AM-014 rows have scope-matched passing evidence.
 - [x] Every automated acceptance row in Section 14.1 is proven.
-- [x] Fresh and prior migration paths preserve data and create exact seeded coverage.
+- [x] Fresh and repeated initialization creates exact seeded coverage without conflicts.
 - [x] Every lifecycle transition/guard and concurrent activation behavior is proven.
 - [x] Fake and real adapter seams both require a resolved configuration; automated tests make no paid call.
 - [x] Manager, selected specialist, and direct quality review use fresh persisted resolution.
@@ -919,7 +911,7 @@ Do not mark human acceptance, close Issue #9/#12/#13, merge, or delete branches 
 At implementation completion:
 
 - `docs/architecture.md` describes database-backed prompt ownership, the new persistence/service/resolver boundaries, per-invocation sequence, quality path, evidence snapshot, admin boundary, and extension steps as verified current behavior.
-- `README.md` documents migration-before-preflight setup, current environment variables, the local-only Agents page, safe agent-version workflow, model availability check, failure recovery, and links to the agent PRD/plan/issues.
+- `README.md` documents setup-before-preflight order, current environment variables, the local-only Agents page, safe agent-version workflow, model availability check, failure recovery, and links to the agent PRD/plan/issues.
 - The accepted agent-management PRD keeps its approved requirement wording and has a fully evidenced implementation tracker.
 - This plan has verified phase/traceability/audit status and a concise decision log, not a diary.
 - `LESSONS-LEARNED.md` changes only if `capture-project-learnings` identifies a reusable observation supported by code/tests/runtime evidence.
@@ -931,7 +923,7 @@ After explicit approval:
 
 - Treat this plan as implementation authority subordinate to the approved PRD. Its approval authorizes coherent phase commits, pushes on the approved working branch, and the progress/evidence comments required by Section 4; do not pause for a separate authorization at each phase boundary.
 - Correct factual file/API details from the current worktree or version-matched primary sources when scope/behavior is unchanged; record material corrections in the decision log and Issue #12.
-- Return to the user before changing product scope, lifecycle semantics, exact coverage, provider support, auth posture, destructive migration strategy, or required verification.
+- Return to the user before changing product scope, lifecycle semantics, exact coverage, provider support, auth posture, destructive persistence behavior, or required verification.
 - Do not weaken tests/requirements, add production infrastructure, or substitute a smaller end state because it is easier to implement.
 - Revise future phases after each verified checkpoint, but never rewrite completed evidence or approved requirements to match an implementation shortcut.
 

@@ -34,7 +34,7 @@ The root responsibilities are:
 | Workflow | `lib/application/` | Context building, routing orchestration, validation, persistence, approvals, quality gates, generation and export. |
 | Jobs | `lib/jobs/` | Startup recovery, sequential execution bootstrap, and safe diagnostics. |
 | Image pipeline | `lib/images/`, `lib/composition/` | Provider seam, prompt serialization, image calls, and geometry-only normalization. |
-| Persistence | `db/` | Official MongoDB driver, typed repositories, indexes, initialization, verification, and legacy SQLite import. |
+| Persistence | `db/` | Official MongoDB driver, typed repositories, indexes, initialization, and verification. |
 
 ## Artifact and decision flow
 

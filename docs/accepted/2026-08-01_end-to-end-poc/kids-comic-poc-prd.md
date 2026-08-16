@@ -1,12 +1,10 @@
 # Product Requirements Document: Kids Booklet End-to-End POC
 
 **Status:** Canonical implementation specification
-**Version:** 2.3
-**Date:** 2026-08-15
+**Version:** 2.4
+**Date:** 2026-08-16
 **Language:** English
 **Initial runtime:** Local, single-user web application
-
-**Persistence addendum:** [`../2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md`](../2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md) supersedes this document's libSQL/SQLite runtime requirements for issue #14. All unrelated product, workflow, agent, asset, and verification requirements remain authoritative.
 
 ## 1. Product summary
 
@@ -511,8 +509,8 @@ Separate reviewer agents per artifact, configurable rule engines, and repair-unt
 | Conversation UI | Vercel AI SDK UI | Known `useChat`/`UIMessage` transport and typed data-part contract. |
 | Agent runtime | OpenAI Agents SDK for TypeScript using its native OpenAI provider | Function tools, structured outputs, bounded runs, and tracing without an extra model abstraction. |
 | Validation | Zod v4 | Shared runtime contracts for skills, cards, artifacts, APIs, and configuration. |
-| Persistence | Drizzle ORM, `@libsql/client/node`, and local libSQL/SQLite | Simple local file storage with a remote-libSQL adaptation path. |
-| Migrations | drizzle-kit with checked-in migrations | Repeatable local setup without custom schema bootstrapping. |
+| Persistence | Official MongoDB Node.js driver with MongoDB Atlas | Typed repositories, replica-set transactions, conditional updates, and managed persistence. |
+| Database initialization | Checked-in collection and index definitions with deterministic seeds | Repeatable setup without an ODM or generated schema layer. |
 | Binary assets | Filesystem `AssetStore` | Local simplicity behind a replaceable interface. |
 | Image client | Official OpenAI JavaScript SDK calling the Image API | Supported core image generation/edit path behind `ImageProvider`. |
 | Composition | Sharp geometry-only normalization | Preserve exact page geometry and source/final lineage without drawing text or panels. |
@@ -537,7 +535,7 @@ flowchart TB
     WF --> RUN[Persistent in-process task runner]
     RUN --> IP[Configured ImageProvider]
     IP --> OAI[OpenAI Image API]
-    RUN --> DB[(libSQL / SQLite)]
+    RUN --> DB[(MongoDB Atlas)]
     RUN --> FS[Filesystem AssetStore]
     RUN --> CMP[Sharp geometry normalization]
     CMP --> PDF[pdf-lib assembly]
@@ -552,13 +550,13 @@ flowchart TB
 
 ### 11.3 Local operation and hosted adaptation
 
-The default local database is `DATABASE_URL=file:./data/booklets.db`, opened with `@libsql/client/node`. The default binary root is `DATA_ROOT=./data/assets`. The local `./data` tree is excluded from version control and contains generated assets, intermediate images, PDFs, and non-secret engineering evidence.
+The application database is configured through `MONGODB_URI` and `MONGODB_DATABASE` and accessed with the official MongoDB Node.js driver. The default binary root is `DATA_ROOT=./data/assets`. The local `./data` tree is excluded from version control and contains generated assets, intermediate images, PDFs, and non-secret engineering evidence.
 
 The application shall use standard `next dev` and `next start` processes, without a custom Next.js server. A Node-runtime-only conditional import from `instrumentation.ts` shall start one guarded in-process runner when the server starts. The bootstrap shall be idempotent across development reloads, resume persisted incomplete jobs, and process work sequentially by default. It shall start the loop without blocking server readiness.
 
 The UI shall poll persisted job/item state approximately once per second only while an image or export job is active, and stop after a terminal state. This simple polling applies to background-job progress; chat turns use the AI SDK UI SSE contract.
 
-For a later single-instance internal demo, the same application must remain deployable as a persistent Node server/container. Database and asset access stay behind small interfaces so remote libSQL and S3-compatible storage can replace local implementations if required. Implementing hosted infrastructure is not a POC deliverable.
+For a later single-instance internal demo, the same application must remain deployable as a persistent Node server/container. Database and asset access stay behind small interfaces so deployment configuration and S3-compatible storage can evolve without changing workflow services. Implementing hosted application or asset infrastructure is not a POC deliverable.
 
 Serverless and Edge deployment targets, multiple application instances, distributed job ownership, and a separate worker process are outside the POC hosting contract.
 
@@ -588,7 +586,8 @@ OPENAI_REVIEW_MODEL=gpt-5.6-sol
 OPENAI_REVIEW_REASONING=medium
 OPENAI_IMAGE_MODEL=gpt-image-2
 OPENAI_IMAGE_QUALITY=disabled
-DATABASE_URL=file:./data/booklets.db
+MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0
+MONGODB_DATABASE=kids_booklet
 DATA_ROOT=./data/assets
 ```
 
@@ -601,7 +600,7 @@ Implementation references:
 - [GPT Image 2 model](https://developers.openai.com/api/docs/models/gpt-image-2)
 - [AI SDK UI streaming custom data](https://ai-sdk.dev/docs/ai-sdk-ui/streaming-data)
 - [Next.js instrumentation](https://nextjs.org/docs/app/guides/instrumentation)
-- [Drizzle SQLite/libSQL setup](https://orm.drizzle.team/docs/get-started/sqlite-new)
+- [MongoDB Node.js driver](https://www.mongodb.com/docs/drivers/node/current/)
 
 ## 12. Public schemas and data rules
 
@@ -629,7 +628,7 @@ Versioned Zod schemas are required for:
 - **DATA-009:** Provider-specific request/result fields shall remain namespaced; shared status, usage, cost, and error fields shall be normalized.
 - **DATA-010:** Model-produced objects shall validate before becoming a visible artifact/card or starting dependent work.
 - **DATA-011:** Structured documents that do not need relational querying may be stored as validated JSON text; images, fonts, and PDFs shall remain outside the database.
-- **DATA-012:** The Drizzle repository layer shall hide the libSQL driver from workflow, route, UI, and agent code without introducing a generic repository framework.
+- **DATA-012:** The repository layer shall hide the MongoDB driver and `_id` storage detail from workflow, route, UI, and agent code without introducing a generic repository framework.
 - **DATA-013:** The following compound writes shall be transactional: artifact version plus current pointer; approval plus workflow advancement; job plus its generation items; and completed generation item plus its asset record.
 - **DATA-014:** A submitted `CardResponse.responseId` shall be used for duplicate-submit protection across retries and reloads.
 - **DATA-015:** Stable character and location IDs shall connect Story Plan concepts, Visual Bible definitions, Page Packages, relevant image references, and generated-asset lineage.
@@ -668,7 +667,7 @@ No detailed startup transition algorithm, provider-side polling mechanism, fixed
 ## 14. Deliverables
 
 1. Runnable local Next.js/TypeScript source, committed npm lockfile, Node engine declaration, and validated environment template.
-2. Drizzle schema, drizzle-kit configuration, checked-in repeatable migrations, local data-root setup, and seeded visual styles/fonts.
+2. MongoDB document/index definitions, repeatable setup and initialization, local data-root setup, and seeded visual styles/fonts.
 3. OpenAI manager, runtime skill registry, seven required skill modules, prompts, and Zod contracts.
 4. AI SDK UI conversation transport, four card families, typed variants, and finite React renderer registry.
 5. OpenAI Image API adapter plus generic provider interface/extension documentation.
@@ -679,7 +678,7 @@ No detailed startup transition algorithm, provider-side polling mechanism, fixed
 10. Setup/run guide and architecture/user-flow diagrams.
 11. Three retained evaluation PDFs with non-secret run data and concise findings for coherence, age fit, continuity, composition, cost, latency, and failures.
 
-The repository shall provide these npm scripts: `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:generate`, `db:migrate`, and `seed`.
+The repository shall provide these npm scripts: `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:setup`, `db:init`, `db:verify`, and `seed`.
 
 Gemini/BFL adapters, hosted deployment, provider comparison runs, and production operations are optional later work and do not block POC completion.
 
@@ -791,7 +790,7 @@ A critical defect is blocked completion/download, a missing or duplicated page, 
 - Desktop Chromium is the only client acceptance target; mobile-specific and cross-browser support are excluded.
 - The application uses Route Handlers, AI SDK UI SSE for chat, and active-job database polling for background progress.
 - Page generation is sequential in one persistent local runner started through Node-only `instrumentation.ts`; there is no custom server or separate worker.
-- Local persistence uses Drizzle, `@libsql/client/node`, a file database, and filesystem assets behind small interfaces.
+- Persistence uses the official MongoDB driver and MongoDB Atlas, while filesystem assets remain behind a small interface.
 - OpenAI agents use the native provider; the beta AI SDK model adapter and optional AI SDK UI stream bridge are not core dependencies.
 - PDF is the only required user-facing export.
 - Cost is recorded but does not trigger an application-enforced spending cap.
