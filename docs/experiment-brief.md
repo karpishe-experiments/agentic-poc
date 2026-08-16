@@ -1,6 +1,6 @@
 # Experiment brief: End-to-end kids booklet POC
 
-This brief summarizes the experiment. The canonical, detailed requirements are in [`accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md`](accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md) and take precedence if this summary is incomplete or ambiguous.
+This brief summarizes the experiment. The canonical, detailed requirements are in [`accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md`](accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md), with the approved [`accepted/2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md`](accepted/2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md) governing persistence migration conflicts. Those sources take precedence if this summary is incomplete or ambiguous.
 
 ## Experiment
 
@@ -45,7 +45,7 @@ A creator starts or resumes a locally persisted booklet from Home. In the worksp
 
 ## Technical constraints
 
-Use the stack and exact boundaries specified by the canonical PRD: a strict TypeScript monolith using Next.js App Router, React, Tailwind CSS, shadcn/ui, OpenAI Agents SDK, Vercel AI SDK UI, Zod, Drizzle with local libSQL/SQLite, filesystem assets, Sharp, and `pdf-lib`. Use Vitest for focused tests and Playwright-bundled desktop Chromium for the golden path. Keep OpenAI sufficient for the core flow and preserve only lightweight provider and hosting seams required by the PRD.
+Use the stack and exact boundaries specified by the canonical PRD and persistence addendum: a strict TypeScript monolith using Next.js App Router, React, Tailwind CSS, shadcn/ui, OpenAI Agents SDK, Vercel AI SDK UI, Zod, the official MongoDB Node.js driver with MongoDB Atlas, filesystem assets, Sharp, and `pdf-lib`. Retain libSQL/SQLite only in the one-time migration utility. Use Vitest with an isolated in-memory MongoDB replica set for focused tests and Playwright-bundled desktop Chromium for the golden path. Keep OpenAI sufficient for the core flow and preserve only lightweight provider and hosting seams required by the PRD.
 
 ## Risks and open decisions
 

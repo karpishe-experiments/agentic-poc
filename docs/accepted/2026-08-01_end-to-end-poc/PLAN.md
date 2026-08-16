@@ -6,6 +6,8 @@
 
 **Authoritative PRD:** [`kids-comic-poc-prd.md`](kids-comic-poc-prd.md)
 
+**Persistence migration addendum:** Issue #14 is governed by the approved [`../2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md`](../2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md) and its separate [`../2026-08-15_mongodb-atlas-migration/PLAN.md`](../2026-08-15_mongodb-atlas-migration/PLAN.md) once explicitly approved. Those documents supersede this plan's SQLite implementation steps only for that migration; completed historical evidence and unrelated application requirements remain unchanged.
+
 **Prepared:** 2026-08-01
 
 **Implementation target:** one uninterrupted, long-running coding-agent session

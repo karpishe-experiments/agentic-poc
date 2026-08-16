@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { createDefaultSkillRegistry } from "@/lib/skills/default-registry";
 import { FakeModelRuntime } from "@/lib/testing/fake-model-runtime";
@@ -32,7 +32,7 @@ export class ManagerService {
   private readonly resolver: AgentResolver;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; runtime?: Pick<FakeModelRuntime, "route"> | Pick<OpenAIManagerRuntime, "route">; specialistRuntime?: SpecialistRuntime; runtimeMode?: "fake" | "real"; resolver?: AgentResolver } = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.runtimeMode = dependencies.runtimeMode ?? (process.env.MODEL_RUNTIME === "real" ? "real" : "fake");
     this.runtime = dependencies.runtime ?? (this.runtimeMode === "real" ? new OpenAIManagerRuntime(createDefaultSkillRegistry()) : new FakeModelRuntime());

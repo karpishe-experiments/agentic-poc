@@ -1,10 +1,12 @@
 # Product Requirements Document: Kids Booklet End-to-End POC
 
 **Status:** Canonical implementation specification
-**Version:** 2.2
-**Date:** 2026-08-01
+**Version:** 2.3
+**Date:** 2026-08-15
 **Language:** English
 **Initial runtime:** Local, single-user web application
+
+**Persistence addendum:** [`../2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md`](../2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md) supersedes this document's libSQL/SQLite runtime requirements for issue #14. All unrelated product, workflow, agent, asset, and verification requirements remain authoritative.
 
 ## 1. Product summary
 

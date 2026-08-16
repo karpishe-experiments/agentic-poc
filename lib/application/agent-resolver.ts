@@ -1,4 +1,4 @@
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { effectiveAgentConfigurationSnapshotSchema, agentVersionConfigurationSchema, type AgentVersion, type EffectiveAgentConfigurationSnapshot } from "@/lib/contracts/agents";
 import type { SkillId } from "@/lib/contracts/skills";
@@ -31,8 +31,8 @@ export class AgentResolver {
   private readonly repositories: Repositories;
   private readonly registry: SkillRegistry;
   public constructor(dependencies: { database?: Database; repositories?: Repositories; registry?: SkillRegistry } = {}) {
-    const database = dependencies.database ?? (dependencies.repositories ? null : createDatabase());
-    this.repositories = dependencies.repositories ?? createRepositories(database!);
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
+    this.repositories = dependencies.repositories ?? createRepositories(database);
     this.registry = dependencies.registry ?? createDefaultSkillRegistry();
   }
 

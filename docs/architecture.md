@@ -14,7 +14,7 @@ flowchart TB
   MGR --> SPEC[One bounded specialist]
   SPEC --> CHAT
   CHAT --> ART[Artifact and approval services]
-  ART --> DB[(SQLite through Drizzle repositories)]
+  ART --> DB[(MongoDB through official-driver repositories)]
   CHAT --> JOB[Persisted sequential jobs]
   JOB --> IMG[ImageProvider and prompt serializer]
   IMG --> FS[Filesystem AssetStore]
@@ -34,7 +34,7 @@ The root responsibilities are:
 | Workflow | `lib/application/` | Context building, routing orchestration, validation, persistence, approvals, quality gates, generation and export. |
 | Jobs | `lib/jobs/` | Startup recovery, sequential execution bootstrap, and safe diagnostics. |
 | Image pipeline | `lib/images/`, `lib/composition/` | Provider seam, prompt serialization, image calls, and geometry-only normalization. |
-| Persistence | `db/` | Drizzle schema, repositories, migration, and seed registration. |
+| Persistence | `db/` | Official MongoDB driver, typed repositories, indexes, initialization, verification, and legacy SQLite import. |
 
 ## Artifact and decision flow
 
@@ -67,7 +67,7 @@ The manager agent receives only those eligible skills as function tools. Its per
 
 ### Specialist
 
-Before a material call, `AgentResolver` reads one complete active SQLite snapshot: one manager plus one specialist for each registered skill. It freezes the resolved manager/specialists for that invocation, so an activation affects only later calls. After routing, the application selects the frozen specialist for the selected skill, validates its input, and invokes it with the persisted version's configuration. The generic specialist receives the skill ID, stage, operation, intent, validated skill input, known facts, recent messages, and approved artifact-version IDs. It returns the code-owned structured output envelope.
+Before a material call, `AgentResolver` reads one complete active MongoDB transaction snapshot: one manager plus one specialist for each registered skill. It freezes the resolved manager/specialists for that invocation, so an activation affects only later calls. After routing, the application selects the frozen specialist for the selected skill, validates its input, and invokes it with the persisted version's configuration. The generic specialist receives the skill ID, stage, operation, intent, validated skill input, known facts, recent messages, and approved artifact-version IDs. It returns the code-owned structured output envelope.
 
 Specialists cannot write workflow state, issue approvals, access arbitrary tools, or create durable entity/page IDs. Their result is transient until an application service validates, materializes, and persists it. This is an application-controlled handoff, not a free-form SDK handoff:
 
@@ -100,7 +100,7 @@ Runtime skills in `lib/skills/` are unrelated to `.agents/skills/`. The latter a
 
 ## Prompt ownership
 
-Runtime prompts are versioned SQLite records, not environment variables or standalone prompt files. The checked-in migration seeds the current manager and seven specialist defaults; runtime never falls back to those TypeScript seed values. `/admin/agents` is the trusted-local-only lifecycle surface. Its Server Component performs one snapshot read and passes only serializable coverage, definition, version, and skill-choice data to a client controller. Pure view-model helpers derive slot/agent/version selection; focused form, version-workspace, and native-dialog components reuse the existing Server Actions for creation, draft editing, confirmation, replacement activation, retirement, and eligible draft deletion.
+Runtime prompts are versioned MongoDB documents, not environment variables or standalone prompt files. Idempotent initialization seeds the current manager and seven specialist defaults; runtime never falls back to those TypeScript seed values. `/admin/agents` is the trusted-local-only lifecycle surface. Its Server Component performs one transaction snapshot read and passes only serializable coverage, definition, version, and skill-choice data to a client controller. Pure view-model helpers derive slot/agent/version selection; focused form, version-workspace, and native-dialog components reuse the existing Server Actions for creation, draft editing, confirmation, replacement activation, retirement, and eligible draft deletion.
 
 - `db/agent-defaults.ts` holds the migration-verification seed manifest only; it is not a runtime fallback.
 - `lib/agents/manager.ts` and `lib/agents/specialist.ts` receive persisted names, instructions, models, and reasoning settings, while retaining code-owned tools, output schemas, and turn constraints.

@@ -6,6 +6,7 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 - Node.js 24 recommended (Node 22 minimum)
 - npm
+- A MongoDB replica set, or a MongoDB Atlas project and cluster
 - An OpenAI account and API key with access to the configured models and available API billing credits for retained evaluations
 - Poppler for PDF visual inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
 
@@ -13,11 +14,13 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 
 1. Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY`.
 2. Install dependencies: `npm install`.
-3. Before upgrading an existing local database, stop the development server and create a verified backup: `npm run db:backup`.
-4. Create or upgrade local tables and seed active runtime agents: `npm run db:migrate`.
-5. Validate credentials and the migrated active-model configuration: `npm run preflight`.
-6. Register the bundled visual styles and Nunito font: `npm run seed`.
-7. Start the app: `npm run dev`, then visit `http://localhost:3000`.
+3. Set `MONGODB_URI` and `MONGODB_DATABASE`. For Atlas provisioning and migration, follow the [Atlas migration runbook](docs/accepted/2026-08-15_mongodb-atlas-migration/ATLAS-RUNBOOK.md).
+4. Create collections and indexes: `npm run db:setup`.
+5. Seed deterministic runtime agents: `npm run db:init`.
+6. Register bundled visual assets and fonts: `npm run seed`.
+7. Verify structure, references, and active-agent coverage: `npm run db:verify`.
+8. Validate credentials and active-model configuration: `npm run preflight`.
+9. Start the app: `npm run dev`, then visit `http://localhost:3000`.
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
@@ -37,7 +40,9 @@ If the browser reports a failed chunk or cannot read a response after local code
 | `dev`, `build`, `start` | Run the Next.js application. |
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
 | `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
-| `db:generate`, `db:backup`, `db:migrate`, `seed` | Generate migrations, create a verified local backup, migrate the local database, and register checked-in seed assets. |
+| `db:setup`, `db:init`, `db:verify` | Create/verify MongoDB structure, seed defaults, and validate integrity. |
+| `db:import:sqlite -- --source <path> --target-database <name> --confirm-writes-stopped` | Back up and import one stopped SQLite database into MongoDB with reconciliation evidence. |
+| `seed` | Idempotently register checked-in visual assets in MongoDB. |
 | `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
 Automated commands never make paid model or image calls. The workspace defaults to deterministic fake model and image providers; real-provider work is limited to the explicit evaluation workflow. The workspace exposes an Evidence JSON link for the selected booklet, and each successful PDF export persists the same summary under the local data root.
@@ -67,11 +72,11 @@ The application uses an application-controlled agent handoff: a stage-filtered m
 
 `/admin/agents` is an unauthenticated, trusted-local-only backoffice. Its slot rail shows the required manager plus seven specialist slots; selecting a slot opens a focused read-only workspace for its logical agents, version history, technical details, and valid lifecycle actions. Use **New Agent** for a blank inactive draft or **Edit Draft** for deliberate changes, then confirm and activate a reviewed replacement. Destructive actions stay in the workspace’s Danger Zone. On narrow screens, the complete slot rail stacks above the workspace. Do not expose this page on a network.
 
-Text-agent instructions and model settings are versioned SQLite data after migration; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
+Text-agent instructions and model settings are versioned MongoDB data; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
 
 ## Local data and project references
 
-Runtime state lives under `data/` and is intentionally Git-ignored. Removing it is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
+Database state lives in MongoDB. Filesystem assets remain under `data/` and are intentionally Git-ignored. Removing either is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
 
 - [Experiment brief](docs/experiment-brief.md)
 - [Current architecture](docs/architecture.md)
@@ -79,6 +84,8 @@ Runtime state lives under `data/` and is intentionally Git-ignored. Removing it 
 - [Accepted implementation plan](docs/accepted/2026-08-01_end-to-end-poc/PLAN.md)
 - [Agent-management PRD](docs/accepted/2026-08-15_database-backed-agent-management/database-backed-agent-management-prd.md)
 - [Agent-management implementation plan](docs/accepted/2026-08-15_database-backed-agent-management/PLAN.md)
+- [MongoDB Atlas migration PRD](docs/accepted/2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md)
+- [MongoDB Atlas migration implementation plan](docs/accepted/2026-08-15_mongodb-atlas-migration/PLAN.md)
 - [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)
 - [Verified lessons](docs/accepted/2026-08-01_end-to-end-poc/LESSONS-LEARNED.md)
 - [Implementation issue #6](https://github.com/karpishe-experiments/agentic-poc/issues/6)

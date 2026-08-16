@@ -1,4 +1,4 @@
-import { createDatabase } from "@/db/client";
+import { getDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { GenerationService } from "@/lib/application/generation-service";
 import { toErrorEnvelope } from "@/lib/http/errors";
@@ -10,7 +10,7 @@ type RouteProperties = { params: Promise<{ jobId: string }> };
 export async function POST(_request: Request, { params }: RouteProperties) {
   try {
     const { jobId } = await params;
-    const database = createDatabase();
+    const database = getDatabase();
     const repositories = createRepositories(database);
     const job = await repositories.jobs.getStatus(jobId);
     if (!job) return Response.json({ error: { code: "job_not_found", message: "This generation job was not found." } }, { status: 404 });

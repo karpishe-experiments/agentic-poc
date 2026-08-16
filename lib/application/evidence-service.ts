@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
@@ -12,8 +12,8 @@ export class EvidenceService {
   private readonly dataRoot?: string;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; assets?: AssetStore } = {}) {
-    const database = dependencies.database ?? (dependencies.repositories ? null : createDatabase());
-    this.repositories = dependencies.repositories ?? createRepositories(database!);
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
+    this.repositories = dependencies.repositories ?? createRepositories(database);
     this.assets = dependencies.assets;
     this.dataRoot = dependencies.assets ? undefined : resolveDataRoot(getServerEnv());
   }

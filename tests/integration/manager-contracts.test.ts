@@ -1,10 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { createRepositories } from "@/db/repositories";
 import { BookletService } from "@/lib/application/booklet-service";
 import { isTypedWorkflowRecovery } from "@/lib/application/chat-service";
@@ -14,15 +11,13 @@ import type { SkillContext } from "@/lib/contracts/skills";
 import { FakeModelRuntime } from "@/lib/testing/fake-model-runtime";
 import { createDefaultSkillRegistry } from "@/lib/skills/default-registry";
 
-const databases: Array<ReturnType<typeof createDatabase>> = [];
+const databases: Database[] = [];
 
-afterEach(() => databases.splice(0).forEach((database) => database.$client.close()));
+afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 async function createFixture() {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "kids-manager-contracts-"));
-  const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+  const database = await createTestDatabase();
   databases.push(database);
-  await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
   const booklet = await new BookletService({ database }).create({ idea: "Robin shares rainwater." });
   return { database, booklet };
 }

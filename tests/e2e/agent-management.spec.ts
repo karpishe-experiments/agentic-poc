@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { eq } from "drizzle-orm";
-import { createDatabase } from "@/db/client";
-import { agentVersions } from "@/db/schema";
+import { createMongoDatabase } from "@/db/client";
+
+function e2eDatabase() {
+  const uri = process.env.MONGODB_URI; const databaseName = process.env.MONGODB_DATABASE;
+  if (!uri || !databaseName) throw new Error("The e2e MongoDB configuration is missing.");
+  return createMongoDatabase({ uri, databaseName });
+}
 
 const slotLabels = ["Manager", "Intake Readiness", "Story Planning", "Story Quality", "Visual Direction", "Booklet Specification", "Page Planning", "Image Prompts"];
 
@@ -131,9 +135,9 @@ test("guards dirty workspace changes and uses contextual lifecycle dialogs", asy
 });
 
 test("keeps corrupt coverage inspectable and repairs a missing active slot", async ({ page }) => {
-  const database = createDatabase();
-  await database.update(agentVersions).set({ isActive: false }).where(eq(agentVersions.id, "00000000-0000-4000-8000-00000000b101"));
-  database.$client.close();
+  const database = e2eDatabase();
+  await database.collections.agent_versions.updateOne({ _id: "00000000-0000-4000-8000-00000000b101" }, { $set: { isActive: false } });
+  await database.close();
 
   await page.goto("/admin/agents");
   const slots = page.getByRole("navigation", { name: "Runtime Slots" });
@@ -151,9 +155,9 @@ test("keeps corrupt coverage inspectable and repairs a missing active slot", asy
 
 test("shows an empty slot without hiding the creation path", async ({ page }) => {
   const imagePromptVersionId = "00000000-0000-4000-8000-00000000b107";
-  const database = createDatabase();
-  await database.update(agentVersions).set({ isActive: false, skillId: "intake_readiness@1" }).where(eq(agentVersions.id, imagePromptVersionId));
-  database.$client.close();
+  const database = e2eDatabase();
+  await database.collections.agent_versions.updateOne({ _id: imagePromptVersionId }, { $set: { isActive: false, skillId: "intake_readiness@1" } });
+  await database.close();
 
   try {
     await page.goto("/admin/agents");
@@ -164,9 +168,9 @@ test("shows an empty slot without hiding the creation path", async ({ page }) =>
     await expect(page.getByText(/Create an inactive draft, then activate a valid version/)).toBeVisible();
     await expect(page.getByRole("region", { name: "No Agent Candidates" }).getByRole("button", { name: "New Agent" })).toBeVisible();
   } finally {
-    const restoreDatabase = createDatabase();
-    await restoreDatabase.update(agentVersions).set({ isActive: true, skillId: "image_prompt_compilation@1" }).where(eq(agentVersions.id, imagePromptVersionId));
-    restoreDatabase.$client.close();
+    const restoreDatabase = e2eDatabase();
+    await restoreDatabase.collections.agent_versions.updateOne({ _id: imagePromptVersionId }, { $set: { isActive: true, skillId: "image_prompt_compilation@1" } });
+    await restoreDatabase.close();
   }
 });
 

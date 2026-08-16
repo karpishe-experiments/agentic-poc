@@ -1,7 +1,3 @@
-import { mkdtemp } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it } from "vitest";
 import { BookletService, type Clock, type IdGenerator } from "@/lib/application/booklet-service";
 import { ChatService, isTypedWorkflowRecovery } from "@/lib/application/chat-service";
@@ -10,15 +6,14 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import type { GenerationService } from "@/lib/application/generation-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { BOOKLET_ARTIFACT_TYPES } from "@/lib/contracts/domain";
 
-const temporaryDatabases: Array<ReturnType<typeof createDatabase>> = [];
+const temporaryDatabases: Database[] = [];
 
-afterEach(() => {
-  temporaryDatabases.splice(0).forEach((database) => database.$client.close());
-});
+afterEach(async () => { await Promise.all(temporaryDatabases.splice(0).map(closeTestDatabase)); });
 
 function deterministicIds(): IdGenerator {
   let value = 100;
@@ -30,11 +25,9 @@ function deterministicIds(): IdGenerator {
   };
 }
 
-async function createServices(clock: Clock): Promise<{ database: ReturnType<typeof createDatabase>; bookletService: BookletService; chatService: ChatService; cardService: CardService }> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "kids-booklet-integration-"));
-  const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+async function createServices(clock: Clock): Promise<{ database: Database; bookletService: BookletService; chatService: ChatService; cardService: CardService }> {
+  const database = await createTestDatabase();
   temporaryDatabases.push(database);
-  await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
   return {
     database,
     bookletService: new BookletService({ database, ids: deterministicIds(), clock }),
@@ -43,7 +36,7 @@ async function createServices(clock: Clock): Promise<{ database: ReturnType<type
   };
 }
 
-async function approvePagePlanWithoutStartingGeneration(database: ReturnType<typeof createDatabase>, bookletId: string) {
+async function approvePagePlanWithoutStartingGeneration(database: Database, bookletId: string) {
   const artifacts = new ArtifactService({ database });
   const characterId = "00000000-0000-4000-8000-000000000961";
   const pages = Array.from({ length: 4 }, (_, pageIndex) => ({
@@ -442,11 +435,11 @@ describe("BookletService", () => {
     const issue = turn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!issue || issue.type !== "data-card") throw new Error("Expected a quality issue card.");
     const accepted = await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000954", cardId: issue.data.cardId, action: "accept_with_issue" });
-    const review = await database.$client.execute({ sql: "select accepted_at_ms from quality_reviews where booklet_id = ?", args: [booklet.id] });
+    const review = await database.collections.quality_reviews.findOne({ bookletId: booklet.id });
 
     expect(turn.assistantMessage.parts).toContainEqual(expect.objectContaining({ type: "data-card", data: expect.objectContaining({ family: "issue", variant: "quality" }) }));
     expect(accepted).toMatchObject({ followupRequired: false });
-    expect(review.rows[0]?.accepted_at_ms).not.toBeNull();
+    expect(review?.acceptedAtMs).not.toBeNull();
     expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);
   });
 });

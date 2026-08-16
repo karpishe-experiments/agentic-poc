@@ -273,3 +273,21 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Evidence:** `components/admin/agents/agent-action-dialog.tsx`, `components/admin/agents/agent-version-workspace.tsx`, and `components/admin/agents/agent-admin.tsx`; focused Chromium tests prove Save, Confirm, activation, retirement, creation, and fork results reach the workspace banner and preserve deterministic selection. The full 116-test suite and eight browser scenarios passed on 2026-08-15.
 - **Promotion target:** React/Next.js implementation guidance.
 - **Status:** Candidate.
+
+### Serialize operations that share a MongoDB transaction session
+
+- **Context:** Official MongoDB Node.js driver repositories read or update several collections inside one transaction.
+- **Observation:** Running `Promise.all` operations with the same `ClientSession` produced transaction-number conflicts in a single-node replica set; the same reads succeeded when awaited sequentially.
+- **Guidance:** Never parallelize driver operations that share one transaction session. Await each operation in order inside `withTransaction`; parallelize only independent work outside that session.
+- **Evidence:** `db/agent-repository.ts` performs snapshot and lifecycle reads sequentially. `tests/integration/agent-management.test.ts` verifies concurrent edits, forks, activation, repair, and deletion; the full 127-test suite passed against `MongoMemoryReplSet` on 2026-08-16.
+- **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+
+### Treat SQLite migration input as immutable and migrate only a working copy
+
+- **Context:** A one-time importer must support databases at either checked-in SQLite migration state while preserving rollback evidence on Windows.
+- **Observation:** Applying pending migrations directly would alter the source, and libSQL can retain a short-lived Windows file handle after close. Copying the source first preserved its hash; cleanup of the disposable working copy needed bounded `EBUSY` tolerance.
+- **Guidance:** Hash and back up the source, apply schema upgrades only to a disposable working copy, import stable IDs without rewriting the source, verify the source hash again, and make working-copy cleanup non-fatal after bounded retries. Never add an overwrite mode for conflicting target identities.
+- **Evidence:** `scripts/import-sqlite-to-mongodb.ts` and `tests/integration/sqlite-mongodb-migration.test.ts` verify both migration states, exact and partial reruns, target conflict rejection, pre-write source validation, redacted reports, WAL handling, and unchanged source identities.
+- **Promotion target:** Documentation.
+- **Status:** Candidate.

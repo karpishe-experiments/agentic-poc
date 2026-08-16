@@ -32,7 +32,7 @@ For the kids booklet POC, use this precedence when sources conflict:
 3. Prototype and other research material.
 4. Generic skill guidance.
 
-The canonical PRD is `docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md`. The prototype and `prototype/docs/ui-design-plan.md` are research inputs only; do not carry conflicting prototype assumptions such as voice input, a fixed six-page book, inventory-based characters, multi-panel layouts, or mobile-specific scope into the implementation plan.
+The canonical PRD is `docs/accepted/2026-08-01_end-to-end-poc/kids-comic-poc-prd.md`. For persistence work under issue #14, the approved addendum `docs/accepted/2026-08-15_mongodb-atlas-migration/mongodb-atlas-migration-prd.md` supersedes conflicting libSQL/SQLite requirements while leaving all other canonical requirements intact. The prototype and `prototype/docs/ui-design-plan.md` are research inputs only; do not carry conflicting prototype assumptions such as voice input, a fixed six-page book, inventory-based characters, multi-panel layouts, or mobile-specific scope into the implementation plan.
 
 Apply a skill only where it supports the requested POC scope. Do not add production hardening, infrastructure, abstractions, or polish solely because a skill recommends them.
 
@@ -69,7 +69,7 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 
 ## Implementation planning
 
-Before implementation begins, locate and read the canonical implementation plan identified by the active PRD or project-management issue and obtain user approval. Do not create a second plan when an approved canonical plan already exists. For the Kids Booklet POC, the canonical implementation plan is `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md`.
+Before implementation begins, locate and read the canonical implementation plan identified by the active PRD or project-management issue and obtain user approval. Do not create a second plan when an approved canonical plan already exists. For the original Kids Booklet POC, the canonical implementation plan is `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md`. Persistence migration work under issue #14 is governed instead by `docs/accepted/2026-08-15_mongodb-atlas-migration/PLAN.md` once that plan is explicitly approved.
 
 The plan must:
 

@@ -1,20 +1,15 @@
-import { mkdtemp } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterEach, describe, expect, it } from "vitest";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { BookletService, type Clock, type IdGenerator } from "@/lib/application/booklet-service";
 import { CardService } from "@/lib/application/card-service";
-import { createDatabase } from "@/db/client";
+import type { Database } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
+import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 
-const temporaryDatabases: Array<ReturnType<typeof createDatabase>> = [];
+const temporaryDatabases: Database[] = [];
 
-afterEach(() => {
-  temporaryDatabases.splice(0).forEach((database) => database.$client.close());
-});
+afterEach(async () => { await Promise.all(temporaryDatabases.splice(0).map(closeTestDatabase)); });
 
 function deterministicIds(): IdGenerator {
   let value = 700;
@@ -22,10 +17,8 @@ function deterministicIds(): IdGenerator {
 }
 
 async function createServices(clock: Clock) {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "kids-booklet-artifact-"));
-  const database = createDatabase(`file:${path.join(directory, "booklets.db")}`);
+  const database = await createTestDatabase();
   temporaryDatabases.push(database);
-  await migrate(database, { migrationsFolder: path.join(process.cwd(), "db", "migrations") });
   return { database, booklets: new BookletService({ database, ids: deterministicIds(), clock }), artifacts: new ArtifactService({ database }) };
 }
 
@@ -100,11 +93,8 @@ describe("ArtifactService", () => {
     const storyV1 = await artifacts.revise(booklet.id, "story_plan", story);
     await artifacts.approve(booklet.id, "story_plan", storyV1.currentVersion!.id);
 
-    const dependencyRows = await database.$client.execute({
-      sql: "select upstream_version_id from artifact_dependencies where downstream_version_id = ?",
-      args: [storyV1.currentVersion!.id],
-    });
-    expect(dependencyRows.rows.map((row) => row.upstream_version_id)).toEqual([audienceV1.currentVersion!.id]);
+    const dependencyRows = await database.collections.artifact_dependencies.find({ downstreamVersionId: storyV1.currentVersion!.id }).toArray();
+    expect(dependencyRows.map((row) => row.upstreamVersionId)).toEqual([audienceV1.currentVersion!.id]);
 
     now += 1_000;
     const audienceV2 = await artifacts.revise(booklet.id, "audience_profile", { ...audience, tone: "Gentle and curious" });

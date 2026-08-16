@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { pagePlanSchema, parseArtifactDocument, storyPlanSchema, visualBibleSchema, type ArtifactDetail } from "@/lib/contracts/artifacts";
@@ -20,7 +20,7 @@ export class ArtifactService {
   private readonly repositories: Repositories;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories } = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
   }
 

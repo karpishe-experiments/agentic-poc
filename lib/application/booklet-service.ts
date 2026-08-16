@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { validateUIMessages } from "ai";
-import { createDatabase, type Database } from "@/db/client";
+import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import {
   createBookletRequestSchema,
@@ -44,7 +44,7 @@ export class BookletService {
   private readonly clock: Clock;
 
   public constructor(dependencies: BookletServiceDependencies = {}) {
-    const database = dependencies.database ?? createDatabase();
+    const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.ids = dependencies.ids ?? systemIds;
     this.clock = dependencies.clock ?? systemClock;
