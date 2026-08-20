@@ -10,38 +10,34 @@ Kids Booklet is a local, single-user experiment that guides a creator from a rou
 - An OpenAI API key with access to the configured models
 - Optional: Poppler for PDF inspection (`winget install --id oschwartz10612.Poppler --exact` on Windows)
 
-## First-time setup
+## Quick start
 
-1. Install dependencies: `npm install`.
-2. Copy `.env.example` to `.env.local`.
-3. Ask the project maintainer for the required values and configure `.env.local`:
+The shared MongoDB database is already initialized. From a fresh clone:
 
-```text
+```powershell
+git clone https://github.com/karpishe-experiments/agentic-poc.git
+cd agentic-poc
+npm install
+Copy-Item .env.example .env.local
+```
+
+Ask the project maintainer for the credentials, then set these values in `.env.local`:
+
+```dotenv
 OPENAI_API_KEY=...
 MONGODB_URI=...
-MONGODB_DATABASE=...
+MONGODB_DATABASE=kids_booklet
 ```
 
-Keep `.env.local` untracked. Developers do not provision MongoDB as part of local application setup.
+Keep `.env.local` untracked, then start the app:
 
-Initialize the application data once:
-
-```text
-npm run db:setup
-npm run db:init
-npm run seed
-npm run db:verify
-```
-
-These commands are safe to repeat and reject incompatible indexes or conflicting deterministic seed records.
-
-## Run locally
-
-```text
+```powershell
 npm run dev
 ```
 
-Open `http://localhost:3000`. The development command runs preflight first, so MongoDB must be reachable and `OPENAI_API_KEY` must be valid even when fake providers are selected.
+Open `http://localhost:3000`. The development command runs preflight first, so MongoDB must be reachable and the API key must access the configured models even when fake providers are selected.
+
+On macOS or Linux, use `cp .env.example .env.local` instead of `Copy-Item`.
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
@@ -52,6 +48,20 @@ For real images during interactive development, set `IMAGE_PROVIDER_MODE=real`; 
 If the browser reports a failed chunk or cannot read a response after local code changes, use **Reload workspace** first; saved booklet data is not affected. If that does not resolve it, stop only the affected development server, delete only its `.next/dev` cache, run `npm.cmd run build`, and restart `npm.cmd run dev`. Do not delete `data/` or retained evaluation output as part of this recovery.
 
 For MongoDB connection failures, check the Atlas IP access list, database-user credentials, and complete connection string. Transaction errors mean the configured deployment is not a replica set. Run `npm run db:verify` after correcting the connection.
+
+For an Atlas `mongodb+srv://` URI, `MONGODB_DATABASE` is a logical database name such as `kids_booklet`, not the Atlas hostname. If Node times out resolving the Atlas SRV record while the individual cluster hosts resolve, use the standard `mongodb://` driver connection string supplied by Atlas.
+
+## Initialize a new database
+
+This is a maintainer task and is not part of normal developer setup. After pointing `.env.local` at a new MongoDB database, run:
+
+```powershell
+npm run db:init
+npm run seed
+npm run db:verify
+```
+
+`db:init` creates the required structure and default runtime agents; `seed` registers the bundled visual styles and font assets; `db:verify` validates the resulting data. These commands are safe to repeat and reject incompatible indexes or conflicting deterministic seed records.
 
 ## Commands
 
