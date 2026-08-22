@@ -1,0 +1,4 @@
+interface:
+  display_name: Sync Docs and Issues
+  short_description: Align canonical docs and issue evidence with a diff
+  default_prompt: Use $sync-docs-issues to reconcile this verified change.
