@@ -4,6 +4,7 @@
 
 **Prepared:** 2026-08-22  
 **Implementation plan:** [`PLAN.md`](PLAN.md)  
+**Current-code review:** [`CHANGE-SURFACE-REPORT.md`](CHANGE-SURFACE-REPORT.md)
 **Task guidance:** [`task-guidelines/`](task-guidelines/)
 
 ## 1. Product summary
