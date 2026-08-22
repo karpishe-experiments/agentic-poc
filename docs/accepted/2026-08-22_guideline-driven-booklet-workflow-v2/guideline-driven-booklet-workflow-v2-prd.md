@@ -1,199 +1,162 @@
 # Guideline-Driven Booklet Workflow v2 PRD
 
-**Status:** Draft based on the approved v2 implementation plan; requires explicit PRD approval before runtime implementation.
+**Status:** Draft; requires explicit approval before runtime implementation.
 
-**Prepared:** 2026-08-22  
-**Implementation plan:** [`PLAN.md`](PLAN.md)  
+**Prepared:** 2026-08-23
+
+**Implementation plan:** [`PLAN.md`](PLAN.md)
 **Current-code review:** [`CHANGE-SURFACE-REPORT.md`](CHANGE-SURFACE-REPORT.md)
-**Task guidance:** [`task-guidelines/`](task-guidelines/)
+**Workflow orchestration:** [`task-guidelines/00-booklet-workflow-orchestration.md`](task-guidelines/00-booklet-workflow-orchestration.md)
 
 ## 1. Product summary
 
-Guideline-Driven Booklet Workflow v2 is the default workflow for newly created Kids Booklet projects. It turns a creator’s free-form idea into an approved, print-aware illustrated children’s book through a sequence of typed, persistent, creator-approved artifacts.
+Guideline-Driven Booklet Workflow v2 turns a creator's free-form book idea into an approved, downloadable illustrated children's book through a clear sequence of typed, persistent artifacts. Each task has one paired artifact guideline. The single exception is the orchestration guideline, which controls sequencing, specialist selection, context handoff, revision routing, and approval gates rather than producing an artifact.
 
-The workflow replaces the planning path for new booklets, not the historical data model for existing work. Existing eight-stage booklets continue as `legacy`; they are neither migrated nor altered. New booklets use `guided-v2` and retain the project’s existing local-first TypeScript, MongoDB, OpenAI, filesystem-asset, recovery, evidence, and PDF-export foundations.
-
-The workflow must demonstrate that bounded specialists can apply the supplied task guidelines while deterministic application services retain authority over artifacts, approvals, identifiers, image jobs, asset records, and stage transitions.
+New booklets use `guided-v2`. Existing booklets retain the `legacy` workflow and are not migrated, deleted, or altered. The application remains responsible for durable state, IDs, versioning, approvals, jobs, asset records, filenames, stage transitions, and export execution; specialists create structured artifact drafts only.
 
 ## 2. Goals and non-goals
 
-### 2.1 Goals
+### Goals
 
-1. Guide a creator from a raw book idea to an approved, downloadable illustrated booklet through explicit, reviewable artifacts.
-2. Preserve the supplied guideline documents verbatim as the durable source of task intent.
-3. Provide one bounded, versioned MongoDB-backed specialist for every guideline task and one additional Final Page Bible specialist.
-4. Keep story, cast, location, style, page text, and image-reference decisions consistent across the complete booklet.
-5. Let the creator choose one-at-a-time or batch final-page image generation, while retaining per-page review and approval.
-6. Generate final page text natively in the page image from an approved Page Bible; never add copy as a post-generation overlay.
-7. Require explicit creator-triggered PDF export only after every final physical page is approved.
-8. Preserve legacy booklets and their runtime agents without migration, deletion, deactivation, or data loss.
+1. Turn a creator's initial input into an approved booklet through a coherent narrative, visual-reference, layout, page-production, and export workflow.
+2. Keep the first narrative pass concise, then expand it into a complete page-by-page, scene-by-scene manuscript that is readable as a non-illustrated storybook.
+3. Use draft Character and Location Lists as a working memory before manuscript writing, then replace them with approved Final Character and Final Location Lists after manuscript approval.
+4. Require an approved Visual Style Package before any character or location sheet is generated.
+5. Produce and individually approve a Character Sheet for every recurring character and a Location Sheet for every final-list location.
+6. Lock a consistent page system, including canvas, typography, and speech/thought-bubble direction, before creating the Final Page Bible.
+7. Require an approved Page Bible before final page generation, preserving page-level review in both one-by-one and batch modes.
+8. Allow explicit export only after all physical pages are individually approved.
+9. Support retrospective revisions by returning to the correct owning specialist and marking only affected downstream work as needing review.
+10. Add all new agent definitions and skills to MongoDB without deleting or altering existing records.
 
-### 2.2 Non-goals
+### Non-goals
 
-- Editing or rewriting the copied guideline contents.
-- Migrating legacy booklets into `guided-v2`.
-- Deleting, retiring, or replacing existing MongoDB agent records.
-- Authentication, collaboration, public publishing, payments, commercial printing integrations, or production operations.
-- Arbitrary print sizes beyond the application’s current three supported geometries.
-- User-uploaded reference images, generic asset libraries, manual image compositing, OCR correction, or post-generation text overlays.
-- Automatic PDF export, automatic approval, or automatic retry of failed paid image work.
+- Migrating, deactivating, or editing legacy booklets or their existing MongoDB records.
+- Automatic approval, automatic export, automatic paid-image retries, or post-generation text overlays.
+- User-uploaded image references, generic asset libraries, collaboration, publishing, payments, commercial-printing integrations, or production hardening.
+- Allowing a specialist to persist data, assign durable IDs, approve artifacts, execute jobs, name assets, or transition stages.
 
-## 3. Source precedence
+## 3. Product rules
 
-For `guided-v2`, apply sources in this order:
+### 3.1 Clarification and approval
 
-1. Explicit creator decisions captured through typed cards.
-2. This approved PRD and its approved implementation plan.
-3. The copied task guideline applicable to the current task.
-4. The copied artifact-structure document.
-5. Legacy POC documents, only for retained platform behavior and compatibility.
+- Every specialist first reviews approved inputs and relevant chat context.
+- Before its first draft, it asks concise questions for material gaps or offers bounded creative options where the creator left a consequential choice open.
+- It must not repeat questions already answered in the approved artifacts or chat context.
+- Every artifact begins as **Draft awaiting approval**. The creator's explicit approval is required before its downstream gate can advance.
 
-Where the guideline documents conflict with each other, the following project decisions apply:
+### 3.2 Revisions
 
-- The outline-derived Character List and manuscript-derived Character List are separate tasks.
-- The World / Setting Guide runs before the Required Locations List.
-- Batch final-page generation creates unapproved drafts; every page is still reviewed and approved separately.
-- PDF generation is an explicit application action, not a specialist decision.
+- A revision goes to the specialist that owns the earlier artifact.
+- The application creates a new version and displays affected downstream artifacts, sheets, pages, and exports as needing review.
+- A sheet review that changes a stable character/location fact also revises the corresponding Final List entry before the sheet is regenerated.
+- Final Page Bible and Final Page Illustration revisions are scoped to the affected physical page unless an upstream shared source changes.
+
+### 3.3 Source hierarchy
+
+For `guided-v2`, resolve conflicts in this order:
+
+1. Explicit creator decisions captured in approved artifacts or current chat context.
+2. This approved PRD and approved implementation plan.
+3. The paired task guideline.
+4. The orchestration guideline.
+5. Legacy POC documents, only for retained platform behavior.
 
 ## 4. Creator workflow
 
-New booklets use the following fixed ordered flow. Every artifact begins as a draft, is revisionable, and advances only after the creator approves the current version or required scoped items.
+| Order | Artifact | Specialist task | Approval / completion rule |
+| ---: | --- | --- | --- |
+| 1 | Book Concept Brief | `book_concept_brief@1` | Captures audience, premise, theme, tone, constraints, and deferred decisions. |
+| 2 | Story Outline | `story_outline@1` | Concise story skeleton with its embedded shortlist of main/supporting characters and key places. |
+| 3 | Draft Character List | `draft_character_list@1` | Working cast memory derived from the outline; no detailed design. |
+| 4 | Draft Location List | `draft_location_list@1` | Working place memory derived from the outline; no visual-location design. |
+| 5 | Page-by-Page Manuscript | `page_by_page_manuscript@1` | Complete child-facing page/scene story with narration, dialogue, action, required characters, and locations. |
+| 6 | Final Character List | `final_character_list@1` | Complete production cast source: identity/role, background, age/life stage, physical description, attire, accessories, recurrence, and sheet requirement. |
+| 7 | Final Location List | `final_location_list@1` | Complete production place source: title, basic description, stable anchors, features, continuity, and sheet requirement. |
+| 8 | Visual Style Package | `visual_style_package@1` | Approved art direction, typography/bubble direction, unchanged shared style prompt module, and validation samples. |
+| 9 | Individual Character Sheet Packages | `individual_character_sheet_package@1` | One approved sheet per final-list recurring character or explicitly requested additional character. |
+| 10 | Location Sheet Packages | `location_sheet_package@1` | One approved sheet per Final Location List entry. |
+| 11 | Pagination & Layout Plan | `pagination_layout_plan@1` | Fixed canvas, page architecture, aspect ratio, typography/font and bubble system, panel/image counts, text-safe areas, and sheet routing. |
+| 12 | Final Page Bible | `final_page_bible@1` | Exact per-physical-page action, composition, panel/image requirements, sheet references, readable text, and bubbles. |
+| 13 | Final Page Illustration Packages | `final_page_illustration_package@1` | One reviewable, approved, natively lettered final image and build record for each physical page. |
+| 14 | Book Export Package | `book_export_package@1` | Approved page manifest and preflight record; application creates the final downloadable export only on the creator's explicit request. |
 
-| Order | Artifact | Specialist task | Completion rule |
-| --- | --- | --- | --- |
-| 1 | Book Concept Brief | Book Concept Brief | Creator approves a concise concept with audience, premise, constraints, and deferred decisions. |
-| 2 | Story Outline | Story Outline | Creator approves causal narrative beats and emotional arc. |
-| 3 | Outline Character List | Outline Character List | Creator approves the early story-relevant cast record. |
-| 4 | Page-by-Page Manuscript | Page-by-Page Manuscript | Creator approves child-facing manuscript text and per-page story requirements. |
-| 5 | Manuscript Character List | Manuscript Character List | Creator approves the manuscript-derived cast and package routing. |
-| 6 | Visual Style Package | Visual Style Package | Creator approves the style definition, immutable shared prompt module, and validation samples. |
-| 7 | Individual Character Packages | Individual Character Package | Every routed recurring character has an approved profile, module, sheet, and build record. |
-| 8 | World / Setting Guide | World / Setting Guide | Creator approves stable reusable setting facts. |
-| 9 | Required Locations List | Required Locations List | Creator approves manuscript-derived location routing. |
-| 10 | Location Definition Packages | Location Definition Package | Every routed recurring location has an approved profile, module, sheet, and build record. |
-| 11 | Pagination & Layout Plan | Pagination & Layout Plan | Creator approves physical-page order, canvas, live-text area strategy, and source routing. |
-| 12 | Final Page Bible | Final Page Bible | Creator approves exact text, form, speaker, hierarchy, and placement for each physical page. |
-| 13 | Final Page Illustrations | Final Page Illustration Package | Every physical page has an approved final natively lettered image and reproducible build record. |
-| 14 | PDF Export | Application-owned export | Creator explicitly starts export after all final pages are approved. |
+The Draft Character List and Draft Location List form one sequential planning gate after the outline; their records may be drafted in either order. The Final Character List and Final Location List form one post-manuscript production-source gate and may be drafted in either order. Character and Location Sheet Packages may be generated in parallel after Visual Style approval, but every required sheet must be approved before Pagination & Layout Plan approval.
 
-The UI must render the stage rail, current stage, artifact views, cards, and route validation from the booklet’s workflow version. Legacy booklets retain the legacy stage rail and APIs.
+## 5. Artifact contracts
 
-## 5. Artifact and approval requirements
+Every artifact is versioned and records its source artifact versions, structured content, draft/approval state, approval provenance, and applicable scoped review status.
 
-### 5.1 General artifact rules
+- **Book Concept Brief:** faithful source input; audience; premise; theme/emotional promise; tone; representation, safety, and content constraints; deferred decisions.
+- **Story Outline:** concise causal story; embedded main/supporting character shortlist; key places; major action; resolution; open decisions.
+- **Draft Character / Location Lists:** working memory only. They support manuscript creation and are superseded by final lists after manuscript approval.
+- **Page-by-Page Manuscript:** prose, dialogue, scene/action, required characters, and locations for each narrative unit; expanded-list notes; no physical page or final-art constraints.
+- **Final Character List:** stable identifier/name or role, narrative function, pages/scenes, background, age/life stage, physical description, acting/personality notes, attire/accessories, recurrence, and Character Sheet requirement.
+- **Final Location List:** stable ID/title, pages/scenes, purpose, basic description, stable anchors, required features, continuity, and Location Sheet requirement.
+- **Visual Style Package:** style definition; typography/bubble direction; canonical shared Style Prompt Module; 2–4 validation samples; assembled prompt records; approval record.
+- **Character Sheet Package:** profile, attire/accessory and expression requirements, character-specific module, assembled build record, sheet asset, and approval/version record. Its sheet includes full-body front/back/side views, a detailed neutral face, and three defined expression shots.
+- **Location Sheet Package:** profile, stable anchors, location-specific module, assembled build record, sheet asset, and approval/version record. Its sheet includes an isometric overview and multiple surrounding-angle views.
+- **Pagination & Layout Plan:** trim/orientation/aspect/working pixels/bleed/live-text margins; font and text/bubble system; book architecture; page/panel allocation; text-safe strategy; and character/location sheet routing.
+- **Final Page Bible:** a complete production entry per physical page and panel/image: story action, composition, exact text, text form, speaker, placement, typography/bubble treatment, and sheet references.
+- **Final Page Illustration Package:** page-specific composition brief, selected asset references and roles, native-text prompt/build record, candidate/approved asset lineage, per-page review, and approval.
+- **Book Export Package:** source page manifest, export settings, preflight, delivered PDF/output asset, and delivery record.
 
-- Every artifact is a versioned MongoDB record with immutable prior versions, explicit upstream version dependencies, state, and approval provenance.
-- Agents may return validated structured proposals only. Application code assigns all durable IDs, persists content, creates jobs and assets, validates dependencies, and derives stages.
-- Revising an approved upstream artifact marks affected downstream artifacts as needing review; no downstream image job runs against stale dependencies.
-- Typed review cards present the material decision, revision path, and recovery path. Free-form agent prose is not authoritative state.
-- Character and location packages are collections of individually addressable entries. A one-off character or location remains page-level information unless the approved routing requires a reusable package.
+## 6. Specialist and MongoDB seed requirements
 
-### 5.2 New structured artifacts
+The existing manager remains the sole manager. It receives only stage-eligible specialist tools and chooses the correct specialized task from the artifact graph and chat context. Each of the fourteen artifact tasks has one MongoDB-backed specialist definition:
 
-The application must define Zod contracts and deterministic materializers for all `guided-v2` artifacts. At minimum, each contract records the source artifacts, approval state, human-readable content, and structured fields required by downstream services.
+```text
+book_concept_brief@1
+story_outline@1
+draft_character_list@1
+draft_location_list@1
+page_by_page_manuscript@1
+final_character_list@1
+final_location_list@1
+visual_style_package@1
+individual_character_sheet_package@1
+location_sheet_package@1
+pagination_layout_plan@1
+final_page_bible@1
+final_page_illustration_package@1
+book_export_package@1
+```
 
-- **Book Concept Brief:** audience, faithful source prompt, premise, emotional arc, representation/safety constraints, tone, and deferred decisions.
-- **Story Outline and manuscript:** causal beats; required action, characters, setting, and reader-facing text by manuscript unit; no unapproved visual or layout details.
-- **Character and location records:** narrative role, recurrence, continuity need, routing, package identity, and approved package/source references.
-- **Visual Style Package:** style definition, immutable reusable style prompt module, diagnostic sample purposes, approved sample asset IDs, and sample build records.
-- **Character and Location Packages:** stable profile, local prompt module, exact assembled prompt, approved reference-sheet asset ID, source artifact versions, and approval/version record.
-- **Pagination & Layout Plan:** physical pages, story-to-physical-page mapping, geometry, working pixels, trim/bleed/live-text assumptions, page-turn purpose, and source-package routing.
-- **Final Page Bible:** exactly one entry per physical page with either the exact textual items or an explicit no-text decision. Each item records wording, text form, speaker when applicable, hierarchy, placement, and visual treatment.
-- **Final Page Illustrations:** per-page composition brief, selected reference assets and roles, final prompt record, generated candidate/final asset lineage, review results, and scoped page approval.
+The `book_export_package` specialist creates a structured manifest/preflight proposal. Deterministic application code, not the specialist, validates pages, generates the export file, persists the asset, and records delivery.
 
-## 6. Specialist and runtime requirements
+`db:seed-guideline-agents` must be additive and idempotent. It inserts or verifies only the fourteen deterministic `guided-v2` agent definitions, versions, and lifecycle records. It must never update, deactivate, retire, delete, or otherwise mutate existing MongoDB records.
 
-### 6.1 Bounded specialist model
+## 7. Final-page generation and export
 
-The existing manager remains the sole active manager. It receives only stage-eligible skill tools and must call exactly one eligible tool for a material turn. Each new task receives a specialist configuration persisted in MongoDB; schemas, tool bounds, fake behavior, application materialization, and stage transitions remain code-owned.
+### 7.1 Page generation
 
-The thirteen new specialist skills are:
+- The final image request uses the approved Page Bible entry, approved pagination entry, unchanged Style Prompt Module, and only relevant approved Character/Location Sheet assets.
+- The model generates all required narration, dialogue, balloons, titles, and diegetic text natively in the image. The application never adds a later text overlay.
+- The creator selects **page by page** or **batch** generation. Batch mode creates ordered draft candidates only; every page remains independently reviewable and approvable.
+- Every page asset uses an application-owned, stable sortable filename: `[booklet-slug]_page-[physical-page-3-digits]_r[revision-2-digits].png`.
+- An upstream revision blocks only affected pages from export and indicates whether they need revision or regeneration.
 
-1. `book_concept_brief@1`
-2. `story_outline@1`
-3. `outline_character_list@1`
-4. `page_by_page_manuscript@1`
-5. `manuscript_character_list@1`
-6. `visual_style_package@1`
-7. `individual_character_package@1`
-8. `world_setting_guide@1`
-9. `required_locations_list@1`
-10. `location_definition_package@1`
-11. `pagination_layout_plan@1`
-12. `final_page_bible@1`
-13. `final_page_illustration_package@1`
+### 7.2 Export
 
-Each initial specialist seed uses provider `openai`, model `gpt-5.6-terra`, medium reasoning effort, and a one-turn limit. Its versioned instruction must apply its paired guideline while obeying the shared application boundary: no direct persistence, no approvals, no stage changes, no invented durable IDs, no arbitrary tools, and no text outside its structured result.
+- Export is unavailable until every physical page has a current approval and passes preflight against the Pagination & Layout Plan.
+- The creator explicitly requests export after reviewing the Book Export Package.
+- The application produces the PDF/output in approved reading order, records the exact page manifest and export settings, and allows explicit retry if export fails without invalidating approved page art.
 
-### 6.2 Additive seed behavior
+## 8. Acceptance criteria
 
-- Add `db:seed-guideline-agents` as an idempotent additive command.
-- It inserts or verifies only the deterministic new definitions, confirmed active versions, and lifecycle events.
-- Existing manager/specialist definitions, versions, events, drafts, and custom records remain unchanged.
-- Verification requires exactly one active manager and exactly one active specialist for every registered legacy and `guided-v2` skill. Historical records remain valid.
+1. The task-guideline directory contains one orchestration guideline plus exactly fourteen artifact guidelines, with no duplicate standalone outline-character-list or world-setting task.
+2. The Story Outline contains a concise shortlist of main/supporting characters and key places; it is not a separate Character List artifact.
+3. Both draft lists are created after outline approval; the manuscript uses them as working memory and is a complete readable non-illustrated story.
+4. Final Character and Location Lists are created only from the approved manuscript and are the authoritative source for all sheet packages.
+5. Character Sheet Packages meet the required front/back/side, neutral face, three-expression, attire, and accessory requirements.
+6. Location Sheet Packages meet the required isometric overview and surrounding-angle requirements for every final-list location.
+7. Pagination locks canvas, typography/font, text/bubble system, panel/image allocation, and sheet routing before a Page Bible is created.
+8. The Page Bible contains a complete per-physical-page production source, and final pages cannot be generated without it.
+9. Both page-by-page and batch generation retain individual page review, approval, revision, asset lineage, and stable filenames.
+10. Export occurs only by explicit creator request after every current final page is approved.
+11. The orchestrator asks the correct specialist to clarify/draft/revise, and returns to the owning specialist for retrospective changes.
+12. The agent seed is repeatable and does not change or delete existing MongoDB records; legacy booklets retain their behavior.
 
-## 7. Image-generation requirements
+## 9. Implementation boundary
 
-### 7.1 Reference selection and prompt assembly
-
-Before generating a final page, the application must verify that the approved Page Bible, manuscript entry, pagination entry, visual style package, and all required character/location packages exist and are current.
-
-The Final Page Illustration specialist receives a constrained catalogue of only approved, eligible source assets and artifacts for each selected physical page. It selects the required character sheets, required location sheet, and only relevant optional style validation samples. Application code rejects:
-
-- missing required character or location packages;
-- assets not present in the eligible catalogue;
-- unrelated cast/location sheets;
-- more references than the provider’s supported limit;
-- a reference selection inconsistent with the page’s required subjects or setting.
-
-The final request must send the selected assets as actual image inputs. It must include the unchanged approved style module, the page-only composition brief, every Page Bible text item verbatim, its form and placement, and page-specific continuity constraints. The final image model must render all readable text natively; no later raster/PDF text overlay is allowed.
-
-### 7.2 Generation modes and reviews
-
-- The creator chooses **Generate this page** or **Generate selected pages** from a typed card.
-- Single-page mode creates one persisted job item and returns its candidate for review.
-- Batch mode creates a persisted ordered job for the selected pages. All candidates remain drafts until individually approved.
-- A failed item pauses the job. The creator may retry only that item, then explicitly continue the remaining queue. Restart recovery preserves completed candidates and restores interrupted work safely.
-- Draft candidates never become references for other draft pages. Approved pages may be used as continuity references only when the final-page guidance explicitly makes them relevant.
-- Each approved final page is immutable until the creator requests a targeted revision; revision creates a new candidate, build record, and page approval requirement.
-
-### 7.3 Quality gates
-
-The final-page review must make these checks visible: canvas dimensions, required story action, exact/legible text, text-safe composition, character continuity, location continuity, visual-style continuity, safety, prohibited additions, watermark/extra-text absence, and complete attachment/build-record lineage.
-
-## 8. PDF export requirements
-
-- Export is available only after every physical page in the Final Page Illustrations artifact has a current scoped approval.
-- Export preserves the Pagination & Layout Plan’s approved physical-page order and geometry.
-- The application records the source final-page artifact version, ordered page asset IDs, preflight checks, export status, PDF asset, and evidence summary.
-- Export failure does not invalidate approved page assets. The creator can retry export explicitly.
-
-## 9. Persistence, evidence, and recovery
-
-- `workflowVersion` is persisted on booklets. Existing records without the field normalize to `legacy`; new records are `guided-v2`.
-- Database documents remain MongoDB-driver managed and transactionally consistent within existing repository boundaries.
-- Every specialist call records its selected skill, model/provider, resolved agent definition/version, immutable configuration snapshot, trace/request identity, latency, usage, cost estimate or actual cost, and structured validation failure when relevant.
-- Every image request records its assembled prompt, selected reference IDs and roles, provider request identity, asset lineage, job/item status, and retry history without storing credentials or raw secret values.
-- Conversation cards, artifact drafts/approvals, image jobs, completed page candidates, and export records survive normal application restarts.
-
-## 10. Acceptance criteria
-
-The feature is complete only when all conditions below are demonstrated:
-
-1. Every copied guideline file is present at its documented destination and matches its source byte-for-byte; the final-page guideline matches the creator-provided text.
-2. A new booklet is created as `guided-v2`, while a pre-existing legacy booklet still resumes with its original artifact sequence and runtime agents.
-3. The manager selects only one stage-eligible specialist per material `guided-v2` turn, and traces identify the resolved persisted agent version.
-4. Every one of the thirteen specialist contracts has fake-runtime fixtures, routing coverage, and artifact/materialization coverage.
-5. All stage transitions require current upstream dependencies and explicit creator approval; package and final-page scoped approvals are enforced.
-6. The visual, character, and location package flows save their exact prompt modules, build records, approved assets, and replacement history.
-7. Final-page generation refuses missing/stale source packages and selects only relevant approved reference assets.
-8. Single-page and batch generation both work; batch output stays draft until every page is individually reviewed and approved.
-9. Final prompts contain exact approved Page Bible text and required attachment roles; generated text is never overlaid after generation.
-10. Failed image work supports selected retry, explicit continuation, and restart recovery without losing completed work.
-11. PDF export is unavailable before all final-page approvals and produces a correctly ordered readable PDF after explicit creator action.
-12. The additive agent seed is safe to run repeatedly and does not alter or delete pre-existing MongoDB records.
-13. Typecheck, lint, focused tests, agent fixtures, MongoDB verification, and desktop Playwright coverage pass. Three retained `guided-v2` evaluations produce rendered and inspected PDFs with trace, cost, and quality evidence.
-
-## 11. Implementation boundaries
-
-This PRD authorizes the behavior described above only after approval. It does not authorize removal of legacy data, use of real MongoDB credentials in a cloud environment, paid provider evaluations without an explicit cost report, merging a pull request, or closing the associated implementation issue without creator approval.
+This PRD defines a documentation-approved product direction only. Runtime implementation, database seeding, paid provider calls, external cloud execution, and changes to legacy records require an approved implementation plan and subsequent creator authorization.
