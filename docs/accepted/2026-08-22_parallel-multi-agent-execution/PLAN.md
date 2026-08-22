@@ -89,8 +89,31 @@ Register four production profiles in this PRD:
 
 1. openai-specialist version 1, compatible with every currently registered skill target. Its settings are the existing provider=openai, closed text model ID, reasoning effort, and maxTurns=1. Its canonical schemas come from the selected SkillDefinition.
 2. openai-image version 1, compatible with image:reference and image:page for generate and edit. Its closed catalog contains GPT Image 2 (`gpt-image-2`) and its current dated snapshot (`gpt-image-2-2026-04-21`). Settings are provider=openai, modelId, and quality=auto|low|medium|high. The adapter maps canonical geometry to OpenAI-supported pixel sizes and quality to the native control. It never sends the legacy input-fidelity option to GPT Image 2. Keep the existing application limit of eight source images.
-3. gemini-image version 1, compatible with both image targets for generate and edit. Its closed catalog contains `gemini-3.1-flash-image` as the fast/general model and `gemini-3-pro-image-preview` as the quality-oriented model. Settings are provider=google, modelId, and resolution=1K|2K|4K; only model-supported resolution/aspect-ratio combinations are selectable. The adapter maps canonical geometry to Gemini aspectRatio, sends imageSize with the required uppercase K, supplies references as inline image parts, requests image-only output, and normalizes the returned inline image bytes. Within the application's eight-reference ceiling, Flash enforces at most four character references; Pro enforces six total references, at most five character references, and at most three style references.
-4. flux-image version 1, compatible with both image targets for generate and edit. Its closed catalog contains the fixed `flux-2-pro` endpoint and `flux-2-flex`; preview, max, klein, dev, and legacy FLUX.1 endpoints remain out of scope. Settings are provider=bfl and modelId. The adapter maps canonical geometry to explicit width/height, supplies at most eight references as input_image fields, submits through native fetch, and accepts only an HTTPS polled result URL, then immediately normalizes it into retained image bytes.
+3. gemini-image version 1, compatible with both image targets for generate and edit. Its closed catalog contains `gemini-3.1-flash-image` as the fast/general model and the stable `gemini-3-pro-image` as the quality-oriented model. The former preview alias `gemini-3-pro-image-preview` is rejected by the closed catalog. Settings are provider=google, modelId, and resolution=1K|2K|4K; only model-supported resolution/aspect-ratio combinations are selectable. The adapter maps canonical geometry to `response_format.aspect_ratio`, sends the selected resolution as `response_format.image_size` with the required uppercase K, supplies references as ordered `input` image objects, requests image-only output, and normalizes the returned model-output image bytes. Within the application's eight-reference ceiling, Flash enforces at most four character references; Pro enforces six total references, at most five character references, and at most three style references.
+4. flux-image version 1, compatible with both image targets for generate and edit. Its closed catalog contains the fixed `flux-2-pro` endpoint and `flux-2-flex`; preview, max, klein, dev, and legacy FLUX.1 endpoints remain out of scope. Settings are provider=bfl and modelId. The adapter maps canonical geometry to explicit width/height and models at most eight ordered references as native `input_image` URL fields. Fake mode validates generate/edit mapping and normalization. In real mode, native fetch is enabled only when the canonical request has no image references or edit target; accepted HTTPS polled results are immediately normalized into retained image bytes.
+
+The gemini-image v1 native wire contract is fixed to `POST https://generativelanguage.googleapis.com/v1beta/interactions`, with `Content-Type: application/json` and the environment-only key in `x-goog-api-key`. The strict request body is:
+
+```json
+{
+  "model": "<closed modelId>",
+  "input": [
+    { "type": "text", "text": "<serialized prompt>" },
+    { "type": "image", "mime_type": "<accepted source MIME>", "data": "<base64 bytes>" }
+  ],
+  "response_format": {
+    "type": "image",
+    "mime_type": "image/png",
+    "aspect_ratio": "<closed canonical mapping>",
+    "image_size": "<1K|2K|4K>"
+  },
+  "store": false
+}
+```
+
+The `input` array contains the prompt first and zero or more deduplicated canonical references in their frozen order. The native input schema rejects unexpected keys, including camelCase `aspectRatio`/`imageSize`, legacy `generationConfig`, tools, and interaction chaining. The response must be a completed Interaction with `object="interaction"`, the requested closed `model`, and `steps`; the adapter walks documented step/content variants and normalizes the last `type="image"` content block from a `type="model_output"` step, matching the documented SDK `output_image` convenience semantics. That image requires non-empty base64 `data` and an accepted `mime_type`; no output image, nonterminal status, mismatched model, malformed base64, or text-only output fails the item before asset creation. Native fetch does not expect or read the SDK-only top-level `output_image` property. Exact serialized-request fixtures cover both closed models, every supported geometry/resolution mapping, and zero/ordered-reference inputs; exact response fixtures cover single- and multi-step completed Interactions, last-image selection, and each rejection case without a paid call.
+
+BFL documents FLUX.2 image inputs as provider-retrievable URLs, while this POC's AssetStore is filesystem-local. This plan therefore does not add a public asset route, tunnel, upload service, or signing configuration. CandidateExecutionService still validates MIME type, byte/pixel limits, reference count, deduplication, and deterministic ordering (edit target first, then canonical references) and proves `input_image` through `input_image_8` mapping with fake native fixtures. Before any real provider submission, a FLUX request containing a reference or edit target is runtime-ineligible with a safe explanation; no provider call or workflow mutation occurs. Enabling real FLUX image-input execution requires a separately approved public-delivery design and plan update. Native evidence stores only asset IDs, roles, hashes, and dimensions; local paths and fixture URLs are never persisted or logged.
 
 Keep existing typed columns as the settings storage instead of adding arbitrary settings JSON:
 
@@ -104,9 +127,9 @@ The profile registry assembles and parses the settings object from those fields.
 
 modelId remains a persisted string at the shared document boundary, but it is never free-form in the admin or runtime: every configuration validates against the selected profile's closed model catalog. Supporting another model is a code/profile catalog change with native-contract fixtures and capability tests.
 
-The implementation uses the existing OpenAI package for OpenAI and native server-side fetch for Gemini and BFL, so no provider SDK dependency is added. `GEMINI_API_KEY` and `BFL_API_KEY` are optional environment-only secrets. Admin capability checks show a non-secret credential-availability warning and block activation/start when the selected real provider key is missing; fake mode exercises every profile without provider keys. Keys, provider request bodies, and signed result URLs never enter agent settings, frozen snapshots, cards, or evidence payloads.
+The implementation uses the existing OpenAI package for OpenAI and native server-side fetch for Gemini and BFL, so no provider SDK dependency is added. `GEMINI_API_KEY` and `BFL_API_KEY` are optional environment-only secrets. Admin capability checks show a non-secret credential-availability warning and block activation/start when the selected real provider key is missing; real FLUX requests with any image input are additionally blocked by the fixed local-capability gate above. Fake mode exercises every profile without provider keys. Keys, provider request bodies, local asset paths, and signed provider result URLs never enter agent settings, frozen snapshots, cards, or evidence payloads.
 
-These model IDs and mappings are based on provider documentation reviewed on 2026-08-22: [OpenAI GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2), [Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation), [FLUX.2 overview](https://docs.bfl.ai/flux_2/flux2_overview), [FLUX.2 text-to-image](https://docs.bfl.ai/flux_2/flux2_text_to_image), and [FLUX.2 editing](https://docs.bfl.ai/flux_2/flux2_image_editing). The implementation phase must re-check these code-owned catalogs against the same official sources before enabling real calls; a changed or removed provider contract is a Phase 2 finding, not a reason for silent fallback.
+These model IDs and mappings are based on provider documentation reviewed on 2026-08-22: [OpenAI GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2), [Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation), the [Gemini Interactions API reference](https://ai.google.dev/api/interactions-api), the [stable Gemini 3 Pro Image model reference](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image), [FLUX.2 overview](https://docs.bfl.ai/flux_2/flux2_overview), [FLUX.2 text-to-image](https://docs.bfl.ai/flux_2/flux2_text_to_image), and [FLUX.2 editing](https://docs.bfl.ai/flux_2/flux2_image_editing). The implementation phase must re-check these code-owned catalogs and exact native contracts against the same official sources before enabling real calls; a changed or removed provider contract is a Phase 2 finding, not a reason for silent fallback.
 
 ### 3.3 Candidate-pool semantics
 
@@ -120,7 +143,7 @@ Normal data must satisfy:
 - every active candidate has a compatible registered profile; and
 - no retired version is active.
 
-Any active but malformed/incompatible row makes that target unavailable instead of being silently omitted. The recoverable error points to /admin/agents. Inactive or retired stale preferences are omitted from a ready card with an explanation.
+Any active but malformed/incompatible persisted configuration makes that target unavailable instead of being silently omitted. The recoverable error points to /admin/agents. Runtime availability is handled separately: in real image mode, a candidate whose required environment credential is missing, or a FLUX candidate whose request contains a reference/edit target unsupported by the local-only AssetStore, is ineligible for that card and is omitted with a safe explanation; the target is unavailable only when no eligible candidate remains. Inactive, retired, or runtime-ineligible stale preferences are omitted from a ready card with an explanation.
 
 Candidate activation is additive: activating a specialist/image version deactivates only another active version of the same logical agent. It never replaces a different logical agent in the pool. Manager activation remains an atomic replacement. Direct candidate deactivation is allowed only when another active compatible candidate remains. Retirement keeps its existing inactive-only rule and applies the same last-candidate guard.
 
@@ -130,10 +153,11 @@ Store selected logical-agent IDs, never version IDs, in one preference per bookl
 
 If a multi-candidate remembered team loses any member, do not offer the collapsed Run shortcut. Expand the refreshed choices, explain each omitted logical agent, and require the creator to submit a valid non-empty replacement team. The sole-candidate shortcut still applies when the current compatible pool itself has exactly one member.
 
-Each ready card carries a candidate-pool fingerprint made from target, active agent IDs, active version IDs, profile IDs/versions, and version revisions. Run submission recomputes it:
+Each ready card carries a candidate-pool fingerprint made from target, runtime mode, active agent IDs, active version IDs, profile IDs/versions, version revisions, and each candidate's non-secret eligibility state. Run submission first rebuilds the pool and credential/operation eligibility, including the fixed real-FLUX image-input gate, then recomputes the fingerprint before opening the preference/batch transaction:
 
-- an exact match freezes the selected versions and creates the batch;
-- a mismatch returns HTTP 409, updates the same card to a refreshed recoverable ready state, and does not change the preference, workflow, batch, or artifact state.
+- an exact match validates the private ready input, freezes the selected versions, replaces the preference when changed, and creates the batch in one transaction;
+- a pool, runtime-mode, credential-availability, or operation-eligibility mismatch returns HTTP 409, updates the same card to a refreshed recoverable ready state, and does not change the preference, workflow, batch, or artifact state; and
+- if no eligible candidate remains, the same preflight returns the recoverable configuration issue without creating a response claim or any workflow/execution row.
 
 When exactly one compatible candidate exists, the application bypasses selection and starts it automatically. It does not write a one-agent preference because the pool itself is authoritative; the completed card still records the candidate and implicit selection.
 
@@ -153,17 +177,21 @@ The payload contains only display-safe, bounded data:
 
 Do not embed image bytes, provider bodies, prompts, full snapshots, or unbounded evidence in cardJson/uiMessageJson. Full text result details are loaded from the validated execution item on demand; image previews use the existing asset response.
 
+Persist the validated pre-run input privately on the authoritative card row, outside cardJson/uiMessageJson: readyInputJson, readyInputSchemaVersion, readyWorkflowFingerprintJson, and nullable readyPreviousBatchId. Manager routing, direct quality, or GenerationService writes those fields in the same transaction that creates/refreshes the ready card. Run submission parses them, verifies that the workflow fingerprint is still current, copies the input/fingerprint/schema version into the new batch, and clears the ready-only fields in the same transaction. Thus a multi-candidate ready card can reload and run without another manager call or conversation reconstruction. Do not add a fourth collection for this transient ready state.
+
 Add optional Agent run provenance to ordinary review cards: summary/editable artifact reviews carry a sourceAgentRunCardId, and visual-gallery rows carry their item-level sourceAgentRunCardId. This lets the produced artifact or image row invoke Restart with agents without guessing from conversation order.
 
-Add actions run_agents, select_agent_result, retry_failed_agents, change_agents, and restart_with_agents. Change agents is a local expand/collapse control until Run is submitted. All mutations include responseId and expected card revision for idempotency/concurrency.
+Add actions run_agents, select_agent_result, retry_failed_agents, change_agents, and restart_with_agents. In `ready`, Change agents is a local expand/collapse control until Run is submitted. In `results`, `change_agents` is a persisted change-and-rerun transition available only after the current batch is terminal and before any result is selected or materialized. All mutations include responseId and expected card revision for idempotency/concurrency.
+
+For a results-state change-and-rerun, one transaction validates the card/batch relationship, terminal batch, current workflow fingerprint, no prior selection/materialization, response ID, and expected card revision; copies the batch's canonical input and schema version back into the card's private ready fields; recomputes the current workflow and candidate-pool fingerprints; stores the source batch ID in `readyPreviousBatchId`; moves the same card to `ready` with that batch retained in collapsed history; appends the action response; and updates the saved UI-message projection. It does not create a batch, replace the preference, or mutate workflow/artifact/asset state. The next `run_agents` submission validates the refreshed pool, persists the newly submitted team preference, creates the replacement batch with `previousBatchId=readyPreviousBatchId`, and clears all ready-only fields atomically. A stale workflow returns `execution_workflow_stale` without changing the card, preference, batch, or workflow.
 
 Unlike ordinary one-shot cards, Agent run actions do not mark the card submitted on every response. Add a repository operation that transactionally appends the action response, updates the cards row, and replaces the matching data-card part in the saved message projection. The card becomes submitted only after completed. The dedicated restart exception may update a submitted/superseded Agent run card back to active/ready and supersede the current ordinary decision card. There remains only one current workflow decision at a time.
 
-Starting a restart does not alter the current artifact or active image. Because cancellation is out of scope, a creator who deliberately restarts completes that recoverable run by selecting a success or retrying/changing its team.
+Starting a restart does not alter the current artifact or active image. Restart clones the source batch's canonical input and schema version so different agents receive the same task. It is an explicit revision command, not a new manager route, so normal current-stage routing eligibility is not reapplied. Before changing any card, ExecutionService instead verifies that the source batch target and subject match the provenance action, the source result still produces the current artifact version or active image for that subject, every recorded upstream dependency/version and referenced asset still exists and is current, and the closed target materializer still permits that revision. It then computes a fresh workflow fingerprint, writes the cloned input as the card's private ready input, records `readyPreviousBatchId`, and only then supersedes the current ordinary decision. When Run creates the replacement batch, `readyPreviousBatchId` becomes `previousBatchId` and is cleared with the other ready-only fields. If any check fails, execution_restart_stale returns a recoverable action to use the current workflow and leaves cards, artifacts, preferences, and batches unchanged. Because cancellation is out of scope, a creator whose restart reaches ready completes that recoverable run by selecting a success or retrying/changing its team.
 
 ### 3.6 Batch, item, and retry lifecycle
 
-The ready card exists before a batch. Run submission creates one execution batch and one execution item per selected logical agent.
+The ready card and its server-only validated ready input exist before a batch. Run submission atomically copies that input into one execution batch and creates one execution item per selected logical agent.
 
 Batch statuses are queued | running | results | materializing | completed. The card maps queued/running/materializing to running, while results and completed map directly. An all-failed batch remains results with only retry/change actions.
 
@@ -212,10 +240,11 @@ The batch freezes:
 
 - canonical input and schema/profile versions;
 - exact agent-version and profile snapshots;
+- `resultChoicePolicy: implicit_sole | explicit`, derived from the eligible pool rather than terminal success count;
 - a workflow fingerprint containing the current stage and relevant upstream/current artifact-version IDs; and
 - a deterministic materialization key/IDs.
 
-Result selection is accepted only when every item is terminal, the chosen item succeeded, no result was already selected, and the workflow fingerprint is still current. A stale workflow leaves results intact and changes the card to a recoverable restart state without workflow mutation.
+Result selection is accepted only when every item is terminal, the chosen item succeeded, no result was already selected, and the workflow fingerprint is still current. Implicit selection is permitted only when the batch's frozen `resultChoicePolicy` is `implicit_sole`, which Run may set only when the eligible pool itself contains exactly one compatible candidate and the batch contains that one item. Every batch created from a multi-candidate eligible pool freezes `resultChoicePolicy=explicit`, even if the creator selects only one agent. A multi-item batch never becomes implicit merely because only one succeeds; it remains in `results` so the creator may select that success, retry failed agents, or change agents and rerun. A stale workflow leaves results intact and changes the card to a recoverable restart state without workflow mutation.
 
 Materialization is a durable idempotent command:
 
@@ -267,7 +296,7 @@ For the current generation item:
 3. A sole image candidate auto-starts; multiple candidates use the remembered target team in ready state.
 4. Candidate items execute concurrently through their image profiles. A FLUX attempt persists its provider request ID and polling URL immediately after submission and resumes polling that same task after process recovery; the signed result URL is fetched promptly into the AssetStore and is not retained.
 5. Each successful native result is validated and written once as an unlinked source asset using existing kind reference or page_source, with batch/item metadata.
-6. Multi-candidate results wait for explicit selection; a sole success is selected implicitly.
+6. Only a batch frozen with `resultChoicePolicy=implicit_sole` implicitly selects its valid success. Every batch originating from a multi-candidate eligible pool waits for explicit selection, even when one agent was selected or exactly one item succeeds; mixed outcomes remain in `results` with select-success, retry-failed, and change-and-rerun actions.
 7. A selected reference source or selected-and-composed page source is recorded as the generation item's sole primary asset.
 8. The generation item completes, then the existing sequential runner advances to the next item and creates its ready/automatic Agent run. Existing job finalization aggregates all selected item assets into one normal Visual Bible or Final Pages revision; a one-item selective-regeneration job revises only that item in the existing artifact.
 
@@ -330,7 +359,7 @@ Add or revise:
 - lib/contracts/execution.ts: target keys, preference, batch/item/attempt statuses, frozen snapshots, result summaries, action values, status response.
 - lib/contracts/execution-profiles.ts: profile IDs/versions, safe capabilities, settings-field metadata, native-reference envelopes.
 - lib/contracts/agents.ts: image role/target, profile binding, nullable role-specific settings, pool coverage, admin snapshot.
-- lib/contracts/cards.ts: agent_run card and actions; no maximum candidate count.
+- lib/contracts/cards.ts: agent_run card and actions; no maximum candidate count; keep private ready-input fields out of the public card schema.
 - lib/contracts/messages.ts: the existing data-card union automatically includes Agent run; keep workingStatus unchanged.
 - lib/contracts/images.ts: keep ImageRequest/ImageResult canonical while adding the discriminated outputControl, provider/MIME unions, and strict success/failure refinements; keep each provider-native schema under its profile implementation.
 - lib/contracts/assets.ts: no new kind; validate candidate provenance metadata where read.
@@ -352,6 +381,7 @@ execution_batches:
 - _id, bookletId, cardId, targetKey, subjectKind, subjectId;
 - previousBatchId, poolFingerprint;
 - status and materializationStatus;
+- resultChoicePolicy (`implicit_sole` or `explicit`);
 - canonicalInputJson, workflowFingerprintJson, schemaVersion;
 - selectedItemId, selectionMode, selectionResponseId;
 - producedArtifactVersionId, producedQualityReviewId, producedAssetId;
@@ -367,13 +397,14 @@ execution_items:
 
 Extend:
 
+- cards with nullable server-only readyInputJson, readyInputSchemaVersion, readyWorkflowFingerprintJson, and readyPreviousBatchId fields that are never copied into cardJson/uiMessageJson;
 - artifact_versions with nullable sourceExecutionBatchId;
 - quality_reviews with nullable sourceExecutionBatchId;
 - generation_items with nullable executionCardId/executionBatchId and candidate-waiting status;
 - model_calls with executionBatchId, executionItemId, executionTarget, profileId/profileVersion, nativeInputRefJson, and nativeOutputRefJson. Existing inputRefJson/outputRefJson remain canonical request/result references;
 - agent_versions with imageTarget, profileId/profileVersion, imageQuality, imageResolution, and nullable reasoning/max-turn fields.
 
-Do not add an execution-attempt collection, profile table, assignment table, target table, agent/team join table, event bus, outbox, or provider-response blob collection.
+Do not add an execution-ready-input or execution-attempt collection, profile table, assignment table, target table, agent/team join table, event bus, outbox, or provider-response blob collection.
 
 ### 5.3 Required indexes
 
@@ -411,7 +442,7 @@ db:init:
 
 The image profile, model, quality, and resolution become database-authoritative candidate settings. IMAGE_PROVIDER_MODE continues to choose fake versus real execution. OPENAI_IMAGE_MODEL and OPENAI_IMAGE_QUALITY are removed from runtime selection and then from env/preflight/operator documentation once Phase 2 is verified. Existing default behavior is preserved by the seeded gpt-image-2/auto settings; custom local overrides must be recreated as an agent draft before activation. Add optional GEMINI_API_KEY and BFL_API_KEY parsing and preflight only when a real active/selected agent needs that provider; never require them for fake mode or an OpenAI-only pool.
 
-db:verify validates references, JSON payload schemas, one manager, one-or-more compatible candidates for every target, active logical-agent uniqueness, batch/item/card/asset provenance, selected-item membership, terminal/completed consistency, and model-call batch/item/profile references.
+db:verify validates references, JSON payload schemas, one manager, one-or-more compatible candidates for every target, active logical-agent uniqueness, private ready-input field/state consistency and absence from public card/message JSON, rerun/restart/previous-batch provenance, batch/item/card/asset provenance, selected-item membership, terminal/completed consistency, and model-call batch/item/profile references.
 
 ## 6. Service and route contracts
 
@@ -431,9 +462,9 @@ Keep route handlers and React components free of direct MongoDB access.
 Add:
 
 - ExecutionProfileRegistry for closed profile lookup/compatibility/adapters.
-- CandidatePoolService for target resolution, preferences, fingerprints, and ready-card view.
+- CandidatePoolService for target resolution, runtime eligibility, preferences, availability-aware fingerprints, and ready-card view.
 - CandidateExecutionService for one attempt and normalized evidence.
-- ExecutionService for batch/action lifecycle, concurrent dispatch, polling view, selection, restart, and recovery.
+- ExecutionService for private ready-input lifecycle, atomic batch creation, concurrent dispatch, polling view, selection, results rerun, completed restart provenance/currentness, and recovery.
 - TextResultMaterializer for the closed skill-to-existing-application switch.
 
 Refactor, do not duplicate:
@@ -468,7 +499,8 @@ Use existing typed application/HTTP errors and add:
 - execution_pool_unavailable (503, /admin/agents);
 - execution_batch_not_terminal (409);
 - execution_result_invalid (409);
-- execution_workflow_stale (409, restart required);
+- execution_workflow_stale (409, ready input or result no longer matches current workflow);
+- execution_restart_stale (409, source result/dependencies are no longer current);
 - execution_action_conflict (409, reload exact card);
 - execution_materialization_failed (recoverable, no duplicate on retry).
 
@@ -493,6 +525,44 @@ Do not modify prototype/**, introduce a second application, replace the existing
 
 ## 8. Execution protocol and mandatory phase gate
 
+### 8.1 Terra session operating model
+
+Treat one implementation session as one bounded vertical slice. A session may complete a small prerequisite repair discovered inside that slice, but it must not begin the next slice, combine unrelated cleanup, or reopen a settled product decision. Resume from the last verified evidence, this plan's ledgers, and the current diff instead of repeating broad repository discovery.
+
+Every session starts with this preflight:
+
+1. Inspect `git status`, the current slice diff, and the last verified checkpoint; preserve unrelated work.
+2. Re-read the exact PRD requirements, slice packet, applicable contract checklist, and recorded findings/decisions—not the entire project history.
+3. Inspect the existing contracts, repositories/services, UI projection, and focused tests named by the slice packet before editing. Confirm the prerequisite slice evidence still exists.
+4. State the slice boundary, expected usable outcome, invariants, and smallest focused proof. If the current source contradicts the packet materially, stop and classify the conflict before coding.
+5. Use fake providers and isolated test data. Never make a paid provider call, mutate retained evaluation data, or perform a destructive operation without the approval required below.
+
+Within a session, work contract-first in this order when applicable: contracts and indexes/migrations → repositories → services/materializers → saved card projection/API → UI → recovery → focused proof. Do not build UI against an unverified persistence/service contract or add broad browser coverage before the underlying focused checks pass.
+
+Every session ends with a compact handoff in the coding agent's final response. That response is the handoff; do not create an implementation report, handoff log, session-notes file, or chronological diary. Record only confirmed unresolved defects in the existing Open Findings Ledger, and record verified phase status/evidence only in the existing roadmap tracker at the applicable gate. The final response contains:
+
+- slice and status: completed, partial, or blocked;
+- files changed and the responsibility of each change group;
+- invariants preserved and any invariant not yet proven;
+- exact tests/commands run, with pass/fail/not-run results;
+- known findings classified by the failure taxonomy in Section 10.1;
+- durable evidence or fixture paths needed to resume; and
+- the exact next slice—or the unfinished step within the current slice—without starting it.
+
+On resume, trust verified commands and evidence unless affected files, dependencies, provider contracts, or database structure changed afterward. Re-run the smallest invalidated proof; do not rediscover settled architecture or reconsider PRD decisions merely because a new session started.
+
+Stop before expanding the slice and request direction when any of these occurs:
+
+- **Product decision:** the PRD and this plan permit materially different user-visible behaviors or authority boundaries.
+- **Architecture conflict:** the verified repository cannot support the planned contract without changing a shared boundary, phase order, or excluded architecture.
+- **Paid provider call:** proof would incur provider cost or require real credentials; provide the exact purpose and expected cost first.
+- **Destructive action:** data, retained assets/evaluations, indexes beyond the exact approved migration, or user work could be deleted or overwritten.
+- **Scope expansion:** completion appears to require a new dependency, service, infrastructure component, abstraction, production hardening, or unrelated refactor.
+
+Ordinary code defects, stale fixtures with an unchanged contract, and reproducible local setup faults are not product questions; classify and handle them under Section 10.1.
+
+### 8.2 First implementation preflight
+
 Before the first implementation edit after explicit plan approval:
 
 1. Re-read AGENTS.md, the PRD, this plan, roadmap, architecture, and current Issue #18.
@@ -500,6 +570,8 @@ Before the first implementation edit after explicit plan approval:
 3. Update Issue #18/project status to In progress and roadmap Phase 1 to In progress.
 4. Record the baseline: npm run db:setup, npm run db:init, npm run db:verify, npm run typecheck, npm run lint, npm test, npm run test:agent, npm run build, npm run test:e2e. Classify inherited failures; do not redefine them as acceptable.
 5. Use fake providers for implementation checks. Do not make real-provider calls without a separate user approval and cost statement.
+
+### 8.3 Mandatory phase gate
 
 Every phase ends with this gate, in order:
 
@@ -515,7 +587,42 @@ The next phase may begin only when the current gate is complete, the findings le
 
 If blocked by a product decision, mark the phase Blocked in roadmap.md with the exact missing decision and preserve completed evidence. Do not invent scope or weaken acceptance to advance.
 
+### 8.4 Contract-first implementation checklists
+
+Apply only the checklist rows relevant to the current slice. Close each checked row with the named evidence before depending on it in a later slice.
+
+| Checklist | Invariant | Failure mode prevented | Required evidence |
+| --- | --- | --- | --- |
+| [ ] Persistence, indexes, and migration | Persisted documents parse under versioned contracts; references/indexes enforce the planned cardinality; setup/init are fresh-, repeat-, and upgrade-safe; only the exact legacy index is removed. | Partial upgrades, rewritten operator edits, duplicate pools/batches, or an unintended destructive index change. | Contract tests, index inspection, fresh/repeat/upgrade setup-init-verify, deterministic seed/backfill comparison. |
+| [ ] Batch, item, and attempt lifecycle | One frozen item exists per selected logical agent; claims are exclusive; attempts append; batch results wait for all terminal items; retry targets failed items only. | Duplicate calls, lost retry evidence, early result selection, or a batch stuck after restart. | Repository/service transition tests, deferred-barrier overlap, mixed/all-failed retry, crash/startup recovery, status projection assertions. |
+| [ ] Saved card and UI-message projection | The authoritative card row and matching saved data-card part change transactionally at one expected revision; private ready input and unbounded details never enter public JSON. | Reload showing a different decision, duplicate action application, leaked prompts/bytes/secrets, or a card that cannot resume. | Projection transaction/idempotency tests, serialized schema checks, ready/running/results/completed reload fixtures, stale-revision conflict test. |
+| [ ] Selection and materialization authority | Only application services may select/materialize; implicit selection requires frozen `resultChoicePolicy=implicit_sole`; otherwise a terminal validated success, explicit creator response, and current workflow fingerprint are required; one batch produces at most one immutable outcome. | Agent-authored mutation, unselected/invalid output activation, duplicate versions/assets, or stale workflow mutation. | Selected-only service tests, sparse provenance uniqueness, invalid/unselected no-mutation assertions, duplicate/crash-resume materializer proof. |
+| [ ] Image native/canonical adapters and retained assets | Shared image intent remains provider-neutral; every candidate receives a profile-valid canonical/native request; returned bytes/MIME/dimensions validate; candidate assets remain unlinked until selection. | Cross-provider setting leakage, malformed provider output, bytes in MongoDB, premature composition/linkage, or prior-asset replacement on failure. | Closed-model fixtures, reference/geometry-limit rejection, byte inspection, retained-unlinked provenance checks, selected-only compose/link and failure-retention tests. |
+| [ ] Admin lifecycle and coverage | Exactly one manager and one-or-more active compatible candidates per target remain; one active version per logical agent; confirmed edits create inactive drafts; capabilities/mappings stay code-owned/read-only. | Empty target coverage, multiple managers, incompatible activation, mutation of confirmed history, or arbitrary runtime configuration. | Lifecycle/coverage integration tests, atomic replacement and last-candidate rejection, draft-successor/no-op Save, settings/schema UI validation, snapshot immutability. |
+| [ ] Rerun, restart, and idempotency | Results rerun and completed restart restore the source input only after the applicable terminal/currentness/provenance checks; stale transitions are no-write; retries/recovery reuse durable IDs and provider task state. | Comparing different tasks, losing ready input/history, overwriting current artifacts early, duplicate provider submissions/outcomes, or stale dependency mutation. | Results change-and-rerun transaction/reload, current/stale restart, readyPreviousBatchId→previousBatchId provenance, no-write assertions, response replay, stable materialization IDs, FLUX poll-resume/no-resubmit proof. |
+
 ## 9. Four implementation phases and self-contained slices
+
+### 9.1 Dependency and sequencing controls
+
+The slice order is mandatory. Later-slice scaffolding may be inspected, but it must not be implemented before its prerequisite proof is green. Card projection, persistence, selected-only materialization, and recovery are explicit dependencies, not cleanup deferred to a phase gate.
+
+| Phase | Required sequence | Safely parallelizable after prerequisites | Must remain sequential |
+| --- | --- | --- | --- |
+| 1 | 1.1 contracts/migration → 1.2 persistence, lifecycle, projection, recovery → 1.3 routing integration → 1.4 materialization/restart | Read-only source inspection, independent fixture preparation, and focused tests that do not edit shared contracts | Migrations, execution/card contracts, repositories, ExecutionService, ChatService, materializers, and saved-message projection |
+| 2 | 2.1 provider adapters/assets → 2.2 reference integration → 2.3 page/composition integration | Independent provider-native fixtures and read-only official-contract checks; reference/page test design after 2.1 is frozen | Image contracts, GenerationService, generation state, AssetStore provenance, composition, and runner recovery |
+| 3 | 3.1 lifecycle/service contract → 3.2 desktop panels → 3.3 narrow navigation/accessibility | Read-only UX/a11y review and isolated view-model/component tests after the server snapshot is stable | Agent lifecycle mutations, admin Server Actions/snapshot, URL selection model, and shared panel controller |
+| 4 | 4.1 data/recovery regression → 4.2 browser/PDF golden path → 4.3 retained-artifact/docs audit | Evidence reconciliation that reads stable outputs | Database repair, golden-path fixture state, retained artifacts, roadmap/docs/issue updates, and final acceptance audit |
+
+Across phases, enforce these dependencies:
+
+- A saved Agent run UI may be wired only after batch/item/card persistence and transactional card/message projection are proven.
+- Manager and image flows may consume ExecutionService only after its lifecycle, retry, terminal-state, and reload contracts pass focused tests.
+- No result materializer or image composer may run until terminal-only selection and selected-item provenance are enforced below the UI layer.
+- Recovery tests and startup wiring follow stable claim/attempt/materialization idempotency; they must replay the same durable command rather than invent a parallel path.
+- Broad Playwright and PDF checks follow focused contract, repository, service, and component proof for the slice they exercise.
+
+### 9.2 Phase slices
 
 ### Phase 1 — Foundation and text execution
 
@@ -536,20 +643,44 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 **Focused evidence:** contract/profile adapter tests; fresh/repeated/upgraded setup-init-verify tests; additive pool/last-candidate repository tests; deterministic seed inspection.
 
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Fresh and upgraded databases expose valid code-registered targets/profiles and one-or-more compatible candidates without changing current seeded identities. |
+| Coverage | MA-016–MA-018, MA-021, MA-024, MA-025; candidate-pool lifecycle, profile compatibility, immutable snapshots, upgraded seeds, and exact-repeat initialization. |
+| Inspect first | Existing agent/skill/image contracts; agent defaults/repository; MongoDB documents, indexes, setup/init/verify; focused tests and deterministic seed fixtures. |
+| Owner and expected change | Contracts/profile registry and persistence own schemas, migration/indexes, backfill, seeds, and pool resolution; runtime flow and final admin UX remain unchanged. |
+| Invariants | Exactly one manager; one-or-more compatible candidates per target; one active version per logical agent; stable agent IDs/history; only the exact legacy index is dropped; no arbitrary settings/schema storage. |
+| Proof | Contract/profile fixtures; fresh, repeated, and upgraded setup/init/verify; pool/last-candidate repository tests; deterministic seed comparison. |
+| Stop/escalate | Apply Section 8.1. Stop for an unexpected production-shaped index/data state, an unresolved profile requirement, any destructive migration beyond the exact index replacement, or paid provider validation. |
+
 #### Slice 1.2 — Durable batches, evidence, recovery, and card projection
 
 **Usable result:** A fake candidate batch can be created, run concurrently, restored, retried, selected, and represented by one evolving persisted card without booklet artifact mutation.
 
-- Implement preference, execution, card-projection, evidence repository methods.
-- Implement pool fingerprint/stale submission behavior.
+- Implement preference, execution, private ready-input, card-projection, and evidence repository methods.
+- Implement runtime-availability-aware pool fingerprints and no-write stale submission behavior.
 - Implement CandidateExecutionService and ExecutionService with concurrent claims/attempts.
 - Extend the runner and startup recovery.
 - Add Agent run card schema/actions/component/status endpoint/shared poller.
-- Prove terminal-only selection, retry-failed-only, all-failed recovery, prior history, and exact reload restoration.
+- Prove private ready-input reload without another manager call, terminal-only selection, retry-failed-only, all-failed recovery, prior history, and exact reload restoration.
 
 **PRD:** MA-001, MA-003–MA-010, MA-015, MA-015a, MA-020–MA-022.
 
 **Focused evidence:** repository/service concurrency tests with controllable deferred fake candidates; card projection/idempotency/reload tests; component keyboard/aria-live tests.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | A durable fake Agent run moves through ready/running/results/completed, restores exactly, and retries without mutating booklet artifacts. |
+| Coverage | MA-001, MA-003–MA-010, MA-015, MA-015a, MA-020–MA-022; card restoration, remembered/stale teams, true parallel items, terminal-only choice, retry, evidence, and accessibility. |
+| Inspect first | 1.1 execution contracts; current card/message schemas and projection transaction; conversation/evidence repositories; runner/job recovery; repository, service, component, and reload tests. |
+| Owner and expected change | Execution persistence/ExecutionService own lifecycle; ConversationRepository owns atomic card/message projection; UI only projects validated state/actions. Add preferences, batches/items, polling, recovery, and Agent run UI. |
+| Invariants | Private ready input never enters public JSON; each selected agent has one durable item; attempts append; all items are terminal before selection; no workflow mutation; the same card restores after reload. |
+| Proof | Deferred-barrier overlap; projection/idempotency; stale/no-write; retry/all-failed/recovery; keyboard/aria-live component tests. |
+| Stop/escalate | Apply Section 8.1. Stop if atomic saved-message projection cannot be preserved, durable claims require new infrastructure, recovery would resubmit completed work, or UI needs authority absent from ExecutionService. |
 
 #### Slice 1.3 — Manager route split and routed text runs
 
@@ -565,6 +696,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 **Focused evidence:** manager allowlist/profile-summary tests; one/three candidate concurrency fixture; stale pool/no-mutation tests; AI SDK route/message validation tests.
 
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | One manager route produces one persisted text Agent run whose selected candidates execute through the registered specialist profile. |
+| Coverage | MA-002, MA-006–MA-010, MA-016–MA-020, MA-022; one legal route plus selected candidate calls, canonical routing, sole-agent behavior, concurrency, and immutable evidence. |
+| Inspect first | Verified 1.1–1.2 contracts/services; ManagerService, ChatService, AgentResolver, skill registry, fake/OpenAI runtimes, AI SDK transport, and agent fixtures. |
+| Owner and expected change | ManagerService routes only; ChatService owns canonical input and persisted narration/card; CandidateExecutionService owns calls/normalization. No materializer runs yet. |
+| Invariants | One manager and stage-valid skill per turn; no native manager input or second manager call; frozen candidate versions; activation affects future cards; no artifact mutation. |
+| Proof | Allowlist/capability tests, one-/three-candidate barrier fixtures, saved-message validation, stale-pool no-mutation, and manager/candidate evidence reconciliation. |
+| Stop/escalate | Apply Section 8.1. Stop if routing cannot separate without changing stage legality, a skill contract must change incompatibly, another manager call appears necessary, or central message transport must be redesigned. |
+
 #### Slice 1.4 — Selected-only text materialization and direct quality
 
 **Usable result:** Selecting a normalized text success produces exactly one existing application outcome; sole-agent and direct-quality flows require no redundant decisions.
@@ -578,6 +721,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 **PRD:** MA-006, MA-010, MA-011, MA-018–MA-022.
 
 **Focused evidence:** each skill materializer; sole-agent implicit result; multi-result selected-only version; quality partial/all failure; crash-resumed materialization; stale workflow; restart creates one new immutable version.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Exactly one validated text result creates the existing outcome; sole-agent/direct-quality paths avoid redundant choices and restart is idempotent. |
+| Coverage | MA-006, MA-010, MA-011, MA-018–MA-022; selected-only mutation, implicit sole selection, direct quality, restart/history, provenance, stale recovery, and downstream review. |
+| Inspect first | Verified execution lifecycle; ChatService result switch, QualityService, ArtifactService dependencies, seven skill materialization paths, card factories, and integration tests. |
+| Owner and expected change | TextResultMaterializer and existing application services own mutation; selection invokes a closed materializer and completion/restart follows durable provenance. |
+| Invariants | Agents never persist; one batch creates at most one outcome; unselected/invalid results never mutate; IDs/dependencies/one-repair remain; restart preserves current artifacts until replacement. |
+| Proof | Seven materializer cases, sole/multi selection, quality failures, duplicate/crash resume, stale restart no-mutation, immutable replacement, and needs_review. |
+| Stop/escalate | Apply Section 8.1. Stop for an uncovered target outcome, ambiguous mutation authority, restart without provable currentness, or any candidate synthesis/merge. |
 
 #### Phase 1 gate
 
@@ -598,13 +753,26 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 - Re-check the dated official provider contracts recorded in Section 3.2 before enabling real calls.
 - Move OpenAI native size/quality mapping behind openai-image v1 and remove legacy GPT Image input-fidelity behavior.
-- Add gemini-image v1 using native fetch, aspectRatio/imageSize validation, inline reference inputs, and inline-byte output normalization.
-- Add flux-image v1 using native fetch, numeric dimensions, up to eight references, persisted submit/poll recovery, and immediate signed-result retrieval.
+- Add gemini-image v1 using native fetch against the exact `POST /v1beta/interactions` contract in Section 3.2: snake_case `response_format.aspect_ratio`/`image_size`, ordered inline `input` image objects, strict completed-Interaction response parsing, and model-output image-byte normalization. Include the stable `gemini-3-pro-image` catalog entry and explicit rejection fixture for `gemini-3-pro-image-preview`.
+- Add flux-image v1 using native fetch for requests without image inputs, numeric dimensions, fake native fixtures for up to eight ordered/deduplicated URL reference fields, persisted submit/poll recovery, and immediate signed-result retrieval.
+- Phase 2 decision gate: keep every real FLUX request containing references or an edit target runtime-ineligible in this local POC. Do not add public asset delivery. Enabling it later requires separate user approval of the public-origin mechanism, setup/security/verification scope, and a corresponding plan update; fake coverage must still prove generate/edit normalization and limits.
 - Keep fake/real provider choice through IMAGE_PROVIDER_MODE and provide deterministic fake execution for every profile.
 - Execute selected image agents concurrently and store successful source assets with batch/item provenance.
 - Prove quality-versus-resolution-versus-dimensions mapping, model-specific invalid combinations, versioned cost calculation, credential availability, and invalid native/canonical output isolation without paid automated calls.
 
 **PRD:** MA-012–MA-014, MA-017–MA-022.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Every image profile validates native/canonical requests and retains each successful candidate as an inactive source asset. |
+| Coverage | MA-012–MA-014, MA-017–MA-022; provider normalization/limits, concurrency, retained assets, task recovery, cost/evidence, and invalid-output isolation. |
+| Inspect first | Image/asset contracts; provider seam, prompt serializer, pricing, Sharp, AssetStore, Phase 1 execution lifecycle, provider/generation tests, and dated official contracts. |
+| Owner and expected change | Profiles own native adapters; CandidateExecutionService owns per-candidate canonical requests/evidence; AssetStore owns bytes. Sequential reference/page flow is not connected yet. |
+| Invariants | Profile-neutral shared intent; distinct validated ImageRequest per candidate; all native values parse; bytes stay out of MongoDB; assets remain unlinked; FLUX resumes polling; no paid calls. |
+| Proof | Closed-model fixtures including stable Gemini Pro ID and preview-alias rejection; exact Gemini endpoint/header/body fixtures for both models, every geometry/resolution mapping, and zero/ordered references; exact completed-Interaction response and invalid/camelCase/legacy/SDK-only response rejection fixtures; invalid combinations/limits; ordered FLUX URL-field fixtures; real FLUX image-input ineligibility with no provider call; byte/MIME/dimensions; barrier overlap; no-resubmit recovery; provenance; and cost tests. |
+| Stop/escalate | Apply Section 8.1. Stop for changed official contracts, real/paid calls, provider input requiring new infrastructure/dependencies, or asset safety unprovable with AssetStore. |
 
 #### Slice 2.2 — Reference-item Agent runs
 
@@ -612,11 +780,23 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 - Connect reference generation/edit items to ExecutionService.
 - Restore remembered reference teams; update the preference on item-level change.
-- Auto-select a sole valid success; require explicit multi-success selection.
+- Auto-select only when Run froze `resultChoicePolicy=implicit_sole` from an eligible pool of exactly one compatible candidate; every batch originating from a multi-candidate pool requires explicit success selection, regardless of selected-agent or success count.
 - Keep failures/retries on the current item and advance only after selection.
 - Make final Visual Bible linkage idempotent.
 
 **PRD:** MA-006–MA-015a, MA-020–MA-022.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Each ordered reference item uses one Agent run, remembers its team, and advances only after one valid source is selected. |
+| Coverage | MA-006–MA-015a, MA-020–MA-022; per-reference defaults, sequential order, recovery, sole-agent flow, reload, selected-only linkage, and asset retention. |
+| Inspect first | Verified 2.1 profiles/assets; GenerationService, generation job/item/runner, Visual Bible linkage, job/card polling, reference recovery, and selective-regeneration tests. |
+| Owner and expected change | Generation job remains sequence owner; ExecutionService owns the current candidate batch; Visual Bible materialization links only the selection at normal finalization. |
+| Invariants | One current reference item; only candidate calls parallelize; changes affect the next same-target item; failed/unselected assets never become primary; completed references stay active. |
+| Proof | First/remembered/changed teams, overlap, sole/explicit selection, mixed/all-failed retry, reload states, sequential advance, idempotent linkage, and retention. |
+| Stop/escalate | Apply Section 8.1. Stop if integration creates a second image workflow, advances before selection, changes reference ordering, or cannot preserve the current Visual Bible through failure. |
 
 #### Slice 2.3 — Page-item Agent runs and composition
 
@@ -628,6 +808,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 - Preserve existing Final Pages gallery, selective regeneration, and job recovery.
 
 **PRD:** MA-006–MA-015a, MA-020–MA-022.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Each ordered page runs candidates in parallel, composes only the selected source, and preserves existing page behavior. |
+| Coverage | MA-006–MA-015a, MA-020–MA-022; per-page teams, sequential items, previews, selected-only activation, restart/reload, unaffected pages, and evidence. |
+| Inspect first | Verified 2.1–2.2 integration; page generate/edit, composition/geometry, Final Pages materialization/gallery, asset lineage, regeneration, and recovery tests. |
+| Owner and expected change | Generation job owns sequence; ExecutionService owns candidates; composition runs after selection; Final Pages publication remains the aggregate boundary. |
+| Invariants | No composition before selection; exactly one primary source; completed/current pages survive failure; lettering/geometry are unchanged; unselected assets stay inactive. |
+| Proof | Page generate/edit, overlap, preview/selection, composition ordering, team defaults, recovery/reload, selective regeneration, and final asset order. |
+| Stop/escalate | Apply Section 8.1. Stop if composition must inspect unselected results, lettering/geometry rules change, page order cannot remain sequential, or a new asset/job abstraction is proposed. |
 
 #### Phase 2 gate
 
@@ -654,6 +846,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 **PRD:** MA-016, MA-020, MA-023b–MA-025.
 
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Services/actions safely manage manager replacement and additive candidate pools with typed profiles and preserved coverage. |
+| Coverage | MA-016, MA-020, MA-023b–MA-025; inactive-first creation, additive activation, last-candidate protection, atomic manager replacement, draft succession, compatibility, and snapshots. |
+| Inspect first | Agent/profile contracts; AgentRepository/lifecycle service; current admin Server Actions/forms; active-version indexes/guards; lifecycle, coverage, and concurrency tests. |
+| Owner and expected change | Repository/lifecycle service owns atomic validation/mutation; Server Actions remain thin callers. Three-panel presentation waits for 3.2. |
+| Invariants | Exactly one manager; every target retains a candidate; activation affects future runs; confirmed versions stay immutable; changed confirmed Save creates one inactive draft; history/evidence guards remain. |
+| Proof | Create/edit/confirm/activate/deactivate/retire/delete integration; manager replacement; last-candidate rejection; settings; no-op Save; draft successor; stale revision; snapshot immutability. |
+| Stop/escalate | Apply Section 8.1. Stop for coverage corruption that cannot be repaired progressively, lifecycle conflict with the PRD, destructive repair, or a new admin API/persistence model. |
+
 #### Slice 3.2 — Desktop Targets / Agents / Details
 
 **Usable result:** Selecting a target updates the active-first searchable agent list; selecting/adding an agent updates persistent details without leaving the page.
@@ -666,6 +870,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 **PRD:** MA-023–MA-024.
 
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Desktop/tablet operators manage targets and agents through persistent Targets/Agents/Details panels without leaving the page. |
+| Coverage | MA-023–MA-024; target/list/detail updates, active-first order, search/add, inactive creation, typed settings, warnings, collapsed details, panel scrolling, and reload selection. |
+| Inspect first | Verified 3.1 services/actions; current admin Server Component/controller/view models/forms/dialogs, responsive styles, and admin component/browser tests. |
+| Owner and expected change | Server Component owns the minimal snapshot; client controller owns selection/search/disclosures; lifecycle actions remain server-owned. Build only against the stable 3.1 contract. |
+| Invariants | No client DB access; active compatible agents precede inactive; schemas/mappings read-only; new agents inactive; panel scroll does not force page scroll; refresh does not steal focus. |
+| Proof | Ordering/filter view-model tests; target/agent/add component tests; validation/disclosures; desktop keyboard/focus/scroll browser evidence; URL reload restoration. |
+| Stop/escalate | Apply Section 8.1. Stop if UI needs unbounded snapshots, duplicates lifecycle rules client-side, requires broad admin restyling, or changes creator/runtime behavior. |
+
 #### Slice 3.3 — Narrow drill-down, focus, and reload
 
 **Usable result:** The same admin tasks work as Targets → Agents → Details on narrow screens and restore after reload.
@@ -675,6 +891,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 - Verify keyboard controls, labels, focus visibility, live validation/status, and responsive overflow.
 
 **PRD:** MA-023e and accessibility acceptance.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | The same admin tasks work as an accessible Targets → Agents → Details narrow drill-down and restore predictably. |
+| Coverage | MA-023e and responsive/accessibility acceptance for Back, keyboard, focus, overflow, no forced scrolling, and restored management view. |
+| Inspect first | Verified desktop controller/view models; current URL search-param handling, focus patterns, responsive component tests, and narrow Playwright setup. |
+| Owner and expected change | The shared controller owns URL target/agent/version/view state; responsive presentation changes panel visibility only and does not fork lifecycle behavior. |
+| Invariants | Desktop/narrow share data/actions; Back restores opener focus; URL stores selection but not search/disclosures; refresh never forces focus or scrolling. |
+| Proof | Narrow forward/Back flow, keyboard-only use, focus restoration, visible focus/status, overflow/no-scroll, viewport transition, and reload at each level. |
+| Stop/escalate | Apply Section 8.1. Stop if narrow support requires separate business state, mobile scope beyond drill-down, a new routing system, or broad cross-browser acceptance. |
 
 #### Phase 3 gate
 
@@ -697,6 +925,18 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 - Prove invalid output and unselected output never mutate workflow state.
 - Run typecheck, lint, unit/integration, agent fixtures, build, and Playwright.
 
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Data, lifecycle, recovery, evidence, and existing single-agent behavior are reconciled before broad acceptance testing. |
+| Coverage | MA-001–MA-025 regression evidence for persistence, recovery, normalization, authority, lifecycle, and reload; Section 6 automated acceptance except final browser/PDF inspection. |
+| Inspect first | All phase handoffs/evidence, findings ledger, migrations/verification, execution/generation recovery, evidence records, retained fixtures, and affected test inventory. |
+| Owner and expected change | This is defect fixing/evidence reconciliation across existing owners, not a refactor. Repair only confirmed in-scope defects and keep contracts stable unless escalated. |
+| Invariants | Fresh/repeat/upgrade agree; recovery never duplicates; invalid/unselected outputs never mutate; evidence matches snapshots; existing single-agent behavior stays green. |
+| Proof | Database commands, interruption/idempotency suites, full affected commands, and requirement-linked evidence with classified failures. |
+| Stop/escalate | Apply Section 8.1. Stop for product ambiguity, retained-data mutation, paid evaluation, unexpected architecture migration, or a failure that cannot be classified without weakening acceptance. |
+
 #### Slice 4.2 — Fake-provider booklet golden path and PDF
 
 - Extend the existing desktop Chromium golden path through at least one multi-agent text step, one reference item, one page item, restart, reload, selected-only activation, approval, and PDF download.
@@ -704,12 +944,36 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 - Render the generated PDF with the repository PDF workflow and inspect page count/order/geometry/readability.
 - Retain screenshots/traces/download under ignored output/playwright paths.
 
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | The fake-provider desktop golden path proves multi-agent text, reference, page, restart/reload, selected-only activation, and readable PDF export. |
+| Coverage | Section 6 browser acceptance and MA-001–MA-015a, MA-020–MA-022 end-to-end proof; completion audit for concurrency, sole-agent flow, asset retention, and PDF. |
+| Inspect first | Verified 4.1 state; current Playwright golden path/fixtures, fake providers, isolated DB/filesystem setup, export/download, PDF workflow, and output conventions. |
+| Owner and expected change | Browser fixtures/tests own orchestration; application fixes remain with their established owner. PDF inspection verifies output and changes rendering only for a confirmed defect. |
+| Invariants | No real calls; isolated data; barriers prove concurrency; only the chosen result mutates; output order/geometry/readability remain deterministic; retained evaluations untouched. |
+| Proof | Golden path traces/screenshots/download, exact reload states, mixed retry/restart, image selection, final export, and rendered PDF page/order/visual inspection. |
+| Stop/escalate | Apply Section 8.1. Stop for a real/paid call, retained evaluation overwrite, non-isolated data, product-level flow change, or PDF work beyond the existing renderer. |
+
 #### Slice 4.3 — Retained-evaluation regression and documentation
 
 - Do not rerun paid evaluations.
 - Confirm the existing accepted early-reader, developing-reader, and older-reader manifests/PDFs remain readable and unchanged unless a separately approved defect requires a rerun.
 - Update docs/architecture.md, README/operator/user guidance, the implementation audit, roadmap, Issue #18, and evidence-based lessons.
 - Complete the requirement-by-requirement audit and final defect-first review.
+
+**Slice execution packet**
+
+| Field | Instruction |
+| --- | --- |
+| Outcome | Retained evaluations remain unchanged and verified documentation/evidence accurately describe the completed implementation. |
+| Coverage | MA-001–MA-025 final traceability, all Section 6 acceptance, documentation end state, and completion/change-control audit. |
+| Inspect first | Verified phase evidence, fake golden-path artifacts, retained manifests/PDFs, architecture/operator/user docs, roadmap, implementation audit, Issue #18, and learnings guidance. |
+| Owner and expected change | Documentation/evidence owners record verified behavior only; roadmap/Issue follow the phase gate; retained artifacts are read-only. |
+| Invariants | No paid rerun or retained artifact change without approval; every trace claim has scope-matched evidence; no open finding; no speculative docs. |
+| Proof | Retained comparison/readability, requirement audit, final defect-first review, documentation diff, git diff check, and complete command/evidence summary. |
+| Stop/escalate | Apply Section 8.1. Stop for a retained difference, missing acceptance evidence, unresolved finding, issue closure/merge, or unsupported documentation claim. |
 
 #### Phase 4 gate
 
@@ -733,21 +997,42 @@ If blocked by a product decision, mark the phase Blocked in roadmap.md with the 
 
 Concurrency tests must use deferred barriers and assert overlapping running windows, not elapsed-time guesses.
 
+Gate each slice through the smallest applicable progression before running phase-wide commands:
+
+1. contract/schema and pure adapter/view-model tests;
+2. repository/index/transaction integration tests;
+3. service lifecycle, authority, idempotency, and recovery tests;
+4. focused component accessibility/projection tests;
+5. focused agent fixture or Playwright path only when the slice crosses that boundary; and
+6. the affected full commands at the phase gate.
+
+A later layer cannot compensate for a failing or omitted earlier layer. Record not-run checks and why; do not call a slice verified when its required proof is deferred to the phase gate.
+
+Classify every failure before acting:
+
+| Classification | Signal | Required action |
+| --- | --- | --- |
+| Code defect | The implementation violates the PRD, plan contract, or a previously passing affected invariant. | Fix within the current slice, add/regress the smallest proof, and rerun affected layers. |
+| Stale fixture | The intended contract is unchanged and implementation evidence passes, but expected fixture data reflects the old singleton/card/provider shape. | Update only the affected fixture, explain the contract-preserving delta, and rerun its producer/consumer tests. |
+| Environment/setup issue | Failure occurs before the changed behavior or depends on unavailable local MongoDB, browser, filesystem, or optional credentials. | Reproduce with the documented setup, record exact diagnostics, avoid product-code workarounds, and mark blocked only if the required environment cannot be restored. |
+| Provider-contract change | A dated official OpenAI, Gemini, or BFL contract no longer matches the closed profile catalog/adapter. | Record a Phase 2 finding with the official evidence; do not silently coerce, fall back, enable the model, or make a paid call. Escalate if resolving it changes planned product support. |
+| Unresolved product decision | Authoritative requirements allow materially different behavior or resolving the issue changes scope/authority/acceptance. | Stop the slice, preserve evidence, and request user direction; do not encode a preference as implementation detail. |
+
 ### 10.2 Required scenario matrix
 
 | Area | Required scenarios |
 | --- | --- |
-| Preferences | first-use no selection; non-empty submit; remembered collapsed team; changed preference; stale subset; no valid remainder |
+| Preferences | first-use no selection; non-empty submit; remembered collapsed team; changed preference; stale subset; runtime-mode/credential change before submit; no valid remainder; no preference/batch write on rejection |
 | Pools | additive activation; active logical version replacement; last-candidate deactivate/retire rejection; atomic manager replacement; malformed active profile |
-| Batches | all selected queued; overlapping execution; terminal-only selection; one success; mixed outcomes; all failed; retry failed only; restart history |
-| Sole candidate | no checkbox or result choice; invalid sole output does not materialize; valid sole output auto-selects |
-| Cards | same logical card/revision; saved message projection; exact ready/running/results/completed reload; stale action conflict |
+| Batches | all selected queued; overlapping execution; terminal-only selection; `implicit_sole` only when the eligible pool has one candidate; selecting one from a multi-candidate pool remains explicit; two selected with one success/one failure stays in results with no implicit selection; mixed outcomes; all failed; retry failed only; results change-and-rerun restores frozen input and transfers readyPreviousBatchId to previousBatchId; completed restart history |
+| Sole candidate | exactly one eligible compatible candidate freezes `implicit_sole` and has no checkbox or result choice; invalid sole output does not materialize; valid sole output auto-selects; selecting one from a larger pool and terminal success count never convert an explicit batch into sole-candidate flow |
+| Cards | same logical card/revision; private ready input survives reload and never enters UI JSON; Run copies the identical input without a manager call; results change-and-rerun transaction restores ready input/history without preference or workflow mutation; saved message projection; exact ready/running/results/completed reload; stale action conflict |
 | Text | all seven closed materializers; direct quality; selected-only version; one-repair limit; downstream needs_review |
 | Images | reference/page generate and edit; per-item preference; sequential items; multi preview; selected-only compose/link; prior asset retention |
-| Profiles | compatible/incompatible targets/operations; closed model IDs; OpenAI size/quality; Gemini ratio/resolution; FLUX dimensions/reference limits/poll recovery; versioned cost; native/canonical invalid output |
+| Profiles | compatible/incompatible targets/operations; closed model IDs including stable `gemini-3-pro-image` and rejected preview alias; OpenAI size/quality; exact Gemini Interactions endpoint, headers, snake_case request body, ordered references, completed model-output image response, and camelCase/legacy/SDK-only rejection; FLUX dimensions and ordered URL-field fixtures; real FLUX image-input ineligibility/no-call; limits and poll recovery; versioned cost; native/canonical invalid output |
 | Evidence | immutable snapshots after admin edits; batch/item IDs; canonical/native references; usage/cost/error; no bytes/secrets |
 | Admin | target/list/detail selection; ordering/search/add; inactive creation; auto draft; advanced disclosures; URL reload; narrow focus/back |
-| Recovery | process interruption while running and materializing; retry action idempotency; stale workflow; missing pool; filesystem asset already written |
+| Recovery | process interruption while running and materializing; retry action idempotency; results change-and-rerun restores frozen input/history across reload; restart clones input when source/dependencies remain current; stale rerun/restart has no mutation; stale workflow; missing pool; filesystem asset already written |
 
 ### 10.3 Required commands
 
@@ -835,10 +1120,12 @@ Replace the placeholder with confirmed findings during execution. Resolve, verif
 | Manager is not an execution-profile candidate | Profile executor kinds are specialist/image; manager remains the unique router with existing closed configuration. | MA-016–MA-019 |
 | Typed columns, no arbitrary settings JSON | Covers current text/image settings with code-owned schemas and minimal persistence. | MA-017, MA-024; minimal scope |
 | Four production profiles, five model choices, and one dated OpenAI snapshot ID | Adds the requested OpenAI/Gemini/FLUX coverage while keeping catalogs and mappings closed and code-owned. | User annotation; MA-017–MA-019 |
-| Ready card precedes batch | MA-007 creates a batch only when Run is submitted; avoids empty durable batches. | MA-001, MA-007 |
+| Ready card precedes batch with private input on the card row | MA-007 creates a batch only when Run is submitted while reload-safe server-only input avoids a fourth collection or manager rerun. | MA-001, MA-007, MA-015a |
 | Append attempts inside execution item | Retains retries/failures without a fourth collection. | MA-007–MA-010, MA-021 |
 | Poll persisted state; no resumable LLM stream | Existing AI SDK data-card transport is atomic; durable runner survives client disconnect/reload. | MA-015a; installed AI SDK 7 docs |
 | Idempotent materializers with batch provenance | Closes crash gaps without an outbox/workflow engine. | MA-010–MA-011, MA-020–MA-022 |
+| Results rerun and completed restart restore frozen input behind currentness gates | `change_agents` returns an unselected terminal batch to ready without mutation; `restart_with_agents` revises a completed outcome only when its provenance remains current. Both transfer `readyPreviousBatchId` into the replacement batch. | MA-010–MA-011, MA-020 |
+| Real FLUX image-input execution is gated out of the local POC | BFL requires provider-retrievable image URLs, while assets are filesystem-local. Fake fixtures retain complete adapter/limit coverage; real requests with references/edit targets fail eligibility before any provider call unless a later public-delivery design is separately approved. | MA-017–MA-019, MA-022; minimal scope |
 | Existing asset kinds remain | Unlinked reference/page_source assets already express inactive candidates; selection controls linkage/composition. | MA-014, MA-021 |
 | Existing generation job remains sequence owner | Avoids two competing image workflows; parallelism belongs inside current item. | MA-012, MA-013, MA-014 |
 | Database-authoritative image model/quality/resolution | Agent versions/profile snapshots must explain exact execution; environment keeps only provider credentials and the fake/real switch. | MA-017, MA-022, MA-024 |
@@ -852,7 +1139,7 @@ Add only material implementation discoveries. Product decisions must not be sile
 | Risk | Required control | Explicitly not added |
 | --- | --- | --- |
 | Provider overload from selecting all candidates | Clear parallel/cost notice and evidence; execute exactly user selection | UI cap, hidden throttle, auto cancellation |
-| Stale pool or workflow mutates state | fingerprints, optimistic revisions, frozen snapshots, selection-time revalidation | silent fallback |
+| Stale pool, runtime availability, ready input, rerun/restart source, or workflow mutates state | availability-aware fingerprints, private-input/currentness checks before transactions, optimistic revisions, frozen snapshots, selection-time revalidation | silent fallback |
 | Crash duplicates an artifact/asset or FLUX submission | stable materialization IDs, sparse unique provenance, recovery replay, persisted FLUX request/poll state | distributed queue/outbox; impossible guarantees across the remote-submit/DB-write gap |
 | Invalid or changed provider/model shape reaches workflow | closed model catalogs, official-contract recheck, native and canonical parsing before terminal success | free-form model IDs, best-effort coercion |
 | Multiple card actions race | response IDs, card revision, conditional transactions | client-only locks |
@@ -875,7 +1162,7 @@ During implementation, keep:
 - a requirement-level IMPLEMENTATION-AUDIT.md created/updated in Phase 4; and
 - LESSONS-LEARNED.md updated only through the capture-project-learnings workflow when verified reusable knowledge exists.
 
-Do not create a second plan, a chronological implementation diary, or speculative postmortem.
+Do not create a second plan, an implementation report, a handoff/session-notes file, a chronological implementation diary, or a speculative postmortem. Session handoffs exist only in the coding agent's final response; durable facts belong only in the existing plan ledger, roadmap evidence tracker, architecture/operator documentation, implementation audit, or verified learnings according to their defined scopes.
 
 ## 15. Completion audit and change control
 
