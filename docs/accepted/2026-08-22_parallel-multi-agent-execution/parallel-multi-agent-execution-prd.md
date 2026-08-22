@@ -1,8 +1,8 @@
 # Product Requirements Document: Parallel multi-agent execution
 
-**Status:** Proposed - PRD refinement in progress
+**Status:** Accepted for implementation planning
 **Issue:** [#18](https://github.com/karpishe-experiments/agentic-poc/issues/18) — Support parallel multi-agent execution and normalized contracts
-**Authority if accepted:** This document extends the accepted Kids Booklet POC PRD and the database-backed runtime agent-management PRD. It supersedes their singleton-specialist and no-multi-agent-selection constraints; all other bounded-skill and application-authority rules remain in force.
+**Authority:** This document extends the accepted Kids Booklet POC PRD and the database-backed runtime agent-management PRD. It supersedes their singleton-specialist and no-multi-agent-selection constraints; all other bounded-skill and application-authority rules remain in force.
 
 ## 1. Product summary
 
@@ -43,13 +43,13 @@ The POC remains local, single-user, application-controlled, and intentionally sm
 - **MA-008:** Candidate items in a batch shall run concurrently. The card moves to results only after every selected candidate succeeds or fails.
 - **MA-009:** Results shall be summary-first in the same card, with a compact normalized summary or safe error per candidate. Creators may expand text details or open a keyboard-operable full image preview on demand.
 - **MA-010:** When multiple candidate results exist, the creator shall select exactly one validated success before a text proposal becomes an artifact version or an image becomes active. In mixed outcomes, the creator may choose a success, retry only failed candidates, or change agents and rerun. If none succeeds, only retry/change-team recovery is available.
-- **MA-011:** After materialization, the same card moves to completed and shows the selected agent/result in a collapsed summary. It and the produced artifact expose **Restart with agents**. Restarting returns the card to a prefilled ready state and leaves current workflow state unchanged until a replacement succeeds and is selected; normal immutable-version and downstream `needs_review` behavior then applies.
+- **MA-011:** After materialization, the same card moves to completed and shows the selected agent/result in a collapsed summary. It and the produced artifact expose **Restart with agents**. Restarting returns the card to a prefilled ready state, keeps prior batches available in collapsed run history, and leaves current workflow state unchanged until a replacement succeeds and is selected; normal immutable-version and downstream `needs_review` behavior then applies.
 
 ### 3.3 Image item flow
 
 - **MA-012:** Every reference and page image item is an independent Agent run step. Its ready state shows the remembered image team collapsed and permits an item-level Change agents action when multiple compatible agents are active.
 - **MA-013:** A changed image team becomes the remembered default for the next item of the same booklet and image target. Existing reference/page order remains sequential; selected candidates for one item run in parallel, and the next item does not begin until the current item has a successful image implicitly or explicitly selected. Failure recovery remains on the current item.
-- **MA-014:** The selected image's source/composed assets become active only after success and creator selection. Changing or restarting an item's team shall not affect completed items, and existing assets remain active through failed alternatives and restarts.
+- **MA-014:** The selected image's source/composed assets become active only after success and implicit sole-agent or explicit multi-agent selection. Changing or restarting an item's team shall not affect completed items, and existing assets remain active through failed alternatives and restarts.
 
 ### 3.4 Accessibility and restoration
 
@@ -100,4 +100,4 @@ Browser evidence shall cover first-use and remembered collapsed teams, Change ag
 - Partial successes remain selectable only after every batch item reaches a terminal state.
 - Agent management is target-centric and uses a three-panel **Targets / Agents / Details** layout, degrading to a three-step drill-down on narrow viewports.
 - Routine administration uses active-team controls and inactive-first agent creation; version branching and lifecycle mechanics remain available as collapsed advanced controls.
-- This proposed PRD intentionally does not contain an implementation plan. Create the canonical `PLAN.md` only after this document is accepted.
+- Implementation phase status and evidence are tracked in `roadmap.md` in this directory.
