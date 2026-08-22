@@ -19,6 +19,8 @@ Project-local skills are copied under `.agents/skills` and pinned in `skills-loc
 - `review-change` for pinned, read-only defect-first review.
 - `sync-docs-issues` for final documentation and issue-evidence reconciliation.
 - `compile-feature-spec` for turning rough experimental ideas into bounded specifications.
+- `asd-ste100` for unambiguous agent-authored technical prose without changing facts,
+  uncertainty, conditions, or scope.
 
 Codex also provides maintained system skills that must not be copied into this repository:
 
@@ -109,8 +111,12 @@ rules are canonical in `.agents/repository-adapter.md`.
 
 - Use `.agents/skills/work-on-task/SKILL.md` for implementation, fixes, and refactors.
 - Use `.agents/skills/review-change/SKILL.md` for a separate read-only review.
-- Use `.agents/skills/sync-docs-issues/SKILL.md` after verified changes.
-- Use `.agents/skills/compile-feature-spec/SKILL.md` for rough feature ideas.
+- Use `.agents/skills/sync-docs-issues/SKILL.md` for reconciling verified changes with docs and issue evidence.
+- Use `.agents/skills/compile-feature-spec/SKILL.md` for turning rough feature ideas into bounded specifications.
+- Use `.agents/skills/asd-ste100/SKILL.md` for unambiguous agent-authored technical prose.
+
+
+Use STE-flavored language for agent-authored prose. Preserve code, commands, identifiers, quotations, logs, and user-owned wording exactly unless the user asks to rewrite them.
 
 These workflows may publish a reviewed branch and PR but never merge, deploy,
 release the consumer application, close issues, or mutate GitHub Project fields.

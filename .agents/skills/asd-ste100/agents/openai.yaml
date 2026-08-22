@@ -1,0 +1,4 @@
+interface:
+  display_name: ASD-STE100 Agent Prose
+  short_description: Rewrite technical prose to reduce ambiguity
+  default_prompt: Use $asd-ste100 to make this agent-authored prose unambiguous without changing its meaning.
