@@ -10,7 +10,8 @@ function string(formData: FormData, key: string) { return String(formData.get(ke
 function nullable(formData: FormData, key: string) { const value = string(formData, key); return value ? value : null; }
 function number(formData: FormData, key: string) { return Number(string(formData, key)); }
 function configuration(formData: FormData) {
-  return { displayName: string(formData, "displayName"), purpose: string(formData, "purpose"), role: string(formData, "role"), skillId: nullable(formData, "skillId"), instructions: string(formData, "instructions"), provider: "openai", modelId: string(formData, "modelId"), reasoningEffort: string(formData, "reasoningEffort"), maxTurns: number(formData, "maxTurns") };
+  const role = string(formData, "role");
+  return { displayName: string(formData, "displayName"), purpose: string(formData, "purpose"), role, skillId: nullable(formData, "skillId"), imageTarget: nullable(formData, "imageTarget"), instructions: string(formData, "instructions") || null, provider: string(formData, "provider") || "openai", modelId: string(formData, "modelId"), reasoningEffort: nullable(formData, "reasoningEffort"), maxTurns: string(formData, "maxTurns") ? number(formData, "maxTurns") : null, profileId: nullable(formData, "profileId") ?? (role === "specialist" ? "openai-specialist" : null), profileVersion: string(formData, "profileVersion") ? number(formData, "profileVersion") : role === "specialist" ? 1 : null, imageQuality: nullable(formData, "imageQuality"), imageResolution: nullable(formData, "imageResolution") };
 }
 
 function validateConfiguration(formData: FormData): AgentActionState | null {
@@ -43,6 +44,7 @@ export async function saveAgentDraft(_: AgentActionState, formData: FormData) {
 }
 export async function forkAgent(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().fork({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision") }), "Draft forked."); }
 export async function confirmAgent(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().confirm({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision") }), "Draft confirmed."); }
-export async function activateAgent(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().activate({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision"), observedSlotVersionId: nullable(formData, "observedSlotVersionId"), observedLogicalActiveVersionId: nullable(formData, "observedLogicalActiveVersionId") }), "Replacement activated."); }
+export async function activateAgent(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().activate({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision"), observedSlotVersionId: nullable(formData, "observedSlotVersionId"), observedLogicalActiveVersionId: nullable(formData, "observedLogicalActiveVersionId") }), "Agent activated."); }
+export async function deactivateAgent(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().deactivate({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision") }), "Candidate deactivated."); }
 export async function retireAgent(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().retire({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision") }), "Version retired."); }
 export async function deleteAgentDraft(_: AgentActionState, formData: FormData) { return run(() => getAgentManagementService().deleteDraft({ id: string(formData, "id"), expectedRevision: number(formData, "expectedRevision") }), "Eligible draft deleted."); }

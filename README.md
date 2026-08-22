@@ -103,6 +103,7 @@ The application uses an application-controlled agent handoff: a stage-filtered m
 `/admin/agents` is an unauthenticated, trusted-local-only backoffice. Its slot rail shows the required manager plus seven specialist slots; selecting a slot opens a focused read-only workspace for its logical agents, version history, technical details, and valid lifecycle actions. Use **New Agent** for a blank inactive draft or **Edit Draft** for deliberate changes, then confirm and activate a reviewed replacement. Destructive actions stay in the workspace’s Danger Zone. On narrow screens, the complete slot rail stacks above the workspace. Do not expose this page on a network.
 
 Text-agent instructions and model settings are versioned MongoDB data; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
+For a target with multiple compatible active candidates, the creator gets one persisted **Choose agents** card: search/select a non-empty team, run it concurrently, then choose one successful result before the application changes an artifact or active image. The selected team is remembered per booklet and target; **Change agents**, retry, and restart retain earlier run history. A sole valid candidate runs and selects automatically. Fake mode is no-cost; real-provider estimates appear in evidence.
 
 ## Local data and project references
 

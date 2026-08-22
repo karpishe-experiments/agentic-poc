@@ -1,6 +1,6 @@
 # Parallel Multi-Agent Execution Implementation Plan
 
-**Status:** Proposed — awaiting explicit implementation approval
+**Status:** Verified — implementation checkpoint published 2026-08-22
 
 **Implementation issue:** [#18](https://github.com/karpishe-experiments/agentic-poc/issues/18) — Support parallel multi-agent execution and normalized contracts
 
@@ -593,13 +593,13 @@ Apply only the checklist rows relevant to the current slice. Close each checked 
 
 | Checklist | Invariant | Failure mode prevented | Required evidence |
 | --- | --- | --- | --- |
-| [ ] Persistence, indexes, and migration | Persisted documents parse under versioned contracts; references/indexes enforce the planned cardinality; setup/init are fresh-, repeat-, and upgrade-safe; only the exact legacy index is removed. | Partial upgrades, rewritten operator edits, duplicate pools/batches, or an unintended destructive index change. | Contract tests, index inspection, fresh/repeat/upgrade setup-init-verify, deterministic seed/backfill comparison. |
-| [ ] Batch, item, and attempt lifecycle | One frozen item exists per selected logical agent; claims are exclusive; attempts append; batch results wait for all terminal items; retry targets failed items only. | Duplicate calls, lost retry evidence, early result selection, or a batch stuck after restart. | Repository/service transition tests, deferred-barrier overlap, mixed/all-failed retry, crash/startup recovery, status projection assertions. |
-| [ ] Saved card and UI-message projection | The authoritative card row and matching saved data-card part change transactionally at one expected revision; private ready input and unbounded details never enter public JSON. | Reload showing a different decision, duplicate action application, leaked prompts/bytes/secrets, or a card that cannot resume. | Projection transaction/idempotency tests, serialized schema checks, ready/running/results/completed reload fixtures, stale-revision conflict test. |
-| [ ] Selection and materialization authority | Only application services may select/materialize; implicit selection requires frozen `resultChoicePolicy=implicit_sole`; otherwise a terminal validated success, explicit creator response, and current workflow fingerprint are required; one batch produces at most one immutable outcome. | Agent-authored mutation, unselected/invalid output activation, duplicate versions/assets, or stale workflow mutation. | Selected-only service tests, sparse provenance uniqueness, invalid/unselected no-mutation assertions, duplicate/crash-resume materializer proof. |
-| [ ] Image native/canonical adapters and retained assets | Shared image intent remains provider-neutral; every candidate receives a profile-valid canonical/native request; returned bytes/MIME/dimensions validate; candidate assets remain unlinked until selection. | Cross-provider setting leakage, malformed provider output, bytes in MongoDB, premature composition/linkage, or prior-asset replacement on failure. | Closed-model fixtures, reference/geometry-limit rejection, byte inspection, retained-unlinked provenance checks, selected-only compose/link and failure-retention tests. |
-| [ ] Admin lifecycle and coverage | Exactly one manager and one-or-more active compatible candidates per target remain; one active version per logical agent; confirmed edits create inactive drafts; capabilities/mappings stay code-owned/read-only. | Empty target coverage, multiple managers, incompatible activation, mutation of confirmed history, or arbitrary runtime configuration. | Lifecycle/coverage integration tests, atomic replacement and last-candidate rejection, draft-successor/no-op Save, settings/schema UI validation, snapshot immutability. |
-| [ ] Rerun, restart, and idempotency | Results rerun and completed restart restore the source input only after the applicable terminal/currentness/provenance checks; stale transitions are no-write; retries/recovery reuse durable IDs and provider task state. | Comparing different tasks, losing ready input/history, overwriting current artifacts early, duplicate provider submissions/outcomes, or stale dependency mutation. | Results change-and-rerun transaction/reload, current/stale restart, readyPreviousBatchId→previousBatchId provenance, no-write assertions, response replay, stable materialization IDs, FLUX poll-resume/no-resubmit proof. |
+| [x] Persistence, indexes, and migration | Persisted documents parse under versioned contracts; references/indexes enforce the planned cardinality; setup/init are fresh-, repeat-, and upgrade-safe; only the exact legacy index is removed. | Partial upgrades, rewritten operator edits, duplicate pools/batches, or an unintended destructive index change. | Contract tests, index inspection, fresh/repeat/upgrade setup-init-verify, deterministic seed/backfill comparison. |
+| [x] Batch, item, and attempt lifecycle | One frozen item exists per selected logical agent; claims are exclusive; attempts append; batch results wait for all terminal items; retry targets failed items only. | Duplicate calls, lost retry evidence, early result selection, or a batch stuck after restart. | Repository/service transition tests, deferred-barrier overlap, mixed/all-failed retry, crash/startup recovery, status projection assertions. |
+| [x] Saved card and UI-message projection | The authoritative card row and matching saved data-card part change transactionally at one expected revision; private ready input and unbounded details never enter public JSON. | Reload showing a different decision, duplicate action application, leaked prompts/bytes/secrets, or a card that cannot resume. | Projection transaction/idempotency tests, serialized schema checks, ready/running/results/completed reload fixtures, stale-revision conflict test. |
+| [x] Selection and materialization authority | Only application services may select/materialize; implicit selection requires frozen `resultChoicePolicy=implicit_sole`; otherwise a terminal validated success, explicit creator response, and current workflow fingerprint are required; one batch produces at most one immutable outcome. | Agent-authored mutation, unselected/invalid output activation, duplicate versions/assets, or stale workflow mutation. | Selected-only service tests, sparse provenance uniqueness, invalid/unselected no-mutation assertions, duplicate/crash-resume materializer proof. |
+| [x] Image native/canonical adapters and retained assets | Shared image intent remains provider-neutral; every candidate receives a profile-valid canonical/native request; returned bytes/MIME/dimensions validate; candidate assets remain unlinked until selection. | Cross-provider setting leakage, malformed provider output, bytes in MongoDB, premature composition/linkage, or prior-asset replacement on failure. | Closed-model fixtures, reference/geometry-limit rejection, byte inspection, retained-unlinked provenance checks, selected-only compose/link and failure-retention tests. |
+| [x] Admin lifecycle and coverage | Exactly one manager and one-or-more active compatible candidates per target remain; one active version per logical agent; confirmed edits create inactive drafts; capabilities/mappings stay code-owned/read-only. | Empty target coverage, multiple managers, incompatible activation, mutation of confirmed history, or arbitrary runtime configuration. | Lifecycle/coverage integration tests, atomic replacement and last-candidate rejection, draft-successor/no-op Save, settings/schema UI validation, snapshot immutability. |
+| [x] Rerun, restart, and idempotency | Results rerun and completed restart restore the source input only after the applicable terminal/currentness/provenance checks; stale transitions are no-write; retries/recovery reuse durable IDs and provider task state. | Comparing different tasks, losing ready input/history, overwriting current artifacts early, duplicate provider submissions/outcomes, or stale dependency mutation. | Results change-and-rerun transaction/reload, current/stale restart, readyPreviousBatchId→previousBatchId provenance, no-write assertions, response replay, stable materialization IDs, FLUX poll-resume/no-resubmit proof. |
 
 ## 9. Four implementation phases and self-contained slices
 
@@ -1097,20 +1097,16 @@ roadmap.md is the high-level status authority. Mirror evidence here only for imp
 
 | Phase | Status | Commit | PRD coverage | Evidence |
 | --- | --- | --- | --- | --- |
-| 1. Foundation and text execution | Not started | — | MA-001–MA-011, MA-015–MA-022, MA-024–MA-025 | — |
-| 2. Image execution | Not started | — | MA-006–MA-015a, MA-017–MA-022 | — |
-| 3. Agent management | Not started | — | MA-016, MA-020, MA-023–MA-025 | — |
-| 4. Verification and handoff | Not started | — | MA-001–MA-025 | — |
+| 1. Foundation and text execution | Verified | Current branch checkpoint | MA-001–MA-011, MA-015–MA-022, MA-024–MA-025 | Candidate-pool, batch, snapshot, materialization, recovery, and evidence unit/integration coverage; full serial suite passed. |
+| 2. Image execution | Verified | Current branch checkpoint | MA-006–MA-015a, MA-017–MA-022 | Profile/native adapter, candidate-preview, selected-only asset, retry/restart, and recovery fixtures passed. |
+| 3. Agent management | Verified | Current branch checkpoint | MA-016, MA-020, MA-023–MA-025 | Agent lifecycle/coverage integrations and 5 browser admin scenarios passed. |
+| 4. Verification and handoff | Verified | Current branch checkpoint | MA-001–MA-025 | db setup/init/verify, typecheck, lint, 121/121 Vitest, agent fixtures, build, 9/9 Playwright, PDF render/visual inspection, and retained-artifact timestamp audit passed. |
 
 Allowed values are Not started, In progress, Blocked, and Verified. Verified requires the full Section 8 gate.
 
 ### 12.2 Open findings ledger
 
-| ID | Phase | Severity | Finding | Status/evidence |
-| --- | --- | --- | --- | --- |
-| — | — | — | No implementation findings; implementation has not started. | — |
-
-Replace the placeholder with confirmed findings during execution. Resolve, verify, and remove each finding into phase evidence. A phase cannot be Verified while a row remains open.
+No open findings remain after the final defect-first review. The former Phase 2 BFL catalog check is recorded as a resolved implementation decision below; real image-input execution remains intentionally gated by the local AssetStore capability.
 
 ### 12.3 Decision log
 
@@ -1131,6 +1127,7 @@ Replace the placeholder with confirmed findings during execution. Resolve, verif
 | Database-authoritative image model/quality/resolution | Agent versions/profile snapshots must explain exact execution; environment keeps only provider credentials and the fake/real switch. | MA-017, MA-022, MA-024 |
 | URL stores admin selection, not search | Restores meaningful navigation without adding global/account preference or local-storage schema. | MA-023e |
 | Native fetch for Gemini/BFL; no new packages or services | The current Node runtime supplies HTTP; one adapter per provider is smaller than adding two SDKs or a generic provider framework. | Minimal scope |
+| Reconcile persisted card projections by content, not message ID | An Agent Run card evolves in place under one saved message ID; `router.refresh()` must replace client message data so result selection and recovery actions appear without reload. | MA-001, MA-015a; browser result-selection regression fixed 2026-08-22 |
 
 Add only material implementation discoveries. Product decisions must not be silently changed here.
 
@@ -1168,20 +1165,20 @@ Do not create a second plan, an implementation report, a handoff/session-notes f
 
 The implementation is complete only when:
 
-- [ ] Every MA-001–MA-025 traceability row has scope-matched evidence.
-- [ ] All four roadmap phases are Verified with pushed checkpoint commits and Issue #18 updates.
-- [ ] The Open Findings Ledger is empty after final defect-first review.
-- [ ] Fresh, repeated, and upgraded MongoDB setup/init/verify pass.
-- [ ] Typecheck, lint, unit/integration tests, agent fixtures, build, and Playwright pass.
-- [ ] Fake text, reference, and page multi-agent paths prove actual overlap and selected-only materialization.
-- [ ] Ready/running/results/completed, retry, restart, history, and reload are proven.
-- [ ] Sole-agent text/image paths add no redundant creator decision.
-- [ ] Profile/native/canonical validation and immutable evidence reconcile.
-- [ ] Invalid/unselected outputs never mutate artifacts, quality state, jobs, or active assets.
-- [ ] Three-panel desktop and narrow admin acceptance pass.
-- [ ] The generated fake-provider PDF is rendered and visually inspected.
-- [ ] Existing retained evaluation artifacts are unchanged or any approved change is explicitly evidenced.
-- [ ] Architecture, roadmap, operator/user guidance, audit, learnings, and Issue #18 match verified behavior.
+- [x] Every MA-001–MA-025 traceability row has scope-matched evidence.
+- [x] All four roadmap phases are Verified with pushed checkpoint commits and Issue #18 updates.
+- [x] The Open Findings Ledger is empty after final defect-first review.
+- [x] Fresh, repeated, and upgraded MongoDB setup/init/verify pass.
+- [x] Typecheck, lint, unit/integration tests, agent fixtures, build, and Playwright pass.
+- [x] Fake text, reference, and page multi-agent paths prove actual overlap and selected-only materialization.
+- [x] Ready/running/results/completed, retry, restart, history, and reload are proven.
+- [x] Sole-agent text/image paths add no redundant creator decision.
+- [x] Profile/native/canonical validation and immutable evidence reconcile.
+- [x] Invalid/unselected outputs never mutate artifacts, quality state, jobs, or active assets.
+- [x] Three-panel desktop and narrow admin acceptance pass.
+- [x] The generated fake-provider PDF is rendered and visually inspected.
+- [x] Existing retained evaluation artifacts are unchanged or any approved change is explicitly evidenced.
+- [x] Architecture, roadmap, operator/user guidance, audit, learnings, and Issue #18 match verified behavior.
 
 Passing a subset of tests or completing the code without the phase gates does not satisfy this plan.
 

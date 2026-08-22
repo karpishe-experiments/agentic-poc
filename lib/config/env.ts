@@ -9,6 +9,8 @@ export const serverEnvSchema = z.object({
   IMAGE_PROVIDER_MODE: z.enum(["fake", "real"]).default("fake"),
   OPENAI_IMAGE_MODEL: z.string().min(1).default("gpt-image-2"),
   OPENAI_IMAGE_QUALITY: imageQualitySchema.default("disabled"),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  BFL_API_KEY: z.string().min(1).optional(),
   MONGODB_URI: z.string().min(1).default("mongodb://127.0.0.1:27017/?replicaSet=rs0"),
   MONGODB_DATABASE: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/).default("kids_booklet"),
   DATA_ROOT: z.string().min(1).default("./data/assets"),

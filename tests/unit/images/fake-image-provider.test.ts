@@ -12,7 +12,7 @@ describe("FakeImageProvider", () => {
 
     expect(result.status).toBe("succeeded");
     const image = sharp(Buffer.from(result.bytesBase64!, "base64"));
-    expect(await image.metadata()).toMatchObject({ width: 1024, height: 1024, format: "png" });
+    expect(await image.metadata()).toMatchObject({ width: 1536, height: 1536, format: "png" });
     const pixels = await image.raw().toBuffer();
     expect(new Set([pixels[0], pixels[1], pixels[2], pixels[pixels.length - 4], pixels[pixels.length - 3], pixels[pixels.length - 2]])).toHaveLength(6);
   });

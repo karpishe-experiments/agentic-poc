@@ -20,7 +20,7 @@ export class OpenAISpecialistRuntime {
   }
 
   public async runWithMetadata(definition: SkillDefinition, input: unknown, context: SkillContext, configuration: ResolvedAgentConfiguration): Promise<SpecialistRunResult> {
-    const agent = createSpecialistAgent(definition, input, context, { name: configuration.version.displayName, instructions: configuration.version.instructions, model: configuration.version.modelId, reasoning: configuration.version.reasoningEffort });
+    const agent = createSpecialistAgent(definition, input, context, { name: configuration.version.displayName, instructions: configuration.version.instructions!, model: configuration.version.modelId, reasoning: configuration.version.reasoningEffort! });
     const outputEnvelope = z.object({ result: definition.outputSchema });
     const result = await this.runner.run(agent, JSON.stringify({
       skillId: definition.id,

@@ -4,6 +4,7 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import type { AgentDefinitionDocument, AgentVersionDocument, AgentVersionEventDocument } from "@/db/documents";
 import { agentDefinitionSchema, agentVersionEventSchema, agentVersionSchema, type AgentDefinition, type AgentVersion, type AgentVersionEvent } from "@/lib/contracts/agents";
 import type { SkillId } from "@/lib/contracts/skills";
+import type { ExecutionTargetKey } from "@/lib/contracts/execution";
 
 const iso = (timestamp: number) => new Date(timestamp).toISOString();
 const parseMetadata = (value: string | null) => value ? JSON.parse(value) as Record<string, unknown> : null;
@@ -12,22 +13,23 @@ function toDefinition(row: AgentDefinitionDocument): AgentDefinition {
   return agentDefinitionSchema.parse({ id: row._id, createdAt: iso(row.createdAtMs), createdBy: row.createdBy });
 }
 function versionValue(row: AgentVersionDocument) {
-  return { id: row._id, agentId: row.agentId, versionNumber: row.versionNumber, parentVersionId: row.parentVersionId, displayName: row.displayName, purpose: row.purpose, role: row.role, skillId: row.skillId, instructions: row.instructions, provider: row.provider, modelId: row.modelId, reasoningEffort: row.reasoningEffort, maxTurns: row.maxTurns, status: row.status, isActive: row.isActive, revision: row.revision, createdAt: iso(row.createdAtMs), updatedAt: iso(row.updatedAtMs), createdBy: row.createdBy, updatedBy: row.updatedBy };
+  return { id: row._id, agentId: row.agentId, versionNumber: row.versionNumber, parentVersionId: row.parentVersionId, displayName: row.displayName, purpose: row.purpose, role: row.role, skillId: row.skillId, imageTarget: row.imageTarget ?? null, instructions: row.instructions, provider: row.provider, modelId: row.modelId, reasoningEffort: row.reasoningEffort, maxTurns: row.maxTurns, profileId: row.profileId ?? null, profileVersion: row.profileVersion ?? null, imageQuality: row.imageQuality ?? null, imageResolution: row.imageResolution ?? null, status: row.status, isActive: row.isActive, revision: row.revision, createdAt: iso(row.createdAtMs), updatedAt: iso(row.updatedAtMs), createdBy: row.createdBy, updatedBy: row.updatedBy };
 }
 const toVersion = (row: AgentVersionDocument) => agentVersionSchema.parse(versionValue(row));
 const toAdminVersion = (row: AgentVersionDocument) => agentVersionSchema.safeParse(versionValue(row)).data ?? versionValue(row) as AgentVersion;
 const toEvent = (row: AgentVersionEventDocument) => agentVersionEventSchema.parse({ id: row._id, agentId: row.agentId, agentVersionId: row.agentVersionId, action: row.action, actor: row.actor, metadata: parseMetadata(row.metadataJson), createdAt: iso(row.createdAtMs) });
 
 export class AgentMutationError extends Error {
-  public constructor(public readonly code: "agent_not_found" | "agent_conflict" | "agent_immutable" | "agent_delete_blocked", message: string) { super(message); }
+  public constructor(public readonly code: "agent_not_found" | "agent_conflict" | "agent_immutable" | "agent_delete_blocked" | "agent_coverage_conflict", message: string) { super(message); }
 }
 export type AgentPersistenceSnapshot = { definitions: AgentDefinition[]; versions: AgentVersion[]; events: AgentVersionEvent[] };
 export type AgentRepository = {
-  getAdminSnapshot(): Promise<AgentPersistenceSnapshot>; getVersion(id: string): Promise<AgentVersion | null>; resolveActiveManager(): Promise<AgentVersion | null>; resolveActiveSpecialist(skillId: SkillId): Promise<AgentVersion | null>;
+  getAdminSnapshot(): Promise<AgentPersistenceSnapshot>; getVersion(id: string): Promise<AgentVersion | null>; resolveActiveManager(): Promise<AgentVersion | null>; resolveActiveSpecialist(skillId: SkillId): Promise<AgentVersion | null>; resolveActiveCandidates(targetKey: ExecutionTargetKey): Promise<AgentVersion[]>;
   create(input: { definitionId: string; versionId: string; configuration: Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns">; actor: string; now: number }): Promise<AgentVersion>;
   updateDraft(input: { id: string; expectedRevision: number; configuration: Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns">; actor: string; now: number }): Promise<AgentVersion>;
   fork(input: { id: string; expectedRevision: number; versionId: string; actor: string; now: number }): Promise<AgentVersion>; confirm(input: { id: string; expectedRevision: number; actor: string; now: number }): Promise<AgentVersion>;
   activate(input: { id: string; expectedRevision: number; observedSlotVersionId: string | null; observedLogicalActiveVersionId: string | null; actor: string; now: number }): Promise<AgentVersion>;
+  deactivate(input: { id: string; expectedRevision: number; actor: string; now: number }): Promise<AgentVersion>;
   retire(input: { id: string; expectedRevision: number; actor: string; now: number }): Promise<AgentVersion>; deleteDraft(input: { id: string; expectedRevision: number; actor: string; now: number }): Promise<void>;
 };
 
@@ -56,7 +58,12 @@ export function createAgentRepository(database: Database): AgentRepository {
     },
     async getVersion(id) { const row = await versions.findOne({ _id: id }); return row ? toVersion(row) : null; },
     async resolveActiveManager() { const rows = await versions.find({ isActive: true, role: "manager" }).limit(2).toArray(); return rows.length === 1 ? toVersion(rows[0]) : null; },
-    async resolveActiveSpecialist(skillId) { const rows = await versions.find({ isActive: true, role: "specialist", skillId }).limit(2).toArray(); return rows.length === 1 ? toVersion(rows[0]) : null; },
+    async resolveActiveSpecialist(skillId) { const rows = await repository.resolveActiveCandidates(`skill:${skillId}`); return rows.length === 1 ? rows[0] : null; },
+    async resolveActiveCandidates(targetKey) {
+      const filter = targetKey.startsWith("skill:") ? { isActive: true, role: "specialist", skillId: targetKey.slice(6) } : targetKey === "image:reference" ? { isActive: true, role: "image", imageTarget: "reference" } : targetKey === "image:page" ? { isActive: true, role: "image", imageTarget: "page" } : { isActive: true, role: "manager" };
+      const rows = await versions.find(filter).sort({ displayName: 1, agentId: 1 }).toArray();
+      return rows.map(toVersion).filter((version) => version.status !== "retired");
+    },
     async create(input) {
       await withMongoTransaction(database, async (session) => {
         await database.collections.agent_definitions.insertOne({ _id: input.definitionId, createdAtMs: input.now, createdBy: input.actor }, { session });
@@ -104,11 +111,11 @@ export function createAgentRepository(database: Database): AgentRepository {
       if (target.status === "retired") throw new AgentMutationError("agent_immutable", "Retired versions cannot be activated.");
       if (target.revision !== input.expectedRevision) throw new AgentMutationError("agent_conflict", "This version changed elsewhere. Reload it before activating.");
       await withMongoTransaction(database, async (session) => {
-        const slotFilter = target.role === "manager" ? { isActive: true, role: "manager" } : { isActive: true, role: "specialist", skillId: target.skillId };
+        const slotFilter = target.role === "manager" ? { isActive: true, role: "manager" } : target.role === "specialist" ? { isActive: true, role: "specialist", skillId: target.skillId } : { isActive: true, role: "image", imageTarget: target.imageTarget };
         const slotRows = await versions.find(slotFilter, { session }).limit(2).toArray();
         const logicalRows = await versions.find({ isActive: true, agentId: target.agentId }, { session }).limit(2).toArray();
         if ((slotRows[0]?._id ?? null) !== input.observedSlotVersionId || (logicalRows[0]?._id ?? null) !== input.observedLogicalActiveVersionId) throw new AgentMutationError("agent_conflict", "Active coverage changed elsewhere. Reload the page before activating.");
-        const deactivated = [...new Map([...slotRows, ...logicalRows].filter((row) => row._id !== target._id).map((row) => [row._id, row])).values()];
+        const deactivated = [...new Map([...(target.role === "manager" ? slotRows : []), ...logicalRows].filter((row) => row._id !== target._id).map((row) => [row._id, row])).values()];
         for (const current of deactivated) {
           const result = await versions.updateOne({ _id: current._id, revision: current.revision }, { $set: { isActive: false, revision: current.revision + 1, updatedAtMs: input.now, updatedBy: input.actor } }, { session });
           if (!result.matchedCount) throw new AgentMutationError("agent_conflict", "Active coverage changed elsewhere. Reload the page before activating.");
@@ -119,7 +126,21 @@ export function createAgentRepository(database: Database): AgentRepository {
         await database.collections.agent_version_events.insertOne(event({ agentId: target.agentId, agentVersionId: target._id, action: "activate", actor: input.actor, now: input.now, metadata: { replacedVersionIds: deactivated.map((row) => row._id) } }), { session });
       }); return (await repository.getVersion(input.id))!;
     },
-    async retire(input) {
+    async deactivate(input) {
+      const current = await requireVersion(input.id);
+      if (current.role === "manager") throw new AgentMutationError("agent_immutable", "The active manager must be replaced, not directly deactivated.");
+      if (!current.isActive || current.status === "retired") throw new AgentMutationError("agent_immutable", "Only an active non-retired candidate can be deactivated.");
+      if (current.revision !== input.expectedRevision) throw new AgentMutationError("agent_conflict", "This version changed elsewhere. Reload it before deactivating.");
+      await withMongoTransaction(database, async (session) => {
+        const filter = current.role === "specialist" ? { isActive: true, role: "specialist", skillId: current.skillId } : { isActive: true, role: "image", imageTarget: current.imageTarget };
+        const peers = await versions.find(filter, { session }).toArray();
+        if (peers.filter((peer) => peer._id !== current._id).length === 0) throw new AgentMutationError("agent_coverage_conflict", "Keep at least one active compatible candidate for this target before deactivating this version.");
+        const result = await versions.updateOne({ _id: current._id, revision: current.revision, isActive: true }, { $set: { isActive: false, revision: current.revision + 1, updatedAtMs: input.now, updatedBy: input.actor } }, { session });
+        if (!result.matchedCount) throw new AgentMutationError("agent_conflict", "This version changed elsewhere. Reload it before deactivating.");
+        await database.collections.agent_version_events.insertOne(event({ agentId: current.agentId, agentVersionId: current._id, action: "deactivate", actor: input.actor, now: input.now, metadata: { direct: true } }), { session });
+      });
+      return (await repository.getVersion(input.id))!;
+    },    async retire(input) {
       const current = await requireVersion(input.id);
       if (current.isActive || current.status === "retired") throw new AgentMutationError("agent_immutable", "Only inactive non-retired versions can be retired.");
       if (current.revision !== input.expectedRevision) throw new AgentMutationError("agent_conflict", "This version changed elsewhere. Reload it before retiring.");

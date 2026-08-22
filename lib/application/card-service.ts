@@ -28,7 +28,24 @@ export class CardService {
     const parsed = cardResponseSchema.parse(input);
     const card = await this.repositories.conversation.getCard(bookletId, parsed.cardId);
     if (!card) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
-    if (await this.isMissingPageGenerationRecovery(bookletId, card, parsed.action)) {
+    if (card.family === "agent_run") {
+      if (card.payload.target.startsWith("image:")) {
+        const service = new (await import("@/lib/application/image-agent-run-service")).ImageAgentRunService({ repositories: this.repositories });
+        if (parsed.action === "run_agents") return service.start(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "select_agent_result") return service.select(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "retry_failed_agents") return service.retryFailed(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "change_agents") return service.changeAgents(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "restart_with_agents") return service.restart(bookletId, parsed.cardId, parsed);
+      } else {
+        const service = new (await import("@/lib/application/agent-run-service")).AgentRunService({ repositories: this.repositories });
+        if (parsed.action === "run_agents") return service.start(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "select_agent_result") return service.select(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "retry_failed_agents") return service.retryFailed(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "change_agents") return service.changeAgents(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "restart_with_agents") return service.restart(bookletId, parsed.cardId, parsed);
+      }
+      throw new RecoverableApplicationError({ code: "execution_action_unsupported", message: "This Agent run action is not available. Reload the card and choose an available action.", status: 409 });
+    }    if (await this.isMissingPageGenerationRecovery(bookletId, card, parsed.action)) {
       return this.retryMissingPageGeneration(bookletId, parsed);
     }
     if (card.family === "artifact_review" && card.variant === "summary" && parsed.action === "approve_and_continue" && card.payload.artifactType === "story_plan") {

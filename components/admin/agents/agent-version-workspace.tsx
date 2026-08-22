@@ -21,17 +21,19 @@ function statusLabel(version: AgentVersion) {
   return `${version.status[0]!.toUpperCase()}${version.status.slice(1)} · ${version.isActive ? "Active" : "Inactive"}`;
 }
 
-function latestName(selection: ResolvedAdminSelection["agent"]) {
-  return selection?.activeVersion?.displayName ?? selection?.versions[0]?.displayName ?? selection?.definition.id ?? "Unknown agent";
-}
-
 function ReadOnlyConfiguration({ version }: { version: AgentVersion }) {
-  const values = [
-    ["Display Name", version.displayName], ["Purpose", version.purpose], ["Role", version.role === "manager" ? "Manager" : "Specialist"],
-    ["Skill", SLOT_LABELS[slotKeyForVersion(version)]], ["Provider", version.provider], ["Model", version.modelId],
-    ["Reasoning", `${version.reasoningEffort[0]!.toUpperCase()}${version.reasoningEffort.slice(1)}`], ["Maximum Turns", String(version.maxTurns)],
-  ];
-  return <div className="grid gap-5">
+  const roleFields: [string, string][] = version.role === "image"
+    ? [["Profile", `${version.profileId ?? "—"} v${version.profileVersion ?? "—"}`], ["Quality", version.imageQuality ?? "Profile default"], ["Resolution", version.imageResolution ?? "Profile default"]]
+    : [["Reasoning", version.reasoningEffort ? `${version.reasoningEffort[0]!.toUpperCase()}${version.reasoningEffort.slice(1)}` : "Application-owned"], ["Maximum Turns", version.maxTurns === null ? "Application-owned" : String(version.maxTurns)]];
+  const values: [string, string][] = [
+    ["Display Name", version.displayName],
+    ["Purpose", version.purpose],
+    ["Role", version.role === "manager" ? "Manager" : version.role === "image" ? "Image agent" : "Specialist"],
+    ["Target", SLOT_LABELS[slotKeyForVersion(version)]],
+    ["Provider", version.provider],
+    ["Model", version.modelId],
+    ...roleFields,
+  ];  return <div className="grid gap-5">
     <dl className="grid gap-3 sm:grid-cols-2">
       {values.map(([label, value]) => <div key={label} className="min-w-0 rounded-lg bg-stone-50 p-3"><dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-ink)]">{label}</dt><dd className="mt-1 break-words" translate={label === "Provider" || label === "Model" ? "no" : undefined}>{value}</dd></div>)}
     </dl>
@@ -56,11 +58,10 @@ function ReadOnlyConfiguration({ version }: { version: AgentVersion }) {
   </div>;
 }
 
-export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectAgent, onSelectVersion, onEdit, onNewAgent, onCancelEdit, onDirtyChange, onFormMutationStart, onMutationStart, onResult, onOpenDialog }: {
+export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectVersion, onEdit, onNewAgent, onCancelEdit, onDirtyChange, onFormMutationStart, onMutationStart, onResult, onOpenDialog }: {
   snapshot: AgentAdminViewModel;
   selection: ResolvedAdminSelection;
   editing: boolean;
-  onSelectAgent(agentId: string): void;
   onSelectVersion(versionId: string): void;
   onEdit(): void;
   onNewAgent(): void;
@@ -71,7 +72,7 @@ export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectAg
   onResult(state: AgentActionState): void;
   onOpenDialog(target: Omit<DialogTarget, "trigger">, trigger: HTMLButtonElement): void;
 }) {
-  const { slot, agents, agent, version } = selection;
+  const { slot, agent, version } = selection;
   if (!agent || !version) return <section aria-labelledby="workspace-heading" className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
     <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">{SLOT_LABELS[slot.key]}</p>
     <h2 id="workspace-heading" className="mt-1 text-2xl font-semibold">No Agent Candidates</h2>
@@ -99,10 +100,6 @@ export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectAg
       <p className={`mt-2 text-sm ${slot.violation ? "text-red-700" : "text-green-700"}`}>{slot.violation ? `${slot.violation}. Review an inactive version and activate a valid replacement.` : "Coverage healthy"}</p>
     </header>
 
-    {agents.length > 1 ? <section aria-labelledby="agents-heading" className="mt-5">
-      <h3 id="agents-heading" className="font-semibold">Agents for This Slot</h3>
-      <ul className="mt-2 grid gap-2 sm:grid-cols-2">{agents.map((candidate) => <li key={candidate.definition.id}><button type="button" aria-current={candidate.definition.id === agent.definition.id ? "true" : undefined} onClick={() => onSelectAgent(candidate.definition.id)} className={`w-full rounded-lg border p-3 text-left hover:border-[var(--accent)] hover:bg-orange-50 ${candidate.definition.id === agent.definition.id ? "border-[var(--accent)] bg-orange-50" : "border-[var(--border)]"}`}><span className="block break-words font-semibold">{latestName(candidate)}</span><span className="mt-1 block text-sm text-[var(--muted-ink)]">{candidate.activeVersion ? `Active v${candidate.activeVersion.versionNumber}` : `${candidate.versions.length} inactive version${candidate.versions.length === 1 ? "" : "s"}`}</span></button></li>)}</ul>
-    </section> : null}
 
     <section aria-labelledby="versions-heading" className="mt-5">
       <h3 id="versions-heading" className="font-semibold">Versions</h3>
@@ -117,7 +114,8 @@ export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectAg
         {version.status === "draft" ? <button type="button" onClick={onEdit} className="rounded-lg border border-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent)] hover:bg-orange-50">Edit Draft</button> : null}
         <DirectLifecycleAction descriptor={{ kind: "fork", version }} visible={eligibility.fork} onMutationStart={onMutationStart} onResult={onResult} />
         <DirectLifecycleAction descriptor={{ kind: "confirm", version }} visible={eligibility.confirm} onMutationStart={onMutationStart} onResult={onResult} />
-        {eligibility.activate ? <button type="button" onClick={(event) => onOpenDialog({ kind: "activate", ...dialogBase }, event.currentTarget)} className="rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-white hover:brightness-95">Activate Replacement</button> : null}
+        {eligibility.activate ? <button type="button" onClick={(event) => onOpenDialog({ kind: "activate", ...dialogBase }, event.currentTarget)} className="rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-white hover:brightness-95">{version.role === "manager" ? "Activate Replacement" : "Activate Candidate"}</button> : null}
+        {eligibility.deactivate ? <button type="button" onClick={(event) => onOpenDialog({ kind: "deactivate", ...dialogBase }, event.currentTarget)} className="rounded-lg border border-red-700 px-4 py-2 font-semibold text-red-800 hover:bg-red-50">Deactivate Candidate</button> : null}
       </div>
       {eligibility.retire || eligibility.deleteDraft ? <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
         <h4 className="font-semibold text-red-900">Danger Zone</h4>

@@ -69,7 +69,7 @@ describe("persisted agent evidence", () => {
     expect(toErrorEnvelope(error)).toEqual(expect.objectContaining({ status: 503, body: { error: expect.objectContaining({ code: "agent_configuration_unavailable", details: { adminPath: "/admin/agents", target: "quality_review_targeted_repair@1" } }) } }));
   });
 
-  it("uses an active draft edit only for later calls and preserves earlier snapshots", async () => {
+  it("keeps direct legacy execution pinned to its deterministic active candidate", async () => {
     const database = await createTestDatabase();
     databases.push(database);
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
@@ -87,8 +87,8 @@ describe("persisted agent evidence", () => {
     const specialistCalls = (await createRepositories(database).evidence.listModelCalls(booklet.id)).filter((call) => call.operation === "skill" && call.skillId === "intake_readiness@1");
     expect(specialistCalls).toHaveLength(2);
     expect(specialistCalls.map((call) => call.agentConfigSnapshot)).toEqual([
-      expect.objectContaining({ agentId: activeDraft.agentId, instructions: "FIRST INSTRUCTION" }),
-      expect.objectContaining({ agentId: activeDraft.agentId, instructions: "SECOND INSTRUCTION" }),
+      expect.objectContaining({ agentId: seededIntake.agentId }),
+      expect.objectContaining({ agentId: seededIntake.agentId }),
     ]);
   });
 
@@ -121,21 +121,17 @@ describe("persisted agent evidence", () => {
     await expect(createRepositories(database).conversation.listMessages(booklet.id)).resolves.toEqual(before);
   });
 
-  it("keeps an accepted card response pending when configuration preflight fails", async () => {
+  it("keeps a ready Agent run unchanged when its target becomes malformed", async () => {
     const database = await createTestDatabase();
     databases.push(database);
-    const bookletService = new BookletService({ database });
-    const chat = new ChatService({ database });
-    const booklet = await bookletService.create({ idea: "A robin shares rainwater." });
-    const turn = await chat.createFakeTurn(booklet.id, { id: randomUUID(), role: "user", parts: [{ type: "text", text: "Please help me begin." }] });
-    const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
-    if (!card || card.type !== "data-card") throw new Error("Expected an intake card.");
-    const responseId = randomUUID();
-    await new CardService({ database }).submit(booklet.id, { cardId: card.data.cardId, responseId, action: "submit", value: "6-8" });
-    await database.collections.agent_versions.updateMany({ skillId: "quality_review_targeted_repair@1" }, { $set: { modelId: "unsupported-model" } });
+    const booklet = await new BookletService({ database }).create({ idea: "A robin shares rainwater." });
+    const turn = await new ChatService({ database }).createFakeTurn(booklet.id, { id: randomUUID(), role: "user", parts: [{ type: "text", text: "Please help me begin." }] });
+    const part = turn.assistantMessage.parts.find((item) => item.type === "data-card");
+    if (!part || part.type !== "data-card" || part.data.family !== "agent_run") throw new Error("Expected Agent run card.");
+    await database.collections.agent_versions.updateMany({ skillId: "intake_readiness@1" }, { $set: { modelId: "unsupported-model" } });
 
-    await expect(chat.createFakeTurn(booklet.id, { id: randomUUID(), role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId }, parts: [{ type: "text", text: "Resume the saved decision." }] })).rejects.toBeInstanceOf(AgentConfigurationUnavailableError);
-    await expect(bookletService.getWorkspaceSnapshot(booklet.id)).resolves.toMatchObject({ pendingCardFollowup: { responseId, summary: expect.any(String) } });
+    await expect(new CardService({ database }).submit(booklet.id, { cardId: part.data.cardId, responseId: randomUUID(), action: "run_agents", value: part.data.payload.selectedAgentIds })).rejects.toBeInstanceOf(AgentConfigurationUnavailableError);
+    await expect(createRepositories(database).conversation.getCard(booklet.id, part.data.cardId)).resolves.toMatchObject({ payload: { state: "ready", batchId: null } });
   });
 
 });

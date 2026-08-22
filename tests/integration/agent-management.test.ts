@@ -34,7 +34,8 @@ describe("AgentManagementService", () => {
     await expect(agents.deleteDraft({ id: edited.id, expectedRevision: edited.revision })).rejects.toMatchObject({ code: "agent_delete_blocked" });
     const disposable = await agents.create({ ...draft, displayName: "Disposable intake" });
     await expect(agents.deleteDraft({ id: disposable.id, expectedRevision: disposable.revision })).resolves.toBeUndefined();
-    await expect(agents.retire({ id: active.id, expectedRevision: active.revision + 1 })).resolves.toMatchObject({ status: "retired" });
+    const deactivated = await agents.deactivate({ id: active.id, expectedRevision: active.revision });
+    await expect(agents.retire({ id: deactivated.id, expectedRevision: deactivated.revision })).resolves.toMatchObject({ status: "retired" });
   });
 
   it("rejects invalid role/skill configuration and stale mutations", async () => {
@@ -150,6 +151,21 @@ describe("AgentManagementService", () => {
     expect(qualitySlot).toMatchObject({ violation: "Malformed active specialist configuration" });
     const replacement = await agents.create({ displayName: "Quality configuration repair", purpose: "Replace corrupt quality settings.", role: "specialist", skillId: "quality_review_targeted_repair@1", instructions: "Return the required quality result.", provider: "openai", modelId: "gpt-5.6-sol", reasoningEffort: "medium", maxTurns: 1 });
     await expect(agents.activate({ id: replacement.id, expectedRevision: replacement.revision, observedSlotVersionId: qualitySlot.activeVersionId, observedLogicalActiveVersionId: null })).resolves.toMatchObject({ isActive: true });
+    await expect(agents.deactivate({ id: qualitySlot.activeVersionId!, expectedRevision: malformed.versions.find((version) => version.id === qualitySlot.activeVersionId)!.revision })).resolves.toMatchObject({ isActive: false });
     expect((await agents.getAdminSnapshot()).coverage.every((slot) => slot.violation === null)).toBe(true);
   });
-});
+
+  it("adds image candidates without replacing peers and blocks removal of the last target candidate", async () => {
+    const agents = await service();
+    const initial = await agents.getAdminSnapshot();
+    const original = initial.versions.find((version) => version.isActive && version.role === "image" && version.imageTarget === "page")!;
+    const candidate = await agents.create({
+      displayName: "Alternate Page Image Agent", purpose: "Provide a second page image candidate.", role: "image", skillId: null, imageTarget: "page", instructions: null,
+      provider: "openai", modelId: "gpt-image-2", reasoningEffort: null, maxTurns: null, profileId: "openai-image", profileVersion: 1, imageQuality: "auto", imageResolution: null,
+    });
+    const active = await agents.activate({ id: candidate.id, expectedRevision: candidate.revision, observedSlotVersionId: original.id, observedLogicalActiveVersionId: null });
+    expect((await agents.getAdminSnapshot()).versions.filter((version) => version.isActive && version.role === "image" && version.imageTarget === "page")).toHaveLength(2);
+    const deactivated = await agents.deactivate({ id: original.id, expectedRevision: original.revision });
+    expect(deactivated.isActive).toBe(false);
+    await expect(agents.deactivate({ id: active.id, expectedRevision: active.revision })).rejects.toMatchObject({ code: "agent_coverage_conflict" });
+  });});

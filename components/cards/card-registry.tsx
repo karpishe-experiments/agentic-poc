@@ -228,6 +228,30 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
   </CardFrame>;
 }
 
+function AgentRunCard({ card, busy, submitResponse, refreshWorkspace }: CardProps) {
+  const [selected, setSelected] = useState<string[]>(() => card.family === "agent_run" ? card.payload.selectedAgentIds : []);
+  const [candidateQuery, setCandidateQuery] = useState("");
+  const isRunning = card.family === "agent_run" && card.payload.state === "running";
+  const soleReadyAgentId = card.family === "agent_run" && card.status === "active" && card.payload.state === "ready" && card.payload.candidates.length === 1 ? card.payload.candidates[0]!.agentId : null;
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = window.setInterval(() => refreshWorkspace?.(), 3_000);
+    return () => window.clearInterval(timer);
+  }, [isRunning, refreshWorkspace]);
+  if (card.family !== "agent_run") return null;
+  const disabled = card.status !== "active" || Boolean(busy) || !submitResponse;
+  const normalizedQuery = candidateQuery.trim().toLowerCase();
+  const visibleCandidates = card.payload.candidates.filter((candidate) => !normalizedQuery || `${candidate.displayName} ${candidate.purpose} ${candidate.profileSummary}`.toLowerCase().includes(normalizedQuery));
+  const canRetryFailed = card.payload.state === "results" && card.payload.items.some((item) => item.status === "failed");
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  return <CardFrame card={card}>
+    <p aria-live="polite" className="text-sm">{card.payload.state === "running" ? "Agents are working in parallel." : `Agent run: ${card.payload.state}.`}</p>
+    {card.payload.state === "ready" ? soleReadyAgentId ? <><p aria-live="polite" className="mt-3 rounded border border-[var(--border)] p-3 text-sm">{card.payload.candidates[0]!.displayName} is the only compatible agent and is preselected.</p><button className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled} onClick={() => submitResponse?.({ action: "run_agents", value: [soleReadyAgentId] })} type="button">{busy ? "Starting…" : "Run this step"}</button></> : <><label className="mt-3 block text-sm font-medium">Search agents<input aria-label="Search agents" className="mt-1 w-full rounded border border-[var(--border)] px-2 py-1" disabled={disabled} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="Name, purpose, or profile" type="search" value={candidateQuery} /></label><div className="mt-3 grid gap-2">{visibleCandidates.map((candidate) => <label className="flex gap-2 rounded border border-[var(--border)] p-2 text-sm" key={candidate.agentId}><input checked={selected.includes(candidate.agentId)} disabled={disabled || !candidate.eligible} onChange={() => toggle(candidate.agentId)} type="checkbox" /><span><span className="font-medium">{candidate.displayName}</span><span className="block text-[var(--muted-ink)]">{candidate.purpose} · {candidate.profileSummary}</span>{candidate.notice ? <span className="block text-amber-800">{candidate.notice}</span> : null}</span></label>)}</div>{visibleCandidates.length === 0 ? <p className="mt-2 text-sm text-[var(--muted-ink)]">No compatible agents match this search.</p> : null}<p className="mt-2 text-sm text-[var(--muted-ink)]">Selected agents run concurrently. Choose at least one valid candidate. Fake-mode runs are free; real-provider cost estimates are recorded in the selected result evidence.</p><button className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled || selected.length === 0} onClick={() => submitResponse?.({ action: "run_agents", value: selected })} type="button">{busy ? "Starting…" : "Run this step"}</button></> : null}
+    {card.payload.items.length ? <ul className="mt-3 grid gap-2">{card.payload.items.map((item) => <li className="rounded border border-[var(--border)] p-2 text-sm" key={item.itemId}><span className="font-medium">{item.displayName}</span> — {item.status}{item.summary ? <p>{item.summary}</p> : null}{item.safeError ? <p role="alert" className="text-red-700">{item.safeError}</p> : null}{card.payload.state === "results" && item.status === "succeeded" ? <button className="mt-2 rounded border border-[var(--accent)] px-2 py-1 font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "select_agent_result", value: item.itemId })} type="button">Use this result</button> : null}</li>)}</ul> : null}
+    {card.payload.state === "results" ? <div className="mt-3 flex gap-2">{canRetryFailed ? <button className="rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "retry_failed_agents" })} type="button">Retry failed</button> : null}<button className="rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "change_agents" })} type="button">Change agents</button></div> : null}
+    {card.payload.state === "completed" ? <button className="mt-3 rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "restart_with_agents" })} type="button">Restart with agents</button> : null}
+  </CardFrame>;
+}
 function IssueCard({ card, busy, submitResponse }: CardProps) {
   if (card.family !== "issue") return null;
   const disabled = card.status !== "active" || !submitResponse || busy;
@@ -238,7 +262,7 @@ function IssueCard({ card, busy, submitResponse }: CardProps) {
   return <CardFrame card={card}><p className="text-sm">{card.payload.summary}</p>{card.payload.details.length ? <ul className="mt-2 list-disc pl-5 text-sm">{card.payload.details.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}<div className="mt-3 flex flex-wrap gap-2">{card.allowedActions.map((action) => <button className="rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled} key={action} onClick={() => submitResponse?.({ action })} type="button">{busy ? "Saving…" : actionLabel(action)}</button>)}</div></CardFrame>;
 }
 
-type CardKey = "question:free_text" | "question:single_select" | "question:multi_select" | "artifact_review:summary" | "artifact_review:editable_form" | "artifact_review:visual_gallery" | "progress:artifact_generation" | "progress:page_batch" | "progress:export" | "issue:quality" | "issue:generation_failure" | "issue:validation_failure" | "issue:recovery";
+type CardKey = "agent_run:parallel_execution" | "question:free_text" | "question:single_select" | "question:multi_select" | "artifact_review:summary" | "artifact_review:editable_form" | "artifact_review:visual_gallery" | "progress:artifact_generation" | "progress:page_batch" | "progress:export" | "issue:quality" | "issue:generation_failure" | "issue:validation_failure" | "issue:recovery";
 
 const registry: Record<CardKey, CardComponent> = {
   "question:free_text": QuestionCard,
@@ -250,6 +274,7 @@ const registry: Record<CardKey, CardComponent> = {
   "progress:artifact_generation": ProgressCard,
   "progress:page_batch": ProgressCard,
   "progress:export": ProgressCard,
+  "agent_run:parallel_execution": AgentRunCard,
   "issue:quality": IssueCard,
   "issue:generation_failure": IssueCard,
   "issue:validation_failure": IssueCard,

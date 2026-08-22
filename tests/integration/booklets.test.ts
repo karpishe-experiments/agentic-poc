@@ -6,6 +6,7 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import type { GenerationService } from "@/lib/application/generation-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
+import { genUICardSchema, type GenUICard } from "@/lib/contracts/cards";
 import type { Database } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
@@ -36,6 +37,18 @@ async function createServices(clock: Clock): Promise<{ database: Database; bookl
   };
 }
 
+async function runSoleAgentCard(bookletService: BookletService, cardService: CardService, bookletId: string, card: GenUICard): Promise<GenUICard> {
+  if (card.family !== "agent_run") return card;
+  await cardService.submit(bookletId, { cardId: card.cardId, responseId: crypto.randomUUID(), action: "run_agents", value: card.payload.selectedAgentIds });
+  let latest: GenUICard | null = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const snapshot = await bookletService.getWorkspaceSnapshot(bookletId);
+    latest = snapshot.activeCard ? genUICardSchema.parse(snapshot.activeCard) : null;
+    if (latest && latest.family !== "agent_run") return latest;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  throw new Error(`The sole Agent run did not materialize a follow-up card: ${JSON.stringify(latest)}`);
+}
 async function approvePagePlanWithoutStartingGeneration(database: Database, bookletId: string) {
   const artifacts = new ArtifactService({ database });
   const characterId = "00000000-0000-4000-8000-000000000961";
@@ -141,13 +154,13 @@ describe("BookletService", () => {
     expect(turn.assistantMessage.parts.some((part) => part.type === "data-card")).toBe(true);
     const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);
     expect(snapshot.messages).toHaveLength(3);
-    expect(snapshot.activeCard).toMatchObject({ family: "question", variant: "single_select", status: "active" });
+    expect(snapshot.activeCard).toMatchObject({ family: "agent_run", variant: "parallel_execution", status: "active" });
     const calls = await createRepositories(database).evidence.listModelCalls(booklet.id);
     expect(calls).toMatchObject([
       { operation: "manager", skillId: null, status: "succeeded" },
-      { operation: "skill", skillId: "intake_readiness@1", status: "succeeded" },
+
     ]);
-    expect(calls[0]?.traceId).toBe(calls[1]?.traceId);
+    expect(calls).toHaveLength(1);
     expect(calls).toEqual(expect.arrayContaining([
       expect.objectContaining({ usage: { inputTokens: 0, outputTokens: 0 }, actualCostUsd: "0", estimatedCostUsd: "0", pricingVersion: "fake-runtime-v1", providerRequestId: null }),
     ]));
@@ -163,8 +176,9 @@ describe("BookletService", () => {
     });
     const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
+    const question = await runSoleAgentCard(bookletService, cardService, booklet.id, card.data);
     const response = {
-      cardId: card.data.cardId,
+      cardId: question.cardId,
       responseId: "00000000-0000-4000-8000-000000000903",
       action: "submit" as const,
       value: "6-8",
@@ -185,8 +199,9 @@ describe("BookletService", () => {
     });
     const card = initialTurn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
+    const question = await runSoleAgentCard(bookletService, cardService, booklet.id, card.data);
     const responseId = "00000000-0000-4000-8000-000000000905";
-    await cardService.submit(booklet.id, { cardId: card.data.cardId, responseId, action: "submit", value: "6-8" });
+    await cardService.submit(booklet.id, { cardId: question.cardId, responseId, action: "submit", value: "6-8" });
     await expect(bookletService.getWorkspaceSnapshot(booklet.id)).resolves.toMatchObject({
       pendingCardFollowup: { responseId, summary: expect.any(String) },
     });
@@ -208,10 +223,10 @@ describe("BookletService", () => {
       .find((part) => part.type === "data-card");
 
     expect(followup.assistantMessage.id).toBe(duplicateFollowup.assistantMessage.id);
-    expect(snapshot.messages).toHaveLength(5);
+    expect(snapshot.messages).toHaveLength(6);
     expect(snapshot.pendingCardFollowup).toBeNull();
     expect(persistedFirstCard?.data?.status).toBe("submitted");
-    expect(snapshot.activeCard).toMatchObject({ status: "active", family: "artifact_review", variant: "summary", payload: { artifactType: "audience_profile" } });
+    expect(snapshot.activeCard).toMatchObject({ status: "active", family: "agent_run", variant: "parallel_execution", payload: { target: "skill:intake_readiness@1" } });
   });
 
   it("creates a deterministic recovery card for a conflicting later response and can reopen a prior card", async () => {
@@ -224,22 +239,23 @@ describe("BookletService", () => {
     });
     const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
+    const question = await runSoleAgentCard(bookletService, cardService, booklet.id, card.data);
     await cardService.submit(booklet.id, {
-      cardId: card.data.cardId,
+      cardId: question.cardId,
       responseId: "00000000-0000-4000-8000-000000000909",
       action: "submit",
       value: "6-8",
     });
     const conflict = await cardService.submit(booklet.id, {
-      cardId: card.data.cardId,
+      cardId: question.cardId,
       responseId: "00000000-0000-4000-8000-000000000910",
       action: "submit",
       value: "3-5",
     });
     expect(conflict).toMatchObject({ kind: "conflict", recoveryCard: { family: "issue", variant: "recovery" } });
 
-    const reopened = await cardService.reopen(booklet.id, card.data.cardId);
-    expect(reopened).toMatchObject({ cardId: expect.not.stringMatching(card.data.cardId), status: "active", family: "question" });
+    const reopened = await cardService.reopen(booklet.id, question.cardId);
+    expect(reopened).toMatchObject({ cardId: expect.not.stringMatching(question.cardId), status: "active", family: "question" });
     expect((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard).toMatchObject({ cardId: reopened.cardId, status: "active" });
   });
 
@@ -346,22 +362,24 @@ describe("BookletService", () => {
     const first = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000921", role: "user", parts: [{ type: "text", text: "Please begin." }] });
     const question = first.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!question || question.type !== "data-card") throw new Error("Expected intake card.");
+    const intakeCard = await runSoleAgentCard(bookletService, cardService, booklet.id, question.data);
     const responseId = "00000000-0000-4000-8000-000000000922";
-    await cardService.submit(booklet.id, { responseId, cardId: question.data.cardId, action: "select", value: "6-8" });
+    await cardService.submit(booklet.id, { responseId, cardId: intakeCard.cardId, action: "select", value: "6-8" });
     await chatService.createFakeTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000923",
       role: "user",
       metadata: { schemaVersion: "1", bookletId: booklet.id, responseId },
       parts: [{ type: "text", text: "Ages 6–8" }],
     });
-    const audienceReview = (await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard;
-    if (!audienceReview || typeof audienceReview !== "object" || !("cardId" in audienceReview)) throw new Error("Expected audience review card.");
+    const audienceReview = await runSoleAgentCard(bookletService, cardService, booklet.id, genUICardSchema.parse((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard));
     await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000924", cardId: String(audienceReview.cardId), action: "approve_and_continue" });
     const storyTurn = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000925", role: "user", parts: [{ type: "text", text: "Show me the story plan." }] });
-    const storyReview = storyTurn.assistantMessage.parts.find((part) => part.type === "data-card");
+    const storyRun = storyTurn.assistantMessage.parts.find((part) => part.type === "data-card");
+    if (!storyRun || storyRun.type !== "data-card") throw new Error("Expected Story Plan Agent run.");
+    const storyReview = await runSoleAgentCard(bookletService, cardService, booklet.id, storyRun.data);
 
-    expect(storyReview).toMatchObject({ type: "data-card", data: { family: "artifact_review", variant: "summary", payload: { artifactType: "story_plan" } } });
-    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);
+    expect(storyReview).toMatchObject({ family: "artifact_review", variant: "summary", payload: { artifactType: "story_plan" } });
+    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(0);
   });
 
   it("revises a Story Plan conversationally while preserving its existing visual subjects", async () => {
@@ -370,20 +388,24 @@ describe("BookletService", () => {
     const first = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000931", role: "user", parts: [{ type: "text", text: "Please begin." }] });
     const question = first.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!question || question.type !== "data-card") throw new Error("Expected intake card.");
+    const intakeCard = await runSoleAgentCard(bookletService, cardService, booklet.id, question.data);
     const intakeResponseId = "00000000-0000-4000-8000-000000000932";
-    await cardService.submit(booklet.id, { responseId: intakeResponseId, cardId: question.data.cardId, action: "select", value: "6-8" });
+    await cardService.submit(booklet.id, { responseId: intakeResponseId, cardId: intakeCard.cardId, action: "select", value: "6-8" });
     await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000933", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: intakeResponseId }, parts: [{ type: "text", text: "Ages 6–8" }] });
-    const audienceCard = (await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard;
-    if (!audienceCard || typeof audienceCard !== "object" || !("cardId" in audienceCard)) throw new Error("Expected audience review.");
+    const audienceCard = await runSoleAgentCard(bookletService, cardService, booklet.id, genUICardSchema.parse((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard));
     await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000934", cardId: String(audienceCard.cardId), action: "approve_and_continue" });
     const draft = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000935", role: "user", parts: [{ type: "text", text: "Draft the Story Plan." }] });
     const storyCard = draft.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!storyCard || storyCard.type !== "data-card") throw new Error("Expected Story Plan review.");
+    const storyReview = await runSoleAgentCard(bookletService, cardService, booklet.id, storyCard.data);
     const before = await new ArtifactService({ database }).get(booklet.id, "story_plan");
     const beforeContent = before.currentVersion?.content as { characters: Array<{ entityId: string }>; settings: Array<{ entityId: string }> };
     const revisionResponseId = "00000000-0000-4000-8000-000000000936";
-    await cardService.submit(booklet.id, { responseId: revisionResponseId, cardId: storyCard.data.cardId, action: "request_revision", revisionInstruction: "Make the middle moment more playful." });
+    await cardService.submit(booklet.id, { responseId: revisionResponseId, cardId: storyReview.cardId, action: "request_revision", revisionInstruction: "Make the middle moment more playful." });
     const revised = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000937", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: revisionResponseId }, parts: [{ type: "text", text: "Ignore this client text." }] });
+    const revisionRun = revised.assistantMessage.parts.find((part) => part.type === "data-card");
+    if (!revisionRun || revisionRun.type !== "data-card") throw new Error("Expected revised Story Plan Agent run.");
+    await runSoleAgentCard(bookletService, cardService, booklet.id, revisionRun.data);
     const after = await new ArtifactService({ database }).get(booklet.id, "story_plan");
     const afterContent = after.currentVersion?.content as { characters: Array<{ entityId: string }>; settings: Array<{ entityId: string }>; storyArc: string };
 
@@ -408,6 +430,9 @@ describe("BookletService", () => {
     }, { createdBy: "agent" });
 
     const turn = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000941", role: "user", parts: [{ type: "text", text: "Check Story Plan quality." }] });
+    const run = turn.assistantMessage.parts.find((part) => part.type === "data-card");
+    if (!run || run.type !== "data-card") throw new Error("Expected quality Agent run.");
+    await runSoleAgentCard(bookletService, new CardService({ database }), booklet.id, run.data);
     const repaired = await artifacts.get(booklet.id, "story_plan");
     const content = repaired.currentVersion?.content as { characters: unknown[]; settings: unknown[]; continuityConstraints: string[] };
 
@@ -432,12 +457,14 @@ describe("BookletService", () => {
     }, { createdBy: "agent" });
 
     const turn = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000953", role: "user", parts: [{ type: "text", text: "Check Story Plan quality [force-validation-failure]." }] });
-    const issue = turn.assistantMessage.parts.find((part) => part.type === "data-card");
-    if (!issue || issue.type !== "data-card") throw new Error("Expected a quality issue card.");
-    const accepted = await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000954", cardId: issue.data.cardId, action: "accept_with_issue" });
+    const run = turn.assistantMessage.parts.find((part) => part.type === "data-card");
+    if (!run || run.type !== "data-card") throw new Error("Expected quality Agent run.");
+    const issue = await runSoleAgentCard(bookletService, cardService, booklet.id, run.data);
+    if (issue.family !== "issue") throw new Error("Expected a quality issue card.");
+    const accepted = await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000954", cardId: issue.cardId, action: "accept_with_issue" });
     const review = await database.collections.quality_reviews.findOne({ bookletId: booklet.id });
 
-    expect(turn.assistantMessage.parts).toContainEqual(expect.objectContaining({ type: "data-card", data: expect.objectContaining({ family: "issue", variant: "quality" }) }));
+    expect(turn.assistantMessage.parts).toContainEqual(expect.objectContaining({ type: "data-card" }));
     expect(accepted).toMatchObject({ followupRequired: false });
     expect(review?.acceptedAtMs).not.toBeNull();
     expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);

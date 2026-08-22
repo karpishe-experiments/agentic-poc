@@ -32,12 +32,15 @@ const seedSpecs: SeedSpec[] = [
 
 const uuid = (kind: string, suffix: string) => `00000000-0000-4000-8000-00000000${kind}${suffix}`;
 
-export const agentSeedDefaults: AgentVersion[] = seedSpecs.map((spec) => ({
+export const agentSeedDefaults: AgentVersion[] = seedSpecs.map<AgentVersion>((spec) => ({
   id: uuid("b", spec.suffix), agentId: uuid("a", spec.suffix), versionNumber: 1, parentVersionId: null,
-  displayName: spec.displayName, purpose: spec.purpose, role: spec.skillId ? "specialist" : "manager", skillId: spec.skillId,
+  displayName: spec.displayName, purpose: spec.purpose, role: spec.skillId ? "specialist" : "manager", skillId: spec.skillId, imageTarget: null,
   instructions: spec.skillId ? specialistInstructions : defaultManagerInstructions, provider: "openai", modelId: spec.modelId,
-  reasoningEffort: spec.skillId ? "medium" : "low", maxTurns: spec.skillId ? 1 : 2, status: "confirmed", isActive: true, revision: 1,
+  reasoningEffort: spec.skillId ? "medium" : "low", maxTurns: spec.skillId ? 1 : 2, profileId: spec.skillId ? "openai-specialist" : null, profileVersion: spec.skillId ? 1 : null, imageQuality: null, imageResolution: null, status: "confirmed", isActive: true, revision: 1,
   createdAt: new Date(AGENT_SEED_TIMESTAMP).toISOString(), updatedAt: new Date(AGENT_SEED_TIMESTAMP).toISOString(), createdBy: AGENT_SEED_ACTOR, updatedBy: AGENT_SEED_ACTOR,
-}));
+ })).concat([
+  { id: uuid("b", "201"), agentId: uuid("a", "201"), versionNumber: 1, parentVersionId: null, displayName: "Reference Image Agent", purpose: "Generate canonical visual references.", role: "image", skillId: null, imageTarget: "reference", instructions: null, provider: "openai", modelId: "gpt-image-2", reasoningEffort: null, maxTurns: null, profileId: "openai-image", profileVersion: 1, imageQuality: "auto", imageResolution: null, status: "confirmed", isActive: true, revision: 1, createdAt: new Date(AGENT_SEED_TIMESTAMP).toISOString(), updatedAt: new Date(AGENT_SEED_TIMESTAMP).toISOString(), createdBy: AGENT_SEED_ACTOR, updatedBy: AGENT_SEED_ACTOR },
+  { id: uuid("b", "202"), agentId: uuid("a", "202"), versionNumber: 1, parentVersionId: null, displayName: "Page Image Agent", purpose: "Generate booklet page illustrations.", role: "image", skillId: null, imageTarget: "page", instructions: null, provider: "openai", modelId: "gpt-image-2", reasoningEffort: null, maxTurns: null, profileId: "openai-image", profileVersion: 1, imageQuality: "auto", imageResolution: null, status: "confirmed", isActive: true, revision: 1, createdAt: new Date(AGENT_SEED_TIMESTAMP).toISOString(), updatedAt: new Date(AGENT_SEED_TIMESTAMP).toISOString(), createdBy: AGENT_SEED_ACTOR, updatedBy: AGENT_SEED_ACTOR },
+]);
 
 export const AGENT_SEED_SKILL_IDS = agentSeedDefaults.filter((agent) => agent.skillId !== null).map((agent) => agent.skillId) as SkillId[];

@@ -11,7 +11,7 @@ describe("MongoDB foundation", () => {
   it("creates exact indexes and reruns setup and deterministic seeds", async () => {
     const database = await createTestDatabase(); databases.push(database);
     await setupMongoStructure(database); await seedDefaultAgents(database); await verifyMongoStructure(database);
-    expect(await database.collections.agent_versions.countDocuments({ isActive: true })).toBe(8);
+    expect(await database.collections.agent_versions.countDocuments({ isActive: true })).toBe(10);
     expect(REQUIRED_INDEXES.length).toBeGreaterThan(20);
   });
 
@@ -27,10 +27,10 @@ describe("MongoDB foundation", () => {
     expect(await database.collections.booklets.findOne({ _id: "rolled-back" })).toBeNull();
   });
 
-  it("allows inactive duplicates while active-agent partial indexes reject collisions", async () => {
+  it("allows specialist candidates while active-manager partial indexes reject collisions", async () => {
     const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
     await database.collections.agent_definitions.insertMany([{ _id: "agent-a", createdAtMs: 1, createdBy: "test" }, { _id: "agent-b", createdAtMs: 1, createdBy: "test" }]);
-    const version = (id: string, agentId: string, isActive: boolean) => ({ _id: id, agentId, versionNumber: 1, parentVersionId: null, displayName: id, purpose: "test", role: "specialist", skillId: "intake_readiness@1", instructions: "test", provider: "openai", modelId: "gpt-5.6-terra", reasoningEffort: "medium", maxTurns: 1, status: isActive ? "confirmed" : "retired", isActive, revision: 1, createdAtMs: 1, updatedAtMs: 1, createdBy: "test", updatedBy: "test" });
+    const version = (id: string, agentId: string, isActive: boolean) => ({ _id: id, agentId, versionNumber: 1, parentVersionId: null, displayName: id, purpose: "test", role: "manager", skillId: null, imageTarget: null, instructions: "test", provider: "openai", modelId: "gpt-5.6-terra", reasoningEffort: "medium", maxTurns: 1, profileId: null, profileVersion: null, imageQuality: null, imageResolution: null, status: isActive ? "confirmed" : "retired", isActive, revision: 1, createdAtMs: 1, updatedAtMs: 1, createdBy: "test", updatedBy: "test" });
     await database.collections.agent_versions.insertMany([version("inactive-a", "agent-a", false), version("inactive-b", "agent-b", false)]);
     await database.collections.agent_versions.updateOne({ _id: "inactive-a" }, { $set: { isActive: true, status: "confirmed" } });
     await expect(database.collections.agent_versions.updateOne({ _id: "inactive-b" }, { $set: { isActive: true, status: "confirmed" } })).rejects.toMatchObject({ code: 11000 });

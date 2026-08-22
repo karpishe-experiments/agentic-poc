@@ -5,6 +5,7 @@ import { createRepositories, type Repositories } from "@/db/repositories";
 import { agentVersionConfigurationSchema, type AgentVersion } from "@/lib/contracts/agents";
 import type { SkillId } from "@/lib/contracts/skills";
 import { createDefaultSkillRegistry } from "@/lib/skills/default-registry";
+import { executionProfileRegistry } from "@/lib/execution-profiles/registry";
 import type { SkillRegistry } from "@/lib/skills/registry";
 
 export type AgentManagementFailureCode = "agent_not_found" | "agent_invalid_configuration" | "agent_immutable" | "agent_coverage_conflict" | "agent_delete_blocked" | "agent_conflict";
@@ -13,40 +14,52 @@ export class AgentManagementError extends Error {
   public constructor(public readonly code: AgentManagementFailureCode, message: string) { super(message); }
 }
 
-type EditableConfiguration = Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns">;
+type EditableConfiguration = Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns"> & Partial<Pick<AgentVersion, "imageTarget" | "profileId" | "profileVersion" | "imageQuality" | "imageResolution">>;
 
-export type AgentCoverage = { key: "manager" | SkillId; role: "manager" | "specialist"; skillId: SkillId | null; activeVersionId: string | null; violation: string | null };
+export type AgentCoverage = { key: "manager" | SkillId | "image:reference" | "image:page"; role: "manager" | "specialist" | "image"; skillId: SkillId | null; imageTarget?: "reference" | "page" | null; activeVersionId: string | null; violation: string | null };
 
 function toCoverage(snapshot: AgentPersistenceSnapshot, registry: SkillRegistry): AgentCoverage[] {
-  const isValid = (version: AgentVersion) => agentVersionConfigurationSchema.safeParse(version).success;
+  const isValid = (version: AgentVersion) => {
+    if (!agentVersionConfigurationSchema.safeParse(version).success) return false;
+    if (version.role === "manager") return true;
+    try {
+      executionProfileRegistry.parseSettings(version.role === "specialist"
+        ? { profileId: version.profileId, profileVersion: version.profileVersion, provider: version.provider, modelId: version.modelId, reasoningEffort: version.reasoningEffort, maxTurns: version.maxTurns }
+        : version.profileId === "openai-image"
+          ? { profileId: version.profileId, profileVersion: version.profileVersion, provider: version.provider, modelId: version.modelId, imageQuality: version.imageQuality }
+          : version.profileId === "gemini-image"
+            ? { profileId: version.profileId, profileVersion: version.profileVersion, provider: version.provider, modelId: version.modelId, imageResolution: version.imageResolution }
+            : { profileId: version.profileId, profileVersion: version.profileVersion, provider: version.provider, modelId: version.modelId });
+      return true;
+    } catch { return false; }
+  };
   const manager = snapshot.versions.filter((version) => version.isActive && version.role === "manager");
   const expected = ["intake_readiness@1", "story_planning_revision@1", "quality_review_targeted_repair@1", "visual_direction_reference_planning@1", "booklet_specification@1", "page_planning_writing@1", "image_prompt_compilation@1"] as SkillId[];
   expected.forEach((id) => registry.get(id));
+  const specialistCoverage = expected.map((skillId) => {
+    const matches = snapshot.versions.filter((version) => version.isActive && version.role === "specialist" && version.skillId === skillId);
+    return { key: skillId, role: "specialist" as const, skillId, imageTarget: null, activeVersionId: matches[0]?.id ?? null, violation: matches.some((version) => !isValid(version)) ? "Malformed active specialist configuration" : matches.length ? null : "Missing active specialist" };
+  });
+  const imageCoverage = (["reference", "page"] as const).map((imageTarget) => {
+    const matches = snapshot.versions.filter((version) => version.isActive && version.role === "image" && version.imageTarget === imageTarget);
+    return { key: `image:${imageTarget}` as const, role: "image" as const, skillId: null, imageTarget, activeVersionId: matches[0]?.id ?? null, violation: matches.some((version) => !isValid(version)) ? "Malformed active image configuration" : matches.length ? null : "Missing active image candidate" };
+  });
   return [
-    { key: "manager", role: "manager", skillId: null, activeVersionId: manager.length === 1 ? manager[0].id : null, violation: manager.some((version) => !isValid(version)) ? "Malformed active manager configuration" : manager.length === 1 ? null : manager.length === 0 ? "Missing active manager" : "Multiple active managers" },
-    ...expected.map((skillId) => {
-      const matches = snapshot.versions.filter((version) => version.isActive && version.role === "specialist" && version.skillId === skillId);
-      return { key: skillId, role: "specialist" as const, skillId, activeVersionId: matches.length === 1 ? matches[0].id : null, violation: matches.some((version) => !isValid(version)) ? "Malformed active specialist configuration" : matches.length === 1 ? null : matches.length === 0 ? "Missing active specialist" : "Multiple active specialists" };
-    }),
+    { key: "manager", role: "manager", skillId: null, imageTarget: null, activeVersionId: manager.length === 1 ? manager[0].id : null, violation: manager.some((version) => !isValid(version)) ? "Malformed active manager configuration" : manager.length === 1 ? null : manager.length === 0 ? "Missing active manager" : "Multiple active managers" },
+    ...specialistCoverage,
+    ...imageCoverage,
   ];
 }
-
 function violationKeys(snapshot: AgentPersistenceSnapshot, registry: SkillRegistry): Set<string> {
   return new Set(toCoverage(snapshot, registry).filter((slot) => slot.violation).map((slot) => slot.key));
 }
 
 function simulateActivation(snapshot: AgentPersistenceSnapshot, target: AgentVersion): AgentPersistenceSnapshot {
-  return {
-    ...snapshot,
-    versions: snapshot.versions.map((version) => ({
-      ...version,
-      isActive: version.id === target.id
-        ? true
-        : version.isActive && !((version.role === target.role && version.skillId === target.skillId) || version.agentId === target.agentId),
-    })),
-  };
+  return { ...snapshot, versions: snapshot.versions.map((version) => ({
+    ...version,
+    isActive: version.id === target.id ? true : version.isActive && (target.role !== "manager" || version.role !== "manager") && version.agentId !== target.agentId,
+  })) };
 }
-
 export class AgentManagementService {
   private readonly repositories: Repositories;
   private readonly registry: SkillRegistry;
@@ -97,10 +110,23 @@ export class AgentManagementService {
     const strictlyRepairsCoverage = beforeViolations.size > 0
       && afterViolations.size < beforeViolations.size
       && [...afterViolations].every((key) => beforeViolations.has(key));
-    if (!preservesExactCoverage && !strictlyRepairsCoverage) {
+    const targetKey = target.role === "manager"
+      ? "manager"
+      : target.role === "specialist"
+        ? target.skillId
+        : `image:${target.imageTarget}`;
+    const enablesMalformedRepair = targetKey !== null
+      && beforeViolations.has(targetKey)
+      && afterViolations.has(targetKey)
+      && [...afterViolations].every((key) => beforeViolations.has(key));
+    if (!preservesExactCoverage && !strictlyRepairsCoverage && !enablesMalformedRepair) {
       throw new AgentManagementError("agent_coverage_conflict", "This activation must preserve exact coverage or repair at least one missing active slot. Repair the missing slot first.");
     }
     return this.call(() => this.repositories.agents.activate({ ...input, actor: "local-admin", now: this.now() }));
+  }
+
+  public async deactivate(input: { id: string; expectedRevision: number }) {
+    return this.call(() => this.repositories.agents.deactivate({ ...input, actor: "local-admin", now: this.now() }));
   }
 
   public async retire(input: { id: string; expectedRevision: number }) {
@@ -120,7 +146,8 @@ export class AgentManagementService {
   }
 
   private validate(value: EditableConfiguration): EditableConfiguration {
-    const parsed = agentVersionConfigurationSchema.safeParse(value);
+    const normalized = value.role === "specialist" ? { ...value, imageTarget: null, profileId: value.profileId ?? "openai-specialist", profileVersion: value.profileVersion ?? 1, imageQuality: null, imageResolution: null } : value.role === "manager" ? { ...value, imageTarget: null, profileId: null, profileVersion: null, imageQuality: null, imageResolution: null } : value;
+    const parsed = agentVersionConfigurationSchema.safeParse(normalized);
     if (!parsed.success) throw new AgentManagementError("agent_invalid_configuration", parsed.error.issues[0]?.message ?? "The agent configuration is invalid.");
     if (parsed.data.skillId) {
       try { this.registry.get(parsed.data.skillId); } catch { throw new AgentManagementError("agent_invalid_configuration", "Choose a registered specialist skill."); }
@@ -133,7 +160,7 @@ export class AgentManagementService {
     catch (error) {
       if (error instanceof AgentManagementError) throw error;
       if (error instanceof AgentMutationError) {
-        const code = error.code === "agent_not_found" || error.code === "agent_conflict" || error.code === "agent_immutable" || error.code === "agent_delete_blocked" ? error.code : "agent_conflict";
+        const code = error.code === "agent_not_found" || error.code === "agent_conflict" || error.code === "agent_immutable" || error.code === "agent_delete_blocked" || error.code === "agent_coverage_conflict" ? error.code : "agent_conflict";
         throw new AgentManagementError(code, error.message);
       }
       throw new AgentManagementError("agent_conflict", "The agent change could not be saved. Reload and try again.");

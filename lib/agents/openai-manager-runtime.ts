@@ -19,13 +19,13 @@ export class OpenAIManagerRuntime {
   public async route(input: ManagerRouteInput, configuration: ResolvedAgentConfiguration): Promise<RoutedManagerResult> {
     const parsed = managerRouteInputSchema.parse(input);
     const allowedSkills = parsed.availableSkills.map((skill) => this.registry.get(skill.id));
-    const result = await this.runner.run(createManagerAgent(allowedSkills, parsed.stage, { name: configuration.version.displayName, instructions: configuration.version.instructions, model: configuration.version.modelId, reasoning: configuration.version.reasoningEffort }), JSON.stringify({
+    const result = await this.runner.run(createManagerAgent(allowedSkills, parsed.stage, { name: configuration.version.displayName, instructions: configuration.version.instructions!, model: configuration.version.modelId, reasoning: configuration.version.reasoningEffort! }), JSON.stringify({
       stage: parsed.stage,
       operation: parsed.operation,
       intent: parsed.intent,
       availableSkills: parsed.availableSkills,
     }), {
-      maxTurns: configuration.version.maxTurns,
+      maxTurns: configuration.version.maxTurns!,
     });
     const route = managerRouteResultSchema.parse(result.finalOutput);
     if (!parsed.availableSkills.some((skill) => skill.id === route.skillId)) throw new Error("The manager selected a skill that is not allowed for this stage.");

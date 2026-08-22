@@ -30,6 +30,19 @@ function cardFrom(turn: ChatTurn) {
   return part.data.cardId;
 }
 
+async function materializeAgentRun(booklets: BookletService, cards: CardService, bookletId: string, cardId: string, responseId: string): Promise<{ cardId: string; title: string }> {
+  const snapshot = await booklets.getWorkspaceSnapshot(bookletId);
+  const active = (snapshot.activeCard as { cardId?: string; family?: string; payload?: { candidates?: Array<{ agentId: string }> } } | null);
+  const run = active?.cardId === cardId ? active : null;
+  if (!run || run.family !== "agent_run") throw new Error("Expected an Agent Run card.");
+  await cards.submit(bookletId, { cardId, responseId, action: "run_agents", value: run.payload?.candidates?.map((candidate) => candidate.agentId) ?? [] });
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const next = (await booklets.getWorkspaceSnapshot(bookletId)).activeCard as { cardId: string; title: string; family?: string } | null;
+    if (next && next.family !== "agent_run") return next;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("Timed out waiting for Agent Run materialization.");
+}
 async function waitForCard(booklets: BookletService, bookletId: string, title: string): Promise<{ cardId: string; payload: { items?: Array<{ assetId: string }> } }> {
   // Sharp PDF/image work competes with other integration workers on this host.
   // This observes persisted completion rather than assuming a fixed two-second budget.
@@ -56,27 +69,26 @@ describe("specification and Page Plan workflow", () => {
     const exporter = new ExportService({ database, assets });
     const chat = new ChatService({ database, generation, exporter });
     const booklet = await bookletService.create({ idea: "A robin shares rainwater in a bright garden." });
-    const begin = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000721", role: "user", parts: [{ type: "text", text: "Begin." }] });
-    const intakeCard = cardFrom(begin);
-    const intakeResponse = "00000000-0000-4000-8000-000000000722";
-    await cardService.submit(booklet.id, { cardId: intakeCard, responseId: intakeResponse, action: "select", value: "6-8" });
-    await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000723", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: intakeResponse }, parts: [{ type: "text", text: "Ages 6–8" }] });
-    const active = (await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard as { cardId: string };
-    await cardService.submit(booklet.id, { cardId: active.cardId, responseId: "00000000-0000-4000-8000-000000000724", action: "approve_and_continue" });
+    const begin = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000721", role: "user", parts: [{ type: "text", text: "Begin. The audience is ages 6-8." }] });
+    const intakeReview = await materializeAgentRun(bookletService, cardService, booklet.id, cardFrom(begin), "00000000-0000-4000-8000-000000000722");
+    await cardService.submit(booklet.id, { cardId: intakeReview.cardId, responseId: "00000000-0000-4000-8000-000000000724", action: "approve_and_continue" });
     const story = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000725", role: "user", parts: [{ type: "text", text: "Draft the Story Plan." }] });
-    await cardService.submit(booklet.id, { cardId: cardFrom(story), responseId: "00000000-0000-4000-8000-000000000726", action: "approve_and_continue" });
-    const style = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000727", role: "user", parts: [{ type: "text", text: "Choose visual direction." }] });
-    await cardService.submit(booklet.id, { cardId: cardFrom(style), responseId: "00000000-0000-4000-8000-000000000728", action: "select", value: "soft-watercolor" });
-    const bible = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000729", role: "user", parts: [{ type: "text", text: "Plan visual references." }] });
-    await cardService.submit(booklet.id, { cardId: cardFrom(bible), responseId: "00000000-0000-4000-8000-000000000730", action: "approve_and_continue" });
+    const storyReview = await materializeAgentRun(bookletService, cardService, booklet.id, cardFrom(story), "00000000-0000-4000-8000-000000000726");
+    await cardService.submit(booklet.id, { cardId: storyReview.cardId, responseId: "00000000-0000-4000-8000-000000000727", action: "approve_and_continue" });
+    const style = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000728", role: "user", parts: [{ type: "text", text: "Choose visual direction." }] });
+    const styleQuestion = await materializeAgentRun(bookletService, cardService, booklet.id, cardFrom(style), "00000000-0000-4000-8000-000000000729");
+    await cardService.submit(booklet.id, { cardId: styleQuestion.cardId, responseId: "00000000-0000-4000-8000-000000000730", action: "select", value: "soft-watercolor" });
+    const bible = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000731", role: "user", parts: [{ type: "text", text: "Plan visual references." }] });
+    const bibleReview = await materializeAgentRun(bookletService, cardService, booklet.id, cardFrom(bible), "00000000-0000-4000-8000-000000000732");
+    await cardService.submit(booklet.id, { cardId: bibleReview.cardId, responseId: "00000000-0000-4000-8000-000000000733", action: "approve_and_continue" });
     const referenceReview = await waitForCard(bookletService, booklet.id, "Review canonical references");
     await cardService.submit(booklet.id, { cardId: referenceReview.cardId, responseId: "00000000-0000-4000-8000-000000000738", action: "approve_and_continue", value: referenceReview.payload.items?.map((item) => item.assetId) });
-    const specification = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000731", role: "user", parts: [{ type: "text", text: "Recommend booklet pages." }] });
-    const geometryCard = cardFrom(specification);
-    const geometryResponse = "00000000-0000-4000-8000-000000000732";
-    await cardService.submit(booklet.id, { cardId: geometryCard, responseId: geometryResponse, action: "confirm_geometry", value: "square_1_1" });
-    const pagePlan = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000733", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: geometryResponse }, parts: [{ type: "text", text: "Square (1:1)" }] });
-    const artifacts = new ArtifactService({ database });
+    const specification = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000734", role: "user", parts: [{ type: "text", text: "Recommend booklet pages." }] });
+    const geometryQuestion = await materializeAgentRun(bookletService, cardService, booklet.id, cardFrom(specification), "00000000-0000-4000-8000-000000000735");
+    const geometryResponse = "00000000-0000-4000-8000-000000000736";
+    await cardService.submit(booklet.id, { cardId: geometryQuestion.cardId, responseId: geometryResponse, action: "confirm_geometry", value: "square_1_1" });
+    const pagePlan = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000737", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: geometryResponse }, parts: [{ type: "text", text: "Square (1:1)" }] });
+    await materializeAgentRun(bookletService, cardService, booklet.id, cardFrom(pagePlan), "00000000-0000-4000-8000-000000000738");    const artifacts = new ArtifactService({ database });
     const draftedPlan = await artifacts.get(booklet.id, "page_plan");
     const legacyContent = draftedPlan.currentVersion!.content as { pages: Array<Record<string, unknown>> };
     const legacyPlan = await artifacts.revise(booklet.id, "page_plan", { ...legacyContent, pages: legacyContent.pages.map((page) => {
@@ -99,11 +111,12 @@ describe("specification and Page Plan workflow", () => {
     const beforePages = (beforeRevision.currentVersion!.content as { pages: Array<{ pageId: string; sourceIllustrationAssetId: string; composedAssetId: string }> }).pages;
     const regeneratedJob = await new RevisionService({ database, assets, generation }).regenerateImage(booklet.id, { target: { kind: "page", pageId: beforePages[1]!.pageId }, instruction: "Make the narration caption larger while preserving its exact words." });
     await generation.runPageJob(booklet.id, regeneratedJob.id);
+    const regeneratedReview = await waitForCard(bookletService, booklet.id, "Review final pages");
     const regenerated = await new ArtifactService({ database }).get(booklet.id, "final_pages");
     const regeneratedPages = (regenerated.currentVersion!.content as { pages: Array<{ pageId: string; sourceIllustrationAssetId: string; composedAssetId: string }> }).pages;
     expect(regeneratedPages[1]!.sourceIllustrationAssetId).not.toBe(beforePages[1]!.sourceIllustrationAssetId);
     expect(regeneratedPages[2]!.composedAssetId).toBe(beforePages[2]!.composedAssetId);
-    const regeneratedReview = await waitForCard(bookletService, booklet.id, "Review final pages");
+
     await cardService.submit(booklet.id, { cardId: regeneratedReview.cardId, responseId: "00000000-0000-4000-8000-000000000739", action: "approve_and_continue", value: regeneratedReview.payload.items?.map((item) => item.assetId) });
     const exported = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000737", role: "user", parts: [{ type: "text", text: "Export the PDF." }] });
     const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);

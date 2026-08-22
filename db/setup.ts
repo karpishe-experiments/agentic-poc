@@ -35,6 +35,13 @@ export async function setupMongoStructure(context: MongoDatabaseContext): Promis
       if (!(error instanceof MongoServerError && error.code === 48)) throw error;
     }
   }
+  const legacy = await context.database.collection("agent_versions").listIndexes().toArray();
+  const legacySingleton = legacy.find((index) => index.name === "agent_versions_active_specialist_unique");
+  if (legacySingleton) {
+    const exactLegacy = indexMatches(legacySingleton, { skillId: 1 }, { unique: true, partialFilterExpression: { isActive: true, role: "specialist", skillId: { $type: "string" } } });
+    if (!exactLegacy) throw new Error("Legacy specialist index exists with unexpected keys or options.");
+    await context.database.collection("agent_versions").dropIndex("agent_versions_active_specialist_unique");
+  }
   for (const required of REQUIRED_INDEXES) {
     const collection = context.database.collection(required.collection);
     const indexes = await collection.listIndexes().toArray();
@@ -64,8 +71,8 @@ function seedDocuments() {
   const definitions = agentSeedDefaults.map((version) => ({ _id: version.agentId, createdAtMs: AGENT_SEED_TIMESTAMP, createdBy: AGENT_SEED_ACTOR }));
   const versions = agentSeedDefaults.map((version) => ({
     _id: version.id, agentId: version.agentId, versionNumber: version.versionNumber, parentVersionId: version.parentVersionId,
-    displayName: version.displayName, purpose: version.purpose, role: version.role, skillId: version.skillId, instructions: version.instructions,
-    provider: version.provider, modelId: version.modelId, reasoningEffort: version.reasoningEffort, maxTurns: version.maxTurns, status: version.status,
+    displayName: version.displayName, purpose: version.purpose, role: version.role, skillId: version.skillId, imageTarget: version.imageTarget, instructions: version.instructions,
+    provider: version.provider, modelId: version.modelId, reasoningEffort: version.reasoningEffort, maxTurns: version.maxTurns, profileId: version.profileId, profileVersion: version.profileVersion, imageQuality: version.imageQuality, imageResolution: version.imageResolution, status: version.status,
     isActive: version.isActive, revision: version.revision, createdAtMs: AGENT_SEED_TIMESTAMP, updatedAtMs: AGENT_SEED_TIMESTAMP, createdBy: version.createdBy, updatedBy: version.updatedBy,
   }));
   const events = agentSeedDefaults.flatMap((version) => (["create", "confirm", "activate"] as const).map((action) => ({
@@ -84,10 +91,12 @@ async function insertOrVerify<T extends { _id: string }>(collection: { findOne(f
 
 export async function seedDefaultAgents(context: MongoDatabaseContext): Promise<void> {
   const { definitions, versions, events } = seedDocuments();
+  // Upgrade only pinned legacy seed rows that predate execution profiles. Operator-created rows stay untouched.
+  for (const version of versions) await context.collections.agent_versions.updateOne({ _id: version._id, profileId: { $exists: false } }, { $set: { imageTarget: version.imageTarget ?? null, profileId: version.profileId ?? null, profileVersion: version.profileVersion ?? null, imageQuality: version.imageQuality ?? null, imageResolution: version.imageResolution ?? null } });
   for (const document of definitions) await insertOrVerify(context.collections.agent_definitions, document);
   for (const document of versions) await insertOrVerify(context.collections.agent_versions, document);
   for (const document of events) await insertOrVerify(context.collections.agent_version_events, document);
   const managers = await context.collections.agent_versions.countDocuments({ isActive: true, role: "manager" });
   const specialists = await context.collections.agent_versions.countDocuments({ isActive: true, role: "specialist" });
-  if (managers !== 1 || specialists !== 7) throw new Error("Default runtime-agent coverage is incomplete or conflicting.");
+  if (managers !== 1 || specialists < 7) throw new Error("Default runtime-agent coverage is incomplete or conflicting.");
 }
