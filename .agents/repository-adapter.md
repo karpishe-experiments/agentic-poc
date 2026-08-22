@@ -41,3 +41,30 @@ otherwise.
   to an associated issue after review passes and validation is current.
 - Agents must not merge, deploy, release the consumer application, close issues,
   or change GitHub Project fields unless the user separately and explicitly asks.
+
+<!-- core-agent-skills:adapter-v0.2:start -->
+## Core workflow safeguards
+
+- Sensitive or contract-changing surfaces: security, persistence and schemas,
+  migrations, public contracts, runtime agents and skills, workflow stages and
+  jobs, providers and integrations, dependencies and build configuration, and
+  architecture boundaries
+- Documentation relationships: keep `AGENTS.md` and `skills-lock.json` aligned with
+  installed skills; update `docs/architecture.md` for runtime ownership or boundary
+  changes; update the applicable experiment brief, accepted PRD, `PLAN.md`, and
+  `LESSONS-LEARNED.md` only for the scope each document owns. No additional catalog
+  or context map is configured.
+- Generated-document ownership: retained evaluation PDFs and manifests are owned by
+  their evaluation workflow and scripts; they are evidence artifacts, not canonical
+  documentation. Canonical documents listed above are authored sources.
+- Validation relevant inputs: affected source, tests, configuration, dependencies,
+  generated inputs, and environment assumptions; agent behavior also includes
+  schemas, agent defaults, skill registry, and fixtures; persistence also includes
+  schemas, repositories, seeds, migrations, and database configuration
+- Issue evidence marker: `<!-- agent-change-evidence -->`
+- Issue evidence policy: one idempotent post-PR comment containing outcome,
+  validation, documentation and learning impact, reviewed SHA, and PR link
+- Publication base: `master`
+- Reviewed-diff identity: publication must use the exact reviewed commit/diff;
+  later relevant changes require affected validation and review
+<!-- core-agent-skills:adapter-v0.2:end -->

@@ -40,30 +40,30 @@
     "work-on-task": {
       "source": "karpishe-experiments/core-agent-skills",
       "sourceType": "github",
-      "sourceRef": "v0.1.1",
+      "sourceRef": "v0.2.0",
       "skillPath": "skills/work-on-task/SKILL.md",
-      "computedHash": "ea7226681e2fd55a61311235262a9c1b40195ea0668ed0f060642af79b8b8127"
+      "computedHash": "e33626cd69ca6b2c3bb6e6ebba8028879a2e22e6261c313b5100171f66bd62a1"
     },
     "review-change": {
       "source": "karpishe-experiments/core-agent-skills",
       "sourceType": "github",
-      "sourceRef": "v0.1.1",
+      "sourceRef": "v0.2.0",
       "skillPath": "skills/review-change/SKILL.md",
-      "computedHash": "9c6ccb28511834a77ffb99a5ee0e297dc2ba1f66eb9f610a5bc9e2c3bed98cfb"
+      "computedHash": "0f850ece1e7dd3064ce96eee956b910dc273577ddae1fd56c0fe4e2d6bd922a2"
     },
     "sync-docs-issues": {
       "source": "karpishe-experiments/core-agent-skills",
       "sourceType": "github",
-      "sourceRef": "v0.1.1",
+      "sourceRef": "v0.2.0",
       "skillPath": "skills/sync-docs-issues/SKILL.md",
-      "computedHash": "fb56eeb41a91586e84d9a9e665bc24cc000ca0cc6935ea5d1fbeed81eea76d8c"
+      "computedHash": "e81070870cde72ede433dfa063dc303276c2ebb0437a7410bc82be91300d4e8f"
     },
     "compile-feature-spec": {
       "source": "karpishe-experiments/core-agent-skills",
       "sourceType": "github",
-      "sourceRef": "v0.1.1",
+      "sourceRef": "v0.2.0",
       "skillPath": "skills/compile-feature-spec/SKILL.md",
-      "computedHash": "12bbb66a44ed53ee31595d6d8cd7f92e097589b0e9163a0799ac1987efc78cd5"
+      "computedHash": "6eb42d774a921197d17876592d60de23f54b789e3d8a001449e8d1259d7ae134"
     }
   }
 }

@@ -11,11 +11,20 @@ interfaces, constraints, or developer workflow changed. Revise stale guidance an
 link instead of duplicating. If no documentation change is needed, record a concise
 evidence-based rationale.
 
-When the repository provides a learning-capture skill, invoke it for durable,
-verified lessons. Do not turn current-state documentation into a work log and do not
-record assumptions as facts.
+Use only documentation relationships, catalogs, or context maps named by the
+adapter. Keep them synchronized when their cataloged interface changes. Detect and
+correct stale local links, duplicated authority, undocumented generated-artifact
+ownership, and temporary guidance that lacks a removal condition. Do not invent new
+catalogs or governance layers for repositories that do not configure them.
 
-For issue-backed work, prepare one concise evidence comment containing the outcome,
-validation, documentation impact, learning impact, and PR link. Posting that comment
-is allowed after the PR exists. Never close the issue, change labels or milestones,
-or mutate GitHub Project fields unless separately requested.
+When the repository provides a learning-capture skill, invoke it for durable,
+verified lessons. Keep current-state documentation separate from chronological
+lessons, and do not record assumptions as facts.
+
+For issue-backed work, re-fetch the issue immediately before commenting. Prepare one
+concise comment containing the adapter's stable evidence marker, outcome, validation,
+documentation impact, learning impact, reviewed commit SHA, and PR link. Search the
+current issue comments for that marker and reviewed SHA; do not post a duplicate.
+Posting the unchanged comment is allowed after the PR exists. Never rewrite the issue
+body, close the issue, change labels, assignment, or milestone, or mutate GitHub
+Project fields unless separately requested.
