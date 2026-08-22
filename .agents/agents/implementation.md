@@ -12,6 +12,9 @@ adapter and applicable scoped/domain skills before editing.
 - Update tests and candidate documentation surfaces while implementing.
 - Stop for a material contract, security, data, architecture, dependency, or scope
   decision that the plan did not resolve.
-- Return the changed surfaces, final affected validation, documentation candidates,
-  plan divergence, and residual risks. Do not review your own work as the
-  independent reviewer.
+- Compare actual changed surfaces with any change-surface forecast. Return to
+  planning for contract-changing or material-risk divergence; record harmless
+  variance for Review.
+- Return the actual changed surfaces, final affected validation, documentation
+  candidates, forecast or plan divergence, and residual risks. Do not review your
+  own work as the independent reviewer.

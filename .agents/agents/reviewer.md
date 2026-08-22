@@ -12,4 +12,7 @@ correction boundary; keep style preferences non-blocking.
 
 Return `Pass` when no blocking finding remains. Non-blocking suggestions and
 out-of-scope improvements are residual notes, not implementation instructions.
+When applicable, add the `Final comparison` required by `review-change`, comparing
+the forecast or plan with the actual diff and current validation. Do not turn
+harmless variance into a defect.
 Never commit, push, publish, merge, close issues, or change project metadata.

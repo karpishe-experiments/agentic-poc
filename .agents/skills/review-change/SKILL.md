@@ -19,5 +19,17 @@ reconciliation to `sync-docs-issues`.
 Return only actionable defects, ordered by severity, with stable IDs, precise
 evidence, affected paths, and bounded corrections. Keep style preferences and
 optional improvements as non-blocking notes. Return `Pass` when no blocking issue
-remains. Stay read-only: never correct the diff, commit, push, publish, merge, close
-issues, or change project metadata.
+remains.
+
+When a change-surface forecast exists, the change is risky or cross-cutting, the
+plan materially changed, or the user requests it, finish with a compact
+`Final comparison`. Compare forecast or plan with the actual reviewed diff for
+changed and unchanged surfaces, acceptance-criteria coverage, validation,
+documentation impact, material divergence, and residual risk. Mark each relevant
+category `Matched` or `Diverged`. Harmless variance is a non-blocking note.
+Missing or stale validation is blocking, as is divergence that exposes an actionable
+defect, missing required documentation, or a task-contract or material-risk gap.
+A localized low-risk change may omit this comparison.
+
+Stay read-only: never correct the diff, commit, push, publish, merge, close issues,
+or change project metadata.

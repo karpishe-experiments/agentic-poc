@@ -25,6 +25,14 @@ Deliver one bounded engineering task using the consumer's
    risky or cross-cutting work needs acceptance criteria, interfaces, risks,
    documentation impact, and rollback or compatibility considerations.
 
+For a risky or cross-cutting change, or when the user requests it, add a compact
+`Change-surface forecast` before implementation. State the intended outcome;
+expected runtime and ownership boundaries; public, persisted, or compatibility
+contracts; affected validation and canonical documentation; expected unchanged
+surfaces; and material uncertainties. A localized low-risk change may omit the
+forecast when it would add no useful decision evidence. The forecast is an
+estimate, not an approval gate or authority to expand scope.
+
 ## Implement and review
 
 Use `.agents/agents/implementation.md` for the editing pass. When implementation is
@@ -35,6 +43,9 @@ task contract. Stop after two unsuccessful correction cycles and ask for directi
 
 Preserve unrelated work. Stop when branch ownership is ambiguous, existing changes
 conflict with the task, or the plan no longer covers the required production work.
+Compare actual changed surfaces with any change-surface forecast. Return to
+planning when an unexpected surface changes the task contract or material risk;
+otherwise record the variance for Review.
 Reuse a passing validation result only while its relevant inputs, as defined by the
 adapter, remain unchanged. Before Review, run the final affected tests and each
 applicable build or type check after its last relevant change.
