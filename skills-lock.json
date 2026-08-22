@@ -36,6 +36,41 @@
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
       "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    },
+    "work-on-task": {
+      "source": "karpishe-experiments/core-agent-skills",
+      "sourceType": "github",
+      "sourceRef": "v0.4.0",
+      "skillPath": "skills/work-on-task/SKILL.md",
+      "computedHash": "5752a54a720c7c75875a07ff6504669ab4b2449ec8ab09d5298106445c518337"
+    },
+    "review-change": {
+      "source": "karpishe-experiments/core-agent-skills",
+      "sourceType": "github",
+      "sourceRef": "v0.4.0",
+      "skillPath": "skills/review-change/SKILL.md",
+      "computedHash": "4b5459cb948348b950785eedbd530dacccd26cac83bc36b5c6633bed76aa7fd1"
+    },
+    "sync-docs-issues": {
+      "source": "karpishe-experiments/core-agent-skills",
+      "sourceType": "github",
+      "sourceRef": "v0.4.0",
+      "skillPath": "skills/sync-docs-issues/SKILL.md",
+      "computedHash": "e81070870cde72ede433dfa063dc303276c2ebb0437a7410bc82be91300d4e8f"
+    },
+    "compile-feature-spec": {
+      "source": "karpishe-experiments/core-agent-skills",
+      "sourceType": "github",
+      "sourceRef": "v0.4.0",
+      "skillPath": "skills/compile-feature-spec/SKILL.md",
+      "computedHash": "6eb42d774a921197d17876592d60de23f54b789e3d8a001449e8d1259d7ae134"
+    },
+    "asd-ste100": {
+      "source": "karpishe-experiments/core-agent-skills",
+      "sourceType": "github",
+      "sourceRef": "v0.4.0",
+      "skillPath": "skills/asd-ste100/SKILL.md",
+      "computedHash": "68264ede06539a5fe15c827c97e79ac5d9fc527f676c691bdbc89a33043367f2"
     }
   }
 }

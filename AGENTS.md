@@ -15,12 +15,17 @@ Project-local skills are copied under `.agents/skills` and pinned in `skills-loc
 - `playwright` for Chromium browser verification.
 - `pdf` for rendered PDF inspection and layout verification.
 - `capture-project-learnings` for promoting verified experiment knowledge.
+- `work-on-task` for proportional implementation and reviewed PR publication.
+- `review-change` for pinned, read-only defect-first review.
+- `sync-docs-issues` for final documentation and issue-evidence reconciliation.
+- `compile-feature-spec` for turning rough experimental ideas into bounded specifications.
+- `asd-ste100` for unambiguous agent-authored technical prose without changing facts,
+  uncertainty, conditions, or scope.
 
 Codex also provides maintained system skills that must not be copied into this repository:
 
 - `openai-docs` for current OpenAI API, model, Agents SDK, and Image API guidance.
 - `imagegen` for image generation or editing when the host exposes the required image tool.
-- `review-agent` for read-only, defect-first review of a code change.
 - `skill-installer` for discovering and installing additional skills when explicitly requested.
 
 If OpenAI documentation tools are unavailable, run `codex mcp add openaiDeveloperDocs --url https://developers.openai.com/mcp` and restart Codex before relying on the `openai-docs` workflow.
@@ -41,11 +46,11 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 1. Read the experiment brief and inspect the relevant repository code.
    Before changing runtime agents, skills, contracts, stage transitions, jobs, or persistence, also read `docs/architecture.md`. Keep that current-state guide aligned when a verified change materially alters those boundaries; it does not override the canonical PRD.
 2. Resolve discoverable questions from the repository before asking the user.
-3. Present an explicit implementation plan before changing code.
-4. Wait for plan approval.
-5. After approval, implement the plan end-to-end without unnecessary pauses. Ask only when a consequential ambiguity, risky action, or scope change requires user input.
-6. Run verification proportional to the change and summarize the result.
-7. After verified work reveals durable knowledge, use the `capture-project-learnings` skill to update canonical docs and record reusable lessons.
+3. Use `work-on-task` and plan in proportion to the change. A localized fix needs a concise task contract; features and risky work require an issue or accepted feature specification and a decision-complete plan.
+4. Implement within the confirmed contract. Ask only when a consequential ambiguity, risky action, or scope change requires user input.
+5. Run verification proportional to the changed surface, then use `review-change` for an independent read-only review.
+6. After Review passes, use `sync-docs-issues`; compose it with `capture-project-learnings` when verified work reveals durable knowledge.
+7. The core workflow may publish a reviewed branch and pull request. Merging, deployment, issue closure, and GitHub Project mutations remain outside that authority.
 
 ## Delegation and multi-agent work
 
@@ -61,7 +66,7 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 
 ## Project management and GitHub
 
-- Use the [Agentic POC GitHub project](https://github.com/orgs/karpishe-experiments/projects/2) as the project-management source for implementation work, status, and sequencing.
+- The [Agentic POC GitHub project](https://github.com/orgs/karpishe-experiments/projects/2) is advisory context for sequencing; ordinary engineering does not require Project status maintenance.
 - Use the configured GitHub MCP server for GitHub project, issue, pull-request, and other GitHub API operations when it exposes the required capability.
 - If the required GitHub capability is unavailable through MCP, fall back to the `gh` CLI.
 - Use the `git` CLI for basic local repository operations such as status, diff, branch, add, commit, log, and push; do not route basic Git operations through GitHub MCP.
@@ -69,9 +74,9 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 
 ## Implementation planning
 
-Before implementation begins, locate and read the canonical implementation plan identified by the active PRD or project-management issue and obtain user approval. Do not create a second plan when an approved canonical plan already exists. For the Kids Booklet POC, the canonical implementation plan is `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md`.
+Scale planning to the risk and scope. Localized fixes, tests, and documentation changes may proceed from a concise task contract. Features, migrations, architecture or persistence changes, public contracts, security-sensitive work, and cross-subsystem work require an existing issue or accepted feature specification. When an accepted plan already governs the requested work, follow it instead of creating a competing plan.
 
-The plan must:
+For a new experiment or material change, the plan must:
 
 - Organize work into incremental vertical slices and map each slice to applicable PRD requirements and acceptance criteria.
 - Define architecture and ownership boundaries, including deterministic application responsibilities versus manager and skill responsibilities.
@@ -82,7 +87,7 @@ The plan must:
 - Record material risks, assumptions, and intentionally deferred production concerns.
 - Resolve consequential implementation choices or explicitly return them to the user before implementation begins.
 
-Do not treat `prototype/docs/ui-design-plan.md` as an implementation plan. Do not begin application implementation until the root `PLAN.md` is approved.
+For the Kids Booklet POC, `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md` remains the accepted plan for its covered scope. Do not treat `prototype/docs/ui-design-plan.md` as an implementation plan.
 
 ## Implementation guidelines
 
@@ -97,3 +102,22 @@ Do not treat `prototype/docs/ui-design-plan.md` as an implementation plan. Do no
 - Run the relevant build, type checks, lint checks, and focused tests when they exist.
 - Add only the tests needed to demonstrate the experiment's success criteria.
 - Report what passed, what failed, and what was not run.
+
+<!-- core-agent-skills:start -->
+## Core engineering workflows
+
+Repository-specific architecture, validation, issue thresholds, and publication
+rules are canonical in `.agents/repository-adapter.md`.
+
+- Use `.agents/skills/work-on-task/SKILL.md` for implementation, fixes, and refactors.
+- Use `.agents/skills/review-change/SKILL.md` for a separate read-only review.
+- Use `.agents/skills/sync-docs-issues/SKILL.md` for reconciling verified changes with docs and issue evidence.
+- Use `.agents/skills/compile-feature-spec/SKILL.md` for turning rough feature ideas into bounded specifications.
+- Use `.agents/skills/asd-ste100/SKILL.md` for unambiguous agent-authored technical prose.
+
+
+Use STE-flavored language for agent-authored prose. Preserve code, commands, identifiers, quotations, logs, and user-owned wording exactly unless the user asks to rewrite them.
+
+These workflows may publish a reviewed branch and PR but never merge, deploy,
+release the consumer application, close issues, or mutate GitHub Project fields.
+<!-- core-agent-skills:end -->

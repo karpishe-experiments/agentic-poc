@@ -1,0 +1,4 @@
+interface:
+  display_name: Work on Task
+  short_description: Implement and publish reviewed repository work
+  default_prompt: Use $work-on-task to complete this bounded engineering task.

@@ -1,0 +1,4 @@
+interface:
+  display_name: Compile Feature Spec
+  short_description: Refine an experimental idea into an implementation contract
+  default_prompt: Use $compile-feature-spec to refine this idea before implementation.

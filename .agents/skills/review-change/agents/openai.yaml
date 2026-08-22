@@ -1,0 +1,4 @@
+interface:
+  display_name: Review Change
+  short_description: Independently review a change without editing it
+  default_prompt: Use $review-change to review this proposed change read-only.
