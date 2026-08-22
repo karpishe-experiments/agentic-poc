@@ -24,7 +24,7 @@ The POC remains local, single-user, application-controlled, and intentionally sm
 
 - Multiple active managers, automatic candidate choice, automatic merging/synthesis, silent fallback, cancellation, or global/account preferences.
 - Arbitrary operator-authored schemas, mapping code, tools, provider credentials, or runtime skill definitions.
-- Production concurrency controls, multi-user coordination, provider comparison dashboards, or new provider credentials.
+- Production concurrency controls, multi-user coordination, provider comparison dashboards, admin-managed credentials, or providers/models beyond the closed OpenAI, Gemini, and FLUX image catalog.
 
 ## 3. Creator experience
 
@@ -61,9 +61,9 @@ The POC remains local, single-user, application-controlled, and intentionally sm
 An execution target is either a registered text `skill:<skillId>` or one of two image targets: reference image or page image. Each image target covers both generation and edit operations for its item type. A candidate is a persisted agent version whose code-registered execution profile is compatible with that target.
 
 - **MA-016:** The active manager remains unique. A valid text/image target has one-or-more active compatible candidates; no logical agent has more than one active version.
-- **MA-017:** An execution profile shall be code-registered and versioned. It owns executor kind (`specialist` or `image`), target compatibility, typed settings schema, native input/output schemas, canonical-to-native input adapter, and native-to-canonical output adapter.
-- **MA-018:** The canonical text contract remains the registered `SkillDefinition` input/output schemas. Canonical image contracts remain `ImageRequest` and `ImageResult`. Native request/result values validate before and after adapter use.
-- **MA-019:** The manager receives a canonical routing interface and compatible capability summaries; it shall not author provider-native requests. Application code maps canonical semantics such as geometry/quality into each profile's native dimensions/quality controls.
+- **MA-017:** An execution profile shall be code-registered and versioned. It owns executor kind (`specialist` or `image`), target/operation/model compatibility, a closed model catalog, typed settings schema, native input/output schemas, canonical-to-native input adapter, and native-to-canonical output adapter. Image profiles shall cover GPT Image 2, Gemini 3.1 Flash Image and Gemini 3 Pro Image, plus FLUX.2 Pro and Flex.
+- **MA-018:** The canonical text contract remains the registered `SkillDefinition` input/output schemas. Canonical image contracts remain `ImageRequest` and `ImageResult`, extended with a discriminated quality/resolution/dimensions output control and the supported provider/raster-output unions. Native request/result values validate before and after adapter use.
+- **MA-019:** The manager receives a canonical routing interface and compatible capability summaries; it shall not author provider-native requests. Application code maps canonical geometry and per-agent settings into OpenAI quality/pixel sizes, Gemini aspect ratio/resolution, or FLUX numeric dimensions, and validates each model's reference/output limits.
 - **MA-020:** Candidate selection freezes exact active agent-version and profile snapshots for that batch. An activation/deactivation affects only later cards. Availability changes before selection submission return a recoverable refreshed card without workflow mutation.
 
 ## 5. Persistence, admin, and evidence
@@ -76,12 +76,12 @@ An execution target is either a registered text `skill:<skillId>` or one of two 
 - **MA-023c:** Details shall expose the selected agent's editable configuration, compatible profile and typed settings, validation, and a read-only capability summary. Input/output schemas and canonical mappings remain read-only. Confirmation, explicit branching, version history, retirement, and draft deletion are secondary controls collapsed by default.
 - **MA-023d:** Editing a confirmed version shall automatically create an editable draft successor without requiring the operator to invoke an explicit fork action. Draft editing, confirmed-version immutability, monotonic version history, retirement rules, and the limit of one active version per logical agent remain unchanged.
 - **MA-023e:** On narrow viewports, the three panels shall become an accessible **Targets → Agents → Details** drill-down flow with visible back navigation. Both layouts shall support labeled keyboard operation, visible focus, independent panel scrolling where panels are simultaneous, and no forced page scrolling.
-- **MA-024:** Operators may choose and inspect only compatible code-registered profiles and their typed settings. Profile capabilities and schema summaries are read-only; arbitrary schemas, mappings, code, and credentials are not editable.
-- **MA-025:** Existing singleton seed agents shall migrate unchanged as valid one-candidate pools. Seed one compatible active candidate for each reference- and page-image target so existing image flows retain valid coverage.
+- **MA-024:** Operators may choose and inspect only compatible code-registered profiles, closed model IDs, and typed settings. Profile capabilities and schema summaries are read-only; arbitrary schemas, mappings, code, and credentials are not editable. Optional Google/BFL credentials remain environment-only, and an unavailable credential blocks real activation/execution with a recoverable configuration warning.
+- **MA-025:** Existing singleton seed agents shall migrate unchanged as valid one-candidate pools. Seed one OpenAI GPT Image 2 active candidate for each reference- and page-image target so existing image flows retain valid coverage. Gemini and FLUX models shall be present in the code-owned profile catalog but shall not create extra seeded logical agents.
 
 ## 6. Verification and acceptance
 
-Automated fake-provider evidence shall prove the single card's ready/running/results/completed transitions and restoration; first-use selection; remembered collapsed selection; changed preference; sole-agent implicit selection; stale preference recovery; candidate-pool lifecycle; concurrent execution; terminal-only result choice; mixed outcomes with targeted retry; all-failed recovery; per-image-item team changes; selected-only materialization; prior-asset retention; schema/profile normalization; immutable evidence; restart/reload persistence; and accessibility controls.
+Automated fake-provider evidence shall prove the single card's ready/running/results/completed transitions and restoration; first-use selection; remembered collapsed selection; changed preference; sole-agent implicit selection; stale preference recovery; candidate-pool lifecycle; concurrent execution; terminal-only result choice; mixed outcomes with targeted retry; all-failed recovery; per-image-item team changes; selected-only materialization; prior-asset retention; OpenAI quality/pixel-size, Gemini aspect-ratio/resolution, and FLUX numeric-dimension normalization; model/reference-limit rejection; immutable evidence; restart/reload persistence; and accessibility controls. FLUX recovery shall resume a persisted provider task rather than resubmit it. Automated acceptance shall not make paid provider calls.
 
 Admin component and browser evidence shall verify that target selection updates Agents, agent selection and Add agent update Details, active agents precede compatible inactive agents, search filters the selected target's agents, and a newly saved agent remains inactive until separately activated. It shall also verify additive activation, last-candidate protection, atomic manager replacement, compatibility and validation feedback, automatic draft succession when editing a confirmed version, collapsed advanced lifecycle/schema information, and preservation of immutable execution snapshots after pool changes.
 
@@ -100,4 +100,5 @@ Browser evidence shall cover first-use and remembered collapsed teams, Change ag
 - Partial successes remain selectable only after every batch item reaches a terminal state.
 - Agent management is target-centric and uses a three-panel **Targets / Agents / Details** layout, degrading to a three-step drill-down on narrow viewports.
 - Routine administration uses active-team controls and inactive-first agent creation; version branching and lifecycle mechanics remain available as collapsed advanced controls.
-- Implementation phase status and evidence are tracked in `roadmap.md` in this directory.
+- OpenAI, Gemini, and FLUX support is a closed code-owned model/profile catalog; provider secrets remain environment-only and missing optional secrets never invalidate an OpenAI-only or fake setup.
+- Implementation decisions and phase gates are defined in `PLAN.md`; phase status and evidence are tracked in `roadmap.md` in this directory.

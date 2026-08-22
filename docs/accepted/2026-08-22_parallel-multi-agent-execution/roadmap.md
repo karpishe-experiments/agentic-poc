@@ -2,6 +2,7 @@
 
 **Status:** Not started
 **Authority:** [Parallel multi-agent execution PRD](parallel-multi-agent-execution-prd.md)
+**Implementation plan:** [PLAN.md](PLAN.md)
 **Tracking:** Update phase and checklist status as implementation progresses.
 
 Status values: `Not started` · `In progress` · `Blocked` · `Verified`
@@ -10,7 +11,7 @@ Status values: `Not started` · `In progress` · `Blocked` · `Verified`
 
 **Outcome:** Text skills support durable parallel candidate execution and selected-only artifact creation.
 
-- [ ] Add execution targets, registered profiles, typed settings, schemas, and normalization adapters.
+- [ ] Add execution targets, four registered profiles, closed OpenAI/Gemini/FLUX image-model catalogs, typed settings, schemas, and normalization adapters.
 - [ ] Migrate specialist slots to candidate pools while retaining one manager.
 - [ ] Seed complete text and image candidate coverage.
 - [ ] Persist booklet-target preferences, batches, items, snapshots, results, and evidence.
@@ -21,14 +22,14 @@ Status values: `Not started` · `In progress` · `Blocked` · `Verified`
 - [ ] Preserve the sole-agent shortcut and direct quality flow.
 - [ ] Pass focused migration, contract, service, fixture, reload, and text browser tests.
 
-**Gate:** Existing single-agent behavior remains green, and a multi-agent text step works end to end.
+**Gate:** Existing single-agent behavior remains green, a multi-agent text step works end to end, and the mandatory review/fix, roadmap, next-phase-plan, publish, and Issue #18 checkpoint in PLAN.md is complete.
 
 ## Phase 2 — Image execution
 
 **Depends on:** Phase 1
 **Outcome:** Each reference and page item supports parallel image candidates safely.
 
-- [ ] Connect reference/page generation and editing to registered image profiles.
+- [ ] Connect reference/page generation and editing to OpenAI, Gemini, and FLUX registered image profiles.
 - [ ] Give each image item its own Agent run batch.
 - [ ] Run selected candidates concurrently within the current sequential item.
 - [ ] Store candidate outputs as inactive preview assets.
@@ -37,9 +38,9 @@ Status values: `Not started` · `In progress` · `Blocked` · `Verified`
 - [ ] Remember item-level team changes as the next item's default.
 - [ ] Keep failure recovery on the current item.
 - [ ] Preserve completed items and active assets through retries and restarts.
-- [ ] Pass normalization, preview, failure, ordering, reload, and selected-only activation tests.
+- [ ] Pass quality/resolution/dimensions normalization, model-limit, credential, FLUX polling recovery, preview, failure, ordering, reload, and selected-only activation tests without paid automated calls.
 
-**Gate:** Multi-agent reference and page generation work end to end without changing prior assets prematurely.
+**Gate:** Multi-agent reference and page generation work end to end without changing prior assets prematurely, and the mandatory checkpoint in PLAN.md is complete.
 
 ## Phase 3 — Three-panel agent management
 
@@ -58,7 +59,7 @@ Status values: `Not started` · `In progress` · `Blocked` · `Verified`
 - [ ] Add responsive Targets → Agents → Details navigation.
 - [ ] Pass lifecycle, compatibility, keyboard, focus, scrolling, responsive, and reload tests.
 
-**Gate:** Operators can create and manage multiple active agents without producing invalid target coverage.
+**Gate:** Operators can create and manage multiple active agents without producing invalid target coverage, and the mandatory checkpoint in PLAN.md is complete.
 
 ## Phase 4 — Verification and handoff
 
@@ -76,7 +77,7 @@ Status values: `Not started` · `In progress` · `Blocked` · `Verified`
 - [ ] Update architecture, operator documentation, implementation audit, project issue, and verified learnings.
 - [ ] Complete a final defect-first review and resolve every in-scope finding.
 
-**Gate:** All acceptance checks pass, documentation matches verified behavior, and the feature is ready for human acceptance.
+**Gate:** All acceptance checks pass, documentation matches verified behavior, the mandatory checkpoint in PLAN.md is complete, and the feature is ready for human acceptance.
 
 ## Completion status
 
