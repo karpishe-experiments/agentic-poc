@@ -425,14 +425,14 @@ Remove only the known legacy agent_versions_active_specialist_unique index. setu
 
 ### 5.4 Initialization and upgraded databases
 
-db:setup:
+db:reset:
 
 - creates the three collections and new indexes;
 - performs the exact legacy specialist-index replacement;
 - retains the transaction probe and final structural verification;
 - is safe on a fresh database and exact repeat.
 
-db:init:
+db:reset:
 
 - backfills missing openai-specialist profile ID/version and role-specific null fields on the seven deterministic existing specialist versions;
 - leaves the manager's existing model/reasoning/max-turn configuration and stable IDs unchanged;
@@ -440,7 +440,7 @@ db:init:
 - runs before exact deterministic seed verification; and
 - is safe on exact repeat without rewriting later operator edits.
 
-The image profile, model, quality, and resolution become database-authoritative candidate settings. IMAGE_PROVIDER_MODE continues to choose fake versus real execution. OPENAI_IMAGE_MODEL and OPENAI_IMAGE_QUALITY are removed from runtime selection and then from env/preflight/operator documentation once Phase 2 is verified. Existing default behavior is preserved by the seeded gpt-image-2/auto settings; custom local overrides must be recreated as an agent draft before activation. Add optional GEMINI_API_KEY and BFL_API_KEY parsing and preflight only when a real active/selected agent needs that provider; never require them for fake mode or an OpenAI-only pool.
+The image profile, model, quality, and resolution become database-authoritative candidate settings. IMAGE_PROVIDER_MODE continues to choose fake versus real execution. global image model and quality settings are removed from runtime selection and then from env/preflight/operator documentation once Phase 2 is verified. Existing default behavior is preserved by the seeded gpt-image-2/auto settings; custom local overrides must be recreated as an agent draft before activation. Add optional GEMINI_API_KEY and BFL_API_KEY parsing and preflight only when a real active/selected agent needs that provider; never require them for fake mode or an OpenAI-only pool.
 
 db:verify validates references, JSON payload schemas, one manager, one-or-more compatible candidates for every target, active logical-agent uniqueness, private ready-input field/state consistency and absence from public card/message JSON, rerun/restart/previous-batch provenance, batch/item/card/asset provenance, selected-item membership, terminal/completed consistency, and model-call batch/item/profile references.
 
@@ -568,7 +568,7 @@ Before the first implementation edit after explicit plan approval:
 1. Re-read AGENTS.md, the PRD, this plan, roadmap, architecture, and current Issue #18.
 2. Confirm branch issue-18-parallel-multi-agent-execution and a understood working tree; preserve unrelated work.
 3. Update Issue #18/project status to In progress and roadmap Phase 1 to In progress.
-4. Record the baseline: npm run db:setup, npm run db:init, npm run db:verify, npm run typecheck, npm run lint, npm test, npm run test:agent, npm run build, npm run test:e2e. Classify inherited failures; do not redefine them as acceptable.
+4. Record the baseline: npm run db:reset, npm run db:verify, npm run typecheck, npm run lint, npm test, npm run test:agent, npm run build, npm run test:e2e. Classify inherited failures; do not redefine them as acceptable.
 5. Use fake providers for implementation checks. Do not make real-provider calls without a separate user approval and cost statement.
 
 ### 8.3 Mandatory phase gate
@@ -1038,8 +1038,8 @@ Classify every failure before acting:
 
 Use the scripts already present:
 
-- npm run db:setup
-- npm run db:init
+- npm run db:reset
+- npm run db:reset
 - npm run db:verify
 - npm run typecheck
 - npm run lint

@@ -8,7 +8,7 @@ import { GenerationService } from "@/lib/application/generation-service";
 import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { genUICardSchema } from "@/lib/contracts/cards";
-import { FakeImageProvider } from "@/lib/images/fake-image-provider";
+
 
 const databases: Database[] = [];
 
@@ -50,7 +50,7 @@ describe("reference generation", () => {
     await artifacts.revise(booklet.id, "visual_bible", { schemaVersion: SCHEMA_VERSION, characters: [{ entityId: robin, name: "Robin", visualDetails: ["Red chest"], continuityConstraints: ["Keep red chest."], referenceRequired: true, currentReferenceAssetId: null, revisionNumber: 1 }], locations: [{ entityId: garden, name: "Garden", visualDetails: ["Round pond"], continuityConstraints: ["Keep pond."], referenceRequired: true, currentReferenceAssetId: null, revisionNumber: 1 }], styleReferences: ["00000000-0000-4000-8000-000000000001"] }, { createdBy: "agent" });
 
     const assets = new MemoryAssetStore();
-    const generation = new GenerationService({ database, artifacts, assets, provider: new FakeImageProvider(), imageModel: "fake-image", imageQuality: "low" });
+    const generation = new GenerationService({ database, artifacts, assets });
     const job = await generation.createReferenceJob(booklet.id);
     await generation.runReferenceJob(booklet.id, job.id);
     const items = await eventually(async () => {
@@ -65,7 +65,7 @@ describe("reference generation", () => {
     const content = bible.currentVersion?.content as { characters: Array<{ currentReferenceAssetId: string | null }>; locations: Array<{ currentReferenceAssetId: string | null }> };
 
     expect(items.map((item) => item.status)).toEqual(["succeeded", "succeeded"]);
-    expect(items.map((item) => (item.input as { request: { quality: string } }).request.quality)).toEqual(["low", "low"]);
+    expect(items.map((item) => (item.input as { request: { quality: string } }).request.quality)).toEqual(["disabled", "disabled"]);
     expect(content.characters[0]?.currentReferenceAssetId).toBeTruthy();
     expect(content.locations[0]?.currentReferenceAssetId).toBeTruthy();
     const selectedAsset = await (await import("@/db/repositories")).createRepositories(database).assets.get(content.characters[0]!.currentReferenceAssetId!);
@@ -88,7 +88,7 @@ describe("reference generation", () => {
     await artifacts.revise(booklet.id, "visual_bible", { schemaVersion: SCHEMA_VERSION, characters: [{ entityId: characterId, name: "Mira", visualDetails: ["Yellow raincoat"], continuityConstraints: ["Keep the raincoat yellow."], referenceRequired: true, currentReferenceAssetId: null, revisionNumber: 1 }], locations: [{ entityId: settingId, name: "Garden", visualDetails: ["Round pond"], continuityConstraints: ["Keep the pond calm."], referenceRequired: false, currentReferenceAssetId: null, revisionNumber: 1 }], styleReferences: [] }, { createdBy: "agent" });
     const assets = new MemoryAssetStore();
     const repositories = (await import("@/db/repositories")).createRepositories(database);
-    const generation = new GenerationService({ database, repositories, artifacts, assets, provider: new FakeImageProvider(), imageModel: "fake-image", imageQuality: "low" });
+    const generation = new GenerationService({ database, repositories, artifacts, assets });
     const firstJob = await generation.createReferenceJob(booklet.id);
     await generation.runReferenceJob(booklet.id, firstJob.id);
     const firstBible = await eventually(async () => {
@@ -139,7 +139,7 @@ describe("reference generation", () => {
     const assets = new MemoryAssetStore();
     const jobId = "00000000-0000-4000-8000-000000000751";
     const itemId = "00000000-0000-4000-8000-000000000752";
-    const page = { schemaVersion: "1", pageId: "00000000-0000-4000-8000-000000000753", pageIndex: 0, kind: "cover", sceneAction: "A child opens a bright book.", characterIds: [], locationIds: [], incidentalVisualDetails: [], compositionIntent: "Keep the title clear.", continuityNotes: [], readerText: "A bright adventure begins.", relevantReferenceIds: [], textSafeRegion: { x: 0.1, y: 0.72, width: 0.8, height: 0.2 } };
+    const page = { schemaVersion: "1", pageId: "00000000-0000-4000-8000-000000000753", pageIndex: 0, kind: "cover", sceneAction: "A child opens a bright book.", characterIds: [], locationIds: [], incidentalVisualDetails: [], compositionIntent: "Keep the title clear.", continuityNotes: [], readerText: "A bright adventure begins.", lettering: [{ kind: "title", text: "A bright adventure begins.", speakerEntityId: null, delivery: "clear", placementHint: "top" }], relevantReferenceIds: [], textSafeRegion: { x: 0.1, y: 0.72, width: 0.8, height: 0.2 } };
     const request = { schemaVersion: "1" as const, operation: "generate" as const, model: "fake-image", prompt: "A bright book in a garden.", promptPlan: { purpose: "cover", subject: "child", action: "opens a book", location: "garden", visualStyle: "watercolor", continuityConstraints: [], preserve: [] }, geometry: "square_1_1" as const, quality: "low" as const, references: [], editTargetAssetId: null };
     await repositories.jobs.createOrGet({ id: jobId, bookletId: booklet.id, jobType: "pages", idempotencyKey: `page-agent-run:${booklet.id}`, input: {}, items: [{ id: itemId, itemKey: "page:cover", position: 0, input: { page, geometry: "square_1_1", request } }], createdAtMs: Date.now() });
     const claimed = await repositories.jobs.claimNextPending(jobId, Date.now());

@@ -43,7 +43,7 @@ export const REQUIRED_INDEXES: RequiredIndex[] = [
   { collection: "execution_batches", name: "execution_batches_recovery_idx", key: { status: 1, updatedAtMs: 1 } },
   { collection: "execution_items", name: "execution_items_batch_agent_unique", key: { batchId: 1, agentId: 1 }, options: { unique: true } },
   { collection: "execution_items", name: "execution_items_batch_status_idx", key: { batchId: 1, status: 1 } },
-  { collection: "artifact_versions", name: "artifact_versions_source_execution_batch_unique", key: { sourceExecutionBatchId: 1 }, options: { unique: true, sparse: true } },
-  { collection: "quality_reviews", name: "quality_reviews_source_execution_batch_unique", key: { sourceExecutionBatchId: 1 }, options: { unique: true, sparse: true } },
+  { collection: "artifact_versions", name: "artifact_versions_source_execution_batch_unique", key: { sourceExecutionBatchId: 1 }, options: { unique: true, partialFilterExpression: { sourceExecutionBatchId: { $type: "string" } } } },
+  { collection: "quality_reviews", name: "quality_reviews_source_execution_batch_unique", key: { sourceExecutionBatchId: 1 }, options: { unique: true, partialFilterExpression: { sourceExecutionBatchId: { $type: "string" } } } },
   { collection: "model_calls", name: "model_calls_execution_item_idx", key: { executionBatchId: 1, executionItemId: 1 }, options: { sparse: true } },
 ];

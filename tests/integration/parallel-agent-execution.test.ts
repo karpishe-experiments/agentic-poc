@@ -27,7 +27,7 @@ describe("parallel agent execution", () => {
     const cards = new CardService({ database });
     const chat = new ChatService({ database });
     const booklet = await booklets.create({ idea: "A robin shares rainwater in a bright garden." });
-    const turn = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000811", role: "user", parts: [{ type: "text", text: "The audience is ages 6-8." }] });
+    const turn = await chat.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000811", role: "user", parts: [{ type: "text", text: "The audience is ages 6-8." }] });
     const part = turn.assistantMessage.parts.find((candidate) => candidate.type === "data-card");
     if (!part || part.type !== "data-card" || part.data.family !== "agent_run") throw new Error("Expected an Agent Run card.");
     expect(part.data.payload.state).toBe("ready");
@@ -62,7 +62,7 @@ describe("parallel agent execution", () => {
     const cards = new CardService({ database });
     const chat = new ChatService({ database });
     const booklet = await booklets.create({ idea: "A fox helps a sleepy owl find the moon." });
-    const turn = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000814", role: "user", parts: [{ type: "text", text: "The audience is ages 6-8." }] });
+    const turn = await chat.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000814", role: "user", parts: [{ type: "text", text: "The audience is ages 6-8." }] });
     const part = turn.assistantMessage.parts.find((candidate) => candidate.type === "data-card");
     if (!part || part.type !== "data-card" || part.data.family !== "agent_run") throw new Error("Expected an Agent Run card.");
 
@@ -80,7 +80,7 @@ describe("parallel agent execution", () => {
     const cards = new CardService({ database });
     const chat = new ChatService({ database });
     const booklet = await booklets.create({ idea: "A hedgehog shares a lantern with a mole." });
-    const turn = await chat.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000824", role: "user", parts: [{ type: "text", text: "The audience is ages 6-8." }] });
+    const turn = await chat.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000824", role: "user", parts: [{ type: "text", text: "The audience is ages 6-8." }] });
     const part = turn.assistantMessage.parts.find((candidate) => candidate.type === "data-card");
     if (!part || part.type !== "data-card" || part.data.family !== "agent_run") throw new Error("Expected an Agent Run card.");
     const originalFingerprint = part.data.payload.poolFingerprint;

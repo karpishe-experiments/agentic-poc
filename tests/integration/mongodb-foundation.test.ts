@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { withMongoTransaction, type MongoDatabaseContext } from "@/db/client";
-import { seedDefaultAgents, setupMongoStructure, verifyMongoStructure } from "@/db/setup";
+import { resetMongoData } from "@/db/reset";
+import { verifyMongoStructure } from "@/db/setup";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import path from "node:path";
+
 import { REQUIRED_INDEXES } from "@/db/indexes";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
@@ -8,14 +12,28 @@ const databases: MongoDatabaseContext[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 describe("MongoDB foundation", () => {
-  it("creates exact indexes and reruns setup and deterministic seeds", async () => {
+  it("creates exact indexes from an empty database", async () => {
     const database = await createTestDatabase(); databases.push(database);
-    await setupMongoStructure(database); await seedDefaultAgents(database); await verifyMongoStructure(database);
+    await verifyMongoStructure(database);
     expect(await database.collections.agent_versions.countDocuments({ isActive: true })).toBe(10);
     expect(REQUIRED_INDEXES.length).toBeGreaterThan(20);
   });
 
-  it("uses the legacy string id directly as _id and rolls back failed transactions", async () => {
+  it("resets populated MongoDB and generated assets deterministically", async () => {
+    const database = await createTestDatabase(); databases.push(database);
+    const root = await mkdtemp(path.join(process.cwd(), "tmp-reset-"));
+    try {
+      await database.collections.booklets.insertOne({ _id: "old-booklet", schemaVersion: "1", workingTitle: "Old", lifecycle: "draft", currentStage: "audience_profile", coverAssetId: null, createdAtMs: 1, updatedAtMs: 1 });
+      await writeFile(path.join(root, "old.txt"), "old");
+      const first = await resetMongoData(database, root);
+      expect(await database.collections.booklets.countDocuments()).toBe(0);
+      expect(await database.collections.agent_versions.countDocuments({ isActive: true })).toBe(10);
+      expect(first.unresolvedAssetUris).toEqual([]);
+      const second = await resetMongoData(database, root);
+      expect(second.counts).toEqual(first.counts);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+  it("uses application string ids directly as _id and rolls back failed transactions", async () => {
     const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
     await database.collections.booklets.insertOne({ _id: "legacy-id", schemaVersion: "1", workingTitle: "Test", lifecycle: "draft", currentStage: "audience_profile", coverAssetId: null, createdAtMs: 1, updatedAtMs: 1 });
     expect(await database.collections.booklets.findOne({ _id: "legacy-id" })).toMatchObject({ _id: "legacy-id" });

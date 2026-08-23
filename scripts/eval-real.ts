@@ -90,7 +90,7 @@ function requestedRunLabel(): string | null {
   return label;
 }
 
-function cardFromTurn(turn: Awaited<ReturnType<ChatService["createFakeTurn"]>>): GenUICard {
+function cardFromTurn(turn: Awaited<ReturnType<ChatService["createTurn"]>>): GenUICard {
   const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
   if (!card || card.type !== "data-card") throw new Error("The workflow turn did not return a typed decision card.");
   return card.data;
@@ -150,7 +150,7 @@ async function main() {
   const booklet = await booklets.create({ idea: fixture.idea });
 
   async function prompt(text: string, responseId?: string): Promise<GenUICard> {
-    return cardFromTurn(await chat.createFakeTurn(booklet.id, userMessage(booklet.id, text, responseId)));
+    return cardFromTurn(await chat.createTurn(booklet.id, userMessage(booklet.id, text, responseId)));
   }
   async function decide(card: GenUICard, action: "submit" | "select" | "confirm_geometry" | "approve_and_continue", value?: string | string[]): Promise<GenUICard | null> {
     const responseId = randomUUID();

@@ -3,7 +3,7 @@ import { MongoServerError, type ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import type { AgentDefinitionDocument, AgentVersionDocument, AgentVersionEventDocument } from "@/db/documents";
 import { agentDefinitionSchema, agentVersionEventSchema, agentVersionSchema, type AgentDefinition, type AgentVersion, type AgentVersionEvent } from "@/lib/contracts/agents";
-import type { SkillId } from "@/lib/contracts/skills";
+
 import type { ExecutionTargetKey } from "@/lib/contracts/execution";
 
 const iso = (timestamp: number) => new Date(timestamp).toISOString();
@@ -24,9 +24,9 @@ export class AgentMutationError extends Error {
 }
 export type AgentPersistenceSnapshot = { definitions: AgentDefinition[]; versions: AgentVersion[]; events: AgentVersionEvent[] };
 export type AgentRepository = {
-  getAdminSnapshot(): Promise<AgentPersistenceSnapshot>; getVersion(id: string): Promise<AgentVersion | null>; resolveActiveManager(): Promise<AgentVersion | null>; resolveActiveSpecialist(skillId: SkillId): Promise<AgentVersion | null>; resolveActiveCandidates(targetKey: ExecutionTargetKey): Promise<AgentVersion[]>;
-  create(input: { definitionId: string; versionId: string; configuration: Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns">; actor: string; now: number }): Promise<AgentVersion>;
-  updateDraft(input: { id: string; expectedRevision: number; configuration: Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns">; actor: string; now: number }): Promise<AgentVersion>;
+  getAdminSnapshot(): Promise<AgentPersistenceSnapshot>; getVersion(id: string): Promise<AgentVersion | null>; resolveActiveManager(): Promise<AgentVersion | null>; resolveActiveCandidates(targetKey: ExecutionTargetKey): Promise<AgentVersion[]>;
+  create(input: { definitionId: string; versionId: string; configuration: Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "imageTarget" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns" | "profileId" | "profileVersion" | "imageQuality" | "imageResolution">; actor: string; now: number }): Promise<AgentVersion>;
+  updateDraft(input: { id: string; expectedRevision: number; configuration: Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "imageTarget" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns" | "profileId" | "profileVersion" | "imageQuality" | "imageResolution">; actor: string; now: number }): Promise<AgentVersion>;
   fork(input: { id: string; expectedRevision: number; versionId: string; actor: string; now: number }): Promise<AgentVersion>; confirm(input: { id: string; expectedRevision: number; actor: string; now: number }): Promise<AgentVersion>;
   activate(input: { id: string; expectedRevision: number; observedSlotVersionId: string | null; observedLogicalActiveVersionId: string | null; actor: string; now: number }): Promise<AgentVersion>;
   deactivate(input: { id: string; expectedRevision: number; actor: string; now: number }): Promise<AgentVersion>;
@@ -58,7 +58,6 @@ export function createAgentRepository(database: Database): AgentRepository {
     },
     async getVersion(id) { const row = await versions.findOne({ _id: id }); return row ? toVersion(row) : null; },
     async resolveActiveManager() { const rows = await versions.find({ isActive: true, role: "manager" }).limit(2).toArray(); return rows.length === 1 ? toVersion(rows[0]) : null; },
-    async resolveActiveSpecialist(skillId) { const rows = await repository.resolveActiveCandidates(`skill:${skillId}`); return rows.length === 1 ? rows[0] : null; },
     async resolveActiveCandidates(targetKey) {
       const filter = targetKey.startsWith("skill:") ? { isActive: true, role: "specialist", skillId: targetKey.slice(6) } : targetKey === "image:reference" ? { isActive: true, role: "image", imageTarget: "reference" } : targetKey === "image:page" ? { isActive: true, role: "image", imageTarget: "page" } : { isActive: true, role: "manager" };
       const rows = await versions.find(filter).sort({ displayName: 1, agentId: 1 }).toArray();

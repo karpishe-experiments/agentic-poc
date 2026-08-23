@@ -1,14 +1,10 @@
 import path from "node:path";
 import { z } from "zod";
 
-const imageQualitySchema = z.enum(["disabled", "low", "high"]);
-
 export const serverEnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   MODEL_RUNTIME: z.enum(["fake", "real"]).default("fake"),
   IMAGE_PROVIDER_MODE: z.enum(["fake", "real"]).default("fake"),
-  OPENAI_IMAGE_MODEL: z.string().min(1).default("gpt-image-2"),
-  OPENAI_IMAGE_QUALITY: imageQualitySchema.default("disabled"),
   GEMINI_API_KEY: z.string().min(1).optional(),
   BFL_API_KEY: z.string().min(1).optional(),
   MONGODB_URI: z.string().min(1).default("mongodb://127.0.0.1:27017/?replicaSet=rs0"),
@@ -28,9 +24,6 @@ export function resolveDataRoot(env: Pick<ServerEnv, "DATA_ROOT">): string {
   return path.resolve(/* turbopackIgnore: true */ process.cwd(), env.DATA_ROOT);
 }
 
-export function resolveImageProviderProfile(env: Pick<ServerEnv, "IMAGE_PROVIDER_MODE" | "OPENAI_IMAGE_QUALITY">) {
-  return { runtime: env.IMAGE_PROVIDER_MODE, quality: env.OPENAI_IMAGE_QUALITY } as const;
-}
 
 export function resolveComicCopyMode(source: Record<string, string | undefined> = process.env) {
   return source.COMIC_COPY_MODE === "exact" ? "exact" as const : "creative" as const;

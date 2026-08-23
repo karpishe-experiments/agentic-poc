@@ -14,6 +14,7 @@ const page = {
   compositionIntent: "Keep the title area calm and clear.",
   continuityNotes: [],
   readerText: "A bright adventure begins.",
+  lettering: [{ kind: "title", text: "A bright adventure begins.", speakerEntityId: null, delivery: "clear", placementHint: "top" }],
   relevantReferenceIds: [],
   textSafeRegion: { x: 0.1, y: 0.72, width: 0.8, height: 0.2 },
 };
@@ -39,6 +40,7 @@ describe("composePage", () => {
       page: {
         ...page,
         readerText: "The stars curled past sleepy flowers and shadowy hedges. Nora kept going, step by careful step.",
+        lettering: [{ kind: "narration", text: "The stars curled past sleepy flowers and shadowy hedges. Nora kept going, step by careful step.", speakerEntityId: null, delivery: "clear", placementHint: "top" }],
         textSafeRegion: { x: 0.56, y: 0.08, width: 0.36, height: 0.23 },
       },
     });

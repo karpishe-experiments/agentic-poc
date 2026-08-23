@@ -16,7 +16,7 @@ export class AgentConfigurationUnavailableError extends Error {
 }
 
 export type ResolvedAgentConfiguration = Readonly<{ version: AgentVersion; snapshot: EffectiveAgentConfigurationSnapshot }>;
-export type PreparedActiveAgentSet = Readonly<{ manager: ResolvedAgentConfiguration; specialists: ReadonlyMap<SkillId, ResolvedAgentConfiguration>; candidatePools: ReadonlyMap<SkillId, readonly ResolvedAgentConfiguration[]>; fingerprint: string }>;
+export type PreparedActiveAgentSet = Readonly<{ manager: ResolvedAgentConfiguration; candidatePools: ReadonlyMap<SkillId, readonly ResolvedAgentConfiguration[]>; fingerprint: string }>;
 
 function resolveVersion(version: AgentVersion, runtimeMode: "fake" | "real", registry: SkillRegistry): ResolvedAgentConfiguration {
   const configuration = agentVersionConfigurationSchema.parse(version);
@@ -57,16 +57,6 @@ export class AgentResolver {
     catch (error) { if (error instanceof AgentConfigurationUnavailableError) throw error; throw new AgentConfigurationUnavailableError("manager"); }
   }
 
-  public async resolveSpecialist(skillId: SkillId, runtimeMode: "fake" | "real") {
-    try {
-      const version = await this.repositories.agents.resolveActiveSpecialist(skillId);
-      if (!version) throw new AgentConfigurationUnavailableError(skillId);
-      const resolved = resolveVersion(version, runtimeMode, this.registry);
-      if (resolved.version.role !== "specialist" || resolved.version.skillId !== skillId) throw new AgentConfigurationUnavailableError(skillId);
-      return resolved;
-    } catch (error) { if (error instanceof AgentConfigurationUnavailableError) throw error; throw new AgentConfigurationUnavailableError(skillId); }
-  }
-
   public async prepareCompleteActiveSet(runtimeMode: "fake" | "real"): Promise<PreparedActiveAgentSet> {
     try {
       const snapshot = await this.repositories.agents.getAdminSnapshot();
@@ -74,7 +64,6 @@ export class AgentResolver {
       if (manager.length !== 1) throw new AgentConfigurationUnavailableError("manager");
       const resolvedManager = resolveVersion(manager[0], runtimeMode, this.registry);
       const ids = ["intake_readiness@1", "story_planning_revision@1", "quality_review_targeted_repair@1", "visual_direction_reference_planning@1", "booklet_specification@1", "page_planning_writing@1", "image_prompt_compilation@1"] as SkillId[];
-      const specialists = new Map<SkillId, ResolvedAgentConfiguration>();
       const candidatePools = new Map<SkillId, readonly ResolvedAgentConfiguration[]>();
       for (const skillId of ids) {
         const matching = snapshot.versions.filter((version) => version.isActive && version.role === "specialist" && version.skillId === skillId);
@@ -82,14 +71,13 @@ export class AgentResolver {
         try {
           const pool = matching.map((version) => resolveVersion(version, runtimeMode, this.registry));
           candidatePools.set(skillId, pool);
-          specialists.set(skillId, pool[0]!);
         } catch (error) {
           if (error instanceof AgentConfigurationUnavailableError) throw error;
           throw new AgentConfigurationUnavailableError(skillId);
         }
       }
       const fingerprint = [resolvedManager.version.id, ...ids.flatMap((id) => candidatePools.get(id)!.map((candidate) => candidate.version.id))].join(":");
-      return Object.freeze({ manager: resolvedManager, specialists, candidatePools, fingerprint });
+      return Object.freeze({ manager: resolvedManager, candidatePools, fingerprint });
     }
     catch (error) { if (error instanceof AgentConfigurationUnavailableError) throw error; throw new AgentConfigurationUnavailableError("manager"); }
   }

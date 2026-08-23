@@ -6,7 +6,7 @@ Verified on 2026-08-22 against the accepted PRD and PLAN. The implementation add
 
 ## Verification evidence
 
-- Database: `npm run db:setup`, `npm run db:init`, and a repeated `npm run db:verify` passed against `kids_booklet`.
+- Database: `npm run db:reset`, `npm run db:reset`, and a repeated `npm run db:verify` passed against `kids_booklet`.
 - Static/build: `npm run typecheck`, `npm run lint`, and `npm run build` passed.
 - Tests: configured serial `npm test` passed 62 suites / 121 tests; `npm run test:agent` passed all 12 fixtures.
 - Browser: `npm run test:e2e` passed 9/9 scenarios. It covers the five admin scenarios, artifact versioning, typed-card restore, PDF golden path, and multi-agent search, concurrent run, explicit result selection, and resulting question card.

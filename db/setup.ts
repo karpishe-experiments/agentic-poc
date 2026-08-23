@@ -35,13 +35,6 @@ export async function setupMongoStructure(context: MongoDatabaseContext): Promis
       if (!(error instanceof MongoServerError && error.code === 48)) throw error;
     }
   }
-  const legacy = await context.database.collection("agent_versions").listIndexes().toArray();
-  const legacySingleton = legacy.find((index) => index.name === "agent_versions_active_specialist_unique");
-  if (legacySingleton) {
-    const exactLegacy = indexMatches(legacySingleton, { skillId: 1 }, { unique: true, partialFilterExpression: { isActive: true, role: "specialist", skillId: { $type: "string" } } });
-    if (!exactLegacy) throw new Error("Legacy specialist index exists with unexpected keys or options.");
-    await context.database.collection("agent_versions").dropIndex("agent_versions_active_specialist_unique");
-  }
   for (const required of REQUIRED_INDEXES) {
     const collection = context.database.collection(required.collection);
     const indexes = await collection.listIndexes().toArray();
@@ -83,19 +76,12 @@ function seedDocuments() {
   return { definitions, versions, events };
 }
 
-async function insertOrVerify<T extends { _id: string }>(collection: { findOne(filter: { _id: string }): Promise<T | null>; insertOne(document: T): Promise<unknown> }, document: T): Promise<void> {
-  const existing = await collection.findOne({ _id: document._id });
-  if (!existing) { await collection.insertOne(document); return; }
-  if (canonical(existing) !== canonical(document)) throw new Error(`Seed record ${document._id} conflicts with the deterministic default.`);
-}
 
 export async function seedDefaultAgents(context: MongoDatabaseContext): Promise<void> {
   const { definitions, versions, events } = seedDocuments();
-  // Upgrade only pinned legacy seed rows that predate execution profiles. Operator-created rows stay untouched.
-  for (const version of versions) await context.collections.agent_versions.updateOne({ _id: version._id, profileId: { $exists: false } }, { $set: { imageTarget: version.imageTarget ?? null, profileId: version.profileId ?? null, profileVersion: version.profileVersion ?? null, imageQuality: version.imageQuality ?? null, imageResolution: version.imageResolution ?? null } });
-  for (const document of definitions) await insertOrVerify(context.collections.agent_definitions, document);
-  for (const document of versions) await insertOrVerify(context.collections.agent_versions, document);
-  for (const document of events) await insertOrVerify(context.collections.agent_version_events, document);
+  await context.collections.agent_definitions.insertMany(definitions);
+  await context.collections.agent_versions.insertMany(versions);
+  await context.collections.agent_version_events.insertMany(events);
   const managers = await context.collections.agent_versions.countDocuments({ isActive: true, role: "manager" });
   const specialists = await context.collections.agent_versions.countDocuments({ isActive: true, role: "specialist" });
   if (managers !== 1 || specialists < 7) throw new Error("Default runtime-agent coverage is incomplete or conflicting.");

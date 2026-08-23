@@ -9,7 +9,7 @@ import { CandidateExecutionService } from "@/lib/application/candidate-execution
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { imageRequestSchema } from "@/lib/contracts/images";
 import { genUICardSchema } from "@/lib/contracts/cards";
-import { FakeImageProvider } from "@/lib/images/fake-image-provider";
+
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); vi.restoreAllMocks(); });
@@ -55,7 +55,7 @@ describe("generation diagnostics", () => {
       ],
     });
 
-    await new GenerationService({ database, repositories, assets: new MemoryAssetStore(), provider: new FakeImageProvider(), imageModel: "fake-image" }).runReferenceJob(booklet.id, jobId);
+    await new GenerationService({ database, repositories, assets: new MemoryAssetStore() }).runReferenceJob(booklet.id, jobId);
     await waitFor(async () => {
       const items = await repositories.jobs.getItems(jobId);
       expect(items).toMatchObject([{ id: firstItemId, status: "failed" }, { id: secondItemId, status: "pending" }]);

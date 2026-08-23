@@ -22,7 +22,7 @@ The rail and conversation persist card state. Reloading a workspace keeps the se
 
 ## Choose image provider and quality
 
-Set `IMAGE_PROVIDER_MODE=real` in `.env.local` for OpenAI images, or `fake` for deterministic no-cost placeholders. Set `OPENAI_IMAGE_QUALITY=disabled` to use provider defaults, or `low`/`high` to apply that output quality to every reference and page. Supported edit models also receive the same input fidelity; `gpt-image-2` safely omits input fidelity because it does not accept the parameter. Set `COMIC_COPY_MODE=creative` (default) to let the writing specialist adapt beats into comic copy before review, or `exact` to classify/split existing words without rewriting them. Restart the development server after changing these values.
+Set `IMAGE_PROVIDER_MODE=real` for selected image-agent profiles, or `fake` for deterministic no-cost placeholders. Provider, model, quality, and resolution belong to the selected frozen image-agent profile. Set `COMIC_COPY_MODE=creative` (default) to let the writing specialist adapt beats into comic copy before review, or `exact` to classify/split existing words without rewriting them. Restart the development server after changing these values.
 
 ## How the local workflow fits together
 

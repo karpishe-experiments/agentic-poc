@@ -1,24 +1,13 @@
 import path from "node:path";
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import type { MongoDatabaseContext } from "@/db/client";
 import { verifyMongoStructure } from "@/db/setup";
 import { AGENT_SEED_SKILL_IDS } from "@/db/agent-defaults";
-import { COLLECTION_NAMES } from "@/db/documents";
 
 const parseArray = (value: string, label: string): string[] => { const parsed = JSON.parse(value) as unknown; if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) throw new Error(`${label} must be a serialized string array.`); return parsed; };
 const requireIds = (known: Set<string>, ids: Array<string | null | undefined>, label: string) => { const missing = ids.filter((id): id is string => Boolean(id) && !known.has(id!)); if (missing.length) throw new Error(`${label} contains missing references: ${missing.slice(0, 5).join(", ")}.`); };
 
 export type MongoVerification = { counts: Record<string, number>; unresolvedAssetUris: string[] };
-
-export async function reconcileMigrationReport(reportFilename: string, databaseName: string, counts: Record<string, number>): Promise<void> {
-  const reportPath = path.resolve(reportFilename);
-  const report = JSON.parse(await readFile(reportPath, "utf8")) as { status?: string; manifestPath?: string; target?: { databaseName?: string }; source?: { path?: string; sha256?: string }; collections?: Record<string, { target?: number }> };
-  if (report.status !== "passed" || report.target?.databaseName !== databaseName || !report.manifestPath || !report.source?.path || !report.source.sha256) throw new Error("The supplied migration report is not a passed report for this database.");
-  const manifestPath = path.isAbsolute(report.manifestPath) ? report.manifestPath : path.resolve(path.dirname(reportPath), report.manifestPath);
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { source?: { path?: string; sha256?: string } };
-  if (manifest.source?.path !== report.source.path || manifest.source.sha256 !== report.source.sha256) throw new Error("The migration report and manifest source identities do not match.");
-  for (const name of COLLECTION_NAMES) if (report.collections?.[name]?.target !== counts[name]) throw new Error(`The migration report no longer reconciles collection ${name}.`);
-}
 
 export async function verifyMongoData(context: MongoDatabaseContext, dataRoot?: string): Promise<MongoVerification> {
   await verifyMongoStructure(context); const c = context.collections;
@@ -28,7 +17,7 @@ export async function verifyMongoData(context: MongoDatabaseContext, dataRoot?: 
   const sets = { booklets: new Set(booklets.map((x) => x._id)), artifacts: new Set(artifacts.map((x) => x._id)), versions: new Set(versions.map((x) => x._id)), messages: new Set(messages.map((x) => x._id)), cards: new Set(cards.map((x) => x._id)), responses: new Set(responses.map((x) => x._id)), assets: new Set(assets.map((x) => x._id)), jobs: new Set(jobs.map((x) => x._id)), definitions: new Set(definitions.map((x) => x._id)), agentVersions: new Set(agentVersions.map((x) => x._id)), reviews: new Set(reviews.map((x) => x._id)), approvals: new Set(approvals.map((x) => x._id)), executionBatches: new Set(executionBatches.map((x) => x._id)), executionItems: new Set(executionItems.map((x) => x._id)) };
   requireIds(sets.assets, booklets.map((x) => x.coverAssetId), "booklets.coverAssetId");
   requireIds(sets.booklets, [...artifacts.map((x) => x.bookletId), ...messages.map((x) => x.bookletId), ...cards.map((x) => x.bookletId), ...jobs.map((x) => x.bookletId), ...calls.map((x) => x.bookletId), ...reviews.map((x) => x.bookletId), ...approvals.map((x) => x.bookletId), ...exportsRows.map((x) => x.bookletId), ...assets.map((x) => x.bookletId), ...executionPreferences.map((x) => x.bookletId), ...executionBatches.map((x) => x.bookletId)], "booklet references");
-  const storedDependencyIds = versions.flatMap((version) => version.dependencyVersionIdsJson ? parseArray(version.dependencyVersionIdsJson, `artifact version ${version._id} dependencyVersionIdsJson`) : []);
+  const storedDependencyIds = versions.flatMap((version) => parseArray(version.dependencyVersionIdsJson, `artifact version ${version._id} dependencyVersionIdsJson`));
   requireIds(sets.versions, [...artifacts.map((x) => x.currentVersionId), ...versions.map((x) => x.sourceVersionId), ...dependencies.flatMap((x) => [x.downstreamVersionId, x.upstreamVersionId]), ...storedDependencyIds, ...calls.map((x) => x.artifactVersionId), ...approvals.map((x) => x.artifactVersionId), ...exportsRows.map((x) => x.artifactVersionId)], "artifact-version references");
   requireIds(sets.artifacts, [...versions.map((x) => x.artifactId), ...cards.map((x) => x.artifactId)], "artifact references");
   for (const artifact of artifacts) if (artifact.currentVersionId) { const version = versions.find((x) => x._id === artifact.currentVersionId); if (!version || version.artifactId !== artifact._id) throw new Error(`Artifact ${artifact._id} points to an incompatible current version.`); }

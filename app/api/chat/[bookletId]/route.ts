@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteProperties) {
   try {
     ({ bookletId } = await params);
     const { message } = requestSchema.parse(await request.json());
-    const turn = await getChatService().createFakeTurn(bookletId, message);
+    const turn = await getChatService().createTurn(bookletId, message);
     return streamAssistantMessage(turn.assistantMessage);
   } catch (error) {
     console.error("Kids Booklet chat turn failed", error);

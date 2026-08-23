@@ -14,6 +14,7 @@ export class AgentManagementError extends Error {
   public constructor(public readonly code: AgentManagementFailureCode, message: string) { super(message); }
 }
 
+type PersistedConfiguration = Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "imageTarget" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns" | "profileId" | "profileVersion" | "imageQuality" | "imageResolution">;
 type EditableConfiguration = Pick<AgentVersion, "displayName" | "purpose" | "role" | "skillId" | "instructions" | "provider" | "modelId" | "reasoningEffort" | "maxTurns"> & Partial<Pick<AgentVersion, "imageTarget" | "profileId" | "profileVersion" | "imageQuality" | "imageResolution">>;
 
 export type AgentCoverage = { key: "manager" | SkillId | "image:reference" | "image:page"; role: "manager" | "specialist" | "image"; skillId: SkillId | null; imageTarget?: "reference" | "page" | null; activeVersionId: string | null; violation: string | null };
@@ -145,7 +146,7 @@ export class AgentManagementService {
     return ids;
   }
 
-  private validate(value: EditableConfiguration): EditableConfiguration {
+  private validate(value: EditableConfiguration): PersistedConfiguration {
     const normalized = value.role === "specialist" ? { ...value, imageTarget: null, profileId: value.profileId ?? "openai-specialist", profileVersion: value.profileVersion ?? 1, imageQuality: null, imageResolution: null } : value.role === "manager" ? { ...value, imageTarget: null, profileId: null, profileVersion: null, imageQuality: null, imageResolution: null } : value;
     const parsed = agentVersionConfigurationSchema.safeParse(normalized);
     if (!parsed.success) throw new AgentManagementError("agent_invalid_configuration", parsed.error.issues[0]?.message ?? "The agent configuration is invalid.");

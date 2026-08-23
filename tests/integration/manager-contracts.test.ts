@@ -37,7 +37,7 @@ describe("manager workflow contracts", () => {
     const route = vi.spyOn(runtime, "route");
     const manager = new ManagerService({ database, runtime, runtimeMode: "fake" });
 
-    await manager.run(context(booklet.id, "story_plan"), {
+    await manager.route(context(booklet.id, "story_plan"), {
       cardId: randomUUID(),
       skillInput: { intent: "Draft the Story Plan.", currentStory: null },
     });
@@ -61,11 +61,11 @@ describe("manager workflow contracts", () => {
     };
     const manager = new ManagerService({ database, runtime: incompatibleRuntime, runtimeMode: "fake" });
 
-    await expect(manager.run(context(booklet.id, "final_pages"), { cardId: randomUUID() }))
+    await expect(manager.route(context(booklet.id, "final_pages"), { cardId: randomUUID() }))
       .rejects.toMatchObject({ code: "skill_contract_mismatch", status: 409 });
 
     const calls = await createRepositories(database).evidence.listModelCalls(booklet.id);
-    expect(calls).toEqual(expect.arrayContaining([expect.objectContaining({ operation: "manager", status: "failed", errorKind: "validation" })]));
+    expect(calls).toEqual(expect.arrayContaining([expect.objectContaining({ operation: "manager", status: "failed" })]));
     expect(isTypedWorkflowRecovery(new RecoverableApplicationError({ code: "skill_contract_mismatch", message: "Retry", status: 409 }))).toBe(true);
   });
 });

@@ -209,7 +209,7 @@ Checked-in MongoDB structure and initialization create the data model and idempo
 - seven active confirmed specialists, one per registered skill, each carrying the current generic specialist behavior relevant to that skill and its current model/reasoning settings; and
 - stable identifiers that make setup and tests repeatable.
 
-`db:init` must leave a freshly structured MongoDB database able to run the booklet flow and safely accept an exact repeat. The existing `seed` command continues to own visual style and font assets; it does not become a prerequisite for runtime-agent defaults.
+`db:reset` must leave a freshly structured MongoDB database able to run the booklet flow and safely accept an exact repeat. The existing `seed` command continues to own visual style and font assets; it does not become a prerequisite for runtime-agent defaults.
 
 ### 10.3 Model-call attribution and reproducibility
 

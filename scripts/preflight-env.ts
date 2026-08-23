@@ -20,7 +20,7 @@ try {
   const repositories = createRepositories(database);
   await new AgentResolver({ database, repositories }).prepareCompleteActiveSet("real");
   const snapshot = await repositories.agents.getAdminSnapshot();
-  const models = [...new Set([...snapshot.versions.filter((version) => version.isActive).map((version) => version.modelId), env.OPENAI_IMAGE_MODEL])];
+  const models = [...new Set(snapshot.versions.filter((version) => version.isActive).map((version) => version.modelId))];
   const unavailable: string[] = [];
   for (const model of models) try {
     const response = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(model)}`, { headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` } });

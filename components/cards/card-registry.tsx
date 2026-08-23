@@ -113,7 +113,7 @@ function VisualGallery({ card, bookletId, disabled, refreshWorkspace }: Readonly
     <section aria-label="Review every item before approving" className="grid gap-3 sm:grid-cols-2">
       {card.payload.items.map((item) => {
         const instructionId = `regeneration-instruction-${card.cardId}-${item.assetId}`;
-        const regenerationTarget = item.regenerationTarget ?? (card.payload.artifactType === "final_pages" || card.payload.artifactType === "visual_bible" ? { kind: "asset" as const, assetId: item.assetId } : null);
+        const regenerationTarget = item.regenerationTarget ?? null;
         return <article className="min-w-0 overflow-hidden rounded border border-[var(--border)] p-2 text-sm" key={item.assetId}>
           <button aria-label={`Preview ${item.label}`} className="block w-full rounded focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2" onClick={() => openPreview(item)} type="button">
             <Image alt={item.label} className="h-40 w-full rounded object-cover hover:brightness-95" height={320} loading="lazy" src={`/api/assets/${item.assetId}`} unoptimized width={400} />

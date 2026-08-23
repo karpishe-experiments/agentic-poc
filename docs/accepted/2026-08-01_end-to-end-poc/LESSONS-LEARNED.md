@@ -233,8 +233,8 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 - **Context:** A gallery lets a user regenerate one page or canonical reference, optionally by editing the current image with a correction instruction.
 - **Observation:** Sending only an asset ID from a persisted gallery is insufficient because old cards can become stale and a failed replacement must not erase the working image. Resolving a typed page/reference target against the current artifact provides both authorization scope and the correct edit target.
-- **Guidance:** Put typed regeneration metadata on new gallery items, accept legacy asset targets only as a compatibility input, and resolve every target server-side against the booklet’s current artifact. Create a one-item persisted job, reserve provider input capacity for the edit target, and publish the new asset into a revised artifact only after generation succeeds; otherwise retain the active asset unchanged.
-- **Evidence:** `lib/contracts/regeneration.ts`, `lib/application/revision-service.ts`, `lib/application/generation-service.ts`, and `tests/integration/specification-page-plan.test.ts`; the integration test upgrades a legacy plan, regenerates one instructed page, and verifies all unrelated pages retain their asset IDs.
+- **Guidance:** Put typed regeneration metadata on new gallery items, reject generic asset targets, and resolve every target server-side against the booklet’s current artifact. Create a one-item persisted job, reserve provider input capacity for the edit target, and publish the new asset into a revised artifact only after generation succeeds; otherwise retain the active asset unchanged.
+- **Evidence:** `lib/contracts/regeneration.ts`, `lib/application/revision-service.ts`, `lib/application/generation-service.ts`, and `tests/integration/specification-page-plan.test.ts`; the integration test regenerates one instructed page, and verifies all unrelated pages retain their asset IDs.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -254,4 +254,12 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Guidance:** Never parallelize driver operations that share one transaction session. Await each operation in order inside `withTransaction`; parallelize only independent work outside that session.
 - **Evidence:** `db/agent-repository.ts` performs snapshot and lifecycle reads sequentially. `tests/integration/agent-management.test.ts` verifies concurrent edits, forks, activation, repair, and deletion; the full 127-test suite passed against `MongoMemoryReplSet` on 2026-08-16.
 - **Promotion target:** Agent instruction.
+- **Status:** Candidate.
+### Use one destructive reset for a disposable POC baseline
+
+- **Context:** A local POC intentionally does not preserve database history, operator customizations, generated assets, or schema compatibility between experiments.
+- **Observation:** Separate setup, initialization, seed, and migration-report flows made an old database appear usable while leaving obsolete indexes and nullable fields inconsistent with the current runtime. A single reset correctly rebuilt the configured `kids_booklet` database with 10 active agents, 3 styles, 4 seed assets, and no unresolved URIs.
+- **Guidance:** Expose one explicit destructive reset command that validates `DATA_ROOT`, drops application data, removes generated files, recreates exact indexes, seeds current agents/assets, and invokes integrity verification. Keep the reset implementation reusable for isolated tests; do not add backfills or old-workspace repairs.
+- **Evidence:** `db/reset.ts`, `scripts/reset-mongodb.ts`, and `tests/integration/mongodb-foundation.test.ts` verify reset against populated disposable stores and a second identical reset. `npm run db:reset` and `npm run db:verify` passed against the configured local POC database on 2026-08-23.
+- **Promotion target:** Documentation.
 - **Status:** Candidate.

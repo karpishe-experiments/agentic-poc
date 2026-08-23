@@ -4,12 +4,12 @@ import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
-import { getServerEnv, resolveDataRoot, resolveImageProviderProfile } from "@/lib/config/env";
-import { imageRequestSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
+import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
+import { imageRequestSchema, type ImageRequest } from "@/lib/contracts/images";
 import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
-import { FakeImageProvider } from "@/lib/images/fake-image-provider";
-import { OpenAIImageProvider } from "@/lib/images/openai-image-provider";
-import type { ImageProvider } from "@/lib/images/provider";
+
+
+
 import { composePage } from "@/lib/composition/compose-page";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import type { GenUICard } from "@/lib/contracts/cards";
@@ -46,25 +46,18 @@ export class GenerationService {
   private readonly repositories: Repositories;
   private readonly artifacts: ArtifactService;
   private assets?: AssetStore;
-  private readonly provider: ImageProvider;
-  private readonly imageModel: string;
-  private readonly imageQuality: ImageRequest["quality"];
   private readonly dataRoot?: string;
   private readonly diagnostics: GenerationDiagnostics;
   private readonly diagnosticWaitMs: number;
 
-  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; provider?: ImageProvider; imageModel?: string; imageQuality?: ImageRequest["quality"]; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
+  public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
     const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
-    const needsEnvironment = !dependencies.assets || !dependencies.provider || !dependencies.imageModel;
+    const needsEnvironment = !dependencies.assets;
     const env = needsEnvironment ? getServerEnv() : null;
-    const imageProfile = env ? resolveImageProviderProfile(env) : null;
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database });
     this.assets = dependencies.assets;
     this.dataRoot = env ? resolveDataRoot(env) : undefined;
-    this.provider = dependencies.provider ?? (imageProfile!.runtime === "real" ? new OpenAIImageProvider() : new FakeImageProvider());
-    this.imageModel = dependencies.imageModel ?? env!.OPENAI_IMAGE_MODEL;
-    this.imageQuality = dependencies.imageQuality ?? imageProfile?.quality ?? "disabled";
     this.diagnostics = dependencies.diagnostics ?? new GenerationDiagnostics(this.dataRoot);
     this.diagnosticWaitMs = dependencies.diagnosticWaitMs ?? 30_000;
   }
@@ -90,7 +83,7 @@ export class GenerationService {
           purpose: `${item.kind} canonical visual reference`, subject: item.name, action: `Create a clear reference pose or establishing view for ${item.name}.`, location: item.kind === "location" ? item.name : "a calm neutral story setting",
           visualStyle: "Use the approved booklet visual direction.", continuityConstraints: item.continuityConstraints, revisionInstruction: options.revisionInstruction, preserve: item.visualDetails,
         };
-        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: options.editTargetAssetId ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: "square_1_1", quality: this.imageQuality, references: [], editTargetAssetId: options.editTargetAssetId ?? null });
+        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: options.editTargetAssetId ? "edit" : "generate", model: "profile-selected", promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: "square_1_1", quality: "disabled", references: [], editTargetAssetId: options.editTargetAssetId ?? null });
         return { id: randomUUID(), itemKey: `${item.kind}:${item.entityId}`, position, input: { item, request } };
       }),
       createdAtMs: Date.now(),
@@ -145,7 +138,6 @@ export class GenerationService {
     const selectedPageIds = options.pageIds ? new Set(options.pageIds) : null;
     const selectedPages = selectedPageIds ? content.pages.filter((page) => selectedPageIds.has(page.pageId)) : content.pages;
     if (!selectedPages.length || (selectedPageIds && selectedPages.length !== selectedPageIds.size)) throw new Error("Choose one or more pages from the current Page Plan to regenerate.");
-    if (selectedPages.some((page) => !page.lettering?.length)) throw new Error("Upgrade and approve the Page Plan with professional comic lettering before generating pages.");
     if ((options.revisionInstruction || options.editTargetAssetId) && selectedPages.length !== 1) throw new Error("A targeted page revision must select exactly one image.");
     const jobId = randomUUID();
     return this.repositories.jobs.createOrGet({
@@ -187,7 +179,7 @@ export class GenerationService {
           assetId,
           role: styleIds.has(assetId) ? "style" as const : locationIds.has(assetId) ? "location_continuity" as const : "character_identity" as const,
         }));
-        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: references.length || options.editTargetAssetId ? "edit" : "generate", model: this.imageModel, promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: content.geometry, quality: this.imageQuality, references, editTargetAssetId: options.editTargetAssetId ?? null });
+        const request = imageRequestSchema.parse({ schemaVersion: "1", operation: references.length || options.editTargetAssetId ? "edit" : "generate", model: "profile-selected", promptPlan, prompt: serializeImagePrompt(promptPlan), geometry: content.geometry, quality: "disabled", references, editTargetAssetId: options.editTargetAssetId ?? null });
         return { id: randomUUID(), itemKey: `page:${page.pageId}`, position: page.pageIndex, input: { page, geometry: content.geometry, request } };
       }),
     });
@@ -310,65 +302,6 @@ export class GenerationService {
       card,
       createdAtMs: Date.now(),
     });
-  }
-
-  private async executeImageWithDiagnostics(input: {
-    bookletId: string;
-    jobId: string;
-    itemId: string;
-    itemKey: string;
-    attempt: number;
-    request: ImageRequest;
-    inputAssets?: Array<{ assetId: string; bytes: Buffer }>;
-  }): Promise<{ result: ImageResult; startedAtMs: number }> {
-    const startedAtMs = Date.now();
-    const shared = {
-      bookletId: input.bookletId,
-      jobId: input.jobId,
-      itemId: input.itemId,
-      itemKey: input.itemKey,
-      attempt: input.attempt,
-      operation: input.request.operation,
-      providerRuntime: this.provider.runtime,
-      model: input.request.model,
-      geometry: input.request.geometry,
-      referenceCount: input.request.references.length,
-    } as const;
-    await this.diagnostics.record({ event: "provider_request_started", ...shared });
-    const heartbeat = this.diagnosticWaitMs > 0
-      ? setInterval(() => {
-        void this.diagnostics.record({ event: "provider_request_still_waiting", ...shared, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
-      }, this.diagnosticWaitMs)
-      : undefined;
-
-    try {
-      const result = await this.provider.execute(input.request, input.inputAssets);
-      await this.diagnostics.record({
-        event: "provider_request_completed",
-        ...shared,
-        elapsedMs: Math.max(0, Date.now() - startedAtMs),
-        resultStatus: result.status,
-        providerRequestId: result.providerRequestId,
-        error: result.error ? {
-          ...describeGenerationError(new Error(result.error.message)),
-          status: result.error.providerError?.status ?? null,
-          code: result.error.providerError?.code ?? null,
-          type: result.error.providerError?.type ?? null,
-          requestId: result.error.providerError?.requestId ?? null,
-        } : undefined,
-      });
-      return { result, startedAtMs };
-    } catch (error) {
-      await this.diagnostics.record({
-        event: "provider_request_threw",
-        ...shared,
-        elapsedMs: Math.max(0, Date.now() - startedAtMs),
-        error: describeGenerationError(error),
-      });
-      throw error;
-    } finally {
-      if (heartbeat) clearInterval(heartbeat);
-    }
   }
 
   private async recordItemFailure(input: { bookletId: string; jobId: string; itemId: string; itemKey: string; attempt: number; error: unknown }): Promise<void> {
