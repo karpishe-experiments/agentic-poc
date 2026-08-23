@@ -5,7 +5,6 @@
 **Prepared:** 2026-08-23
 
 **Implementation plan:** [`PLAN.md`](PLAN.md)
-**Current-code review:** [`CHANGE-SURFACE-REPORT.md`](CHANGE-SURFACE-REPORT.md)
 **Workflow orchestration:** [`task-guidelines/00-booklet-workflow-orchestration.md`](task-guidelines/00-booklet-workflow-orchestration.md)
 
 ## 1. Product summary
