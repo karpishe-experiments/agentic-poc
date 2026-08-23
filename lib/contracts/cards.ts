@@ -183,7 +183,14 @@ export function validateCardResponseValue(card: GenUICard, response: CardRespons
     throw new z.ZodError([{ code: "custom", path: ["revisionInstruction"], message: "Only revision requests accept an instruction." }]);
   }
   if (card.family === "agent_run") {
-    if (response.action === "run_agents") return { ...response, value: z.array(opaqueIdSchema).min(1).max(64).parse(response.value) };
+    if (response.action === "run_agents") {
+      const selected = z.array(opaqueIdSchema).min(1).max(64).parse(response.value);
+      const eligible = new Set(card.payload.candidates.filter((candidate) => candidate.eligible).map((candidate) => candidate.agentId));
+      if (new Set(selected).size !== selected.length || selected.some((agentId) => !eligible.has(agentId))) {
+        throw new z.ZodError([{ code: "custom", path: ["value"], message: "Choose one or more displayed eligible agents." }]);
+      }
+      return { ...response, value: selected };
+    }
     if (response.action === "select_agent_result") return { ...response, value: opaqueIdSchema.parse(response.value) };
     if (["retry_failed_agents", "change_agents", "restart_with_agents"].includes(response.action)) { if (response.value !== undefined) throw new z.ZodError([{ code: "custom", path: ["value"], message: "This action does not accept an additional value." }]); return response; }
   }

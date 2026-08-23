@@ -20,11 +20,17 @@ async function runLoop(): Promise<void> {
   const diagnostics = new GenerationDiagnostics(resolveDataRoot(getServerEnv()));
   await diagnostics.record({ event: "runner_started" });
   await repositories.conversation.recoverInterruptedFollowups();
+  const generation = new GenerationService({ database, repositories, diagnostics });
   const recoveredTextExecutions = await new AgentRunService({ repositories }).recoverInterrupted();
-  const recoveredImageExecutions = await new ImageAgentRunService({ repositories }).recoverInterrupted();
+  const recoveredImageExecutions = await new ImageAgentRunService({
+    repositories,
+    onMaterialized: async (ready, bookletId) => {
+      if (ready.target === "reference") await generation.runReferenceJob(bookletId, ready.jobId);
+      else await generation.runPageJob(bookletId, ready.jobId);
+    },
+  }).recoverInterrupted();
   const recoveredItems = await repositories.jobs.recoverInterrupted();
   await diagnostics.record({ event: "runner_recovered_interrupted_work", recoveredItems, recoveredExecutionBatches: recoveredTextExecutions.length + recoveredImageExecutions.length });
-  const generation = new GenerationService({ database, repositories, diagnostics });
 
   for (;;) {
     try {

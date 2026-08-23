@@ -114,7 +114,7 @@ export function createAgentRepository(database: Database): AgentRepository {
         const slotFilter = target.role === "manager" ? { isActive: true, role: "manager" } : target.role === "specialist" ? { isActive: true, role: "specialist", skillId: target.skillId } : { isActive: true, role: "image", imageTarget: target.imageTarget };
         const slotRows = await versions.find(slotFilter, { session }).limit(2).toArray();
         const logicalRows = await versions.find({ isActive: true, agentId: target.agentId }, { session }).limit(2).toArray();
-        if ((slotRows[0]?._id ?? null) !== input.observedSlotVersionId || (logicalRows[0]?._id ?? null) !== input.observedLogicalActiveVersionId) throw new AgentMutationError("agent_conflict", "Active coverage changed elsewhere. Reload the page before activating.");
+        if ((target.role === "manager" && (slotRows[0]?._id ?? null) !== input.observedSlotVersionId) || (logicalRows[0]?._id ?? null) !== input.observedLogicalActiveVersionId) throw new AgentMutationError("agent_conflict", "Active coverage changed elsewhere. Reload the page before activating.");
         const deactivated = [...new Map([...(target.role === "manager" ? slotRows : []), ...logicalRows].filter((row) => row._id !== target._id).map((row) => [row._id, row])).values()];
         for (const current of deactivated) {
           const result = await versions.updateOne({ _id: current._id, revision: current.revision }, { $set: { isActive: false, revision: current.revision + 1, updatedAtMs: input.now, updatedBy: input.actor } }, { session });

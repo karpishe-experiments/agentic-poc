@@ -44,5 +44,12 @@ export class CandidatePoolService {
     });
     return { targetKey, candidates: eligible, notices, fingerprint: hash({ targetKey, runtimeMode: this.runtimeMode, hasImageInput: Boolean(options.hasImageInput), candidates: eligible.map((candidate) => ({ id: candidate.agentId, versionId: candidate.id, revision: candidate.revision, profileId: candidate.profileId, profileVersion: candidate.profileVersion, provider: candidate.provider, modelId: candidate.modelId })) }) };
   }
+  public rememberedSelection(pool: CandidatePool, preference: string[] | null): { selectedAgentIds: string[]; notices: string[] } {
+    if (pool.candidates.length === 1) return { selectedAgentIds: [pool.candidates[0]!.agentId], notices: pool.notices };
+    const eligible = new Set(pool.candidates.map((candidate) => candidate.agentId));
+    const selectedAgentIds = (preference ?? []).filter((agentId) => eligible.has(agentId));
+    const removed = (preference ?? []).filter((agentId) => !eligible.has(agentId));
+    return { selectedAgentIds, notices: removed.length ? [...pool.notices, "Previously selected agents are no longer available and were removed from this team."] : pool.notices };
+  }
   public async forSkill(skillId: SkillId) { return this.resolve(executionTargetKeyForSkill(skillId)); }
 }

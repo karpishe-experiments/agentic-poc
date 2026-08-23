@@ -45,6 +45,26 @@ describe("AgentManagementService", () => {
     await expect(agents.updateDraft({ ...draft, id: created.id, expectedRevision: 99 })).rejects.toMatchObject({ code: "agent_conflict" });
   });
 
+  it("rejects profile settings that do not belong to the selected execution profile", async () => {
+    const agents = await service();
+    await expect(agents.create({
+      displayName: "Invalid image profile", purpose: "Must not become an active incompatible candidate.", role: "image", skillId: null, imageTarget: "page", instructions: null,
+      provider: "google", modelId: "gpt-image-2", reasoningEffort: null, maxTurns: null, profileId: "openai-image", profileVersion: 1, imageQuality: "auto", imageResolution: null,
+    })).rejects.toMatchObject({ code: "agent_invalid_configuration" });
+  });
+
+  it("adds a candidate without depending on an arbitrary existing pool member", async () => {
+    const agents = await service();
+    const pageCandidate = {
+      purpose: "Provide an independent page image candidate.", role: "image" as const, skillId: null, imageTarget: "page" as const, instructions: null,
+      provider: "openai" as const, modelId: "gpt-image-2", reasoningEffort: null, maxTurns: null, profileId: "openai-image" as const, profileVersion: 1, imageQuality: "auto" as const, imageResolution: null,
+    };
+    const first = await agents.create({ ...pageCandidate, displayName: "First additional page candidate" });
+    await agents.activate({ id: first.id, expectedRevision: first.revision, observedSlotVersionId: randomUUID(), observedLogicalActiveVersionId: null });
+    const second = await agents.create({ ...pageCandidate, displayName: "Second additional page candidate" });
+    await expect(agents.activate({ id: second.id, expectedRevision: second.revision, observedSlotVersionId: randomUUID(), observedLogicalActiveVersionId: null })).resolves.toMatchObject({ isActive: true });
+    expect((await agents.getAdminSnapshot()).versions.filter((version) => version.isActive && version.role === "image" && version.imageTarget === "page")).toHaveLength(3);
+  });
   it("allows only one simultaneous draft edit and writes one edit event", async () => {
     const agents = await service();
     const created = await agents.create(draft);

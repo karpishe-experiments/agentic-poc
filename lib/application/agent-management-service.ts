@@ -152,6 +152,20 @@ export class AgentManagementService {
     if (parsed.data.skillId) {
       try { this.registry.get(parsed.data.skillId); } catch { throw new AgentManagementError("agent_invalid_configuration", "Choose a registered specialist skill."); }
     }
+    if (parsed.data.role !== "manager") {
+      try {
+        const settings = parsed.data.role === "specialist"
+          ? { profileId: parsed.data.profileId, profileVersion: parsed.data.profileVersion, provider: parsed.data.provider, modelId: parsed.data.modelId, reasoningEffort: parsed.data.reasoningEffort, maxTurns: parsed.data.maxTurns }
+          : parsed.data.profileId === "openai-image"
+            ? { profileId: parsed.data.profileId, profileVersion: parsed.data.profileVersion, provider: parsed.data.provider, modelId: parsed.data.modelId, imageQuality: parsed.data.imageQuality }
+            : parsed.data.profileId === "gemini-image"
+              ? { profileId: parsed.data.profileId, profileVersion: parsed.data.profileVersion, provider: parsed.data.provider, modelId: parsed.data.modelId, imageResolution: parsed.data.imageResolution }
+              : { profileId: parsed.data.profileId, profileVersion: parsed.data.profileVersion, provider: parsed.data.provider, modelId: parsed.data.modelId };
+        executionProfileRegistry.parseSettings(settings);
+      } catch {
+        throw new AgentManagementError("agent_invalid_configuration", "Choose a provider, model, and settings supported by the selected execution profile.");
+      }
+    }
     return parsed.data;
   }
 

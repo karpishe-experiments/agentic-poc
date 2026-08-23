@@ -6,6 +6,7 @@ import { CandidatePoolService } from "@/lib/application/candidate-pool-service";
 import { CandidateExecutionService } from "@/lib/application/candidate-execution-service";
 import { ExecutionService } from "@/lib/application/execution-service";
 import { TextResultMaterializer } from "@/lib/application/text-result-materializer";
+import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { executionTargetKeyForSkill, type ExecutionBatch } from "@/lib/contracts/execution";
 import { cardResponseSchema, validateCardResponseValue, type GenUICard } from "@/lib/contracts/cards";
 import { skillContextSchema, skillIdSchema } from "@/lib/contracts/skills";
@@ -111,6 +112,7 @@ export class AgentRunService {
         await this.materializeSelection(bookletId, card, status.batch, successful[0]!.id, randomUUID(), "implicit_sole");
         return;
       } catch {
+        if ((await this.execution.status(batchId))?.batch.status === "completed") return;
         // Keep a recoverable result card when a valid candidate needs a different creator decision.
       }
     }
@@ -123,11 +125,20 @@ export class AgentRunService {
     if (!item || item.canonicalResult === null) throw new Error("execution_result_invalid");
     const selected = await this.repositories.execution.markSelected({ batchId: batch.id, itemId, responseId, mode, now: Date.now() });
     if (!selected) throw new Error("execution_action_conflict");
-    const input = readyInputSchema.parse(batch.canonicalInput);
+    try {
+      const input = readyInputSchema.parse(batch.canonicalInput);
     const materialized = await this.materializer.materialize({ bookletId, skillId: input.skillId, result: item.canonicalResult, sourceExecutionBatchId: batch.id });
-    await this.repositories.execution.completeMaterialization({ batchId: batch.id, now: Date.now() });
     await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: randomUUID(), narration: materialized.narration, card: materialized.card, createdAtMs: Date.now() });
-    await this.project(bookletId, { ...card, status: "submitted" }, "completed", batch.id);
+      await this.project(bookletId, { ...card, status: "submitted" }, "completed", batch.id);
+    await this.repositories.execution.completeMaterialization({ batchId: batch.id, now: Date.now() });
+    } catch (error) {
+      const latest = await this.execution.status(batch.id);
+      if (latest?.batch.status === "materializing") {
+        await this.repositories.database.collections.execution_batches.updateOne({ _id: batch.id, status: "materializing" }, { $set: { status: "results", materializationStatus: "failed", selectedItemId: null, selectionMode: null, selectionResponseId: null, updatedAtMs: Date.now() } });
+        await this.project(bookletId, card, "results", batch.id);
+      }
+      throw error;
+    }
   }
 
   public async start(bookletId: string, cardId: string, responseInput: unknown): Promise<CardResult> {
@@ -140,17 +151,25 @@ export class AgentRunService {
     const targetKey = executionTargetKeyForSkill(input.skillId);
     if (card.payload.target !== targetKey) throw new Error("The Agent run target no longer matches its saved input.");
     const pool = await this.pools.resolve(targetKey);
-    if (pool.fingerprint !== card.payload.poolFingerprint) throw new Error("execution_pool_stale");
+    if (pool.fingerprint !== card.payload.poolFingerprint) {
+      const rememberedSelection = this.pools.rememberedSelection(pool, await this.repositories.execution.getPreference(bookletId, targetKey));
+      const refreshed: AgentRunCard = {
+        ...card,
+        allowedActions: ["run_agents", "change_agents"],
+        payload: { ...card.payload, state: "ready", batchId: null, poolFingerprint: pool.fingerprint, candidates: this.candidates(pool), selectedAgentIds: rememberedSelection.selectedAgentIds, staleSelectionNotices: [...rememberedSelection.notices, "Available agents changed. Review the refreshed team before running."], items: [], selectedItemId: null, selectionMode: null },
+      };
+      await this.repositories.conversation.updateAgentRunProjection({ bookletId, card: refreshed, readyInput: input, readyInputSchemaVersion: ready.schemaVersion, readyWorkflowFingerprint: ready.workflowFingerprint, readyPreviousBatchId: ready.previousBatchId, updatedAtMs: Date.now() });
+      throw new RecoverableApplicationError({ code: "execution_pool_stale", message: "Available agents changed. Review the refreshed team and run it again.", status: 409 });
+    }
     const selectedAgentIds = z.array(z.string().uuid()).parse(response.value);
+    const running: AgentRunCard = { ...card, allowedActions: [], payload: { ...card.payload, state: "running", batchId: randomUUID(), selectedAgentIds, items: [], selectedItemId: null, selectionMode: null } };
     const batchId = await this.execution.start({
       bookletId, cardId, targetKey, subjectKind: input.subjectKind, subjectId: input.subjectId,
       canonicalInput: input, workflowFingerprint: ready.workflowFingerprint, schemaVersion: ready.schemaVersion,
-      selectedAgentIds, previousBatchId: ready.previousBatchId,
+      selectedAgentIds, pool, previousBatchId: ready.previousBatchId, runningCard: running, expectedCardRevision: card.payload.revision,
       executor: ({ canonicalInput, agent, executionBatchId, executionItemId }) => this.execute(canonicalInput, agent, executionBatchId, executionItemId),
-      beforeRun: async (id) => {
-        const running: AgentRunCard = { ...card, payload: { ...card.payload, state: "running", batchId: id, selectedAgentIds, items: [], selectedItemId: null, selectionMode: null } };
-        await this.repositories.conversation.updateAgentRunProjection({ bookletId, card: running, readyInput: null, readyInputSchemaVersion: null, readyWorkflowFingerprint: null, readyPreviousBatchId: null, updatedAtMs: Date.now() });
-      },
+
+
       onTerminal: async (id) => this.completeOrShowResults(bookletId, cardId, id),
     });
     return this.result(`Agent execution ${batchId} has started.`);
@@ -180,12 +199,41 @@ export class AgentRunService {
     );    return this.result("Failed agents are retrying.");
   }
 
+  private restartStale(): never {
+    throw new RecoverableApplicationError({ code: "execution_restart_stale", message: "This completed result is no longer current. Start a new run from the current workflow.", status: 409 });
+  }
+
+  private async assertCurrentDependencies(versionId: string): Promise<void> {
+    const collections = this.repositories.database.collections;
+    const version = await collections.artifact_versions.findOne({ _id: versionId });
+    if (!version) this.restartStale();
+    const dependencyVersionIdsJson = version.dependencyVersionIdsJson;
+    if (!dependencyVersionIdsJson) this.restartStale();
+    const dependencyIds = JSON.parse(dependencyVersionIdsJson) as unknown;
+    if (!Array.isArray(dependencyIds) || !(await Promise.all(dependencyIds.map(async (id) => {
+      if (typeof id !== "string") return false;
+      const dependency = await collections.artifact_versions.findOne({ _id: id });
+      if (!dependency) return false;
+      const artifact = await collections.artifacts.findOne({ _id: dependency.artifactId });
+      return artifact?.currentVersionId === dependency._id;
+    }))).every(Boolean)) this.restartStale();
+  }
+
+  private async assertTextRestartCurrent(bookletId: string, batch: ExecutionBatch): Promise<void> {
+    const collections = this.repositories.database.collections;
+    const version = await collections.artifact_versions.findOne({ sourceExecutionBatchId: batch.id });
+    if (!version) this.restartStale();
+    const artifact = await collections.artifacts.findOne({ _id: version.artifactId, bookletId });
+    if (!artifact || artifact.currentVersionId !== version._id) this.restartStale();
+    await this.assertCurrentDependencies(version._id);
+  }
   private async readyFromBatch(bookletId: string, card: AgentRunCard, batch: ExecutionBatch, createNewCard: boolean): Promise<AgentRunCard> {
     const input = readyInputSchema.parse(batch.canonicalInput);
     const targetKey = executionTargetKeyForSkill(input.skillId);
     const pool = await this.pools.resolve(targetKey);
     if (!pool.candidates.length) throw new Error("execution_pool_unavailable");
     const preference = await this.repositories.execution.getPreference(bookletId, targetKey);
+    const rememberedSelection = this.pools.rememberedSelection(pool, preference);
     const next: AgentRunCard = {
       ...card,
       cardId: createNewCard ? randomUUID() : card.cardId,
@@ -196,8 +244,8 @@ export class AgentRunService {
       payload: {
         ...card.payload,
         state: "ready", batchId: null, poolFingerprint: pool.fingerprint, candidates: this.candidates(pool),
-        selectedAgentIds: pool.candidates.length === 1 ? [pool.candidates[0]!.agentId] : preference ?? [],
-        staleSelectionNotices: pool.notices, items: [], selectedItemId: null, selectionMode: null,
+        selectedAgentIds: rememberedSelection.selectedAgentIds,
+        staleSelectionNotices: rememberedSelection.notices, items: [], selectedItemId: null, selectionMode: null,
         history: [...card.payload.history, { batchId: batch.id, state: batch.status === "completed" ? ("completed" as const) : ("results" as const), selectedAgentName: null }].slice(-12),
       },
     };
@@ -206,6 +254,9 @@ export class AgentRunService {
       await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: randomUUID(), narration: "Choose agents to run this step again.", card: next, createdAtMs: Date.now(), readyInput: ready.input, readyInputSchemaVersion: ready.schemaVersion, readyWorkflowFingerprint: ready.workflowFingerprint, readyPreviousBatchId: ready.previousBatchId });
     } else {
       await this.repositories.conversation.updateAgentRunProjection({ bookletId, card: next, readyInput: ready.input, readyInputSchemaVersion: ready.schemaVersion, readyWorkflowFingerprint: ready.workflowFingerprint, readyPreviousBatchId: ready.previousBatchId, updatedAtMs: Date.now() });
+    }
+    if (pool.candidates.length === 1) {
+      await this.start(bookletId, next.cardId, { cardId: next.cardId, responseId: randomUUID(), action: "run_agents", value: [pool.candidates[0]!.agentId] });
     }
     return next;
   }
@@ -226,6 +277,7 @@ export class AgentRunService {
     if (response.action !== "restart_with_agents" || !card.payload.batchId) throw new Error("execution_action_invalid");
     const batch = await this.repositories.execution.getBatch(card.payload.batchId);
     if (!batch || batch.status !== "completed") throw new Error("execution_restart_unavailable");
+    await this.assertTextRestartCurrent(bookletId, batch);
     await this.readyFromBatch(bookletId, card, batch, true);
     return this.result("Choose agents to restart this step.");
   }

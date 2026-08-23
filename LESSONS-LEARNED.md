@@ -15,3 +15,11 @@
 - Guidance: replace/reconcile saved message projections on refresh; message identity alone is not a freshness signal for evolving generative-UI cards.
 - Evidence: the 2026-08-22 multi-agent Playwright scenario runs two candidates, selects a result, and renders the next question card.
 - Promotion candidate: Architecture guidance.
+
+## Recovered item execution needs its owning workflow continuation
+
+- Context: a selected image Agent Run is one step inside an ordered reference or page generation job.
+- Observation: recovering the Agent Run alone can finalize the current image while leaving its generation job unable to claim the next item.
+- Guidance: inject the owning generation continuation into recovered image materialization, using the persisted ready input’s job ID and the batch’s booklet ID; keep candidate execution separate from sequence ownership.
+- Evidence: `ImageAgentRunService` invokes its continuation after materialization; `runner-bootstrap.ts` supplies it during recovery; `tests/integration/reference-generation.test.ts` covers the callback on recovered materialization.
+- Promotion candidate: Architecture guidance.

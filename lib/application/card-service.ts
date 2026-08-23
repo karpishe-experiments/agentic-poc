@@ -30,7 +30,7 @@ export class CardService {
     if (!card) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
     if (card.family === "agent_run") {
       if (card.payload.target.startsWith("image:")) {
-        const service = new (await import("@/lib/application/image-agent-run-service")).ImageAgentRunService({ repositories: this.repositories });
+        const service = new (await import("@/lib/application/image-agent-run-service")).ImageAgentRunService({ repositories: this.repositories, onMaterialized: async (ready) => { const generation = this.generation ?? new (await import("@/lib/application/generation-service")).GenerationService({ repositories: this.repositories }); if (ready.target === "reference") await generation.runReferenceJob(bookletId, ready.jobId); else await generation.runPageJob(bookletId, ready.jobId); } });
         if (parsed.action === "run_agents") return service.start(bookletId, parsed.cardId, parsed);
         if (parsed.action === "select_agent_result") return service.select(bookletId, parsed.cardId, parsed);
         if (parsed.action === "retry_failed_agents") return service.retryFailed(bookletId, parsed.cardId, parsed);

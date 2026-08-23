@@ -141,4 +141,42 @@ describe("CardRegistry", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/jobs/${progress.payload.jobId}/continue`, { method: "POST" }));
     rendered.unmount();
   });
-});
+
+  it("collapses a remembered agent team until Change agents is requested", () => {
+    const agentRun: GenUICard = {
+      ...base,
+      family: "agent_run",
+      variant: "parallel_execution",
+      title: "Choose agents for story planning",
+      explanation: "Your saved team will be used for this step.",
+      allowedActions: ["run_agents", "change_agents"],
+      payload: {
+        revision: 1,
+        target: "skill:story_plan",
+        subjectLabel: "Story plan",
+        state: "ready",
+        batchId: null,
+        poolFingerprint: "pool-v1",
+        candidates: [
+          { agentId: "00000000-0000-4000-8000-000000000301", agentVersionId: "00000000-0000-4000-8000-000000000311", displayName: "Plot Scout", purpose: "Find story structure", profileSummary: "openai-specialist · gpt-5", eligible: true },
+          { agentId: "00000000-0000-4000-8000-000000000302", agentVersionId: "00000000-0000-4000-8000-000000000312", displayName: "Character Guide", purpose: "Strengthen character arcs", profileSummary: "openai-specialist · gpt-5", eligible: true },
+        ],
+        selectedAgentIds: ["00000000-0000-4000-8000-000000000301", "00000000-0000-4000-8000-000000000302"],
+        staleSelectionNotices: [],
+        items: [],
+        selectedItemId: null,
+        selectionMode: null,
+        history: [],
+      },
+    };
+    const submitResponse = vi.fn(async () => {});
+    render(<CardRegistry card={agentRun} submitResponse={submitResponse} />);
+
+    expect(screen.getByText("Saved team: Plot Scout, Character Guide.")).toBeTruthy();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Change agents" }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.getByText(/2 agents selected/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Run this step" }));
+    expect(submitResponse).toHaveBeenCalledWith({ action: "run_agents", value: agentRun.payload.selectedAgentIds });
+  });});

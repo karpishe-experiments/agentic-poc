@@ -172,8 +172,10 @@ export class ChatService {
                   ? { intent: authoritativeText, finalPages: finalPages?.currentVersion?.content }
                   : undefined;
       const route = await this.manager.route(skillContext, { cardId: randomUUID(), skillInput }, prepared);
-      const candidatePool = await new (await import("@/lib/application/candidate-pool-service")).CandidatePoolService(this.repositories, process.env.MODEL_RUNTIME === "real" ? "real" : "fake").forSkill(route.skillId);
+      const candidatePools = new (await import("@/lib/application/candidate-pool-service")).CandidatePoolService(this.repositories, process.env.MODEL_RUNTIME === "real" ? "real" : "fake");
+      const candidatePool = await candidatePools.forSkill(route.skillId);
       if (!candidatePool.candidates.length) throw new RecoverableApplicationError({ code: "execution_pool_unavailable", message: "No compatible agents are active for this step. Open /admin/agents to repair it.", status: 503 });
+      const rememberedSelection = candidatePools.rememberedSelection(candidatePool, await this.repositories.execution.getPreference(bookletId, candidatePool.targetKey));
       const cardId = randomUUID();
       let agentRunCard: Extract<GenUICard, { family: "agent_run" }> = {
         schemaVersion: "1" as const, cardId, family: "agent_run" as const, variant: "parallel_execution" as const, status: "active" as const,
@@ -181,7 +183,7 @@ export class ChatService {
         allowedActions: ["run_agents" as const, "change_agents" as const],
         payload: { revision: 1, target: `skill:${route.skillId}`, subjectLabel: route.skillId.replace("@1", "").replaceAll("_", " "), state: "ready" as const, batchId: null, poolFingerprint: candidatePool.fingerprint,
           candidates: candidatePool.candidates.map((candidate) => ({ agentId: candidate.agentId, agentVersionId: candidate.id, displayName: candidate.displayName, purpose: candidate.purpose, profileSummary: `${candidate.profileId} · ${candidate.modelId}`, eligible: true })),
-          selectedAgentIds: candidatePool.candidates.length === 1 ? [candidatePool.candidates[0]!.agentId] : (await this.repositories.execution.getPreference(bookletId, candidatePool.targetKey)) ?? [], staleSelectionNotices: candidatePool.notices, items: [], selectedItemId: null, selectionMode: null, history: [],
+          selectedAgentIds: rememberedSelection.selectedAgentIds, staleSelectionNotices: rememberedSelection.notices, items: [], selectedItemId: null, selectionMode: null, history: [],
         },
       };
       const assistantMessageId = randomUUID();

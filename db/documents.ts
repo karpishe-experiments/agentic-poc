@@ -2,7 +2,7 @@ export type BaseDocument = { _id: string };
 
 export type BookletDocument = BaseDocument & { schemaVersion: string; workingTitle: string; lifecycle: string; currentStage: string; coverAssetId: string | null; createdAtMs: number; updatedAtMs: number };
 export type ArtifactDocument = BaseDocument & { bookletId: string; artifactType: string; state: string; currentVersionId: string | null; createdAtMs: number; updatedAtMs: number };
-export type ArtifactVersionDocument = BaseDocument & { artifactId: string; versionNumber: number; schemaVersion: string; contentJson: string; createdBy: string; sourceVersionId: string | null; sourceExecutionBatchId?: string | null; createdAtMs: number };
+export type ArtifactVersionDocument = BaseDocument & { artifactId: string; versionNumber: number; schemaVersion: string; contentJson: string; dependencyVersionIdsJson?: string; createdBy: string; sourceVersionId: string | null; sourceExecutionBatchId?: string | null; createdAtMs: number };
 export type ArtifactDependencyDocument = BaseDocument & { downstreamVersionId: string; upstreamVersionId: string; createdAtMs: number };
 export type MessageDocument = BaseDocument & { bookletId: string; sequence: number; role: string; schemaVersion: string; uiMessageJson: string; createdAtMs: number };
 export type CardDocument = BaseDocument & { bookletId: string; messageId: string | null; artifactId: string | null; family: string; variant: string; status: string; schemaVersion: string; cardJson: string; readyInputJson?: string | null; readyInputSchemaVersion?: string | null; readyWorkflowFingerprintJson?: string | null; readyPreviousBatchId?: string | null; createdAtMs: number; updatedAtMs: number };
