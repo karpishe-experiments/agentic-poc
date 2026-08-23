@@ -123,9 +123,8 @@ export const pagePackageSchema = z.object({
   continuityNotes: textList(),
   relevantReferenceIds: z.array(opaqueIdSchema).max(12),
   textSafeRegion: normalizedRectSchema,
-  lettering: z.array(letteringElementSchema).min(1).max(5).optional(),
+  lettering: z.array(letteringElementSchema).min(1).max(5),
 }).superRefine((page, context) => {
-  if (!page.lettering) return;
   const words = page.lettering.reduce((total, element) => total + element.text.split(/\s+/).filter(Boolean).length, 0);
   if (page.kind === "story" && words > 45) context.addIssue({ code: "custom", path: ["lettering"], message: "Story-page comic lettering must stay within 45 words." });
   for (const [index, element] of page.lettering.entries()) {
@@ -159,7 +158,7 @@ export const finalPagesSchema = z.object({
     sourceIllustrationAssetId: opaqueIdSchema,
     composedAssetId: opaqueIdSchema,
     readerText: z.string().max(5_000),
-    lettering: z.array(letteringElementSchema).min(1).max(5).optional(),
+    lettering: z.array(letteringElementSchema).min(1).max(5),
     textSafeRegion: normalizedRectSchema,
     revisionNumber: z.number().int().positive(),
     acceptedQualityIssueIds: z.array(opaqueIdSchema),

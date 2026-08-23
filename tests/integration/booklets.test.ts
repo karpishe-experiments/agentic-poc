@@ -4,8 +4,7 @@ import { ChatService, isTypedWorkflowRecovery } from "@/lib/application/chat-ser
 import { CardService } from "@/lib/application/card-service";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
-import type { GenerationService } from "@/lib/application/generation-service";
-import { SCHEMA_VERSION } from "@/lib/contracts/common";
+import { genUICardSchema, type GenUICard } from "@/lib/contracts/cards";
 import type { Database } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
@@ -36,54 +35,18 @@ async function createServices(clock: Clock): Promise<{ database: Database; bookl
   };
 }
 
-async function approvePagePlanWithoutStartingGeneration(database: Database, bookletId: string) {
-  const artifacts = new ArtifactService({ database });
-  const characterId = "00000000-0000-4000-8000-000000000961";
-  const pages = Array.from({ length: 4 }, (_, pageIndex) => ({
-    pageId: `00000000-0000-4000-8000-${String(962 + pageIndex).padStart(12, "0")}`,
-    pageIndex,
-    kind: pageIndex === 0 ? "cover" as const : "story" as const,
-    readerText: pageIndex === 0 ? "Robin Shares Rainwater" : "Robin shares a drop of rainwater.",
-    sceneAction: "Show one clear, kind action.",
-    characterIds: [characterId],
-    locationIds: [],
-    incidentalVisualDetails: [],
-    compositionIntent: "Keep one clear focal action.",
-    continuityNotes: ["Keep Robin’s red scarf visible."],
-    relevantReferenceIds: [],
-    textSafeRegion: { x: 0.08, y: 0.07, width: 0.84, height: 0.22 },
-  }));
-  await artifacts.revise(bookletId, "audience_profile", {
-    schemaVersion: SCHEMA_VERSION, ageBand: "6-8", interests: ["kindness"], readingNeeds: "Short, clear sentences.", tone: "Warm", avoidList: [], knownFacts: ["Robin shares rainwater."], openAssumptions: [],
-  }, { createdBy: "agent" });
-  const audience = await artifacts.get(bookletId, "audience_profile");
-  await artifacts.approve(bookletId, "audience_profile", audience.currentVersion!.id);
-  await artifacts.revise(bookletId, "story_plan", {
-    schemaVersion: SCHEMA_VERSION, premise: "Robin learns to share rainwater.", theme: "Kindness", characters: [{ entityId: characterId, name: "Robin", narrativeRole: "hero", goal: "Share the rainwater", relationships: [], named: true, continuityRelevant: true, recurringVisualSubject: true }], settings: [], storyArc: "Robin sees a thirsty friend and shares.", keyEvents: ["Robin finds rainwater."], ending: "Robin and friends share every drop.", ageFitNotes: "Suitable for ages 6–8.", continuityConstraints: ["Keep Robin’s red scarf visible."],
-  }, { createdBy: "agent" });
-  const story = await artifacts.get(bookletId, "story_plan");
-  await artifacts.approve(bookletId, "story_plan", story.currentVersion!.id);
-  await artifacts.revise(bookletId, "visual_style", {
-    schemaVersion: SCHEMA_VERSION, styleId: "soft-watercolor", name: "Soft watercolor", rationale: "Gentle and clear.", visualDirection: "Rounded watercolor forms.", palette: ["blue"], texture: "Watercolor paper", lighting: "Warm daylight", styleReferenceAssetIds: [],
-  }, { createdBy: "agent" });
-  const visualStyle = await artifacts.get(bookletId, "visual_style");
-  await artifacts.approve(bookletId, "visual_style", visualStyle.currentVersion!.id);
-  await artifacts.revise(bookletId, "visual_bible", {
-    schemaVersion: SCHEMA_VERSION, characters: [{ entityId: characterId, name: "Robin", visualDetails: ["A red scarf"], continuityConstraints: ["Keep the red scarf visible."], referenceRequired: false, currentReferenceAssetId: null, revisionNumber: 1 }], locations: [], styleReferences: [],
-  }, { createdBy: "agent" });
-  const visualBible = await artifacts.get(bookletId, "visual_bible");
-  await artifacts.approve(bookletId, "visual_bible", visualBible.currentVersion!.id, { scope: "artifact_content" });
-  await artifacts.approve(bookletId, "visual_bible", visualBible.currentVersion!.id);
-  await artifacts.revise(bookletId, "booklet_specification", {
-    schemaVersion: SCHEMA_VERSION, title: "Robin Shares Rainwater", coverDirection: "Robin shares a raindrop.", storyPageCount: 3, geometry: "square_1_1", geometryConfirmed: true, typographyTheme: "Friendly", dialoguePolicy: "Narration only", castLimitWarningAccepted: false, locationLimitWarningAccepted: false,
-  }, { createdBy: "agent" });
-  const specification = await artifacts.get(bookletId, "booklet_specification");
-  await artifacts.approve(bookletId, "booklet_specification", specification.currentVersion!.id);
-  await artifacts.revise(bookletId, "page_plan", { schemaVersion: SCHEMA_VERSION, storyPageCount: 3, geometry: "square_1_1", pages }, { createdBy: "agent" });
-  const pagePlan = await artifacts.get(bookletId, "page_plan");
-  await artifacts.approve(bookletId, "page_plan", pagePlan.currentVersion!.id);
+async function runSoleAgentCard(bookletService: BookletService, cardService: CardService, bookletId: string, card: GenUICard): Promise<GenUICard> {
+  if (card.family !== "agent_run") return card;
+  await cardService.submit(bookletId, { cardId: card.cardId, responseId: crypto.randomUUID(), action: "run_agents", value: card.payload.selectedAgentIds });
+  let latest: GenUICard | null = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const snapshot = await bookletService.getWorkspaceSnapshot(bookletId);
+    latest = snapshot.activeCard ? genUICardSchema.parse(snapshot.activeCard) : null;
+    if (latest && latest.family !== "agent_run") return latest;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  throw new Error(`The sole Agent run did not materialize a follow-up card: ${JSON.stringify(latest)}`);
 }
-
 describe("BookletService", () => {
   it("creates the complete persisted initial booklet state and lists the newest booklet first", async () => {
     let now = Date.UTC(2026, 7, 1, 9, 0, 0);
@@ -132,7 +95,7 @@ describe("BookletService", () => {
   it("persists a deterministic fake turn and its active decision card", async () => {
     const { database, bookletService, chatService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A robin learns why taking turns makes the garden kinder." });
-    const turn = await chatService.createFakeTurn(booklet.id, {
+    const turn = await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000901",
       role: "user",
       parts: [{ type: "text", text: "Please help me begin." }],
@@ -141,13 +104,13 @@ describe("BookletService", () => {
     expect(turn.assistantMessage.parts.some((part) => part.type === "data-card")).toBe(true);
     const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);
     expect(snapshot.messages).toHaveLength(3);
-    expect(snapshot.activeCard).toMatchObject({ family: "question", variant: "single_select", status: "active" });
+    expect(snapshot.activeCard).toMatchObject({ family: "agent_run", variant: "parallel_execution", status: "active" });
     const calls = await createRepositories(database).evidence.listModelCalls(booklet.id);
     expect(calls).toMatchObject([
       { operation: "manager", skillId: null, status: "succeeded" },
-      { operation: "skill", skillId: "intake_readiness@1", status: "succeeded" },
+
     ]);
-    expect(calls[0]?.traceId).toBe(calls[1]?.traceId);
+    expect(calls).toHaveLength(1);
     expect(calls).toEqual(expect.arrayContaining([
       expect.objectContaining({ usage: { inputTokens: 0, outputTokens: 0 }, actualCostUsd: "0", estimatedCostUsd: "0", pricingVersion: "fake-runtime-v1", providerRequestId: null }),
     ]));
@@ -156,15 +119,16 @@ describe("BookletService", () => {
   it("makes a repeated card response idempotent and collapses the submitted card", async () => {
     const { bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A little fox finds a new way home." });
-    const turn = await chatService.createFakeTurn(booklet.id, {
+    const turn = await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000902",
       role: "user",
       parts: [{ type: "text", text: "Please help me begin." }],
     });
     const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
+    const question = await runSoleAgentCard(bookletService, cardService, booklet.id, card.data);
     const response = {
-      cardId: card.data.cardId,
+      cardId: question.cardId,
       responseId: "00000000-0000-4000-8000-000000000903",
       action: "submit" as const,
       value: "6-8",
@@ -178,26 +142,27 @@ describe("BookletService", () => {
   it("claims a card-response follow-up once and restores submitted cards on reload", async () => {
     const { bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A hedgehog shares a warm lantern with a lost moth." });
-    const initialTurn = await chatService.createFakeTurn(booklet.id, {
+    const initialTurn = await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000904",
       role: "user",
       parts: [{ type: "text", text: "Please help me begin." }],
     });
     const card = initialTurn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
+    const question = await runSoleAgentCard(bookletService, cardService, booklet.id, card.data);
     const responseId = "00000000-0000-4000-8000-000000000905";
-    await cardService.submit(booklet.id, { cardId: card.data.cardId, responseId, action: "submit", value: "6-8" });
+    await cardService.submit(booklet.id, { cardId: question.cardId, responseId, action: "submit", value: "6-8" });
     await expect(bookletService.getWorkspaceSnapshot(booklet.id)).resolves.toMatchObject({
       pendingCardFollowup: { responseId, summary: expect.any(String) },
     });
 
-    const followup = await chatService.createFakeTurn(booklet.id, {
+    const followup = await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000906",
       role: "user",
       metadata: { schemaVersion: "1", bookletId: booklet.id, responseId },
       parts: [{ type: "text", text: "This client summary is not authoritative." }],
     });
-    const duplicateFollowup = await chatService.createFakeTurn(booklet.id, {
+    const duplicateFollowup = await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000907",
       role: "user",
       metadata: { schemaVersion: "1", bookletId: booklet.id, responseId },
@@ -208,38 +173,39 @@ describe("BookletService", () => {
       .find((part) => part.type === "data-card");
 
     expect(followup.assistantMessage.id).toBe(duplicateFollowup.assistantMessage.id);
-    expect(snapshot.messages).toHaveLength(5);
+    expect(snapshot.messages).toHaveLength(6);
     expect(snapshot.pendingCardFollowup).toBeNull();
     expect(persistedFirstCard?.data?.status).toBe("submitted");
-    expect(snapshot.activeCard).toMatchObject({ status: "active", family: "artifact_review", variant: "summary", payload: { artifactType: "audience_profile" } });
+    expect(snapshot.activeCard).toMatchObject({ status: "active", family: "agent_run", variant: "parallel_execution", payload: { target: "skill:intake_readiness@1" } });
   });
 
   it("creates a deterministic recovery card for a conflicting later response and can reopen a prior card", async () => {
     const { bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A squirrel learns that asking for help can be brave." });
-    const turn = await chatService.createFakeTurn(booklet.id, {
+    const turn = await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000908",
       role: "user",
       parts: [{ type: "text", text: "Please help me begin." }],
     });
     const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!card || card.type !== "data-card") throw new Error("Expected a card from the fake runtime.");
+    const question = await runSoleAgentCard(bookletService, cardService, booklet.id, card.data);
     await cardService.submit(booklet.id, {
-      cardId: card.data.cardId,
+      cardId: question.cardId,
       responseId: "00000000-0000-4000-8000-000000000909",
       action: "submit",
       value: "6-8",
     });
     const conflict = await cardService.submit(booklet.id, {
-      cardId: card.data.cardId,
+      cardId: question.cardId,
       responseId: "00000000-0000-4000-8000-000000000910",
       action: "submit",
       value: "3-5",
     });
     expect(conflict).toMatchObject({ kind: "conflict", recoveryCard: { family: "issue", variant: "recovery" } });
 
-    const reopened = await cardService.reopen(booklet.id, card.data.cardId);
-    expect(reopened).toMatchObject({ cardId: expect.not.stringMatching(card.data.cardId), status: "active", family: "question" });
+    const reopened = await cardService.reopen(booklet.id, question.cardId);
+    expect(reopened).toMatchObject({ cardId: expect.not.stringMatching(question.cardId), status: "active", family: "question" });
     expect((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard).toMatchObject({ cardId: reopened.cardId, status: "active" });
   });
 
@@ -294,96 +260,57 @@ describe("BookletService", () => {
     expect(snapshot.activeCard).toBeNull();
   });
 
-  it("starts missing page generation from Final Pages recovery without calling the manager", async () => {
-    const { database, bookletService, chatService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
-    const booklet = await bookletService.create({ idea: "Robin shares rainwater." });
-    await approvePagePlanWithoutStartingGeneration(database, booklet.id);
-    const repositories = createRepositories(database);
-    let startedJobId: string | null = null;
-    let startedInTest = 0;
-    const generation = {
-      async createPageJob(bookletId: string) {
-        const job = await repositories.jobs.createOrGet({
-          id: "00000000-0000-4000-8000-000000000981",
-          bookletId,
-          jobType: "pages",
-          idempotencyKey: `page-recovery:${bookletId}`,
-          input: { pagePlanVersionId: "approved" },
-          items: [{ id: "00000000-0000-4000-8000-000000000982", itemKey: "page:cover", position: 0, input: {} }],
-          createdAtMs: Date.now(),
-        });
-        startedJobId = job.id;
-        return job;
-      },
-      startPageJob() { startedInTest += 1; },
-    } as unknown as GenerationService;
-    const recovery = await chatService.createRecoveryTurn(booklet.id, new RecoverableApplicationError({
-      code: "skill_contract_mismatch",
-      message: "The saved step could not be prepared.",
-      status: 409,
-    }));
-    const card = recovery.parts.find((part) => part.type === "data-card");
-    if (!card || card.type !== "data-card") throw new Error("Expected Final Pages recovery card.");
-
-    const result = await new CardService({ database, generation }).submit(booklet.id, {
-      cardId: card.data.cardId,
-      responseId: "00000000-0000-4000-8000-000000000983",
-      action: "retry",
-    });
-    const snapshot = await bookletService.getWorkspaceSnapshot(booklet.id);
-
-    expect(result).toMatchObject({ kind: "saved", followupRequired: false, refreshRequired: true });
-    expect(startedInTest).toBe(1);
-    expect(startedJobId).not.toBeNull();
-    expect(await repositories.jobs.getStatus(startedJobId!)).toMatchObject({ jobType: "pages", status: "pending" });
-    expect(snapshot.activeCard).toMatchObject({ family: "progress", variant: "page_batch", payload: { jobId: startedJobId } });
-    expect(await repositories.evidence.listModelCalls(booklet.id)).toEqual([]);
-  });
 
   it("advances from the approved audience review to the persisted Story Plan review", async () => {
     const { database, bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A robin learns to share rainwater in a bright garden." });
-    const first = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000921", role: "user", parts: [{ type: "text", text: "Please begin." }] });
+    const first = await chatService.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000921", role: "user", parts: [{ type: "text", text: "Please begin." }] });
     const question = first.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!question || question.type !== "data-card") throw new Error("Expected intake card.");
+    const intakeCard = await runSoleAgentCard(bookletService, cardService, booklet.id, question.data);
     const responseId = "00000000-0000-4000-8000-000000000922";
-    await cardService.submit(booklet.id, { responseId, cardId: question.data.cardId, action: "select", value: "6-8" });
-    await chatService.createFakeTurn(booklet.id, {
+    await cardService.submit(booklet.id, { responseId, cardId: intakeCard.cardId, action: "select", value: "6-8" });
+    await chatService.createTurn(booklet.id, {
       id: "00000000-0000-4000-8000-000000000923",
       role: "user",
       metadata: { schemaVersion: "1", bookletId: booklet.id, responseId },
       parts: [{ type: "text", text: "Ages 6–8" }],
     });
-    const audienceReview = (await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard;
-    if (!audienceReview || typeof audienceReview !== "object" || !("cardId" in audienceReview)) throw new Error("Expected audience review card.");
+    const audienceReview = await runSoleAgentCard(bookletService, cardService, booklet.id, genUICardSchema.parse((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard));
     await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000924", cardId: String(audienceReview.cardId), action: "approve_and_continue" });
-    const storyTurn = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000925", role: "user", parts: [{ type: "text", text: "Show me the story plan." }] });
-    const storyReview = storyTurn.assistantMessage.parts.find((part) => part.type === "data-card");
+    const storyTurn = await chatService.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000925", role: "user", parts: [{ type: "text", text: "Show me the story plan." }] });
+    const storyRun = storyTurn.assistantMessage.parts.find((part) => part.type === "data-card");
+    if (!storyRun || storyRun.type !== "data-card") throw new Error("Expected Story Plan Agent run.");
+    const storyReview = await runSoleAgentCard(bookletService, cardService, booklet.id, storyRun.data);
 
-    expect(storyReview).toMatchObject({ type: "data-card", data: { family: "artifact_review", variant: "summary", payload: { artifactType: "story_plan" } } });
-    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);
+    expect(storyReview).toMatchObject({ family: "artifact_review", variant: "summary", payload: { artifactType: "story_plan" } });
+    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(0);
   });
 
   it("revises a Story Plan conversationally while preserving its existing visual subjects", async () => {
     const { database, bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
     const booklet = await bookletService.create({ idea: "A robin learns to share rainwater in a bright garden." });
-    const first = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000931", role: "user", parts: [{ type: "text", text: "Please begin." }] });
+    const first = await chatService.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000931", role: "user", parts: [{ type: "text", text: "Please begin." }] });
     const question = first.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!question || question.type !== "data-card") throw new Error("Expected intake card.");
+    const intakeCard = await runSoleAgentCard(bookletService, cardService, booklet.id, question.data);
     const intakeResponseId = "00000000-0000-4000-8000-000000000932";
-    await cardService.submit(booklet.id, { responseId: intakeResponseId, cardId: question.data.cardId, action: "select", value: "6-8" });
-    await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000933", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: intakeResponseId }, parts: [{ type: "text", text: "Ages 6–8" }] });
-    const audienceCard = (await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard;
-    if (!audienceCard || typeof audienceCard !== "object" || !("cardId" in audienceCard)) throw new Error("Expected audience review.");
+    await cardService.submit(booklet.id, { responseId: intakeResponseId, cardId: intakeCard.cardId, action: "select", value: "6-8" });
+    await chatService.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000933", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: intakeResponseId }, parts: [{ type: "text", text: "Ages 6–8" }] });
+    const audienceCard = await runSoleAgentCard(bookletService, cardService, booklet.id, genUICardSchema.parse((await bookletService.getWorkspaceSnapshot(booklet.id)).activeCard));
     await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000934", cardId: String(audienceCard.cardId), action: "approve_and_continue" });
-    const draft = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000935", role: "user", parts: [{ type: "text", text: "Draft the Story Plan." }] });
+    const draft = await chatService.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000935", role: "user", parts: [{ type: "text", text: "Draft the Story Plan." }] });
     const storyCard = draft.assistantMessage.parts.find((part) => part.type === "data-card");
     if (!storyCard || storyCard.type !== "data-card") throw new Error("Expected Story Plan review.");
+    const storyReview = await runSoleAgentCard(bookletService, cardService, booklet.id, storyCard.data);
     const before = await new ArtifactService({ database }).get(booklet.id, "story_plan");
     const beforeContent = before.currentVersion?.content as { characters: Array<{ entityId: string }>; settings: Array<{ entityId: string }> };
     const revisionResponseId = "00000000-0000-4000-8000-000000000936";
-    await cardService.submit(booklet.id, { responseId: revisionResponseId, cardId: storyCard.data.cardId, action: "request_revision", revisionInstruction: "Make the middle moment more playful." });
-    const revised = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000937", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: revisionResponseId }, parts: [{ type: "text", text: "Ignore this client text." }] });
+    await cardService.submit(booklet.id, { responseId: revisionResponseId, cardId: storyReview.cardId, action: "request_revision", revisionInstruction: "Make the middle moment more playful." });
+    const revised = await chatService.createTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000937", role: "user", metadata: { schemaVersion: "1", bookletId: booklet.id, responseId: revisionResponseId }, parts: [{ type: "text", text: "Ignore this client text." }] });
+    const revisionRun = revised.assistantMessage.parts.find((part) => part.type === "data-card");
+    if (!revisionRun || revisionRun.type !== "data-card") throw new Error("Expected revised Story Plan Agent run.");
+    await runSoleAgentCard(bookletService, cardService, booklet.id, revisionRun.data);
     const after = await new ArtifactService({ database }).get(booklet.id, "story_plan");
     const afterContent = after.currentVersion?.content as { characters: Array<{ entityId: string }>; settings: Array<{ entityId: string }>; storyArc: string };
 
@@ -394,52 +321,6 @@ describe("BookletService", () => {
     expect(afterContent.storyArc).toContain("Make the middle moment more playful.");
   });
 
-  it("attempts one deterministic Story Plan repair and records both quality review outcomes", async () => {
-    const { database, bookletService, chatService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
-    const booklet = await bookletService.create({ idea: "A quiet story about a garden." });
-    const artifacts = new ArtifactService({ database });
-    await artifacts.revise(booklet.id, "audience_profile", {
-      schemaVersion: SCHEMA_VERSION, ageBand: "6-8", interests: ["gardens"], readingNeeds: "Short clear sentences.", tone: "Gentle", avoidList: [], knownFacts: ["garden"], openAssumptions: [],
-    }, { createdBy: "agent" });
-    const audience = await artifacts.get(booklet.id, "audience_profile");
-    await artifacts.approve(booklet.id, "audience_profile", audience.currentVersion!.id);
-    await artifacts.revise(booklet.id, "story_plan", {
-      schemaVersion: SCHEMA_VERSION, premise: "A quiet story about a garden.", theme: "Care", characters: [], settings: [], storyArc: "A small wish becomes a kind action.", keyEvents: ["A seed is found."], ending: "The garden blooms.", ageFitNotes: "Suitable for ages 6–8.", continuityConstraints: [],
-    }, { createdBy: "agent" });
 
-    const turn = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000941", role: "user", parts: [{ type: "text", text: "Check Story Plan quality." }] });
-    const repaired = await artifacts.get(booklet.id, "story_plan");
-    const content = repaired.currentVersion?.content as { characters: unknown[]; settings: unknown[]; continuityConstraints: string[] };
 
-    expect(turn.assistantMessage.parts).toContainEqual(expect.objectContaining({ type: "data-card" }));
-    expect(content.characters).toHaveLength(1);
-    expect(content.settings).toHaveLength(1);
-    expect(content.continuityConstraints).toHaveLength(1);
-    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(2);
-  });
-
-  it("stops after one rejected repair and presents a recoverable quality issue", async () => {
-    const { database, bookletService, chatService, cardService } = await createServices({ now: () => Date.UTC(2026, 7, 1) });
-    const booklet = await bookletService.create({ idea: "A robin shares a garden puddle." });
-    const artifacts = new ArtifactService({ database });
-    await artifacts.revise(booklet.id, "audience_profile", {
-      schemaVersion: SCHEMA_VERSION, ageBand: "6-8", interests: ["gardens"], readingNeeds: "Short clear sentences.", tone: "Gentle", avoidList: [], knownFacts: ["garden"], openAssumptions: [],
-    }, { createdBy: "agent" });
-    const audience = await artifacts.get(booklet.id, "audience_profile");
-    await artifacts.approve(booklet.id, "audience_profile", audience.currentVersion!.id);
-    await artifacts.revise(booklet.id, "story_plan", {
-      schemaVersion: SCHEMA_VERSION, premise: "A robin shares a garden puddle.", theme: "Care", characters: [{ entityId: "00000000-0000-4000-8000-000000000951", name: "Robin", narrativeRole: "hero", goal: "Share water", relationships: [], named: true, continuityRelevant: true, recurringVisualSubject: true }], settings: [{ entityId: "00000000-0000-4000-8000-000000000952", name: "Garden", narrativeRole: "main setting", named: true, continuityRelevant: true, recurringVisualSubject: true }], storyArc: "Robin learns to share.", keyEvents: ["Robin finds water."], ending: "Everyone shares.", ageFitNotes: "Suitable for ages 6–8.", continuityConstraints: ["Keep the garden calm."],
-    }, { createdBy: "agent" });
-
-    const turn = await chatService.createFakeTurn(booklet.id, { id: "00000000-0000-4000-8000-000000000953", role: "user", parts: [{ type: "text", text: "Check Story Plan quality [force-validation-failure]." }] });
-    const issue = turn.assistantMessage.parts.find((part) => part.type === "data-card");
-    if (!issue || issue.type !== "data-card") throw new Error("Expected a quality issue card.");
-    const accepted = await cardService.submit(booklet.id, { responseId: "00000000-0000-4000-8000-000000000954", cardId: issue.data.cardId, action: "accept_with_issue" });
-    const review = await database.collections.quality_reviews.findOne({ bookletId: booklet.id });
-
-    expect(turn.assistantMessage.parts).toContainEqual(expect.objectContaining({ type: "data-card", data: expect.objectContaining({ family: "issue", variant: "quality" }) }));
-    expect(accepted).toMatchObject({ followupRequired: false });
-    expect(review?.acceptedAtMs).not.toBeNull();
-    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);
-  });
 });

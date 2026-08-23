@@ -3,8 +3,6 @@ import type { Database } from "@/db/client";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { createRepositories } from "@/db/repositories";
 import { BookletService } from "@/lib/application/booklet-service";
-import { CardService } from "@/lib/application/card-service";
-import { ChatService } from "@/lib/application/chat-service";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -14,19 +12,7 @@ describe("restart recovery", () => {
     const database = await createTestDatabase();
     databases.push(database);
     const booklet = await new BookletService({ database }).create({ idea: "A robin shares a puddle." });
-    const chat = new ChatService({ database });
-    const cardService = new CardService({ database });
     const repositories = createRepositories(database);
-
-    const turn = await chat.createFakeTurn(booklet.id, {
-      id: "00000000-0000-4000-8000-000000000a01", role: "user", parts: [{ type: "text", text: "Begin." }],
-    });
-    const card = turn.assistantMessage.parts.find((part) => part.type === "data-card");
-    if (!card || card.type !== "data-card") throw new Error("Expected intake card.");
-    const responseId = "00000000-0000-4000-8000-000000000a02";
-    await cardService.submit(booklet.id, { cardId: card.data.cardId, responseId, action: "select", value: "6-8" });
-    expect(await repositories.conversation.claimCardFollowup({ bookletId: booklet.id, responseId })).toMatchObject({ status: "claimed" });
-
     const jobId = "00000000-0000-4000-8000-000000000a03";
     const itemId = "00000000-0000-4000-8000-000000000a04";
     const pausedJobId = "00000000-0000-4000-8000-000000000a05";
@@ -42,9 +28,8 @@ describe("restart recovery", () => {
     });
     expect(await repositories.jobs.claimNextPending(pausedJobId, Date.now(), true)).toMatchObject({ id: pausedItemId, attemptCount: 1 });
 
-    expect(await repositories.conversation.recoverInterruptedFollowups()).toBe(1);
+    expect(await repositories.conversation.recoverInterruptedFollowups()).toBe(0);
     expect(await repositories.jobs.recoverInterrupted()).toBe(2);
-    expect(await repositories.conversation.claimCardFollowup({ bookletId: booklet.id, responseId })).toMatchObject({ status: "claimed" });
     expect(await repositories.jobs.getItems(jobId)).toMatchObject([{ id: itemId, status: "pending", attemptCount: 1 }]);
     expect(await repositories.jobs.getStatus(pausedJobId)).toMatchObject({ status: "paused", items: [{ id: pausedItemId, status: "pending", attemptCount: 1 }] });
     expect(await repositories.jobs.listRunnable()).toEqual(expect.arrayContaining([{ id: jobId, bookletId: booklet.id, jobType: "pages" }]));

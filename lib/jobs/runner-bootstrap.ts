@@ -1,5 +1,7 @@
 import { getDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
+import { AgentRunService } from "@/lib/application/agent-run-service";
+import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
 import { GenerationService } from "@/lib/application/generation-service";
 import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
 import { describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
@@ -18,9 +20,17 @@ async function runLoop(): Promise<void> {
   const diagnostics = new GenerationDiagnostics(resolveDataRoot(getServerEnv()));
   await diagnostics.record({ event: "runner_started" });
   await repositories.conversation.recoverInterruptedFollowups();
-  const recoveredItems = await repositories.jobs.recoverInterrupted();
-  await diagnostics.record({ event: "runner_recovered_interrupted_work", recoveredItems });
   const generation = new GenerationService({ database, repositories, diagnostics });
+  const recoveredTextExecutions = await new AgentRunService({ repositories }).recoverInterrupted();
+  const recoveredImageExecutions = await new ImageAgentRunService({
+    repositories,
+    onMaterialized: async (ready, bookletId) => {
+      if (ready.target === "reference") await generation.runReferenceJob(bookletId, ready.jobId);
+      else await generation.runPageJob(bookletId, ready.jobId);
+    },
+  }).recoverInterrupted();
+  const recoveredItems = await repositories.jobs.recoverInterrupted();
+  await diagnostics.record({ event: "runner_recovered_interrupted_work", recoveredItems, recoveredExecutionBatches: recoveredTextExecutions.length + recoveredImageExecutions.length });
 
   for (;;) {
     try {

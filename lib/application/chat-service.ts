@@ -1,32 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { validateUIMessages } from "ai";
-import { z } from "zod";
+
 import { createRepositories, type Repositories } from "@/db/repositories";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { createRecoveryCard } from "@/lib/application/card-factories";
 import { getDatabase, type Database } from "@/db/client";
 import { BookletNotFoundError } from "@/lib/application/booklet-service";
 import { ArtifactService } from "@/lib/application/artifact-service";
-import { createFakeConversationResult } from "@/lib/application/fake-conversation-runtime";
 import { ManagerService } from "@/lib/application/manager-service";
 import { QualityService } from "@/lib/application/quality-service";
 import type { PreparedActiveAgentSet } from "@/lib/application/agent-resolver";
 import { buildSkillContext } from "@/lib/application/skill-context";
 import type { GenerationService } from "@/lib/application/generation-service";
 import type { ExportService } from "@/lib/application/export-service";
-import { readinessAssessmentSchema } from "@/lib/contracts/skills";
-import { storyPlanningResultSchema } from "@/lib/skills/story-planning-revision";
-import { storyQualityResultSchema } from "@/lib/skills/quality-review-repair";
-import { visualDirectionResultSchema } from "@/lib/skills/visual-direction-reference-planning";
-import { bookletSpecificationResultSchema } from "@/lib/skills/booklet-specification";
-import { pagePlanningResultSchema } from "@/lib/skills/page-planning-writing";
-import { imagePromptCompilationResultSchema } from "@/lib/skills/image-prompt-compilation";
+
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
-import { materializePagePlan, materializeStoryPlan, materializeVisualBible } from "@/lib/application/entity-materialization";
-import { pagePlanSchema, storyPlanSchema, visualBibleSchema, visualStyleSchema } from "@/lib/contracts/artifacts";
+
+
 import { resolveComicCopyMode } from "@/lib/config/env";
-import { pagePlanDraftSchema, storyPlanDraftSchema } from "@/lib/contracts/drafts";
+
 import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
+import type { GenUICard } from "@/lib/contracts/cards";
 
 export type ChatTurn = { userMessage: BookletUIMessage; assistantMessage: BookletUIMessage };
 
@@ -64,7 +58,7 @@ export class ChatService {
     this.exporter = dependencies.exporter;
   }
 
-  public async createFakeTurn(bookletId: string, input: unknown): Promise<ChatTurn> {
+  public async createTurn(bookletId: string, input: unknown): Promise<ChatTurn> {
     const [message] = await validateUIMessages<BookletUIMessage>({
       messages: [input],
       metadataSchema: bookletMessageMetadataSchema,
@@ -140,7 +134,7 @@ export class ChatService {
         const result = await this.createExportResponse(bookletId);
         const assistantMessageId = randomUUID();
         await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: assistantMessageId, narration: result.narration, card: result.card, createdAtMs: now });
-        if (claimedResponseId) await this.repositories.conversation.completeCardFollowup({ responseId: claimedResponseId, assistantMessageId });
+      if (claimedResponseId) await this.repositories.conversation.completeCardFollowup({ responseId: claimedResponseId, assistantMessageId });
         return {
           userMessage: persistedUserMessage,
           assistantMessage: { id: assistantMessageId, role: "assistant", metadata: { schemaVersion: "1", bookletId, persistedAt: new Date(now).toISOString() }, parts: [{ type: "text", text: result.narration }, { type: "data-card", id: result.card.cardId, data: result.card }] },
@@ -155,7 +149,7 @@ export class ChatService {
       const finalPages = booklet.currentStage === "final_pages" ? await this.artifacts.get(bookletId, "final_pages") : null;
       const requestsQuality = Boolean(currentStory?.currentVersion) && /\b(quality|review|check)\b/i.test(authoritativeText);
       const artifactSummaries = await this.repositories.artifacts.listByBooklet(bookletId);
-      const managerResult = await this.manager.run(buildSkillContext({
+      const skillContext = buildSkillContext({
         booklet,
         operation: requestsQuality ? "story_quality" : "guided_intake",
         intent: authoritativeText,
@@ -163,70 +157,49 @@ export class ChatService {
         previousMessages,
         approvedArtifactVersionIds: artifactSummaries.filter((artifact) => artifact.state === "approved" && artifact.currentVersionId).map((artifact) => artifact.currentVersionId!),
         traceId: randomUUID(),
-      }), {
-        cardId: randomUUID(),
-        skillInput: booklet.currentStage === "story_plan"
-          ? { intent: authoritativeText, currentStory: currentStory?.currentVersion?.content ?? null, storyPlan: currentStory?.currentVersion?.content }
-          : booklet.currentStage === "visual_style"
-            ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualStyle: null }
-            : booklet.currentStage === "visual_bible"
-              ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualStyle: visualStyle?.currentVersion?.content ?? null }
-              : booklet.currentStage === "booklet_specification"
-                ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content }
-                : booklet.currentStage === "page_plan"
-                  ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualBible: visualBible?.currentVersion?.content, specification: specification?.currentVersion?.content, currentPagePlan: currentPagePlan?.currentVersion?.content ?? null, copyMode: resolveComicCopyMode() }
-                  : booklet.currentStage === "final_pages"
-                    ? { intent: authoritativeText, finalPages: finalPages?.currentVersion?.content }
-              : undefined,
-      }, prepared);
-      const assessment = readinessAssessmentSchema.safeParse(managerResult.output);
-      const storyDraft = storyPlanningResultSchema.safeParse(managerResult.output);
-      const storyQuality = storyQualityResultSchema.safeParse(managerResult.output);
-      const visualDirection = visualDirectionResultSchema.safeParse(managerResult.output);
-      const specificationDraft = bookletSpecificationResultSchema.safeParse(managerResult.output);
-      const pagePlanDraft = pagePlanningResultSchema.safeParse(managerResult.output);
-      const finalPagesReview = imagePromptCompilationResultSchema.safeParse(managerResult.output);
-      const selectedAgeBand = /\b(3[-–]5|6[-–]8|9[-–]12)\b/.exec(authoritativeText)?.[1]?.replace("–", "-") as "3-5" | "6-8" | "9-12" | undefined;
-      const result = selectedAgeBand && booklet.currentStage === "audience_profile"
-        // This response is a validated application decision, not a creative
-        // model choice. Advance deterministically so a model cannot reopen it.
-        ? await this.createAudienceReview(bookletId, originalIdea, [`Audience is ages ${selectedAgeBand}.`])
-        : assessment.success && assessment.data.questionCard
-        // Age-band identifiers drive application routing, so this UI decision is
-        // application-owned even when the specialist identifies it as the gap.
-        ? createFakeConversationResult({ bookletId, cardId: randomUUID(), idea: originalIdea })
-        : assessment.success && assessment.data.ready && booklet.currentStage === "audience_profile"
-          ? await this.createAudienceReview(bookletId, originalIdea, assessment.data.knownFacts)
-          : storyDraft.success && booklet.currentStage === "story_plan"
-            ? await this.createStoryReview(bookletId, storyDraft.data.storyPlan, storyDraft.data.summary, prepared!.specialists.get("quality_review_targeted_repair@1"))
-            : storyQuality.success && booklet.currentStage === "story_plan"
-              ? await this.createQualityResponse(bookletId, storyQuality.data)
-              : visualDirection.success && (booklet.currentStage === "visual_style" || booklet.currentStage === "visual_bible")
-                ? await this.createVisualReview(bookletId, visualDirection.data)
-                : specificationDraft.success && booklet.currentStage === "booklet_specification"
-                  ? await this.createSpecificationConfirmation(bookletId, specificationDraft.data.content, specificationDraft.data.summary)
-                  : pagePlanDraft.success && booklet.currentStage === "page_plan"
-                    ? await this.createPagePlanReview(bookletId, pagePlanDraft.data.content, pagePlanDraft.data.summary)
-                    : finalPagesReview.success && booklet.currentStage === "final_pages"
-                      ? await this.createFinalPagesReview(bookletId, finalPagesReview.data.summary)
-          : createFakeConversationResult({ bookletId, cardId: randomUUID(), idea: originalIdea });
-      const assistantMessageId = randomUUID();
-      await this.repositories.conversation.persistAssistantCard({
-        bookletId,
-        messageId: assistantMessageId,
-        narration: result.narration,
-        card: result.card,
-        createdAtMs: now,
       });
+      const skillInput = booklet.currentStage === "story_plan"
+        ? { intent: authoritativeText, currentStory: currentStory?.currentVersion?.content ?? null, storyPlan: currentStory?.currentVersion?.content }
+        : booklet.currentStage === "visual_style"
+          ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualStyle: null }
+          : booklet.currentStage === "visual_bible"
+            ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualStyle: visualStyle?.currentVersion?.content ?? null }
+            : booklet.currentStage === "booklet_specification"
+              ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content }
+              : booklet.currentStage === "page_plan"
+                ? { intent: authoritativeText, storyPlan: storyDetail?.currentVersion?.content, visualBible: visualBible?.currentVersion?.content, specification: specification?.currentVersion?.content, currentPagePlan: currentPagePlan?.currentVersion?.content ?? null, copyMode: resolveComicCopyMode() }
+                : booklet.currentStage === "final_pages"
+                  ? { intent: authoritativeText, finalPages: finalPages?.currentVersion?.content }
+                  : undefined;
+      const route = await this.manager.route(skillContext, { cardId: randomUUID(), skillInput }, prepared);
+      const candidatePools = new (await import("@/lib/application/candidate-pool-service")).CandidatePoolService(this.repositories, process.env.MODEL_RUNTIME === "real" ? "real" : "fake");
+      const candidatePool = await candidatePools.forSkill(route.skillId);
+      if (!candidatePool.candidates.length) throw new RecoverableApplicationError({ code: "execution_pool_unavailable", message: "No compatible agents are active for this step. Open /admin/agents to repair it.", status: 503 });
+      const rememberedSelection = candidatePools.rememberedSelection(candidatePool, await this.repositories.execution.getPreference(bookletId, candidatePool.targetKey));
+      const cardId = randomUUID();
+      let agentRunCard: Extract<GenUICard, { family: "agent_run" }> = {
+        schemaVersion: "1" as const, cardId, family: "agent_run" as const, variant: "parallel_execution" as const, status: "active" as const,
+        title: "Choose agents for this step", explanation: "Your saved team will be used for this step. You can change it before running.",
+        allowedActions: ["run_agents" as const, "change_agents" as const],
+        payload: { revision: 1, target: `skill:${route.skillId}`, subjectLabel: route.skillId.replace("@1", "").replaceAll("_", " "), state: "ready" as const, batchId: null, poolFingerprint: candidatePool.fingerprint,
+          candidates: candidatePool.candidates.map((candidate) => ({ agentId: candidate.agentId, agentVersionId: candidate.id, displayName: candidate.displayName, purpose: candidate.purpose, profileSummary: `${candidate.profileId} · ${candidate.modelId}`, eligible: true })),
+          selectedAgentIds: rememberedSelection.selectedAgentIds, staleSelectionNotices: rememberedSelection.notices, items: [], selectedItemId: null, selectionMode: null, history: [],
+        },
+      };
+      const assistantMessageId = randomUUID();
+      await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: assistantMessageId, narration: "I routed this step and saved the available agent team. Choose one or more agents to run.", card: agentRunCard, createdAtMs: now, readyInput: { kind: "text", skillId: route.skillId, skillInput: route.rawInput, context: skillContext, subjectKind: "text", subjectId: booklet.currentStage }, readyInputSchemaVersion: "1", readyWorkflowFingerprint: { stage: booklet.currentStage, approvedArtifactVersionIds: skillContext.approvedArtifactVersionIds }, readyPreviousBatchId: null });
+      // A sole compatible text candidate has no creator choice to make. Start it
+      // server-side so the same durable card can project running/completed states.
+      if (candidatePool.candidates.length === 1 && !process.env.VITEST) {
+        const service = new (await import("@/lib/application/agent-run-service")).AgentRunService({ repositories: this.repositories });
+        await service.start(bookletId, cardId, { cardId, responseId: randomUUID(), action: "run_agents", value: [candidatePool.candidates[0]!.agentId] });
+        const projected = await this.repositories.conversation.getCard(bookletId, cardId);
+        if (projected?.family === "agent_run") agentRunCard = projected;
+      }
       if (claimedResponseId) await this.repositories.conversation.completeCardFollowup({ responseId: claimedResponseId, assistantMessageId });
       return {
         userMessage: persistedUserMessage,
-        assistantMessage: {
-          id: assistantMessageId,
-          role: "assistant",
-          metadata: { schemaVersion: "1", bookletId, persistedAt: new Date(now).toISOString() },
-          parts: [{ type: "text", text: result.narration }, { type: "data-card", id: result.card.cardId, data: result.card }],
-        },
+        assistantMessage: { id: assistantMessageId, role: "assistant", metadata: { schemaVersion: "1", bookletId, persistedAt: new Date(now).toISOString() }, parts: [{ type: "text", text: "I routed this step and saved the available agent team. Choose one or more agents to run." }, { type: "data-card", id: agentRunCard.cardId, data: agentRunCard }] },
       };
     } catch (error) {
       if (claimedResponseId) await this.repositories.conversation.resetRunningCardFollowup(claimedResponseId);
@@ -289,195 +262,6 @@ export class ChatService {
         { type: "text", text: recovery.narration },
         { type: "data-card", id: card.cardId, data: card },
       ],
-    };
-  }
-
-  private async createAudienceReview(bookletId: string, idea: string, knownFacts: string[]) {
-    const ageBand = knownFacts.find((fact) => /3[-–]5/.test(fact)) ? "3-5" as const
-      : knownFacts.find((fact) => /9[-–]12/.test(fact)) ? "9-12" as const
-        : "6-8" as const;
-    const audience = await this.artifacts.revise(bookletId, "audience_profile", {
-      schemaVersion: SCHEMA_VERSION,
-      ageBand,
-      interests: ["gentle adventures", "helping friends"],
-      readingNeeds: "Clear concrete language with a reassuring emotional arc.",
-      tone: "Warm, playful, and hopeful",
-      avoidList: ["graphic danger"],
-      knownFacts,
-      openAssumptions: ["The creator can revise details before approval."],
-    }, { createdBy: "agent" });
-    return {
-      narration: "I drafted the audience profile. Review it before we create the Story Plan.",
-      card: {
-        schemaVersion: SCHEMA_VERSION,
-        cardId: randomUUID(),
-        family: "artifact_review" as const,
-        variant: "summary" as const,
-        status: "active" as const,
-        title: "Review the audience profile",
-        explanation: "Approving this version keeps the reading age and tone available to the Story Plan.",
-        allowedActions: ["approve_and_continue" as const],
-        payload: {
-          artifactType: "audience_profile" as const,
-          versionId: audience.currentVersion!.id,
-          summary: [
-            { label: "Reading age", value: ageBand.replace("-", "–") },
-            { label: "Tone", value: "Warm, playful, and hopeful" },
-          ],
-        },
-      },
-    };
-  }
-
-  private async createStoryReview(bookletId: string, draft: unknown, narration: string, qualityConfiguration?: Parameters<QualityService["runStoryReadiness"]>[1]) {
-    const current = await this.artifacts.get(bookletId, "story_plan");
-    const story = await this.artifacts.revise(bookletId, "story_plan", materializeStoryPlan(storyPlanDraftSchema.parse(draft), current.currentVersion ? storyPlanSchema.parse(current.currentVersion.content) : null), { createdBy: "agent" });
-    if (!story.currentVersion || !story.currentVersion.content || typeof story.currentVersion.content !== "object") {
-      throw new RecoverableApplicationError({ code: "story_plan_missing", message: "The Story Plan needs a saved version before it can be reviewed.", status: 409 });
-    }
-    const readiness = await this.quality.runStoryReadiness(bookletId, qualityConfiguration);
-    if (readiness.kind === "unresolved") {
-      return { narration: "The Story Plan needs a focused change before your review.", card: readiness.card };
-    }
-    const reviewedStory = await this.artifacts.get(bookletId, "story_plan");
-    const content = reviewedStory.currentVersion?.content as { premise?: string; theme?: string; ending?: string } | undefined;
-    const repaired = readiness.kind === "repaired";
-    const repairSummary = repaired ? readiness.issues.map((issue) => `${issue.target}: ${issue.message}`).join(" ") : null;
-    return {
-      narration: repaired ? "I applied one targeted quality repair before your review, so you only need to approve the ready Story Plan once." : narration,
-      card: {
-        schemaVersion: SCHEMA_VERSION,
-        cardId: randomUUID(),
-        family: "artifact_review" as const,
-        variant: "summary" as const,
-        status: "active" as const,
-        title: "Review the Story Plan",
-        explanation: repaired ? "A targeted quality repair was applied before this review. Approve this ready version to continue into visual direction." : "The Story Plan passed its readiness check. Approve it to carry these constraints into visual direction.",
-        allowedActions: ["approve_and_continue" as const, "request_revision" as const],
-        payload: {
-          artifactType: "story_plan" as const,
-          versionId: reviewedStory.currentVersion?.id ?? null,
-          summary: [
-            { label: "Premise", value: content?.premise ?? "A gentle story is being drafted." },
-            { label: "Theme", value: content?.theme ?? "Kindness" },
-            { label: "Ending", value: content?.ending ?? "A hopeful ending" },
-            { label: "Quality", value: repaired ? "One targeted repair applied" : "Readiness checked" },
-            ...(repairSummary ? [{ label: "Repair", value: repairSummary }] : []),
-          ],
-        },
-      },
-    };
-  }
-
-  private async createQualityResponse(bookletId: string, qualityOutput: unknown) {
-    const review = await this.quality.applyStoryReview(bookletId, qualityOutput);
-    if (review.kind === "unresolved") {
-      return { narration: "The Story Plan needs a focused change before it can move forward.", card: review.card };
-    }
-    const story = await this.artifacts.get(bookletId, "story_plan");
-    const content = story.currentVersion?.content as { premise?: string; theme?: string; ending?: string } | undefined;
-    return {
-      narration: review.kind === "repaired" ? "I made one focused repair and the Story Plan is ready for your review." : "The Story Plan passed its readiness check and is ready for your review.",
-      card: {
-        schemaVersion: SCHEMA_VERSION,
-        cardId: randomUUID(),
-        family: "artifact_review" as const,
-        variant: "summary" as const,
-        status: "active" as const,
-        title: "Review the Story Plan",
-        explanation: "Approve it to carry these story constraints into visual direction.",
-        allowedActions: ["approve_and_continue" as const, "request_revision" as const],
-        payload: {
-          artifactType: "story_plan" as const,
-          versionId: story.currentVersion?.id ?? null,
-          summary: [
-            { label: "Premise", value: content?.premise ?? "A gentle story is being drafted." },
-            { label: "Theme", value: content?.theme ?? "Kindness" },
-            { label: "Ending", value: content?.ending ?? "A hopeful ending" },
-          ],
-        },
-      },
-    };
-  }
-
-  private async createVisualReview(bookletId: string, output: z.infer<typeof visualDirectionResultSchema>) {
-    if (output.kind === "visual_style") {
-      await this.artifacts.revise(bookletId, "visual_style", output.content, { createdBy: "agent" });
-      return {
-        narration: output.summary,
-        card: {
-          schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "question" as const, variant: "single_select" as const, status: "active" as const,
-          title: "Choose visual style", explanation: "Soft watercolor is recommended, but each seeded direction remains available.", allowedActions: ["select" as const],
-          payload: { prompt: "Choose the booklet's visual direction.", recommendedChoiceId: "soft-watercolor", choices: [
-            { id: "soft-watercolor", label: "Soft watercolor", description: "Warm, forgiving shapes for gentle stories." },
-            { id: "cut-paper-collage", label: "Cut-paper collage", description: "Bold handmade shapes and clear silhouettes." },
-            { id: "colored-pencil", label: "Colored pencil", description: "Textured lines and familiar storybook warmth." },
-          ] },
-        },
-      };
-    }
-    const [story, style, existingBible] = await Promise.all([
-      this.artifacts.get(bookletId, "story_plan"),
-      this.artifacts.get(bookletId, "visual_style"),
-      this.artifacts.get(bookletId, "visual_bible"),
-    ]);
-    const storyContent = storyPlanSchema.parse(story.currentVersion?.content);
-    const styleContent = visualStyleSchema.parse(style.currentVersion?.content);
-    await this.artifacts.revise(bookletId, "visual_bible", materializeVisualBible(output.content, storyContent, styleContent, existingBible.currentVersion ? visualBibleSchema.parse(existingBible.currentVersion.content) : null), { createdBy: "agent" });
-    const detail = await this.artifacts.get(bookletId, "visual_bible");
-    const bible = detail.currentVersion?.content as { characters: Array<{ name: string; referenceRequired: boolean }>; locations: Array<{ name: string; referenceRequired: boolean }> };
-    const requiredReferences = [...bible.characters, ...bible.locations].filter((item) => item.referenceRequired).length;
-    return {
-      narration: output.summary,
-      card: {
-        schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "artifact_review" as const, variant: "summary" as const, status: "active" as const,
-        title: "Review the Visual Bible", explanation: `Approve these definitions to generate ${requiredReferences} canonical reference${requiredReferences === 1 ? "" : "s"} in the background.`, allowedActions: ["approve_and_continue" as const],
-        payload: { artifactType: "visual_bible" as const, versionId: detail.currentVersion!.id, summary: [{ label: "Characters", value: String(bible.characters.length) }, { label: "Locations", value: String(bible.locations.length) }, { label: "Required references", value: String(requiredReferences) }] },
-      },
-    };
-  }
-
-  private async createSpecificationConfirmation(bookletId: string, content: unknown, narration: string) {
-    const detail = await this.artifacts.revise(bookletId, "booklet_specification", content, { createdBy: "agent" });
-    const specification = detail.currentVersion?.content as { storyPageCount: number; geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5" };
-    return {
-      narration,
-      card: {
-        schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "question" as const, variant: "single_select" as const, status: "active" as const,
-        title: "Confirm booklet geometry", explanation: `The plan recommends ${specification.storyPageCount} story pages. You may change the count from 3 to 8 in the Booklet Specification editor, then choose the final page shape before page planning.`, allowedActions: ["confirm_geometry" as const],
-        payload: { prompt: "Choose the final booklet page shape.", recommendedChoiceId: specification.geometry, choices: [
-          { id: "square_1_1", label: "Square (1:1)" }, { id: "landscape_5_4", label: "Landscape (5:4)" }, { id: "portrait_4_5", label: "Portrait (4:5)" },
-        ] },
-      },
-    };
-  }
-
-  private async createPagePlanReview(bookletId: string, content: unknown, narration: string) {
-    const current = await this.artifacts.get(bookletId, "page_plan");
-    const draft = pagePlanDraftSchema.parse(content);
-    const detail = await this.artifacts.revise(bookletId, "page_plan", materializePagePlan(draft, current.currentVersion ? pagePlanSchema.parse(current.currentVersion.content) : null), { createdBy: "agent" });
-    const plan = detail.currentVersion?.content as { storyPageCount: number; geometry: string; pages: unknown[] };
-    return {
-      narration,
-      card: {
-        schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "artifact_review" as const, variant: "summary" as const, status: "active" as const,
-        title: "Review the Page Plan", explanation: "Each package has one scene and one intended illustration. Approve it when the count and sequence are right.", allowedActions: ["approve_and_continue" as const, "request_revision" as const],
-        payload: { artifactType: "page_plan" as const, versionId: detail.currentVersion!.id, summary: [{ label: "Story pages", value: String(plan.storyPageCount) }, { label: "Canvas", value: plan.geometry }, { label: "Page packages", value: String(plan.pages.length) }] },
-      },
-    };
-  }
-
-  private async createFinalPagesReview(bookletId: string, narration: string) {
-    const detail = await this.artifacts.get(bookletId, "final_pages");
-    const pages = detail.currentVersion?.content as { pages?: Array<{ pageIndex: number; pageId: string; composedAssetId: string }> } | undefined;
-    if (!detail.currentVersion || !pages?.pages) throw new Error("Final Pages are not available for review.");
-    return {
-      narration,
-      card: {
-        schemaVersion: SCHEMA_VERSION, cardId: randomUUID(), family: "artifact_review" as const, variant: "visual_gallery" as const, status: "active" as const,
-        title: "Review final pages", explanation: "Approve every composed page set before PDF export.", allowedActions: ["approve_and_continue" as const],
-        payload: { artifactType: "final_pages" as const, versionId: detail.currentVersion.id, items: pages.pages.map((page) => ({ assetId: page.composedAssetId, label: page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`, selected: false, regenerationTarget: { kind: "page" as const, pageId: page.pageId } })) },
-      },
     };
   }
 

@@ -3,7 +3,7 @@ import type { AgentModelId } from "@/lib/config/agent-models";
 
 export function modelCallCost(input: {
   runtimeMode: "fake" | "real";
-  modelId: AgentModelId;
+  modelId: string;
   usage: { inputTokens: number; outputTokens: number } | null;
 }) {
   if (input.runtimeMode === "fake") {
@@ -11,7 +11,7 @@ export function modelCallCost(input: {
   }
   return {
     actualCostUsd: null,
-    estimatedCostUsd: input.usage ? estimateModelCostUsd({ modelId: input.modelId, ...input.usage })?.toFixed(6) ?? null : null,
-    pricingVersion: input.usage && estimateModelCostUsd({ modelId: input.modelId, ...input.usage }) !== null ? pricingVersion : null,
+    estimatedCostUsd: input.usage ? estimateModelCostUsd({ modelId: input.modelId as AgentModelId, ...input.usage })?.toFixed(6) ?? null : null,
+    pricingVersion: input.usage && estimateModelCostUsd({ modelId: input.modelId as AgentModelId, ...input.usage }) !== null ? pricingVersion : null,
   };
 }

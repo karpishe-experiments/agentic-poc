@@ -40,10 +40,10 @@ describe("application-owned identity materialization", () => {
   });
 
   it("assigns page IDs and preserves them by page position for a revision", () => {
-    const page = (pageIndex: number, kind: "cover" | "story") => ({ pageIndex, kind, readerText: kind === "cover" ? "Robin" : "Robin shares.", sceneAction: "One clear action.", characterIds: [], locationIds: [], incidentalVisualDetails: [], compositionIntent: "One illustration.", continuityNotes: [], relevantReferenceIds: [], textSafeRegion: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 } });
+    const page = (pageIndex: number, kind: "cover" | "story") => { const readerText = kind === "cover" ? "Robin" : "Robin shares."; return { pageIndex, kind, readerText, sceneAction: "One clear action.", characterIds: [], locationIds: [], incidentalVisualDetails: [], compositionIntent: "One illustration.", continuityNotes: [], relevantReferenceIds: [], textSafeRegion: { x: 0.1, y: 0.1, width: 0.8, height: 0.2 }, lettering: [{ kind: kind === "cover" ? "title" as const : "narration" as const, text: readerText, speakerEntityId: null, delivery: "clear", placementHint: "top" }] }; };
     const draft: PagePlanDraft = { schemaVersion: "1", storyPageCount: 3, geometry: "square_1_1", pages: [page(0, "cover"), page(1, "story"), page(2, "story"), page(3, "story")] };
     const first = materializePagePlan(draft, null, idFactory());
-    const second = materializePagePlan({ ...draft, pages: draft.pages.map((item) => ({ ...item, readerText: `${item.readerText} Revised` })) }, first, idFactory());
+    const second = materializePagePlan({ ...draft, pages: draft.pages.map((item) => ({ ...item, readerText: `${item.readerText} Revised`, lettering: item.lettering.map((letter) => ({ ...letter, text: `${letter.text} Revised` })) })) }, first, idFactory());
     expect(second.pages.map((item) => item.pageId)).toEqual(first.pages.map((item) => item.pageId));
   });
 

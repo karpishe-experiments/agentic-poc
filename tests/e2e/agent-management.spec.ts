@@ -7,7 +7,7 @@ function e2eDatabase() {
   return createMongoDatabase({ uri, databaseName });
 }
 
-const slotLabels = ["Manager", "Intake Readiness", "Story Planning", "Story Quality", "Visual Direction", "Booklet Specification", "Page Planning", "Image Prompts"];
+const slotLabels = ["Manager", "Intake Readiness", "Story Planning", "Story Quality", "Visual Direction", "Booklet Specification", "Page Planning", "Image Prompts", "Reference Image Agents", "Page Image Agents"];
 
 test("uses a slot-driven workspace and creates, edits, and inspects an alternate logical agent", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -23,7 +23,11 @@ test("uses a slot-driven workspace and creates, edits, and inspects an alternate
   await expect(page.getByText("00000000-0000-4000-8000-00000000b001", { exact: true })).toBeVisible();
 
   await slots.getByRole("button", { name: /^Story Planning/ }).click();
+  await expect(page).toHaveURL(/target=story_planning_revision%401/);
   await expect(page.getByRole("heading", { name: "Story Planning Specialist" })).toBeVisible();
+  await page.getByLabel("Search agents").fill("Story Planning Specialist");
+  await expect(page.getByRole("button", { name: /Story Planning Specialist.*Active v1/ })).toBeVisible();
+  await page.getByLabel("Search agents").fill("");
   await page.getByRole("button", { name: "New Agent" }).click();
   await page.getByLabel("Display Name").fill("Cancelled draft");
   page.once("dialog", async (dialog) => { await dialog.accept(); });
@@ -47,8 +51,8 @@ test("uses a slot-driven workspace and creates, edits, and inspects an alternate
   await expect(page.getByRole("status")).toContainText("Draft created.");
   await expect(page.getByRole("heading", { name: "Browser-created story specialist" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Version 1.*Draft · Inactive/ })).toHaveAttribute("aria-current", "true");
-  await expect(page.getByRole("heading", { name: "Agents for This Slot" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Story Planning Specialist.*Active v1/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Story Planning Specialist.*Active v1/ }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Edit Draft" }).click();
   const edit = page.getByRole("region", { name: "Edit Browser-created story specialist" });
@@ -62,9 +66,12 @@ test("uses a slot-driven workspace and creates, edits, and inspects an alternate
   await edit.getByRole("button", { name: "Save Draft" }).click();
   await expect(page.getByRole("status")).toContainText("Draft saved.");
   await expect(page.getByText("Updated through explicit Edit mode.", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Browser-created story specialist" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   await page.getByRole("button", { name: "Fork" }).click();
+  await expect(page.getByRole("status")).toContainText("Draft forked.");
   await expect(page.getByRole("button", { name: /Version 2.*Draft · Inactive/ })).toHaveAttribute("aria-current", "true");
   await page.getByRole("button", { name: /Version 1.*Draft · Inactive/ }).click();
   await page.getByRole("button", { name: "Delete Draft" }).click();
@@ -85,14 +92,14 @@ test("guards dirty workspace changes and uses contextual lifecycle dialogs", asy
   await page.goto("/admin/agents");
   const slots = page.getByRole("navigation", { name: "Runtime Slots" });
   await slots.getByRole("button", { name: /^Story Planning/ }).click();
-  await page.getByRole("button", { name: /Browser-created story specialist.*inactive versions?/ }).click();
+  await page.getByRole("button", { name: /Browser-created story specialist.*inactive versions?/ }).first().click();
   await page.getByRole("button", { name: /Version 1.*Draft · Inactive/ }).click();
   await page.getByRole("button", { name: "Edit Draft" }).click();
   await page.getByLabel("Purpose").fill("Unsaved workspace change");
 
   page.once("dialog", async (dialog) => { await dialog.dismiss(); });
   await page.getByRole("link", { name: "Help" }).click();
-  await expect(page).toHaveURL(/\/admin\/agents$/);
+  await expect(page).toHaveURL(/\/admin\/agents\?target=story_planning_revision%401/);
 
   page.once("dialog", async (dialog) => { expect(dialog.message()).toBe("Discard unsaved agent changes?"); await dialog.dismiss(); });
   await slots.getByRole("button", { name: /^Intake Readiness/ }).click();
@@ -109,11 +116,11 @@ test("guards dirty workspace changes and uses contextual lifecycle dialogs", asy
   await expect(page.getByRole("status")).toContainText("Draft confirmed.");
   await expect(page.getByRole("button", { name: /Version 2.*Confirmed · Inactive/ })).toHaveAttribute("aria-current", "true");
 
-  const activateTrigger = page.getByRole("button", { name: "Activate Replacement" });
+  const activateTrigger = page.getByRole("button", { name: "Activate Candidate" });
   await activateTrigger.click();
-  const activateDialog = page.getByRole("dialog", { name: "Activate Replacement" });
+  const activateDialog = page.getByRole("dialog", { name: "Activate Candidate" });
   await expect(activateDialog).toContainText("Intake Readiness Specialist version 2");
-  await expect(activateDialog).toContainText("replace Intake Readiness Specialist version 1");
+  await expect(activateDialog).toContainText("additional candidate");
   await expect(activateDialog).toContainText("future calls only");
   await expect(activateDialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Escape");
@@ -121,16 +128,16 @@ test("guards dirty workspace changes and uses contextual lifecycle dialogs", asy
   await expect(activateTrigger).toBeFocused();
 
   await activateTrigger.click();
-  await activateDialog.getByRole("button", { name: "Activate Replacement" }).click();
-  await expect(page.getByRole("status")).toContainText("Replacement activated.");
+  await activateDialog.getByRole("button", { name: "Activate Candidate" }).click();
+  await expect(page.getByRole("status")).toContainText("Agent activated.");
   await expect(page.getByRole("button", { name: /Version 2.*Confirmed · Active/ })).toHaveAttribute("aria-current", "true");
   await expect(page.getByRole("button", { name: /Version 1.*Confirmed · Inactive/ })).toBeVisible();
 
   await page.getByRole("button", { name: /Version 1.*Confirmed · Inactive/ }).click();
   await expect(page.getByRole("heading", { name: "Danger Zone" })).toBeVisible();
-  await page.getByRole("button", { name: "Activate Replacement" }).click();
-  const restoreDialog = page.getByRole("dialog", { name: "Activate Replacement" });
-  await restoreDialog.getByRole("button", { name: "Activate Replacement" }).click();
+  await page.getByRole("button", { name: "Activate Candidate" }).click();
+  const restoreDialog = page.getByRole("dialog", { name: "Activate Candidate" });
+  await restoreDialog.getByRole("button", { name: "Activate Candidate" }).click();
   await expect(page.getByRole("button", { name: /Version 1.*Confirmed · Active/ })).toHaveAttribute("aria-current", "true");
 });
 
@@ -145,11 +152,11 @@ test("keeps corrupt coverage inspectable and repairs a missing active slot", asy
   await slots.getByRole("button", { name: /^Intake Readiness/ }).click();
   await expect(page.getByText(/Missing active specialist.*activate a valid replacement/)).toBeVisible();
   await page.getByRole("button", { name: /Version 1.*Confirmed · Inactive/ }).click();
-  await page.getByRole("button", { name: "Activate Replacement" }).click();
-  const dialog = page.getByRole("dialog", { name: "Activate Replacement" });
-  await expect(dialog).toContainText("currently empty slot");
-  await dialog.getByRole("button", { name: "Activate Replacement" }).click();
-  await expect(page.getByRole("status")).toContainText("Replacement activated.");
+  await page.getByRole("button", { name: "Activate Candidate" }).click();
+  const dialog = page.getByRole("dialog", { name: "Activate Candidate" });
+  await expect(dialog).toContainText("currently empty target");
+  await dialog.getByRole("button", { name: "Activate Candidate" }).click();
+  await expect(page.getByRole("status")).toContainText("Agent activated.");
   await expect(slots.getByRole("button", { name: /Intake Readiness.*Healthy/ })).toBeVisible();
 });
 
@@ -174,15 +181,17 @@ test("shows an empty slot without hiding the creation path", async ({ page }) =>
   }
 });
 
-test("stacks the slot rail before the workspace without horizontal overflow", async ({ page }) => {
+test("stacks targets, agents, and workspace without horizontal overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/admin/agents");
   const slots = page.getByRole("navigation", { name: "Runtime Slots" });
+  const agents = page.getByRole("complementary", { name: "Agents" });
   const workspace = page.getByRole("region", { name: "Kids Booklet Manager" });
   await expect(slots).toBeVisible();
   await expect(workspace).toBeVisible();
-  const boxes = await Promise.all([slots.boundingBox(), workspace.boundingBox()]);
+  const boxes = await Promise.all([slots.boundingBox(), agents.boundingBox(), workspace.boundingBox()]);
   expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y);
+  expect(boxes[1]!.y).toBeLessThan(boxes[2]!.y);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await expect(page.getByRole("button", { name: "Fork" })).toBeVisible();
 });

@@ -55,9 +55,11 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
         const total = details.length || ("progress" in job ? job.progress.total : 0);
         const canContinue = details.some((item) => item.status === "pending") && !details.some((item) => item.status === "failed" || item.status === "running");
         const continueKey = `continue:${job.id}`;
+        const waitingMessage = job.status === "waiting_for_agents" ? "Waiting for you to choose agents for the current item." : job.status === "waiting_for_selection" ? "Waiting for you to choose one successful candidate result." : null;
         return <article className="rounded-lg border border-[var(--border)] bg-white p-2" key={job.id}>
           <p className="font-medium capitalize">{job.jobType} — {job.status}</p>
           <p aria-live="polite" className="text-[var(--muted-ink)]">{completed} of {total} items completed</p>
+          {waitingMessage ? <p className="mt-1 text-[var(--muted-ink)]">{waitingMessage}</p> : null}
           {job.status === "failed" ? <p className="mt-1 text-[var(--muted-ink)]">Generation stopped on this failure. Retry only the failed item; remaining pending items will wait for an explicit Continue action.</p> : null}
           {job.status === "paused" && canContinue ? <p className="mt-1 text-[var(--muted-ink)]">The failed item was retried. Continue when you are ready to generate the remaining pending items.</p> : null}
           {details.filter((item) => item.status === "failed").map((item) => <div className="mt-2 flex flex-wrap items-center gap-2" key={item.id}>

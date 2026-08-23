@@ -1,6 +1,3 @@
-import { mkdtemp, readFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/client";
@@ -9,18 +6,15 @@ import { createRepositories } from "@/db/repositories";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
 import { BookletService } from "@/lib/application/booklet-service";
 import { GenerationService } from "@/lib/application/generation-service";
+import { CandidateExecutionService } from "@/lib/application/candidate-execution-service";
+import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
-import { imageRequestSchema, imageResultSchema } from "@/lib/contracts/images";
-import { FakeImageProvider } from "@/lib/images/fake-image-provider";
-import type { ImageProvider } from "@/lib/images/provider";
-import { GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
+import { imageRequestSchema } from "@/lib/contracts/images";
+import { genUICardSchema } from "@/lib/contracts/cards";
+
 
 const databases: Database[] = [];
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(closeTestDatabase));
-  vi.restoreAllMocks();
-});
+afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); vi.restoreAllMocks(); });
 
 class MemoryAssetStore implements AssetStore {
   private readonly values = new Map<string, Uint8Array>();
@@ -31,199 +25,100 @@ class MemoryAssetStore implements AssetStore {
 
 function request() {
   return imageRequestSchema.parse({
-    schemaVersion: SCHEMA_VERSION,
-    operation: "generate",
-    model: "fake-image",
-    promptPlan: {
-      purpose: "canonical visual reference",
-      subject: "Robin",
-      action: "Create a clear reference pose.",
-      location: "A calm garden",
-      visualStyle: "Soft watercolor",
-      continuityConstraints: ["Keep the red chest."],
-      preserve: ["Recognizable red chest."],
-    },
-    prompt: "A safe test prompt that must not appear in diagnostics.",
-    geometry: "square_1_1",
-    quality: "disabled",
-    references: [],
-    editTargetAssetId: null,
+    schemaVersion: SCHEMA_VERSION, operation: "generate", model: "fake-image", quality: "disabled", geometry: "square_1_1", references: [], editTargetAssetId: null,
+    promptPlan: { purpose: "canonical visual reference", subject: "Robin", action: "Create a clear reference pose.", location: "A calm garden", visualStyle: "Soft watercolor", continuityConstraints: ["Keep the red chest."], preserve: ["Recognizable red chest."] },
+    prompt: "A safe test prompt that must not appear in execution evidence.",
   });
 }
 
+async function waitFor(assertion: () => Promise<void>, attempts = 80) {
+  let last: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try { await assertion(); return; } catch (error) { last = error; await new Promise((resolve) => setTimeout(resolve, 15)); }
+  }
+  throw last;
+}
+
 describe("generation diagnostics", () => {
-  it("persists a safe failure trail and leaves the next item pending", async () => {
-    vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const directory = await mkdtemp(path.join(os.tmpdir(), "kids-generation-diagnostics-"));
+  it("persists a safe Agent run failure and leaves the next item pending", async () => {
     const database = await createTestDatabase();
     databases.push(database);
     const booklet = await new BookletService({ database }).create({ idea: "Robin shares rainwater." });
     const repositories = createRepositories(database);
-    const fake = new FakeImageProvider();
-    let calls = 0;
-    const provider: ImageProvider = {
-      runtime: fake.runtime,
-      capabilities: fake.capabilities,
-      async execute(input) {
-        calls += 1;
-        if (calls === 1) throw Object.assign(new Error("simulated provider connection reset"), { status: 503, code: "ECONNRESET", type: "server_error", request_id: "req_diagnostic" });
-        await new Promise((resolve) => setTimeout(resolve, 15));
-        return fake.execute(input);
-      },
-    };
-    const jobId = randomUUID();
-    const firstItemId = randomUUID();
-    const secondItemId = randomUUID();
+    vi.spyOn(CandidateExecutionService.prototype, "executeImage").mockRejectedValue(new Error("simulated provider connection reset"));
+    const jobId = "00000000-0000-4000-8000-000000000711";
+    const firstItemId = "00000000-0000-4000-8000-000000000712";
+    const secondItemId = "00000000-0000-4000-8000-000000000713";
     await repositories.jobs.createOrGet({
-      id: jobId,
-      bookletId: booklet.id,
-      jobType: "references",
-      idempotencyKey: `diagnostics:${jobId}`,
-      input: {},
-      createdAtMs: Date.now(),
+      id: jobId, bookletId: booklet.id, jobType: "references", idempotencyKey: `diagnostics:${jobId}`, input: {}, createdAtMs: Date.now(),
       items: [
-        { id: firstItemId, itemKey: "character:00000000-0000-4000-8000-000000000711", position: 0, input: { item: { entityId: "00000000-0000-4000-8000-000000000711", kind: "character", name: "Robin", visualDetails: ["Red chest"], continuityConstraints: [], referenceRequired: true }, request: request() } },
-        { id: secondItemId, itemKey: "location:00000000-0000-4000-8000-000000000712", position: 1, input: { item: { entityId: "00000000-0000-4000-8000-000000000712", kind: "location", name: "Garden", visualDetails: ["Round pond"], continuityConstraints: [], referenceRequired: true }, request: request() } },
+        { id: firstItemId, itemKey: "character:00000000-0000-4000-8000-000000000714", position: 0, input: { item: { entityId: "00000000-0000-4000-8000-000000000714", kind: "character", name: "Robin", visualDetails: ["Red chest"], continuityConstraints: [], referenceRequired: true }, request: request() } },
+        { id: secondItemId, itemKey: "location:00000000-0000-4000-8000-000000000715", position: 1, input: { item: { entityId: "00000000-0000-4000-8000-000000000715", kind: "location", name: "Garden", visualDetails: ["Round pond"], continuityConstraints: [], referenceRequired: true }, request: request() } },
       ],
     });
-    const diagnosticsRoot = path.join(directory, "diagnostic-output");
-    const generation = new GenerationService({
-      database,
-      repositories,
-      assets: new MemoryAssetStore(),
-      provider,
-      imageModel: "fake-image",
-      diagnostics: new GenerationDiagnostics(diagnosticsRoot),
-      diagnosticWaitMs: 1,
+
+    await new GenerationService({ database, repositories, assets: new MemoryAssetStore() }).runReferenceJob(booklet.id, jobId);
+    await waitFor(async () => {
+      const items = await repositories.jobs.getItems(jobId);
+      expect(items).toMatchObject([{ id: firstItemId, status: "failed" }, { id: secondItemId, status: "pending" }]);
     });
-
-    await generation.runReferenceJob(booklet.id, jobId);
-
-    const items = await repositories.jobs.getItems(jobId);
-    const trail = (await readFile(path.join(diagnosticsRoot, "diagnostics", "jobs", `${jobId}.ndjson`), "utf8"))
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line) as { event: string; error?: { status?: number; code?: string; requestId?: string } });
-
-    expect(items.map((item) => item.status)).toEqual(["failed", "pending"]);
-    expect(trail).toEqual(expect.arrayContaining([
-      expect.objectContaining({ event: "provider_request_started", itemId: firstItemId }),
-      expect.objectContaining({ event: "provider_request_threw", itemId: firstItemId, error: expect.objectContaining({ status: 503, code: "ECONNRESET", requestId: "req_diagnostic" }) }),
-      expect.objectContaining({ event: "job_item_failed", itemId: firstItemId }),
-    ]));
-    expect(JSON.stringify(trail)).not.toContain("A safe test prompt");
+    const card = genUICardSchema.parse(await repositories.conversation.getActiveCard(booklet.id));
+    if (card.family !== "agent_run" || !card.payload.batchId) throw new Error("Expected failed Agent run card.");
+    const executionItems = await repositories.execution.getItems(card.payload.batchId);
+    expect(executionItems).toContainEqual(expect.objectContaining({ status: "failed", safeError: expect.objectContaining({ message: "simulated provider connection reset" }) }));
   });
-
-  it("retries one failed item, pauses, and requires Continue for retained pending items", async () => {
-    vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const directory = await mkdtemp(path.join(os.tmpdir(), "kids-generation-blocked-"));
+  it("resumes a failed image item before retrying every failed candidate", async () => {
     const database = await createTestDatabase();
     databases.push(database);
     const booklet = await new BookletService({ database }).create({ idea: "Robin shares rainwater." });
     const repositories = createRepositories(database);
-    const fake = new FakeImageProvider();
-    let balanceAvailable = false;
-    let calls = 0;
-    const provider: ImageProvider = {
-      runtime: "real",
-      capabilities: fake.capabilities,
-      async execute(input) {
-        calls += 1;
-        if (balanceAvailable) return fake.execute(input);
-        return imageResultSchema.parse({
-          status: "failed",
-          provider: "openai",
-          model: input.model,
-          providerRequestId: null,
-          mimeType: null,
-          bytesBase64: null,
-          width: null,
-          height: null,
-          usage: null,
-          error: {
-            kind: "blocked",
-            message: "You have no credits remaining.",
-            providerError: { status: 429, code: "credit_balance_exhausted", type: "insufficient_quota", requestId: null },
-          },
-        });
-      },
-    };
+    const sourceAgent = await database.collections.agent_versions.findOne({ _id: "00000000-0000-4000-8000-00000000b201" });
+    if (!sourceAgent) throw new Error("Expected seeded reference image agent.");
+    const secondAgentId = randomUUID();
+    await database.collections.agent_definitions.insertOne({ _id: secondAgentId, createdAtMs: Date.now(), createdBy: "test" });
+    await database.collections.agent_versions.insertOne({ ...sourceAgent, _id: randomUUID(), agentId: secondAgentId, displayName: "Second Reference Image Agent", createdAtMs: Date.now(), updatedAtMs: Date.now(), createdBy: "test", updatedBy: "test" });
+
     const jobId = randomUUID();
-    const failedItemId = randomUUID();
-    const pendingItemId = randomUUID();
+    const itemId = randomUUID();
     await repositories.jobs.createOrGet({
-      id: jobId,
-      bookletId: booklet.id,
-      jobType: "references",
-      idempotencyKey: `blocked:${jobId}`,
-      input: {},
-      createdAtMs: Date.now(),
-      items: [
-        { id: failedItemId, itemKey: "character:00000000-0000-4000-8000-000000000721", position: 0, input: { item: { entityId: "00000000-0000-4000-8000-000000000721", kind: "character", name: "Robin", visualDetails: ["Red chest"], continuityConstraints: [], referenceRequired: true }, request: request() } },
-        { id: pendingItemId, itemKey: "location:00000000-0000-4000-8000-000000000722", position: 1, input: { item: { entityId: "00000000-0000-4000-8000-000000000722", kind: "location", name: "Garden", visualDetails: ["Round pond"], continuityConstraints: [], referenceRequired: true }, request: request() } },
-      ],
+      id: jobId, bookletId: booklet.id, jobType: "references", idempotencyKey: `retry:${jobId}`, input: {}, createdAtMs: Date.now(),
+      items: [{ id: itemId, itemKey: `character:${randomUUID()}`, position: 0, input: { item: { entityId: randomUUID(), kind: "character", name: "Robin", visualDetails: ["Red chest"], continuityConstraints: [], referenceRequired: true }, request: request() } }],
     });
-    const generation = new GenerationService({
-      database,
-      repositories,
-      assets: new MemoryAssetStore(),
-      provider,
-      imageModel: "fake-image",
-      diagnostics: new GenerationDiagnostics(path.join(directory, "diagnostic-output")),
-      diagnosticWaitMs: 0,
+    const claimed = await repositories.jobs.claimNextPending(jobId, Date.now());
+    if (!claimed) throw new Error("Expected a pending generation item.");
+    const imageRuns = new ImageAgentRunService({ database, repositories, assets: new MemoryAssetStore(), runtimeMode: "fake" });
+    const cardId = await imageRuns.createReady({ bookletId: booklet.id, jobId, itemId, itemKey: claimed.itemKey, position: claimed.position, target: "reference", subjectLabel: "Robin", request: request() });
+    const ready = genUICardSchema.parse(await repositories.conversation.getCard(booklet.id, cardId));
+    if (ready.family !== "agent_run") throw new Error("Expected Image Agent run card.");
+
+    const executeImage = vi.spyOn(CandidateExecutionService.prototype, "executeImage").mockRejectedValue(new Error("simulated provider connection reset"));
+    await imageRuns.start(booklet.id, cardId, { cardId, responseId: randomUUID(), action: "run_agents", value: ready.payload.candidates.map((candidate) => candidate.agentId) });
+    await waitFor(async () => expect((await repositories.jobs.getItems(jobId))[0]).toMatchObject({ id: itemId, status: "failed" }));
+    await waitFor(async () => {
+      const card = genUICardSchema.parse(await repositories.conversation.getCard(booklet.id, cardId));
+      expect(card).toMatchObject({ allowedActions: expect.arrayContaining(["retry_failed_agents"]), payload: { state: "results" } });
     });
+    executeImage.mockRestore();
 
-    await generation.runReferenceJob(booklet.id, jobId);
-
-    expect(calls).toBe(1);
-    expect(await repositories.jobs.getStatus(jobId)).toMatchObject({
-      status: "failed",
-      items: [
-        { id: failedItemId, status: "failed", attemptCount: 1 },
-        { id: pendingItemId, status: "pending", attemptCount: 0 },
-      ],
-    });
-    expect(await repositories.jobs.listActiveByBooklet(booklet.id)).toEqual([
-      expect.objectContaining({ id: jobId, status: "failed", progress: { completed: 0, total: 2 } }),
-    ]);
-
-    // Existing jobs may have persisted this provider code as transient before the classifier was fixed.
-    await repositories.jobs.failItem({
-      jobId,
-      itemId: failedItemId,
-      error: {
-        kind: "transient",
-        message: "You have no credits remaining.",
-        providerError: { status: 429, code: "credit_balance_exhausted", type: "insufficient_quota", requestId: null },
-      },
-      finishedAtMs: Date.now(),
-    });
-    await generation.runReferenceJob(booklet.id, jobId);
-    expect(calls).toBe(1);
-    expect(await repositories.jobs.getStatus(jobId)).toMatchObject({ status: "failed" });
-
-    balanceAvailable = true;
-    await generation.retryReferenceItem(booklet.id, jobId, failedItemId);
-
-    expect(calls).toBe(2);
-    expect(await repositories.jobs.getStatus(jobId)).toMatchObject({
-      status: "paused",
-      items: [
-        { id: failedItemId, status: "succeeded", attemptCount: 2 },
-        { id: pendingItemId, status: "pending", attemptCount: 0 },
-      ],
+    const failed = genUICardSchema.parse(await repositories.conversation.getCard(booklet.id, cardId));
+    if (failed.family !== "agent_run") throw new Error("Expected failed Image Agent run card.");
+    await imageRuns.retryFailed(booklet.id, cardId, { cardId, responseId: randomUUID(), action: "retry_failed_agents" });
+    await waitFor(async () => {
+      const batch = await repositories.execution.getBatch(failed.payload.batchId!);
+      const items = batch ? await repositories.execution.getItems(batch.id) : [];
+      expect(items).toHaveLength(2);
+      expect(items.every((item) => item.status === "succeeded")).toBe(true);
     });
 
-    await repositories.jobs.continueJob(jobId);
-    await generation.runReferenceJob(booklet.id, jobId);
-
-    expect(calls).toBe(3);
-    expect(await repositories.jobs.getStatus(jobId)).toMatchObject({
-      status: "succeeded",
-      items: [
-        { id: failedItemId, status: "succeeded", attemptCount: 2 },
-        { id: pendingItemId, status: "succeeded", attemptCount: 1 },
-      ],
+    await waitFor(async () => {
+      const card = genUICardSchema.parse(await repositories.conversation.getCard(booklet.id, cardId));
+      expect(card).toMatchObject({ allowedActions: expect.arrayContaining(["select_agent_result"]), payload: { state: "results" } });
     });
+    const recovered = genUICardSchema.parse(await repositories.conversation.getCard(booklet.id, cardId));
+    if (recovered.family !== "agent_run" || !recovered.payload.batchId) throw new Error("Expected recovered Image Agent run card.");
+    const selected = (await repositories.execution.getItems(recovered.payload.batchId))[0];
+    if (!selected) throw new Error("Expected a recovered candidate result.");
+    await imageRuns.select(booklet.id, cardId, { cardId, responseId: randomUUID(), action: "select_agent_result", value: selected.id });
+    await waitFor(async () => expect((await repositories.jobs.getItems(jobId))[0]).toMatchObject({ id: itemId, status: "succeeded" }));
   });
 });

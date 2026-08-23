@@ -75,12 +75,11 @@ export function WorkspaceConversation({ bookletId, initialMessages, pendingCardF
   });
 
   useEffect(() => {
-    const serverLatest = initialMessages.at(-1)?.id;
-    const clientLatest = messages.at(-1)?.id;
-    if (initialMessages.length > messages.length || (initialMessages.length === messages.length && serverLatest && clientLatest && serverLatest !== clientLatest)) {
-      setMessages(initialMessages);
-    }
-  }, [initialMessages, messages, setMessages]);
+    // Persisted Agent Run cards evolve in place while their message IDs remain
+    // stable. A router refresh must therefore reconcile projections as well as
+    // appended messages.
+    setMessages(initialMessages);
+  }, [initialMessages, setMessages]);
 
   useEffect(() => {
     const container = conversationRef.current;
@@ -153,7 +152,7 @@ export function WorkspaceConversation({ bookletId, initialMessages, pendingCardF
       });
       const body = await readCardResponse(result);
       if (!result.ok || !body.data) throw new Error(body.error?.message ?? "We could not save that decision.");
-      setSubmittedCardIds((submitted) => new Set(submitted).add(card.cardId));
+      if (card.family !== "agent_run") setSubmittedCardIds((submitted) => new Set(submitted).add(card.cardId));
       const advancesGuidedFlow = card.family === "artifact_review" && response.action === "approve_and_continue" && (
         (card.variant === "summary" && (card.payload.artifactType === "audience_profile" || card.payload.artifactType === "story_plan"))
         || (card.variant === "visual_gallery" && (card.payload.artifactType === "visual_bible" || card.payload.artifactType === "final_pages"))

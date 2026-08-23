@@ -59,9 +59,9 @@ describe("OpenAI image provider", () => {
     const client = { images: { generate } } as unknown as OpenAI;
 
     const cases = [
-      ["square_1_1", "1024x1024"],
-      ["landscape_5_4", "1536x1024"],
-      ["portrait_4_5", "1024x1536"],
+      ["square_1_1", "1536x1536"],
+      ["landscape_5_4", "1600x1280"],
+      ["portrait_4_5", "1280x1600"],
     ] as const;
     const provider = new OpenAIImageProvider(client);
     for (const [geometry, size] of cases) {
@@ -102,9 +102,9 @@ describe("OpenAI image provider", () => {
     expect(result.status).toBe("succeeded");
   });
 
-  it("sends matching output quality and input fidelity for supported edits", async () => {
+  it("keeps application-owned controls to output quality for configured edits", async () => {
     const source = await sharp({ create: { width: 8, height: 8, channels: 4, background: "green" } }).png().toBuffer();
-    const edit = vi.fn(async () => ({ _request_id: "request-fidelity", data: [{ b64_json: source.toString("base64") }] }));
+    const edit = vi.fn(async (_input: unknown) => { void _input; return { _request_id: "request-fidelity", data: [{ b64_json: source.toString("base64") }] }; });
     const client = { images: { edit } } as unknown as OpenAI;
     const editRequest: ImageRequest = {
       ...request,
@@ -116,7 +116,8 @@ describe("OpenAI image provider", () => {
 
     await new OpenAIImageProvider(client).execute(editRequest, [{ assetId: editRequest.references[0]!.assetId, bytes: source }]);
 
-    expect(edit).toHaveBeenCalledWith(expect.objectContaining({ quality: "high", input_fidelity: "high" }));
+    expect(edit).toHaveBeenCalledWith(expect.objectContaining({ quality: "high" }));
+    expect(edit.mock.calls[0]?.[0]).not.toHaveProperty("input_fidelity");
   });
 
   it("omits both quality controls when disabled", async () => {

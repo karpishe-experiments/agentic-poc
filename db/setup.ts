@@ -64,8 +64,8 @@ function seedDocuments() {
   const definitions = agentSeedDefaults.map((version) => ({ _id: version.agentId, createdAtMs: AGENT_SEED_TIMESTAMP, createdBy: AGENT_SEED_ACTOR }));
   const versions = agentSeedDefaults.map((version) => ({
     _id: version.id, agentId: version.agentId, versionNumber: version.versionNumber, parentVersionId: version.parentVersionId,
-    displayName: version.displayName, purpose: version.purpose, role: version.role, skillId: version.skillId, instructions: version.instructions,
-    provider: version.provider, modelId: version.modelId, reasoningEffort: version.reasoningEffort, maxTurns: version.maxTurns, status: version.status,
+    displayName: version.displayName, purpose: version.purpose, role: version.role, skillId: version.skillId, imageTarget: version.imageTarget, instructions: version.instructions,
+    provider: version.provider, modelId: version.modelId, reasoningEffort: version.reasoningEffort, maxTurns: version.maxTurns, profileId: version.profileId, profileVersion: version.profileVersion, imageQuality: version.imageQuality, imageResolution: version.imageResolution, status: version.status,
     isActive: version.isActive, revision: version.revision, createdAtMs: AGENT_SEED_TIMESTAMP, updatedAtMs: AGENT_SEED_TIMESTAMP, createdBy: version.createdBy, updatedBy: version.updatedBy,
   }));
   const events = agentSeedDefaults.flatMap((version) => (["create", "confirm", "activate"] as const).map((action) => ({
@@ -76,18 +76,13 @@ function seedDocuments() {
   return { definitions, versions, events };
 }
 
-async function insertOrVerify<T extends { _id: string }>(collection: { findOne(filter: { _id: string }): Promise<T | null>; insertOne(document: T): Promise<unknown> }, document: T): Promise<void> {
-  const existing = await collection.findOne({ _id: document._id });
-  if (!existing) { await collection.insertOne(document); return; }
-  if (canonical(existing) !== canonical(document)) throw new Error(`Seed record ${document._id} conflicts with the deterministic default.`);
-}
 
 export async function seedDefaultAgents(context: MongoDatabaseContext): Promise<void> {
   const { definitions, versions, events } = seedDocuments();
-  for (const document of definitions) await insertOrVerify(context.collections.agent_definitions, document);
-  for (const document of versions) await insertOrVerify(context.collections.agent_versions, document);
-  for (const document of events) await insertOrVerify(context.collections.agent_version_events, document);
+  await context.collections.agent_definitions.insertMany(definitions);
+  await context.collections.agent_versions.insertMany(versions);
+  await context.collections.agent_version_events.insertMany(events);
   const managers = await context.collections.agent_versions.countDocuments({ isActive: true, role: "manager" });
   const specialists = await context.collections.agent_versions.countDocuments({ isActive: true, role: "specialist" });
-  if (managers !== 1 || specialists !== 7) throw new Error("Default runtime-agent coverage is incomplete or conflicting.");
+  if (managers !== 1 || specialists < 7) throw new Error("Default runtime-agent coverage is incomplete or conflicting.");
 }

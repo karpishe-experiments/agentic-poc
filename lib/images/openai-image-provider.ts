@@ -4,15 +4,8 @@ import { getServerEnv } from "@/lib/config/env";
 import { imageRequestSchema, imageResultSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
 import type { ImageProvider } from "@/lib/images/provider";
 
-const sizeByGeometry = {
-  square_1_1: "1024x1024",
-  landscape_5_4: "1536x1024",
-  portrait_4_5: "1024x1536",
-} as const;
+const sizeByGeometry = { square_1_1: "1536x1536", landscape_5_4: "1600x1280", portrait_4_5: "1280x1600" } as const;
 
-function supportsInputFidelity(model: string): boolean {
-  return ["gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"].some((supported) => model === supported || model.startsWith(`${supported}-`));
-}
 
 function errorKind(error: unknown): "transient" | "user_correctable" | "blocked" | "unavailable" {
   if (error instanceof OpenAI.APIError) {
@@ -36,7 +29,7 @@ function providerErrorDetails(error: unknown): { status: number | null; code: st
 
 export class OpenAIImageProvider implements ImageProvider {
   public readonly runtime = "real" as const;
-  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1024x1024", "1536x1024", "1024x1536"] as ["1024x1024", "1536x1024", "1024x1536"] };
+  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1536x1536", "1600x1280", "1280x1600"] as ["1536x1536", "1600x1280", "1280x1600"] };
   private readonly client: OpenAI;
 
   public constructor(client?: OpenAI) {
@@ -50,12 +43,10 @@ export class OpenAIImageProvider implements ImageProvider {
     }
     try {
       const size = sizeByGeometry[request.geometry];
-      const qualityOptions = request.quality === "disabled" ? {} : { quality: request.quality };
-      const fidelityOptions = request.quality !== "disabled" && supportsInputFidelity(request.model)
-        ? { input_fidelity: request.quality }
-        : {};
+      const quality = request.outputControl?.kind === "quality" ? request.outputControl.value : request.quality;
+      const qualityOptions = !quality || quality === "disabled" ? {} : { quality };
       const response = request.operation === "edit"
-        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, ...qualityOptions, ...fidelityOptions })
+        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, ...qualityOptions })
         : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, ...qualityOptions });
       const data = "data" in response && response.data ? response.data[0] : undefined;
       const bytesBase64 = data?.b64_json ?? null;

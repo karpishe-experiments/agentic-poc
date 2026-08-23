@@ -18,10 +18,8 @@
     "test:agent": "tsx scripts/test-agent-fixtures.ts",
     "smoke:agent:real": "tsx scripts/smoke-real-agent.ts",
     "test:e2e": "node --import tsx scripts/run-e2e.ts",
-    "db:setup": "tsx scripts/setup-mongodb.ts",
-    "db:init": "tsx scripts/init-mongodb.ts",
+    "db:reset": "tsx scripts/reset-mongodb.ts",
     "db:verify": "tsx scripts/verify-mongodb.ts",
-    "seed": "tsx db/seed.ts",
     "eval:real": "tsx scripts/eval-real.ts"
   },
   "dependencies": {

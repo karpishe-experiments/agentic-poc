@@ -118,7 +118,7 @@ describe("ArtifactService", () => {
     await expect(artifacts.approve(booklet.id, "audience_profile", second.currentVersion!.id)).resolves.toMatchObject({ state: "approved" });
   });
 
-  it("runs the story-readiness quality gate before approving the Story Plan", async () => {
+  it("approves the Story Plan only after selected quality materialization", async () => {
     const { database, booklets, artifacts } = await createServices({ now: () => Date.UTC(2026, 7, 1, 12, 0, 0) });
     const booklet = await booklets.create({ idea: "A robin shares a watering can." });
     const audienceVersion = await artifacts.revise(booklet.id, "audience_profile", audience);
@@ -148,7 +148,7 @@ describe("ArtifactService", () => {
       action: "approve_and_continue",
     });
 
-    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(1);
+    expect(await createRepositories(database).evidence.countQualityReviews(booklet.id)).toBe(0);
     await expect(artifacts.get(booklet.id, "story_plan")).resolves.toMatchObject({ state: "approved" });
   });
 

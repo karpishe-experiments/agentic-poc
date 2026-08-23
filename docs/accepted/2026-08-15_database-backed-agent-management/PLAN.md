@@ -101,7 +101,7 @@ Runtime resolution performs a database read for the manager immediately before m
 
 ### 3.6 Seed behavior and quality specialist model
 
-`npm run db:init`, not `npm run seed`, inserts stable version-1 defaults:
+`npm run db:reset`, not `npm run db:reset`, inserts stable version-1 defaults:
 
 | Slot | Logical ID suffix | Version ID suffix | Seed model | Reasoning | Max turns | Instruction source |
 | --- | --- | --- | --- | --- | ---: | --- |
@@ -263,7 +263,7 @@ Database uniqueness prevents duplicates; service transactions enforce exact cove
 
 ### 7.2 Initialization behavior
 
-Update the checked-in MongoDB document contracts and named index definitions together. `db:setup` creates or verifies collections and indexes without inserting application records; `db:init` adds exact deterministic runtime-agent defaults and rejects conflicts. Both commands are idempotent and fail before silently changing incompatible resident state.
+Update the checked-in MongoDB document contracts and named index definitions together. `db:reset` destructively recreates collections, indexes, current agents, and visual seed assets before verifying the result.
 
 Automated tests use an isolated in-memory replica set. Operator environments use the configured MongoDB deployment and verify structure, references, and active-agent coverage through `db:verify`.
 
@@ -272,7 +272,7 @@ Initialization must:
 1. create the required collections and named indexes without rewriting or deleting existing records;
 2. insert eight logical definitions, eight active confirmed versions, and the specified create/confirm/activate audit events with fixed IDs and timestamps;
 3. accept exact existing defaults and reject conflicting records;
-4. produce exact manager plus seven-skill coverage without running `npm run seed`; and
+4. produce exact manager plus seven-skill coverage without running `npm run db:reset`; and
 5. fail safely on incompatible indexes or resident records.
 
 `tests/integration/mongodb-foundation.test.ts` proves stable seed contents, idempotent setup, complete unique coverage, incompatible-index rejection, and transaction support against an isolated in-memory replica set.
@@ -316,7 +316,6 @@ type AgentRepository = {
   getAdminSnapshot(): Promise<AgentPersistenceSnapshot>;
   getVersion(id: string): Promise<AgentVersion | null>;
   resolveActiveManager(): Promise<AgentVersion | null>;
-  resolveActiveSpecialist(skillId: SkillId): Promise<AgentVersion | null>;
   resolveCompleteActiveCoverage(): Promise<AgentCoveragePersistenceSnapshot>;
   create(input: CreateAgentRecord): Promise<AgentVersion>;
   updateDraft(input: UpdateAgentDraftRecord): Promise<AgentVersion>;
@@ -349,7 +348,7 @@ The service calculates a deterministic set of coverage violations from the curre
 
 ```ts
 resolveManager(runtimeMode: "fake" | "real"): Promise<ResolvedAgentConfiguration>;
-resolveSpecialist(skillId: SkillId, runtimeMode: "fake" | "real"): Promise<ResolvedAgentConfiguration>;
+prepareCompleteActiveSet(runtimeMode: "fake" | "real"): Promise<PreparedActiveAgentSet>;
 prepareCompleteActiveSet(runtimeMode: "fake" | "real"): Promise<PreparedActiveAgentSet>;
 ```
 
@@ -378,7 +377,7 @@ The real manager factory receives persisted name/instructions/model/reasoning an
 
 ### 9.2 Direct quality review
 
-`QualityService.prepareStoryReadiness` resolves/freezes `quality_review_targeted_repair@1` and returns a typed prepared invocation that `runStoryReadiness` must consume exactly once. The automatic new-Story-Plan path prepares it before artifact persistence. The card-approval path resolves it before mutating the card response and may then execute immediately. Remove the runtime’s `skill`/`review` constructor role and all hard-coded review model/harness lookup. Deterministic generation-readiness and final-page checks remain application-only and do not resolve or record a text agent.
+Story-readiness quality is a normal selected candidate result: the quality specialist runs through its persisted candidate pool, then application-owned materialization records the review and any bounded repair. Deterministic generation-readiness and final-page checks remain application-only.
 
 ### 9.3 Failure behavior
 
@@ -401,7 +400,7 @@ Do not add `agent_configuration_unavailable` to the persisted typed-recovery-car
 
 Remove `OPENAI_MANAGER_MODEL`, `OPENAI_MANAGER_REASONING`, `OPENAI_SKILL_MODEL`, `OPENAI_SKILL_REASONING`, `OPENAI_REVIEW_MODEL`, and `OPENAI_REVIEW_REASONING` from runtime parsing and `.env.example`. They do not override database-backed agent configuration.
 
-`scripts/preflight-env.ts` reads active OpenAI text model IDs from MongoDB, validates them against the code-owned catalog, adds `OPENAI_IMAGE_MODEL`, deduplicates them, and uses authenticated no-generation model lookups. This verifies account access only; catalog validation owns capability compatibility. If collections or coverage are missing, it fails safely with guidance to run `npm run db:setup` and `npm run db:init`, without exposing secrets. `npm run dev` may continue to invoke preflight.
+`scripts/preflight-env.ts` reads active OpenAI text model IDs from MongoDB, validates them against the code-owned catalog, adds selected image-agent profile, deduplicates them, and uses authenticated no-generation model lookups. This verifies account access only; catalog validation owns capability compatibility. If collections or coverage are missing, it fails safely with guidance to run `npm run db:reset`, without exposing secrets. `npm run dev` may continue to invoke preflight.
 
 Update the opt-in real smoke script to resolve the active manager from the database and use the same runtime contract. It remains paid/networked, explicitly gated, and is not required by this PRD’s acceptance run.
 
@@ -486,7 +485,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 
 ### Phase 1 — MongoDB structure and seeded coverage
 
-**Working outcome:** `npm run db:setup` and `npm run db:init` create one active confirmed manager and seven active confirmed skill specialists, and exact repeated initialization succeeds.
+**Working outcome:** `npm run db:reset` create one active confirmed manager and seven active confirmed skill specialists, and exact repeated initialization succeeds.
 
 **Primary files:** `lib/contracts/agents.ts`, MongoDB document/index/setup modules, `db/agent-defaults.ts`, foundation tests, and evidence repository parsing.
 
@@ -505,7 +504,7 @@ Do not modify runtime skill schemas/implementations, artifact transitions, image
 - One manager + seven unique skill slots + one active per logical agent.
 - Default inserts are conflict-safe and idempotent.
 - Seed audit rows have the specified stable IDs, timestamp, action values, actor, and bounded structural metadata.
-- Commands: `npm run db:setup`, `npm run db:init`, `npm run db:verify`, focused foundation tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
+- Commands: `npm run db:reset`, `npm run db:verify`, focused foundation tests, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
 
 **Phase evidence:** collection/index inspection, fresh/repeated initialization assertions, and unchanged booklet runtime behavior.
 
@@ -785,8 +784,8 @@ Focused Playwright assertions also cover keyboard operation, visible focus, long
 
 | Command | Required proof |
 | --- | --- |
-| `npm run db:setup` | Required collections and compatible named indexes exist; exact repeat succeeds. |
-| `npm run db:init` | Deterministic runtime-agent defaults and complete coverage exist; exact repeat succeeds. |
+| `npm run db:reset` | Required collections and compatible named indexes exist; exact repeat succeeds. |
+| `npm run db:reset` | Deterministic runtime-agent defaults and complete coverage exist; exact repeat succeeds. |
 | `npm run db:verify` | Structure, references, assets, and active-agent coverage validate. |
 | Focused Vitest commands | Each phase’s new contracts/services/runtime/UI cases pass. |
 | `npm run typecheck` | Strict TypeScript, Server/Client serialization, and action/runtime contracts pass. |

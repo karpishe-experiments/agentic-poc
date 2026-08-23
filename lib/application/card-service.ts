@@ -6,7 +6,7 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import type { GenerationService } from "@/lib/application/generation-service";
 import { createProgressCard, createRecoveryCard } from "@/lib/application/card-factories";
 import { QualityService } from "@/lib/application/quality-service";
-import { cardResponseSchema, genUICardSchema, type CardResponse, type GenUICard } from "@/lib/contracts/cards";
+import { cardResponseSchema, genUICardSchema,  } from "@/lib/contracts/cards";
 
 type PageGenerationStart = { jobId: string; total: number; reused: boolean; generation: Pick<GenerationService, "startPageJob"> };
 
@@ -28,43 +28,23 @@ export class CardService {
     const parsed = cardResponseSchema.parse(input);
     const card = await this.repositories.conversation.getCard(bookletId, parsed.cardId);
     if (!card) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
-    if (await this.isMissingPageGenerationRecovery(bookletId, card, parsed.action)) {
-      return this.retryMissingPageGeneration(bookletId, parsed);
-    }
-    if (card.family === "artifact_review" && card.variant === "summary" && parsed.action === "approve_and_continue" && card.payload.artifactType === "story_plan") {
-      const readinessAlreadyPassed = card.payload.versionId
-        ? await this.repositories.evidence.hasPassedQualityReview({ bookletId, gate: "story_readiness", artifactVersionId: card.payload.versionId })
-        : false;
-      if (!readinessAlreadyPassed) {
-        const outcome = await this.quality.runStoryReadiness(bookletId);
-        if (outcome.kind === "passed") {
-          // The original Story Plan card was produced outside the normal chat
-          // flow, so this defensive gate is the only needed review.
-        } else {
-          const refreshed = await this.artifacts.get(bookletId, "story_plan");
-          const replacement = outcome.kind === "unresolved"
-            ? outcome.card
-            : {
-              schemaVersion: "1" as const,
-              cardId: randomUUID(),
-              family: "artifact_review" as const,
-              variant: "summary" as const,
-              status: "active" as const,
-              title: "Review the repaired Story Plan",
-              explanation: "One targeted repair was applied. Review this new version before continuing.",
-              allowedActions: ["approve_and_continue" as const, "request_revision" as const],
-              payload: { artifactType: "story_plan" as const, versionId: refreshed.currentVersion?.id ?? null, summary: [{ label: "Status", value: "Targeted repair ready" }] },
-            };
-          await this.repositories.conversation.persistAssistantCard({
-            bookletId,
-            messageId: randomUUID(),
-            narration: outcome.kind === "unresolved" ? "The Story Plan needs your decision before visual development." : "One targeted Story Plan repair is ready for your review.",
-            card: replacement,
-            createdAtMs: Date.now(),
-          });
-          return { kind: "saved" as const, duplicate: false, followupRequired: false, summary: "Story quality requires an updated review.", refreshRequired: true };
-        }
+    if (card.family === "agent_run") {
+      if (card.payload.target.startsWith("image:")) {
+        const service = new (await import("@/lib/application/image-agent-run-service")).ImageAgentRunService({ repositories: this.repositories, onMaterialized: async (ready) => { const generation = this.generation ?? new (await import("@/lib/application/generation-service")).GenerationService({ repositories: this.repositories }); if (ready.target === "reference") await generation.runReferenceJob(bookletId, ready.jobId); else await generation.runPageJob(bookletId, ready.jobId); } });
+        if (parsed.action === "run_agents") return service.start(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "select_agent_result") return service.select(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "retry_failed_agents") return service.retryFailed(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "change_agents") return service.changeAgents(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "restart_with_agents") return service.restart(bookletId, parsed.cardId, parsed);
+      } else {
+        const service = new (await import("@/lib/application/agent-run-service")).AgentRunService({ repositories: this.repositories });
+        if (parsed.action === "run_agents") return service.start(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "select_agent_result") return service.select(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "retry_failed_agents") return service.retryFailed(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "change_agents") return service.changeAgents(bookletId, parsed.cardId, parsed);
+        if (parsed.action === "restart_with_agents") return service.restart(bookletId, parsed.cardId, parsed);
       }
+      throw new RecoverableApplicationError({ code: "execution_action_unsupported", message: "This Agent run action is not available. Reload the card and choose an available action.", status: 409 });
     }
     if (card.family === "artifact_review" && parsed.action === "approve_and_continue" && card.payload.artifactType === "page_plan") {
       const review = await this.quality.reviewGenerationReadiness(bookletId);
@@ -205,50 +185,6 @@ export class CardService {
       createdAtMs: now,
     });
     return { ...result, recoveryCard };
-  }
-
-  /**
-   * Final Pages is owned by the page-generation job, not the manager. If an
-   * earlier Page Plan approval was saved but process work never started, turn
-   * that old generic recovery card into a deterministic job start instead of
-   * sending `finalPages: undefined` through the Final Pages skill again.
-   */
-  private async isMissingPageGenerationRecovery(bookletId: string, card: GenUICard, action: CardResponse["action"]): Promise<boolean> {
-    if (action !== "retry" || card.family !== "issue" || card.variant !== "recovery") return false;
-    if (card.payload.code !== "skill_contract_mismatch" && card.payload.code !== "page_generation_start_failed") return false;
-    const [booklet, pagePlan, finalPages] = await Promise.all([
-      this.repositories.booklets.get(bookletId),
-      this.artifacts.get(bookletId, "page_plan"),
-      this.artifacts.get(bookletId, "final_pages"),
-    ]);
-    return booklet?.currentStage === "final_pages" && pagePlan.state === "approved" && !finalPages.currentVersion;
-  }
-
-  private async retryMissingPageGeneration(bookletId: string, response: CardResponse) {
-    let started: PageGenerationStart;
-    try {
-      started = await this.preparePageGeneration(bookletId);
-    } catch (error) {
-      await this.persistPageGenerationStartFailure(bookletId, error);
-      return {
-        kind: "saved" as const,
-        duplicate: false,
-        followupRequired: false,
-        refreshRequired: true,
-        summary: "Page generation could not start. Your approved Page Plan is still saved.",
-      };
-    }
-    const result = await this.repositories.conversation.submitCardResponse({ bookletId, response, createdAtMs: Date.now() });
-    if (result.kind !== "conflict") {
-      await this.persistPageGenerationProgress(bookletId, started);
-      this.startPageGenerationInTests(bookletId, started);
-    }
-    return {
-      ...result,
-      followupRequired: false,
-      refreshRequired: true,
-      summary: started.reused ? "Page generation is resuming from the saved job." : "Page generation has started from the approved Page Plan.",
-    };
   }
 
   private async preparePageGeneration(bookletId: string): Promise<PageGenerationStart> {

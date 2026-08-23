@@ -18,11 +18,16 @@ function version(overrides: Partial<AgentVersion> & Pick<AgentVersion, "id" | "a
     purpose: "Test deterministic administration behavior.",
     role: "specialist",
     skillId: "intake_readiness@1",
+    imageTarget: null,
     instructions: "Return the required structured result.",
     provider: "openai",
     modelId: "gpt-5.6-terra",
     reasoningEffort: "medium",
     maxTurns: 1,
+    profileId: "openai-specialist",
+    profileVersion: 1,
+    imageQuality: null,
+    imageResolution: null,
     status: "draft",
     isActive: false,
     revision: 1,
@@ -57,6 +62,8 @@ describe("agent admin model", () => {
       "booklet_specification@1": "Booklet Specification",
       "page_planning_writing@1": "Page Planning",
       "image_prompt_compilation@1": "Image Prompts",
+      "image:reference": "Reference Image Agents",
+      "image:page": "Page Image Agents",
     });
   });
 
@@ -101,9 +108,9 @@ describe("agent admin model", () => {
 
   it("exposes exactly the state-valid lifecycle actions", () => {
     const inactiveDraft = version({ id: "00000000-0000-4000-8000-00000000b101", agentId: intakeAgentId });
-    expect(getVersionActionEligibility(inactiveDraft)).toEqual({ fork: true, confirm: true, activate: true, retire: true, deleteDraft: true });
-    expect(getVersionActionEligibility({ ...inactiveDraft, status: "confirmed", isActive: true })).toEqual({ fork: true, confirm: false, activate: false, retire: false, deleteDraft: false });
-    expect(getVersionActionEligibility({ ...inactiveDraft, status: "retired" })).toEqual({ fork: true, confirm: false, activate: false, retire: false, deleteDraft: false });
+    expect(getVersionActionEligibility(inactiveDraft)).toEqual({ fork: true, confirm: true, activate: true, deactivate: false, retire: true, deleteDraft: true });
+    expect(getVersionActionEligibility({ ...inactiveDraft, status: "confirmed", isActive: true })).toEqual({ fork: true, confirm: false, activate: false, deactivate: true, retire: false, deleteDraft: false });
+    expect(getVersionActionEligibility({ ...inactiveDraft, status: "retired" })).toEqual({ fork: true, confirm: false, activate: false, deactivate: false, retire: false, deleteDraft: false });
   });
 
   it("identifies only versions added since mutation submission", () => {

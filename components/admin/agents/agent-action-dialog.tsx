@@ -2,13 +2,13 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { activateAgent, confirmAgent, deleteAgentDraft, forkAgent, retireAgent, type AgentActionState } from "@/app/admin/agents/actions";
+import { activateAgent, confirmAgent, deactivateAgent, deleteAgentDraft, forkAgent, retireAgent, type AgentActionState } from "@/app/admin/agents/actions";
 import type { AgentVersion } from "@/lib/contracts/agents";
 
 const initialAgentActionState: AgentActionState = { kind: "idle", message: "" };
 
-export type MutationKind = "fork" | "confirm" | "activate" | "retire" | "delete";
-type DialogMutationKind = "activate" | "retire" | "delete";
+export type MutationKind = "fork" | "confirm" | "activate" | "deactivate" | "retire" | "delete";
+type DialogMutationKind = "activate" | "deactivate" | "retire" | "delete";
 
 export type MutationDescriptor = {
   kind: MutationKind;
@@ -24,7 +24,7 @@ export type DialogTarget = Omit<MutationDescriptor, "kind"> & {
 };
 
 const directActions = { fork: forkAgent, confirm: confirmAgent } as const;
-const dialogActions = { activate: activateAgent, retire: retireAgent, delete: deleteAgentDraft } as const;
+const dialogActions = { activate: activateAgent, deactivate: deactivateAgent, retire: retireAgent, delete: deleteAgentDraft } as const;
 const directLabels = {
   fork: { idle: "Fork", pending: "Forking…" },
   confirm: { idle: "Confirm", pending: "Confirming…" },
@@ -58,15 +58,24 @@ function dialogCopy(target: DialogTarget) {
     const occupant = target.occupyingVersion && target.occupyingVersion.id !== target.version.id
       ? `${target.occupyingVersion.displayName} version ${target.occupyingVersion.versionNumber}`
       : "the currently empty slot";
+    const replacement = target.version.role === "manager";
     return {
-      title: "Activate Replacement",
-      description: `Activate ${versionName} and replace ${occupant}? This affects future calls only; past evidence keeps its original configuration.`,
-      confirm: "Activate Replacement",
+      title: replacement ? "Activate Replacement" : "Activate Candidate",
+      description: replacement
+        ? `Activate ${versionName} and replace ${occupant}? This affects future calls only; past evidence keeps its original configuration.`
+        : `Activate ${versionName} as an additional candidate for future runs? This affects future calls only; ${target.occupyingVersion ? "existing candidates remain available" : "this currently empty target gains its first active candidate"}, and past evidence keeps its original configuration.`,
+      confirm: replacement ? "Activate Replacement" : "Activate Candidate",
       pending: "Activating…",
       danger: false,
     };
   }
-  if (target.kind === "retire") return {
+  if (target.kind === "deactivate") return {
+    title: "Deactivate Candidate",
+    description: `Deactivate ${versionName} for future runs? This is allowed only while another compatible candidate remains active for the same target.`,
+    confirm: "Deactivate Candidate",
+    pending: "Deactivating…",
+    danger: true,
+  };  if (target.kind === "retire") return {
     title: "Retire Version",
     description: `Retire ${versionName}? It becomes immutable and cannot be activated again.`,
     confirm: "Retire Version",

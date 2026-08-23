@@ -113,7 +113,7 @@ function VisualGallery({ card, bookletId, disabled, refreshWorkspace }: Readonly
     <section aria-label="Review every item before approving" className="grid gap-3 sm:grid-cols-2">
       {card.payload.items.map((item) => {
         const instructionId = `regeneration-instruction-${card.cardId}-${item.assetId}`;
-        const regenerationTarget = item.regenerationTarget ?? (card.payload.artifactType === "final_pages" || card.payload.artifactType === "visual_bible" ? { kind: "asset" as const, assetId: item.assetId } : null);
+        const regenerationTarget = item.regenerationTarget ?? null;
         return <article className="min-w-0 overflow-hidden rounded border border-[var(--border)] p-2 text-sm" key={item.assetId}>
           <button aria-label={`Preview ${item.label}`} className="block w-full rounded focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2" onClick={() => openPreview(item)} type="button">
             <Image alt={item.label} className="h-40 w-full rounded object-cover hover:brightness-95" height={320} loading="lazy" src={`/api/assets/${item.assetId}`} unoptimized width={400} />
@@ -228,6 +228,86 @@ function LiveProgressCard({ card }: Readonly<{ card: ProgressGenUICard }>) {
   </CardFrame>;
 }
 
+function AgentRunCard({ card, bookletId, busy, submitResponse, refreshWorkspace }: CardProps) {
+  const readySelection = card.family === "agent_run" && card.payload.state === "ready" ? card.payload.selectedAgentIds : null;
+  const readyPoolFingerprint = card.family === "agent_run" && card.payload.state === "ready" ? card.payload.poolFingerprint : null;
+  const readyHasStaleSelection = card.family === "agent_run" && card.payload.state === "ready" && card.payload.staleSelectionNotices.length > 0;
+  const selectionKey = readyPoolFingerprint ?? `${card.cardId}:${card.family === "agent_run" ? card.payload.state : "unknown"}`;
+  const defaultSelected = readySelection ?? [];
+  const defaultIsChangingAgents = defaultSelected.length === 0 || readyHasStaleSelection;
+  const [selectionState, setSelectionState] = useState({ key: selectionKey, selected: defaultSelected });
+  const [teamState, setTeamState] = useState({ key: selectionKey, isChangingAgents: defaultIsChangingAgents });
+  const [candidateQuery, setCandidateQuery] = useState("");
+  const [detail, setDetail] = useState<{ itemId: string; text: string } | null>(null);
+  const [previewCandidate, setPreviewCandidate] = useState<{ assetId: string; label: string } | null>(null);
+  const previewDialogRef = useRef<HTMLDialogElement>(null);
+  const selected = selectionState.key === selectionKey ? selectionState.selected : defaultSelected;
+  const isChangingAgents = teamState.key === selectionKey ? teamState.isChangingAgents : defaultIsChangingAgents;
+  const setSelected = (updater: (current: string[]) => string[]) => setSelectionState((current) => ({ key: selectionKey, selected: updater(current.key === selectionKey ? current.selected : defaultSelected) }));
+  const setIsChangingAgents = (value: boolean) => setTeamState({ key: selectionKey, isChangingAgents: value });
+  const isRunning = card.family === "agent_run" && card.payload.state === "running";
+  const soleReadyAgentId = card.family === "agent_run" && card.status === "active" && card.payload.state === "ready" && card.payload.candidates.length === 1 ? card.payload.candidates[0]!.agentId : null;
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = window.setInterval(() => refreshWorkspace?.(), 3_000);
+    return () => window.clearInterval(timer);
+  }, [isRunning, refreshWorkspace]);
+
+  if (card.family !== "agent_run") return null;
+  const disabled = card.status !== "active" || Boolean(busy) || !submitResponse;
+  const normalizedQuery = candidateQuery.trim().toLowerCase();
+  const visibleCandidates = card.payload.candidates.filter((candidate) => !normalizedQuery || `${candidate.displayName} ${candidate.purpose} ${candidate.profileSummary}`.toLowerCase().includes(normalizedQuery));
+  const selectedCandidates = card.payload.candidates.filter((candidate) => selected.includes(candidate.agentId));
+  const canRetryFailed = card.payload.state === "results" && card.payload.items.some((item) => item.status === "failed");
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const runSelected = () => submitResponse?.({ action: "run_agents", value: selected });
+  const showDetails = async (itemId: string) => {
+    if (!bookletId || !card.payload.batchId) return;
+    try {
+      const response = await fetch(`/api/booklets/${bookletId}/agent-runs/${card.payload.batchId}`, { cache: "no-store" });
+      const body = await response.json() as { data?: { items?: Array<{ id: string; canonicalResult: unknown }> }; error?: { message?: string } };
+      const item = body.data?.items?.find((candidate) => candidate.id === itemId);
+      if (!response.ok || !item) throw new Error(body.error?.message ?? "The saved result details are unavailable.");
+      setDetail({ itemId, text: JSON.stringify(item.canonicalResult, null, 2) });
+    } catch (error) {
+      setDetail({ itemId, text: error instanceof Error ? error.message : "The saved result details are unavailable." });
+    }
+  };
+  const showCandidatePreview = (assetId: string, label: string) => { setPreviewCandidate({ assetId, label }); previewDialogRef.current?.showModal(); };
+  const closeCandidatePreview = () => { previewDialogRef.current?.close(); setPreviewCandidate(null); };
+
+  return <CardFrame card={card}>
+    <p aria-live="polite" className="text-sm">{card.payload.state === "running" ? "Agents are working in parallel." : `Agent run: ${card.payload.state}.`}</p>
+    {card.payload.staleSelectionNotices.length ? <ul aria-live="polite" className="mt-3 grid gap-1 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{card.payload.staleSelectionNotices.map((notice) => <li key={notice}>{notice}</li>)}</ul> : null}
+    {card.payload.state === "ready" ? soleReadyAgentId ? <>
+      <p aria-live="polite" className="mt-3 rounded border border-[var(--border)] p-3 text-sm">{card.payload.candidates[0]!.displayName} is the only compatible agent and is preselected.</p>
+      <button className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled} onClick={() => submitResponse?.({ action: "run_agents", value: [soleReadyAgentId] })} type="button">{busy ? "Starting…" : "Run this step"}</button>
+    </> : !isChangingAgents && selectedCandidates.length > 0 ? <>
+      <p className="mt-3 rounded border border-[var(--border)] p-3 text-sm">Saved team: {selectedCandidates.map((candidate) => candidate.displayName).join(", ")}.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="rounded border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled} onClick={() => setIsChangingAgents(true)} type="button">Change agents</button>
+        <button className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled} onClick={runSelected} type="button">{busy ? "Starting…" : "Run this step"}</button>
+      </div>
+    </> : <>
+      <label className="mt-3 block text-sm font-medium">Search agents
+        <input aria-label="Search agents" className="mt-1 w-full rounded border border-[var(--border)] px-2 py-1" disabled={disabled} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="Name, purpose, or profile" type="search" value={candidateQuery} />
+      </label>
+      <div className="mt-3 grid gap-2">{visibleCandidates.map((candidate) => <label className="flex gap-2 rounded border border-[var(--border)] p-2 text-sm" key={candidate.agentId}>
+        <input checked={selected.includes(candidate.agentId)} disabled={disabled || !candidate.eligible} onChange={() => toggle(candidate.agentId)} type="checkbox" />
+        <span><span className="font-medium">{candidate.displayName}</span><span className="block text-[var(--muted-ink)]">{candidate.purpose} · {candidate.profileSummary}</span>{candidate.notice ? <span className="block text-amber-800">{candidate.notice}</span> : null}</span>
+      </label>)}</div>
+      {visibleCandidates.length === 0 ? <p className="mt-2 text-sm text-[var(--muted-ink)]">No compatible agents match this search.</p> : null}
+      <p className="mt-2 text-sm text-[var(--muted-ink)]">{selected.length} {selected.length === 1 ? "agent" : "agents"} selected. Selected agents run concurrently. Choose at least one valid candidate. Fake-mode runs are free; real-provider cost estimates are recorded in the selected result evidence.</p>
+      <button className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled || selected.length === 0} onClick={runSelected} type="button">{busy ? "Starting…" : "Run this step"}</button>
+    </> : null}
+    {card.payload.items.length ? <ul className="mt-3 grid gap-2">{card.payload.items.map((item) => <li className="rounded border border-[var(--border)] p-2 text-sm" key={item.itemId}><span className="font-medium">{item.displayName}</span> — {item.status}{item.summary ? <p>{item.summary}</p> : null}{item.summary && card.payload.batchId && bookletId ? <button className="mt-2 block rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" onClick={() => void showDetails(item.itemId)} type="button">{detail?.itemId === item.itemId ? "Refresh details" : "View details"}</button> : null}{item.candidateAssetId ? <button className="mt-2 block rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" onClick={() => showCandidatePreview(item.candidateAssetId!, item.displayName)} type="button">Preview image</button> : null}{detail?.itemId === item.itemId ? <pre className="mt-2 max-h-56 overflow-auto rounded bg-[#fffaf2] p-2 text-xs whitespace-pre-wrap">{detail.text}</pre> : null}{item.safeError ? <p role="alert" className="text-red-700">{item.safeError}</p> : null}{card.payload.state === "results" && item.status === "succeeded" ? <button className="mt-2 rounded border border-[var(--accent)] px-2 py-1 font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "select_agent_result", value: item.itemId })} type="button">Use this result</button> : null}</li>)}</ul> : null}
+    <dialog aria-label={previewCandidate ? `${previewCandidate.label} preview` : "Image preview"} className="m-auto max-h-[90vh] w-[min(94vw,72rem)] overscroll-contain rounded-2xl border border-[var(--border)] bg-white p-4 shadow-2xl backdrop:bg-black/70" onClick={(event) => { if (event.target === event.currentTarget) closeCandidatePreview(); }} onClose={() => setPreviewCandidate(null)} ref={previewDialogRef}>
+      {previewCandidate ? <div className="grid max-h-[85vh] gap-3 overflow-auto"><div className="flex items-center justify-between gap-3"><h4 className="text-lg font-semibold">{previewCandidate.label}</h4><button className="rounded-lg border border-[var(--accent)] px-3 py-2 font-semibold text-[var(--accent)]" onClick={closeCandidatePreview} type="button">Close Preview</button></div><Image alt={previewCandidate.label} className="max-h-[76vh] h-auto w-full rounded-lg object-contain" height={1600} src={`/api/assets/${previewCandidate.assetId}`} unoptimized width={1600} /></div> : null}
+    </dialog>
+    {card.payload.state === "results" ? <div className="mt-3 flex gap-2">{canRetryFailed ? <button className="rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "retry_failed_agents" })} type="button">Retry failed</button> : null}<button className="rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "change_agents" })} type="button">Change agents</button></div> : null}
+    {card.payload.state === "completed" ? <button className="mt-3 rounded border border-[var(--accent)] px-2 py-1 text-sm font-semibold text-[var(--accent)]" disabled={disabled} onClick={() => submitResponse?.({ action: "restart_with_agents" })} type="button">Restart with agents</button> : null}
+  </CardFrame>;
+}
 function IssueCard({ card, busy, submitResponse }: CardProps) {
   if (card.family !== "issue") return null;
   const disabled = card.status !== "active" || !submitResponse || busy;
@@ -238,7 +318,7 @@ function IssueCard({ card, busy, submitResponse }: CardProps) {
   return <CardFrame card={card}><p className="text-sm">{card.payload.summary}</p>{card.payload.details.length ? <ul className="mt-2 list-disc pl-5 text-sm">{card.payload.details.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}<div className="mt-3 flex flex-wrap gap-2">{card.allowedActions.map((action) => <button className="rounded-lg border border-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50" disabled={disabled} key={action} onClick={() => submitResponse?.({ action })} type="button">{busy ? "Saving…" : actionLabel(action)}</button>)}</div></CardFrame>;
 }
 
-type CardKey = "question:free_text" | "question:single_select" | "question:multi_select" | "artifact_review:summary" | "artifact_review:editable_form" | "artifact_review:visual_gallery" | "progress:artifact_generation" | "progress:page_batch" | "progress:export" | "issue:quality" | "issue:generation_failure" | "issue:validation_failure" | "issue:recovery";
+type CardKey = "agent_run:parallel_execution" | "question:free_text" | "question:single_select" | "question:multi_select" | "artifact_review:summary" | "artifact_review:editable_form" | "artifact_review:visual_gallery" | "progress:artifact_generation" | "progress:page_batch" | "progress:export" | "issue:quality" | "issue:generation_failure" | "issue:validation_failure" | "issue:recovery";
 
 const registry: Record<CardKey, CardComponent> = {
   "question:free_text": QuestionCard,
@@ -250,6 +330,7 @@ const registry: Record<CardKey, CardComponent> = {
   "progress:artifact_generation": ProgressCard,
   "progress:page_batch": ProgressCard,
   "progress:export": ProgressCard,
+  "agent_run:parallel_execution": AgentRunCard,
   "issue:quality": IssueCard,
   "issue:generation_failure": IssueCard,
   "issue:validation_failure": IssueCard,

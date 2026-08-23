@@ -1,12 +1,13 @@
 import type { AgentDefinition, AgentVersion } from "@/lib/contracts/agents";
 import type { SkillId } from "@/lib/contracts/skills";
 
-export type SlotKey = "manager" | SkillId;
+export type SlotKey = "manager" | SkillId | "image:reference" | "image:page";
 
 export type AgentCoverageView = {
   key: SlotKey;
-  role: "manager" | "specialist";
+  role: "manager" | "specialist" | "image";
   skillId: SkillId | null;
+  imageTarget?: "reference" | "page" | null;
   activeVersionId: string | null;
   violation: string | null;
 };
@@ -36,6 +37,7 @@ export type VersionActionEligibility = {
   fork: boolean;
   confirm: boolean;
   activate: boolean;
+  deactivate: boolean;
   retire: boolean;
   deleteDraft: boolean;
 };
@@ -49,10 +51,14 @@ export const SLOT_LABELS: Record<SlotKey, string> = {
   "booklet_specification@1": "Booklet Specification",
   "page_planning_writing@1": "Page Planning",
   "image_prompt_compilation@1": "Image Prompts",
+  "image:reference": "Reference Image Agents",
+  "image:page": "Page Image Agents",
 };
 
-export function slotKeyForVersion(version: Pick<AgentVersion, "role" | "skillId">): SlotKey {
-  return version.role === "manager" ? "manager" : version.skillId!;
+export function slotKeyForVersion(version: Pick<AgentVersion, "role" | "skillId" | "imageTarget">): SlotKey {
+  if (version.role === "manager") return "manager";
+  if (version.role === "image") return `image:${version.imageTarget!}` as SlotKey;
+  return version.skillId!;
 }
 
 export function versionBelongsToSlot(version: AgentVersion, slotKey: SlotKey): boolean {
@@ -66,6 +72,7 @@ export function getVersionActionEligibility(version: AgentVersion): VersionActio
     fork: true,
     confirm: version.status === "draft",
     activate: inactive && nonRetired,
+    deactivate: version.isActive && version.role !== "manager" && nonRetired,
     retire: inactive && nonRetired,
     deleteDraft: inactive && version.status === "draft",
   };

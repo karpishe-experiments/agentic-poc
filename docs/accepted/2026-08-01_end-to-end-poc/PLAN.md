@@ -548,7 +548,7 @@ Repositories expose domain objects, never MongoDB documents or driver clients.
 `-- evidence/prompts/<call-id>.txt
 ```
 
-Checked-in seed source files live under `seeds/`. `npm run seed` copies styles/fonts idempotently to `_seed/...` under `DATA_ROOT`, creates nullable-booklet asset records, and inserts the read-only style catalog. All UI and generated booklet assets are served only through `/api/assets/[assetId]`; never expose `DATA_ROOT` through `public` or accept filesystem paths from the client.
+Checked-in seed source files live under `seeds/`. `npm run db:reset` copies styles/fonts idempotently to `_seed/...` under `DATA_ROOT`, creates nullable-booklet asset records, and inserts the read-only style catalog. All UI and generated booklet assets are served only through `/api/assets/[assetId]`; never expose `DATA_ROOT` through `public` or accept filesystem paths from the client.
 
 ## 10. Public Zod contracts
 
@@ -809,7 +809,7 @@ interface ImageProvider {
 
 The OpenAI adapter:
 
-- Uses the official `openai` package and configured `OPENAI_IMAGE_MODEL`.
+- Uses the official `openai` package and selected image-agent profile.
 - Calls the Images API `generate` only when the normalized request has no input images. It calls `edit` whenever the request contains canonical/style references or an edit target, including reference-driven first generation and targeted revision.
 - Serializes the provider-neutral prompt plan inside the adapter.
 - Converts relevant `AssetStore` assets to the SDK's accepted upload/input form without exposing paths outside the adapter.
@@ -980,8 +980,6 @@ OPENAI_SKILL_MODEL=gpt-5.6-terra
 OPENAI_SKILL_REASONING=medium
 OPENAI_REVIEW_MODEL=gpt-5.6-sol
 OPENAI_REVIEW_REASONING=medium
-OPENAI_IMAGE_MODEL=gpt-image-2
-OPENAI_IMAGE_QUALITY=disabled
 MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0
 MONGODB_DATABASE=kids_booklet
 DATA_ROOT=./data/assets
@@ -1053,7 +1051,7 @@ Implement `/help` as a small application-owned page containing the same user-vis
 Replace the placeholder root README setup section with verified instructions covering:
 
 - Requirements: Node 24 recommended/22 minimum, npm, OpenAI account/key, and Poppler required for final PDF verification.
-- Clone/checkout, `.env.local`, `npm install`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run preflight`, `npm run dev`.
+- Clone/checkout, `.env.local`, `npm install`, `npm run db:reset`, `npm run db:reset`, `npm run preflight`, `npm run dev`.
 - Local URL and first-book workflow.
 - Required scripts and what uses fake versus real providers.
 - Local `data/`, retained evaluations, and reset behavior (manual removal only, explicitly destructive and never automated).
@@ -1100,7 +1098,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 **Actions and files**
 
 - [x] Scaffolded root `package.json`, exact dependencies, lockfile, `tsconfig.json`, Next/Tailwind/PostCSS/ESLint/Vitest/Playwright configs, `components.json`, and app shell without modifying `prototype/`.
-- [x] Added required npm scripts: `preflight`, `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:setup`, `db:init`, `db:verify`, `seed`, and `eval:real`.
+- [x] Added required npm scripts: `preflight`, `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:agent`, `test:e2e`, `db:reset`, `db:verify`, `seed`, and `eval:real`.
 - [x] Added `.env.example`, Zod server configuration, `.gitignore`, `scripts/preflight-env.ts`, and an explicit Next-only server configuration boundary.
 - [x] Added the MongoDB driver, document/index definitions, setup/initialization commands, repository interfaces, filesystem AssetStore, and a safe temporary test-data-root helper.
 - [x] Generated and checked in the three accepted style images, recorded prompts/provenance, and seeded their records plus Nunito files, license, and metadata. The seed command makes no provider call.
@@ -1114,7 +1112,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **PRD coverage:** technical stack and hosting boundaries; DATA-001, DATA-002, DATA-006, DATA-011, DATA-012; deliverables 1-2 and required script names.
 
-**Commands:** `npm install`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run start` smoke check.
+**Commands:** `npm install`, `npm run db:reset`, `npm run db:reset`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run start` smoke check.
 
 **Evidence:** P0 and Slice 0 verification passed: safe model preflight; MongoDB structure/initialization verification; idempotent seed with three visual styles and Nunito metadata; typecheck; lint; unit tests; agent-fixture command; production build; and `next start` smoke responses of 200 for Home and Help. In this host the commands used `npm.cmd` because PowerShell blocked `npm.ps1`.
 
@@ -1143,7 +1141,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **PRD coverage:** FR-001 through FR-008, GUI-010, DATA-003 through DATA-007, DATA-011 through DATA-013, JOB-006.
 
-**Commands:** `npm run db:setup`, `npm run db:init`, `npm run db:verify`, `npm run typecheck`, `npm run lint`, `npm test -- tests/integration/booklets.test.ts tests/integration/workspace-resume.test.ts`, `npm run build`.
+**Commands:** `npm run db:reset`, `npm run db:verify`, `npm run typecheck`, `npm run lint`, `npm test -- tests/integration/booklets.test.ts tests/integration/workspace-resume.test.ts`, `npm run build`.
 
 **Evidence:** create two booklets, Home ordering/status screenshot, deep-link/reload returning to selected artifact.
 
@@ -1369,7 +1367,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **PRD coverage:** all UX principles, FR-001 through FR-049 browser-relevant paths, GUI-001 through GUI-012, AC-001 through AC-012, deliverables 9-10.
 
-**Commands:** fresh `npm install`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`; manually follow README quick start.
+**Commands:** fresh `npm install`, `npm run db:reset`, `npm run db:reset`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`; manually follow README quick start.
 
 **Evidence:** Playwright trace/screenshots/downloaded PDF under `output/playwright`, restart/resume proof, README command transcript, Help screenshots.
 
@@ -1402,7 +1400,7 @@ The implementation agent maintains the checkboxes in this section. A slice is co
 
 **PRD coverage:** completion criteria, deliverable 11, evaluation section, all ACs.
 
-**Commands:** `npm ci`, `npm run db:setup`, `npm run db:init`, `npm run seed`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`, `npm run eval:real -- --fixture early-reader`, `... developing-reader`, `... older-reader`; PDF render/inspection commands from README.
+**Commands:** `npm ci`, `npm run db:reset`, `npm run db:reset`, `npm run db:verify`, `npm run preflight`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:agent`, `npm run build`, `npm run test:e2e`, `npm run eval:real -- --fixture early-reader`, `... developing-reader`, `... older-reader`; PDF render/inspection commands from README.
 
 **Evidence:** three PDFs and non-secret run directories, rubric results with no unresolved critical defect, trace/cost reconciliation, complete automated command report.
 
@@ -1521,7 +1519,7 @@ A critical defect is any blocked completion/download, missing/duplicate page, un
 | `test` | Vitest unit/integration tests with fake providers; no paid calls. |
 | `test:agent` | Small fixture runner in deterministic fake mode by default; explicit opt-in flag for real comparison. |
 | `test:e2e` | Playwright desktop Chromium golden path with isolated fake-provider server/data. |
-| `db:setup`, `db:init`, `db:verify` | Create and verify MongoDB collections/indexes, seed deterministic defaults, and validate integrity. |
+| `db:reset`, `db:verify` | Create and verify MongoDB collections/indexes, seed deterministic defaults, and validate integrity. |
 | `seed` | Idempotently register checked-in styles/fonts; no provider call. |
 | `eval:real` | Require preflight and one named evaluation fixture, then use real providers and retain evidence. |
 

@@ -16,6 +16,11 @@ export const cardActionSchema = z.enum([
   "start_generation",
   "retry_item",
   "download",
+  "run_agents",
+  "select_agent_result",
+  "retry_failed_agents",
+  "change_agents",
+  "restart_with_agents",
 ]);
 
 const baseCardSchema = z.object({
@@ -120,6 +125,18 @@ const progressCardSchema = baseCardSchema.extend({
   }).refine(({ completed, total }) => completed <= total, { message: "completed must not exceed total", path: ["completed"] }),
 });
 
+const agentRunCardSchema = baseCardSchema.extend({
+  family: z.literal("agent_run"),
+  variant: z.literal("parallel_execution"),
+  payload: z.object({
+    revision: z.number().int().positive(), target: z.string().min(1).max(180), subjectLabel: z.string().min(1).max(240), state: z.enum(["ready", "running", "results", "completed"]), batchId: opaqueIdSchema.nullable(), poolFingerprint: z.string().min(1).nullable(),
+    candidates: z.array(z.object({ agentId: opaqueIdSchema, agentVersionId: opaqueIdSchema.optional(), displayName: z.string().min(1).max(120), purpose: z.string().min(1).max(500), profileSummary: z.string().min(1).max(240), eligible: z.boolean(), notice: z.string().max(500).optional() })).max(64),
+    selectedAgentIds: z.array(opaqueIdSchema).max(64), staleSelectionNotices: z.array(z.string().min(1).max(500)).max(16).default([]),
+    items: z.array(z.object({ itemId: opaqueIdSchema, agentId: opaqueIdSchema, displayName: z.string().min(1).max(120), status: z.enum(["queued", "running", "succeeded", "failed"]), elapsedMs: z.number().int().nonnegative(), attemptCount: z.number().int().nonnegative(), summary: z.string().max(1_000).nullable(), safeError: z.string().max(500).nullable(), candidateAssetId: opaqueIdSchema.nullable() })).max(64).default([]),
+    selectedItemId: opaqueIdSchema.nullable(), selectionMode: z.enum(["implicit_sole", "explicit"]).nullable(), history: z.array(z.object({ batchId: opaqueIdSchema, state: z.enum(["results", "completed"]), selectedAgentName: z.string().nullable() })).max(12).default([]),
+  }),
+});
+
 const issueCardSchema = baseCardSchema.extend({
   family: z.literal("issue"),
   variant: z.enum(["quality", "generation_failure", "validation_failure", "recovery"]),
@@ -137,6 +154,7 @@ export const genUICardSchema = z.union([
   editableFormCardSchema,
   visualGalleryCardSchema,
   progressCardSchema,
+  agentRunCardSchema,
   issueCardSchema,
 ]);
 
@@ -164,6 +182,19 @@ export function validateCardResponseValue(card: GenUICard, response: CardRespons
   if (response.revisionInstruction !== undefined) {
     throw new z.ZodError([{ code: "custom", path: ["revisionInstruction"], message: "Only revision requests accept an instruction." }]);
   }
+  if (card.family === "agent_run") {
+    if (response.action === "run_agents") {
+      const selected = z.array(opaqueIdSchema).min(1).max(64).parse(response.value);
+      const eligible = new Set(card.payload.candidates.filter((candidate) => candidate.eligible).map((candidate) => candidate.agentId));
+      if (new Set(selected).size !== selected.length || selected.some((agentId) => !eligible.has(agentId))) {
+        throw new z.ZodError([{ code: "custom", path: ["value"], message: "Choose one or more displayed eligible agents." }]);
+      }
+      return { ...response, value: selected };
+    }
+    if (response.action === "select_agent_result") return { ...response, value: opaqueIdSchema.parse(response.value) };
+    if (["retry_failed_agents", "change_agents", "restart_with_agents"].includes(response.action)) { if (response.value !== undefined) throw new z.ZodError([{ code: "custom", path: ["value"], message: "This action does not accept an additional value." }]); return response; }
+  }
+
   if (card.family === "question") {
     if (card.variant === "free_text") {
       const value = z.string().trim()

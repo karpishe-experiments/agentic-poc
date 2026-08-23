@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { createMongoDatabase } from "@/db/client";
 import { seedVisualAssets } from "@/db/seed";
@@ -16,9 +17,21 @@ await setupMongoStructure(database);
 await seedDefaultAgents(database);
 await seedVisualAssets(database, process.env.DATA_ROOT);
 await database.close();
-const port = process.env.E2E_PORT ?? "3001";
-const baseUrl = `http://127.0.0.1:${port}`;
 
+async function reservePort(): Promise<string> {
+  const reservation = createServer();
+  return await new Promise((resolve, reject) => {
+    reservation.once("error", reject);
+    reservation.listen(0, "127.0.0.1", () => {
+      const address = reservation.address();
+      if (!address || typeof address === "string") { reject(new Error("Could not reserve an E2E port.")); return; }
+      reservation.close((error) => error ? reject(error) : resolve(String(address.port)));
+    });
+  });
+}
+
+const port = process.env.E2E_PORT ?? await reservePort();
+const baseUrl = `http://127.0.0.1:${port}`;
 const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--port", port], { env: process.env, stdio: "inherit" });
 
 function stopServer(): void {
@@ -53,6 +66,4 @@ try {
   stopServer();
   await replicaSet.stop();
 }
-// The tsx loader holds a worker handle under Node 24. The isolated server and
-// Playwright child have both exited at this point, so terminate deterministically.
 process.exit(exitCode);

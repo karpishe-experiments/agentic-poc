@@ -30,7 +30,7 @@ export class ArtifactService {
     return detail;
   }
 
-  public async revise(bookletId: string, artifactType: ArtifactType, content: unknown, options: { createdBy?: "agent" | "user_edit" | "repair" | "application" } = {}): Promise<ArtifactDetail> {
+  public async revise(bookletId: string, artifactType: ArtifactType, content: unknown, options: { createdBy?: "agent" | "user_edit" | "repair" | "application"; sourceExecutionBatchId?: string | null } = {}): Promise<ArtifactDetail> {
     const parsedContent = parseArtifactDocument(artifactType, content);
     const artifactSummaries = await this.repositories.artifacts.listByBooklet(bookletId);
     if (artifactSummaries.length !== BOOKLET_ARTIFACT_TYPES.length) {
@@ -52,6 +52,7 @@ export class ArtifactService {
       content: parsedContent,
       dependencyVersionIds: upstreamDetails.map(([, detail]) => detail.currentVersion!.id),
       createdBy: options.createdBy ?? "user_edit",
+      sourceExecutionBatchId: options.sourceExecutionBatchId ?? null,
       createdAtMs: Date.now(),
     });
     await this.refreshDerivedStage(bookletId);

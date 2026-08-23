@@ -17,6 +17,7 @@ export default defineConfig({
     globalSetup: ["./tests/global-mongodb.ts"],
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    maxWorkers: 4,
+    // MongoDB/Sharp workflow tests coordinate in-process job polling; serial files keep timing assertions deterministic on constrained local hosts.
+    maxWorkers: 1,
   },
 });

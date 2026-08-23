@@ -42,6 +42,7 @@ export type GenerationDiagnostic = {
   providerRequestId?: string | null;
   error?: SafeErrorDetails;
   recoveredItems?: number;
+  recoveredExecutionBatches?: number;
 };
 
 type DiagnosticInput = Omit<GenerationDiagnostic, "at" | "processId">;

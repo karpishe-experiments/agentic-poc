@@ -3,9 +3,9 @@ import { imageRequestSchema, imageResultSchema, type ImageRequest, type ImageRes
 import type { ImageProvider } from "@/lib/images/provider";
 
 const dimensionsByGeometry = {
-  square_1_1: { width: 1024, height: 1024 },
-  landscape_5_4: { width: 1536, height: 1024 },
-  portrait_4_5: { width: 1024, height: 1536 },
+  square_1_1: { width: 1536, height: 1536 },
+  landscape_5_4: { width: 1600, height: 1280 },
+  portrait_4_5: { width: 1280, height: 1600 },
 } as const;
 
 async function placeholderImage(input: { width: number; height: number; edited: boolean }): Promise<Buffer> {
@@ -25,7 +25,7 @@ async function placeholderImage(input: { width: number; height: number; edited: 
 
 export class FakeImageProvider implements ImageProvider {
   public readonly runtime = "fake" as const;
-  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1024x1024", "1536x1024", "1024x1536"] as ["1024x1024", "1536x1024", "1024x1536"] };
+  public readonly capabilities = { provider: "openai" as const, supportsEdit: true, maxReferenceImages: 8, supportedSizes: ["1536x1536", "1600x1280", "1280x1600"] as ["1536x1536", "1600x1280", "1280x1600"] };
 
   public async execute(input: ImageRequest): Promise<ImageResult> {
     const request = imageRequestSchema.parse(input);

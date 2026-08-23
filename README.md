@@ -41,7 +41,7 @@ On macOS or Linux, use `cp .env.example .env.local` instead of `Copy-Item`.
 
 If your PowerShell execution policy blocks `npm.ps1`, invoke the equivalent commands with `npm.cmd`, for example `npm.cmd run typecheck`.
 
-For real images during interactive development, set `IMAGE_PROVIDER_MODE=real`; use `fake` for deterministic no-cost placeholders. Image quality is configured independently with `OPENAI_IMAGE_QUALITY=disabled|low|high`. `disabled` uses provider defaults, while `low` or `high` applies that output quality to every reference and page. Restart the development server after changing these values.
+Set `IMAGE_PROVIDER_MODE=real` to execute the selected image agent profiles, or `fake` for deterministic no-cost placeholders. Provider, model, quality, and resolution are frozen on the selected image-agent profile; change them by creating and activating an agent draft. Restart the development server after changing runtime mode.
 
 ### Local development recovery
 
@@ -51,17 +51,14 @@ For MongoDB connection failures, check the Atlas IP access list, database-user c
 
 For an Atlas `mongodb+srv://` URI, `MONGODB_DATABASE` is a logical database name such as `kids_booklet`, not the Atlas hostname. If Node times out resolving the Atlas SRV record while the individual cluster hosts resolve, use the standard `mongodb://` driver connection string supplied by Atlas.
 
-## Initialize a new database
+## Reset the local POC baseline
 
-This is a maintainer task and is not part of normal developer setup. After pointing `.env.local` at a new MongoDB database, run:
+`db:reset` is the only initialization workflow. It drops every collection in the configured application database, deletes generated contents below the configured `DATA_ROOT`, recreates current indexes, seeds ten current agents and bundled visual assets, then verifies the result. It is deliberately destructive.
 
 ```powershell
-npm run db:init
-npm run seed
+npm run db:reset
 npm run db:verify
 ```
-
-`db:init` creates the required structure and default runtime agents; `seed` registers the bundled visual styles and font assets; `db:verify` validates the resulting data. These commands are safe to repeat and reject incompatible indexes or conflicting deterministic seed records.
 
 ## Commands
 
@@ -71,8 +68,7 @@ npm run db:verify
 | `dev`, `build`, `start` | Run the Next.js application. |
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
 | `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
-| `db:setup`, `db:init`, `db:verify` | Create/verify MongoDB structure, seed defaults, and validate integrity. |
-| `seed` | Idempotently register checked-in visual assets in MongoDB. |
+| `db:reset`, `db:verify` | Destructively recreate the current MongoDB/data-root baseline, then validate it. |
 | `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
 Automated commands never make paid model or image calls. The workspace defaults to deterministic fake model and image providers; real-provider work is limited to the explicit evaluation workflow. The workspace exposes an Evidence JSON link for the selected booklet, and each successful PDF export persists the same summary under the local data root.
@@ -103,10 +99,11 @@ The application uses an application-controlled agent handoff: a stage-filtered m
 `/admin/agents` is an unauthenticated, trusted-local-only backoffice. Its slot rail shows the required manager plus seven specialist slots; selecting a slot opens a focused read-only workspace for its logical agents, version history, technical details, and valid lifecycle actions. Use **New Agent** for a blank inactive draft or **Edit Draft** for deliberate changes, then confirm and activate a reviewed replacement. Destructive actions stay in the workspace’s Danger Zone. On narrow screens, the complete slot rail stacks above the workspace. Do not expose this page on a network.
 
 Text-agent instructions and model settings are versioned MongoDB data; `OPENAI_MANAGER_*`, `OPENAI_SKILL_*`, and `OPENAI_REVIEW_*` environment overrides are intentionally unsupported. Every manager, specialist, and Story Plan quality call records the resolved definition/version and immutable configuration snapshot in booklet Evidence JSON.
+For a target with multiple compatible active candidates, the creator gets one persisted **Choose agents** card: search/select a non-empty team, run it concurrently, then choose one successful result before the application changes an artifact or active image. The selected team is remembered per booklet and target; **Change agents**, retry, and restart retain earlier run history. A sole valid candidate runs and selects automatically. Fake mode is no-cost; real-provider estimates appear in evidence.
 
 ## Local data and project references
 
-Database state lives in MongoDB. Filesystem assets remain under `data/` and are intentionally Git-ignored. Removing either is destructive and is never automated by this project. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
+Database state lives in MongoDB. Filesystem assets remain under `data/` and are intentionally Git-ignored. `npm run db:reset` deliberately removes both configured POC stores before recreating them. The root app is configured for a later standalone Node/container path, but deployment is not part of the POC.
 
 - [Experiment brief](docs/experiment-brief.md)
 - [Current architecture](docs/architecture.md)
