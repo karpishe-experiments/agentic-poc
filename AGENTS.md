@@ -71,6 +71,41 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 - If the required GitHub capability is unavailable through MCP, fall back to the `gh` CLI.
 - Use the `git` CLI for basic local repository operations such as status, diff, branch, add, commit, log, and push; do not route basic Git operations through GitHub MCP.
 - Run all Git and GitHub operations outside the sandbox because repository metadata access and remote operations may require permissions or network access. Request the necessary escalation when the execution environment requires approval.
+- If the current branch matches the case-sensitive pattern `personal/*`, keep all work on that branch. Do not ask to create or switch branches, and do not create or switch branches unless the user explicitly requests it.
+- The canonical list of explicitly identified non-technical GitHub collaborators is `@Mehdi-varm`. Do not infer that another collaborator is non-technical from writing, behavior, or task content. Update this list when collaborator responsibilities change.
+- Activate cautious Git confirmation immediately when the current branch matches `personal/*`; identity resolution is not required for this trigger.
+- On a non-`personal/*` branch, activate cautious Git confirmation when explicit conversation, task, or repository context identifies the current user in the canonical non-technical collaborator list.
+- During legal-document work, use identity lookup only when explicit conversation, task, or repository context indicates that the current user may be in the canonical non-technical collaborator list but does not provide an exact identity. Resolve identity from the current-viewer identity in the configured GitHub MCP capability and then the authenticated identity from `gh api user`. If these sources are unavailable or conflict, ask once for the user's GitHub handle before a branch or commit action. Do not infer the identity.
+- For every other collaborator on a non-`personal/*` branch, use the standard repository workflow without identity lookup or extra branch or commit confirmation. The general safety, sensitive-material, and large-file rules still apply.
+- When cautious Git confirmation is active:
+  - On `personal/*`, the user must explicitly request any branch create, switch, rename, or delete action. That request is approval for the specified action; do not ask twice.
+  - For a listed collaborator on another branch, explain a proposed branch create, switch, rename, or delete action and get explicit approval before performing it. An explicit request for that action in the current conversation is approval; do not ask twice.
+  - Before creating or amending a commit, show the complete proposed file list and a concise explanation of the commit. Get approval for that exact file set. If the file set or commit scope changes, get approval again.
+  - Ordinary staging and pushing may continue within the approved workflow without another prompt. Stop if another safeguard detects unexpected files, conflicts, generated output, binaries, or a large-file threshold.
+- Before staging, committing, or pushing, inspect the files in the proposed commit. Do not stage, commit, or push until the user gives explicit approval if it includes any of the following:
+  - More than five photo or image files.
+  - Any video file.
+  - A PDF larger than 2 MiB (2,097,152 bytes).
+  - Ten or more non-code files that appear to come from a pasted folder or unintended file generation.
+- For these files, warn the user. Recommend that they upload the files to external storage and provide the URL in this chat. If the files are unintended, recommend that they delete them or explicitly add them to `.gitignore` instead of committing them.
+
+### Retained uploads and archives
+
+- If the user explicitly asks to keep an uploaded file but does not specify a destination, store it in the nearest relevant `archive/` directory. For example, use `docs/legal/archive/` for legal material. Use the repository-root `archive/` only when no relevant project area exists.
+- Track only small, safe, non-sensitive files in an archive. Confidential, privileged, personal, regulated, or credential-bearing files must remain outside Git.
+- If uploaded media has an existing online source, prefer a Markdown link record in the contextual archive instead of another binary copy. Include a short description and the source URL. Do not download the online resource unless the user explicitly requests it.
+- If media has no online source and does not trigger an existing large-file approval threshold, it may be retained in the contextual archive.
+
+### Documentation-only collaborators
+
+- This section does not change the standard workflow for technical collaborators on non-`personal/*` branches.
+- For `@Mehdi-varm`, limit changes to `docs/legal/` unless the user explicitly requests a different scope.
+- Do not request, disclose, create, or modify `.env.local`, API keys, MongoDB credentials, or shared application data for documentation work.
+- Do not run `npm run db:reset`, `npm run eval:real`, paid model or image calls, or destructive recovery commands for documentation work.
+- Stop and ask a repository administrator for help if the change includes a merge conflict, an unexpected file, generated output, or a binary file.
+- On `personal/*`, follow the user-owned branch rule. Otherwise, use a task branch and a pull request. Do not push directly to `master`, and do not merge the collaborator's own pull request.
+- Keep confidential, privileged, personal, and regulated source material outside GitHub. Store it in approved access-controlled storage and commit only a sanitized summary or safe link.
+- Follow these rules even when GitHub does not enforce them. Repository administrators can use `docs/repository-setup-guide.md` to configure enforcement later.
 
 ## Implementation planning
 
@@ -96,6 +131,7 @@ For the Kids Booklet POC, `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md` rema
 - Preserve unrelated user work and avoid broad refactors unless the approved plan requires them.
 - Keep explanations of non-obvious behavior close to the implementation. Do not create post-experiment reports unless requested.
 - For generative UI, make agent state visible, actions understandable, errors recoverable, and fallback behavior deterministic where practical.
+- Store legal and legal-research documentation in `docs/legal/`.
 
 ## Verification
 
