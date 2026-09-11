@@ -298,7 +298,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | Checkpoint | Status | Validation/evidence | Remaining defects |
 | --- | --- | --- | --- |
 | 1 | Complete | `npm run typecheck`; `npm run test:mockup` (6); `npm run test:mockup:e2e` (1); two consecutive independent reviews passed | None |
-| 2 | Not started | — | — |
+| 2 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup`; `npm run test:mockup:e2e` (3); two consecutive independent reviews passed | None |
 | 3 | Not started | — | — |
 | 4 | Not started | — | — |
 | 5 | Not started | — | — |
