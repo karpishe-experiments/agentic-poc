@@ -1,6 +1,8 @@
 "use client";
+import { useState } from "react";
 import { FileText, Plus, Settings2, Trash2 } from "lucide-react";
 import { MarkdownEditor } from "./markdown-editor";
+import { SampleResultDialog } from "./sample-result-dialog";
 import type {
   AgentVersion,
   MockupState,
@@ -21,6 +23,7 @@ export function AgentEditor({
   update: Update;
   announce(message: string): void;
 }) {
+  const [sampleOpen, setSampleOpen] = useState(false);
   const selection = state.ui.selection;
   if (selection.kind !== "agent") return null;
   const specialty = state.specialties.find(
@@ -144,6 +147,8 @@ export function AgentEditor({
     if (!confirm("Delete this inactive draft?")) return;
     update((draft) => {
       const target = draft.agents.find((item) => item.id === agent.id)!;
+      draft.chat.proposals.forEach((proposal) => { if (proposal.target.agentId === agent.id && proposal.target.versionId === saved.id && proposal.status === "pending") proposal.status = "unavailable"; });
+      if (draft.chat.pendingResponse?.target.agentId === agent.id && draft.chat.pendingResponse.target.versionId === saved.id) draft.chat.pendingResponse = null;
       target.versions = target.versions.filter((item) => item.id !== saved.id);
       delete draft.workingCopies.versions[saved.id];
       if (!target.versions.length) {
@@ -160,6 +165,7 @@ export function AgentEditor({
         section: "configuration",
       };
     });
+    announce("Draft deleted; related chat proposals are unavailable.");
   };
   const addReference = () => {
     if (!editable) {
@@ -402,7 +408,7 @@ export function AgentEditor({
                 </div>
               </fieldset>
               {specialty.outputType === "image" ? (
-                <fieldset disabled={!editable}>
+                <><fieldset disabled={!editable}>
                   <legend>
                     Image model <small>Demo catalog</small>
                   </legend>
@@ -467,7 +473,7 @@ export function AgentEditor({
                       </select>
                     </label>
                   </div>
-                </fieldset>
+                </fieldset><button type="button" className="sample-result-button" onClick={() => setSampleOpen(true)}>Preview sample result</button></>
               ) : null}
             </div>
           ) : selection.section === "instructions" ? (
@@ -548,6 +554,12 @@ export function AgentEditor({
                           (item) => item.id !== reference.id,
                         ),
                       );
+                      update((draft) => {
+                        const section = `reference:${reference.id}`;
+                        draft.chat.proposals.forEach((proposal) => { if (proposal.target.agentId === agent.id && proposal.target.versionId === saved.id && proposal.target.section === section && proposal.status === "pending") proposal.status = "unavailable"; });
+                        if (draft.chat.pendingResponse?.target.agentId === agent.id && draft.chat.pendingResponse.target.versionId === saved.id && draft.chat.pendingResponse.target.section === section) draft.chat.pendingResponse = null;
+                      });
+                      announce("Reference removed; related chat proposals are unavailable.");
                       selectSection("instructions");
                     }
                   }}
@@ -561,6 +573,7 @@ export function AgentEditor({
           )}
         </div>
       </div>
+      <SampleResultDialog open={sampleOpen} description={state.ui.imageDescriptions[version.id] ?? ""} onDescriptionChange={(value) => update((draft) => { draft.ui.imageDescriptions[version.id] = value; })} onClose={() => setSampleOpen(false)} />
       <footer className="agent-actions">
         <button onClick={fork}>
           {editable ? "Fork draft" : "Edit as draft"}

@@ -301,7 +301,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 2 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup`; `npm run test:mockup:e2e` (3); two consecutive independent reviews passed | None |
 | 3 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (7); `npm run test:mockup:e2e` (7); two consecutive independent reviews passed | None |
 | 4 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (12); `npm run test:mockup:e2e` (10); two consecutive independent reviews passed with no intervening changes | None |
-| 5 | Not started | — | — |
+| 5 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (15); `npm run test:mockup:e2e` (18); two consecutive independent reviews passed with no intervening changes | None |
 | 6 | Not started | — | — |
 
 ## 5. Handoff and completion boundary

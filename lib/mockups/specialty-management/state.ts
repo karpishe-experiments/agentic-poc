@@ -6,6 +6,10 @@ function normalize(state: MockupState): MockupState {
   const selection = state.ui.selection;
   state.ui.recentVersionIds ??= {};
   if (selection.kind === "agent") state.ui.recentVersionIds[selection.agentId] ??= selection.versionId;
+  if (state.chat.pendingResponse) {
+    state.chat.messages.push({ id: `interrupted-${state.chat.pendingResponse.id}`, role: "assistant", text: "The simulated response was interrupted during refresh.", target: state.chat.pendingResponse.target, retryRequest: state.chat.pendingResponse.request });
+    state.chat.pendingResponse = null;
+  }
   return state;
 }
 export const freshSeed = () => normalize(structuredClone(seed) as unknown as MockupState);

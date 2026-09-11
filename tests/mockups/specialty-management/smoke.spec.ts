@@ -141,6 +141,92 @@ test("renders only the bundled Markdown image without external requests", async 
   expect(externalImages).toEqual([]);
   await expect(page.getByRole("link", { name: "Unsafe" })).not.toHaveAttribute("href", /javascript:/);
 });
+test("keeps one chat across targets and safely applies proposals", async ({ page }) => {
+  await page.getByRole("button", { name: "Add an example" }).click();
+  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await expect(page.getByText("Here is a simulated suggestion.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Open target" }).click();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel("Main instructions")).toHaveValue(/## Example/);
+  await page.reload();
+  await expect(page.getByText("Here is a simulated suggestion.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Main instructions")).toHaveValue(/## Example/);
+});
+test("blocks a stale proposal and cancels the sole pending response", async ({ page }) => {
+  await page.getByRole("button", { name: "Make this concise" }).click();
+  await expect(page.getByText("Here is a simulated suggestion.", { exact: false })).toBeVisible();
+  await page.getByLabel("Main instructions").fill("A later manual edit");
+  await expect(page.getByText("Content changed; generate a new proposal.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
+  await page.getByLabel("Request an edit").fill("Try something else");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByText("Preparing a deterministic suggestion…", { exact: false })).toHaveCount(0);
+  await expect(page.locator(".sr-only[role=status]")).toHaveText("Simulated response cancelled.");
+});
+test("turns a refresh-interrupted response into an explicit retry", async ({ page }) => {
+  await page.getByRole("button", { name: "Add an example" }).click();
+  await expect(page.getByText("Preparing a deterministic suggestion…", { exact: false })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("The simulated response was interrupted during refresh.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry response" }).click();
+  await expect(page.getByText("Here is a simulated suggestion.", { exact: false })).toBeVisible();
+});
+test("reset cancels a pending response and restores an empty conversation", async ({ page }) => {
+  await page.getByRole("button", { name: "Add an example" }).click();
+  await expect(page.getByText("Preparing a deterministic suggestion…", { exact: false })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Reset demo data" }).click();
+  await page.waitForTimeout(500);
+  await expect(page.getByText("Here is a simulated suggestion.", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Choose Main instructions or a reference, then ask for a simulated edit.")).toBeVisible();
+});
+test("marks a proposal unavailable when its reference is deleted", async ({ page }) => {
+  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "Add an example" }).click();
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove reference" }).click();
+  await expect(page.getByText("Target unavailable.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
+  await expect(page.locator(".sr-only[role=status]")).toHaveText("Reference removed; related chat proposals are unavailable.");
+});
+test("deleting a target during the delay cancels its pending response", async ({ page }) => {
+  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "Add an example" }).click();
+  await expect(page.getByText("Preparing a deterministic suggestion…", { exact: false })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove reference" }).click();
+  await expect(page.locator(".sr-only[role=status]")).toHaveText("Reference removed; related chat proposals are unavailable.");
+  await page.waitForTimeout(500);
+  await expect(page.getByText("Here is a simulated suggestion.", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Preparing a deterministic suggestion…", { exact: false })).toHaveCount(0);
+});
+test("chat Apply to a confirmed version creates a draft without changing active", async ({ page }) => {
+  await page.getByLabel("Version").selectOption("playful-v1");
+  await page.getByRole("button", { name: "Main instructions" }).click();
+  await page.getByRole("button", { name: "Use a numbered checklist" }).click();
+  await expect(page.getByRole("button", { name: "Create draft with changes" })).toBeEnabled();
+  await page.getByRole("button", { name: "Create draft with changes" }).click();
+  await expect(page.getByLabel("Version")).toContainText("v3 · draft");
+  await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
+  await page.getByLabel("Version").selectOption("playful-v1");
+  await expect(page.getByText(/Version 1 · confirmed · Active/)).toBeVisible();
+});
+test("persists sample image description and exposes metadata", async ({ page }) => {
+  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page.getByRole("button", { name: /Watercolor Illustrator/ }).click();
+  await page.getByRole("button", { name: "Preview sample result" }).click();
+  await expect(page.getByRole("dialog", { name: "Image specialty output" })).toBeVisible();
+  await page.getByLabel("Optional description").fill("Moonlit cover candidate");
+  await page.getByText("Metadata").click();
+  await expect(page.getByText("1120 × 630")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Preview sample result" }).click();
+  await expect(page.getByLabel("Optional description")).toHaveValue("Moonlit cover candidate");
+});
 test("reopens an agent at its most recently selected version", async ({ page }) => {
   await expect(page.getByLabel("Version")).toHaveValue("playful-v2");
   await page.getByRole("button", { name: "Story Planning text" }).click();
