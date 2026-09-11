@@ -508,7 +508,9 @@ export function SpecialtyManagementMockup() {
     }
   }, [hydrated, loadError, state]);
   useEffect(() => {
-    const dirty = Object.keys(state.workingCopies.specialties).length > 0 || Object.keys(state.workingCopies.versions).length > 0;
+    const dirty =
+      Object.keys(state.workingCopies.specialties).length > 0 ||
+      Object.keys(state.workingCopies.versions).length > 0;
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
@@ -554,22 +556,29 @@ export function SpecialtyManagementMockup() {
       </div>
       <header className="mockup-toolbar">
         <div>
-          <p>Mockup · synthetic data · simulated chat</p>
           <h1>Specialties and agents</h1>
+          <p>Synthetic data · simulated chat</p>
         </div>
         <div>
           <button
+            className="toolbar-icon-button"
+            aria-label={state.ui.chatOpen ? "Hide chat" : "Show chat"}
+            title={state.ui.chatOpen ? "Hide chat" : "Show chat"}
             onClick={() =>
               update((draft) => {
                 draft.ui.chatOpen = !draft.ui.chatOpen;
               })
             }
           >
-            <MessageSquare size={16} /> {state.ui.chatOpen ? "Hide" : "Show"}{" "}
-            chat
+            <MessageSquare aria-hidden="true" size={15} />
           </button>
-          <button onClick={reset}>
-            <RotateCcw size={16} /> Reset demo data
+          <button
+            className="toolbar-icon-button"
+            aria-label="Reset demo data"
+            title="Reset demo data"
+            onClick={reset}
+          >
+            <RotateCcw aria-hidden="true" size={15} />
           </button>
         </div>
       </header>
