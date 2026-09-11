@@ -96,6 +96,51 @@ test("forks visible pending agent content without changing its source", async ({
   await page.getByRole("button", { name: "Main instructions" }).click();
   await expect(page.getByLabel("Main instructions")).toHaveValue("Pending source content");
 });
+test("edits Markdown with keyboard and toolbar mention menus", async ({ page }) => {
+  const editor = page.getByLabel("Main instructions");
+  await editor.fill("Use @sto");
+  await page.keyboard.press("Enter");
+  await expect(editor).toHaveValue(/\[@Story Planning\]\(specialty:sp-story\)/);
+  await page.getByRole("button", { name: "Mention tool" }).click();
+  await page.getByRole("option", { name: /get_artifact_context/ }).click();
+  await page.getByRole("button", { name: "Mention reference" }).click();
+  await page.getByRole("option", { name: /rhyming-guide\.md/ }).click();
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByRole("button", { name: "@Story Planning" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "/get_artifact_context" })).toBeVisible();
+  await page.getByRole("button", { name: "/get_artifact_context" }).click();
+  await expect(page.getByText("Read artifact context.")).toBeVisible();
+  await page.getByRole("button", { name: "$rhyming-guide.md" }).click();
+  await expect(page.getByText("Prefer natural rhythm.")).toBeVisible();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel("Reference content")).toBeVisible();
+  await page.getByRole("button", { name: "Preview" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Preview" })).toHaveClass(/active/);
+});
+test("navigates specialty mentions and disables deleted references", async ({ page }) => {
+  const editor = page.getByLabel("Main instructions");
+  await editor.fill("See [@Story Planning](specialty:sp-story) and [$guide](reference:ref-rhyme-v2).");
+  await page.getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("button", { name: "$guide" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove reference" }).click();
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByRole("button", { name: "Unavailable reference" })).toBeDisabled();
+  await page.getByRole("button", { name: "@Story Planning" }).click();
+  await expect(page.getByRole("heading", { name: "Story Planning", exact: true })).toBeVisible();
+});
+test("renders only the bundled Markdown image without external requests", async ({ page }) => {
+  const externalImages: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("example.com/remote.png")) externalImages.push(request.url()); });
+  await page.getByLabel("Main instructions").fill("![Local](/mockups/specialty-management/sample-image.svg)\n\n![Remote](https://example.com/remote.png)\n\n[Unsafe](javascript:alert(1))");
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByRole("img", { name: "Local" })).toBeVisible();
+  await expect(page.getByText("Image placeholder: Remote")).toBeVisible();
+  expect(externalImages).toEqual([]);
+  await expect(page.getByRole("link", { name: "Unsafe" })).not.toHaveAttribute("href", /javascript:/);
+});
 test("reopens an agent at its most recently selected version", async ({ page }) => {
   await expect(page.getByLabel("Version")).toHaveValue("playful-v2");
   await page.getByRole("button", { name: "Story Planning text" }).click();
