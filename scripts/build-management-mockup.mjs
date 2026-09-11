@@ -1,0 +1,1 @@
+import {spawn} from "node:child_process";const child=spawn(process.execPath,["node_modules/next/dist/bin/next","build"],{stdio:"inherit",env:{...process.env,SPECIALTY_MOCKUP_ONLY:"1",NEXT_TELEMETRY_DISABLED:"1"}});child.on("exit",(code,signal)=>process.exit(code??(signal?1:0)));

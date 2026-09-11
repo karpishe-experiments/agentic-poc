@@ -1,0 +1,16 @@
+export type OutputType = "text" | "image";
+export type VersionStatus = "draft" | "confirmed" | "retired";
+export type EditorSection = "configuration" | "instructions" | `reference:${string}`;
+export type ModelSelection = { provider: string; model: string };
+export type ReferenceFile = { id: string; name: string; description: string; content: string };
+export type Specialty = { id: string; name: string; description: string; outputType: OutputType; allowedToolIds: string[]; builtIn: boolean; retired: boolean };
+export type AgentVersion = { id: string; number: number; parentVersionId: string | null; status: VersionStatus; title: string; languageModel: ModelSelection; imageModel: ModelSelection | null; mainInstructions: string; references: ReferenceFile[] };
+export type Agent = { id: string; specialtyId: string; activeVersionId: string | null; versions: AgentVersion[] };
+export type ToolFixture = { id: string; name: string; description: string };
+export type ModelFixture = { id: string; provider: string; label: string; kind: "language" | "image" };
+export type Selection = { kind: "specialty"; specialtyId: string } | { kind: "agent"; specialtyId: string; agentId: string; versionId: string; section: EditorSection };
+export type ProposalTarget = { agentId: string; versionId: string; section: "instructions" | `reference:${string}` };
+export type ChatProposal = { id: string; target: ProposalTarget; request: string; baseText: string; proposedText: string; status: "pending" | "applied" | "dismissed" | "superseded" | "unavailable" };
+export type ChatMessage = { id: string; role: "user" | "assistant"; text: string; target: ProposalTarget | null };
+export type MockupState = { formatVersion: 1; specialties: Specialty[]; agents: Agent[]; tools: ToolFixture[]; models: ModelFixture[]; workingCopies: { specialties: Record<string, Specialty>; versions: Record<string, AgentVersion> }; ui: { selection: Selection; expandedSpecialtyIds: string[]; showRetired: boolean; navWidth: number; chatWidth: number; sectionWidth: number; chatOpen: boolean; editorMode: "edit" | "preview"; imageDescriptions: Record<string,string> }; chat: { messages: ChatMessage[]; proposals: ChatProposal[]; pendingResponse: { id:string; target:ProposalTarget; request:string } | null } };
+export type MockupAction = { type:"replace"; state:MockupState } | { type:"mutate"; mutate:(state:MockupState)=>MockupState };
