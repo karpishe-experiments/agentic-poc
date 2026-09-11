@@ -299,7 +299,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | --- | --- | --- | --- |
 | 1 | Complete | `npm run typecheck`; `npm run test:mockup` (6); `npm run test:mockup:e2e` (1); two consecutive independent reviews passed | None |
 | 2 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup`; `npm run test:mockup:e2e` (3); two consecutive independent reviews passed | None |
-| 3 | Not started | — | — |
+| 3 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (7); `npm run test:mockup:e2e` (7); two consecutive independent reviews passed | None |
 | 4 | Not started | — | — |
 | 5 | Not started | — | — |
 | 6 | Not started | — | — |

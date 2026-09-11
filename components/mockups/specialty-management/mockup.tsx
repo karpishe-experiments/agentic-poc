@@ -3,7 +3,8 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, MessageSquare, Plus, RotateCcw, Search } from "lucide-react";
 import { freshSeed, loadState, reducer, saveState } from "@/lib/mockups/specialty-management/state";
-import type { MockupState, Selection, Specialty } from "@/lib/mockups/specialty-management/types";
+import type { Agent, MockupState, Selection, Specialty } from "@/lib/mockups/specialty-management/types";
+import { AgentEditor } from "./agent-editor";
 
 type Update = (fn: (draft: MockupState) => void) => void;
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -26,6 +27,13 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
     const specialty: Specialty = { id: uid("sp"), name: "Untitled specialty", description: "", outputType: "text", allowedToolIds: [], builtIn: false, retired: false };
     update((draft) => { draft.specialties.push(specialty); draft.ui.expandedSpecialtyIds.push(specialty.id); draft.ui.selection = { kind: "specialty", specialtyId: specialty.id }; });
   };
+  const addAgent = (specialty: Specialty) => {
+    const language = state.models.find((item) => item.kind === "language")!;
+    const image = state.models.find((item) => item.kind === "image")!;
+    const versionId = uid("version");
+    const agent: Agent = { id: uid("agent"), specialtyId: specialty.id, activeVersionId: null, versions: [{ id: versionId, number: 1, parentVersionId: null, status: "draft", title: "Untitled agent", languageModel: { provider: language.provider, model: language.label }, imageModel: specialty.outputType === "image" ? { provider: image.provider, model: image.label } : null, mainInstructions: "", references: [] }] };
+    update((draft) => { draft.agents.push(agent); draft.ui.selection = { kind: "agent", specialtyId: specialty.id, agentId: agent.id, versionId, section: "configuration" }; });
+  };
   return <nav className="left-pane" aria-label="Specialties and agents">
     <div className="pane-heading"><div><h2>Specialties</h2><span>{visible.length} shown</span></div><button className="icon-button" onClick={addSpecialty} aria-label="Add specialty"><Plus size={17} /></button></div>
     <label className="search"><Search size={15} /><span className="sr-only">Search specialties and agents</span><input name="specialty-search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" /></label>
@@ -37,7 +45,7 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
       const dirty = !!state.workingCopies.specialties[specialty.id];
       return <li key={specialty.id}>
         <div className={`specialty-row ${selected ? "selected" : ""}`}><button className="chevron" aria-label={`${expanded ? "Collapse" : "Expand"} ${specialty.name}`} aria-expanded={expanded} onClick={() => update((draft) => { draft.ui.expandedSpecialtyIds = expanded ? draft.ui.expandedSpecialtyIds.filter((id) => id !== specialty.id) : [...draft.ui.expandedSpecialtyIds, specialty.id]; })}>{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button><button className="entity-button" aria-current={selected ? "page" : undefined} onClick={() => select({ kind: "specialty", specialtyId: specialty.id })}><span>{specialty.name}{dirty ? <i className="dirty-dot" aria-label="Unsaved changes">●</i> : null}</span><small>{specialty.outputType}{specialty.builtIn ? " · Built-in" : ""}{specialty.retired ? " · Retired" : ""}</small></button></div>
-        {expanded ? <ul className="agent-list">{agents.map((agent) => { const version = agent.versions.find((item) => item.id === agent.activeVersionId) ?? agent.versions.toSorted((a, b) => b.number - a.number)[0]; if (!version) return null; const agentSelected = state.ui.selection.kind === "agent" && state.ui.selection.agentId === agent.id; return <li key={agent.id}><button className={`agent-row ${agentSelected ? "selected" : ""}`} aria-current={agentSelected ? "page" : undefined} onClick={() => select({ kind: "agent", specialtyId: specialty.id, agentId: agent.id, versionId: version.id, section: "configuration" })}><span>{version.title}</span><small>{agent.activeVersionId ? "Active" : "Inactive"} · v{version.number}</small></button></li>; })}<li><button className="add-agent" disabled><Plus size={14} /> Add agent <small>Checkpoint 3</small></button></li></ul> : null}
+        {expanded ? <ul className="agent-list">{agents.map((agent) => { const recentId = state.ui.recentVersionIds?.[agent.id]; const version = agent.versions.find((item) => item.id === recentId) ?? agent.versions.find((item) => item.id === agent.activeVersionId) ?? agent.versions.toSorted((a, b) => b.number - a.number)[0]; if (!version) return null; const shown = state.ui.selection.kind === "agent" && state.ui.selection.agentId === agent.id ? state.workingCopies.versions[state.ui.selection.versionId] ?? version : version; const agentSelected = state.ui.selection.kind === "agent" && state.ui.selection.agentId === agent.id; return <li key={agent.id}><button className={`agent-row ${agentSelected ? "selected" : ""}`} aria-current={agentSelected ? "page" : undefined} onClick={() => update((draft) => { draft.ui.recentVersionIds = { ...draft.ui.recentVersionIds, [agent.id]: version.id }; draft.ui.selection = { kind: "agent", specialtyId: specialty.id, agentId: agent.id, versionId: version.id, section: "configuration" }; })}><span>{shown.title}{state.ui.selection.kind === "agent" && state.ui.selection.agentId === agent.id && state.workingCopies.versions[state.ui.selection.versionId] ? <i className="dirty-dot" aria-label="Unsaved changes">●</i> : null}</span><small>{agent.activeVersionId ? "Active" : "Inactive"} · v{version.number}</small></button></li>; })}<li><button className="add-agent" onClick={() => addAgent(specialty)}><Plus size={14} /> Add agent</button></li></ul> : null}
       </li>;
     })}</ul>
     <label className="show-retired"><input type="checkbox" checked={state.ui.showRetired} onChange={(event) => update((draft) => { draft.ui.showRetired = event.target.checked; })} /> Show retired</label>
@@ -45,7 +53,7 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
 }
 
 function SpecialtyEditor({ state, update, announce }: { state: MockupState; update: Update; announce(message: string): void }) {
-  if (state.ui.selection.kind !== "specialty") return <section className="workspace-placeholder"><h2>Agent workspace</h2><p>Agent editing arrives in checkpoint 3.</p></section>;
+  if (state.ui.selection.kind !== "specialty") return <AgentEditor state={state} update={update} announce={announce} />;
   const id = state.ui.selection.specialtyId;
   const saved = state.specialties.find((item) => item.id === id); if (!saved) return null;
   const draft = state.workingCopies.specialties[id] ?? saved; const dirty = !!state.workingCopies.specialties[id];
