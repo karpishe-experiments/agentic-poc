@@ -302,7 +302,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 3 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (7); `npm run test:mockup:e2e` (7); two consecutive independent reviews passed | None |
 | 4 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (12); `npm run test:mockup:e2e` (10); two consecutive independent reviews passed with no intervening changes | None |
 | 5 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (15); `npm run test:mockup:e2e` (18); two consecutive independent reviews passed with no intervening changes | None |
-| 6 | Not started | — | — |
+| 6 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (15); `npm run test:mockup:e2e` (22); `npm run mockup:build`; working-tree and branch whitespace checks; six desktop screenshots inspected; two consecutive independent final reviews passed with no intervening changes | None |
 
 ## 5. Handoff and completion boundary
 
@@ -312,4 +312,4 @@ After implementation review passes, reconcile docs through `sync-docs-issues`. U
 
 Report the route, launch command, tested flows, verification outcomes, and known mockup limitations. Do not call issue #22 complete. Do not require a real model, MongoDB, authentication, shared storage, production validations, multi-tab synchronization, schema authoring, runtime tool permissions, actual reference loading by agents, creator team selection, or actual orchestration to finish Phase 0.
 
-For the current planning task, completion means this document has been checked against every agreed interaction and the current repository. It does not mean any mockup code or tests have been implemented. Publication, commit approval, and user feedback are separate from delivery of the local plan.
+The Phase 0 implementation is complete on its issue branch. Publication and user feedback remain separate from local implementation completion.

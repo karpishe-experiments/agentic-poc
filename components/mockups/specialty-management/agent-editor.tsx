@@ -147,8 +147,19 @@ export function AgentEditor({
     if (!confirm("Delete this inactive draft?")) return;
     update((draft) => {
       const target = draft.agents.find((item) => item.id === agent.id)!;
-      draft.chat.proposals.forEach((proposal) => { if (proposal.target.agentId === agent.id && proposal.target.versionId === saved.id && proposal.status === "pending") proposal.status = "unavailable"; });
-      if (draft.chat.pendingResponse?.target.agentId === agent.id && draft.chat.pendingResponse.target.versionId === saved.id) draft.chat.pendingResponse = null;
+      draft.chat.proposals.forEach((proposal) => {
+        if (
+          proposal.target.agentId === agent.id &&
+          proposal.target.versionId === saved.id &&
+          proposal.status === "pending"
+        )
+          proposal.status = "unavailable";
+      });
+      if (
+        draft.chat.pendingResponse?.target.agentId === agent.id &&
+        draft.chat.pendingResponse.target.versionId === saved.id
+      )
+        draft.chat.pendingResponse = null;
       target.versions = target.versions.filter((item) => item.id !== saved.id);
       delete draft.workingCopies.versions[saved.id];
       if (!target.versions.length) {
@@ -168,10 +179,6 @@ export function AgentEditor({
     announce("Draft deleted; related chat proposals are unavailable.");
   };
   const addReference = () => {
-    if (!editable) {
-      fork();
-      return;
-    }
     const used = new Set(version.references.map((ref) => ref.name));
     let number = 1;
     while (used.has(`reference-${number}.md`)) number++;
@@ -181,6 +188,32 @@ export function AgentEditor({
       description: "",
       content: "",
     };
+    if (!editable) {
+      update((draft) => {
+        const target = draft.agents.find((item) => item.id === agent.id)!;
+        const source =
+          draft.workingCopies.versions[saved.id] ??
+          target.versions.find((item) => item.id === saved.id)!;
+        const copy = structuredClone(source);
+        copy.id = uid("version");
+        copy.number =
+          Math.max(...target.versions.map((item) => item.number)) + 1;
+        copy.parentVersionId = saved.id;
+        copy.status = "draft";
+        copy.references.push(ref);
+        target.versions.push(copy);
+        draft.ui.recentVersionIds[agent.id] = copy.id;
+        draft.ui.selection = {
+          kind: "agent",
+          specialtyId: specialty.id,
+          agentId: agent.id,
+          versionId: copy.id,
+          section: `reference:${ref.id}`,
+        };
+      });
+      announce("Draft created with a new reference.");
+      return;
+    }
     setReferences([...version.references, ref]);
     selectSection(`reference:${ref.id}`);
   };
@@ -408,72 +441,81 @@ export function AgentEditor({
                 </div>
               </fieldset>
               {specialty.outputType === "image" ? (
-                <><fieldset disabled={!editable}>
-                  <legend>
-                    Image model <small>Demo catalog</small>
-                  </legend>
-                  <div className="model-grid">
-                    <label>
-                      Provider
-                      <select
-                        value={
-                          (
-                            version.imageModel ?? {
-                              provider: imageProviders[0],
-                            }
-                          ).provider
-                        }
-                        onChange={(event) =>
-                          setModel("image", event.target.value)
-                        }
-                      >
-                        {imageProviders.map((item) => (
-                          <option key={item}>{item}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Model
-                      <select
-                        value={
-                          (
-                            version.imageModel ?? {
-                              model: state.models.find(
-                                (item) => item.kind === "image",
-                              )!.label,
-                            }
-                          ).model
-                        }
-                        onChange={(event) =>
-                          setModel(
-                            "image",
+                <>
+                  <fieldset disabled={!editable}>
+                    <legend>
+                      Image model <small>Demo catalog</small>
+                    </legend>
+                    <div className="model-grid">
+                      <label>
+                        Provider
+                        <select
+                          value={
                             (
                               version.imageModel ?? {
                                 provider: imageProviders[0],
                               }
-                            ).provider,
-                            event.target.value,
-                          )
-                        }
-                      >
-                        {state.models
-                          .filter(
-                            (item) =>
-                              item.kind === "image" &&
-                              item.provider ===
-                                (
-                                  version.imageModel ?? {
-                                    provider: imageProviders[0],
-                                  }
-                                ).provider,
-                          )
-                          .map((item) => (
-                            <option key={item.id}>{item.label}</option>
+                            ).provider
+                          }
+                          onChange={(event) =>
+                            setModel("image", event.target.value)
+                          }
+                        >
+                          {imageProviders.map((item) => (
+                            <option key={item}>{item}</option>
                           ))}
-                      </select>
-                    </label>
-                  </div>
-                </fieldset><button type="button" className="sample-result-button" onClick={() => setSampleOpen(true)}>Preview sample result</button></>
+                        </select>
+                      </label>
+                      <label>
+                        Model
+                        <select
+                          value={
+                            (
+                              version.imageModel ?? {
+                                model: state.models.find(
+                                  (item) => item.kind === "image",
+                                )!.label,
+                              }
+                            ).model
+                          }
+                          onChange={(event) =>
+                            setModel(
+                              "image",
+                              (
+                                version.imageModel ?? {
+                                  provider: imageProviders[0],
+                                }
+                              ).provider,
+                              event.target.value,
+                            )
+                          }
+                        >
+                          {state.models
+                            .filter(
+                              (item) =>
+                                item.kind === "image" &&
+                                item.provider ===
+                                  (
+                                    version.imageModel ?? {
+                                      provider: imageProviders[0],
+                                    }
+                                  ).provider,
+                            )
+                            .map((item) => (
+                              <option key={item.id}>{item.label}</option>
+                            ))}
+                        </select>
+                      </label>
+                    </div>
+                  </fieldset>
+                  <button
+                    type="button"
+                    className="sample-result-button"
+                    onClick={() => setSampleOpen(true)}
+                  >
+                    Preview sample result
+                  </button>
+                </>
               ) : null}
             </div>
           ) : selection.section === "instructions" ? (
@@ -556,10 +598,27 @@ export function AgentEditor({
                       );
                       update((draft) => {
                         const section = `reference:${reference.id}`;
-                        draft.chat.proposals.forEach((proposal) => { if (proposal.target.agentId === agent.id && proposal.target.versionId === saved.id && proposal.target.section === section && proposal.status === "pending") proposal.status = "unavailable"; });
-                        if (draft.chat.pendingResponse?.target.agentId === agent.id && draft.chat.pendingResponse.target.versionId === saved.id && draft.chat.pendingResponse.target.section === section) draft.chat.pendingResponse = null;
+                        draft.chat.proposals.forEach((proposal) => {
+                          if (
+                            proposal.target.agentId === agent.id &&
+                            proposal.target.versionId === saved.id &&
+                            proposal.target.section === section &&
+                            proposal.status === "pending"
+                          )
+                            proposal.status = "unavailable";
+                        });
+                        if (
+                          draft.chat.pendingResponse?.target.agentId ===
+                            agent.id &&
+                          draft.chat.pendingResponse.target.versionId ===
+                            saved.id &&
+                          draft.chat.pendingResponse.target.section === section
+                        )
+                          draft.chat.pendingResponse = null;
                       });
-                      announce("Reference removed; related chat proposals are unavailable.");
+                      announce(
+                        "Reference removed; related chat proposals are unavailable.",
+                      );
                       selectSection("instructions");
                     }
                   }}
@@ -573,7 +632,16 @@ export function AgentEditor({
           )}
         </div>
       </div>
-      <SampleResultDialog open={sampleOpen} description={state.ui.imageDescriptions[version.id] ?? ""} onDescriptionChange={(value) => update((draft) => { draft.ui.imageDescriptions[version.id] = value; })} onClose={() => setSampleOpen(false)} />
+      <SampleResultDialog
+        open={sampleOpen}
+        description={state.ui.imageDescriptions[version.id] ?? ""}
+        onDescriptionChange={(value) =>
+          update((draft) => {
+            draft.ui.imageDescriptions[version.id] = value;
+          })
+        }
+        onClose={() => setSampleOpen(false)}
+      />
       <footer className="agent-actions">
         <button onClick={fork}>
           {editable ? "Fork draft" : "Edit as draft"}

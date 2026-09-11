@@ -6,6 +6,10 @@ This document describes the current implementation for contributors and coding a
 
 Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser renders a persisted workspace and uses Vercel AI SDK UI for chat transport. Route handlers call deterministic application services, which are the only owners of workflow state, durable IDs, artifact versions, approvals, jobs, assets, and exports. OpenAI Agents SDK agents may route or author validated proposals, but they cannot persist data or advance the workflow directly.
 
+### Isolated specialty-management mockup
+
+`/mockups/specialty-management` is a separate Phase 0 design surface. It uses bundled synthetic JSON and browser `localStorage`. It does not import the runtime agent repositories, skill registry, contracts, services, model adapters, or MongoDB setup. `npm run mockup:dev` starts Next.js with `SPECIALTY_MOCKUP_ONLY=1`; the instrumentation bootstrap then skips the job runner. `npm run mockup:build` and the dedicated mockup test commands use the same isolated boundary. This mockup does not change the runtime architecture or define production persistence and permission contracts.
+
 ```mermaid
 flowchart TB
   UI[Next.js workspace and typed cards] --> API[Route handlers]
