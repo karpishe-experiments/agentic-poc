@@ -11,6 +11,7 @@ import {
 } from "@/lib/contracts/booklets";
 import { BOOKLET_ARTIFACT_TYPES } from "@/lib/contracts/domain";
 import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
+import { assertMutationsAllowed } from "@/lib/application/deployment-control";
 
 export class BookletNotFoundError extends Error {
   public constructor(bookletId: string) {
@@ -51,6 +52,7 @@ export class BookletService {
   }
 
   public async create(input: unknown) {
+    await assertMutationsAllowed();
     const { idea } = createBookletRequestSchema.parse(input);
     const now = this.clock.now();
     const booklet = await this.repositories.booklets.createWithInitialState({

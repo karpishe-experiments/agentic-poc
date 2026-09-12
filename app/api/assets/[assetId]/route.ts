@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { FilesystemAssetStore } from "@/lib/assets/filesystem-asset-store";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { getBookletService } from "@/lib/application/booklet-service";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env.server";
 import { toErrorEnvelope } from "@/lib/http/errors";
 
 export const runtime = "nodejs";
@@ -16,7 +15,7 @@ export async function GET(_: Request, { params }: RouteProperties) {
       return NextResponse.json({ error: { code: "asset_not_found", message: "This asset could not be found.", recoverable: true } }, { status: 404 });
     }
 
-    const store = new FilesystemAssetStore(resolveDataRoot(getServerEnv()));
+    const store = createAssetStore();
     const bytes = await store.get(asset.uri);
     const body = Uint8Array.from(bytes).buffer as ArrayBuffer;
     return new Response(body, {

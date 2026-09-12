@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ActiveJobSummary } from "@/lib/contracts/booklets";
 import { publishJobStatus, subscribeToJobStatus, type PolledJobStatus } from "@/components/workspace/job-status-poller";
+import { readOperationResponse } from "@/lib/http/read-operation-response";
 
 type JobStatus = PolledJobStatus & {
   id: string;
@@ -69,8 +70,9 @@ export function JobProgressPanel({ jobs }: Readonly<{ jobs: ActiveJobSummary[] }
               setRetryError(null);
               try {
                 const response = await fetch(`/api/jobs/${job.id}/items/${item.id}/retry`, { method: "POST" });
-                if (!response.ok) throw new Error("The item could not be queued for retry.");
-                const body = await response.json() as { data?: PolledJobStatus };
+                const terminal = await readOperationResponse<{ data?: PolledJobStatus; error?: { message?: string } }>(response);
+                const body = terminal.body;
+                if (!terminal.ok) throw new Error(body.error?.message ?? "The item could not be queued for retry.");
                 if (body.data) publishJobStatus(job.id, body.data);
                 router.refresh();
               } catch (error) {

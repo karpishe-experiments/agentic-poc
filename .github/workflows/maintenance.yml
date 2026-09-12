@@ -1,0 +1,21 @@
+name: Maintenance
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [staging, prod], required: true }
+      action: { type: choice, options: [backup, resume, rollback, restore], required: true }
+      backup_id: { description: Required for restore, required: false }
+      confirmation: { description: Exact database name for restore, required: false }
+      task_definition: { description: Exact task-definition ARN for rollback, required: false }
+permissions: { contents: read, id-token: write }
+concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+jobs:
+  run:
+    uses: ./.github/workflows/aws-maintenance.yml
+    with:
+      environment: "${{ inputs.environment }}"
+      action: "${{ inputs.action }}"
+      backup_id: "${{ inputs.backup_id }}"
+      confirmation: "${{ inputs.confirmation }}"
+      task_definition: "${{ inputs.task_definition }}"
+    secrets: inherit

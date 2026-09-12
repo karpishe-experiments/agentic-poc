@@ -1,0 +1,46 @@
+name: Infrastructure
+on:
+  push: { branches: [master], paths: ['infra/**', 'scripts/deploy/**', '.github/workflows/aws-infrastructure.yml'] }
+  workflow_dispatch:
+    inputs:
+      apply: { description: Apply the generated plan, type: boolean, default: false }
+permissions: { contents: read, id-token: write }
+concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+jobs:
+  decision:
+    runs-on: ubuntu-latest
+    outputs: { apply: "${{ steps.value.outputs.apply }}" }
+    steps:
+      - id: value
+        run: echo "apply=${{ github.event_name == 'push' || inputs.apply }}" >> "$GITHUB_OUTPUT"
+  drain-staging:
+    needs: decision
+    if: needs.decision.outputs.apply == 'true'
+    uses: ./.github/workflows/aws-maintenance.yml
+    with: { environment: staging, action: drain-shared }
+    secrets: inherit
+  drain-prod:
+    needs: drain-staging
+    uses: ./.github/workflows/aws-maintenance.yml
+    with: { environment: prod, action: drain-shared, lock_held: true }
+    secrets: inherit
+  apply:
+    needs: [decision, drain-prod]
+    if: always() && needs.decision.result == 'success' && (needs.decision.outputs.apply != 'true' || needs.drain-prod.result == 'success')
+    uses: ./.github/workflows/aws-infrastructure.yml
+    with:
+      stack: master
+      apply: ${{ needs.decision.outputs.apply == 'true' }}
+      lock_held: ${{ needs.decision.outputs.apply == 'true' }}
+    secrets: inherit
+  restart-staging:
+    needs: [apply, decision]
+    if: needs.decision.outputs.apply == 'true' && success()
+    uses: ./.github/workflows/aws-maintenance.yml
+    with: { environment: staging, action: restart-shared, lock_held: true }
+    secrets: inherit
+  restart-prod:
+    needs: restart-staging
+    uses: ./.github/workflows/aws-maintenance.yml
+    with: { environment: prod, action: restart-shared, lock_held: true, release_lock: true }
+    secrets: inherit

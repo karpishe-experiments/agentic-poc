@@ -1,0 +1,35 @@
+name: AWS maintenance operation
+on:
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true }
+      action: { type: string, required: true }
+      backup_id: { type: string, required: false }
+      confirmation: { type: string, required: false }
+      task_definition: { type: string, required: false }
+      lock_held: { type: boolean, required: false, default: false }
+      release_lock: { type: boolean, required: false, default: false }
+permissions: { contents: read, id-token: write }
+jobs:
+  maintenance:
+    environment: _${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.11.4 }
+      - uses: aws-actions/configure-aws-credentials@v5
+        with: { role-to-assume: "${{ vars.AWS_MAINTENANCE_ROLE_ARN }}", aws-region: eu-west-1 }
+      - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
+      - env:
+          GH_TOKEN: "${{ github.token }}"
+          STACK: "${{ inputs.environment }}"
+          ACTION: "${{ inputs.action }}"
+          BACKUP_ID: "${{ inputs.backup_id }}"
+          CONFIRM_DATABASE: "${{ inputs.confirmation }}"
+          TASK_DEFINITION: "${{ inputs.task_definition }}"
+          OPERATION: "${{ inputs.action }}"
+          ENVIRONMENT: "_${{ inputs.environment }}"
+          LOCK_HELD: "${{ inputs.lock_held }}"
+          RELEASE_LOCK: "${{ inputs.release_lock }}"
+        run: scripts/deploy/github-maintenance.sh

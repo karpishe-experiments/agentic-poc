@@ -1,5 +1,8 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getServerEnv, resolveDataRoot, type ServerEnv } from "@/lib/config/env";
 
 type DiagnosticEventName =
   | "runner_started"
@@ -73,18 +76,23 @@ export function describeGenerationError(error: unknown): SafeErrorDetails {
 }
 
 export class GenerationDiagnostics {
-  public constructor(private readonly rootDirectory?: string, private readonly writeToConsole = !process.env.VITEST) {}
+  public constructor(private readonly rootDirectory?: string, private readonly writeToConsole = !process.env.VITEST, private readonly s3?: { bucket: string; client: S3Client }) {}
 
   public async record(input: DiagnosticInput): Promise<GenerationDiagnostic> {
     const event: GenerationDiagnostic = { ...input, at: new Date().toISOString(), processId: process.pid };
     if (this.writeToConsole) console.info("GENERATION_DIAGNOSTIC", JSON.stringify(event));
 
-    if (!this.rootDirectory || !event.jobId) return event;
+    if (!event.jobId) return event;
 
     try {
-      const directory = path.join(this.rootDirectory, "diagnostics", "jobs");
-      await mkdir(directory, { recursive: true });
-      await appendFile(path.join(directory, `${event.jobId}.ndjson`), `${JSON.stringify(event)}\n`, "utf8");
+      if (this.s3) {
+        const key = `jobs/${event.jobId}/${event.at.replaceAll(/[:.]/g, "-")}-${randomUUID()}.json`;
+        await this.s3.client.send(new PutObjectCommand({ Bucket: this.s3.bucket, Key: key, Body: JSON.stringify(event), ContentType: "application/json", IfNoneMatch: "*" }));
+      } else if (this.rootDirectory) {
+        const directory = path.join(this.rootDirectory, "diagnostics", "jobs");
+        await mkdir(directory, { recursive: true });
+        await appendFile(path.join(directory, `${event.jobId}.ndjson`), `${JSON.stringify(event)}\n`, "utf8");
+      }
     } catch (error) {
       // The terminal log still identifies a diagnostic-storage problem without
       // allowing observability I/O to stop paid image generation.
@@ -93,4 +101,12 @@ export class GenerationDiagnostics {
 
     return event;
   }
+}
+
+export function createGenerationDiagnostics(env: ServerEnv = getServerEnv()): GenerationDiagnostics {
+  if (env.DEPLOYMENT_ENV !== "local") {
+    if (!env.DIAGNOSTICS_BUCKET) throw new Error("DIAGNOSTICS_BUCKET is required.");
+    return new GenerationDiagnostics(undefined, !process.env.VITEST, { bucket: env.DIAGNOSTICS_BUCKET, client: new S3Client({ region: env.AWS_REGION }) });
+  }
+  return new GenerationDiagnostics(resolveDataRoot(env));
 }

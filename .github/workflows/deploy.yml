@@ -1,0 +1,24 @@
+name: Deploy
+on:
+  push: { branches: [_staging, _prod] }
+  workflow_dispatch:
+    inputs:
+      environment: { description: Environment, type: choice, options: [staging, prod], required: true }
+permissions: { contents: read, id-token: write }
+concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+jobs:
+  branch:
+    runs-on: ubuntu-latest
+    outputs: { stack: "${{ steps.select.outputs.stack }}" }
+    steps:
+      - id: select
+        env: { REQUESTED: "${{ inputs.environment }}" }
+        run: |
+          stack="${REQUESTED:-${GITHUB_REF_NAME#_}}"
+          test "$GITHUB_REF_NAME" = "_$stack"
+          echo "stack=$stack" >> "$GITHUB_OUTPUT"
+  deploy:
+    needs: branch
+    uses: ./.github/workflows/aws-release.yml
+    with: { stack: "${{ needs.branch.outputs.stack }}" }
+    secrets: inherit

@@ -20,10 +20,18 @@
     "test:e2e": "node --import tsx scripts/run-e2e.ts",
     "db:reset": "tsx scripts/reset-mongodb.ts",
     "db:verify": "tsx scripts/verify-mongodb.ts",
+    "deploy:initialize": "tsx scripts/initialize-deployment.ts",
+    "deploy:migrate-assets": "tsx scripts/migrate-assets-to-s3.ts",
+    "deploy:control": "tsx scripts/deployment-control.ts",
+    "deploy:reset-staging": "tsx scripts/reset-staging-deployment.ts",
+    "deploy:recovery": "tsx scripts/recovery.ts",
+    "deploy:check": "tsx scripts/check-deployment-readiness.ts",
+    "deploy:drain": "tsx scripts/wait-for-deployment-drain.ts",
     "eval:real": "tsx scripts/eval-real.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.50",
+    "@aws-sdk/client-s3": "3.888.0",
     "@openai/agents": "0.14.2",
     "ai": "7.0.47",
     "class-variance-authority": "0.7.1",

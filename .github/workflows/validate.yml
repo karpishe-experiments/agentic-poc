@@ -1,0 +1,27 @@
+name: Validate
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.21.0, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:agent
+      - run: npm run build
+      - run: docker build --tag kids-booklet-validation:${{ github.sha }} .
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.11.4 }
+      - run: terraform fmt -check -recursive infra/terraform
+      - run: for root in bootstrap shared environment; do terraform -chdir="infra/terraform/$root" init -backend=false && terraform -chdir="infra/terraform/$root" validate; done
+      - run: for root in bootstrap shared environment; do terraform -chdir="infra/terraform/$root" test; done
+      - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
+      - run: bash -n scripts/deploy/*.sh

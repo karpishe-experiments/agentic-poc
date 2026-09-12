@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getCardService } from "@/lib/application/card-service";
 import { toErrorEnvelope } from "@/lib/http/errors";
+import { streamOperation } from "@/lib/http/stream-operation";
 
 export const runtime = "nodejs";
 
@@ -11,8 +12,7 @@ export async function POST(request: Request, { params }: RouteProperties) {
   try {
     const { bookletId, cardId } = await params;
     const body = bodySchema.parse(await request.json());
-    const result = await getCardService().submit(bookletId, { ...body, cardId });
-    return Response.json({ data: result });
+    return streamOperation(() => getCardService().submit(bookletId, { ...body, cardId }));
   } catch (error) {
     const response = toErrorEnvelope(error);
     return Response.json(response.body, { status: response.status });

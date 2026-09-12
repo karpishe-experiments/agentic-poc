@@ -4,6 +4,7 @@ import type { CollectionName } from "@/db/documents";
 export type RequiredIndex = { collection: CollectionName; name: string; key: IndexSpecification; options?: Omit<CreateIndexesOptions, "name"> };
 
 export const REQUIRED_INDEXES: RequiredIndex[] = [
+  { collection: "deployment_control", name: "deployment_control_environment_unique", key: { environment: 1 }, options: { unique: true } },
   { collection: "booklets", name: "booklets_updated_at_idx", key: { updatedAtMs: -1 } },
   { collection: "artifacts", name: "artifacts_booklet_type_unique", key: { bookletId: 1, artifactType: 1 }, options: { unique: true } },
   { collection: "artifact_versions", name: "artifact_versions_artifact_number_unique", key: { artifactId: 1, versionNumber: 1 }, options: { unique: true } },

@@ -1,0 +1,95 @@
+name: AWS application release
+on:
+  workflow_call:
+    inputs:
+      stack: { type: string, required: true }
+permissions: { contents: read, id-token: write }
+jobs:
+  build:
+    environment: _${{ inputs.stack }}
+    runs-on: ubuntu-latest
+    outputs: { image: "${{ steps.image.outputs.uri }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v5
+        with: { role-to-assume: "${{ vars.AWS_RELEASE_ROLE_ARN }}", aws-region: eu-west-1 }
+      - name: Verify merged setup configuration
+        run: jq -e --arg account "${{ vars.AWS_ACCOUNT_ID }}" '.awsAccountId==$account and .awsRegion=="eu-west-1"' infra/config/configured.json
+      - name: Reject stale automatic deployment
+        if: github.event_name == 'push'
+        run: test "$(git ls-remote origin "refs/heads/_${{ inputs.stack }}" | cut -f1)" = "$GITHUB_SHA"
+      - id: image
+        run: |
+          repository="${{ vars.ECR_REPOSITORY_URL }}"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${repository%/*}"
+          docker build --pull --tag "$repository:$GITHUB_SHA" .
+          docker push "$repository:$GITHUB_SHA"
+          digest="$(aws ecr describe-images --repository-name "${repository#*/}" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          echo "uri=$repository@$digest" >> "$GITHUB_OUTPUT"
+      - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
+      - name: Acquire operation lock
+        env: { OPERATION: deploy, ENVIRONMENT: "_${{ inputs.stack }}" }
+        run: scripts/deploy/operation-lock.sh acquire
+  prepare:
+    needs: build
+    environment: _${{ inputs.stack }}
+    runs-on: ubuntu-latest
+    outputs: { previous: "${{ steps.prepare.outputs.previous }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.11.4 }
+      - uses: aws-actions/configure-aws-credentials@v5
+        with: { role-to-assume: "${{ vars.AWS_MAINTENANCE_ROLE_ARN }}", aws-region: eu-west-1 }
+      - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
+      - run: source scripts/deploy/lib.sh && load_config && init_stack "${{ inputs.stack }}"
+      - id: prepare
+        env: { STACK: "${{ inputs.stack }}", MODE: prepare }
+        run: scripts/deploy/github-release.sh
+  infrastructure:
+    needs: prepare
+    uses: ./.github/workflows/aws-infrastructure.yml
+    with: { stack: "${{ inputs.stack }}", apply: true }
+    secrets: inherit
+  register-app:
+    needs: [build, infrastructure]
+    environment: _${{ inputs.stack }}
+    runs-on: ubuntu-latest
+    outputs: { revision: "${{ steps.register.outputs.revision }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.11.4 }
+      - uses: aws-actions/configure-aws-credentials@v5
+        with: { role-to-assume: "${{ vars.AWS_RELEASE_ROLE_ARN }}", aws-region: eu-west-1 }
+      - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
+      - run: source scripts/deploy/lib.sh && load_config && init_stack "${{ inputs.stack }}"
+      - id: register
+        env: { STACK: "${{ inputs.stack }}", MODE: register-app, IMAGE_URI: "${{ needs.build.outputs.image }}" }
+        run: scripts/deploy/github-release.sh
+  activate:
+    needs: [build, prepare, register-app]
+    environment: _${{ inputs.stack }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.11.4 }
+      - uses: aws-actions/configure-aws-credentials@v5
+        with: { role-to-assume: "${{ vars.AWS_MAINTENANCE_ROLE_ARN }}", aws-region: eu-west-1 }
+      - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
+      - run: source scripts/deploy/lib.sh && load_config && init_stack "${{ inputs.stack }}"
+      - id: maintenance
+        env: { STACK: "${{ inputs.stack }}", MODE: register-maintenance, IMAGE_URI: "${{ needs.build.outputs.image }}" }
+        run: scripts/deploy/github-release.sh
+      - name: Initialize, release, and verify
+        env:
+          STACK: "${{ inputs.stack }}"
+          MODE: activate
+          APP_TASK_DEFINITION: "${{ needs.register-app.outputs.revision }}"
+          MAINTENANCE_TASK_DEFINITION: "${{ steps.maintenance.outputs.revision }}"
+          PREVIOUS_TASK_DEFINITION: "${{ needs.prepare.outputs.previous }}"
+        run: scripts/deploy/github-release.sh
+      - name: Release operation lock
+        if: success()
+        run: scripts/deploy/operation-lock.sh release

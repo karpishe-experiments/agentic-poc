@@ -6,6 +6,7 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { GenerationService } from "@/lib/application/generation-service";
 import { pagePlanSchema, type ArtifactDetail } from "@/lib/contracts/artifacts";
 import { regenerationRequestSchema, type RegenerationRequest } from "@/lib/contracts/regeneration";
+import { assertMutationsAllowed } from "@/lib/application/deployment-control";
 
 export class RevisionService {
   private readonly repositories: Repositories;
@@ -22,6 +23,7 @@ export class RevisionService {
   }
 
   public async regenerateImage(bookletId: string, input: RegenerationRequest) {
+    await assertMutationsAllowed();
     const parsed = regenerationRequestSchema.parse(input);
     const generation = this.generation ?? new GenerationService({ repositories: this.repositories, assets: this.assets });
     let job: { id: string; status: string; reused: boolean };

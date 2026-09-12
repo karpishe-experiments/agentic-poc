@@ -8,6 +8,7 @@ import Link from "next/link";
 import { CardRegistry } from "@/components/cards/card-registry";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 import type { BookletUIMessage } from "@/lib/contracts/messages";
+import { readOperationResponse } from "@/lib/http/read-operation-response";
 
 type CardResponseBody = { data?: { summary: string; followupRequired: boolean; refreshRequired?: boolean }; error?: { message?: string } };
 const workspaceRefreshMessage = "The workspace needs a refresh. Your saved work is still available.";
@@ -108,12 +109,15 @@ export function WorkspaceConversation({ bookletId, initialMessages, pendingCardF
   }
 
   async function readCardResponse(result: Response): Promise<CardResponseBody> {
+    let terminal: { ok: boolean; status: number; body: CardResponseBody };
     try {
-      return await result.json() as CardResponseBody;
+      terminal = await readOperationResponse<CardResponseBody>(result);
     } catch {
       setReloadSuggested(true);
       throw new Error(workspaceRefreshMessage);
     }
+    if (!terminal.ok) throw new Error(terminal.body.error?.message ?? "The operation failed.");
+    return terminal.body;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -151,7 +155,7 @@ export function WorkspaceConversation({ bookletId, initialMessages, pendingCardF
         body: JSON.stringify({ responseId, ...response }),
       });
       const body = await readCardResponse(result);
-      if (!result.ok || !body.data) throw new Error(body.error?.message ?? "We could not save that decision.");
+      if (!body.data) throw new Error(body.error?.message ?? "We could not save that decision.");
       if (card.family !== "agent_run") setSubmittedCardIds((submitted) => new Set(submitted).add(card.cardId));
       const advancesGuidedFlow = card.family === "artifact_review" && response.action === "approve_and_continue" && (
         (card.variant === "summary" && (card.payload.artifactType === "audience_profile" || card.payload.artifactType === "story_plan"))
@@ -175,7 +179,7 @@ export function WorkspaceConversation({ bookletId, initialMessages, pendingCardF
     try {
       const result = await fetch(`/api/booklets/${bookletId}/cards/${cardId}/reopen`, { method: "POST" });
       const body = await readCardResponse(result);
-      if (!result.ok || !body.data) throw new Error(body.error?.message ?? "We could not reopen that decision.");
+      if (!body.data) throw new Error(body.error?.message ?? "We could not reopen that decision.");
       window.location.reload();
     } catch (reopenError) {
       setCardError(reopenError instanceof Error ? reopenError.message : "We could not reopen that decision.");

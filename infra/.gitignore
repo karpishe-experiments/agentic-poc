@@ -1,0 +1,8 @@
+.tools/
+**/.terraform/
+**/terraform.tfstate*
+**/backend.generated.tf
+**/*.tfplan
+**/*.tfplan.json
+**/crash.log
+config/account.json

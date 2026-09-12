@@ -2,20 +2,18 @@ import { randomUUID } from "node:crypto";
 import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 
 type SummaryBucket = { calls: number; failures: number; latencyMs: number };
 
 export class EvidenceService {
   private readonly repositories: Repositories;
   private assets?: AssetStore;
-  private readonly dataRoot?: string;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; assets?: AssetStore } = {}) {
     const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.assets = dependencies.assets;
-    this.dataRoot = dependencies.assets ? undefined : resolveDataRoot(getServerEnv());
   }
 
   public async buildSummary(bookletId: string) {
@@ -72,8 +70,7 @@ export class EvidenceService {
 
   private async getAssetStore(): Promise<AssetStore> {
     if (this.assets) return this.assets;
-    const { FilesystemAssetStore } = await import("@/lib/assets/filesystem-asset-store");
-    this.assets = new FilesystemAssetStore(this.dataRoot ?? resolveDataRoot(getServerEnv()));
+    this.assets = createAssetStore();
     return this.assets;
   }
 }

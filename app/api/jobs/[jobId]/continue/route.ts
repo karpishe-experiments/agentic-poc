@@ -2,6 +2,7 @@ import { getDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
 import { GenerationService } from "@/lib/application/generation-service";
 import { toErrorEnvelope } from "@/lib/http/errors";
+import { runTrackedMutation } from "@/lib/application/deployment-control";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,7 @@ type RouteProperties = { params: Promise<{ jobId: string }> };
 export async function POST(_request: Request, { params }: RouteProperties) {
   try {
     const { jobId } = await params;
+    return await runTrackedMutation(async () => {
     const database = getDatabase();
     const repositories = createRepositories(database);
     const job = await repositories.jobs.getStatus(jobId);
@@ -25,6 +27,7 @@ export async function POST(_request: Request, { params }: RouteProperties) {
     else return Response.json({ error: { code: "continue_not_available", message: "This job type cannot be continued here." } }, { status: 409 });
 
     return Response.json({ data: await repositories.jobs.getStatus(job.id) });
+    });
   } catch (error) {
     const response = toErrorEnvelope(error);
     return Response.json(response.body, { status: response.status });
