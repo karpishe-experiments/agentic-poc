@@ -41,7 +41,7 @@ review_root="$test_root/review-work"; mkdir -p "$review_root/.deploy/plans"; pri
   export STANDALONE=true DEPLOY_ROOT="$review_root" SCRIPT_PATH="$test_root/aws-deployment.sh" AWS_ACCOUNT_ID=123456789012 PROJECT=kids-booklet STACK=shared
   export REPOSITORY=owner/repository
   unset GH_AUTHENTICATED
-  if resolve_repository_owner >/dev/null 2>&1; then echo 'bootstrap preview accepted missing GitHub authentication' >&2; exit 1; fi
+  if (resolve_repository_owner) >/dev/null 2>&1; then echo 'bootstrap preview accepted missing GitHub authentication' >&2; exit 1; fi
   export GH_AUTHENTICATED=true
   resolve_repository_owner
   [[ "$REPOSITORY_OWNER_ID" == 987654321 ]]
