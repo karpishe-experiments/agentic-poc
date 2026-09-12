@@ -4,6 +4,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  History,
   MessageSquare,
   Plus,
   RotateCcw,
@@ -23,6 +24,8 @@ import type {
 } from "@/lib/mockups/specialty-management/types";
 import { AgentEditor } from "./agent-editor";
 import { ChatPanel } from "./chat-panel";
+import { TestHistoryWorkspace } from "./test-workspace";
+import { completeTestResponse } from "@/lib/mockups/specialty-management/testing";
 
 type Update = (fn: (draft: MockupState) => void) => void;
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -166,6 +169,20 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
           placeholder="Search…"
         />
       </label>
+      <button
+        className={`test-history-link ${state.ui.selection.kind === "test-history" ? "selected" : ""}`}
+        aria-current={state.ui.selection.kind === "test-history" ? "page" : undefined}
+        onClick={() =>
+          select({
+            kind: "test-history",
+            sessionId: state.testSessions[0]?.id ?? null,
+          })
+        }
+      >
+        <History size={15} />
+        <span>Test history</span>
+        <small>{state.testSessions.length}</small>
+      </button>
       <ul className="specialty-list">
         {visible.map((specialty) => {
           const expanded = state.ui.expandedSpecialtyIds.includes(specialty.id);
@@ -332,6 +349,10 @@ function SpecialtyEditor({
   update: Update;
   announce(message: string): void;
 }) {
+  if (state.ui.selection.kind === "test-history")
+    return (
+      <TestHistoryWorkspace state={state} update={update} announce={announce} />
+    );
   if (state.ui.selection.kind !== "specialty")
     return <AgentEditor state={state} update={update} announce={announce} />;
   const id = state.ui.selection.specialtyId;
@@ -512,6 +533,15 @@ export function SpecialtyManagementMockup() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [state.workingCopies]);
+  useEffect(() => {
+    if (!state.pendingTestResponse) return;
+    const timer = window.setTimeout(() => {
+      update((draft) => {
+        completeTestResponse(draft, uid);
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [state.pendingTestResponse]);
   const reset = () => {
     if (!confirm("Reset all specialty-management demo data?")) return;
     const next = freshSeed();

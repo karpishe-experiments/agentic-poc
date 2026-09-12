@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { FileText, Plus, Settings2, Trash2 } from "lucide-react";
+import { FileText, FlaskConical, Plus, Settings2, Trash2 } from "lucide-react";
 import { MarkdownEditor } from "./markdown-editor";
 import { SampleResultDialog } from "./sample-result-dialog";
+import { AgentTestWorkspace } from "./test-workspace";
 import type {
   AgentVersion,
   MockupState,
@@ -346,6 +347,12 @@ export function AgentEditor({
           >
             <FileText size={15} /> Main instructions
           </button>
+          <button
+            className={selection.section === "test" ? "selected" : ""}
+            onClick={() => selectSection("test")}
+          >
+            <FlaskConical size={15} /> Test
+          </button>
           <div className="reference-heading">
             <strong>References</strong>
             <button aria-label="Add reference" onClick={addReference}>
@@ -382,7 +389,14 @@ export function AgentEditor({
           }}
         />
         <div className="agent-editor">
-          {selection.section === "configuration" ? (
+          {selection.section === "test" ? (
+            <AgentTestWorkspace
+              agentId={agent.id}
+              state={state}
+              update={update}
+              announce={announce}
+            />
+          ) : selection.section === "configuration" ? (
             <div className="form-grid">
               <label>
                 Title

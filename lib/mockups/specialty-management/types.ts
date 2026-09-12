@@ -2,10 +2,11 @@ import type { UIMessage } from "ai";
 
 export type OutputType = "text" | "image";
 export type VersionStatus = "draft" | "confirmed" | "retired";
-export type EditorSection =
+export type EditableAgentSection =
   | "configuration"
   | "instructions"
   | `reference:${string}`;
+export type EditorSection = EditableAgentSection | "test";
 export type ModelSelection = { provider: string; model: string };
 export type ReferenceFile = {
   id: string;
@@ -54,7 +55,8 @@ export type Selection =
       agentId: string;
       versionId: string;
       section: EditorSection;
-    };
+    }
+  | { kind: "test-history"; sessionId: string | null };
 
 export type SpecialtyEditingTarget = {
   kind: "specialty";
@@ -66,7 +68,7 @@ export type AgentEditingTarget = {
   specialtyId: string;
   agentId: string;
   versionId: string;
-  section: EditorSection;
+  section: EditableAgentSection;
 };
 export type EditingTarget = SpecialtyEditingTarget | AgentEditingTarget;
 /** Kept as a named alias while checkpoint 7 callers migrate. */
@@ -192,8 +194,116 @@ export type PendingChatResponse = {
 };
 export type PendingClarification = ClarificationCard;
 
+export type BookletStageId =
+  | "audience_profile"
+  | "story_plan"
+  | "visual_style"
+  | "visual_bible"
+  | "booklet_specification"
+  | "page_plan"
+  | "final_pages"
+  | "pdf_export";
+export type StageArtifact = {
+  stageId: BookletStageId;
+  label: string;
+  content: string;
+  assetPath?: string;
+};
+export type BookletStageSnapshot = {
+  id: string;
+  bookletId: string;
+  stageId: BookletStageId;
+  stageLabel: string;
+  stageIndex: number;
+  premise: string;
+  audience: string;
+  artifacts: StageArtifact[];
+  conversation: Array<{ role: "user" | "assistant"; text: string }>;
+  taskContext: string;
+};
+export type BookletFixture = {
+  id: string;
+  title: string;
+  premise: string;
+  audience: string;
+  currentStageId: BookletStageId;
+  snapshots: BookletStageSnapshot[];
+};
+export type Compatibility = "compatible" | "warning" | "undefined";
+export type TestActivity = {
+  id: string;
+  kind: "context-read" | "reference-read" | "tool-call";
+  label: string;
+  input: string;
+  output: string;
+};
+export type TestResult =
+  | {
+      kind: "text";
+      markdown: string;
+      revisionNote?: string;
+    }
+  | {
+      kind: "image";
+      imagePath: string;
+      description: string;
+      metadata: Record<string, string>;
+      revisionNote?: string;
+    }
+  | {
+      kind: "orchestrator";
+      selectedSpecialtyId: string | null;
+      explanation: string;
+    }
+  | { kind: "unsupported"; explanation: string };
+export type TestMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: string;
+  state: "complete" | "cancelled" | "interrupted" | "error";
+  result?: TestResult;
+  activityIds?: string[];
+  rating?: "useful" | "needs-work";
+  note?: string;
+  retryRequest?: string;
+};
+export type TestSession = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  agentId: string;
+  agentName: string;
+  agentVersionId: string;
+  agentVersionNumber: number;
+  specialtyId: string;
+  specialtyName: string;
+  agentSnapshot: AgentVersion;
+  specialtySnapshot: Pick<Specialty, "id" | "name" | "outputType" | "allowedToolIds">;
+  stageSnapshot: BookletStageSnapshot;
+  routingCatalog: Array<Pick<Specialty, "id" | "name" | "retired">>;
+  sourceSessionId: string | null;
+  openingRequest: string;
+  messages: TestMessage[];
+  activity: TestActivity[];
+};
+export type PendingTestResponse = {
+  id: string;
+  sessionId: string;
+  request: string;
+  startedAt: string;
+  kind: "opening" | "followup" | "retry";
+};
+export type TestSetup = {
+  bookletId: string;
+  stageId: BookletStageId;
+  openingRequest: string;
+  sourceSessionId: string | null;
+};
+
 export type MockupState = {
-  formatVersion: 2;
+  formatVersion: 3;
   specialties: Specialty[];
   agents: Agent[];
   tools: ToolFixture[];
@@ -213,6 +323,7 @@ export type MockupState = {
     chatOpen: boolean;
     editorMode: "edit" | "preview";
     imageDescriptions: Record<string, string>;
+    testSetup: TestSetup;
   };
   chat: {
     messages: ManagementUIMessage[];
@@ -221,6 +332,9 @@ export type MockupState = {
     composerText: string;
     pendingClarification: PendingClarification | null;
   };
+  booklets: BookletFixture[];
+  testSessions: TestSession[];
+  pendingTestResponse: PendingTestResponse | null;
 };
 export type MockupAction =
   | { type: "replace"; state: MockupState }

@@ -1,4 +1,5 @@
 import seed from "./seed.json";
+import { bookletFixtures } from "./booklets";
 import { captureBase, selectedTarget } from "./chat";
 import type {
   ChatProposal,
@@ -124,7 +125,8 @@ function migrateV1(value: UnknownRecord, includeSeedFailure: boolean): MockupSta
     formatVersion: 2,
     ui: { ...(isRecord(value.ui) ? value.ui : {}), recentVersionIds: isRecord(value.ui) && isRecord(value.ui.recentVersionIds) ? value.ui.recentVersionIds : {} },
     chat: { messages, proposals, pendingResponse: null, composerText: "", pendingClarification: null },
-  } as unknown as MockupState;
+  } as UnknownRecord;
+  const migrated = migrateV2(state, includeSeedFailure);
   proposals.forEach((proposal, index) => {
     const message = textMessage(
       `migrated-proposal-message-${index}`,
@@ -133,7 +135,7 @@ function migrateV1(value: UnknownRecord, includeSeedFailure: boolean): MockupSta
       proposal.target,
     );
     message.parts.push({ type: "data-proposal", data: { proposalId: proposal.id } });
-    state.chat.messages.push(message);
+    migrated.chat.messages.push(message);
   });
   if (isRecord(legacyChat.pendingResponse)) {
     const pendingTarget = asTarget(legacyChat.pendingResponse.target, value);
@@ -158,9 +160,35 @@ function migrateV1(value: UnknownRecord, includeSeedFailure: boolean): MockupSta
         type: "data-error-details",
         data: interruptedDetails(request, pendingTarget, legacyBase(pendingTarget, baseText)),
       });
-      state.chat.messages.push(interrupted);
+      migrated.chat.messages.push(interrupted);
     }
   }
+  return migrated;
+}
+
+function defaultTestSetup() {
+  return {
+    bookletId: "demo-forest",
+    stageId: "story_plan" as const,
+    openingRequest: "Produce a sample result",
+    sourceSessionId: null,
+  };
+}
+
+function migrateV2(value: UnknownRecord, includeSeedFailure = false): MockupState {
+  const ui = isRecord(value.ui) ? value.ui : {};
+  const state = {
+    ...structuredClone(value),
+    formatVersion: 3,
+    ui: {
+      ...ui,
+      recentVersionIds: isRecord(ui.recentVersionIds) ? ui.recentVersionIds : {},
+      testSetup: isRecord(ui.testSetup) ? ui.testSetup : defaultTestSetup(),
+    },
+    booklets: bookletFixtures(),
+    testSessions: [],
+    pendingTestResponse: null,
+  } as unknown as MockupState;
   return normalize(state, includeSeedFailure);
 }
 
@@ -221,6 +249,23 @@ function normalize(state: MockupState, includeSeedFailure = false): MockupState 
   if (selection.kind === "agent") state.ui.recentVersionIds[selection.agentId] ??= selection.versionId;
   state.chat.composerText ??= "";
   state.chat.pendingClarification ??= null;
+  state.ui.testSetup ??= defaultTestSetup();
+  state.booklets ??= bookletFixtures();
+  state.testSessions ??= [];
+  if (state.pendingTestResponse) {
+    const pending = state.pendingTestResponse;
+    const session = state.testSessions.find((item) => item.id === pending.sessionId);
+    if (session)
+      session.messages.push({
+        id: `interrupted-${pending.id}`,
+        role: "assistant",
+        text: "The simulated test response was interrupted during refresh.",
+        createdAt: new Date().toISOString(),
+        state: "interrupted",
+        retryRequest: pending.request,
+      });
+    state.pendingTestResponse = null;
+  }
   if (state.chat.pendingResponse) {
     const pending = state.chat.pendingResponse;
     state.chat.messages.push({
@@ -247,12 +292,14 @@ export const freshSeed = () =>
 
 export const isMockupState = (value: unknown): value is MockupState =>
   isRecord(value) &&
-  value.formatVersion === 2 &&
+  value.formatVersion === 3 &&
   Array.isArray(value.specialties) &&
   Array.isArray(value.agents) &&
   isRecord(value.chat) &&
   Array.isArray(value.chat.messages) &&
-  Array.isArray(value.chat.proposals);
+  Array.isArray(value.chat.proposals) &&
+  Array.isArray(value.booklets) &&
+  Array.isArray(value.testSessions);
 
 export function loadState(storage: Pick<Storage, "getItem">) {
   try {
@@ -260,6 +307,8 @@ export function loadState(storage: Pick<Storage, "getItem">) {
     if (raw === null) return { state: freshSeed(), error: null };
     const value: unknown = JSON.parse(raw);
     if (isMockupState(value)) return { state: normalize(value), error: null };
+    if (isRecord(value) && value.formatVersion === 2)
+      return { state: migrateV2(value), error: null };
     if (isRecord(value) && value.formatVersion === 1)
       return { state: migrateV1(value, false), error: null };
     return { state: null, error: "Saved demo data uses an unsupported format." };

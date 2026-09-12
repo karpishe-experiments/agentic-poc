@@ -24,7 +24,7 @@ test("loads with local synthetic data and no service calls", async ({
     await page.evaluate(() =>
       localStorage.getItem("specialty-management-mockup:v1"),
     ),
-  ).toContain('"formatVersion":2');
+  ).toContain('"formatVersion":3');
 });
 test("creates, saves, reloads, discards, retires and restores a specialty", async ({
   page,
@@ -247,7 +247,7 @@ test("migrates legacy saved chat data while preserving the selected management r
   await expect(page.getByRole("heading", { name: "Playful Writer" })).toBeVisible();
   expect(
     await page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1")),
-  ).toContain('"formatVersion":2');
+  ).toContain('"formatVersion":3');
 });
 
 test("proposes editable specialty, configuration, instruction, and reference fields", async ({
@@ -383,6 +383,193 @@ test("chat application creates a draft from a confirmed version without changing
   await page.getByLabel("Version").selectOption("playful-v1");
   await expect(page.getByText(/Version 1 · confirmed · Active/)).toBeVisible();
 });
+
+async function startAgentTest(page: import("@playwright/test").Page, request = "Produce a sample result") {
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Test setup" })).toBeVisible();
+  await page.getByLabel("Opening test request").fill(request);
+  await page.getByRole("button", { name: "Start test" }).click();
+  await expect(page.getByRole("region", { name: "Test session" })).toBeVisible();
+  await expect(page.getByText(/Prepared a deterministic text result|Prepared a bundled sample image result|Selected Story Planning|Selected Illustration/).last()).toBeVisible();
+}
+
+test("tests an agent against a frozen booklet stage, activity, feedback, and persisted history", async ({ page }) => {
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByLabel("Test booklet").selectOption("demo-forest");
+  await expect(page.getByLabel("Test stage")).toHaveValue("story_plan");
+  await expect(page.getByText(/Audience profile → Story plan/)).toBeVisible();
+  await expect(page.getByText("Available artifacts")).toBeVisible();
+  await page.getByLabel("Opening test request").fill("Produce a sample result");
+  await page.getByRole("button", { name: "Start test" }).click();
+  await expect(page.getByText("Prepared a deterministic text result from the frozen snapshot.")).toBeVisible();
+  await page.getByText(/Simulated activity/).click();
+  await expect(page.getByText("Read frozen stage context")).toBeVisible();
+  await page.getByRole("button", { name: "Useful" }).click();
+  await page.getByLabel("Feedback note").fill("Keep this structure.");
+  await page.reload();
+  await expect(page.getByLabel("Feedback note")).toHaveValue("Keep this structure.");
+  await page.getByRole("button", { name: "Test history" }).click();
+  await expect(page.getByRole("heading", { name: "Test history" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Test sessions" }).getByRole("button").first().click();
+  await expect(page.getByText("Frozen v2")).toBeVisible();
+  await page.getByLabel("Filter test history by booklet").selectOption("demo-moon");
+  await expect(page.getByText("No test sessions match these filters.")).toBeVisible();
+});
+
+test("returns image and orchestrator fixtures with frozen activity", async ({ page }) => {
+  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page.getByRole("button", { name: /Watercolor Illustrator/ }).click();
+  await startAgentTest(page);
+  await expect(page.getByRole("img", { name: /A warm scene/ })).toBeVisible();
+  await page.getByText("Image metadata").click();
+  await expect(page.getByText("Warm watercolor")).toBeVisible();
+
+  await page.getByRole("button", { name: "Expand Orchestrator" }).click();
+  await page.getByRole("button", { name: /Booklet Guide/ }).click();
+  await startAgentTest(page);
+  await expect(page.getByText("Specialty selected")).toBeVisible();
+  await expect(page.getByText(/Story Planning matches this frozen stage/)).toBeVisible();
+});
+
+test("expanded test activity shows frozen context, references, and allowed tools", async ({ page }) => {
+  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page.getByRole("button", { name: /Watercolor Illustrator/ }).click();
+  await startAgentTest(page);
+  const activity = page.getByText(/Simulated activity/);
+  await activity.click();
+  for (const label of ["Read frozen stage context", "Read composition.md", "Simulated get_artifact_context", "Simulated generate_image"]) {
+    await page.getByText(label, { exact: true }).click();
+  }
+  await expect(page.getByText("Bundled sample illustration selected.")).toBeVisible();
+  await expect(page.getByText("Frozen context read.")).toBeVisible();
+});
+
+test("stops and retries a test, repeats it explicitly, and preserves the editing composer during handoff", async ({ page }) => {
+  const instructions = await page.getByLabel("Main instructions").inputValue();
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByLabel("Opening test request").fill("Produce a sample result");
+  await page.getByRole("button", { name: "Start test" }).click();
+  await page.getByRole("button", { name: "Stop test response" }).click();
+  await expect(page.getByText("The simulated test response was stopped.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry turn" }).click();
+  await expect(page.getByText("Prepared a deterministic text result from the frozen snapshot.")).toBeVisible();
+  await page.getByRole("button", { name: "Repeat test with current edits" }).click();
+  await expect(page.getByText(/Repeat setup is ready/)).toBeVisible();
+  await expect(page.getByLabel("Test booklet")).toBeDisabled();
+  await page.getByRole("button", { name: "Start test" }).click();
+  await expect(page.getByText("Repeated test")).toBeVisible();
+  await page.getByLabel("Message the editing assistant").fill("Existing editing draft");
+  await page.getByRole("button", { name: "Send to editing chat" }).last().click();
+  await expect(page.getByLabel("Message the editing assistant")).toHaveValue(/Existing editing draft[\s\S]*Test feedback for/);
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(page.getByLabel("Main instructions")).toHaveValue(instructions);
+});
+
+test("repeat captures an intervening unsaved edit without changing the original frozen session", async ({ page }) => {
+  await startAgentTest(page);
+  await page.getByRole("button", { name: "Main instructions" }).click();
+  await page.getByLabel("Main instructions").fill("Unsaved revision for the repeat.");
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("button", { name: "Repeat test with current edits" }).click();
+  await page.getByRole("button", { name: "Start test" }).click();
+  await expect(page.getByText("Repeated test")).toBeVisible();
+  const snapshots = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return state.testSessions.map((session: { sourceSessionId: string | null; agentSnapshot: { mainInstructions: string } }) => ({
+      sourceSessionId: session.sourceSessionId,
+      mainInstructions: session.agentSnapshot.mainInstructions,
+    }));
+  });
+  expect(snapshots[0]).toMatchObject({ sourceSessionId: expect.any(String), mainInstructions: "Unsaved revision for the repeat." });
+  expect(snapshots[1]).toMatchObject({ sourceSessionId: null });
+  expect(snapshots[1].mainInstructions).not.toBe("Unsaved revision for the repeat.");
+});
+
+test("recovers an interrupted test and retains an orphaned frozen session without service calls", async ({ page }) => {
+  const forbidden: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1") forbidden.push(request.url());
+  });
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByLabel("Opening test request").fill("Produce a sample result");
+  await page.getByRole("button", { name: "Start test" }).click();
+  await page.reload();
+  await expect(page.getByText("The simulated test response was interrupted during refresh.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry turn" }).click();
+  await expect(page.getByText("Prepared a deterministic text result from the frozen snapshot.")).toBeVisible();
+  await page.evaluate(() => {
+    const key = "specialty-management-mockup:v1";
+    const state = JSON.parse(localStorage.getItem(key)!);
+    state.agents = state.agents.filter((agent: { id: string }) => agent.id !== "agent-playful");
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Test history" }).click();
+  await expect(page.getByText("Source agent missing")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Repeat test with current edits" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send to editing chat" })).toBeDisabled();
+  expect(forbidden).toEqual([]);
+});
+
+test("offers only prepared booklet stages and permits a compatibility mismatch", async ({ page }) => {
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByLabel("Test booklet").selectOption("demo-moon");
+  await expect(page.getByLabel("Test stage")).toHaveValue("visual_bible");
+  await expect(page.getByText("This specialty is not a typical match for the selected stage. You can still test it.")).toBeVisible();
+  await page.getByLabel("Test stage").selectOption("audience_profile");
+  await expect(page.getByText(/Available artifacts/)).toBeVisible();
+  await expect(page.getByText("None yet")).toBeVisible();
+  await expect(page.getByRole("option", { name: /PDF export/ })).toHaveCount(0);
+  await page.getByLabel("Test booklet").selectOption("demo-garden");
+  await page.getByLabel("Test stage").selectOption("story_plan");
+  await expect(page.getByText(/Audience profile → Story plan/)).toBeVisible();
+  await expect(page.getByText("Warm watercolor, simple shapes, clear focal point.")).toHaveCount(0);
+});
+
+test("keeps follow-ups in one session and persists its rename until deletion", async ({ page }) => {
+  await startAgentTest(page);
+  await page.getByLabel("Message Test agent").fill("Summarize context");
+  await page.getByRole("button", { name: "Send to Test agent" }).click();
+  await expect(page.getByText(/Captured \d+ earlier artifact/)).toBeVisible();
+  await page.getByLabel("Session name").fill("Forest review");
+  await page.reload();
+  await expect(page.getByLabel("Session name")).toHaveValue("Forest review");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete session" }).click();
+  await expect(page.getByText("No tests yet.")).toBeVisible();
+});
+
+test("testing leaves source agents, specialties, and booklet fixtures unchanged", async ({ page }) => {
+  await page.getByLabel("Message the editing assistant").fill("Persist source fixtures");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1"))).not.toBeNull();
+  const before = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return JSON.stringify({ agents: state.agents, specialties: state.specialties, booklets: state.booklets });
+  });
+  await startAgentTest(page);
+  const after = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return JSON.stringify({ agents: state.agents, specialties: state.specialties, booklets: state.booklets });
+  });
+  expect(after).toBe(before);
+});
+
+test("history preserves a missing tested version and offers a labeled handoff fallback", async ({ page }) => {
+  await startAgentTest(page);
+  await page.evaluate(() => {
+    const key = "specialty-management-mockup:v1";
+    const state = JSON.parse(localStorage.getItem(key)!);
+    const agent = state.agents.find((item: { id: string }) => item.id === "agent-playful");
+    agent.versions = agent.versions.filter((version: { id: string }) => version.id !== "playful-v2");
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Test history" }).click();
+  await expect(page.getByText("Tested version missing")).toBeVisible();
+  await page.getByRole("button", { name: "Send to editing chat" }).click();
+  await expect(page.getByLabel("Message the editing assistant")).toHaveValue(/tested version is unavailable; using the current version/i);
+});
 test("persists sample image description and exposes metadata", async ({
   page,
 }) => {
@@ -450,6 +637,33 @@ test("captures readable desktop layouts with chat open and closed", async ({
       fullPage: true,
     });
     await page.getByRole("button", { name: "Show chat" }).click();
+  }
+});
+
+test("captures readable Test and Test history desktop layouts", async ({ page }) => {
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("button", { name: /Start test/ }).click();
+  await expect(page.getByText("Prepared a deterministic text result from the frozen snapshot.")).toBeVisible();
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.screenshot({
+      path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-test.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: /Test history/ }).click();
+    await page.screenshot({
+      path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-test-history.png`,
+      fullPage: true,
+    });
+    await page
+      .getByRole("navigation", { name: "Specialties and agents" })
+      .getByRole("button", { name: /Playful Writer/ })
+      .click();
+    await page.getByRole("button", { name: "Test", exact: true }).click();
   }
 });
 
