@@ -4,9 +4,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM deps AS builder
-ENV OPENAI_API_KEY=build-placeholder MODEL_RUNTIME=fake IMAGE_PROVIDER_MODE=fake
 COPY . .
-RUN npm run build
+RUN OPENAI_API_KEY=build-placeholder MODEL_RUNTIME=fake IMAGE_PROVIDER_MODE=fake npm run build
 
 FROM node:24.21.0-bookworm-slim AS runner
 ARG MONGODB_TOOLS_VERSION=100.18.0
@@ -21,7 +20,6 @@ RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nod
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/seeds ./seeds
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/db ./db
