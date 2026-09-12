@@ -47,6 +47,6 @@ review_root="$test_root/review-work"; mkdir -p "$review_root/.deploy/plans"; pri
   [[ "$REPOSITORY_OWNER_ID" == 987654321 ]]
   persist_reviewed_plan >/dev/null
   manifest="$HOME/.kids-booklet-deployment/$AWS_ACCOUNT_ID/$PROJECT/plans/shared.manifest"; [[ -f "$manifest" ]]
-  rm "$manifest"; if restore_reviewed_plan >/dev/null 2>&1; then echo 'apply accepted a missing reviewed-plan manifest' >&2; exit 1; fi
+  rm "$manifest"; if (restore_reviewed_plan) >/dev/null 2>&1; then echo 'apply accepted a missing reviewed-plan manifest' >&2; exit 1; fi
 )
 printf 'deployment script contract checks passed\n'
