@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM deps AS builder
+ENV OPENAI_API_KEY=build-placeholder MODEL_RUNTIME=fake IMAGE_PROVIDER_MODE=fake
 COPY . .
 RUN npm run build
 

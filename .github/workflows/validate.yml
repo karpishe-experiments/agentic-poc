@@ -7,6 +7,10 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: test-key
+      MODEL_RUNTIME: fake
+      IMAGE_PROVIDER_MODE: fake
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
