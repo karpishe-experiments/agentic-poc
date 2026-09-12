@@ -199,19 +199,41 @@ export type PendingChatResponse = {
 export type PendingClarification = ClarificationCard;
 
 export type BookletStageId =
-  | "audience_profile"
-  | "story_plan"
-  | "visual_style"
-  | "visual_bible"
-  | "booklet_specification"
-  | "page_plan"
-  | "final_pages"
-  | "pdf_export";
+  | "book_concept_brief"
+  | "story_outline"
+  | "draft_character_list"
+  | "draft_location_list"
+  | "page_by_page_manuscript"
+  | "final_character_list"
+  | "final_location_list"
+  | "visual_style_package"
+  | "character_sheet_package"
+  | "location_sheet_package"
+  | "pagination_layout_plan"
+  | "final_page_bible"
+  | "final_page_illustration_package"
+  | "book_export_package";
+export type TaskCatalogItem = {
+  id: BookletStageId;
+  label: string;
+  index: number;
+  specialtyId: string;
+  dependsOn: BookletStageId[];
+  outputType: OutputType;
+};
 export type StageArtifact = {
+  id: string;
   stageId: BookletStageId;
   label: string;
   content: string;
+  status: "approved";
+  version: number;
+  entityId?: string;
   assetPath?: string;
+  assetId?: string;
+  filename?: string;
+  revision?: number;
+  geometry?: string;
 };
 export type BookletStageSnapshot = {
   id: string;
@@ -222,8 +244,18 @@ export type BookletStageSnapshot = {
   premise: string;
   audience: string;
   artifacts: StageArtifact[];
+  currentArtifact?: StageArtifact;
   conversation: Array<{ role: "user" | "assistant"; text: string }>;
   taskContext: string;
+};
+export type SourcePageRecord = {
+  readingOrder: number;
+  pageId: string;
+  geometry: string;
+  approvedAssetId: string;
+  approvedFilename: string;
+  revision: number;
+  approved: true;
 };
 export type BookletFixture = {
   id: string;
@@ -231,6 +263,11 @@ export type BookletFixture = {
   premise: string;
   audience: string;
   currentStageId: BookletStageId;
+  completedTaskIds: BookletStageId[];
+  eligibleTaskIds: BookletStageId[];
+  characters: Array<{ id: string; name: string; sheetAssetId?: string }>;
+  locations: Array<{ id: string; name: string; sheetAssetId?: string }>;
+  sourcePageManifest: SourcePageRecord[];
   snapshots: BookletStageSnapshot[];
 };
 export type Compatibility = "compatible" | "warning" | "undefined";
@@ -287,6 +324,7 @@ export type TestSession = {
   specialtySnapshot: Pick<Specialty, "id" | "name" | "outputType" | "allowedToolIds">;
   stageSnapshot: BookletStageSnapshot;
   routingCatalog: Array<Pick<Specialty, "id" | "name" | "retired">>;
+  taskCatalogSnapshot: TaskCatalogItem[];
   sourceSessionId: string | null;
   openingRequest: string;
   messages: TestMessage[];
@@ -313,6 +351,7 @@ export type MockupState = {
   agents: Agent[];
   tools: ToolFixture[];
   models: ModelFixture[];
+  taskCatalog: TaskCatalogItem[];
   workingCopies: {
     specialties: Record<string, Specialty>;
     versions: Record<string, AgentVersion>;

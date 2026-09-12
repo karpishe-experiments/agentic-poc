@@ -40,6 +40,34 @@ test("loads with local synthetic data and no service calls", async ({
     ),
   ).toContain('"formatVersion":1');
 });
+test("exposes the complete guideline catalog and synthetic export boundary", async ({
+  page,
+}) => {
+  await page.goto("/mockups/specialty-management?view=directory");
+  await expect(page.locator(".directory-group")).toHaveCount(15);
+  const exportGroup = page.locator(".directory-group").filter({
+    has: page.getByRole("button", {
+      name: /Book Export Package.*Prepares a traceable source manifest/,
+    }),
+  });
+  await exportGroup
+    .getByRole("button", { name: /Export Preflight Editor/ })
+    .click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
+  await page.getByLabel("Test booklet").selectOption("demo-garden");
+  await expect(page.getByLabel("Test stage")).toHaveValue(
+    "book_export_package",
+  );
+  await expect(
+    page.getByText(
+      "Export The Smallest Garden now using the approved source-page manifest.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Start test" }).click();
+  await expect(page.getByText("Synthetic preflight passed.")).toBeVisible();
+  await expect(page.getByText("No PDF was generated or exported.")).toBeVisible();
+});
 test("creates, saves, reloads, discards, retires and restores a specialty", async ({
   page,
 }) => {
@@ -77,10 +105,14 @@ test("resizes navigation with the keyboard", async ({ page }) => {
 test("creates and activates an image agent with a persisted reference", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page
+    .getByRole("button", { name: "Expand Visual Style Package" })
+    .click();
   const illustration = page
     .getByRole("listitem")
-    .filter({ has: page.getByRole("button", { name: /Illustration image/ }) })
+    .filter({
+      has: page.getByRole("button", { name: /Visual Style Package image/ }),
+    })
     .first();
   await illustration.getByRole("button", { name: "Add agent" }).click();
   await expect(page.getByRole("group", { name: /Image model/ })).toBeVisible();
@@ -149,22 +181,24 @@ test("edits Markdown with keyboard and toolbar mention menus", async ({
   const editor = page.getByLabel("Main instructions");
   await editor.fill("Use @sto");
   await page.keyboard.press("Enter");
-  await expect(editor).toHaveValue(/\[@Story Planning\]\(specialty:sp-story\)/);
+  await expect(editor).toHaveValue(/\[@Story Outline\]\(specialty:sp-story\)/);
   await page.getByRole("button", { name: "Mention tool" }).click();
   await page.getByRole("option", { name: /get_artifact_context/ }).click();
   await page.getByRole("button", { name: "Mention reference" }).click();
-  await page.getByRole("option", { name: /rhyming-guide\.md/ }).click();
+  await page.getByRole("option", { name: /artifact-template\.md/ }).click();
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(
-    page.getByRole("button", { name: "@Story Planning" }),
+    page.getByRole("button", { name: "@Story Outline" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "/get_artifact_context" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "/get_artifact_context" }).click();
-  await expect(page.getByText("Read artifact context.")).toBeVisible();
-  await page.getByRole("button", { name: "$rhyming-guide.md" }).click();
-  await expect(page.getByText("Prefer natural rhythm.")).toBeVisible();
+  await expect(
+    page.getByText("Read frozen approved artifact context."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "$artifact-template.md" }).click();
+  await expect(page.getByText("One-Paragraph Story Summary")).toBeVisible();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(page.getByLabel("Reference content")).toBeVisible();
   await page.getByRole("button", { name: "Preview" }).click();
@@ -178,7 +212,7 @@ test("navigates specialty mentions and disables deleted references", async ({
 }) => {
   const editor = page.getByLabel("Main instructions");
   await editor.fill(
-    "See [@Story Planning](specialty:sp-story) and [$guide](reference:ref-rhyme-v2).",
+    "See [@Story Outline](specialty:sp-story) and [$guide](reference:ref-playful-template-v2).",
   );
   await page.getByRole("button", { name: "Preview" }).click();
   await page.getByRole("button", { name: "$guide" }).click();
@@ -189,9 +223,9 @@ test("navigates specialty mentions and disables deleted references", async ({
   await expect(
     page.getByRole("button", { name: "Unavailable reference" }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "@Story Planning" }).click();
+  await page.getByRole("button", { name: "@Story Outline" }).click();
   await expect(
-    page.getByRole("heading", { name: "Story Planning", exact: true }),
+    page.getByRole("heading", { name: "Story Outline", exact: true }),
   ).toBeVisible();
 });
 test("renders only the bundled Markdown image without external requests", async ({
@@ -246,7 +280,7 @@ test("streams answers, clarification, and read-only instruction proposals from t
   await waitForAssistantTurn(page, /Which change should I prepare/);
   await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-clarification.png" });
   await expect(page.getByText("Choose the kind of edit you want for this section.")).toBeVisible();
-  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "artifact-template.md" }).click();
   await page.getByLabel("Message the editing assistant").fill("A free-text clarification answer");
   await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
   await expect(page.getByText(/to answer the pending clarification/)).toBeVisible();
@@ -303,12 +337,12 @@ test("proposes editable specialty, configuration, instruction, and reference fie
   ).toBeVisible();
   await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-field-proposal.png" });
 
-  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "artifact-template.md" }).click();
   await requestEditingAssistant(page, "Add an example");
   await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   await expect(page.getByRole("region", { name: "Edit proposal" }).last().getByText("Content", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Story Planning text" }).click();
+  await page.getByRole("button", { name: "Story Outline text" }).click();
   await requestEditingAssistant(page, "Update the description");
   await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   await expect(page.getByRole("region", { name: "Edit proposal" }).last().getByText("Description", { exact: true })).toBeVisible();
@@ -328,7 +362,7 @@ test("keeps target-aware proposals safe across selection changes and manual edit
 }) => {
   await requestEditingAssistant(page, "Add an example");
   await waitForAssistantTurn(page, /I prepared a simulated proposal/);
-  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "artifact-template.md" }).click();
   const proposal = page.getByRole("region", { name: "Edit proposal" }).last();
   await expect(proposal.getByRole("button", { name: "Open target" })).toBeVisible();
   await proposal.getByRole("button", { name: "Open target" }).click();
@@ -402,7 +436,7 @@ test("reset cancels a running response and restores the seeded failure fixture",
 test("marks a proposal unavailable when its reference is deleted during or after a request", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "artifact-template.md" }).click();
   await requestEditingAssistant(page, "Add an example");
   await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   page.once("dialog", (dialog) => dialog.accept());
@@ -431,14 +465,16 @@ async function startAgentTest(page: import("@playwright/test").Page, request = "
   await page.getByLabel("Opening test request").fill(request);
   await page.getByRole("button", { name: "Start test" }).click();
   await expect(page.getByRole("region", { name: "Test session" })).toBeVisible();
-  await expect(page.getByText(/Prepared a deterministic text result|Prepared a bundled sample image result|Selected Story Planning|Selected Illustration/).last()).toBeVisible();
+  await expect(page.getByText(/Prepared a deterministic text result|Prepared a bundled sample image result|Selected Story Outline|Selected Visual Style Package/).last()).toBeVisible();
 }
 
 test("tests an agent against a frozen booklet stage, activity, feedback, and persisted history", async ({ page }) => {
   await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByLabel("Test booklet").selectOption("demo-forest");
-  await expect(page.getByLabel("Test stage")).toHaveValue("story_plan");
-  await expect(page.getByText(/Audience profile → Story plan/)).toBeVisible();
+  await expect(page.getByLabel("Test stage")).toHaveValue("story_outline");
+  await expect(
+    page.getByText(/Book Concept Brief → Story Outline/),
+  ).toBeVisible();
   await expect(page.getByText("Available artifacts")).toBeVisible();
   await page.getByLabel("Opening test request").fill("Produce a sample result");
   await page.getByRole("button", { name: "Start test" }).click();
@@ -458,10 +494,16 @@ test("tests an agent against a frozen booklet stage, activity, feedback, and per
 });
 
 test("returns image and orchestrator fixtures with frozen activity", async ({ page }) => {
-  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page
+    .getByRole("button", { name: "Expand Visual Style Package" })
+    .click();
   await page.getByRole("button", { name: /Watercolor Illustrator/ }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
+  await page.getByLabel("Test booklet").selectOption("demo-moon");
   await startAgentTest(page);
-  await expect(page.getByRole("img", { name: /A warm scene/ })).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /Bundled synthetic visual style package/ }),
+  ).toBeVisible();
   await page.getByText("Image metadata").click();
   await expect(page.getByText("Warm watercolor")).toBeVisible();
 
@@ -469,16 +511,22 @@ test("returns image and orchestrator fixtures with frozen activity", async ({ pa
   await page.getByRole("button", { name: /Booklet Guide/ }).click();
   await startAgentTest(page);
   await expect(page.getByText("Specialty selected")).toBeVisible();
-  await expect(page.getByText(/Story Planning matches this frozen stage/)).toBeVisible();
+  await expect(
+    page.getByText(/Visual Style Package matches this frozen stage/),
+  ).toBeVisible();
 });
 
 test("expanded test activity shows frozen context, references, and allowed tools", async ({ page }) => {
-  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page
+    .getByRole("button", { name: "Expand Visual Style Package" })
+    .click();
   await page.getByRole("button", { name: /Watercolor Illustrator/ }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
+  await page.getByLabel("Test booklet").selectOption("demo-moon");
   await startAgentTest(page);
   const activity = page.getByText(/Simulated activity/);
   await activity.click();
-  for (const label of ["Read frozen stage context", "Read composition.md", "Simulated get_artifact_context", "Simulated generate_image"]) {
+  for (const label of ["Read frozen stage context", "Read artifact-template.md", "Simulated get_workflow_overview", "Simulated generate_image"]) {
     await page.getByText(label, { exact: true }).click();
   }
   await expect(page.getByText("Bundled sample illustration selected.")).toBeVisible();
@@ -559,15 +607,17 @@ test("recovers an interrupted test and retains an orphaned frozen session withou
 test("offers only prepared booklet stages and permits a compatibility mismatch", async ({ page }) => {
   await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByLabel("Test booklet").selectOption("demo-moon");
-  await expect(page.getByLabel("Test stage")).toHaveValue("visual_bible");
+  await expect(page.getByLabel("Test stage")).toHaveValue("visual_style_package");
   await expect(page.getByText("This specialty is not a typical match for the selected stage. You can still test it.")).toBeVisible();
-  await page.getByLabel("Test stage").selectOption("audience_profile");
+  await page.getByLabel("Test stage").selectOption("book_concept_brief");
   await expect(page.getByText(/Available artifacts/)).toBeVisible();
   await expect(page.getByText("None yet")).toBeVisible();
   await expect(page.getByRole("option", { name: /PDF export/ })).toHaveCount(0);
   await page.getByLabel("Test booklet").selectOption("demo-garden");
-  await page.getByLabel("Test stage").selectOption("story_plan");
-  await expect(page.getByText(/Audience profile → Story plan/)).toBeVisible();
+  await page.getByLabel("Test stage").selectOption("story_outline");
+  await expect(
+    page.getByText(/Book Concept Brief → Story Outline/),
+  ).toBeVisible();
   await expect(page.getByText("Warm watercolor, simple shapes, clear focal point.")).toHaveCount(0);
 });
 
@@ -665,6 +715,17 @@ test("confirmation atomically saves description and notes, then clears notes on 
   await expect(dialog.getByRole("region", { name: "Simulated note suggestion" })).toContainText(
     "Updated configuration, Main instructions, and references.",
   );
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.screenshot({
+      path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-confirmation.png`,
+      fullPage: true,
+    });
+  }
   await dialog.getByRole("button", { name: "Use suggestion" }).click();
   await expect(dialog.getByLabel("Confirmation notes")).toHaveValue(
     "Updated configuration, Main instructions, and references.",
@@ -744,13 +805,28 @@ test("agent configuration reflects unsaved specialty tools and returns to its wo
 
 test("uses the same search and retired filter in directory and workspace", async ({ page }) => {
   await page.getByRole("button", { name: "Directory" }).click();
-  await page.getByLabel("Search specialties and agents").fill("Concise");
-  await expect(page.getByRole("button", { name: /Concise Planner/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Watercolor Illustrator/ })).toHaveCount(0);
+  await page.getByLabel("Search specialties and agents").fill("Watercolor");
+  await expect(
+    page.getByRole("button", { name: /Watercolor Illustrator/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Playful Writer/ }),
+  ).toHaveCount(0);
+  await page.getByLabel("Search specialties and agents").fill("");
+  await page
+    .getByRole("button", { name: /Visual Style Package.*Defines and validates/ })
+    .click();
+  await page.getByRole("button", { name: "Retire", exact: true }).click();
+  await page.getByRole("button", { name: "Directory" }).click();
+  await page.getByLabel("Search specialties and agents").fill("Visual Style");
+  await expect(
+    page.getByRole("button", { name: /Visual Style Package.*Defines and validates/ }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Filter" }).click();
   await page.getByLabel("Show retired").check();
-  await page.getByLabel("Search specialties and agents").fill("Legacy");
-  await expect(page.getByRole("button", { name: /Legacy Review/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Visual Style Package.*Defines and validates/ }),
+  ).toBeVisible();
 });
 
 test("history preserves a missing tested version and offers a labeled handoff fallback", async ({ page }) => {
@@ -771,7 +847,9 @@ test("history preserves a missing tested version and offers a labeled handoff fa
 test("persists sample image description and exposes metadata", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Expand Illustration" }).click();
+  await page
+    .getByRole("button", { name: "Expand Visual Style Package" })
+    .click();
   await page.getByRole("button", { name: /Watercolor Illustrator/ }).click();
   await page.getByRole("button", { name: "Preview sample result" }).click();
   await expect(
@@ -794,7 +872,7 @@ test("reopens an agent at its most recently selected version", async ({
   page,
 }) => {
   await expect(page.locator(".header-actions select")).toHaveValue("playful-v2");
-  await page.getByRole("button", { name: "Story Planning text" }).click();
+  await page.getByRole("button", { name: "Story Outline text" }).click();
   await page.getByRole("button", { name: /Playful Writer/ }).click();
   await expect(page.locator(".header-actions select")).toHaveValue("playful-v2");
 });
@@ -812,7 +890,7 @@ test("swaps the inner agent workspace between Edit and Test and restores the edi
   await expect(testTab).toBeFocused();
   await editTab.click();
   await expect(page.getByLabel("Title")).toBeVisible();
-  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await page.getByRole("button", { name: "artifact-template.md" }).click();
   await testTab.click();
   await expect(testTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("navigation", { name: "Agent sections" })).toHaveCount(0);
@@ -874,6 +952,14 @@ test("captures readable desktop layouts with chat open and closed", async ({
       path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-chat-closed.png`,
       fullPage: true,
     });
+    await page.getByRole("button", { name: "Directory" }).click();
+    await page.screenshot({
+      path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-directory.png`,
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: /Playful Writer/ })
+      .click();
     await page.getByRole("button", { name: "Reopen Assistant" }).click();
   }
 });
@@ -907,21 +993,21 @@ test("captures readable Test and Test history desktop layouts", async ({ page })
 
 test("searches and opens specialty and agent entities", async ({ page }) => {
   const search = page.getByLabel("Search specialties and agents");
-  await search.fill("Concise");
-  await expect(
-    page.getByRole("button", { name: /Concise Planner/ }),
-  ).toBeVisible();
+  await search.fill("Playful");
   await expect(
     page.getByRole("button", { name: /Playful Writer/ }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: /Concise Planner/ }).click();
+  ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Concise Planner" }),
+    page.getByRole("button", { name: /Watercolor Illustrator/ }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: /Playful Writer/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Playful Writer" }),
   ).toBeVisible();
   await search.fill("");
-  await page.getByRole("button", { name: "Story Planning text" }).click();
+  await page.getByRole("button", { name: "Story Outline text" }).click();
   await expect(
-    page.getByRole("heading", { name: "Story Planning", exact: true }),
+    page.getByRole("heading", { name: "Story Outline", exact: true }),
   ).toBeVisible();
   await expect(
     page

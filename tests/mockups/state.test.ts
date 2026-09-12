@@ -12,7 +12,7 @@ describe("mockup state", () => {
     const state = freshSeed();
     expect(STORAGE_KEY).toBe("specialty-management-mockup:v2");
     expect(state.formatVersion).toBe(1);
-    expect(state.seedRevision).toBe(1);
+    expect(state.seedRevision).toBe(2);
     expect(state.ui.selection).toEqual({ kind: "directory" });
     expect(state.ui.navigationNotice).toBeNull();
     expect(state.booklets).toHaveLength(3);
@@ -57,6 +57,23 @@ describe("mockup state", () => {
     });
   });
 
+  it("replaces an earlier seed revision once", () => {
+    const old = freshSeed();
+    old.seedRevision = 1;
+    old.specialties[0]!.name = "Old local seed";
+    delete (old as unknown as { taskCatalog?: unknown }).taskCatalog;
+    const loaded = loadState({
+      getItem: () => JSON.stringify(old),
+    }).state!;
+    expect(loaded.seedRevision).toBe(2);
+    expect(loaded.specialties[0]?.name).toBe("Orchestrator");
+    loaded.specialties[0]!.name = "Retained current edit";
+    expect(
+      loadState({ getItem: () => JSON.stringify(loaded) }).state?.specialties[0]
+        ?.name,
+    ).toBe("Retained current edit");
+  });
+
   it("converts in-flight editing and test responses to interrupted records", () => {
     const state = freshSeed();
     const target = {
@@ -84,7 +101,7 @@ describe("mockup state", () => {
       agentVersionId: "playful-v2",
       agentVersionNumber: 2,
       specialtyId: "sp-story",
-      specialtyName: "Story Planning",
+      specialtyName: "Story Outline",
       agentSnapshot: structuredClone(
         state.agents
           .find((agent) => agent.id === "agent-playful")!
@@ -92,12 +109,13 @@ describe("mockup state", () => {
       ),
       specialtySnapshot: {
         id: "sp-story",
-        name: "Story Planning",
+        name: "Story Outline",
         outputType: "text",
         allowedToolIds: [],
       },
       stageSnapshot: structuredClone(state.booklets[0]!.snapshots[0]!),
       routingCatalog: [],
+      taskCatalogSnapshot: structuredClone(state.taskCatalog),
       sourceSessionId: null,
       openingRequest: "Produce a sample result",
       messages: [],

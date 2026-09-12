@@ -6,7 +6,7 @@ Deliver an interactive desktop mockup that the user can evaluate before defining
 
 The user requested a mockup with synthetic data, simulated chat, and persistence between refreshes. Their conversation decisions govern this phase. This plan does not implement or complete the parent issue's runtime requirements. In particular, schemas, migrations, tool execution, workflow routing, result mapping, and runtime integration remain later work. The parent issue still uses “skill”; this mockup uses “specialty”. Do not rename existing runtime symbols.
 
-Status: Checkpoints 1–12 complete; checkpoint 13 planned. Sections 10–14 govern the current implementation and supersede conflicting baseline instructions. Earlier checkpoint evidence remains historical. Defaults are experiment choices, not permanent runtime contracts.
+Status: Checkpoints 1–13 complete. Sections 10–14 govern the implemented mockup and supersede conflicting baseline instructions. Earlier checkpoint evidence remains historical. Defaults are experiment choices, not permanent runtime contracts.
 
 ### Agreed product model
 
@@ -18,7 +18,7 @@ Status: Checkpoints 1–12 complete; checkpoint 13 planned. Sections 10–14 gov
 - The built-in Orchestrator specialty can contain multiple agents. The future workflow selects one orchestrator per booklet. Other specialties retain the existing concept of team selection and parallel results; Phase 0 does not modify those creator flows.
 - Agent draft, confirmation, activation, retirement, and fork interactions are represented locally.
 - The editor supports `@` specialty, `/` available tool, and `$` reference menus. All agents can mention specialties. Mentions do not execute anything.
-- The Editing assistant proposes changes to the selected specialty settings, agent configuration, Main instructions, or reference. Proposals show read-only proposed content and require explicit Apply. Activation is separate.
+- The Assistant proposes changes to the selected specialty settings, agent configuration, Main instructions, or reference. Proposals show read-only proposed content and require explicit Apply. Activation is separate.
 - Agent Studio is the visible feature name. Preserve existing routes, storage keys, and internal identifiers. Test conversations are labeled Test agent.
 - The user explicitly wants simulated responses and simple JSON data, without existing runtime schemas or real model calls.
 
@@ -205,9 +205,9 @@ The specialty menu shows non-retired specialties for all agents. The tool menu s
 
 Configure Markdown URL handling explicitly: recognize only the three local mention schemes and safe ordinary link schemes (`https`, `http`, `mailto`). Render local mentions as buttons/badges; never navigate the browser to a custom protocol. A specialty mention opens its settings, a reference mention opens that reference in the same version, and a tool mention opens a small description popover. Resolve labels from current data; unknown IDs render a muted “Unavailable reference/tool/specialty” badge with original label. Raw HTML remains disabled. Do not execute links as tools or enforce runtime prompt rules.
 
-### Editing assistant
+### Assistant
 
-Checkpoint 7 below is the complete chat behavior specification. Use the visible name Editing assistant, one continuous target-aware conversation, local streaming, and read-only proposal cards. Chat edits specialty settings, configuration, instructions, and references. On Test or Test history, retain the conversation and disable edit submission until an editable section is selected. Preserve draft-only application and explicit Save; confirmed or retired versions require a new draft.
+Checkpoint 7 below is the complete chat behavior specification. Use the visible name Assistant, one continuous target-aware conversation, local streaming, and read-only proposal cards. Chat edits specialty settings, configuration, instructions, and references. On Test or Test history, retain the conversation and disable edit submission until an editable section is selected. Preserve draft-only application and explicit Save; confirmed or retired versions require a new draft.
 
 ### Image result illustration
 
@@ -236,13 +236,13 @@ Use these closed interaction defaults throughout implementation:
 | 4 — Markdown and mentions | Add dependencies, Edit/Preview, all three pickers and local link rendering | Keyboard and mouse menus insert correct tokens; preview renders Markdown and clickable mentions; removed reference is shown as unavailable |
 | 5 — Chat and result preview (completed baseline) | Implement shared conversation, deterministic simulation, original before/after editing, Apply and create-draft flow, sample image result | Suggest→review→Apply works; manual-edit conflict prevents replacement; active version stays unchanged; image dialog shows description and expandable metadata |
 | 6 — Verification and handoff | Complete tests, browser inspection, documentation, independent read-only review, bounded corrections | Acceptance matrix passes with evidence; final source checks pass; screenshots inspected; launch instructions and limitations documented |
-| 7 — Editing assistant | Complete: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate passed |
+| 7 — Assistant | Complete: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate passed |
 | 8 — Agent tests | Complete: stage snapshots, test sessions/history, repeat and editing handoff, format 3 | P0-16–P0-23 pass; independent review gate passed |
 | 9 — Focus and lifecycle UX | Complete: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate passed |
 | 10 — Theme and directory | Complete: application theme, directory/navigation, fresh storage | P0-28, P0-29, P0-34 |
 | 11 — Editor and Assistant | Complete: Edit/Test tabs, header actions, Assistant | P0-30, P0-31 |
 | 12 — Descriptions and notes | Complete: versioned descriptions, atomic confirmation notes | P0-32, P0-33 |
-| 13 — Guideline seed | Pending: PR #26 catalog, booklets, task results | P0-35–P0-37 |
+| 13 — Guideline seed | Complete: pinned PR #26 catalog, booklets, task results, provenance, and seed revision | P0-35–P0-37 |
 
 An implementation agent should use the relevant repository React/Next.js, UI review, and browser skills when implementing their surfaces. The primary agent owns edits and integration. A separate read-only reviewer is required after implementation; delegate that bounded review without concurrent edits. A review may find ordinary in-scope defects to fix; it must not expand the mockup into the parent runtime platform.
 
@@ -294,7 +294,7 @@ Run Git commands with repository-required permissions. Do not run paid evaluatio
 | P0-23 | History remains accessible after source deletion | Delete version/agent and reopen history; verify disabled source-dependent actions and frozen-session follow-up |
 | P0-24 | Focus restores panes/preferences without interrupting conversations | Enter/exit, refresh, Escape with popup/dialog, and editing handoff |
 | P0-25 | Optional notes obey version lifecycle and use simulated suggestions | Save/Discard, confirmed read-only, new-draft blank, suggestion review/apply |
-| P0-26 | Names, lifecycle explanations, and tool summary clarify behavior | Inspect Editing assistant/Test agent labels, disabled reasons, visible specialty edits |
+| P0-26 | Names, lifecycle explanations, and tool summary clarify behavior | Inspect Assistant/Test agent labels, disabled reasons, visible specialty edits |
 | P0-27 | Historical sequential-migration coverage; superseded by P0-34 | Preserve prior evidence; remove legacy migration tests in checkpoint 10 |
 | P0-28 | Compact application theme preserves generated-content styling | Inspect application pages and booklet content |
 | P0-29 | Directory and URL navigation restore correct views | Entry, refresh, Back/Forward, invalid targets, filters, creation |
@@ -329,7 +329,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 10 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (30); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; directory, refresh, Back/Forward, invalid-target recovery, shared filtering, and three desktop sizes covered; first review found booklet-content styling and Forward-coverage gaps, both corrected; two subsequent consecutive independent reviews passed with no intervening changes | None |
 | 11 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (30); `npm run test:mockup:e2e` (42), then focused corrected scenarios (2); `npm run mockup:build`; `git diff --check`; Edit/Test restoration, keyboard tabs, full Test space, Assistant collapse/reopen, focus handoff, and pending Directory navigation covered; reviews found focus Reopen, tab semantics/restoration, and Directory stream-lifecycle gaps, all corrected; two subsequent consecutive independent reviews passed with no intervening changes | None |
 | 12 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (31); `npm run test:mockup:e2e` (43), then affected scenarios (4); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; description Save/Discard, chat conflicts, confirmation cancellation, atomic dirty-draft save, deterministic note preview, derived-note reset, popover Escape, and focus return covered; two consecutive independent reviews passed with no intervening implementation changes | None |
-| 13 | Pending | Not run | Implementation pending |
+| 13 | Complete | Pinned commit `631f547ec3f7ce375f740dd6f2b1b9aaebbde940`; `npm run typecheck`; `npm run lint`; `npm run test:mockup` (37); `npm run test:mockup:e2e` (44); `npm run mockup:build`; `git diff --check`; source manifest covers 15 guidelines and 14 extracted templates; all 14 task results, frozen route catalogs, three booklet scenarios, Garden page/source links, seed-revision replacement, and no-PDF boundary covered; directory, Edit, Test, Test history, confirmation, focus, and Assistant screenshots inspected at 1280×800, 1440×900, and 1920×1080; review findings for full Garden page-bible coverage, tracked Next metadata, and frozen Orchestrator routing were corrected; two subsequent consecutive independent reviews passed with no intervening changes. Broader `npm test` passed 124/125 tests; the unrelated runtime reference-generation materialization timeout also failed on focused retry and no checkpoint files touch that subsystem. | None in checkpoint 13 |
 
 ## 5. Handoff and completion boundary
 
@@ -339,7 +339,7 @@ After implementation review passes, reconcile docs through `sync-docs-issues`. U
 
 Report the route, launch command, tested flows, verification outcomes, and known mockup limitations. Do not call issue #22 complete. Do not require a real model, MongoDB, authentication, shared storage, production validations, multi-tab synchronization, schema authoring, runtime tool permissions, actual reference loading by agents, creator team selection, or actual orchestration to finish Phase 0.
 
-Checkpoints 1–12 are complete; checkpoint 13 is pending. Excluded product features remain Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring. Seed-integrity tests are verification, not a user-facing reference/tool-check feature.
+Checkpoints 1–13 are complete. Excluded product features remain Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring. Seed-integrity tests are verification, not a user-facing reference/tool-check feature.
 
 ## 6. Checkpoint 7 — Interactive simulated management chat
 
@@ -385,7 +385,7 @@ A proposal can change multiple fields within one section. Store a partial field 
 
 Completed changes for other targets never supersede each other.
 
-Satisfy P0-08 and P0-13–P0-15 in the consolidated acceptance matrix. Preserve P0-01–P0-12 and independent desktop scrolling. Use the label Editing assistant and Test agent for their separate conversations. Configuration base comparisons cover title and applicable models; reference comparisons cover name, description, and content. Answers, clarification, failure, and cancellation do not supersede proposals. On Test or Test history, require an editable target before submitting an editing request.
+Satisfy P0-08 and P0-13–P0-15 in the consolidated acceptance matrix. Preserve P0-01–P0-12 and independent desktop scrolling. Use the labels Assistant and Test agent for their separate conversations. Configuration base comparisons cover title and applicable models; reference comparisons cover name, description, and content. Answers, clarification, failure, and cancellation do not supersede proposals. On Test or Test history, require an editable target before submitting an editing request.
 
 Run typecheck, lint, isolated mockup unit/browser tests, isolated build, and whitespace checks. Reject API/external requests in browser verification. Inspect streaming, clarification, text/field proposals, and expanded errors at 1280×800, 1440×900, and 1920×1080. Update the handoff guide and local-transport architecture description.
 
@@ -435,7 +435,7 @@ Use the existing mockup architecture and checkpoint 7's local chat patterns. All
 
 If that agent is currently open, use its selected version and working copy. Otherwise use its most recently viewed existing version, then active version, then newest remaining version. Display the chosen version before Start. Retry instead replays a failed or stopped turn against the original frozen session inputs.
 
-Snapshot specialty output type, allowed tools, and demo routing catalog alongside the complete agent version and booklet context. Later source edits cannot affect existing sessions. Permit one running test response across sessions, independently of the Editing assistant. Navigation does not stop it. Deleting that session or resetting cancels it. Refresh converts incomplete responses to interrupted turns with Retry.
+Snapshot specialty output type, allowed tools, and demo routing catalog alongside the complete agent version and booklet context. Later source edits cannot affect existing sessions. Permit one running test response across sessions, independently of the Assistant. Navigation does not stop it. Deleting that session or resetting cancels it. Refresh converts incomplete responses to interrupted turns with Retry.
 
 Add **Test history** to Studio navigation outside specialty sections. Show all sessions newest first with agent and booklet filters. Per-agent Test sections show the same records filtered by agent. Preserve captured names and snapshots after deletion; mark missing sources clearly. Orphaned sessions remain inspectable and can continue using frozen snapshots, but Repeat and editing handoff are disabled if the entire agent is missing. If only its version is missing, use the version fallback above and identify the difference in editing handoff.
 
@@ -488,9 +488,9 @@ Update the handoff guide when implemented. Retain the existing typecheck, lint, 
 
 ### Focus mode
 
-Focus mode expands the main workspace by hiding Studio navigation, agent section navigation, and the Editing assistant. Keep the entity header, version identity, relevant actions, and an accessible **Exit focus mode** control visible. Support specialty settings, configuration, instructions, references, and Test.
+Focus mode expands the main workspace by hiding Studio navigation, agent section navigation, and the Assistant. Keep the entity header, version identity, relevant actions, and an accessible **Exit focus mode** control visible. Support specialty settings, configuration, instructions, references, and Test.
 
-Preserve pane widths and chat-open preferences rather than overwriting them; restore them on exit. Persist focus state across refresh. Escape exits focus only when no dialog or popup consumes it. An editing-chat handoff exits focus and reveals the Editing assistant. Hidden conversations continue running. Keep independent main-pane scrolling and restore focus to the entry control on exit.
+Preserve pane widths and chat-open preferences rather than overwriting them; restore them on exit. Persist focus state across refresh. Escape exits focus only when no dialog or popup consumes it. An editing-chat handoff exits focus and reveals the Assistant. Hidden conversations continue running. Keep independent main-pane scrolling and restore focus to the entry control on exit.
 
 ### Optional version note
 

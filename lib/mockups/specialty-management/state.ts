@@ -1,5 +1,5 @@
 import seed from "./seed.json";
-import { bookletFixtures } from "./booklets";
+import { bookletFixtures, TASK_CATALOG } from "./booklets";
 import { captureBase } from "./chat";
 import type {
   EditingBase,
@@ -10,6 +10,7 @@ import type {
 } from "./types";
 
 export const STORAGE_KEY = "specialty-management-mockup:v2";
+export const CURRENT_SEED_REVISION = 2;
 type UnknownRecord = Record<string, unknown>;
 
 const isRecord = (value: unknown): value is UnknownRecord =>
@@ -55,7 +56,7 @@ function normalize(state: MockupState): MockupState {
   state.ui.recentVersionIds ??= {};
   state.ui.testSetup ??= {
     bookletId: "demo-forest",
-    stageId: "story_plan",
+    stageId: "story_outline",
     openingRequest: "Produce a sample result",
     sourceSessionId: null,
   };
@@ -63,7 +64,10 @@ function normalize(state: MockupState): MockupState {
   state.ui.navigationNotice ??= null;
   state.ui.lastEditorSections ??= {};
   state.booklets ??= bookletFixtures();
+  state.taskCatalog ??= structuredClone(TASK_CATALOG);
   state.testSessions ??= [];
+  for (const session of state.testSessions)
+    session.taskCatalogSnapshot ??= structuredClone(state.taskCatalog);
   state.pendingTestResponse ??= null;
   state.chat.composerText ??= "";
   state.chat.pendingClarification ??= null;
@@ -110,14 +114,14 @@ function normalize(state: MockupState): MockupState {
 export const freshSeed = (): MockupState => {
   const current = structuredClone(seed) as unknown as MockupState;
   current.formatVersion = 1;
-  current.seedRevision = 1;
+  current.seedRevision = CURRENT_SEED_REVISION;
   current.ui.selection = { kind: "directory" };
   current.ui.navigationNotice = null;
   current.ui.lastEditorSections ??= {};
   current.ui.recentVersionIds ??= {};
   current.ui.testSetup ??= {
     bookletId: "demo-forest",
-    stageId: "story_plan",
+    stageId: "story_outline",
     openingRequest: "Produce a sample result",
     sourceSessionId: null,
   };
@@ -190,6 +194,7 @@ export const isMockupState = (value: unknown): value is MockupState =>
   typeof value.seedRevision === "number" &&
   Array.isArray(value.specialties) &&
   Array.isArray(value.agents) &&
+  Array.isArray(value.taskCatalog) &&
   isRecord(value.ui) &&
   isRecord(value.chat) &&
   Array.isArray(value.chat.messages) &&
@@ -202,7 +207,18 @@ export function loadState(storage: Pick<Storage, "getItem">) {
     const raw = storage.getItem(STORAGE_KEY);
     if (raw === null) return { state: freshSeed(), error: null };
     const value: unknown = JSON.parse(raw);
-    if (isMockupState(value)) return { state: normalize(value), error: null };
+    if (
+      isRecord(value) &&
+      value.formatVersion === 1 &&
+      typeof value.seedRevision === "number" &&
+      value.seedRevision < CURRENT_SEED_REVISION
+    )
+      return { state: freshSeed(), error: null };
+    if (isMockupState(value))
+      return {
+        state: normalize(value),
+        error: null,
+      };
     return { state: null, error: "Saved demo data uses an unsupported format." };
   } catch {
     return { state: null, error: "Saved demo data could not be read." };

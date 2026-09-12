@@ -23,3 +23,11 @@
 - Guidance: inject the owning generation continuation into recovered image materialization, using the persisted ready input’s job ID and the batch’s booklet ID; keep candidate execution separate from sequence ownership.
 - Evidence: `ImageAgentRunService` invokes its continuation after materialization; `runner-bootstrap.ts` supplies it during recovery; `tests/integration/reference-generation.test.ts` covers the callback on recovered materialization.
 - Promotion candidate: Architecture guidance.
+
+## External guideline fixtures need pinned, reproducible provenance
+
+- Context: Agent Studio uses a complete synthetic catalog derived from task guidelines that live on another unmerged branch.
+- Observation: a checked-in generator can preserve the source text while a manifest records the exact commit, path, and SHA-256 digest for every input; application startup then needs no network or Git access.
+- Guidance: pin external fixture inputs to an immutable commit, generate reviewable local data, record per-file checksums, and test the catalog and extracted-reference counts.
+- Evidence: `scripts/generate-management-guideline-seed.mjs`, `lib/mockups/specialty-management/guideline-manifest.json`, and `tests/mockups/guideline-seed.test.ts` cover the 15 guideline sources and 14 extracted templates.
+- Promotion candidate: Documentation.

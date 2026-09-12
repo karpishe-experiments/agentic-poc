@@ -1,4 +1,4 @@
-import { STAGES } from "./booklets";
+import { TASK_CATALOG } from "./booklets";
 import type {
   Agent,
   AgentVersion,
@@ -15,7 +15,6 @@ import type {
 } from "./types";
 
 const now = () => new Date().toISOString();
-const visualStages = new Set<BookletStageId>(["visual_style", "visual_bible", "final_pages"]);
 
 const visibleSpecialty = (state: MockupState, specialty: Specialty) =>
   state.workingCopies.specialties[specialty.id] ?? specialty;
@@ -26,15 +25,12 @@ export function compatibilityFor(
   specialty: Specialty,
   stageId: BookletStageId,
 ): Compatibility {
-  const supported: Record<string, readonly BookletStageId[]> = {
-    "sp-orchestrator": STAGES.map((stage) => stage.id),
-    "sp-story": ["audience_profile", "story_plan", "booklet_specification", "page_plan"],
-    "sp-illustration": ["visual_style", "visual_bible", "final_pages"],
-    "sp-character": ["story_plan", "visual_bible"],
-    "sp-legacy": STAGES.map((stage) => stage.id),
-  };
-  if (!(specialty.id in supported)) return "undefined";
-  return supported[specialty.id].includes(stageId) ? "compatible" : "warning";
+  if (specialty.id === "sp-orchestrator") return "compatible";
+  const ownedTask = TASK_CATALOG.find(
+    (item) => item.specialtyId === specialty.id,
+  );
+  if (!ownedTask) return "undefined";
+  return ownedTask.id === stageId ? "compatible" : "warning";
 }
 
 export type SelectedTestVersion = {
@@ -110,6 +106,7 @@ export function createTestSession(
       const current = visibleSpecialty(state, item);
       return { id: current.id, name: current.name, retired: current.retired };
     }),
+    taskCatalogSnapshot: structuredClone(state.taskCatalog),
     sourceSessionId: setup.sourceSessionId,
     openingRequest: setup.openingRequest.trim(),
     messages: [],
@@ -235,8 +232,12 @@ function resultFor(session: TestSession, request: string, createId: (prefix: str
       text: `Captured ${session.stageSnapshot.artifacts.length} earlier artifact(s) for ${session.stageSnapshot.stageLabel}.`,
     };
   if (session.specialtyId === "sp-orchestrator") {
-    const specialtyId = visualStages.has(session.stageSnapshot.stageId) ? "sp-illustration" : "sp-story";
-    const selected = session.routingCatalog.find((item) => item.id === specialtyId && !item.retired);
+    const specialtyId = session.taskCatalogSnapshot.find(
+      (item) => item.id === session.stageSnapshot.stageId,
+    )?.specialtyId;
+    const selected = session.routingCatalog.find(
+      (item) => item.id === specialtyId && !item.retired,
+    );
     return {
       result: selected
         ? { kind: "orchestrator", selectedSpecialtyId: selected.id, explanation: `${selected.name} matches this frozen stage.` }
@@ -245,7 +246,10 @@ function resultFor(session: TestSession, request: string, createId: (prefix: str
       text: selected ? `Selected ${selected.name}.` : "Routing is unavailable.",
     };
   }
-  const revisionNote = lower === "revise the result" ? "Simulated revision requested." : undefined;
+  const revisionNote =
+    lower === "revise the result"
+      ? `Synthetic revision of ${session.stageSnapshot.stageLabel}; frozen approvals remain unchanged.`
+      : undefined;
   if (session.specialtySnapshot.outputType === "image") {
     if (!session.specialtySnapshot.allowedToolIds.includes("generate_image"))
       return {
@@ -264,8 +268,13 @@ function resultFor(session: TestSession, request: string, createId: (prefix: str
       result: {
         kind: "image",
         imagePath: "/mockups/specialty-management/sample-image.svg",
-        description: `A warm scene for ${session.stageSnapshot.premise}.`,
-        metadata: { style: "Warm watercolor", stage: session.stageSnapshot.stageLabel },
+        description: `Bundled synthetic ${session.stageSnapshot.stageLabel.toLowerCase()} for ${session.stageSnapshot.premise}.`,
+        metadata: {
+          style: "Warm watercolor",
+          task: session.stageSnapshot.stageLabel,
+          asset: "Bundled synthetic placeholder",
+          qualityReview: "Not performed",
+        },
         revisionNote,
       },
       activity,
@@ -275,12 +284,33 @@ function resultFor(session: TestSession, request: string, createId: (prefix: str
   return {
     result: {
       kind: "text",
-      markdown: `# ${session.stageSnapshot.stageLabel}\n${session.stageSnapshot.premise}\n\n1. Introduce the goal\n2. Overcome one obstacle\n3. Resolve through cooperation`,
+      markdown: textResultFor(session),
       revisionNote,
     },
     activity,
     text: "Prepared a deterministic text result from the frozen snapshot.",
   };
+}
+
+function textResultFor(session: TestSession) {
+  const title = session.stageSnapshot.stageLabel;
+  const premise = session.stageSnapshot.premise;
+  const results: Partial<Record<BookletStageId, string>> = {
+    book_concept_brief: `# Book Concept Brief\n\n**Status:** Draft awaiting approval\n\n## Core Premise\n${premise}.\n\n## Intended Audience\n${session.stageSnapshot.audience}\n\n## Approval Questions\nDoes this capture the intended direction?`,
+    story_outline: `# Story Outline\n\n**Status:** Draft awaiting approval\n\n## One-Paragraph Story Summary\n${premise}; the protagonist meets one clear obstacle and resolves it through thoughtful cooperation.\n\n## Story Arc\n1. Opening situation\n2. Inciting action\n3. Meaningful choice\n4. Resolution`,
+    draft_character_list: `# Draft Character List\n\n**Status:** Draft awaiting approval\n\n| Name or role | Narrative function | Open questions |\n| --- | --- | --- |\n| Protagonist | Drives the central action | Appearance intentionally open |`,
+    draft_location_list: `# Draft Location List\n\n**Status:** Draft awaiting approval\n\n| Location title | Story purpose | Open questions |\n| --- | --- | --- |\n| Primary setting | Supports the central action | Visual details intentionally open |`,
+    page_by_page_manuscript: `# Page-by-Page Manuscript\n\n**Status:** Draft awaiting approval\n\n## Manuscript Pages\n### Manuscript Page 1 — The idea\nThe protagonist names a hopeful goal.\n\n### Manuscript Page 2 — The challenge\nA small obstacle invites a patient solution.`,
+    final_character_list: `# Final Character List\n\n**Status:** Draft awaiting approval\n\n| ID | Name or role | Recurrence | Character-sheet requirement |\n| --- | --- | --- | --- |\n| character-01 | Protagonist | Recurring | Required |`,
+    final_location_list: `# Final Location List\n\n**Status:** Draft awaiting approval\n\n| ID | Location title | Stable anchors | Location-sheet requirement |\n| --- | --- | --- | --- |\n| location-01 | Primary setting | Clear path and focal landmark | Required |`,
+    pagination_layout_plan: `# Pagination & Layout Plan\n\n**Status:** Draft awaiting approval\n\n## Physical Book Assumptions\n- Square, 2400×2400 px\n- 120 px live-text safe margin\n- Left-to-right reading order\n\n## Source Routing\nApproved character and location sheets are linked by stable ID.`,
+    final_page_bible: `# Final Page Bible\n\n**Status:** Draft awaiting approval\n\n## Global Production Rules\nUse the approved square canvas and exact manuscript wording.\n\n## Physical Page 001 — Cover\n- **Layout and panel/image structure:** One image\n- **Exact text plan:** Approved title treatment`,
+    book_export_package: `# Book Export Package\n\n**Status:** Draft awaiting user export request\n\n## Source Page Manifest\n${session.stageSnapshot.artifacts.filter((item) => item.stageId === "final_page_illustration_package").map((item, index) => `- ${index + 1}. ${item.filename} · r${String(item.revision ?? 1).padStart(2, "0")} · Pass`).join("\n")}\n\n## Preflight Results\nSynthetic preflight passed. No PDF was generated or exported.`,
+  };
+  return (
+    results[session.stageSnapshot.stageId] ??
+    `# ${title}\n\nBundled synthetic result for ${premise}.`
+  );
 }
 
 export function completeTestResponse(

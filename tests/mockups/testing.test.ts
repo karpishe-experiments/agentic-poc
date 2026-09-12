@@ -31,9 +31,14 @@ describe("synthetic agent tests", () => {
   it("only exposes prepared current and earlier stage snapshots", () => {
     const state = selectedSeed();
     const forest = state.booklets.find((booklet) => booklet.id === "demo-forest")!;
-    expect(forest.snapshots.map((snapshot) => snapshot.stageId)).toEqual(["audience_profile", "story_plan"]);
+    expect(forest.snapshots.map((snapshot) => snapshot.stageId)).toEqual([
+      "book_concept_brief",
+      "story_outline",
+    ]);
     expect(forest.snapshots[0]?.artifacts).toEqual([]);
-    expect(forest.snapshots[1]?.artifacts.map((artifact) => artifact.stageId)).toEqual(["audience_profile"]);
+    expect(
+      forest.snapshots[1]?.artifacts.map((artifact) => artifact.stageId),
+    ).toEqual(["book_concept_brief"]);
   });
 
   it("captures unsaved visible agent content and frozen stage context", () => {
@@ -67,7 +72,16 @@ describe("synthetic agent tests", () => {
     expect(text.messages.at(-1)?.result?.kind).toBe("text");
     expect(text.activity.every((activity) => activity.kind !== "tool-call" || state.specialties.find((specialty) => specialty.id === "sp-story")?.allowedToolIds.some((tool) => activity.label.includes(tool)))).toBe(true);
 
-    const image = createTestSession(state, "agent-watercolor", state.ui.testSetup, id)!;
+    const image = createTestSession(
+      state,
+      "agent-watercolor",
+      {
+        ...state.ui.testSetup,
+        bookletId: "demo-moon",
+        stageId: "visual_style_package",
+      },
+      id,
+    )!;
     startTestResponse(state, image.id, "Produce a sample result", "opening", id);
     completeTestResponse(state, id);
     expect(image.messages.at(-1)?.result?.kind).toBe("image");
@@ -82,10 +96,12 @@ describe("synthetic agent tests", () => {
     const result = session.messages.at(-1)?.result;
     expect(result?.kind).toBe("text");
     if (result?.kind !== "text") return;
-    expect(result.markdown).toContain("Audience profile");
-    expect(result.markdown).toContain("Help with Story plan for Forest Friends");
+    expect(result.markdown).toContain("Book Concept Brief");
+    expect(result.markdown).toContain(
+      "Prepare Story Outline for Forest Friends",
+    );
     expect(result.markdown).not.toContain("Warm watercolor");
-    expect(result.markdown).not.toContain("Visual bible");
+    expect(result.markdown).not.toContain("Visual Style Package");
   });
 
   it("uses version fallback and retains inspectable orphan sessions", () => {
@@ -100,8 +116,15 @@ describe("synthetic agent tests", () => {
   it("marks compatibility warnings without blocking a session", () => {
     const state = selectedSeed();
     const story = state.specialties.find((specialty) => specialty.id === "sp-story")!;
-    expect(compatibilityFor(story, "visual_bible")).toBe("warning");
-    expect(createTestSession(state, "agent-playful", { ...state.ui.testSetup, stageId: "story_plan" }, id)).not.toBeNull();
+    expect(compatibilityFor(story, "visual_style_package")).toBe("warning");
+    expect(
+      createTestSession(
+        state,
+        "agent-playful",
+        { ...state.ui.testSetup, stageId: "story_outline" },
+        id,
+      ),
+    ).not.toBeNull();
   });
 
   it("prepares an editing handoff using an available fallback version", () => {

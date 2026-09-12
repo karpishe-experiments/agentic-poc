@@ -1,0 +1,316 @@
+{
+  "repository": "karpishe-experiments/agentic-poc",
+  "pullRequest": 26,
+  "commit": "631f547ec3f7ce375f740dd6f2b1b9aaebbde940",
+  "sourceDirectory": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines",
+  "generatedBy": "scripts/generate-management-guideline-seed.mjs",
+  "guidelines": [
+    {
+      "prefix": "00",
+      "taskId": null,
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/00-booklet-workflow-orchestration.md",
+      "sourceSha256": "fce7c3fa1a91555b144481b2b3da3a597b6664ce4edf2faf8c8f617aef68bbb2",
+      "specialtyId": "sp-orchestrator",
+      "agentId": "agent-guide",
+      "extractedReference": null
+    },
+    {
+      "prefix": "01",
+      "taskId": "book_concept_brief",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/01-book-concept-brief.md",
+      "sourceSha256": "8c514e2923d309de92f9fa2a276269690a2934640d8fd16210a7b48dfd25d5e6",
+      "specialtyId": "sp-book-concept",
+      "agentId": "agent-book-concept",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "02",
+      "taskId": "story_outline",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/02-story-outline.md",
+      "sourceSha256": "5a11735ae8ccdf8dc9c2b4cac4e3bd479ef3335e8bfb94347386513b162125b7",
+      "specialtyId": "sp-story",
+      "agentId": "agent-playful",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "03",
+      "taskId": "draft_character_list",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/03-draft-character-list.md",
+      "sourceSha256": "96cbd6490709cffd50e5bb1e47afd9689b6db72629e331df88c5de5df442e0b1",
+      "specialtyId": "sp-draft-character",
+      "agentId": "agent-draft-character",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "04",
+      "taskId": "draft_location_list",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/04-draft-location-list.md",
+      "sourceSha256": "a608290862b3b3c8989a7b748848da9fb443a0d585499c34af8555ba36d77305",
+      "specialtyId": "sp-draft-location",
+      "agentId": "agent-draft-location",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "05",
+      "taskId": "page_by_page_manuscript",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/05-page-by-page-manuscript.md",
+      "sourceSha256": "bceb8b4b884f3fb130689abee32f4ac5b33458e4f0925f0482a0f145dbcbe9b7",
+      "specialtyId": "sp-manuscript",
+      "agentId": "agent-manuscript",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "06",
+      "taskId": "final_character_list",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/06-final-character-list.md",
+      "sourceSha256": "c6e8a1edaa37ae93e18a2a391f728e436677354765ff81c30345579e268234ad",
+      "specialtyId": "sp-final-character",
+      "agentId": "agent-final-character",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "07",
+      "taskId": "final_location_list",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/07-final-location-list.md",
+      "sourceSha256": "7aa6158a21d6e26d9da634eb29ef3d766425ee30c2acb31fef130ac665245f53",
+      "specialtyId": "sp-final-location",
+      "agentId": "agent-final-location",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "08",
+      "taskId": "visual_style_package",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/08-visual-style-package.md",
+      "sourceSha256": "9377d00d557094c006602c62478f643b547e8263aedec81579e3898da2a53d48",
+      "specialtyId": "sp-illustration",
+      "agentId": "agent-watercolor",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "09",
+      "taskId": "character_sheet_package",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/09-individual-character-sheet-package.md",
+      "sourceSha256": "412d49fa81af17094170e6180122c529f32dc1017a2d4ab9e9e27b52d1b2d21f",
+      "specialtyId": "sp-character-sheet",
+      "agentId": "agent-character-sheet",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "10",
+      "taskId": "location_sheet_package",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/10-location-sheet-package.md",
+      "sourceSha256": "659aa3877a8c3c60daeeeb885b1b563f139ea02fc23691d7ade487cbfbc1b4f2",
+      "specialtyId": "sp-location-sheet",
+      "agentId": "agent-location-sheet",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "11",
+      "taskId": "pagination_layout_plan",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/11-pagination-and-layout-plan.md",
+      "sourceSha256": "9042db8e709f24e9b8da13f966681a28cc3d91a4eb88fc086e554abff3b67712",
+      "specialtyId": "sp-pagination",
+      "agentId": "agent-pagination",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "12",
+      "taskId": "final_page_bible",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/12-final-page-bible.md",
+      "sourceSha256": "5caf21b4e0b261db138c19ddd7112193bc82ab496bd5d25caba1d703acdc9386",
+      "specialtyId": "sp-page-bible",
+      "agentId": "agent-page-bible",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "13",
+      "taskId": "final_page_illustration_package",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/13-final-page-illustration-package.md",
+      "sourceSha256": "71d5597c20a8454c7ec86e446df20e59cc93f54ab7e989cdefcdaa9621abe573",
+      "specialtyId": "sp-final-page",
+      "agentId": "agent-final-page",
+      "extractedReference": "artifact-template.md"
+    },
+    {
+      "prefix": "14",
+      "taskId": "book_export_package",
+      "sourcePath": "docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/14-book-export-package.md",
+      "sourceSha256": "2fe86e59e69918fd8ef47a1479f6d115c6a0d903ee0da47121cd99705d07788c",
+      "specialtyId": "sp-export",
+      "agentId": "agent-export",
+      "extractedReference": "artifact-template.md"
+    }
+  ],
+  "taskCatalog": [
+    {
+      "id": "book_concept_brief",
+      "label": "Book Concept Brief",
+      "index": 0,
+      "specialtyId": "sp-book-concept",
+      "dependsOn": [],
+      "outputType": "text"
+    },
+    {
+      "id": "story_outline",
+      "label": "Story Outline",
+      "index": 1,
+      "specialtyId": "sp-story",
+      "dependsOn": [
+        "book_concept_brief"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "draft_character_list",
+      "label": "Draft Character List",
+      "index": 2,
+      "specialtyId": "sp-draft-character",
+      "dependsOn": [
+        "book_concept_brief",
+        "story_outline"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "draft_location_list",
+      "label": "Draft Location List",
+      "index": 3,
+      "specialtyId": "sp-draft-location",
+      "dependsOn": [
+        "book_concept_brief",
+        "story_outline"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "page_by_page_manuscript",
+      "label": "Page-by-Page Manuscript",
+      "index": 4,
+      "specialtyId": "sp-manuscript",
+      "dependsOn": [
+        "book_concept_brief",
+        "story_outline",
+        "draft_character_list",
+        "draft_location_list"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "final_character_list",
+      "label": "Final Character List",
+      "index": 5,
+      "specialtyId": "sp-final-character",
+      "dependsOn": [
+        "story_outline",
+        "draft_character_list",
+        "page_by_page_manuscript"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "final_location_list",
+      "label": "Final Location List",
+      "index": 6,
+      "specialtyId": "sp-final-location",
+      "dependsOn": [
+        "story_outline",
+        "draft_location_list",
+        "page_by_page_manuscript"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "visual_style_package",
+      "label": "Visual Style Package",
+      "index": 7,
+      "specialtyId": "sp-illustration",
+      "dependsOn": [
+        "book_concept_brief",
+        "story_outline",
+        "page_by_page_manuscript",
+        "final_character_list",
+        "final_location_list"
+      ],
+      "outputType": "image"
+    },
+    {
+      "id": "character_sheet_package",
+      "label": "Individual Character Sheet Package",
+      "index": 8,
+      "specialtyId": "sp-character-sheet",
+      "dependsOn": [
+        "final_character_list",
+        "visual_style_package"
+      ],
+      "outputType": "image"
+    },
+    {
+      "id": "location_sheet_package",
+      "label": "Location Sheet Package",
+      "index": 9,
+      "specialtyId": "sp-location-sheet",
+      "dependsOn": [
+        "final_location_list",
+        "visual_style_package"
+      ],
+      "outputType": "image"
+    },
+    {
+      "id": "pagination_layout_plan",
+      "label": "Pagination & Layout Plan",
+      "index": 10,
+      "specialtyId": "sp-pagination",
+      "dependsOn": [
+        "page_by_page_manuscript",
+        "final_character_list",
+        "final_location_list",
+        "visual_style_package",
+        "character_sheet_package",
+        "location_sheet_package"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "final_page_bible",
+      "label": "Final Page Bible",
+      "index": 11,
+      "specialtyId": "sp-page-bible",
+      "dependsOn": [
+        "page_by_page_manuscript",
+        "final_character_list",
+        "final_location_list",
+        "visual_style_package",
+        "character_sheet_package",
+        "location_sheet_package",
+        "pagination_layout_plan"
+      ],
+      "outputType": "text"
+    },
+    {
+      "id": "final_page_illustration_package",
+      "label": "Final Page Illustration Package",
+      "index": 12,
+      "specialtyId": "sp-final-page",
+      "dependsOn": [
+        "page_by_page_manuscript",
+        "visual_style_package",
+        "character_sheet_package",
+        "location_sheet_package",
+        "pagination_layout_plan",
+        "final_page_bible"
+      ],
+      "outputType": "image"
+    },
+    {
+      "id": "book_export_package",
+      "label": "Book Export Package",
+      "index": 13,
+      "specialtyId": "sp-export",
+      "dependsOn": [
+        "pagination_layout_plan",
+        "final_page_illustration_package"
+      ],
+      "outputType": "text"
+    }
+  ]
+}
