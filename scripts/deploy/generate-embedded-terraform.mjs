@@ -12,7 +12,7 @@ const files = fs.readdirSync(path.join(root, 'infra/terraform'), { recursive: tr
 files.push('infra/config/deployment.env.example');
 const lines = ['# BEGIN EMBEDDED_TERRAFORM', 'materialize_embedded_terraform() {', '  local workspace manifest', '  STANDALONE=true', '  command -v base64 >/dev/null || die "Required command is unavailable: base64"', '  command -v sha256sum >/dev/null || die "Required command is unavailable: sha256sum"', '  workspace="$(mktemp -d)"; chmod 700 "$workspace"; TEMP_WORKSPACE="$workspace"', '  manifest="$workspace/manifest.sha256"; : > "$manifest"; chmod 600 "$manifest"'];
 for (const name of files) {
-  const bytes = fs.readFileSync(path.join(root, name));
+  const bytes = Buffer.from(fs.readFileSync(path.join(root, name), 'utf8').replace(/\r\n/g, '\n'));
   const encoded = bytes.toString('base64');
   const hash = crypto.createHash('sha256').update(bytes).digest('hex');
   lines.push(`  mkdir -p "$workspace/${path.posix.dirname(name)}"`);
