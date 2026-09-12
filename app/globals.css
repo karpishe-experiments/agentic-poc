@@ -1,12 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --canvas: #fffaf2;
-  --ink: #29231d;
-  --muted-ink: #70665a;
-  --accent: #c75f35;
-  --surface: #fffdf9;
-  --border: #eadfce;
+  --canvas: #f5f7fb;
+  --ink: #14213d;
+  --muted-ink: #64748b;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --border: #dbe3ef;
+  --warning: #a16207;
+  --warning-soft: #fefce8;
+  --danger: #b91c1c;
 }
 
 * {
@@ -18,7 +24,27 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: var(--font-nunito), Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+  font-size: 14px;
+}
+
+.app-header {
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  padding: 0.75rem 1.5rem;
+}
+
+.app-main {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: 2rem 1.5rem;
+}
+
+body:has([data-management-mockup]) .app-main {
+  max-width: none;
+  height: calc(100dvh - 49px);
+  padding: 0.5rem;
 }
 
 a {

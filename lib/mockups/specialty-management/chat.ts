@@ -102,7 +102,12 @@ export function selectedTarget(state: MockupState): EditingTarget | null {
   const selection = state.ui.selection;
   if (selection.kind === "specialty")
     return { kind: "specialty", specialtyId: selection.specialtyId, section: "settings" };
-  if (selection.kind === "test-history" || selection.section === "test") return null;
+  if (
+    selection.kind === "directory" ||
+    selection.kind === "test-history" ||
+    selection.section === "test"
+  )
+    return null;
   return {
     kind: "agent",
     specialtyId: selection.specialtyId,

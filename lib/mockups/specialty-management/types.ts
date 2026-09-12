@@ -29,6 +29,7 @@ export type AgentVersion = {
   parentVersionId: string | null;
   status: VersionStatus;
   title: string;
+  description: string;
   versionNote: string;
   languageModel: ModelSelection;
   imageModel: ModelSelection | null;
@@ -49,6 +50,7 @@ export type ModelFixture = {
   kind: "language" | "image";
 };
 export type Selection =
+  | { kind: "directory" }
   | { kind: "specialty"; specialtyId: string }
   | {
       kind: "agent";
@@ -304,7 +306,8 @@ export type TestSetup = {
 };
 
 export type MockupState = {
-  formatVersion: 4;
+  formatVersion: 1;
+  seedRevision: number;
   specialties: Specialty[];
   agents: Agent[];
   tools: ToolFixture[];
@@ -326,6 +329,7 @@ export type MockupState = {
     imageDescriptions: Record<string, string>;
     testSetup: TestSetup;
     focusMode: boolean;
+    navigationNotice: string | null;
   };
   chat: {
     messages: ManagementUIMessage[];

@@ -124,7 +124,7 @@ export function AgentActionDialog({ target, onClose, onMutationStart, onResult }
     onClose();
   }, [onClose, onResult, state, target.trigger]);
 
-  return <dialog ref={dialogRef} aria-labelledby="agent-action-title" aria-describedby="agent-action-description" onCancel={(event) => { if (submitting) event.preventDefault(); else { event.preventDefault(); close(); } }} className="m-auto max-h-[min(90vh,36rem)] w-[min(92vw,34rem)] overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--ink)] shadow-2xl backdrop:bg-stone-950/45">
+  return <dialog ref={dialogRef} aria-labelledby="agent-action-title" aria-describedby="agent-action-description" onCancel={(event) => { if (submitting) event.preventDefault(); else { event.preventDefault(); close(); } }} className="m-auto max-h-[min(90vh,36rem)] w-[min(92vw,34rem)] overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--ink)] shadow-2xl backdrop:bg-slate-950/45">
     <div className="grid gap-4 p-6">
       <div>
         <h2 id="agent-action-title" className="text-2xl font-semibold">{copy.title}</h2>
@@ -137,7 +137,7 @@ export function AgentActionDialog({ target, onClose, onMutationStart, onResult }
           <input type="hidden" name="observedSlotVersionId" value={target.observedSlotVersionId ?? ""} />
           <input type="hidden" name="observedLogicalActiveVersionId" value={target.observedLogicalActiveVersionId ?? ""} />
         </> : null}
-        <button ref={cancelRef} type="button" disabled={submitting} onClick={close} className="rounded-lg border border-[var(--border)] px-4 py-2 font-semibold hover:bg-stone-100 disabled:opacity-70">Cancel</button>
+        <button ref={cancelRef} type="button" disabled={submitting} onClick={close} className="rounded-lg border border-[var(--border)] px-4 py-2 font-semibold hover:bg-slate-100 disabled:opacity-70">Cancel</button>
         <ActionSubmit label={copy.confirm} pendingLabel={copy.pending} danger={copy.danger} />
       </form>
     </div>

@@ -3,7 +3,11 @@ import Link from "next/link";
 import localFont from "next/font/local";
 import "./globals.css";
 
-const nunito = localFont({ src: "../seeds/fonts/nunito/Nunito-Variable.ttf", display: "swap", variable: "--font-nunito" });
+const inter = localFont({
+  src: "../seeds/fonts/inter/InterVariable.ttf",
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: "Kids Booklet",
@@ -12,18 +16,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html className={nunito.variable} lang="en">
+    <html className={inter.variable} lang="en">
       <body>
         <a className="skip-link" href="#main-content">Skip to main content</a>
-        <header className="border-b border-[var(--border)] bg-[var(--surface)] px-6 py-4">
+        <header className="app-header">
           <nav aria-label="Main navigation" className="mx-auto flex max-w-6xl items-center justify-between">
             <Link className="font-semibold no-underline" href="/">
               Kids Booklet
             </Link>
-            <div className="flex gap-4"><Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link><Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link><Link className="text-sm text-[var(--muted-ink)]" href="/mockups/specialty-management">Agent Studio</Link></div>
+            <div className="flex gap-4"><Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link><Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link><Link className="text-sm text-[var(--muted-ink)]" href="/mockups/specialty-management?view=directory">Agent Studio</Link></div>
           </nav>
         </header>
-        <main className="mx-auto w-full max-w-6xl px-6 py-10" id="main-content">{children}</main>
+        <main className="app-main" id="main-content">{children}</main>
       </body>
     </html>
   );

@@ -365,18 +365,21 @@ export function AgentEditor({
         <nav className="section-nav" aria-label="Agent sections">
           <button
             className={selection.section === "configuration" ? "selected" : ""}
+            aria-current={selection.section === "configuration" ? "page" : undefined}
             onClick={() => selectSection("configuration")}
           >
             <Settings2 size={15} /> Configuration
           </button>
           <button
             className={selection.section === "instructions" ? "selected" : ""}
+            aria-current={selection.section === "instructions" ? "page" : undefined}
             onClick={() => selectSection("instructions")}
           >
             <FileText size={15} /> Main instructions
           </button>
           <button
             className={selection.section === "test" ? "selected" : ""}
+            aria-current={selection.section === "test" ? "page" : undefined}
             onClick={() => selectSection("test")}
           >
             <FlaskConical size={15} /> Test
@@ -391,6 +394,7 @@ export function AgentEditor({
             <button
               key={ref.id}
               className={referenceId === ref.id ? "selected" : ""}
+              aria-current={referenceId === ref.id ? "page" : undefined}
               onClick={() => selectSection(`reference:${ref.id}`)}
             >
               {ref.name}

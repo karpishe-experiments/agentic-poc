@@ -5,9 +5,9 @@ async function runVersionAction(page: Page, name: RegExp) {
   await page.getByRole("menuitem", { name }).click();
 }
 test.beforeEach(async ({ page }) => {
-  await page.goto("/mockups/specialty-management");
+  await page.goto("/mockups/specialty-management?view=agent&specialty=sp-story&agent=agent-playful&version=playful-v2&tab=edit&section=instructions");
   await page.evaluate(() =>
-    localStorage.removeItem("specialty-management-mockup:v1"),
+    localStorage.removeItem("specialty-management-mockup:v2"),
   );
   await page.reload();
 });
@@ -20,16 +20,19 @@ test("loads with local synthetic data and no service calls", async ({
     if (url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1")
       forbidden.push(request.url());
   });
-  await page.goto("/mockups/specialty-management");
+  await page.goto("/mockups/specialty-management?view=directory");
   await expect(
     page.getByRole("heading", { name: "Agent Studio" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Specialties and agents" }),
   ).toBeVisible();
   expect(forbidden).toEqual([]);
   expect(
     await page.evaluate(() =>
-      localStorage.getItem("specialty-management-mockup:v1"),
+      localStorage.getItem("specialty-management-mockup:v2"),
     ),
-  ).toContain('"formatVersion":4');
+  ).toContain('"formatVersion":1');
 });
 test("creates, saves, reloads, discards, retires and restores a specialty", async ({
   page,
@@ -47,6 +50,7 @@ test("creates, saves, reloads, discards, retires and restores a specialty", asyn
   await page.getByRole("button", { name: "Discard" }).click();
   await expect(name).toHaveValue("Poetry");
   await page.getByRole("button", { name: "Retire", exact: true }).click();
+  await page.getByRole("button", { name: "Filter specialties" }).click();
   await page.getByLabel("Show retired").check();
   await expect(
     page.getByRole("button", { name: "Poetry text · Retired" }),
@@ -236,23 +240,22 @@ test("streams answers, clarification, and read-only instruction proposals from t
   expect(forbidden).toEqual([]);
 });
 
-test("migrates legacy saved chat data while preserving the selected management record", async ({
+test("restores URL navigation and recovers invalid targets in the directory", async ({
   page,
 }) => {
-  await page.getByLabel("Message the editing assistant").fill("Persist this draft");
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1"))).not.toBeNull();
-  await page.evaluate(() => {
-    const key = "specialty-management-mockup:v1";
-    const legacy = JSON.parse(localStorage.getItem(key)!);
-    legacy.formatVersion = 1;
-    legacy.chat = { messages: [], proposals: [], pendingResponse: null };
-    localStorage.setItem(key, JSON.stringify(legacy));
-  });
+  await page.getByRole("button", { name: "Directory" }).click();
+  await page.getByRole("button", { name: /Playful Writer/ }).click();
+  await page.getByRole("button", { name: "Configuration" }).click();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Playful Writer" })).toBeVisible();
-  expect(
-    await page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1")),
-  ).toContain('"formatVersion":4');
+  await expect(page.getByRole("button", { name: "Configuration" })).toHaveAttribute("aria-current", "page");
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Specialties and agents" })).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole("heading", { name: "Playful Writer" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Configuration" })).toHaveAttribute("aria-current", "page");
+  await page.goto("/mockups/specialty-management?view=agent&specialty=missing&agent=missing&version=missing");
+  await expect(page.getByText(/target is unavailable/)).toBeVisible();
 });
 
 test("proposes editable specialty, configuration, instruction, and reference fields", async ({
@@ -359,6 +362,7 @@ test("reset cancels a running response and restores the seeded failure fixture",
   await requestEditingAssistant(page, "Add an example");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Reset demo data" }).click();
+  await page.getByRole("button", { name: /Playful Writer/ }).click();
   await expect(page.getByText("A synthetic example failed before creating a proposal.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
 });
@@ -479,7 +483,7 @@ test("repeat captures an intervening unsaved edit without changing the original 
   await page.getByRole("button", { name: "Start test" }).click();
   await expect(page.getByText("Repeated test")).toBeVisible();
   const snapshots = await page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return state.testSessions.map((session: { sourceSessionId: string | null; agentSnapshot: { mainInstructions: string } }) => ({
       sourceSessionId: session.sourceSessionId,
       mainInstructions: session.agentSnapshot.mainInstructions,
@@ -504,7 +508,7 @@ test("recovers an interrupted test and retains an orphaned frozen session withou
   await page.getByRole("button", { name: "Retry turn" }).click();
   await expect(page.getByText("Prepared a deterministic text result from the frozen snapshot.")).toBeVisible();
   await page.evaluate(() => {
-    const key = "specialty-management-mockup:v1";
+    const key = "specialty-management-mockup:v2";
     const state = JSON.parse(localStorage.getItem(key)!);
     state.agents = state.agents.filter((agent: { id: string }) => agent.id !== "agent-playful");
     localStorage.setItem(key, JSON.stringify(state));
@@ -547,23 +551,23 @@ test("keeps follow-ups in one session and persists its rename until deletion", a
 
 test("testing leaves source agents, specialties, and booklet fixtures unchanged", async ({ page }) => {
   await page.getByLabel("Message the editing assistant").fill("Persist source fixtures");
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1"))).not.toBeNull();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v2"))).not.toBeNull();
   const before = await page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return JSON.stringify({ agents: state.agents, specialties: state.specialties, booklets: state.booklets });
   });
   await startAgentTest(page);
   const after = await page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return JSON.stringify({ agents: state.agents, specialties: state.specialties, booklets: state.booklets });
   });
   expect(after).toBe(before);
 });
 
 test("focus mode and version notes preserve draft workflow and lifecycle explanations", async ({ page }) => {
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1"))).not.toBeNull();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v2"))).not.toBeNull();
   const preferences = await page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return { navWidth: state.ui.navWidth, chatWidth: state.ui.chatWidth, chatOpen: state.ui.chatOpen };
   });
   await page.getByRole("button", { name: "Configuration" }).click();
@@ -597,7 +601,7 @@ test("focus mode and version notes preserve draft workflow and lifecycle explana
   await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeFocused();
   expect(await page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return { navWidth: state.ui.navWidth, chatWidth: state.ui.chatWidth, chatOpen: state.ui.chatOpen };
   })).toEqual(preferences);
   await page.getByRole("button", { name: "Version actions" }).click();
@@ -637,7 +641,7 @@ test("focus mode preserves hidden streams and editing handoff exits focus", asyn
   await requestEditingAssistant(page, "What can you change here?");
   await page.getByRole("button", { name: "Enter focus mode" }).click();
   await expect.poll(() => page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return state.chat.pendingResponse === null && state.chat.messages.some((message: { role: string; text?: string }) => message.role === "assistant" && message.text?.includes("deterministic simulation"));
   })).toBe(true);
   await page.keyboard.press("Escape");
@@ -645,7 +649,7 @@ test("focus mode preserves hidden streams and editing handoff exits focus", asyn
   await page.getByRole("button", { name: "Start test" }).click();
   await page.getByRole("button", { name: "Enter focus mode" }).click();
   await expect.poll(() => page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v2")!);
     return state.pendingTestResponse === null && state.testSessions[0]?.messages.some((message: { role: string; state: string }) => message.role === "assistant" && message.state === "complete");
   })).toBe(true);
   for (const viewport of [
@@ -680,32 +684,21 @@ test("agent configuration reflects unsaved specialty tools and returns to its wo
   await expect(page.getByRole("heading", { name: "Test agent" })).toBeVisible();
 });
 
-test("migrates format 3 browser state to format 4 without losing work", async ({ page }) => {
-  await page.getByLabel("Message the editing assistant").fill("Preserved composer");
-  await page.evaluate(() => {
-    const key = "specialty-management-mockup:v1";
-    const state = JSON.parse(localStorage.getItem(key)!);
-    state.formatVersion = 3;
-    delete state.ui.focusMode;
-    state.agents.forEach((agent: { versions: Array<Record<string, unknown>> }) =>
-      agent.versions.forEach((version) => delete version.versionNote),
-    );
-    Object.values(state.workingCopies.versions as Record<string, Record<string, unknown>>).forEach(
-      (version) => delete version.versionNote,
-    );
-    localStorage.setItem(key, JSON.stringify(state));
-  });
-  await page.reload();
-  await expect(page.getByLabel("Message the editing assistant")).toHaveValue("Preserved composer");
-  await page.getByRole("button", { name: "Configuration" }).click();
-  await expect(page.getByLabel("Version note")).toHaveValue("");
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!).formatVersion)).toBe(4);
+test("uses the same search and retired filter in directory and workspace", async ({ page }) => {
+  await page.getByRole("button", { name: "Directory" }).click();
+  await page.getByLabel("Search specialties and agents").fill("Concise");
+  await expect(page.getByRole("button", { name: /Concise Planner/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Watercolor Illustrator/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByLabel("Show retired").check();
+  await page.getByLabel("Search specialties and agents").fill("Legacy");
+  await expect(page.getByRole("button", { name: /Legacy Review/ })).toBeVisible();
 });
 
 test("history preserves a missing tested version and offers a labeled handoff fallback", async ({ page }) => {
   await startAgentTest(page);
   await page.evaluate(() => {
-    const key = "specialty-management-mockup:v1";
+    const key = "specialty-management-mockup:v2";
     const state = JSON.parse(localStorage.getItem(key)!);
     const agent = state.agents.find((item: { id: string }) => item.id === "agent-playful");
     agent.versions = agent.versions.filter((version: { id: string }) => version.id !== "playful-v2");

@@ -35,11 +35,11 @@ function ReadOnlyConfiguration({ version }: { version: AgentVersion }) {
     ...roleFields,
   ];  return <div className="grid gap-5">
     <dl className="grid gap-3 sm:grid-cols-2">
-      {values.map(([label, value]) => <div key={label} className="min-w-0 rounded-lg bg-stone-50 p-3"><dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-ink)]">{label}</dt><dd className="mt-1 break-words" translate={label === "Provider" || label === "Model" ? "no" : undefined}>{value}</dd></div>)}
+      {values.map(([label, value]) => <div key={label} className="min-w-0 rounded-lg bg-[var(--surface-subtle)] p-3"><dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-ink)]">{label}</dt><dd className="mt-1 break-words" translate={label === "Provider" || label === "Model" ? "no" : undefined}>{value}</dd></div>)}
     </dl>
     <section aria-labelledby="instructions-heading">
       <h4 id="instructions-heading" className="font-semibold">Complete Instructions</h4>
-      <pre className="mt-2 min-w-0 max-w-full whitespace-pre-wrap break-all rounded-xl border border-[var(--border)] bg-stone-50 p-4 font-mono text-sm leading-6">{version.instructions}</pre>
+      <pre className="mt-2 min-w-0 max-w-full whitespace-pre-wrap break-all rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-4 font-mono text-sm leading-6">{version.instructions}</pre>
     </section>
     <details className="rounded-xl border border-[var(--border)] p-4">
       <summary className="cursor-pointer font-semibold">Technical Details</summary>
@@ -103,7 +103,7 @@ export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectVe
 
     <section aria-labelledby="versions-heading" className="mt-5">
       <h3 id="versions-heading" className="font-semibold">Versions</h3>
-      <ul className="mt-2 flex flex-wrap gap-2">{agent.versions.map((candidate) => <li key={candidate.id}><button type="button" aria-current={candidate.id === version.id ? "true" : undefined} onClick={() => onSelectVersion(candidate.id)} className={`rounded-lg border px-3 py-2 text-left hover:border-[var(--accent)] hover:bg-orange-50 ${candidate.id === version.id ? "border-[var(--accent)] bg-orange-50" : "border-[var(--border)]"}`}><span className="font-semibold tabular-nums">Version {candidate.versionNumber}</span><span className="ml-2 text-sm text-[var(--muted-ink)]">{statusLabel(candidate)}</span><span className="mt-1 block text-xs text-[var(--muted-ink)]"><LocalizedDate value={candidate.updatedAt} /></span></button></li>)}</ul>
+      <ul className="mt-2 flex flex-wrap gap-2">{agent.versions.map((candidate) => <li key={candidate.id}><button type="button" aria-current={candidate.id === version.id ? "true" : undefined} onClick={() => onSelectVersion(candidate.id)} className={`rounded-lg border px-3 py-2 text-left hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] ${candidate.id === version.id ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)]"}`}><span className="font-semibold tabular-nums">Version {candidate.versionNumber}</span><span className="ml-2 text-sm text-[var(--muted-ink)]">{statusLabel(candidate)}</span><span className="mt-1 block text-xs text-[var(--muted-ink)]"><LocalizedDate value={candidate.updatedAt} /></span></button></li>)}</ul>
     </section>
 
     <div className="mt-6"><ReadOnlyConfiguration version={version} /></div>
@@ -111,7 +111,7 @@ export function AgentVersionWorkspace({ snapshot, selection, editing, onSelectVe
     <section aria-labelledby="actions-heading" className="mt-6 border-t border-[var(--border)] pt-5">
       <div className="flex flex-wrap items-center gap-2">
         <h3 id="actions-heading" className="mr-auto font-semibold">Version Actions</h3>
-        {version.status === "draft" ? <button type="button" onClick={onEdit} className="rounded-lg border border-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent)] hover:bg-orange-50">Edit Draft</button> : null}
+        {version.status === "draft" ? <button type="button" onClick={onEdit} className="rounded-lg border border-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]">Edit Draft</button> : null}
         <DirectLifecycleAction descriptor={{ kind: "fork", version }} visible={eligibility.fork} onMutationStart={onMutationStart} onResult={onResult} />
         <DirectLifecycleAction descriptor={{ kind: "confirm", version }} visible={eligibility.confirm} onMutationStart={onMutationStart} onResult={onResult} />
         {eligibility.activate ? <button type="button" onClick={(event) => onOpenDialog({ kind: "activate", ...dialogBase }, event.currentTarget)} className="rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-white hover:brightness-95">{version.role === "manager" ? "Activate Replacement" : "Activate Candidate"}</button> : null}

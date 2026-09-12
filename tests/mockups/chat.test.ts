@@ -12,6 +12,17 @@ import { ManagementLocalChatTransport } from "@/lib/mockups/specialty-management
 import { freshSeed } from "@/lib/mockups/specialty-management/state";
 
 const id = (prefix: string) => `${prefix}-new`;
+const selectedSeed = () => {
+  const state = freshSeed();
+  state.ui.selection = {
+    kind: "agent",
+    specialtyId: "sp-story",
+    agentId: "agent-playful",
+    versionId: "playful-v2",
+    section: "instructions",
+  };
+  return state;
+};
 
 describe("simulated management chat", () => {
   it("applies deterministic text transforms including shorter", () => {
@@ -21,7 +32,7 @@ describe("simulated management chat", () => {
   });
 
   it("captures only the selected section and leaves unrelated edits valid", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const target = selectedTarget(state)!;
     const base = captureBase(state, target)!;
     state.workingCopies.specialties["sp-story"] = {
@@ -32,7 +43,7 @@ describe("simulated management chat", () => {
   });
 
   it("supersedes only completed proposals for the same target", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const target = selectedTarget(state)!;
     const first = simulateReply(state, target, "add an example", "proposal-1", "2026-01-01T00:00:00.000Z");
     const second = simulateReply(state, target, "make concise", "proposal-2", "2026-01-02T00:00:00.000Z");
@@ -43,7 +54,7 @@ describe("simulated management chat", () => {
   });
 
   it("creates a draft when applying a confirmed-version proposal", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     state.agents.find((item) => item.id === "agent-playful")!.versions.find((item) => item.id === "playful-v1")!.versionNote = "Confirmed source note";
     state.ui.selection = {
       kind: "agent",
@@ -69,7 +80,7 @@ describe("simulated management chat", () => {
   });
 
   it("rejects stale proposals without partial application", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const target = selectedTarget(state)!;
     const reply = simulateReply(state, target, "add an example", "proposal", "2026-01-01T00:00:00.000Z");
     if (reply.kind !== "proposal") throw new Error("Expected proposal");
@@ -81,7 +92,7 @@ describe("simulated management chat", () => {
   });
 
   it("answers questions and asks for clarification without mutating proposals", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const target = selectedTarget(state)!;
     expect(simulateReply(state, target, "How will this be used?", "answer").kind).toBe("answer");
     expect(simulateReply(state, target, "Improve this", "clarify").kind).toBe("clarification");

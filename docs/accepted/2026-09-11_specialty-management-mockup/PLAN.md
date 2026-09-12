@@ -239,7 +239,7 @@ Use these closed interaction defaults throughout implementation:
 | 7 — Editing assistant | Complete: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate passed |
 | 8 — Agent tests | Complete: stage snapshots, test sessions/history, repeat and editing handoff, format 3 | P0-16–P0-23 pass; independent review gate passed |
 | 9 — Focus and lifecycle UX | Complete: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate passed |
-| 10 — Theme and directory | Pending: application theme, directory/navigation, fresh storage | P0-28, P0-29, P0-34 |
+| 10 — Theme and directory | Complete: application theme, directory/navigation, fresh storage | P0-28, P0-29, P0-34 |
 | 11 — Editor and Assistant | Pending: Edit/Test tabs, header actions, Assistant | P0-30, P0-31 |
 | 12 — Descriptions and notes | Pending: versioned descriptions, confirmation notes | P0-32, P0-33 |
 | 13 — Guideline seed | Pending: PR #26 catalog, booklets, task results | P0-35–P0-37 |
@@ -326,7 +326,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 7 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (20); `npm run test:mockup:e2e` (25); `npm run mockup:build`; `git diff --check`; streaming, clarification, text/field proposal, diagnostics, and 1280×800/1440×900/1920×1080 screenshots inspected; two consecutive independent reviews passed with no intervening changes | None |
 | 8 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (31); `npm run test:mockup:e2e` (36); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; Test and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
 | 9 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (35); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata clean; focused configuration, focused Test, and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
-| 10 | Pending | Not run | Implementation pending |
+| 10 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (30); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; directory, refresh, Back/Forward, invalid-target recovery, shared filtering, and three desktop sizes covered; first review found booklet-content styling and Forward-coverage gaps, both corrected; two subsequent consecutive independent reviews passed with no intervening changes | None |
 | 11 | Pending | Not run | Implementation pending |
 | 12 | Pending | Not run | Implementation pending |
 | 13 | Pending | Not run | Implementation pending |

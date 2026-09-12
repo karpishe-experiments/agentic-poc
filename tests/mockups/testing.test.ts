@@ -15,10 +15,21 @@ import { freshSeed } from "@/lib/mockups/specialty-management/state";
 
 let number = 0;
 const id = (prefix: string) => `${prefix}-${++number}`;
+const selectedSeed = () => {
+  const state = freshSeed();
+  state.ui.selection = {
+    kind: "agent",
+    specialtyId: "sp-story",
+    agentId: "agent-playful",
+    versionId: "playful-v2",
+    section: "test",
+  };
+  return state;
+};
 
 describe("synthetic agent tests", () => {
   it("only exposes prepared current and earlier stage snapshots", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const forest = state.booklets.find((booklet) => booklet.id === "demo-forest")!;
     expect(forest.snapshots.map((snapshot) => snapshot.stageId)).toEqual(["audience_profile", "story_plan"]);
     expect(forest.snapshots[0]?.artifacts).toEqual([]);
@@ -26,7 +37,7 @@ describe("synthetic agent tests", () => {
   });
 
   it("captures unsaved visible agent content and frozen stage context", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const saved = state.agents.find((agent) => agent.id === "agent-playful")!.versions.find((version) => version.id === "playful-v2")!;
     state.workingCopies.versions[saved.id] = { ...saved, mainInstructions: "Unsaved test instructions" };
     const session = createTestSession(state, "agent-playful", state.ui.testSetup, id)!;
@@ -36,7 +47,7 @@ describe("synthetic agent tests", () => {
   });
 
   it("distinguishes a retry from repeat test with current edits", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const session = createTestSession(state, "agent-playful", state.ui.testSetup, id)!;
     startTestResponse(state, session.id, session.openingRequest, "opening", id);
     stopTestResponse(state, id);
@@ -49,7 +60,7 @@ describe("synthetic agent tests", () => {
   });
 
   it("creates deterministic text and image results with only frozen allowed activity", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const text = createTestSession(state, "agent-playful", state.ui.testSetup, id)!;
     startTestResponse(state, text.id, "Produce a sample result", "opening", id);
     completeTestResponse(state, id);
@@ -64,7 +75,7 @@ describe("synthetic agent tests", () => {
   });
 
   it("summarizes only context captured before the selected stage", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const session = createTestSession(state, "agent-playful", state.ui.testSetup, id)!;
     startTestResponse(state, session.id, "Summarize context", "opening", id);
     completeTestResponse(state, id);
@@ -78,7 +89,7 @@ describe("synthetic agent tests", () => {
   });
 
   it("uses version fallback and retains inspectable orphan sessions", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const session = createTestSession(state, "agent-playful", state.ui.testSetup, id)!;
     state.agents = state.agents.filter((agent) => agent.id !== "agent-playful");
     expect(isSessionOrphaned(state, session)).toBe(true);
@@ -87,14 +98,14 @@ describe("synthetic agent tests", () => {
   });
 
   it("marks compatibility warnings without blocking a session", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const story = state.specialties.find((specialty) => specialty.id === "sp-story")!;
     expect(compatibilityFor(story, "visual_bible")).toBe("warning");
     expect(createTestSession(state, "agent-playful", { ...state.ui.testSetup, stageId: "story_plan" }, id)).not.toBeNull();
   });
 
   it("prepares an editing handoff using an available fallback version", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const session = createTestSession(state, "agent-playful", state.ui.testSetup, id)!;
     startTestResponse(state, session.id, "Produce a sample result", "opening", id);
     completeTestResponse(state, id);
@@ -106,7 +117,7 @@ describe("synthetic agent tests", () => {
   });
 
   it("falls back to the highest numbered remaining version", () => {
-    const state = freshSeed();
+    const state = selectedSeed();
     const agent = state.agents.find((item) => item.id === "agent-playful")!;
     state.ui.selection = { kind: "specialty", specialtyId: "sp-story" };
     state.ui.recentVersionIds = {};

@@ -11,6 +11,8 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Filter,
+  ArrowLeft,
 } from "lucide-react";
 import {
   freshSeed,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/mockups/specialty-management/state";
 import type {
   Agent,
+  EditableAgentSection,
   MockupState,
   Selection,
   Specialty,
@@ -28,6 +31,7 @@ import { AgentEditor } from "./agent-editor";
 import { ChatPanel } from "./chat-panel";
 import { TestHistoryWorkspace } from "./test-workspace";
 import { completeTestResponse } from "@/lib/mockups/specialty-management/testing";
+import { StudioDirectory } from "./studio-directory";
 
 type Update = (fn: (draft: MockupState) => void) => void;
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -35,6 +39,84 @@ function change(state: MockupState, mutate: (draft: MockupState) => void) {
   const next = structuredClone(state);
   mutate(next);
   return next;
+}
+
+function selectionUrl(selection: Selection) {
+  const query = new URLSearchParams();
+  query.set("view", selection.kind);
+  if (selection.kind === "specialty") query.set("specialty", selection.specialtyId);
+  if (selection.kind === "agent") {
+    query.set("specialty", selection.specialtyId);
+    query.set("agent", selection.agentId);
+    query.set("version", selection.versionId);
+    query.set("tab", selection.section === "test" ? "test" : "edit");
+    if (selection.section !== "test") query.set("section", selection.section);
+  }
+  if (selection.kind === "test-history" && selection.sessionId)
+    query.set("session", selection.sessionId);
+  return `?${query.toString()}`;
+}
+
+function selectionFromUrl(state: MockupState) {
+  const query = new URLSearchParams(window.location.search);
+  const view = query.get("view");
+  if (!view || view === "directory")
+    return { selection: { kind: "directory" } as Selection, notice: null };
+  if (view === "specialty") {
+    const specialtyId = query.get("specialty") ?? "";
+    if (state.specialties.some((item) => item.id === specialtyId))
+      return {
+        selection: { kind: "specialty", specialtyId } as Selection,
+        notice: null,
+      };
+  }
+  if (view === "agent") {
+    const specialtyId = query.get("specialty") ?? "";
+    const agentId = query.get("agent") ?? "";
+    const versionId = query.get("version") ?? "";
+    const agent = state.agents.find(
+      (item) => item.id === agentId && item.specialtyId === specialtyId,
+    );
+    const version = agent?.versions.find((item) => item.id === versionId);
+    if (agent && version) {
+      const tab = query.get("tab");
+      const requested = query.get("section") ?? "configuration";
+      const referenceId = requested.startsWith("reference:")
+        ? requested.slice(10)
+        : null;
+      const validSection =
+        requested === "configuration" ||
+        requested === "instructions" ||
+        (referenceId && version.references.some((item) => item.id === referenceId));
+      return {
+        selection: {
+          kind: "agent",
+          specialtyId,
+          agentId,
+          versionId,
+          section:
+            tab === "test"
+              ? "test"
+              : validSection
+                ? (requested as EditableAgentSection)
+                : "configuration",
+        } as Selection,
+        notice: validSection || tab === "test" ? null : "That editor section is unavailable. Configuration was opened instead.",
+      };
+    }
+  }
+  if (view === "test-history") {
+    const sessionId = query.get("session");
+    if (!sessionId || state.testSessions.some((item) => item.id === sessionId))
+      return {
+        selection: { kind: "test-history", sessionId } as Selection,
+        notice: null,
+      };
+  }
+  return {
+    selection: { kind: "directory" } as Selection,
+    notice: "That Agent Studio target is unavailable. The directory was opened instead.",
+  };
 }
 
 function ResizeHandle({
@@ -73,7 +155,19 @@ function ResizeHandle({
   );
 }
 
-function Navigation({ state, update }: { state: MockupState; update: Update }) {
+function Navigation({
+  state,
+  update,
+  select,
+  addSpecialty,
+  addAgent,
+}: {
+  state: MockupState;
+  update: Update;
+  select(selection: Selection): void;
+  addSpecialty(): void;
+  addAgent(specialty: Specialty): void;
+}) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const visible = state.specialties.filter(
@@ -89,63 +183,6 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
             ),
         )),
   );
-  const select = (selection: Selection) =>
-    update((draft) => {
-      draft.ui.selection = selection;
-    });
-  const addSpecialty = () => {
-    const specialty: Specialty = {
-      id: uid("sp"),
-      name: "Untitled specialty",
-      description: "",
-      outputType: "text",
-      allowedToolIds: [],
-      builtIn: false,
-      retired: false,
-    };
-    update((draft) => {
-      draft.specialties.push(specialty);
-      draft.ui.expandedSpecialtyIds.push(specialty.id);
-      draft.ui.selection = { kind: "specialty", specialtyId: specialty.id };
-    });
-  };
-  const addAgent = (specialty: Specialty) => {
-    const language = state.models.find((item) => item.kind === "language")!;
-    const image = state.models.find((item) => item.kind === "image")!;
-    const versionId = uid("version");
-    const agent: Agent = {
-      id: uid("agent"),
-      specialtyId: specialty.id,
-      activeVersionId: null,
-      versions: [
-        {
-          id: versionId,
-          number: 1,
-          parentVersionId: null,
-          status: "draft",
-          title: "Untitled agent",
-          versionNote: "",
-          languageModel: { provider: language.provider, model: language.label },
-          imageModel:
-            specialty.outputType === "image"
-              ? { provider: image.provider, model: image.label }
-              : null,
-          mainInstructions: "",
-          references: [],
-        },
-      ],
-    };
-    update((draft) => {
-      draft.agents.push(agent);
-      draft.ui.selection = {
-        kind: "agent",
-        specialtyId: specialty.id,
-        agentId: agent.id,
-        versionId,
-        section: "configuration",
-      };
-    });
-  };
   return (
     <nav className="left-pane" aria-label="Specialties and agents">
       <div className="pane-heading">
@@ -153,6 +190,23 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
           <h2>Specialties</h2>
           <span>{visible.length} shown</span>
         </div>
+        <div className="pane-heading-actions">
+        <details className="filter-menu">
+          <summary className="icon-button" aria-label="Filter specialties" role="button">
+            <Filter size={16} />
+          </summary>
+          <label>
+            <input
+              type="checkbox"
+              checked={state.ui.showRetired}
+              onChange={(event) =>
+                update((draft) => {
+                  draft.ui.showRetired = event.target.checked;
+                })
+              }
+            /> Show retired
+          </label>
+        </details>
         <button
           className="icon-button"
           onClick={addSpecialty}
@@ -160,6 +214,7 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
         >
           <Plus size={17} />
         </button>
+        </div>
       </div>
       <label className="search">
         <Search size={15} />
@@ -172,20 +227,6 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
           placeholder="Search…"
         />
       </label>
-      <button
-        className={`test-history-link ${state.ui.selection.kind === "test-history" ? "selected" : ""}`}
-        aria-current={state.ui.selection.kind === "test-history" ? "page" : undefined}
-        onClick={() =>
-          select({
-            kind: "test-history",
-            sessionId: state.testSessions[0]?.id ?? null,
-          })
-        }
-      >
-        <History size={15} />
-        <span>Test history</span>
-        <small>{state.testSessions.length}</small>
-      </button>
       <ul className="specialty-list">
         {visible.map((specialty) => {
           const expanded = state.ui.expandedSpecialtyIds.includes(specialty.id);
@@ -327,18 +368,6 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
           );
         })}
       </ul>
-      <label className="show-retired">
-        <input
-          type="checkbox"
-          checked={state.ui.showRetired}
-          onChange={(event) =>
-            update((draft) => {
-              draft.ui.showRetired = event.target.checked;
-            })
-          }
-        />{" "}
-        Show retired
-      </label>
     </nav>
   );
 }
@@ -352,6 +381,7 @@ function SpecialtyEditor({
   update: Update;
   announce(message: string): void;
 }) {
+  if (state.ui.selection.kind === "directory") return null;
   if (state.ui.selection.kind === "test-history")
     return (
       <TestHistoryWorkspace state={state} update={update} announce={announce} />
@@ -514,14 +544,104 @@ export function SpecialtyManagementMockup() {
   const focusButton = useRef<HTMLButtonElement>(null);
   const update: Update = (fn) =>
     dispatch({ type: "mutate", mutate: (current) => change(current, fn) });
+  const select = (selection: Selection, history: "push" | "replace" = "push") => {
+    if (history === "push")
+      window.history.pushState(null, "", selectionUrl(selection));
+    else window.history.replaceState(null, "", selectionUrl(selection));
+    update((draft) => {
+      draft.ui.selection = selection;
+      draft.ui.navigationNotice = null;
+      if (selection.kind === "agent")
+        draft.ui.recentVersionIds[selection.agentId] = selection.versionId;
+    });
+  };
+  const addSpecialty = () => {
+    const specialty: Specialty = {
+      id: uid("sp"),
+      name: "Untitled specialty",
+      description: "",
+      outputType: "text",
+      allowedToolIds: [],
+      builtIn: false,
+      retired: false,
+    };
+    update((draft) => {
+      draft.specialties.push(specialty);
+      draft.ui.expandedSpecialtyIds.push(specialty.id);
+    });
+    select({ kind: "specialty", specialtyId: specialty.id });
+  };
+  const addAgent = (specialty: Specialty) => {
+    const language = state.models.find((item) => item.kind === "language")!;
+    const image = state.models.find((item) => item.kind === "image")!;
+    const versionId = uid("version");
+    const agent: Agent = {
+      id: uid("agent"),
+      specialtyId: specialty.id,
+      activeVersionId: null,
+      versions: [{
+        id: versionId,
+        number: 1,
+        parentVersionId: null,
+        status: "draft",
+        title: "Untitled agent",
+        description: "",
+        versionNote: "",
+        languageModel: { provider: language.provider, model: language.label },
+        imageModel: specialty.outputType === "image"
+          ? { provider: image.provider, model: image.label }
+          : null,
+        mainInstructions: "",
+        references: [],
+      }],
+    };
+    update((draft) => {
+      draft.agents.push(agent);
+    });
+    select({
+      kind: "agent",
+      specialtyId: specialty.id,
+      agentId: agent.id,
+      versionId,
+      section: "configuration",
+    });
+  };
   useEffect(() => {
     const result = loadState(localStorage);
     queueMicrotask(() => {
-      if (result.state) dispatch({ type: "replace", state: result.state });
+      if (result.state) {
+        const resolved = selectionFromUrl(result.state);
+        result.state.ui.selection = resolved.selection;
+        result.state.ui.navigationNotice = resolved.notice;
+        if (resolved.selection.kind === "agent")
+          result.state.ui.recentVersionIds[resolved.selection.agentId] =
+            resolved.selection.versionId;
+        dispatch({ type: "replace", state: result.state });
+        window.history.replaceState(null, "", selectionUrl(resolved.selection));
+      }
       else setLoadError(result.error);
       setHydrated(true);
     });
   }, []);
+  useEffect(() => {
+    if (!hydrated || loadError) return;
+    const onPopState = () => {
+      const resolved = selectionFromUrl(state);
+      update((draft) => {
+        draft.ui.selection = resolved.selection;
+        draft.ui.navigationNotice = resolved.notice;
+        if (resolved.selection.kind === "agent")
+          draft.ui.recentVersionIds[resolved.selection.agentId] =
+            resolved.selection.versionId;
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [hydrated, loadError, state]);
+  useEffect(() => {
+    if (!hydrated || loadError) return;
+    window.history.replaceState(null, "", selectionUrl(state.ui.selection));
+  }, [hydrated, loadError, state.ui.selection]);
   useEffect(() => {
     if (hydrated && !loadError) {
       const error = saveState(localStorage, state);
@@ -575,6 +695,7 @@ export function SpecialtyManagementMockup() {
     setSaveError(saveState(localStorage, next));
     setChatResetToken((value) => value + 1);
     dispatch({ type: "replace", state: next });
+    window.history.replaceState(null, "", selectionUrl(next.ui.selection));
   };
   if (!hydrated) return <div role="status">Loading management mockup…</div>;
   if (loadError)
@@ -593,9 +714,28 @@ export function SpecialtyManagementMockup() {
       <header className="mockup-toolbar">
         <div>
           <h1>Agent Studio</h1>
-          <p>Synthetic data · simulated chat</p>
         </div>
         <div>
+          {state.ui.selection.kind !== "directory" ? (
+            <button
+              className="toolbar-text-button"
+              onClick={() => select({ kind: "directory" })}
+            >
+              <ArrowLeft aria-hidden="true" size={15} /> Directory
+            </button>
+          ) : null}
+          <button
+            className="toolbar-text-button"
+            aria-current={state.ui.selection.kind === "test-history" ? "page" : undefined}
+            onClick={() =>
+              select({
+                kind: "test-history",
+                sessionId: state.testSessions[0]?.id ?? null,
+              })
+            }
+          >
+            <History aria-hidden="true" size={15} /> Test history
+          </button>
           <button
             ref={focusButton}
             className="toolbar-icon-button"
@@ -641,6 +781,15 @@ export function SpecialtyManagementMockup() {
           </button>
         </div>
       ) : null}
+      {state.ui.selection.kind === "directory" ? (
+        <StudioDirectory
+          state={state}
+          update={update}
+          select={select}
+          addSpecialty={addSpecialty}
+          addAgent={addAgent}
+        />
+      ) : (
       <div
         className={`mockup-shell ${state.ui.focusMode ? "focus-mode" : ""}`}
         style={{
@@ -649,7 +798,15 @@ export function SpecialtyManagementMockup() {
             : `${state.ui.navWidth}px 7px minmax(360px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`,
         }}
       >
-        {!state.ui.focusMode ? <Navigation state={state} update={update} /> : null}
+        {!state.ui.focusMode ? (
+          <Navigation
+            state={state}
+            update={update}
+            select={select}
+            addSpecialty={addSpecialty}
+            addAgent={addAgent}
+          />
+        ) : null}
         {!state.ui.focusMode ? (
           <ResizeHandle
             label="Resize specialties pane"
@@ -689,6 +846,7 @@ export function SpecialtyManagementMockup() {
           resetToken={chatResetToken}
         />
       </div>
+      )}
     </section>
   );
 }
