@@ -127,6 +127,7 @@ function TestTurn({
                 const separator = draft.chat.composerText.trim() ? "\n\n---\n\n" : "";
                 draft.chat.composerText += `${separator}${handoff.differs ? "The tested version is unavailable; using the current version.\n\n" : ""}${handoff.request}`;
                 draft.ui.chatOpen = true;
+                draft.ui.focusMode = false;
                 draft.ui.selection = { kind: "agent", specialtyId: agent.specialtyId, agentId: agent.id, versionId: handoff.versionId, section: "instructions" };
               });
               announce("Test feedback prepared in the Editing assistant. Review before sending.");
@@ -181,6 +182,7 @@ function SessionView({
         <summary>Captured test details</summary>
         <dl>
           <dt>Agent</dt><dd>{session.agentName} · v{session.agentVersionNumber}</dd>
+          <dt>Version note</dt><dd>{session.agentSnapshot.versionNote || "No version note"}</dd>
           <dt>Specialty</dt><dd>{session.specialtyName} · {session.specialtySnapshot.outputType}</dd>
           <dt>Allowed tools</dt><dd>{session.specialtySnapshot.allowedToolIds.join(", ") || "None"}</dd>
           <dt>Booklet</dt><dd>{session.stageSnapshot.premise} · {session.stageSnapshot.audience}</dd>

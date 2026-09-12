@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
-import { FileText, FlaskConical, Plus, Settings2, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileText, FlaskConical, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
 import { MarkdownEditor } from "./markdown-editor";
 import { SampleResultDialog } from "./sample-result-dialog";
 import { AgentTestWorkspace } from "./test-workspace";
+import { suggestVersionNote } from "@/lib/mockups/specialty-management/version-notes";
 import type {
   AgentVersion,
   MockupState,
@@ -25,6 +26,18 @@ export function AgentEditor({
   announce(message: string): void;
 }) {
   const [sampleOpen, setSampleOpen] = useState(false);
+  const [noteSuggestion, setNoteSuggestion] = useState<{
+    versionId: string;
+    text: string;
+  } | null>(null);
+  const [lifecycleOpen, setLifecycleOpen] = useState(false);
+  const suggestNoteButton = useRef<HTMLButtonElement>(null);
+  const noteSuggestionDialog = useRef<HTMLDialogElement>(null);
+  const lifecycleButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const dialog = noteSuggestionDialog.current;
+    if (noteSuggestion && dialog && !dialog.open) dialog.showModal();
+  }, [noteSuggestion]);
   const selection = state.ui.selection;
   if (selection.kind !== "agent") return null;
   const specialty = state.specialties.find(
@@ -40,6 +53,8 @@ export function AgentEditor({
       </section>
     );
   const version = state.workingCopies.versions[saved.id] ?? saved;
+  const visibleSpecialty =
+    state.workingCopies.specialties[specialty.id] ?? specialty;
   const dirty = !!state.workingCopies.versions[saved.id];
   const editable = version.status === "draft";
   const selectSection = (section: typeof selection.section) =>
@@ -58,6 +73,10 @@ export function AgentEditor({
   };
   const setReferences = (references: ReferenceFile[]) =>
     setVersion({ references });
+  const closeNoteSuggestion = () => {
+    setNoteSuggestion(null);
+    queueMicrotask(() => suggestNoteButton.current?.focus());
+  };
   const save = () => {
     if (
       !version.title.trim() ||
@@ -108,6 +127,7 @@ export function AgentEditor({
       copy.number = Math.max(...target.versions.map((item) => item.number)) + 1;
       copy.parentVersionId = saved.id;
       copy.status = "draft";
+      copy.versionNote = "";
       target.versions.push(copy);
       draft.ui.recentVersionIds = {
         ...draft.ui.recentVersionIds,
@@ -203,6 +223,7 @@ export function AgentEditor({
           Math.max(...target.versions.map((item) => item.number)) + 1;
         copy.parentVersionId = saved.id;
         copy.status = "draft";
+        copy.versionNote = "";
         copy.references.push(ref);
         target.versions.push(copy);
         draft.ui.recentVersionIds[agent.id] = copy.id;
@@ -283,6 +304,9 @@ export function AgentEditor({
               ? "Unsaved changes · retained in this browser"
               : `Version ${version.number} · ${version.status}${agent.activeVersionId === version.id ? " · Active" : ""}`}
           </span>
+          <p className="version-note-summary">
+            {version.versionNote || "No version note"}
+          </p>
         </div>
         <div className="header-actions">
           <label>
@@ -307,6 +331,7 @@ export function AgentEditor({
                 .map((item) => (
                   <option key={item.id} value={item.id}>
                     v{item.number} · {item.status}
+                    {item.versionNote ? ` · ${item.versionNote}` : ""}
                   </option>
                 ))}
             </select>
@@ -331,9 +356,12 @@ export function AgentEditor({
       <div
         className="agent-body"
         style={{
-          gridTemplateColumns: `${state.ui.sectionWidth}px 7px minmax(360px,1fr)`,
+          gridTemplateColumns: state.ui.focusMode
+            ? "minmax(360px,1fr)"
+            : `${state.ui.sectionWidth}px 7px minmax(360px,1fr)`,
         }}
       >
+        {!state.ui.focusMode ? (
         <nav className="section-nav" aria-label="Agent sections">
           <button
             className={selection.section === "configuration" ? "selected" : ""}
@@ -369,6 +397,8 @@ export function AgentEditor({
             </button>
           ))}
         </nav>
+        ) : null}
+        {!state.ui.focusMode ? (
         <div
           className="resize-handle"
           role="separator"
@@ -388,6 +418,7 @@ export function AgentEditor({
               });
           }}
         />
+        ) : null}
         <div className="agent-editor">
           {selection.section === "test" ? (
             <AgentTestWorkspace
@@ -413,6 +444,64 @@ export function AgentEditor({
                   <small className="error">Enter a title.</small>
                 ) : null}
               </label>
+              <label>
+                Version note
+                <small>Optional · {version.versionNote.length}/240</small>
+                <textarea
+                  aria-label="Version note"
+                  disabled={!editable}
+                  maxLength={240}
+                  value={version.versionNote}
+                  onChange={(event) =>
+                    setVersion({ versionNote: event.target.value })
+                  }
+                />
+                {editable ? (
+                  <button
+                    ref={suggestNoteButton}
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      setNoteSuggestion({
+                        versionId: version.id,
+                        text: suggestVersionNote(agent, version),
+                      })
+                    }
+                  >
+                    Suggest note
+                  </button>
+                ) : null}
+              </label>
+              <section
+                className="allowed-tools-summary"
+                aria-label="Allowed tools summary"
+              >
+                <div>
+                  <strong>Allowed tools</strong>
+                  <small>
+                    {state.workingCopies.specialties[specialty.id]
+                      ? "Unsaved specialty values"
+                      : "From specialty"}
+                  </small>
+                </div>
+                <p>
+                  {visibleSpecialty.allowedToolIds.length
+                    ? visibleSpecialty.allowedToolIds
+                        .map(
+                          (id) =>
+                            state.tools.find((tool) => tool.id === id)?.name ??
+                            id,
+                        )
+                        .join(", ")
+                    : "No tools allowed"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openSpecialty(specialty.id)}
+                >
+                  Edit specialty tools
+                </button>
+              </section>
               <fieldset disabled={!editable}>
                 <legend>
                   Language model <small>Demo catalog</small>
@@ -660,41 +749,108 @@ export function AgentEditor({
         }
         onClose={() => setSampleOpen(false)}
       />
+      {noteSuggestion?.versionId === version.id ? (
+        <dialog
+          ref={noteSuggestionDialog}
+          aria-modal="true"
+          aria-labelledby="version-note-suggestion-title"
+          className="note-suggestion-dialog"
+          onCancel={(event) => {
+            event.preventDefault();
+            closeNoteSuggestion();
+          }}
+        >
+          <p>Simulated suggestion</p>
+          <h3 id="version-note-suggestion-title">Suggested version note</h3>
+          <p>{noteSuggestion.text}</p>
+          <div>
+            <button autoFocus onClick={closeNoteSuggestion}>Cancel</button>
+            <button
+              className="primary"
+              onClick={() => {
+                setVersion({ versionNote: noteSuggestion.text });
+                closeNoteSuggestion();
+              }}
+            >
+              Use suggestion
+            </button>
+          </div>
+        </dialog>
+      ) : null}
       <footer className="agent-actions">
-        <button onClick={fork}>
-          {editable ? "Fork draft" : "Edit as draft"}
-        </button>
-        {editable ? (
-          <>
-            <button disabled={dirty} onClick={() => transition("confirmed")}>
-              Confirm
-            </button>
-            {!agent.activeVersionId ? (
-              <button disabled>Activate after confirmation</button>
-            ) : null}
-            <button
-              disabled={agent.activeVersionId === version.id}
-              onClick={removeVersion}
-            >
-              Delete draft
-            </button>
-          </>
+        {!editable ? (
+          <button className="primary" onClick={fork}>Edit as draft</button>
         ) : null}
-        {version.status === "confirmed" ? (
-          <>
-            {agent.activeVersionId === version.id ? (
-              <button onClick={deactivate}>Deactivate</button>
-            ) : (
-              <button onClick={activate}>Activate</button>
-            )}
-            <button
-              disabled={dirty || agent.activeVersionId === version.id}
-              onClick={() => transition("retired")}
+        <div className="lifecycle-menu">
+          <button
+            ref={lifecycleButton}
+            aria-haspopup="menu"
+            aria-expanded={lifecycleOpen}
+            onClick={() => {
+              const opening = !lifecycleOpen;
+              setLifecycleOpen(opening);
+              if (opening)
+                queueMicrotask(() =>
+                  lifecycleButton.current?.parentElement
+                    ?.querySelector<HTMLButtonElement>("[role='menuitem']")
+                    ?.focus(),
+                );
+            }}
+          >
+            <MoreHorizontal size={15} /> Version actions
+          </button>
+          {lifecycleOpen ? (
+            <div
+              role="menu"
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("[role='menuitem']"))
+                  setLifecycleOpen(false);
+              }}
+              onKeyDown={(event) => {
+                const items = [
+                  ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                    "[role='menuitem']:not(:disabled)",
+                  ),
+                ];
+                const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setLifecycleOpen(false);
+                  lifecycleButton.current?.focus();
+                } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  const delta = event.key === "ArrowDown" ? 1 : -1;
+                  items[(index + delta + items.length) % items.length]?.focus();
+                }
+              }}
             >
-              Retire
-            </button>
-          </>
-        ) : null}
+              {editable ? <button role="menuitem" onClick={fork}>Fork draft</button> : null}
+              {editable ? (
+                <button role="menuitem" disabled={dirty} onClick={() => transition("confirmed")}>
+                  Confirm · Lock this version
+                </button>
+              ) : null}
+              {editable && dirty ? <small>Save or discard before locking this version.</small> : null}
+              {editable ? (
+                <button role="menuitem" disabled={agent.activeVersionId === version.id} onClick={removeVersion}>Delete draft</button>
+              ) : null}
+              {version.status === "confirmed" ? (
+                agent.activeVersionId === version.id ? (
+                  <button role="menuitem" onClick={deactivate}>Deactivate</button>
+                ) : (
+                  <button role="menuitem" onClick={activate}>Activate · Make available for selection</button>
+                )
+              ) : null}
+              {version.status === "confirmed" ? (
+                <button role="menuitem" disabled={dirty || agent.activeVersionId === version.id} onClick={() => transition("retired")}>Retire</button>
+              ) : null}
+              {version.status === "confirmed" && agent.activeVersionId === version.id ? (
+                <small>Deactivate before retiring this version.</small>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </footer>
     </section>
   );

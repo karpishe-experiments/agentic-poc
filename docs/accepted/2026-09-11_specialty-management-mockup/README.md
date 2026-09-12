@@ -20,6 +20,10 @@ Each agent has a **Test** workspace. Select one of three synthetic booklets and 
 
 Test conversations are separate from the Editing assistant. **Send to editing chat** appends a prepared request to any existing editing composer text and never sends or applies it automatically. Test Stop/Retry and refresh interruption operate only on the frozen test session. The Editing assistant and Test agent can each have one independent simulated response in progress.
 
+**Focus mode** hides Studio navigation, agent section navigation, and the Editing assistant so the current editor or Test workspace can use the full shell. The exit control remains in the toolbar; Escape exits when no dialog or menu is open. Pane sizes and chat visibility return unchanged. Hidden Editing assistant and Test agent responses continue, and an explicit test-result handoff exits focus mode.
+
+Draft agent versions can store an optional 240-character **Version note**. **Suggest note** previews a deterministic summary of model, Main instructions, and reference changes before replacing the editable note; it never calls a model. Confirmed and retired notes are read-only, and every derived draft begins with an empty note. Agent configuration also shows the specialty's visible allowed tools, including unsaved specialty changes. **Version actions** groups confirmation, activation, retirement, deletion, and forking while keeping Save/Discard and Edit as draft prominent.
+
 “Make this concise” and “shorter” preserve headings, the first prose paragraph, and mention links. “Use a numbered checklist” numbers prose outside headings and fenced code. “Add an example” appends a synthetic example. Vague requests ask for clarification, and informational questions return an answer without changing editor content. **Stop**, interrupted-refresh recovery, Retry, and the seeded synthetic failure let you explore error handling. Reset restores that failure fixture and aborts a running response.
 
 ## Five-minute feedback path
@@ -32,7 +36,8 @@ Test conversations are separate from the Editing assistant. **Send to editing ch
 6. Repeat the test with current edits, then inspect both sessions in **Test history**.
 7. Send a result to the Editing assistant and confirm that the prepared request does not send automatically.
 8. Refresh the page and confirm that synthetic records, conversations, and tests remain.
-9. Open an Image agent and inspect **Preview sample result**.
+9. Try Focus mode, add or suggest a Version note, and inspect Version actions and Allowed tools.
+10. Open an Image agent and inspect **Preview sample result**.
 
 Please focus feedback on pane navigation, prompt authoring, proposal review, streaming, clarification, and recovery. Lifecycle and permission rules are illustrative and are not a runtime specification.
 

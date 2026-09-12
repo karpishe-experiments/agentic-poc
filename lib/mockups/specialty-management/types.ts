@@ -29,6 +29,7 @@ export type AgentVersion = {
   parentVersionId: string | null;
   status: VersionStatus;
   title: string;
+  versionNote: string;
   languageModel: ModelSelection;
   imageModel: ModelSelection | null;
   mainInstructions: string;
@@ -303,7 +304,7 @@ export type TestSetup = {
 };
 
 export type MockupState = {
-  formatVersion: 3;
+  formatVersion: 4;
   specialties: Specialty[];
   agents: Agent[];
   tools: ToolFixture[];
@@ -324,6 +325,7 @@ export type MockupState = {
     editorMode: "edit" | "preview";
     imageDescriptions: Record<string, string>;
     testSetup: TestSetup;
+    focusMode: boolean;
   };
   chat: {
     messages: ManagementUIMessage[];

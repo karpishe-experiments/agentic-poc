@@ -6,7 +6,7 @@ Deliver an interactive desktop mockup that the user can evaluate before defining
 
 The user requested a mockup with synthetic data, simulated chat, and persistence between refreshes. Their conversation decisions govern this phase. This plan does not implement or complete the parent issue's runtime requirements. In particular, schemas, migrations, tool execution, workflow routing, result mapping, and runtime integration remain later work. The parent issue still uses “skill”; this mockup uses “specialty”. Do not rename existing runtime symbols.
 
-Status: Checkpoints 1–8 complete; checkpoint 9 planned and not implemented. This consolidated document governs resumption. Defaults are experiment choices, not permanent runtime contracts.
+Status: Checkpoints 1–9 complete. This document records the implemented Phase 0 mockup and its verification evidence. Defaults are experiment choices, not permanent runtime contracts.
 
 ### Agreed product model
 
@@ -238,7 +238,7 @@ Use these closed interaction defaults throughout implementation:
 | 6 — Verification and handoff | Complete tests, browser inspection, documentation, independent read-only review, bounded corrections | Acceptance matrix passes with evidence; final source checks pass; screenshots inspected; launch instructions and limitations documented |
 | 7 — Editing assistant | Complete: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate passed |
 | 8 — Agent tests | Complete: stage snapshots, test sessions/history, repeat and editing handoff, format 3 | P0-16–P0-23 pass; independent review gate passed |
-| 9 — Focus and lifecycle UX | Pending: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate |
+| 9 — Focus and lifecycle UX | Complete: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate passed |
 
 An implementation agent should use the relevant repository React/Next.js, UI review, and browser skills when implementing their surfaces. The primary agent owns edits and integration. A separate read-only reviewer is required after implementation; delegate that bounded review without concurrent edits. A review may find ordinary in-scope defects to fix; it must not expand the mockup into the parent runtime platform.
 
@@ -311,7 +311,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 6 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (15); `npm run test:mockup:e2e` (22); `npm run mockup:build`; working-tree and branch whitespace checks; six desktop screenshots inspected; two consecutive independent final reviews passed with no intervening changes | None |
 | 7 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (20); `npm run test:mockup:e2e` (25); `npm run mockup:build`; `git diff --check`; streaming, clarification, text/field proposal, diagnostics, and 1280×800/1440×900/1920×1080 screenshots inspected; two consecutive independent reviews passed with no intervening changes | None |
 | 8 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (31); `npm run test:mockup:e2e` (36); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; Test and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
-| 9 | Pending | Not run | Implementation pending |
+| 9 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (35); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata clean; focused configuration, focused Test, and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
 
 ## 5. Handoff and completion boundary
 
@@ -321,7 +321,7 @@ After implementation review passes, reconcile docs through `sync-docs-issues`. U
 
 Report the route, launch command, tested flows, verification outcomes, and known mockup limitations. Do not call issue #22 complete. Do not require a real model, MongoDB, authentication, shared storage, production validations, multi-tab synchronization, schema authoring, runtime tool permissions, actual reference loading by agents, creator team selection, or actual orchestration to finish Phase 0.
 
-Checkpoints 1–6 are complete on the issue branch. Checkpoints 7–9 remain pending. Exclude Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring.
+Checkpoints 1–9 are complete on the issue branch. Excluded scope remains unchanged: Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring.
 
 ## 6. Checkpoint 7 — Interactive simulated management chat
 
@@ -490,10 +490,8 @@ Upgrade format 3 to format 4 with empty version notes (including version working
 
 Acceptance: P0-24–P0-27. Update the mockup guide and relevant architecture description after verification. Inspect focused editing and Test history at all three desktop sizes.
 
-## 9. Unattended implementation resumption
+## 9. Implementation record
 
-Planning work alone must not start implementation. When the user explicitly resumes implementation, first verify the issue branch and preserve unrelated work, including generated Next.js type-file differences. Commit this consolidated plan before code changes.
-
-Implement checkpoints 7, 8, then 9 without switching branches. For each checkpoint, implement and run relevant checks; obtain independent read-only review; fix findings and rerun affected checks until two consecutive reviews are clean with no intervening changes. Any correction resets the clean count. Record actual commands/results and both clean reviews in the single ledger, then commit the checkpoint. Inspect the next checkpoint against implemented behavior; commit any necessary plan adjustment and continue without routine approval pauses.
+Checkpoints 7, 8, and 9 were implemented on `agent/issue-22-specialty-management-mockup` without switching branches. Each checkpoint passed focused verification and two consecutive independent clean reviews. The completion ledger records the final evidence.
 
 At final completion run typecheck, lint, isolated mockup unit/browser tests, isolated build, and whitespace checks. Inspect screenshots of the new states at 1280×800, 1440×900, and 1920×1080. No real model, database, or external requests are required. No merge, deployment, or issue closure is authorized.

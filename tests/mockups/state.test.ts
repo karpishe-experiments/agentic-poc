@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { freshSeed, isMockupState, loadState, saveState, STORAGE_KEY } from "@/lib/mockups/specialty-management/state";
+import { createTestSession } from "@/lib/mockups/specialty-management/testing";
+
+let migrationId = 0;
+const nextMigrationId = (prefix: string) => `${prefix}-${++migrationId}`;
 
 describe("mockup state", () => {
-  it("seeds the format-3 document and one inspectable synthetic failure", () => {
+  it("seeds the format-4 document and one inspectable synthetic failure", () => {
     const state = freshSeed();
-    expect(state.formatVersion).toBe(3);
+    expect(state.formatVersion).toBe(4);
+    expect(state.ui.focusMode).toBe(false);
+    expect(state.agents.every((agent) => agent.versions.every((version) => version.versionNote === ""))).toBe(true);
     expect(state.booklets).toHaveLength(3);
     expect(state.chat.messages.some((message) => message.id === "seeded-synthetic-failure")).toBe(true);
   });
@@ -15,7 +21,7 @@ describe("mockup state", () => {
     old.chat = { messages: [], proposals: [], pendingResponse: null };
     const result = loadState({ getItem: () => JSON.stringify(old) });
     expect(result.error).toBeNull();
-    expect(result.state?.formatVersion).toBe(3);
+    expect(result.state?.formatVersion).toBe(4);
     expect(result.state?.chat.messages).toHaveLength(0);
   });
 
@@ -95,9 +101,78 @@ describe("mockup state", () => {
     delete old.pendingTestResponse;
     delete old.ui.testSetup;
     const result = loadState({ getItem: () => JSON.stringify(old) });
-    expect(result.state?.formatVersion).toBe(3);
+    expect(result.state?.formatVersion).toBe(4);
     expect(result.state?.testSessions).toEqual([]);
     expect(result.state?.booklets).toHaveLength(3);
+  });
+
+  it("migrates format 3 without losing editor, chat, tests, or pane preferences", () => {
+    const state = freshSeed();
+    state.chat.composerText = "Preserve this editing request";
+    state.ui.navWidth = 300;
+    state.ui.chatOpen = false;
+    const saved = state.agents.find((agent) => agent.id === "agent-playful")!.versions.find((version) => version.id === "playful-v2")!;
+    state.workingCopies.versions[saved.id] = { ...saved, title: "Unsaved title" };
+    const session = createTestSession(state, "agent-playful", state.ui.testSetup, nextMigrationId)!;
+    const old = state as unknown as {
+      formatVersion: number;
+      ui: { focusMode?: boolean };
+      agents: Array<{ versions: Array<Record<string, unknown>> }>;
+      workingCopies: { versions: Record<string, Record<string, unknown>> };
+      testSessions: Array<{ agentSnapshot: Record<string, unknown> }>;
+    };
+    old.formatVersion = 3;
+    delete old.ui.focusMode;
+    old.agents.forEach((agent) =>
+      agent.versions.forEach((version) => delete version.versionNote),
+    );
+    Object.values(old.workingCopies.versions).forEach(
+      (version) => delete version.versionNote,
+    );
+    delete old.testSessions[0]!.agentSnapshot.versionNote;
+
+    const loaded = loadState({ getItem: () => JSON.stringify(old) }).state!;
+    expect(loaded.formatVersion).toBe(4);
+    expect(loaded.ui.focusMode).toBe(false);
+    expect(loaded.ui.navWidth).toBe(300);
+    expect(loaded.ui.chatOpen).toBe(false);
+    expect(loaded.chat.composerText).toBe("Preserve this editing request");
+    expect(loaded.workingCopies.versions[saved.id]?.title).toBe("Unsaved title");
+    expect(loaded.workingCopies.versions[saved.id]?.versionNote).toBe("");
+    expect(loaded.testSessions[0]?.id).toBe(session.id);
+    expect(loaded.testSessions[0]?.agentSnapshot.versionNote).toBeUndefined();
+  });
+
+  it("migrates format 3 through format 4 without losing editor, chat, or test work", () => {
+    const old = structuredClone(freshSeed()) as unknown as {
+      formatVersion: number;
+      agents: Array<{ versions: Array<Record<string, unknown>> }>;
+      workingCopies: { versions: Record<string, Record<string, unknown>> };
+      ui: Record<string, unknown>;
+      chat: { composerText: string };
+      testSessions: Array<{ name: string; agentSnapshot: Record<string, unknown> }>;
+    };
+    old.formatVersion = 3;
+    delete old.ui.focusMode;
+    old.chat.composerText = "Keep this chat draft";
+    const draft = structuredClone(old.agents[2]!.versions[1]!);
+    draft.mainInstructions = "Keep this working copy";
+    old.workingCopies.versions["playful-v2"] = draft;
+    for (const agent of old.agents)
+      for (const version of agent.versions) delete version.versionNote;
+    delete old.workingCopies.versions["playful-v2"]!.versionNote;
+    old.testSessions.push({
+      name: "Keep this test",
+      agentSnapshot: structuredClone(old.agents[2]!.versions[1]!),
+    });
+    const result = loadState({ getItem: () => JSON.stringify(old) }).state!;
+    expect(result.formatVersion).toBe(4);
+    expect(result.ui.focusMode).toBe(false);
+    expect(result.chat.composerText).toBe("Keep this chat draft");
+    expect(result.workingCopies.versions["playful-v2"]?.mainInstructions).toBe("Keep this working copy");
+    expect(result.workingCopies.versions["playful-v2"]?.versionNote).toBe("");
+    expect(result.testSessions[0]?.name).toBe("Keep this test");
+    expect(result.testSessions[0]?.agentSnapshot.versionNote).toBeUndefined();
   });
 
   it("turns an in-flight test response into an interrupted retry turn on refresh", () => {

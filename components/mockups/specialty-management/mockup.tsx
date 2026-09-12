@@ -5,6 +5,8 @@ import {
   ChevronDown,
   ChevronRight,
   History,
+  Maximize2,
+  Minimize2,
   MessageSquare,
   Plus,
   RotateCcw,
@@ -122,6 +124,7 @@ function Navigation({ state, update }: { state: MockupState; update: Update }) {
           parentVersionId: null,
           status: "draft",
           title: "Untitled agent",
+          versionNote: "",
           languageModel: { provider: language.provider, model: language.label },
           imageModel:
             specialty.outputType === "image"
@@ -508,6 +511,7 @@ export function SpecialtyManagementMockup() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [chatResetToken, setChatResetToken] = useState(0);
+  const focusButton = useRef<HTMLButtonElement>(null);
   const update: Update = (fn) =>
     dispatch({ type: "mutate", mutate: (current) => change(current, fn) });
   useEffect(() => {
@@ -542,6 +546,28 @@ export function SpecialtyManagementMockup() {
     }, 900);
     return () => window.clearTimeout(timer);
   }, [state.pendingTestResponse]);
+  useEffect(() => {
+    if (!state.ui.focusMode) return;
+    const exit = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (event.defaultPrevented) return;
+      if (document.querySelector("dialog[open], .mention-menu, [role='menu']"))
+        return;
+      event.preventDefault();
+      update((draft) => {
+        draft.ui.focusMode = false;
+      });
+      queueMicrotask(() => focusButton.current?.focus());
+    };
+    window.addEventListener("keydown", exit);
+    return () => window.removeEventListener("keydown", exit);
+  }, [state.ui.focusMode]);
+  const toggleFocus = () => {
+    update((draft) => {
+      draft.ui.focusMode = !draft.ui.focusMode;
+    });
+    if (state.ui.focusMode) queueMicrotask(() => focusButton.current?.focus());
+  };
   const reset = () => {
     if (!confirm("Reset all specialty-management demo data?")) return;
     const next = freshSeed();
@@ -571,9 +597,24 @@ export function SpecialtyManagementMockup() {
         </div>
         <div>
           <button
+            ref={focusButton}
+            className="toolbar-icon-button"
+            aria-label={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
+            title={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
+            disabled={state.ui.selection.kind === "test-history"}
+            onClick={toggleFocus}
+          >
+            {state.ui.focusMode ? (
+              <Minimize2 aria-hidden="true" size={15} />
+            ) : (
+              <Maximize2 aria-hidden="true" size={15} />
+            )}
+          </button>
+          <button
             className="toolbar-icon-button"
             aria-label={state.ui.chatOpen ? "Hide chat" : "Show chat"}
             title={state.ui.chatOpen ? "Hide chat" : "Show chat"}
+            disabled={state.ui.focusMode}
             onClick={() =>
               update((draft) => {
                 draft.ui.chatOpen = !draft.ui.chatOpen;
@@ -601,29 +642,33 @@ export function SpecialtyManagementMockup() {
         </div>
       ) : null}
       <div
-        className="mockup-shell"
+        className={`mockup-shell ${state.ui.focusMode ? "focus-mode" : ""}`}
         style={{
-          gridTemplateColumns: `${state.ui.navWidth}px 7px minmax(360px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`,
+          gridTemplateColumns: state.ui.focusMode
+            ? "minmax(360px,1fr)"
+            : `${state.ui.navWidth}px 7px minmax(360px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`,
         }}
       >
-        <Navigation state={state} update={update} />
-        <ResizeHandle
-          label="Resize specialties pane"
-          onMove={(delta) =>
-            update((draft) => {
-              draft.ui.navWidth = Math.max(
-                200,
-                Math.min(320, draft.ui.navWidth + delta),
-              );
-            })
-          }
-        />
+        {!state.ui.focusMode ? <Navigation state={state} update={update} /> : null}
+        {!state.ui.focusMode ? (
+          <ResizeHandle
+            label="Resize specialties pane"
+            onMove={(delta) =>
+              update((draft) => {
+                draft.ui.navWidth = Math.max(
+                  200,
+                  Math.min(320, draft.ui.navWidth + delta),
+                );
+              })
+            }
+          />
+        ) : null}
         <SpecialtyEditor
           state={state}
           update={update}
           announce={setAnnouncement}
         />
-        {state.ui.chatOpen ? (
+        {!state.ui.focusMode && state.ui.chatOpen ? (
           <ResizeHandle
             label="Resize editing assistant pane"
             onMove={(delta) =>
@@ -640,7 +685,7 @@ export function SpecialtyManagementMockup() {
           state={state}
           update={update}
           announce={setAnnouncement}
-          hidden={!state.ui.chatOpen}
+          hidden={state.ui.focusMode || !state.ui.chatOpen}
           resetToken={chatResetToken}
         />
       </div>

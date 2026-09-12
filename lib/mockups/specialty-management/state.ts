@@ -188,8 +188,30 @@ function migrateV2(value: UnknownRecord, includeSeedFailure = false): MockupStat
     booklets: bookletFixtures(),
     testSessions: [],
     pendingTestResponse: null,
-  } as unknown as MockupState;
-  return normalize(state, includeSeedFailure);
+  } as UnknownRecord;
+  return migrateV3(state, includeSeedFailure);
+}
+
+function migrateV3(value: UnknownRecord, includeSeedFailure = false): MockupState {
+  const state = structuredClone(value) as UnknownRecord;
+  state.formatVersion = 4;
+  const ui = isRecord(state.ui) ? state.ui : {};
+  state.ui = { ...ui, focusMode: false };
+  if (Array.isArray(state.agents))
+    state.agents.forEach((agent) => {
+      if (!isRecord(agent) || !Array.isArray(agent.versions)) return;
+      agent.versions.forEach((version) => {
+        if (isRecord(version) && typeof version.versionNote !== "string")
+          version.versionNote = "";
+      });
+    });
+  const workingCopies = isRecord(state.workingCopies) ? state.workingCopies : {};
+  const versions = isRecord(workingCopies.versions) ? workingCopies.versions : {};
+  Object.values(versions).forEach((version) => {
+    if (isRecord(version) && typeof version.versionNote !== "string")
+      version.versionNote = "";
+  });
+  return normalize(state as unknown as MockupState, includeSeedFailure);
 }
 
 const isProposalStatus = (value: unknown): value is ChatProposal["status"] =>
@@ -250,6 +272,7 @@ function normalize(state: MockupState, includeSeedFailure = false): MockupState 
   state.chat.composerText ??= "";
   state.chat.pendingClarification ??= null;
   state.ui.testSetup ??= defaultTestSetup();
+  state.ui.focusMode ??= false;
   state.booklets ??= bookletFixtures();
   state.testSessions ??= [];
   if (state.pendingTestResponse) {
@@ -292,7 +315,7 @@ export const freshSeed = () =>
 
 export const isMockupState = (value: unknown): value is MockupState =>
   isRecord(value) &&
-  value.formatVersion === 3 &&
+  value.formatVersion === 4 &&
   Array.isArray(value.specialties) &&
   Array.isArray(value.agents) &&
   isRecord(value.chat) &&
@@ -307,6 +330,8 @@ export function loadState(storage: Pick<Storage, "getItem">) {
     if (raw === null) return { state: freshSeed(), error: null };
     const value: unknown = JSON.parse(raw);
     if (isMockupState(value)) return { state: normalize(value), error: null };
+    if (isRecord(value) && value.formatVersion === 3)
+      return { state: migrateV3(value), error: null };
     if (isRecord(value) && value.formatVersion === 2)
       return { state: migrateV2(value), error: null };
     if (isRecord(value) && value.formatVersion === 1)

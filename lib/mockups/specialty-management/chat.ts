@@ -304,6 +304,7 @@ export function applyProposal(
     copy.number = Math.max(...found.agent!.versions.map((version) => version.number)) + 1;
     copy.parentVersionId = found.savedVersion!.id;
     copy.status = "draft";
+    copy.versionNote = "";
     const target: AgentEditingTarget = { ...proposal.target, versionId: copy.id };
     writePatch(target, proposal.base, proposal.patch, { ...found, version: copy });
     found.agent!.versions.push(copy);

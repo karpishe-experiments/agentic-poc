@@ -44,6 +44,7 @@ describe("simulated management chat", () => {
 
   it("creates a draft when applying a confirmed-version proposal", () => {
     const state = freshSeed();
+    state.agents.find((item) => item.id === "agent-playful")!.versions.find((item) => item.id === "playful-v1")!.versionNote = "Confirmed source note";
     state.ui.selection = {
       kind: "agent",
       specialtyId: "sp-story",
@@ -59,6 +60,7 @@ describe("simulated management chat", () => {
     const agent = state.agents.find((item) => item.id === "agent-playful")!;
     expect(agent.versions).toHaveLength(3);
     expect(agent.versions.at(-1)?.status).toBe("draft");
+    expect(agent.versions.at(-1)?.versionNote).toBe("");
     expect(agent.versions.at(-1)?.mainInstructions).not.toBe(
       reply.proposal.base.kind === "instructions"
         ? reply.proposal.base.mainInstructions

@@ -11,6 +11,7 @@
 .mockup-toolbar h1 { font-size: 1rem; white-space: nowrap; }
 .mockup-toolbar button, .header-actions button, .danger-zone button { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--border); border-radius: .55rem; background: var(--surface); padding: .55rem .8rem; font-weight: 700; }
 .mockup-toolbar .toolbar-icon-button { width: 30px; height: 30px; justify-content: center; padding: 0; }
+.mockup-toolbar .toolbar-icon-button:disabled { opacity: .4; }
 .storage-alert { border: 1px solid #e3aa35; background: #fff5d8; padding: .6rem; border-radius: .5rem; }
 .mockup-shell { display: grid; min-width: 1100px; min-height: 0; height: 100%; border: 1px solid var(--border); border-radius: .7rem; overflow: hidden; background: var(--surface); box-shadow: 0 10px 28px #6b4d2d10; }
 .left-pane, .chat-placeholder, .specialty-editor, .workspace-placeholder { min-width: 0; overflow: auto; }
@@ -68,6 +69,8 @@
 .reference-heading { display: flex; justify-content: space-between; align-items: center; margin-top: .75rem; padding: .35rem .5rem; }
 .header-actions label { display: flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 700; }
 .header-actions select, .model-grid select { border: 1px solid var(--border); border-radius: .45rem; padding: .45rem; background: white; }
+.header-actions select { max-width: min(360px,35vw); }
+.header-actions select { max-width: 240px; }
 .model-grid, .reference-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
 .model-grid label, .reference-fields label, .text-editor > label { display: grid; gap: .35rem; font-weight: 700; }
 .text-editor { display: grid; gap: .7rem; align-content: start; }
@@ -146,7 +149,21 @@
 .sample-dialog dt { font-weight: 750; }
 .agent-actions { display: flex; flex-wrap: wrap; gap: .4rem; padding: .55rem .75rem; border-top: 1px solid var(--border); }
 .agent-actions button, .danger-button { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--border); border-radius: .5rem; background: white; padding: .5rem .75rem; font-weight: 700; }
+.agent-actions .primary, .note-suggestion-dialog .primary { background: var(--accent); color: white; }
 .agent-actions button:disabled { opacity: .45; }
+.entity-header .version-note-summary { margin-top: .25rem; color: var(--muted-ink); font-size: .76rem; font-weight: 400; letter-spacing: normal; text-transform: none; }
+.secondary-button, .allowed-tools-summary button { width: fit-content; border: 1px solid var(--border); border-radius: .45rem; background: white; padding: .4rem .55rem; font-weight: 700; }
+.allowed-tools-summary { display: grid; gap: .35rem; border: 1px solid var(--border); border-radius: .5rem; padding: .55rem; background: #fbfaf8; }
+.allowed-tools-summary > div { display: flex; justify-content: space-between; gap: .5rem; }
+.allowed-tools-summary small { color: var(--accent); }
+.allowed-tools-summary p { margin: 0; overflow-wrap: anywhere; }
+.note-suggestion-dialog { position: fixed; inset: 0; z-index: 20; width: min(460px,calc(100vw - 2rem)); margin: auto; border: 1px solid var(--border); border-radius: .65rem; padding: .85rem; box-shadow: 0 18px 60px #17110c38; }
+.note-suggestion-dialog > div, .note-suggestion-dialog > div:last-child { display: flex; justify-content: flex-end; gap: .4rem; }
+.note-suggestion-dialog > p:first-child { color: var(--accent); font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+.lifecycle-menu { position: relative; }
+.lifecycle-menu > [role="menu"] { position: absolute; z-index: 10; bottom: calc(100% + .35rem); left: 0; min-width: 250px; display: grid; gap: .25rem; border: 1px solid var(--border); border-radius: .55rem; padding: .4rem; background: white; box-shadow: 0 12px 28px #3d2c1f24; }
+.lifecycle-menu > [role="menu"] button { width: 100%; justify-content: flex-start; }
+.lifecycle-menu > [role="menu"] small { padding: .2rem .35rem; color: #9b451f; }
 .danger-button { color: #9b1c1c; width: fit-content; }
 .test-workspace { display: grid; gap: .8rem; align-content: start; }
 .test-setup, .agent-test-history, .test-session { display: grid; gap: .7rem; }

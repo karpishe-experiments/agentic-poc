@@ -1,4 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function runVersionAction(page: Page, name: RegExp) {
+  await page.getByRole("button", { name: "Version actions" }).click();
+  await page.getByRole("menuitem", { name }).click();
+}
 test.beforeEach(async ({ page }) => {
   await page.goto("/mockups/specialty-management");
   await page.evaluate(() =>
@@ -24,7 +29,7 @@ test("loads with local synthetic data and no service calls", async ({
     await page.evaluate(() =>
       localStorage.getItem("specialty-management-mockup:v1"),
     ),
-  ).toContain('"formatVersion":3');
+  ).toContain('"formatVersion":4');
 });
 test("creates, saves, reloads, discards, retires and restores a specialty", async ({
   page,
@@ -81,11 +86,11 @@ test("creates and activates an image agent with a persisted reference", async ({
     "Keep the moon bright.",
   );
   await page.getByRole("button", { name: "Configuration" }).click();
-  await page.getByRole("button", { name: "Confirm", exact: true }).click();
-  await page.getByRole("button", { name: "Activate", exact: true }).click();
+  await runVersionAction(page, /^Confirm/);
+  await runVersionAction(page, /^Activate/);
   await expect(page.getByText(/confirmed · Active/)).toBeVisible();
-  await page.getByRole("button", { name: "Deactivate" }).click();
-  await page.getByRole("button", { name: "Retire" }).click();
+  await runVersionAction(page, /^Deactivate/);
+  await runVersionAction(page, /^Retire/);
   await expect(page.getByText(/Version 1 · retired/)).toBeVisible();
 });
 test("text agents omit image controls and draft deletion selects the active version", async ({
@@ -93,8 +98,8 @@ test("text agents omit image controls and draft deletion selects the active vers
 }) => {
   await expect(page.getByRole("group", { name: /Image model/ })).toHaveCount(0);
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Delete draft" }).click();
-  await expect(page.getByLabel("Version")).toHaveValue("playful-v1");
+  await runVersionAction(page, /^Delete draft/);
+  await expect(page.locator(".header-actions select")).toHaveValue("playful-v1");
   await expect(page.getByText(/Version 1 · confirmed · Active/)).toBeVisible();
 });
 test("forks visible pending agent content without changing its source", async ({
@@ -102,12 +107,12 @@ test("forks visible pending agent content without changing its source", async ({
 }) => {
   await page.getByRole("button", { name: "Main instructions" }).click();
   await page.getByLabel("Main instructions").fill("Pending source content");
-  await page.getByRole("button", { name: "Fork draft" }).click();
+  await runVersionAction(page, /^Fork draft/);
   await expect(page.getByLabel("Main instructions")).toHaveValue(
     "Pending source content",
   );
-  await expect(page.getByLabel("Version")).toContainText("v3 · draft");
-  await page.getByLabel("Version").selectOption("playful-v2");
+  await expect(page.locator(".header-actions select")).toContainText("v3 · draft");
+  await page.locator(".header-actions select").selectOption("playful-v2");
   await page.getByRole("button", { name: "Main instructions" }).click();
   await expect(page.getByLabel("Main instructions")).toHaveValue(
     "Pending source content",
@@ -247,7 +252,7 @@ test("migrates legacy saved chat data while preserving the selected management r
   await expect(page.getByRole("heading", { name: "Playful Writer" })).toBeVisible();
   expect(
     await page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1")),
-  ).toContain('"formatVersion":3');
+  ).toContain('"formatVersion":4');
 });
 
 test("proposes editable specialty, configuration, instruction, and reference fields", async ({
@@ -276,9 +281,9 @@ test("proposes editable specialty, configuration, instruction, and reference fie
 test("Add reference on a confirmed version creates a draft and opens the reference", async ({
   page,
 }) => {
-  await page.getByLabel("Version").selectOption("playful-v1");
+  await page.locator(".header-actions select").selectOption("playful-v1");
   await page.getByRole("button", { name: "Add reference" }).click();
-  await expect(page.getByLabel("Version")).toContainText("v3 · draft");
+  await expect(page.locator(".header-actions select")).toContainText("v3 · draft");
   await expect(page.getByLabel("Name")).toHaveValue("reference-1.md");
   await expect(page.getByLabel("Reference content")).toBeVisible();
   await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
@@ -373,14 +378,14 @@ test("marks a proposal unavailable when its reference is deleted during or after
 test("chat application creates a draft from a confirmed version without changing active", async ({
   page,
 }) => {
-  await page.getByLabel("Version").selectOption("playful-v1");
+  await page.locator(".header-actions select").selectOption("playful-v1");
   await page.getByRole("button", { name: "Main instructions" }).click();
   await requestEditingAssistant(page, "Use a numbered checklist");
   await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   await page.getByRole("button", { name: "Create draft with changes" }).click();
-  await expect(page.getByLabel("Version")).toContainText("v3 · draft");
+  await expect(page.locator(".header-actions select")).toContainText("v3 · draft");
   await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
-  await page.getByLabel("Version").selectOption("playful-v1");
+  await page.locator(".header-actions select").selectOption("playful-v1");
   await expect(page.getByText(/Version 1 · confirmed · Active/)).toBeVisible();
 });
 
@@ -555,6 +560,148 @@ test("testing leaves source agents, specialties, and booklet fixtures unchanged"
   expect(after).toBe(before);
 });
 
+test("focus mode and version notes preserve draft workflow and lifecycle explanations", async ({ page }) => {
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1"))).not.toBeNull();
+  const preferences = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return { navWidth: state.ui.navWidth, chatWidth: state.ui.chatWidth, chatOpen: state.ui.chatOpen };
+  });
+  await page.getByRole("button", { name: "Configuration" }).click();
+  await page.getByLabel("Version note").fill("Draft note");
+  await page.getByRole("button", { name: "Suggest note" }).click();
+  const noteDialog = page.getByRole("dialog", { name: "Suggested version note" });
+  await expect(noteDialog).toBeVisible();
+  for (let index = 0; index < 4; index += 1) await page.keyboard.press("Tab");
+  await expect.poll(() => noteDialog.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("button", { name: "Suggest note" })).toBeFocused();
+  await expect(page.getByLabel("Version note")).toHaveValue("Draft note");
+  await page.getByRole("button", { name: "Enter focus mode" }).click();
+  await expect(page.getByRole("navigation", { name: "Specialties and agents" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Agent sections" })).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "Editing assistant" })).toHaveCount(0);
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.screenshot({
+      path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-focused-configuration.png`,
+      fullPage: true,
+    });
+  }
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Exit focus mode" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeFocused();
+  expect(await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return { navWidth: state.ui.navWidth, chatWidth: state.ui.chatWidth, chatOpen: state.ui.chatOpen };
+  })).toEqual(preferences);
+  await page.getByRole("button", { name: "Version actions" }).click();
+  await expect(page.getByText("Save or discard before locking this version.")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Version actions" })).toBeFocused();
+});
+
+test("version notes preview, save, lock, and reset on a derived draft", async ({ page }) => {
+  await page.getByRole("button", { name: "Configuration" }).click();
+  await page.getByLabel("Version note").fill("Existing optional note");
+  await page.getByRole("button", { name: "Suggest note" }).click();
+  const dialog = page.getByRole("dialog", { name: "Suggested version note" });
+  await expect(dialog).toContainText("Updated Main instructions and references.");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByLabel("Version note")).toHaveValue("Existing optional note");
+  await page.getByRole("button", { name: "Suggest note" }).click();
+  await dialog.getByRole("button", { name: "Use suggestion" }).click();
+  await expect(page.getByLabel("Version note")).toHaveValue("Updated Main instructions and references.");
+  await page.getByLabel("Version note").fill("x".repeat(241));
+  expect((await page.getByLabel("Version note").inputValue()).length).toBe(240);
+  await page.getByLabel("Version note").fill("Release summary");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.reload();
+  await expect(page.getByLabel("Version note")).toHaveValue("Release summary");
+  await runVersionAction(page, /^Confirm/);
+  await expect(page.getByLabel("Version note")).toBeDisabled();
+  await expect(page.locator(".header-actions select")).toContainText("Release summary");
+  await page.getByRole("button", { name: "Edit as draft" }).click();
+  await expect(page.getByLabel("Version note")).toHaveValue("");
+  await page.locator(".header-actions select").selectOption("playful-v2");
+  await expect(page.getByLabel("Version note")).toHaveValue("Release summary");
+});
+
+test("focus mode preserves hidden streams and editing handoff exits focus", async ({ page }) => {
+  await requestEditingAssistant(page, "What can you change here?");
+  await page.getByRole("button", { name: "Enter focus mode" }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return state.chat.pendingResponse === null && state.chat.messages.some((message: { role: string; text?: string }) => message.role === "assistant" && message.text?.includes("deterministic simulation"));
+  })).toBe(true);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("button", { name: "Start test" }).click();
+  await page.getByRole("button", { name: "Enter focus mode" }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!);
+    return state.pendingTestResponse === null && state.testSessions[0]?.messages.some((message: { role: string; state: string }) => message.role === "assistant" && message.state === "complete");
+  })).toBe(true);
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.screenshot({
+      path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-focused-test.png`,
+      fullPage: true,
+    });
+  }
+  await page.getByRole("button", { name: "Send to editing chat" }).last().click();
+  await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Editing assistant" })).toBeVisible();
+  await expect(page.getByLabel("Message the editing assistant")).toHaveValue(/Test feedback for/);
+});
+
+test("agent configuration reflects unsaved specialty tools and returns to its working copy", async ({ page }) => {
+  await page.getByRole("button", { name: "Configuration" }).click();
+  await page.getByLabel("Title").fill("Working title preserved");
+  const summary = page.getByRole("region", { name: "Allowed tools summary" });
+  await expect(summary).toContainText("get_conversation_context");
+  await summary.getByRole("button", { name: "Edit specialty tools" }).click();
+  await page.getByLabel(/get_conversation_context/).uncheck();
+  await page.getByRole("button", { name: /Playful Writer/ }).click();
+  await expect(page.getByRole("region", { name: "Allowed tools summary" })).toContainText("Unsaved specialty values");
+  await expect(page.getByRole("region", { name: "Allowed tools summary" })).not.toContainText("get_conversation_context");
+  await expect(page.getByLabel("Title")).toHaveValue("Working title preserved");
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Test agent" })).toBeVisible();
+});
+
+test("migrates format 3 browser state to format 4 without losing work", async ({ page }) => {
+  await page.getByLabel("Message the editing assistant").fill("Preserved composer");
+  await page.evaluate(() => {
+    const key = "specialty-management-mockup:v1";
+    const state = JSON.parse(localStorage.getItem(key)!);
+    state.formatVersion = 3;
+    delete state.ui.focusMode;
+    state.agents.forEach((agent: { versions: Array<Record<string, unknown>> }) =>
+      agent.versions.forEach((version) => delete version.versionNote),
+    );
+    Object.values(state.workingCopies.versions as Record<string, Record<string, unknown>>).forEach(
+      (version) => delete version.versionNote,
+    );
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.reload();
+  await expect(page.getByLabel("Message the editing assistant")).toHaveValue("Preserved composer");
+  await page.getByRole("button", { name: "Configuration" }).click();
+  await expect(page.getByLabel("Version note")).toHaveValue("");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("specialty-management-mockup:v1")!).formatVersion)).toBe(4);
+});
+
 test("history preserves a missing tested version and offers a labeled handoff fallback", async ({ page }) => {
   await startAgentTest(page);
   await page.evaluate(() => {
@@ -595,10 +742,10 @@ test("persists sample image description and exposes metadata", async ({
 test("reopens an agent at its most recently selected version", async ({
   page,
 }) => {
-  await expect(page.getByLabel("Version")).toHaveValue("playful-v2");
+  await expect(page.locator(".header-actions select")).toHaveValue("playful-v2");
   await page.getByRole("button", { name: "Story Planning text" }).click();
   await page.getByRole("button", { name: /Playful Writer/ }).click();
-  await expect(page.getByLabel("Version")).toHaveValue("playful-v2");
+  await expect(page.locator(".header-actions select")).toHaveValue("playful-v2");
 });
 test("captures readable desktop layouts with chat open and closed", async ({
   page,

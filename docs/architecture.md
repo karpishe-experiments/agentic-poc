@@ -12,6 +12,8 @@ Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser ren
 
 The Editing assistant uses the installed AI SDK `useChat` hook, typed `UIMessage` data parts, and a local `ChatTransport`. The transport emits deterministic browser-local stream chunks and does not call a route handler, model provider, database, or external service. Versioned local JSON stores the durable conversation, captured section bases, proposals, composer text, clarification state, recovery diagnostics, and synthetic agent-test sessions. Test sessions freeze an agent's visible configuration and working copy with one synthetic booklet-stage snapshot, specialty tool/output settings, and routing catalog. Their deterministic results and activity evidence remain in the browser and do not run runtime agents, tools, models, or booklet services. This mockup does not change the runtime architecture or define production persistence and permission contracts.
 
+Agent Studio storage format 4 also persists optional version notes and the focus-mode preference. Sequential migration preserves earlier editor, chat, and test-session data.
+
 ```mermaid
 flowchart TB
   UI[Next.js workspace and typed cards] --> API[Route handlers]
