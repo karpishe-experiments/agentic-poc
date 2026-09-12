@@ -6,7 +6,7 @@ Deliver an interactive desktop mockup that the user can evaluate before defining
 
 The user requested a mockup with synthetic data, simulated chat, and persistence between refreshes. Their conversation decisions govern this phase. This plan does not implement or complete the parent issue's runtime requirements. In particular, schemas, migrations, tool execution, workflow routing, result mapping, and runtime integration remain later work. The parent issue still uses “skill”; this mockup uses “specialty”. Do not rename existing runtime symbols.
 
-Status: plan prepared; implementation not started. Behavioral details marked as mockup defaults below are implementation choices for this experiment, not permanent platform contracts. Do not add approval pauses for these defaults during implementation. Gather product feedback after the mockup works.
+Status: Checkpoints 1–6 complete; checkpoint 7 planned. Checkpoint 7 replaces conflicting earlier chat and persistence instructions. Defaults are experiment choices, not permanent runtime contracts.
 
 ### Agreed product model
 
@@ -312,4 +312,32 @@ After implementation review passes, reconcile docs through `sync-docs-issues`. U
 
 Report the route, launch command, tested flows, verification outcomes, and known mockup limitations. Do not call issue #22 complete. Do not require a real model, MongoDB, authentication, shared storage, production validations, multi-tab synchronization, schema authoring, runtime tool permissions, actual reference loading by agents, creator team selection, or actual orchestration to finish Phase 0.
 
-The Phase 0 implementation is complete on its issue branch. Publication and user feedback remain separate from local implementation completion.
+Checkpoints 1–6 are complete on the issue branch. Checkpoint 7 extends the feedback surface before publication.
+
+## 6. Checkpoint 7 — Interactive simulated management chat
+
+Use installed AI SDK `useChat`, typed `UIMessage` parts, and a local streaming `ChatTransport`. This replaces the earlier AI SDK hook prohibition. Follow booklet chat patterns in mockup components without refactoring booklet chat. No model, database, API, or external requests.
+
+Chat edits the current section: specialty name/description/output type/tools (preserving built-in restrictions); agent title and applicable models; Main instructions; or reference name/description/content. Lifecycle commands remain in existing controls. Applying to a confirmed version creates a draft.
+
+Keep a continuous shared conversation with captured targets. Contextual chips populate a persisted multiline composer. Enter sends; Shift+Enter adds a newline. Stream progress and text, then cards. One response runs at a time, including while collapsed. Use near-bottom scrolling, Jump to latest, and Copy. No attachments, branching, feedback, or message editing.
+
+Recognized edits produce proposals; vague requests produce clarification cards with two or three choices and free-text replies; questions produce answers. Unsupported requests explain simulation limits. Keep concise/checklist/example transforms; shorter means concise. Resolve fields against existing fields and demo choices; clarify ambiguous values.
+
+Render read-only proposed Markdown or labeled values within the assistant turn, with Show full/Collapse for long content. Replace editable Before/After. Apply and Dismiss remain explicit. Open target changes selection only. Apply requires latest proposal, matching selection, available target, and matching selected-section base. Apply updates working copies; Save remains separate. Only completed replacements supersede proposals. Clarification and retry remain target-bound, require opening another target, and require a fresh request after base changes. Deleted targets are unavailable.
+
+Stop retains a cancelled item with Retry and discards incomplete proposals. Refresh creates an interrupted item. Errors provide Retry, Edit request, and collapsed Show error details with input, target, prompt snapshots, stages, timestamps, and system errors. Selected models are context, never executed models. Seed one historical synthetic failure on fresh/reset data only; its retry succeeds. No error-trigger control. Edit request restores target and prompt without sending; preserve an existing composer draft before replacement.
+
+Keep storage key `specialty-management-mockup:v1`, upgrade to `formatVersion: 2`, and migrate version-1 messages/proposals without losing entities, working copies, or preferences. Preserve legacy proposal order when association is unavailable. Persist cards, proposals, composer, pending clarification, selection, and errors. Do not seed failures into migrated conversations.
+
+### Checkpoint 7 acceptance and exit evidence
+
+Extend P0-08 to all sections, read-only proposals, target switching, section conflicts, and confirmed-version drafts. Add P0-13 for streaming, questions/answers/proposals, revisions, Stop, Retry, Edit request, Copy, keyboard submission, and scrolling; P0-14 for error diagnostics and refresh recovery; P0-15 for migration and composer/card persistence. Preserve P0-01–P0-12 and independent desktop scrolling.
+
+Run typecheck, lint, isolated mockup unit/browser tests, isolated build, and whitespace checks. Reject API/external requests in browser verification. Inspect streaming, clarification, text/field proposals, and expanded errors at 1280×800, 1440×900, and 1920×1080. Update the handoff guide and local-transport architecture description.
+
+Commit the amended plan first. After implementation and verification, obtain two consecutive independent clean reviews with no intervening changes; corrections reset the count. Record evidence and commit checkpoint 7 on the existing branch.
+
+| Checkpoint | Status | Validation/evidence | Remaining defects |
+| --- | --- | --- | --- |
+| 7 — Interactive simulated management chat | Pending | Not run | Implementation pending |
