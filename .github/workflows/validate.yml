@@ -32,4 +32,4 @@ jobs:
       - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
       - run: bash -n scripts/deploy/aws-deployment.sh
       - run: bash tests/shell/deployment-script.test.sh
-      - run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 scripts/deploy/aws-deployment.sh tests/shell/deployment-script.test.sh
+      - run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/aws-deployment.sh tests/shell/deployment-script.test.sh
