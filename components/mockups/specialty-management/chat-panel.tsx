@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { Check, Copy, Send, Square } from "lucide-react";
+import { Copy, PanelRightClose, Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applyProposal,
@@ -233,12 +233,14 @@ export function ChatPanel({
   announce,
   hidden = false,
   resetToken = 0,
+  onCollapse,
 }: {
   state: MockupState;
   update: Update;
   announce(message: string): void;
   hidden?: boolean;
   resetToken?: number;
+  onCollapse(): void;
 }) {
   const current = selectedTarget(state);
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -333,19 +335,18 @@ export function ChatPanel({
       : ["Make this concise", "Use a numbered checklist", "Add an example"];
 
   return (
-    <aside className="chat-panel" aria-label="Editing assistant" hidden={hidden}>
+    <aside className="chat-panel" aria-label="Assistant" hidden={hidden}>
       <header>
-        <p>Current target</p>
-        <h2>Editing assistant</h2>
-        <span>{targetLabel(state, current)}</span>
+        <h2>Assistant</h2>
+        <button
+          className="icon-button"
+          aria-label="Collapse Assistant"
+          title="Collapse Assistant"
+          onClick={onCollapse}
+        >
+          <PanelRightClose aria-hidden="true" size={15} />
+        </button>
       </header>
-      <div className="chat-suggestions" aria-label="Suggested requests">
-        {suggestions.map((item) => (
-          <button key={item} disabled={!current || running} onClick={() => update((draft) => { draft.chat.composerText = item; })}>
-            {item}
-          </button>
-        ))}
-      </div>
       <div
         className="conversation"
         ref={conversationRef}
@@ -359,7 +360,7 @@ export function ChatPanel({
           const text = textOf(message);
           return (
             <article className={`chat-message ${message.role}`} key={message.id}>
-              <small>{message.role === "user" ? "You" : "Synthetic simulator"} · {targetLabel(state, message.metadata?.target ?? null)}</small>
+              <small>{message.role === "user" ? "You · " : ""}{targetLabel(state, message.metadata?.target ?? null)}</small>
               {text ? <p>{text}</p> : null}
               {message.role === "assistant" && text ? (
                 <button className="icon-text-button" aria-label="Copy assistant response" onClick={() => void navigator.clipboard.writeText(text)}>
@@ -396,7 +397,7 @@ export function ChatPanel({
         })}
         {streamingMessage ? (
           <article className="chat-message assistant streaming">
-            <small>Synthetic simulator · {targetLabel(state, streamingMessage.metadata?.target ?? current)}</small>
+            <small>{targetLabel(state, streamingMessage.metadata?.target ?? current)}</small>
             {streamingMessage.parts.map((part, index) => part.type === "text" ? <p key={index}>{part.text}</p> : part.type === "data-working-status" ? <p className="progress-label" key={index}>{part.data.label}…</p> : null)}
           </article>
         ) : null}
@@ -414,6 +415,16 @@ export function ChatPanel({
           })}>Open clarification target</button>
         </div>
       ) : null}
+      <div className="composer-context">
+        <span>{targetLabel(state, current)}</span>
+        <div className="chat-suggestions" aria-label="Suggested requests">
+          {suggestions.map((item) => (
+            <button key={item} disabled={!current || running} onClick={() => update((draft) => { draft.chat.composerText = item; })}>
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
       <form onSubmit={(event) => { event.preventDefault(); send(state.chat.composerText); }}>
         <label>
           <span className="sr-only">Message the editing assistant</span>
@@ -421,6 +432,7 @@ export function ChatPanel({
             name="chat-request"
             autoComplete="off"
             aria-label="Message the editing assistant"
+            disabled={!current}
             value={state.chat.composerText}
             onChange={(event) => update((draft) => { draft.chat.composerText = event.target.value; })}
             onKeyDown={(event) => {
@@ -438,7 +450,6 @@ export function ChatPanel({
           <button type="submit" disabled={!current || !state.chat.composerText.trim() || !clarificationMatches}><Send aria-hidden="true" size={13} /> Send</button>
         )}
       </form>
-      <p className="simulation-note"><Check aria-hidden="true" size={12} /> Synthetic simulator · selected models are context only</p>
     </aside>
   );
 }

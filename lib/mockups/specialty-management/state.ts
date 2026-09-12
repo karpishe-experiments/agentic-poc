@@ -61,6 +61,7 @@ function normalize(state: MockupState): MockupState {
   };
   state.ui.focusMode ??= false;
   state.ui.navigationNotice ??= null;
+  state.ui.lastEditorSections ??= {};
   state.booklets ??= bookletFixtures();
   state.testSessions ??= [];
   state.pendingTestResponse ??= null;
@@ -112,6 +113,7 @@ export const freshSeed = (): MockupState => {
   current.seedRevision = 1;
   current.ui.selection = { kind: "directory" };
   current.ui.navigationNotice = null;
+  current.ui.lastEditorSections ??= {};
   current.ui.recentVersionIds ??= {};
   current.ui.testSetup ??= {
     bookletId: "demo-forest",

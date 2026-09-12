@@ -330,6 +330,7 @@ export type MockupState = {
     testSetup: TestSetup;
     focusMode: boolean;
     navigationNotice: string | null;
+    lastEditorSections: Record<string, EditableAgentSection>;
   };
   chat: {
     messages: ManagementUIMessage[];

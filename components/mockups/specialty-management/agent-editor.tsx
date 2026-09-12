@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { FileText, FlaskConical, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
+import { FileText, Maximize2, Minimize2, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
 import { MarkdownEditor } from "./markdown-editor";
 import { SampleResultDialog } from "./sample-result-dialog";
 import { AgentTestWorkspace } from "./test-workspace";
@@ -34,6 +34,8 @@ export function AgentEditor({
   const suggestNoteButton = useRef<HTMLButtonElement>(null);
   const noteSuggestionDialog = useRef<HTMLDialogElement>(null);
   const lifecycleButton = useRef<HTMLButtonElement>(null);
+  const editTabButton = useRef<HTMLButtonElement>(null);
+  const testTabButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const dialog = noteSuggestionDialog.current;
     if (noteSuggestion && dialog && !dialog.open) dialog.showModal();
@@ -59,9 +61,30 @@ export function AgentEditor({
   const editable = version.status === "draft";
   const selectSection = (section: typeof selection.section) =>
     update((draft) => {
-      if (draft.ui.selection.kind === "agent")
+      if (draft.ui.selection.kind === "agent") {
         draft.ui.selection.section = section;
+        if (section !== "test")
+          draft.ui.lastEditorSections[agent?.id ?? selection.agentId] = section;
+      }
     });
+  const selectTab = (tab: "edit" | "test") => {
+    if (tab === "test") {
+      update((draft) => {
+        if (draft.ui.selection.kind !== "agent") return;
+        if (draft.ui.selection.section !== "test")
+          draft.ui.lastEditorSections[agent?.id ?? selection.agentId] =
+            draft.ui.selection.section;
+        draft.ui.selection.section = "test";
+      });
+      return;
+    }
+    const previous = state.ui.lastEditorSections[agent?.id ?? selection.agentId];
+    const valid =
+      previous?.startsWith("reference:")
+        ? version.references.some((item) => item.id === previous.slice(10))
+        : !!previous;
+    selectSection(valid && previous ? previous : "instructions");
+  };
   const setVersion = (patch: Partial<AgentVersion>) => {
     if (!editable) return;
     update((draft) => {
@@ -293,6 +316,83 @@ export function AgentEditor({
     onOpenSpecialty: openSpecialty,
     onOpenReference: openReference,
   };
+  const lifecycleControls = (
+    <>
+      {!editable ? (
+        <button className="primary" onClick={fork}>Edit as draft</button>
+      ) : null}
+      <div className="lifecycle-menu">
+        <button
+          ref={lifecycleButton}
+          aria-haspopup="menu"
+          aria-expanded={lifecycleOpen}
+          onClick={() => {
+            const opening = !lifecycleOpen;
+            setLifecycleOpen(opening);
+            if (opening)
+              queueMicrotask(() =>
+                lifecycleButton.current?.parentElement
+                  ?.querySelector<HTMLButtonElement>("[role='menuitem']")
+                  ?.focus(),
+              );
+          }}
+        >
+          <MoreHorizontal size={15} /> Version actions
+        </button>
+        {lifecycleOpen ? (
+          <div
+            role="menu"
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest("[role='menuitem']"))
+                setLifecycleOpen(false);
+            }}
+            onKeyDown={(event) => {
+              const items = [
+                ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                  "[role='menuitem']:not(:disabled)",
+                ),
+              ];
+              const index = items.indexOf(document.activeElement as HTMLButtonElement);
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setLifecycleOpen(false);
+                lifecycleButton.current?.focus();
+              } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const delta = event.key === "ArrowDown" ? 1 : -1;
+                items[(index + delta + items.length) % items.length]?.focus();
+              }
+            }}
+          >
+            {editable ? <button role="menuitem" onClick={fork}>Fork draft</button> : null}
+            {editable ? (
+              <button role="menuitem" disabled={dirty} onClick={() => transition("confirmed")}>
+                Confirm · Lock this version
+              </button>
+            ) : null}
+            {editable && dirty ? <small>Save or discard before locking this version.</small> : null}
+            {editable ? (
+              <button role="menuitem" disabled={agent.activeVersionId === version.id} onClick={removeVersion}>Delete draft</button>
+            ) : null}
+            {version.status === "confirmed" ? (
+              agent.activeVersionId === version.id ? (
+                <button role="menuitem" onClick={deactivate}>Deactivate</button>
+              ) : (
+                <button role="menuitem" onClick={activate}>Activate · Make available for selection</button>
+              )
+            ) : null}
+            {version.status === "confirmed" ? (
+              <button role="menuitem" disabled={dirty || agent.activeVersionId === version.id} onClick={() => transition("retired")}>Retire</button>
+            ) : null}
+            {version.status === "confirmed" && agent.activeVersionId === version.id ? (
+              <small>Deactivate before retiring this version.</small>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
   return (
     <section className="agent-workspace">
       <header className="entity-header">
@@ -302,13 +402,64 @@ export function AgentEditor({
           <span>
             {dirty
               ? "Unsaved changes · retained in this browser"
-              : `Version ${version.number} · ${version.status}${agent.activeVersionId === version.id ? " · Active" : ""}`}
+              : `${version.status} · ${agent.activeVersionId === version.id ? "Active" : "Not active"}`}
           </span>
           <p className="version-note-summary">
             {version.versionNote || "No version note"}
           </p>
         </div>
-        <div className="header-actions">
+        <div className="agent-header-controls">
+          <div className="agent-tabs" role="tablist" aria-label="Agent workspace">
+            <button
+              id="agent-edit-tab"
+              ref={editTabButton}
+              role="tab"
+              aria-selected={selection.section !== "test"}
+              aria-controls="agent-edit-panel"
+              tabIndex={selection.section !== "test" ? 0 : -1}
+              onClick={() => selectTab("edit")}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowRight" || event.key === "End") {
+                  event.preventDefault();
+                  selectTab("test");
+                  testTabButton.current?.focus();
+                }
+              }}
+            >
+              Edit
+            </button>
+            <button
+              id="agent-test-tab"
+              ref={testTabButton}
+              role="tab"
+              aria-selected={selection.section === "test"}
+              aria-controls="agent-test-panel"
+              tabIndex={selection.section === "test" ? 0 : -1}
+              onClick={() => selectTab("test")}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft" || event.key === "Home") {
+                  event.preventDefault();
+                  selectTab("edit");
+                  editTabButton.current?.focus();
+                }
+              }}
+            >
+              Test
+            </button>
+          </div>
+          <div className="header-actions">
+          <button
+            className="toolbar-icon-button"
+            aria-label={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
+            title={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
+            onClick={() =>
+              update((draft) => {
+                draft.ui.focusMode = !draft.ui.focusMode;
+              })
+            }
+          >
+            {state.ui.focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
           <label>
             Version{" "}
             <select
@@ -351,17 +502,24 @@ export function AgentEditor({
               </button>
             </>
           ) : null}
+          {lifecycleControls}
+          </div>
         </div>
       </header>
       <div
-        className="agent-body"
+        id={selection.section === "test" ? "agent-test-panel" : "agent-edit-panel"}
+        role="tabpanel"
+        aria-labelledby={selection.section === "test" ? "agent-test-tab" : "agent-edit-tab"}
+        className={`agent-body ${selection.section === "test" ? "test-mode" : ""}`}
         style={{
-          gridTemplateColumns: state.ui.focusMode
+          gridTemplateColumns: selection.section === "test"
+            ? "minmax(360px,1fr)"
+            : state.ui.focusMode
             ? "minmax(360px,1fr)"
             : `${state.ui.sectionWidth}px 7px minmax(360px,1fr)`,
         }}
       >
-        {!state.ui.focusMode ? (
+        {!state.ui.focusMode && selection.section !== "test" ? (
         <nav className="section-nav" aria-label="Agent sections">
           <button
             className={selection.section === "configuration" ? "selected" : ""}
@@ -376,13 +534,6 @@ export function AgentEditor({
             onClick={() => selectSection("instructions")}
           >
             <FileText size={15} /> Main instructions
-          </button>
-          <button
-            className={selection.section === "test" ? "selected" : ""}
-            aria-current={selection.section === "test" ? "page" : undefined}
-            onClick={() => selectSection("test")}
-          >
-            <FlaskConical size={15} /> Test
           </button>
           <div className="reference-heading">
             <strong>References</strong>
@@ -402,7 +553,7 @@ export function AgentEditor({
           ))}
         </nav>
         ) : null}
-        {!state.ui.focusMode ? (
+        {!state.ui.focusMode && selection.section !== "test" ? (
         <div
           className="resize-handle"
           role="separator"
@@ -423,7 +574,7 @@ export function AgentEditor({
           }}
         />
         ) : null}
-        <div className="agent-editor">
+        <div className={selection.section === "test" ? "agent-editor test-space" : "agent-editor"}>
           {selection.section === "test" ? (
             <AgentTestWorkspace
               agentId={agent.id}
@@ -781,81 +932,6 @@ export function AgentEditor({
           </div>
         </dialog>
       ) : null}
-      <footer className="agent-actions">
-        {!editable ? (
-          <button className="primary" onClick={fork}>Edit as draft</button>
-        ) : null}
-        <div className="lifecycle-menu">
-          <button
-            ref={lifecycleButton}
-            aria-haspopup="menu"
-            aria-expanded={lifecycleOpen}
-            onClick={() => {
-              const opening = !lifecycleOpen;
-              setLifecycleOpen(opening);
-              if (opening)
-                queueMicrotask(() =>
-                  lifecycleButton.current?.parentElement
-                    ?.querySelector<HTMLButtonElement>("[role='menuitem']")
-                    ?.focus(),
-                );
-            }}
-          >
-            <MoreHorizontal size={15} /> Version actions
-          </button>
-          {lifecycleOpen ? (
-            <div
-              role="menu"
-              onClick={(event) => {
-                if ((event.target as HTMLElement).closest("[role='menuitem']"))
-                  setLifecycleOpen(false);
-              }}
-              onKeyDown={(event) => {
-                const items = [
-                  ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
-                    "[role='menuitem']:not(:disabled)",
-                  ),
-                ];
-                const index = items.indexOf(document.activeElement as HTMLButtonElement);
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setLifecycleOpen(false);
-                  lifecycleButton.current?.focus();
-                } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  const delta = event.key === "ArrowDown" ? 1 : -1;
-                  items[(index + delta + items.length) % items.length]?.focus();
-                }
-              }}
-            >
-              {editable ? <button role="menuitem" onClick={fork}>Fork draft</button> : null}
-              {editable ? (
-                <button role="menuitem" disabled={dirty} onClick={() => transition("confirmed")}>
-                  Confirm · Lock this version
-                </button>
-              ) : null}
-              {editable && dirty ? <small>Save or discard before locking this version.</small> : null}
-              {editable ? (
-                <button role="menuitem" disabled={agent.activeVersionId === version.id} onClick={removeVersion}>Delete draft</button>
-              ) : null}
-              {version.status === "confirmed" ? (
-                agent.activeVersionId === version.id ? (
-                  <button role="menuitem" onClick={deactivate}>Deactivate</button>
-                ) : (
-                  <button role="menuitem" onClick={activate}>Activate · Make available for selection</button>
-                )
-              ) : null}
-              {version.status === "confirmed" ? (
-                <button role="menuitem" disabled={dirty || agent.activeVersionId === version.id} onClick={() => transition("retired")}>Retire</button>
-              ) : null}
-              {version.status === "confirmed" && agent.activeVersionId === version.id ? (
-                <small>Deactivate before retiring this version.</small>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </footer>
     </section>
   );
 }

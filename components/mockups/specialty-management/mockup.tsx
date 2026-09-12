@@ -430,6 +430,29 @@ function SpecialtyEditor({
           </span>
         </div>
         <div className="header-actions">
+          <button
+            className="toolbar-icon-button"
+            aria-label={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
+            title={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
+            onClick={() =>
+              update((next) => {
+                next.ui.focusMode = !next.ui.focusMode;
+              })
+            }
+          >
+            {state.ui.focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+          <button
+            disabled={saved.builtIn}
+            onClick={() =>
+              update((next) => {
+                const item = next.specialties.find((value) => value.id === id);
+                if (item) item.retired = !item.retired;
+              })
+            }
+          >
+            {saved.retired ? "Restore" : "Retire"}
+          </button>
           <button disabled={!dirty} onClick={discard}>
             Discard
           </button>
@@ -511,25 +534,6 @@ function SpecialtyEditor({
           </div>
         </fieldset>
       </div>
-      <footer className="danger-zone">
-        <div>
-          <strong>
-            {saved.retired ? "Restore specialty" : "Retire specialty"}
-          </strong>
-          <p>This only changes its visibility in this mockup.</p>
-        </div>
-        <button
-          disabled={saved.builtIn}
-          onClick={() =>
-            update((next) => {
-              const item = next.specialties.find((value) => value.id === id);
-              if (item) item.retired = !item.retired;
-            })
-          }
-        >
-          {saved.retired ? "Restore" : "Retire"}
-        </button>
-      </footer>
     </section>
   );
 }
@@ -541,7 +545,6 @@ export function SpecialtyManagementMockup() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [chatResetToken, setChatResetToken] = useState(0);
-  const focusButton = useRef<HTMLButtonElement>(null);
   const update: Update = (fn) =>
     dispatch({ type: "mutate", mutate: (current) => change(current, fn) });
   const select = (selection: Selection, history: "push" | "replace" = "push") => {
@@ -677,17 +680,15 @@ export function SpecialtyManagementMockup() {
       update((draft) => {
         draft.ui.focusMode = false;
       });
-      queueMicrotask(() => focusButton.current?.focus());
+      queueMicrotask(() =>
+        document
+          .querySelector<HTMLButtonElement>("[aria-label='Enter focus mode']")
+          ?.focus(),
+      );
     };
     window.addEventListener("keydown", exit);
     return () => window.removeEventListener("keydown", exit);
   }, [state.ui.focusMode]);
-  const toggleFocus = () => {
-    update((draft) => {
-      draft.ui.focusMode = !draft.ui.focusMode;
-    });
-    if (state.ui.focusMode) queueMicrotask(() => focusButton.current?.focus());
-  };
   const reset = () => {
     if (!confirm("Reset all specialty-management demo data?")) return;
     const next = freshSeed();
@@ -736,33 +737,19 @@ export function SpecialtyManagementMockup() {
           >
             <History aria-hidden="true" size={15} /> Test history
           </button>
-          <button
-            ref={focusButton}
+          {!state.ui.chatOpen ? <button
             className="toolbar-icon-button"
-            aria-label={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
-            title={state.ui.focusMode ? "Exit focus mode" : "Enter focus mode"}
-            disabled={state.ui.selection.kind === "test-history"}
-            onClick={toggleFocus}
-          >
-            {state.ui.focusMode ? (
-              <Minimize2 aria-hidden="true" size={15} />
-            ) : (
-              <Maximize2 aria-hidden="true" size={15} />
-            )}
-          </button>
-          <button
-            className="toolbar-icon-button"
-            aria-label={state.ui.chatOpen ? "Hide chat" : "Show chat"}
-            title={state.ui.chatOpen ? "Hide chat" : "Show chat"}
-            disabled={state.ui.focusMode}
+            aria-label="Reopen Assistant"
+            title="Reopen Assistant"
             onClick={() =>
               update((draft) => {
-                draft.ui.chatOpen = !draft.ui.chatOpen;
+                draft.ui.chatOpen = true;
+                draft.ui.focusMode = false;
               })
             }
           >
             <MessageSquare aria-hidden="true" size={15} />
-          </button>
+          </button> : null}
           <button
             className="toolbar-icon-button"
             aria-label="Reset demo data"
@@ -781,24 +768,25 @@ export function SpecialtyManagementMockup() {
           </button>
         </div>
       ) : null}
-      {state.ui.selection.kind === "directory" ? (
-        <StudioDirectory
-          state={state}
-          update={update}
-          select={select}
-          addSpecialty={addSpecialty}
-          addAgent={addAgent}
-        />
-      ) : (
       <div
-        className={`mockup-shell ${state.ui.focusMode ? "focus-mode" : ""}`}
+        className={`mockup-shell ${state.ui.focusMode ? "focus-mode" : ""} ${state.ui.selection.kind === "directory" ? "directory-shell" : ""}`}
         style={{
           gridTemplateColumns: state.ui.focusMode
             ? "minmax(360px,1fr)"
-            : `${state.ui.navWidth}px 7px minmax(360px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`,
+            : state.ui.selection.kind === "directory"
+              ? `minmax(560px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`
+              : `${state.ui.navWidth}px 7px minmax(360px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`,
         }}
       >
-        {!state.ui.focusMode ? (
+        {state.ui.selection.kind === "directory" ? (
+          <StudioDirectory
+            state={state}
+            update={update}
+            select={select}
+            addSpecialty={addSpecialty}
+            addAgent={addAgent}
+          />
+        ) : !state.ui.focusMode ? (
           <Navigation
             state={state}
             update={update}
@@ -807,7 +795,7 @@ export function SpecialtyManagementMockup() {
             addAgent={addAgent}
           />
         ) : null}
-        {!state.ui.focusMode ? (
+        {state.ui.selection.kind !== "directory" && !state.ui.focusMode ? (
           <ResizeHandle
             label="Resize specialties pane"
             onMove={(delta) =>
@@ -820,11 +808,13 @@ export function SpecialtyManagementMockup() {
             }
           />
         ) : null}
-        <SpecialtyEditor
-          state={state}
-          update={update}
-          announce={setAnnouncement}
-        />
+        {state.ui.selection.kind !== "directory" ? (
+          <SpecialtyEditor
+            state={state}
+            update={update}
+            announce={setAnnouncement}
+          />
+        ) : null}
         {!state.ui.focusMode && state.ui.chatOpen ? (
           <ResizeHandle
             label="Resize editing assistant pane"
@@ -839,14 +829,19 @@ export function SpecialtyManagementMockup() {
           />
         ) : null}
         <ChatPanel
+          key="persistent-assistant"
           state={state}
           update={update}
           announce={setAnnouncement}
           hidden={state.ui.focusMode || !state.ui.chatOpen}
           resetToken={chatResetToken}
+          onCollapse={() =>
+            update((draft) => {
+              draft.ui.chatOpen = false;
+            })
+          }
         />
       </div>
-      )}
     </section>
   );
 }

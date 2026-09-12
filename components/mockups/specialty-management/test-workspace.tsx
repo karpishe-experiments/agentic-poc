@@ -128,9 +128,10 @@ function TestTurn({
                 draft.chat.composerText += `${separator}${handoff.differs ? "The tested version is unavailable; using the current version.\n\n" : ""}${handoff.request}`;
                 draft.ui.chatOpen = true;
                 draft.ui.focusMode = false;
+                draft.ui.lastEditorSections[agent.id] = "instructions";
                 draft.ui.selection = { kind: "agent", specialtyId: agent.specialtyId, agentId: agent.id, versionId: handoff.versionId, section: "instructions" };
               });
-              announce("Test feedback prepared in the Editing assistant. Review before sending.");
+              announce("Test feedback prepared in the Assistant. Review before sending.");
             }}
           >Send to editing chat</button>
           {orphaned ? <small className="proposal-note">Unavailable because the source agent was deleted.</small> : null}

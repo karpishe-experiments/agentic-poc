@@ -95,7 +95,7 @@ test("creates and activates an image agent with a persisted reference", async ({
   await expect(page.getByText(/confirmed · Active/)).toBeVisible();
   await runVersionAction(page, /^Deactivate/);
   await runVersionAction(page, /^Retire/);
-  await expect(page.getByText(/Version 1 · retired/)).toBeVisible();
+  await expect(page.getByText(/retired · Not active/)).toBeVisible();
 });
 test("text agents omit image controls and draft deletion selects the active version", async ({
   page,
@@ -104,7 +104,7 @@ test("text agents omit image controls and draft deletion selects the active vers
   page.once("dialog", (dialog) => dialog.accept());
   await runVersionAction(page, /^Delete draft/);
   await expect(page.locator(".header-actions select")).toHaveValue("playful-v1");
-  await expect(page.getByText(/Version 1 · confirmed · Active/)).toBeVisible();
+  await expect(page.getByText(/confirmed · Active/)).toBeVisible();
 });
 test("forks visible pending agent content without changing its source", async ({
   page,
@@ -215,7 +215,7 @@ test("streams answers, clarification, and read-only instruction proposals from t
     const url = new URL(request.url());
     if (url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1") forbidden.push(request.url());
   });
-  await expect(page.getByRole("heading", { name: "Editing assistant" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Assistant" })).toBeVisible();
   await requestEditingAssistant(page, "What can you change here?");
   await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-streaming.png" });
   await waitForAssistantTurn(page, /deterministic simulation/);
@@ -289,7 +289,7 @@ test("Add reference on a confirmed version creates a draft and opens the referen
   await expect(page.locator(".header-actions select")).toContainText("v3 · draft");
   await expect(page.getByLabel("Name")).toHaveValue("reference-1.md");
   await expect(page.getByLabel("Reference content")).toBeVisible();
-  await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
+  await expect(page.getByText(/draft · Not active/)).toBeVisible();
 });
 test("keeps target-aware proposals safe across selection changes and manual edits", async ({
   page,
@@ -388,13 +388,13 @@ test("chat application creates a draft from a confirmed version without changing
   await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   await page.getByRole("button", { name: "Create draft with changes" }).click();
   await expect(page.locator(".header-actions select")).toContainText("v3 · draft");
-  await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
+  await expect(page.getByText(/draft · Not active/)).toBeVisible();
   await page.locator(".header-actions select").selectOption("playful-v1");
-  await expect(page.getByText(/Version 1 · confirmed · Active/)).toBeVisible();
+  await expect(page.getByText(/confirmed · Active/)).toBeVisible();
 });
 
 async function startAgentTest(page: import("@playwright/test").Page, request = "Produce a sample result") {
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await expect(page.getByRole("region", { name: "Test setup" })).toBeVisible();
   await page.getByLabel("Opening test request").fill(request);
   await page.getByRole("button", { name: "Start test" }).click();
@@ -403,7 +403,7 @@ async function startAgentTest(page: import("@playwright/test").Page, request = "
 }
 
 test("tests an agent against a frozen booklet stage, activity, feedback, and persisted history", async ({ page }) => {
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByLabel("Test booklet").selectOption("demo-forest");
   await expect(page.getByLabel("Test stage")).toHaveValue("story_plan");
   await expect(page.getByText(/Audience profile → Story plan/)).toBeVisible();
@@ -455,7 +455,7 @@ test("expanded test activity shows frozen context, references, and allowed tools
 
 test("stops and retries a test, repeats it explicitly, and preserves the editing composer during handoff", async ({ page }) => {
   const instructions = await page.getByLabel("Main instructions").inputValue();
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByLabel("Opening test request").fill("Produce a sample result");
   await page.getByRole("button", { name: "Start test" }).click();
   await page.getByRole("button", { name: "Stop test response" }).click();
@@ -476,9 +476,10 @@ test("stops and retries a test, repeats it explicitly, and preserves the editing
 
 test("repeat captures an intervening unsaved edit without changing the original frozen session", async ({ page }) => {
   await startAgentTest(page);
+  await page.getByRole("tab", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Main instructions" }).click();
   await page.getByLabel("Main instructions").fill("Unsaved revision for the repeat.");
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByRole("button", { name: "Repeat test with current edits" }).click();
   await page.getByRole("button", { name: "Start test" }).click();
   await expect(page.getByText("Repeated test")).toBeVisible();
@@ -500,7 +501,7 @@ test("recovers an interrupted test and retains an orphaned frozen session withou
     const url = new URL(request.url());
     if (url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1") forbidden.push(request.url());
   });
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByLabel("Opening test request").fill("Produce a sample result");
   await page.getByRole("button", { name: "Start test" }).click();
   await page.reload();
@@ -522,7 +523,7 @@ test("recovers an interrupted test and retains an orphaned frozen session withou
 });
 
 test("offers only prepared booklet stages and permits a compatibility mismatch", async ({ page }) => {
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByLabel("Test booklet").selectOption("demo-moon");
   await expect(page.getByLabel("Test stage")).toHaveValue("visual_bible");
   await expect(page.getByText("This specialty is not a typical match for the selected stage. You can still test it.")).toBeVisible();
@@ -583,7 +584,7 @@ test("focus mode and version notes preserve draft workflow and lifecycle explana
   await page.getByRole("button", { name: "Enter focus mode" }).click();
   await expect(page.getByRole("navigation", { name: "Specialties and agents" })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Agent sections" })).toHaveCount(0);
-  await expect(page.getByRole("complementary", { name: "Editing assistant" })).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "Assistant" })).toHaveCount(0);
   for (const viewport of [
     { width: 1280, height: 800 },
     { width: 1440, height: 900 },
@@ -645,7 +646,7 @@ test("focus mode preserves hidden streams and editing handoff exits focus", asyn
     return state.chat.pendingResponse === null && state.chat.messages.some((message: { role: string; text?: string }) => message.role === "assistant" && message.text?.includes("deterministic simulation"));
   })).toBe(true);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByRole("button", { name: "Start test" }).click();
   await page.getByRole("button", { name: "Enter focus mode" }).click();
   await expect.poll(() => page.evaluate(() => {
@@ -665,7 +666,7 @@ test("focus mode preserves hidden streams and editing handoff exits focus", asyn
   }
   await page.getByRole("button", { name: "Send to editing chat" }).last().click();
   await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Editing assistant" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Assistant" })).toBeVisible();
   await expect(page.getByLabel("Message the editing assistant")).toHaveValue(/Test feedback for/);
 });
 
@@ -680,7 +681,7 @@ test("agent configuration reflects unsaved specialty tools and returns to its wo
   await expect(page.getByRole("region", { name: "Allowed tools summary" })).toContainText("Unsaved specialty values");
   await expect(page.getByRole("region", { name: "Allowed tools summary" })).not.toContainText("get_conversation_context");
   await expect(page.getByLabel("Title")).toHaveValue("Working title preserved");
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Test agent" })).toBeVisible();
 });
 
@@ -740,6 +741,46 @@ test("reopens an agent at its most recently selected version", async ({
   await page.getByRole("button", { name: /Playful Writer/ }).click();
   await expect(page.locator(".header-actions select")).toHaveValue("playful-v2");
 });
+test("swaps the inner agent workspace between Edit and Test and restores the edit section", async ({
+  page,
+}) => {
+  const editTab = page.getByRole("tab", { name: "Edit" });
+  const testTab = page.getByRole("tab", { name: "Test" });
+  await expect(editTab).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Configuration" }).click();
+  await testTab.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(editTab).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(testTab).toBeFocused();
+  await editTab.click();
+  await expect(page.getByLabel("Title")).toBeVisible();
+  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await testTab.click();
+  await expect(testTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("navigation", { name: "Agent sections" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Test agent" })).toBeVisible();
+  await page.reload();
+  await expect(testTab).toHaveAttribute("aria-selected", "true");
+  await editTab.click();
+  await expect(page.getByLabel("Reference content")).toBeVisible();
+  await page.getByRole("button", { name: "Collapse Assistant" }).click();
+  await expect(page.getByRole("complementary", { name: "Assistant" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Enter focus mode" }).click();
+  await page.getByRole("button", { name: "Reopen Assistant" }).click();
+  await expect(page.getByRole("complementary", { name: "Assistant" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter focus mode" })).toBeVisible();
+});
+test("keeps a pending Assistant response alive while navigating to Directory", async ({
+  page,
+}) => {
+  await requestEditingAssistant(page, "What can you change here?");
+  await page.getByRole("button", { name: "Directory" }).click();
+  await expect(page.getByRole("complementary", { name: "Assistant" })).toBeVisible();
+  await expect(page.getByLabel("Message the editing assistant")).toBeDisabled();
+  await waitForAssistantTurn(page, /deterministic simulation/);
+  await expect(page.getByText("Open an editable section to request changes").last()).toBeVisible();
+});
 test("captures readable desktop layouts with chat open and closed", async ({
   page,
 }) => {
@@ -762,7 +803,7 @@ test("captures readable desktop layouts with chat open and closed", async ({
       path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-chat-open.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Hide chat" }).click();
+    await page.getByRole("button", { name: "Collapse Assistant" }).click();
     await expect
       .poll(() =>
         page.evaluate(
@@ -776,12 +817,12 @@ test("captures readable desktop layouts with chat open and closed", async ({
       path: `output/playwright/specialty-management-mockup/desktop-${viewport.width}-chat-closed.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Show chat" }).click();
+    await page.getByRole("button", { name: "Reopen Assistant" }).click();
   }
 });
 
 test("captures readable Test and Test history desktop layouts", async ({ page }) => {
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("tab", { name: "Test", exact: true }).click();
   await page.getByRole("button", { name: /Start test/ }).click();
   await expect(page.getByText("Prepared a deterministic text result from the frozen snapshot.")).toBeVisible();
   for (const viewport of [
@@ -803,7 +844,7 @@ test("captures readable Test and Test history desktop layouts", async ({ page })
       .getByRole("navigation", { name: "Specialties and agents" })
       .getByRole("button", { name: /Playful Writer/ })
       .click();
-    await page.getByRole("button", { name: "Test", exact: true }).click();
+    await page.getByRole("tab", { name: "Test", exact: true }).click();
   }
 });
 
