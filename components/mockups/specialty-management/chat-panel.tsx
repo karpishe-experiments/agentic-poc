@@ -1,364 +1,444 @@
 "use client";
 
-import { useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { Check, Copy, Send, Square } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  getTarget,
+  applyProposal,
+  baseMatches,
+  beginResponse,
+  canApplyProposal,
+  cancelResponse,
+  completeResponse,
+  resolveTarget,
   selectedTarget,
-  simulateSuggestion,
+  simulateReply,
   targetKey,
-  writeTarget,
 } from "@/lib/mockups/specialty-management/chat";
+import { ManagementLocalChatTransport } from "@/lib/mockups/specialty-management/local-chat-transport";
 import type {
-  AgentVersion,
+  ChatProposal,
+  EditingTarget,
+  ErrorDetails,
+  ManagementUIMessage,
   MockupState,
-  ProposalTarget,
 } from "@/lib/mockups/specialty-management/types";
 
 type Update = (fn: (draft: MockupState) => void) => void;
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
+const textOf = (message: ManagementUIMessage) =>
+  message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
 
-function targetLabel(state: MockupState, target: ProposalTarget | null) {
-  if (!target) return "No editable target selected";
-  const found = getTarget(state, target);
-  if (!found) return "Deleted target";
+function targetLabel(state: MockupState, target: EditingTarget | null) {
+  if (!target) return "Open an editable section to request changes";
+  const found = resolveTarget(state, target);
+  if (!found) return "Target unavailable";
+  if (target.kind === "specialty") return `${found.specialty.name} · Settings`;
   const section =
-    target.section === "instructions"
-      ? "Main instructions"
-      : (found.version.references.find(
-          (item) => item.id === target.section.slice(10),
-        )?.name ?? "Deleted reference");
-  return `${found.version.title} · v${found.version.number} · ${section}`;
+    target.section === "configuration"
+      ? "Configuration"
+      : target.section === "instructions"
+        ? "Main instructions"
+        : (found.reference?.name ?? "Deleted reference");
+  return `${found.version?.title ?? "Deleted agent"} · v${found.version?.number ?? "?"} · ${section}`;
 }
 
-export function ChatPanel({
+function proposedFields(proposal: ChatProposal) {
+  const patch = proposal.patch as Record<string, unknown>;
+  return Object.entries(patch).map(([key, value]) => ({
+    key,
+    label: key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase()),
+    value:
+      typeof value === "string"
+        ? value
+        : Array.isArray(value)
+          ? value.join(", ")
+          : value === null
+            ? "None"
+            : JSON.stringify(value),
+  }));
+}
+
+function ProposalCard({
+  proposal,
   state,
   update,
   announce,
 }: {
+  proposal: ChatProposal;
   state: MockupState;
   update: Update;
   announce(message: string): void;
 }) {
-  const [request, setRequest] = useState("");
-  const current = selectedTarget(state);
-  const send = (text: string, capturedTarget = current) => {
-    const clean = text.trim();
-    if (!clean || !capturedTarget || state.chat.pendingResponse) return;
-    const found = getTarget(state, capturedTarget);
-    if (!found) {
-      announce("The proposal target is unavailable.");
-      return;
-    }
-    const prior = [...state.chat.proposals]
-      .reverse()
-      .find(
-        (item) =>
-          targetKey(item.target) === targetKey(capturedTarget) &&
-          item.status === "pending",
-      );
-    const conflict = !!prior && prior.baseText !== found.text;
-    const baseText = prior && !conflict ? prior.baseText : found.text;
-    const inputText = prior && !conflict ? prior.proposedText : found.text;
+  const [expanded, setExpanded] = useState(false);
+  const found = resolveTarget(state, proposal.target);
+  const selected = selectedTarget(state);
+  const matches = !!selected && targetKey(selected) === targetKey(proposal.target);
+  const actionable = canApplyProposal(state, proposal);
+  const fields = proposedFields(proposal);
+  const long = fields.some((field) => field.value.length > 360);
+  const openTarget = () => {
+    const target = proposal.target;
     update((draft) => {
-      draft.chat.proposals.forEach((item) => {
-        if (
-          targetKey(item.target) === targetKey(capturedTarget) &&
-          item.status === "pending"
-        )
-          item.status = "superseded";
-      });
-      draft.chat.messages.push({
-        id: uid("message"),
-        role: "user",
-        text: clean,
-        target: capturedTarget,
-      });
-      draft.chat.pendingResponse = {
-        id: uid("response"),
-        target: capturedTarget,
-        request: clean,
-        baseText,
-        inputText,
-      };
-    });
-    setRequest("");
-    announce("Simulated response started.");
-  };
-  const openTarget = (target: ProposalTarget) => {
-    update((draft) => {
+      if (target.kind === "specialty") {
+        draft.ui.selection = { kind: "specialty", specialtyId: target.specialtyId };
+        return;
+      }
       const agent = draft.agents.find((item) => item.id === target.agentId);
       if (!agent?.versions.some((item) => item.id === target.versionId)) return;
-      draft.ui.recentVersionIds[target.agentId] = target.versionId;
+      draft.ui.recentVersionIds[agent.id] = target.versionId;
       draft.ui.selection = {
         kind: "agent",
-        specialtyId: agent.specialtyId,
-        agentId: agent.id,
+        specialtyId: target.specialtyId,
+        agentId: target.agentId,
         versionId: target.versionId,
         section: target.section,
       };
     });
     announce("Proposal target opened.");
   };
-  const apply = (proposalId: string) => {
-    const createsDraft = state.chat.proposals.some(
-      (item) =>
-        item.id === proposalId &&
-        getTarget(state, item.target)?.saved.status !== "draft",
-    );
+  return (
+    <section className="proposal" aria-label="Edit proposal">
+      <small>{targetLabel(state, proposal.target)} · {proposal.status}</small>
+      <div className={long && !expanded ? "proposal-content collapsed" : "proposal-content"}>
+        {fields.map((field) => (
+          <div className="proposal-field" key={field.key}>
+            <strong>{field.label}</strong>
+            <pre>{field.value}</pre>
+          </div>
+        ))}
+      </div>
+      {long ? (
+        <button className="link-button" onClick={() => setExpanded((value) => !value)}>
+          {expanded ? "Collapse" : "Show full"}
+        </button>
+      ) : null}
+      {!found ? <p className="proposal-note">Target unavailable.</p> : null}
+      {found && proposal.status === "pending" && !matches ? (
+        <button onClick={openTarget}>Open target</button>
+      ) : null}
+      {found && matches && proposal.status === "pending" && !actionable ? (
+        <p className="proposal-note">The selected section changed. Request a fresh proposal.</p>
+      ) : null}
+      <div className="proposal-actions">
+        <button
+          disabled={!actionable}
+          onClick={() => {
+            update((draft) => {
+              applyProposal(draft, proposal.id, uid);
+            });
+            announce("Proposal applied to the working copy.");
+          }}
+        >
+          {found?.savedVersion?.status && found.savedVersion.status !== "draft"
+            ? "Create draft with changes"
+            : "Apply"}
+        </button>
+        <button
+          disabled={proposal.status !== "pending"}
+          onClick={() => {
+            update((draft) => {
+              const item = draft.chat.proposals.find((value) => value.id === proposal.id);
+              if (item) item.status = "dismissed";
+            });
+            announce("Proposal dismissed.");
+          }}
+        >Dismiss</button>
+      </div>
+    </section>
+  );
+}
+
+function ErrorCard({
+  details,
+  state,
+  composer,
+  update,
+  send,
+}: {
+  details: ErrorDetails;
+  state: MockupState;
+  composer: string;
+  update: Update;
+  send(text: string, target: EditingTarget): void;
+}) {
+  const [open, setOpen] = useState(false);
+  const available = details.target && resolveTarget(state, details.target);
+  const current = selectedTarget(state);
+  const matches = !!details.target && !!current && targetKey(details.target) === targetKey(current);
+  const retryMatchesBase =
+    !!details.target &&
+    !!details.capturedBase &&
+    baseMatches(state, details.target, details.capturedBase);
+  const prepare = () => {
+    if (!details.target || !available) return;
     update((draft) => {
-      const proposal = draft.chat.proposals.find(
-        (item) => item.id === proposalId,
-      );
-      if (!proposal || proposal.status !== "pending") return;
-      const found = getTarget(draft, proposal.target);
-      const selected = selectedTarget(draft);
-      if (
-        !found ||
-        !selected ||
-        found.text !== proposal.baseText ||
-        targetKey(selected) !== targetKey(proposal.target)
-      )
-        return;
-      if (found.saved.status === "draft") {
-        const working = structuredClone(found.version);
-        writeTarget(working, proposal.target, proposal.proposedText);
-        draft.workingCopies.versions[found.saved.id] = working;
+      const separator = draft.chat.composerText.trim() ? "\n\n---\n\n" : "";
+      draft.chat.composerText = `${draft.chat.composerText}${separator}${details.request}`;
+      if (details.target!.kind === "specialty") {
+        draft.ui.selection = { kind: "specialty", specialtyId: details.target!.specialtyId };
       } else {
-        const copy = structuredClone(found.version) as AgentVersion;
-        copy.id = uid("version");
-        copy.number =
-          Math.max(...found.agent.versions.map((item) => item.number)) + 1;
-        copy.parentVersionId = found.saved.id;
-        copy.status = "draft";
-        writeTarget(
-          copy,
-          { ...proposal.target, versionId: copy.id },
-          proposal.proposedText,
-        );
-        found.agent.versions.push(copy);
-        draft.ui.recentVersionIds[found.agent.id] = copy.id;
         draft.ui.selection = {
           kind: "agent",
-          specialtyId: found.agent.specialtyId,
-          agentId: found.agent.id,
-          versionId: copy.id,
-          section: proposal.target.section,
+          specialtyId: details.target!.specialtyId,
+          agentId: details.target!.agentId,
+          versionId: details.target!.versionId,
+          section: details.target!.section,
         };
       }
-      proposal.status = "applied";
     });
-    announce(
-      createsDraft
-        ? "Draft created with proposed changes."
-        : "Proposed changes applied.",
-    );
   };
   return (
-    <aside className="chat-panel" aria-label="Simulated assistant">
+    <div className="chat-error-card">
+      <div className="proposal-actions">
+        {details.target && matches ? (
+          <button
+            disabled={!retryMatchesBase}
+            onClick={() => send(details.request, details.target!)}
+          >Retry</button>
+        ) : null}
+        {details.target && available && !matches ? <button onClick={prepare}>Open target</button> : null}
+        {details.target && available ? <button onClick={prepare}>Edit request</button> : null}
+        <button aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          {open ? "Hide error details" : "Show error details"}
+        </button>
+      </div>
+      {details.target && matches && !retryMatchesBase ? (
+        <p className="proposal-note">The captured section changed. Edit the request and send it again.</p>
+      ) : null}
+      {open ? (
+        <dl className="error-details">
+          <dt>Responder</dt><dd>{details.responder}</dd>
+          <dt>Captured request</dt><dd>{details.request}</dd>
+          <dt>Target</dt><dd>{targetLabel(state, details.target)}</dd>
+          <dt>Stages</dt><dd>{details.stages.join(" → ")}</dd>
+          <dt>Started</dt><dd>{details.timestamps.startedAt}</dd>
+          <dt>Stopped or failed</dt><dd>{details.timestamps.failedAt}</dd>
+          <dt>Captured section</dt><dd><pre>{JSON.stringify(details.capturedBase, null, 2)}</pre></dd>
+          <dt>Error</dt><dd>{details.systemError}</dd>
+          {details.modelContext ? <><dt>Selected models (context only)</dt><dd>{details.modelContext.languageModel.provider} · {details.modelContext.languageModel.model}</dd></> : null}
+        </dl>
+      ) : null}
+      {composer.trim() ? <small>Your existing draft will be preserved when preparing this request.</small> : null}
+    </div>
+  );
+}
+
+export function ChatPanel({
+  state,
+  update,
+  announce,
+  hidden = false,
+  resetToken = 0,
+}: {
+  state: MockupState;
+  update: Update;
+  announce(message: string): void;
+  hidden?: boolean;
+  resetToken?: number;
+}) {
+  const current = selectedTarget(state);
+  const conversationRef = useRef<HTMLDivElement>(null);
+  const [nearBottom, setNearBottom] = useState(true);
+  const transport = useMemo(
+    () =>
+      new ManagementLocalChatTransport({
+        respond(message) {
+          return { text: `The synthetic simulator could not prepare ${message.id}.` };
+        },
+        delayMs: 45,
+      }),
+    [],
+  );
+  const chat = useChat<ManagementUIMessage>({
+    id: "agent-studio-editing-assistant",
+    transport,
+    messages: [],
+    onFinish({ isAbort, isError }) {
+      update((draft) => {
+        if (isAbort || isError) cancelResponse(draft, uid);
+        else completeResponse(draft, uid);
+      });
+    },
+    onError() {
+      update((draft) => cancelResponse(draft, uid));
+    },
+  });
+  const running = chat.status === "submitted" || chat.status === "streaming";
+  const streamingMessage = running && chat.messages.at(-1)?.role === "assistant" ? chat.messages.at(-1) : null;
+  const pendingClarification = state.chat.pendingClarification;
+  const clarificationMatches =
+    !pendingClarification ||
+    (!!current && targetKey(current) === targetKey(pendingClarification.target));
+  const previousResetToken = useRef(resetToken);
+  const observedPending = useRef(false);
+
+  useEffect(() => {
+    if (previousResetToken.current === resetToken) return;
+    previousResetToken.current = resetToken;
+    if (running) void chat.stop();
+  }, [chat, resetToken, running]);
+
+  useEffect(() => {
+    if (state.chat.pendingResponse) observedPending.current = true;
+    else if (running && observedPending.current) {
+      observedPending.current = false;
+      void chat.stop();
+    }
+  }, [chat, running, state.chat.pendingResponse]);
+
+  const send = (text: string, target = current) => {
+    const clean = text.trim();
+    if (!clean || !target || state.chat.pendingResponse || running) return;
+    if (
+      pendingClarification &&
+      targetKey(target) !== targetKey(pendingClarification.target)
+    )
+      return;
+    const responseTarget = pendingClarification?.target ?? target;
+    const base = resolveTarget(state, responseTarget);
+    if (!base) return;
+    update((draft) => {
+      beginResponse(draft, responseTarget, clean, uid);
+      draft.chat.pendingClarification = null;
+    });
+    const reply = simulateReply(state, responseTarget, clean, `preview-${crypto.randomUUID()}`);
+    const simulatedResponse = {
+      text: reply.text,
+      clarification:
+        reply.kind === "clarification"
+          ? { id: uid("preview"), question: reply.question, choices: reply.choices, target: responseTarget, request: clean }
+          : undefined,
+      proposalId: reply.kind === "proposal" ? reply.proposal.id : undefined,
+    };
+    void chat.sendMessage(
+      { text: clean, metadata: { target: responseTarget, createdAt: new Date().toISOString(), state: "complete" } },
+      { body: { simulatedResponse } },
+    );
+    announce("Synthetic simulator response started.");
+  };
+
+  useEffect(() => {
+    const node = conversationRef.current;
+    if (node && nearBottom) node.scrollTop = node.scrollHeight;
+  }, [state.chat.messages, state.chat.proposals, streamingMessage, nearBottom]);
+
+  const suggestions = current?.kind === "specialty"
+    ? ["Update the description", "Use Text output", "Use Image output"]
+    : current?.section === "configuration"
+      ? ["Change the title", "Use Story", "Use Quick"]
+      : ["Make this concise", "Use a numbered checklist", "Add an example"];
+
+  return (
+    <aside className="chat-panel" aria-label="Editing assistant" hidden={hidden}>
       <header>
-        <p>Editing target</p>
-        <h2>Simulated assistant</h2>
+        <p>Current target</p>
+        <h2>Editing assistant</h2>
         <span>{targetLabel(state, current)}</span>
       </header>
-      <div className="chat-suggestions">
-        {[
-          "Make this concise",
-          "Use a numbered checklist",
-          "Add an example",
-        ].map((item) => (
-          <button
-            key={item}
-            disabled={!current || !!state.chat.pendingResponse}
-            onClick={() => send(item)}
-          >
+      <div className="chat-suggestions" aria-label="Suggested requests">
+        {suggestions.map((item) => (
+          <button key={item} disabled={!current || running} onClick={() => update((draft) => { draft.chat.composerText = item; })}>
             {item}
           </button>
         ))}
       </div>
-      <div className="conversation" aria-live="polite">
-        {state.chat.messages.length || state.chat.proposals.length ? (
-          <>
-            {state.chat.messages.map((message) => (
-              <article
-                className={`chat-message ${message.role}`}
-                key={message.id}
-              >
-                <small>
-                  {message.role === "user" ? "You" : "Simulated assistant"} ·{" "}
-                  {targetLabel(state, message.target)}
-                </small>
-                <p>{message.text}</p>
-                {message.retryRequest && message.target ? (
-                  <button
-                    disabled={
-                      !!state.chat.pendingResponse ||
-                      !getTarget(state, message.target)
-                    }
-                    onClick={() => {
-                      send(message.retryRequest!, message.target);
-                      update((draft) => {
-                        const item = draft.chat.messages.find(
-                          (value) => value.id === message.id,
-                        );
-                        if (item) delete item.retryRequest;
-                      });
-                    }}
-                  >
-                    Retry response
-                  </button>
-                ) : null}
-              </article>
-            ))}
-            {state.chat.proposals.map((proposal) => {
-              const found = getTarget(state, proposal.target);
-              const matches =
-                !!current && targetKey(current) === targetKey(proposal.target);
-              const conflict = !!found && found.text !== proposal.baseText;
-              const actionable =
-                proposal.status === "pending" &&
-                matches &&
-                !conflict &&
-                !!found;
-              return (
-                <article className="proposal" key={proposal.id}>
-                  <small>
-                    {targetLabel(state, proposal.target)} · {proposal.status}
-                  </small>
-                  <label>
-                    Before
-                    <textarea
-                      name={`proposal-before-${proposal.id}`}
-                      readOnly
-                      value={proposal.baseText}
-                    />
-                  </label>
-                  <label>
-                    After
-                    <textarea
-                      name={`proposal-after-${proposal.id}`}
-                      autoComplete="off"
-                      disabled={proposal.status !== "pending"}
-                      value={proposal.proposedText}
-                      onChange={(event) =>
-                        update((draft) => {
-                          const item = draft.chat.proposals.find(
-                            (value) => value.id === proposal.id,
-                          );
-                          if (item) item.proposedText = event.target.value;
-                        })
-                      }
-                    />
-                  </label>
-                  {!found ? (
-                    <p className="proposal-note">Target unavailable.</p>
-                  ) : conflict ? (
-                    <p className="proposal-note">
-                      Content changed; generate a new proposal.
-                    </p>
-                  ) : !matches && proposal.status === "pending" ? (
-                    <button onClick={() => openTarget(proposal.target)}>
-                      Open target
-                    </button>
-                  ) : null}
-                  <div className="proposal-actions">
-                    <button
-                      disabled={!actionable}
-                      onClick={() => apply(proposal.id)}
-                    >
-                      {!found || found.saved.status === "draft"
-                        ? "Apply"
-                        : "Create draft with changes"}
-                    </button>
-                    <button
-                      disabled={proposal.status !== "pending"}
-                      onClick={() => {
-                        update((draft) => {
-                          const item = draft.chat.proposals.find(
-                            (value) => value.id === proposal.id,
-                          );
-                          if (item) item.status = "dismissed";
-                        });
-                        announce("Proposal dismissed.");
-                      }}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </>
-        ) : (
-          <p>
-            Choose Main instructions or a reference, then ask for a simulated
-            edit.
-          </p>
-        )}
-        {state.chat.pendingResponse ? (
-          <div className="pending-response" role="status">
-            Preparing a deterministic suggestion…{" "}
-            <button
-              onClick={() => {
-                update((draft) => {
-                  draft.chat.pendingResponse = null;
-                });
-                announce("Simulated response cancelled.");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : null}
-      </div>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          send(request);
+      <div
+        className="conversation"
+        ref={conversationRef}
+        aria-live="polite"
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          setNearBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 72);
         }}
       >
+        {state.chat.messages.map((message) => {
+          const text = textOf(message);
+          return (
+            <article className={`chat-message ${message.role}`} key={message.id}>
+              <small>{message.role === "user" ? "You" : "Synthetic simulator"} · {targetLabel(state, message.metadata?.target ?? null)}</small>
+              {text ? <p>{text}</p> : null}
+              {message.role === "assistant" && text ? (
+                <button className="icon-text-button" aria-label="Copy assistant response" onClick={() => void navigator.clipboard.writeText(text)}>
+                  <Copy aria-hidden="true" size={13} /> Copy
+                </button>
+              ) : null}
+              {message.parts.map((part, index) => {
+                if (part.type === "data-proposal") {
+                  const proposal = state.chat.proposals.find((item) => item.id === part.data.proposalId);
+                  return proposal ? <ProposalCard key={`${message.id}-${index}`} proposal={proposal} state={state} update={update} announce={announce} /> : null;
+                }
+                if (part.type === "data-clarification") {
+                  const matches = !!current && targetKey(current) === targetKey(part.data.target);
+                  const active = pendingClarification?.id === part.data.id;
+                  return (
+                    <div className="clarification-card" key={`${message.id}-${index}`}>
+                      <strong>{part.data.question}</strong>
+                      <div className="chat-suggestions">
+                        {part.data.choices.map((choice) => <button key={choice} disabled={!active || !matches || running} onClick={() => send(choice, part.data.target)}>{choice}</button>)}
+                        {active && !matches ? <button onClick={() => update((draft) => {
+                          const target = part.data.target;
+                          draft.ui.selection = target.kind === "specialty" ? { kind: "specialty", specialtyId: target.specialtyId } : { kind: "agent", specialtyId: target.specialtyId, agentId: target.agentId, versionId: target.versionId, section: target.section };
+                        })}>Open target</button> : null}
+                      </div>
+                      <small>You can also type a free-text reply below.</small>
+                    </div>
+                  );
+                }
+                if (part.type === "data-error-details") return <ErrorCard key={`${message.id}-${index}`} details={part.data} state={state} composer={state.chat.composerText} update={update} send={send} />;
+                return null;
+              })}
+            </article>
+          );
+        })}
+        {streamingMessage ? (
+          <article className="chat-message assistant streaming">
+            <small>Synthetic simulator · {targetLabel(state, streamingMessage.metadata?.target ?? current)}</small>
+            {streamingMessage.parts.map((part, index) => part.type === "text" ? <p key={index}>{part.text}</p> : part.type === "data-working-status" ? <p className="progress-label" key={index}>{part.data.label}…</p> : null)}
+          </article>
+        ) : null}
+        {!state.chat.messages.length && !streamingMessage ? <p>Ask about the selected section or request a simulated edit.</p> : null}
+      </div>
+      {!nearBottom ? <button className="jump-latest" onClick={() => { const node = conversationRef.current; if (node) node.scrollTop = node.scrollHeight; }}>Jump to latest</button> : null}
+      {pendingClarification && !clarificationMatches ? (
+        <div className="clarification-binding">
+          <span>Open {targetLabel(state, pendingClarification.target)} to answer the pending clarification.</span>
+          <button onClick={() => update((draft) => {
+            const target = pendingClarification.target;
+            draft.ui.selection = target.kind === "specialty"
+              ? { kind: "specialty", specialtyId: target.specialtyId }
+              : { kind: "agent", specialtyId: target.specialtyId, agentId: target.agentId, versionId: target.versionId, section: target.section };
+          })}>Open clarification target</button>
+        </div>
+      ) : null}
+      <form onSubmit={(event) => { event.preventDefault(); send(state.chat.composerText); }}>
         <label>
-          <span className="sr-only">Request an edit</span>
+          <span className="sr-only">Message the editing assistant</span>
           <textarea
             name="chat-request"
             autoComplete="off"
-            aria-label="Request an edit"
-            value={request}
-            onChange={(event) => setRequest(event.target.value)}
-            placeholder="Describe a change…"
+            aria-label="Message the editing assistant"
+            value={state.chat.composerText}
+            onChange={(event) => update((draft) => { draft.chat.composerText = event.target.value; })}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                send(state.chat.composerText);
+              }
+            }}
+            placeholder={current ? "Ask a question or describe a change…" : "Open an editable section first…"}
           />
         </label>
-        <button
-          type="submit"
-          disabled={!current || !request.trim() || !!state.chat.pendingResponse}
-        >
-          Send
-        </button>
+        {running ? (
+          <button type="button" onClick={() => void chat.stop()}><Square aria-hidden="true" size={13} /> Stop</button>
+        ) : (
+          <button type="submit" disabled={!current || !state.chat.composerText.trim() || !clarificationMatches}><Send aria-hidden="true" size={13} /> Send</button>
+        )}
       </form>
-      <p className="simulation-note">
-        Suggestions are deterministic simulations, not model interpretations.
-      </p>
+      <p className="simulation-note"><Check aria-hidden="true" size={12} /> Synthetic simulator · selected models are context only</p>
     </aside>
   );
-}
-
-export function finishPendingResponse(state: MockupState) {
-  const pending = state.chat.pendingResponse;
-  if (!pending) return null;
-  const status = getTarget(state, pending.target) ? "pending" : "unavailable";
-  state.chat.proposals.push({
-    id: pending.id,
-    target: pending.target,
-    request: pending.request,
-    baseText: pending.baseText,
-    proposedText: simulateSuggestion(pending.inputText, pending.request),
-    status,
-  });
-  state.chat.messages.push({
-    id: uid("message"),
-    role: "assistant",
-    text: "Here is a simulated suggestion. Review the before and after text before applying it.",
-    target: pending.target,
-  });
-  state.chat.pendingResponse = null;
-  return status;
 }

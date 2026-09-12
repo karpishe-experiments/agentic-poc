@@ -6,7 +6,7 @@ Deliver an interactive desktop mockup that the user can evaluate before defining
 
 The user requested a mockup with synthetic data, simulated chat, and persistence between refreshes. Their conversation decisions govern this phase. This plan does not implement or complete the parent issue's runtime requirements. In particular, schemas, migrations, tool execution, workflow routing, result mapping, and runtime integration remain later work. The parent issue still uses “skill”; this mockup uses “specialty”. Do not rename existing runtime symbols.
 
-Status: Checkpoints 1–6 complete; checkpoints 7–9 planned and not implemented. This consolidated document governs resumption. Defaults are experiment choices, not permanent runtime contracts. Updating this plan does not authorize implementation until the user explicitly resumes it.
+Status: Checkpoints 1–7 complete; checkpoints 8–9 planned and not implemented. This consolidated document governs resumption. Defaults are experiment choices, not permanent runtime contracts.
 
 ### Agreed product model
 
@@ -236,7 +236,7 @@ Use these closed interaction defaults throughout implementation:
 | 4 — Markdown and mentions | Add dependencies, Edit/Preview, all three pickers and local link rendering | Keyboard and mouse menus insert correct tokens; preview renders Markdown and clickable mentions; removed reference is shown as unavailable |
 | 5 — Chat and result preview (completed baseline) | Implement shared conversation, deterministic simulation, original before/after editing, Apply and create-draft flow, sample image result | Suggest→review→Apply works; manual-edit conflict prevents replacement; active version stays unchanged; image dialog shows description and expandable metadata |
 | 6 — Verification and handoff | Complete tests, browser inspection, documentation, independent read-only review, bounded corrections | Acceptance matrix passes with evidence; final source checks pass; screenshots inspected; launch instructions and limitations documented |
-| 7 — Editing assistant | Pending: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate |
+| 7 — Editing assistant | Complete: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate passed |
 | 8 — Agent tests | Pending: stage snapshots, test sessions/history, repeat and editing handoff, format 3 | P0-16–P0-23 pass; independent review gate |
 | 9 — Focus and lifecycle UX | Pending: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate |
 
@@ -309,7 +309,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 4 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (12); `npm run test:mockup:e2e` (10); two consecutive independent reviews passed with no intervening changes | None |
 | 5 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (15); `npm run test:mockup:e2e` (18); two consecutive independent reviews passed with no intervening changes | None |
 | 6 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (15); `npm run test:mockup:e2e` (22); `npm run mockup:build`; working-tree and branch whitespace checks; six desktop screenshots inspected; two consecutive independent final reviews passed with no intervening changes | None |
-| 7 | Pending | Not run | Implementation pending |
+| 7 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (20); `npm run test:mockup:e2e` (25); `npm run mockup:build`; `git diff --check`; streaming, clarification, text/field proposal, diagnostics, and 1280×800/1440×900/1920×1080 screenshots inspected; two consecutive independent reviews passed with no intervening changes | None |
 | 8 | Pending | Not run | Implementation pending |
 | 9 | Pending | Not run | Implementation pending |
 

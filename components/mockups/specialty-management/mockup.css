@@ -91,6 +91,7 @@
 .tool-popover { margin-top: .6rem; border: 1px solid var(--border); border-radius: .5rem; padding: .65rem; background: #fffaf5; }
 .image-placeholder { display: block; border: 1px dashed var(--border); border-radius: .5rem; padding: 2rem; text-align: center; color: var(--muted-ink); background: #faf8f5; }
 .chat-panel { min-width: 0; min-height: 0; overflow: hidden; display: grid; grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: .65rem; gap: .45rem; background: #fbfaf8; }
+.chat-panel[hidden] { display: none; }
 .chat-panel > header { border-bottom: 1px solid var(--border); padding-bottom: .6rem; }
 .chat-panel > header p, .sample-dialog header p { color: var(--accent); font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .chat-panel > header h2 { font-size: 1rem; }
@@ -102,15 +103,34 @@
 .chat-message.user { margin-left: 1.4rem; background: #fff0e8; }
 .chat-message p, .proposal-note { margin-top: .25rem; font-size: .82rem; }
 .proposal { display: grid; gap: .5rem; }
+.proposal-content { display: grid; gap: .4rem; }
+.proposal-content.collapsed { max-height: 12rem; overflow: hidden; mask-image: linear-gradient(#000 75%, transparent); }
+.proposal-field { display: grid; gap: .2rem; }
+.proposal-field strong { font-size: .72rem; color: var(--muted-ink); }
+.proposal-field pre { margin: 0; max-height: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: .4rem; padding: .45rem; background: #f5f2ee; font: .75rem/1.4 ui-monospace,monospace; }
 .proposal label, .chat-panel form label, .sample-dialog label { display: grid; gap: .25rem; font-size: .76rem; font-weight: 700; }
 .proposal textarea, .chat-panel form textarea, .sample-dialog textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--border); border-radius: .4rem; padding: .45rem; background: white; font: .75rem/1.4 ui-monospace,monospace; }
 .proposal textarea:read-only { background: #f5f2ee; }
 .proposal-actions { display: flex; gap: .35rem; }
 .proposal button:disabled, .chat-suggestions button:disabled { opacity: .45; }
 .proposal-note { color: #9b451f; }
+.clarification-card, .chat-error-card { display: grid; gap: .45rem; margin-top: .45rem; border-top: 1px solid var(--border); padding-top: .45rem; font-size: .78rem; }
+.clarification-binding { display: grid; gap: .3rem; border: 1px solid #e7b769; border-radius: .45rem; padding: .45rem; background: #fff5d8; font-size: .74rem; }
+.clarification-binding button { width: fit-content; border: 1px solid var(--border); border-radius: .4rem; background: white; padding: .3rem .45rem; font-weight: 700; }
+.error-details { display: grid; grid-template-columns: minmax(5rem,auto) 1fr; gap: .25rem .55rem; margin: 0; border-radius: .4rem; padding: .5rem; background: #f5f2ee; font-size: .72rem; overflow-wrap: anywhere; }
+.error-details dt { font-weight: 750; }
+.error-details dd { margin: 0; }
+.error-details pre { margin: 0; max-height: 10rem; overflow: auto; white-space: pre-wrap; font: .68rem/1.35 ui-monospace,monospace; }
+.progress-label { color: var(--accent); font-weight: 700; }
+.chat-message.streaming { border-style: dashed; }
+.icon-text-button, .link-button, .jump-latest { width: fit-content; border: 0; background: transparent; padding: .25rem; color: var(--accent); font-size: .72rem; font-weight: 700; }
+.icon-text-button { display: inline-flex; align-items: center; gap: .25rem; }
+.jump-latest { justify-self: center; border: 1px solid var(--border); border-radius: 999px; background: white; padding: .3rem .65rem; }
 .pending-response { border-radius: .5rem; padding: .55rem; background: #fff5d8; font-size: .8rem; }
 .chat-panel form { display: grid; grid-template-columns: 1fr auto; gap: .4rem; align-items: end; }
 .chat-panel form textarea { min-height: 58px; font-family: inherit; }
+.chat-panel form button { display: inline-flex; align-items: center; gap: .3rem; }
+.simulation-note { display: flex; align-items: center; gap: .25rem; }
 .sample-result-button { width: fit-content; }
 .sample-dialog { width: min(720px, calc(100vw - 2rem)); border: 1px solid var(--border); border-radius: .8rem; padding: 1rem; color: var(--ink); overscroll-behavior: contain; }
 .sample-dialog::backdrop { background: #17110c99; }

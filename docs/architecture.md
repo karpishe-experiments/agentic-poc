@@ -8,7 +8,9 @@ Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser ren
 
 ### Isolated specialty-management mockup
 
-`/mockups/specialty-management` is a separate Phase 0 design surface. It uses bundled synthetic JSON and browser `localStorage`. It does not import the runtime agent repositories, skill registry, contracts, services, model adapters, or MongoDB setup. `npm run mockup:dev` starts Next.js with `SPECIALTY_MOCKUP_ONLY=1`; the instrumentation bootstrap then skips the job runner. `npm run mockup:build` and the dedicated mockup test commands use the same isolated boundary. This mockup does not change the runtime architecture or define production persistence and permission contracts.
+`/mockups/specialty-management` is the separate Phase 0 Agent Studio design surface. It uses bundled synthetic JSON and browser `localStorage`. It does not import the runtime agent repositories, skill registry, contracts, services, model adapters, or MongoDB setup. `npm run mockup:dev` starts Next.js with `SPECIALTY_MOCKUP_ONLY=1`; the instrumentation bootstrap then skips the job runner. Mockup development, browser tests, and builds use separate Next output directories so they do not share a development lock or generated type metadata with the ordinary application process.
+
+The Editing assistant uses the installed AI SDK `useChat` hook, typed `UIMessage` data parts, and a local `ChatTransport`. The transport emits deterministic browser-local stream chunks and does not call a route handler, model provider, database, or external service. Versioned local JSON stores the durable conversation, captured section bases, proposals, composer text, clarification state, and recovery diagnostics. This mockup does not change the runtime architecture or define production persistence and permission contracts.
 
 ```mermaid
 flowchart TB

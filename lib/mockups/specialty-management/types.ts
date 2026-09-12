@@ -1,7 +1,11 @@
+import type { UIMessage } from "ai";
+
 export type OutputType = "text" | "image";
 export type VersionStatus = "draft" | "confirmed" | "retired";
 export type EditorSection =
-  "configuration" | "instructions" | `reference:${string}`;
+  | "configuration"
+  | "instructions"
+  | `reference:${string}`;
 export type ModelSelection = { provider: string; model: string };
 export type ReferenceFile = {
   id: string;
@@ -51,28 +55,145 @@ export type Selection =
       versionId: string;
       section: EditorSection;
     };
-export type ProposalTarget = {
+
+export type SpecialtyEditingTarget = {
+  kind: "specialty";
+  specialtyId: string;
+  section: "settings";
+};
+export type AgentEditingTarget = {
+  kind: "agent";
+  specialtyId: string;
   agentId: string;
   versionId: string;
-  section: "instructions" | `reference:${string}`;
+  section: EditorSection;
 };
+export type EditingTarget = SpecialtyEditingTarget | AgentEditingTarget;
+/** Kept as a named alias while checkpoint 7 callers migrate. */
+export type ProposalTarget = EditingTarget;
+
+export type SpecialtyBase = {
+  kind: "specialty";
+  name: string;
+  description: string;
+  outputType: OutputType;
+  allowedToolIds: string[];
+  builtIn: boolean;
+};
+export type ConfigurationBase = {
+  kind: "configuration";
+  title: string;
+  languageModel: ModelSelection;
+  imageModel: ModelSelection | null;
+  outputType: OutputType;
+  builtIn: boolean;
+};
+export type InstructionsBase = { kind: "instructions"; mainInstructions: string };
+export type ReferenceBase = {
+  kind: "reference";
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+};
+export type EditingBase =
+  | SpecialtyBase
+  | ConfigurationBase
+  | InstructionsBase
+  | ReferenceBase;
+
+export type SpecialtyPatch = Partial<
+  Pick<Specialty, "name" | "description" | "outputType" | "allowedToolIds">
+>;
+export type ConfigurationPatch = Partial<
+  Pick<AgentVersion, "title" | "languageModel" | "imageModel">
+>;
+export type InstructionsPatch = { mainInstructions: string };
+export type ReferencePatch = Partial<
+  Pick<ReferenceFile, "name" | "description" | "content">
+>;
+export type EditingPatch =
+  | SpecialtyPatch
+  | ConfigurationPatch
+  | InstructionsPatch
+  | ReferencePatch;
+
+export type ProposalStatus =
+  | "pending"
+  | "applied"
+  | "dismissed"
+  | "superseded"
+  | "unavailable";
 export type ChatProposal = {
   id: string;
-  target: ProposalTarget;
+  target: EditingTarget;
   request: string;
-  baseText: string;
-  proposedText: string;
-  status: "pending" | "applied" | "dismissed" | "superseded" | "unavailable";
+  base: EditingBase;
+  patch: EditingPatch;
+  status: ProposalStatus;
+  createdAt: string;
+  /** Read-only presentation text for Markdown sections and legacy UI. */
+  proposedText?: string;
+  /** Preserved during v1 migration; new code must use `base`. */
+  baseText?: string;
 };
-export type ChatMessage = {
+
+export type WorkingStatusCard = {
+  label: "Reading selected section" | "Preparing response" | "Creating proposal";
+};
+export type ClarificationCard = {
   id: string;
-  role: "user" | "assistant";
-  text: string;
-  target: ProposalTarget | null;
+  question: string;
+  choices: string[];
+  target: EditingTarget;
+  request: string;
+};
+export type ErrorDetails = {
+  request: string;
+  target: EditingTarget | null;
+  capturedBase: EditingBase | null;
+  stages: string[];
+  timestamps: { startedAt: string; failedAt: string };
+  systemError: string;
+  responder: "Synthetic simulator";
+  modelContext?: { languageModel: ModelSelection; imageModel: ModelSelection | null };
+};
+export type ManagementChatData = {
+  "working-status": WorkingStatusCard;
+  clarification: ClarificationCard;
+  proposal: { proposalId: string };
+  "error-details": ErrorDetails;
+};
+export type ManagementMessageMetadata = {
+  target: EditingTarget | null;
+  createdAt: string;
+  state?: "complete" | "cancelled" | "interrupted" | "error";
+};
+export type ManagementUIMessage = UIMessage<
+  ManagementMessageMetadata,
+  ManagementChatData
+> & {
+  /** Transitional read-only conveniences for the checkpoint-6 panel. */
+  text?: string;
+  target?: AgentEditingTarget | null;
   retryRequest?: string;
 };
+
+export type PendingChatResponse = {
+  id: string;
+  target: EditingTarget;
+  request: string;
+  base: EditingBase;
+  startedAt: string;
+  stage: WorkingStatusCard["label"];
+  /** Transitional fields retained until the former timer-based panel is removed. */
+  baseText?: string;
+  inputText?: string;
+};
+export type PendingClarification = ClarificationCard;
+
 export type MockupState = {
-  formatVersion: 1;
+  formatVersion: 2;
   specialties: Specialty[];
   agents: Agent[];
   tools: ToolFixture[];
@@ -94,15 +215,11 @@ export type MockupState = {
     imageDescriptions: Record<string, string>;
   };
   chat: {
-    messages: ChatMessage[];
+    messages: ManagementUIMessage[];
     proposals: ChatProposal[];
-    pendingResponse: {
-      id: string;
-      target: ProposalTarget;
-      request: string;
-      baseText: string;
-      inputText: string;
-    } | null;
+    pendingResponse: PendingChatResponse | null;
+    composerText: string;
+    pendingClarification: PendingClarification | null;
   };
 };
 export type MockupAction =

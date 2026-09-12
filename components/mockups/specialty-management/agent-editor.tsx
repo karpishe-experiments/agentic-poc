@@ -149,6 +149,7 @@ export function AgentEditor({
       const target = draft.agents.find((item) => item.id === agent.id)!;
       draft.chat.proposals.forEach((proposal) => {
         if (
+          proposal.target.kind === "agent" &&
           proposal.target.agentId === agent.id &&
           proposal.target.versionId === saved.id &&
           proposal.status === "pending"
@@ -156,6 +157,7 @@ export function AgentEditor({
           proposal.status = "unavailable";
       });
       if (
+        draft.chat.pendingResponse?.target.kind === "agent" &&
         draft.chat.pendingResponse?.target.agentId === agent.id &&
         draft.chat.pendingResponse.target.versionId === saved.id
       )
@@ -600,6 +602,7 @@ export function AgentEditor({
                         const section = `reference:${reference.id}`;
                         draft.chat.proposals.forEach((proposal) => {
                           if (
+                            proposal.target.kind === "agent" &&
                             proposal.target.agentId === agent.id &&
                             proposal.target.versionId === saved.id &&
                             proposal.target.section === section &&
@@ -608,6 +611,7 @@ export function AgentEditor({
                             proposal.status = "unavailable";
                         });
                         if (
+                          draft.chat.pendingResponse?.target.kind === "agent" &&
                           draft.chat.pendingResponse?.target.agentId ===
                             agent.id &&
                           draft.chat.pendingResponse.target.versionId ===

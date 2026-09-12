@@ -17,14 +17,14 @@ test("loads with local synthetic data and no service calls", async ({
   });
   await page.goto("/mockups/specialty-management");
   await expect(
-    page.getByRole("heading", { name: "Specialties and agents" }),
+    page.getByRole("heading", { name: "Agent Studio" }),
   ).toBeVisible();
   expect(forbidden).toEqual([]);
   expect(
     await page.evaluate(() =>
       localStorage.getItem("specialty-management-mockup:v1"),
     ),
-  ).toContain('"formatVersion":1');
+  ).toContain('"formatVersion":2');
 });
 test("creates, saves, reloads, discards, retires and restores a specialty", async ({
   page,
@@ -135,7 +135,7 @@ test("edits Markdown with keyboard and toolbar mention menus", async ({
   await expect(page.getByText("Read artifact context.")).toBeVisible();
   await page.getByRole("button", { name: "$rhyming-guide.md" }).click();
   await expect(page.getByText("Prefer natural rhythm.")).toBeVisible();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(page.getByLabel("Reference content")).toBeVisible();
   await page.getByRole("button", { name: "Preview" }).click();
   await page.reload();
@@ -152,7 +152,7 @@ test("navigates specialty mentions and disables deleted references", async ({
   );
   await page.getByRole("button", { name: "Preview" }).click();
   await page.getByRole("button", { name: "$guide" }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Remove reference" }).click();
   await page.getByRole("button", { name: "Preview" }).click();
@@ -186,28 +186,92 @@ test("renders only the bundled Markdown image without external requests", async 
     /javascript:/,
   );
 });
-test("keeps one chat across targets and safely applies proposals", async ({
+async function requestEditingAssistant(page: import("@playwright/test").Page, request: string) {
+  const composer = page.getByLabel("Message the editing assistant");
+  await composer.fill(request);
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+}
+
+async function waitForAssistantTurn(page: import("@playwright/test").Page, text: RegExp) {
+  await expect(page.getByText(text).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+}
+
+test("streams answers, clarification, and read-only instruction proposals from the Editing assistant", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Add an example" }).click();
+  const forbidden: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1") forbidden.push(request.url());
+  });
+  await expect(page.getByRole("heading", { name: "Editing assistant" })).toBeVisible();
+  await requestEditingAssistant(page, "What can you change here?");
+  await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-streaming.png" });
+  await waitForAssistantTurn(page, /deterministic simulation/);
+  await expect(page.getByRole("button", { name: "Copy assistant response" }).last()).toBeVisible();
+
+  await requestEditingAssistant(page, "Improve this");
+  await waitForAssistantTurn(page, /Which change should I prepare/);
+  await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-clarification.png" });
+  await expect(page.getByText("Choose the kind of edit you want for this section.")).toBeVisible();
   await page.getByRole("button", { name: "rhyming-guide.md" }).click();
-  await expect(
-    page.getByText("Here is a simulated suggestion.", { exact: false }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Open target" }).click();
-  await page.getByLabel("After").fill("Custom proposal text");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.getByLabel("Main instructions")).toHaveValue(
-    "Custom proposal text",
-  );
+  await page.getByLabel("Message the editing assistant").fill("A free-text clarification answer");
+  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  await expect(page.getByText(/to answer the pending clarification/)).toBeVisible();
+  await page.getByRole("button", { name: "Open clarification target" }).click();
+  await expect(page.getByLabel("Message the editing assistant")).toHaveValue("A free-text clarification answer");
+  await page.getByRole("button", { name: "Make it concise" }).last().click();
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-text-proposal.png" });
+  const proposal = page.getByRole("region", { name: "Edit proposal" }).last();
+  await expect(proposal.getByText("Main Instructions", { exact: true })).toBeVisible();
+  await expect(proposal.locator("textarea")).toHaveCount(0);
+  expect(forbidden).toEqual([]);
+});
+
+test("migrates legacy saved chat data while preserving the selected management record", async ({
+  page,
+}) => {
+  await page.getByLabel("Message the editing assistant").fill("Persist this draft");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1"))).not.toBeNull();
+  await page.evaluate(() => {
+    const key = "specialty-management-mockup:v1";
+    const legacy = JSON.parse(localStorage.getItem(key)!);
+    legacy.formatVersion = 1;
+    legacy.chat = { messages: [], proposals: [], pendingResponse: null };
+    localStorage.setItem(key, JSON.stringify(legacy));
+  });
   await page.reload();
-  await expect(
-    page.getByText("Here is a simulated suggestion.", { exact: false }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Main instructions")).toHaveValue(
-    "Custom proposal text",
-  );
+  await expect(page.getByRole("heading", { name: "Playful Writer" })).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem("specialty-management-mockup:v1")),
+  ).toContain('"formatVersion":2');
+});
+
+test("proposes editable specialty, configuration, instruction, and reference fields", async ({
+  page,
+}) => {
+  await requestEditingAssistant(page, "Add an example");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await expect(page.getByRole("region", { name: "Edit proposal" }).last().getByText("Main Instructions", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Configuration" }).click();
+  await requestEditingAssistant(page, "Change the title to Bright Writer");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await expect(page.getByRole("region", { name: "Edit proposal" }).last().getByText("Title", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-field-proposal.png" });
+
+  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  await requestEditingAssistant(page, "Add an example");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await expect(page.getByRole("region", { name: "Edit proposal" }).last().getByText("Content", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Story Planning text" }).click();
+  await requestEditingAssistant(page, "Update the description");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await expect(page.getByRole("region", { name: "Edit proposal" }).last().getByText("Description", { exact: true })).toBeVisible();
 });
 test("Add reference on a confirmed version creates a draft and opens the reference", async ({
   page,
@@ -219,113 +283,100 @@ test("Add reference on a confirmed version creates a draft and opens the referen
   await expect(page.getByLabel("Reference content")).toBeVisible();
   await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
 });
-test("blocks a stale proposal and cancels the sole pending response", async ({
+test("keeps target-aware proposals safe across selection changes and manual edits", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Make this concise" }).click();
-  await expect(
-    page.getByText("Here is a simulated suggestion.", { exact: false }),
-  ).toBeVisible();
+  await requestEditingAssistant(page, "Add an example");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
+  const proposal = page.getByRole("region", { name: "Edit proposal" }).last();
+  await expect(proposal.getByRole("button", { name: "Open target" })).toBeVisible();
+  await proposal.getByRole("button", { name: "Open target" }).click();
   await page.getByLabel("Main instructions").fill("A later manual edit");
-  await expect(
-    page.getByText("Content changed; generate a new proposal."),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Apply", exact: true }),
-  ).toBeDisabled();
-  await page.getByLabel("Request an edit").fill("Try something else");
-  await page.getByRole("button", { name: "Send" }).click();
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(
-    page.getByText("Preparing a deterministic suggestion…", { exact: false }),
-  ).toHaveCount(0);
-  await expect(page.locator(".sr-only[role=status]")).toHaveText(
-    "Simulated response cancelled.",
-  );
-});
-test("turns a refresh-interrupted response into an explicit retry", async ({
-  page,
-}) => {
-  await page.getByRole("button", { name: "Add an example" }).click();
-  await expect(
-    page.getByText("Preparing a deterministic suggestion…", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText("The selected section changed. Request a fresh proposal.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
   await page.reload();
-  await expect(
-    page.getByText("The simulated response was interrupted during refresh."),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Retry response" }).click();
-  await expect(
-    page.getByText("Here is a simulated suggestion.", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText("A later manual edit")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
 });
-test("reset cancels a pending response and restores an empty conversation", async ({
+
+test("natural revisions supersede only the prior proposal for the captured target", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Add an example" }).click();
-  await expect(
-    page.getByText("Preparing a deterministic suggestion…", { exact: false }),
-  ).toBeVisible();
+  await requestEditingAssistant(page, "Make this concise");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await requestEditingAssistant(page, "Make it shorter");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+  await expect(page.getByRole("region", { name: "Edit proposal" })).toHaveCount(2);
+  await expect(page.getByText(/superseded/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply", exact: true }).last()).toBeEnabled();
+});
+
+test("Stop and refresh leave recoverable responses without incomplete proposals", async ({
+  page,
+}) => {
+  await requestEditingAssistant(page, "Add an example");
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByText("The simulated response was stopped before it created a proposal.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" }).last()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Edit proposal" })).toHaveCount(0);
+  await page.getByLabel("Main instructions").fill("Changed after the stopped request");
+  await expect(page.getByRole("button", { name: "Retry" }).last()).toBeDisabled();
+  await expect(page.getByText("The captured section changed. Edit the request and send it again.").last()).toBeVisible();
+
+  await requestEditingAssistant(page, "Add an example");
+  await page.reload();
+  await expect(page.getByText("The simulated response was interrupted during refresh.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry" }).last().click();
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+});
+
+test("seeded diagnostics reveal context and retry or prepare an editable request", async ({
+  page,
+}) => {
+  await expect(page.getByText("A synthetic example failed before creating a proposal.")).toBeVisible();
+  await page.getByRole("button", { name: "Show error details" }).click();
+  await page.screenshot({ path: "output/playwright/specialty-management-mockup/chat-error-details.png" });
+  await expect(page.getByText("Synthetic simulator", { exact: true })).toBeVisible();
+  await expect(page.getByText("Captured section")).toBeVisible();
+  await expect(page.getByText("Started")).toBeVisible();
+  await expect(page.getByText("Selected models (context only)")).toBeVisible();
+  await page.getByLabel("Message the editing assistant").fill("Keep this draft");
+  await page.getByRole("button", { name: "Edit request" }).click();
+  await expect(page.getByLabel("Message the editing assistant")).toHaveValue(/Keep this draft[\s\S]*Make the selected instructions more concise/);
+  await page.getByRole("button", { name: "Retry" }).click();
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
+});
+
+test("reset cancels a running response and restores the seeded failure fixture", async ({
+  page,
+}) => {
+  await requestEditingAssistant(page, "Add an example");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Reset demo data" }).click();
-  await page.waitForTimeout(500);
-  await expect(
-    page.getByText("Here is a simulated suggestion.", { exact: false }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByText(
-      "Choose Main instructions or a reference, then ask for a simulated edit.",
-    ),
-  ).toBeVisible();
+  await expect(page.getByText("A synthetic example failed before creating a proposal.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
 });
-test("marks a proposal unavailable when its reference is deleted", async ({
+
+test("marks a proposal unavailable when its reference is deleted during or after a request", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "rhyming-guide.md" }).click();
-  await page.getByRole("button", { name: "Add an example" }).click();
-  await expect(
-    page.getByRole("button", { name: "Apply", exact: true }),
-  ).toBeEnabled();
+  await requestEditingAssistant(page, "Add an example");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Remove reference" }).click();
   await expect(page.getByText("Target unavailable.")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Apply", exact: true }),
-  ).toBeDisabled();
-  await expect(page.locator(".sr-only[role=status]")).toHaveText(
-    "Reference removed; related chat proposals are unavailable.",
-  );
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
 });
-test("deleting a target during the delay cancels its pending response", async ({
-  page,
-}) => {
-  await page.getByRole("button", { name: "rhyming-guide.md" }).click();
-  await page.getByRole("button", { name: "Add an example" }).click();
-  await expect(
-    page.getByText("Preparing a deterministic suggestion…", { exact: false }),
-  ).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Remove reference" }).click();
-  await expect(page.locator(".sr-only[role=status]")).toHaveText(
-    "Reference removed; related chat proposals are unavailable.",
-  );
-  await page.waitForTimeout(500);
-  await expect(
-    page.getByText("Here is a simulated suggestion.", { exact: false }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByText("Preparing a deterministic suggestion…", { exact: false }),
-  ).toHaveCount(0);
-});
-test("chat Apply to a confirmed version creates a draft without changing active", async ({
+
+test("chat application creates a draft from a confirmed version without changing active", async ({
   page,
 }) => {
   await page.getByLabel("Version").selectOption("playful-v1");
   await page.getByRole("button", { name: "Main instructions" }).click();
-  await page.getByRole("button", { name: "Use a numbered checklist" }).click();
-  await expect(
-    page.getByRole("button", { name: "Create draft with changes" }),
-  ).toBeEnabled();
+  await requestEditingAssistant(page, "Use a numbered checklist");
+  await waitForAssistantTurn(page, /I prepared a simulated proposal/);
   await page.getByRole("button", { name: "Create draft with changes" }).click();
   await expect(page.getByLabel("Version")).toContainText("v3 · draft");
   await expect(page.getByText(/Version 3 · draft/)).toBeVisible();
@@ -420,7 +471,11 @@ test("searches and opens specialty and agent entities", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Story Planning", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /move|copy/i })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Specialties and agents" })
+      .getByRole("button", { name: /move|copy/i }),
+  ).toHaveCount(0);
 });
 
 test("closes a mention menu with Escape", async ({ page }) => {

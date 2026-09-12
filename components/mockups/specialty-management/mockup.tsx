@@ -15,7 +15,6 @@ import {
   reducer,
   saveState,
 } from "@/lib/mockups/specialty-management/state";
-import { getTarget } from "@/lib/mockups/specialty-management/chat";
 import type {
   Agent,
   MockupState,
@@ -23,7 +22,7 @@ import type {
   Specialty,
 } from "@/lib/mockups/specialty-management/types";
 import { AgentEditor } from "./agent-editor";
-import { ChatPanel, finishPendingResponse } from "./chat-panel";
+import { ChatPanel } from "./chat-panel";
 
 type Update = (fn: (draft: MockupState) => void) => void;
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -487,7 +486,7 @@ export function SpecialtyManagementMockup() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const latestState = useRef(state);
+  const [chatResetToken, setChatResetToken] = useState(0);
   const update: Update = (fn) =>
     dispatch({ type: "mutate", mutate: (current) => change(current, fn) });
   useEffect(() => {
@@ -498,9 +497,6 @@ export function SpecialtyManagementMockup() {
       setHydrated(true);
     });
   }, []);
-  useEffect(() => {
-    latestState.current = state;
-  }, [state]);
   useEffect(() => {
     if (hydrated && !loadError) {
       const error = saveState(localStorage, state);
@@ -516,35 +512,19 @@ export function SpecialtyManagementMockup() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [state.workingCopies]);
-  const pendingResponse = state.chat.pendingResponse;
-  useEffect(() => {
-    if (!pendingResponse) return;
-    const timer = window.setTimeout(() => {
-      const available = !!getTarget(
-        latestState.current,
-        pendingResponse.target,
-      );
-      update((draft) => finishPendingResponse(draft));
-      setAnnouncement(
-        available
-          ? "Simulated proposal ready."
-          : "Simulated proposal target unavailable.",
-      );
-    }, 400);
-    return () => window.clearTimeout(timer);
-  }, [pendingResponse]);
   const reset = () => {
     if (!confirm("Reset all specialty-management demo data?")) return;
     const next = freshSeed();
     setLoadError(null);
     setSaveError(saveState(localStorage, next));
+    setChatResetToken((value) => value + 1);
     dispatch({ type: "replace", state: next });
   };
   if (!hydrated) return <div role="status">Loading management mockup…</div>;
   if (loadError)
     return (
       <section>
-        <h1>Management mockup</h1>
+        <h1>Agent Studio</h1>
         <p role="alert">{loadError}</p>
         <button onClick={reset}>Reset demo data</button>
       </section>
@@ -556,7 +536,7 @@ export function SpecialtyManagementMockup() {
       </div>
       <header className="mockup-toolbar">
         <div>
-          <h1>Specialties and agents</h1>
+          <h1>Agent Studio</h1>
           <p>Synthetic data · simulated chat</p>
         </div>
         <div>
@@ -614,25 +594,25 @@ export function SpecialtyManagementMockup() {
           announce={setAnnouncement}
         />
         {state.ui.chatOpen ? (
-          <>
-            <ResizeHandle
-              label="Resize chat pane"
-              onMove={(delta) =>
-                update((draft) => {
-                  draft.ui.chatWidth = Math.max(
-                    300,
-                    Math.min(460, draft.ui.chatWidth - delta),
-                  );
-                })
-              }
-            />
-            <ChatPanel
-              state={state}
-              update={update}
-              announce={setAnnouncement}
-            />
-          </>
+          <ResizeHandle
+            label="Resize editing assistant pane"
+            onMove={(delta) =>
+              update((draft) => {
+                draft.ui.chatWidth = Math.max(
+                  300,
+                  Math.min(460, draft.ui.chatWidth - delta),
+                );
+              })
+            }
+          />
         ) : null}
+        <ChatPanel
+          state={state}
+          update={update}
+          announce={setAnnouncement}
+          hidden={!state.ui.chatOpen}
+          resetToken={chatResetToken}
+        />
       </div>
     </section>
   );
