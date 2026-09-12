@@ -23,11 +23,14 @@ jobs:
       - name: Plan
         env: { STACK: "${{ inputs.stack == 'master' && 'shared' || inputs.stack }}" }
         run: |
-          scripts/deploy/deploy.sh plan "$STACK"
+          scripts/deploy/aws-deployment.sh --action infrastructure --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --stack "$STACK"
           sha256sum .deploy/plans/"$STACK".tfplan infra/terraform/"${{ inputs.stack == 'master' && 'shared' || 'environment' }}"/.terraform.lock.hcl infra/config/configured.json > .deploy/plans/"$STACK".manifest.sha256
       - uses: actions/upload-artifact@v4
         with: { name: "terraform-${{ inputs.stack }}-${{ github.sha }}", path: .deploy/plans/*.tfplan* }
       - name: Apply exact plan
         if: inputs.apply
         env: { STACK: "${{ inputs.stack == 'master' && 'shared' || inputs.stack }}", OPERATION: terraform-apply, LOCK_HELD: "${{ inputs.lock_held || inputs.stack != 'master' }}" }
-        run: scripts/deploy/deploy.sh apply "$STACK"
+        run: |
+          args=(--action infrastructure --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --stack "$STACK")
+          [[ "$LOCK_HELD" != true ]] || args+=(--lock-held)
+          scripts/deploy/aws-deployment.sh "${args[@]}" --apply

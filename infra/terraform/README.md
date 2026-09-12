@@ -74,3 +74,9 @@ The OIDC `context` key expands directly to `environment:<name>`; the subject
 does not include a literal `context:` segment. Trust also binds repository and
 owner IDs, branch, and the role-specific reusable workflow.
 [GitHub custom OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc#example-requiring-a-reusable-workflow-and-other-claims)
+
+## Consolidated deployment entrypoint
+
+`scripts/deploy/aws-deployment.sh` is the only deployment shell entrypoint. It uses named arguments, previews by default, and requires `--apply` for mutation. GitHub workflows execute the checked-in copy. A CloudShell operator can paste the same file without a checkout; it materializes the canonical Terraform roots into a private temporary workspace and verifies every embedded file before planning.
+
+The Terraform files in this directory remain the reviewable source. Run `node scripts/deploy/generate-embedded-terraform.mjs` after a Terraform change, then `node scripts/deploy/sync-runbook.mjs`. CI checks that the embedded bundle and the runbook copy match. No secret, state, saved plan, application data, or generated account configuration is embedded.

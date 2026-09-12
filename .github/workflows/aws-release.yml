@@ -29,7 +29,7 @@ jobs:
       - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
       - name: Acquire operation lock
         env: { OPERATION: deploy, ENVIRONMENT: "_${{ inputs.stack }}" }
-        run: scripts/deploy/operation-lock.sh acquire
+        run: scripts/deploy/aws-deployment.sh --action lock --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --environment "${{ inputs.stack }}" --step acquire --apply
   prepare:
     needs: build
     environment: _${{ inputs.stack }}
@@ -42,10 +42,15 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v5
         with: { role-to-assume: "${{ vars.AWS_MAINTENANCE_ROLE_ARN }}", aws-region: eu-west-1 }
       - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
-      - run: source scripts/deploy/lib.sh && load_config && init_stack "${{ inputs.stack }}"
       - id: prepare
         env: { STACK: "${{ inputs.stack }}", MODE: prepare }
-        run: scripts/deploy/github-release.sh
+        run: |
+          args=(--action release --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --environment "${{ inputs.stack }}" --step "$MODE")
+          [[ -z "${IMAGE_URI:-}" ]] || args+=(--image-uri "$IMAGE_URI")
+          [[ -z "${APP_TASK_DEFINITION:-}" ]] || args+=(--app-task-definition "$APP_TASK_DEFINITION")
+          [[ -z "${MAINTENANCE_TASK_DEFINITION:-}" ]] || args+=(--maintenance-task-definition "$MAINTENANCE_TASK_DEFINITION")
+          [[ -z "${PREVIOUS_TASK_DEFINITION:-}" ]] || args+=(--previous-task-definition "$PREVIOUS_TASK_DEFINITION")
+          scripts/deploy/aws-deployment.sh "${args[@]}" --apply
   infrastructure:
     needs: prepare
     uses: ./.github/workflows/aws-infrastructure.yml
@@ -63,10 +68,15 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v5
         with: { role-to-assume: "${{ vars.AWS_RELEASE_ROLE_ARN }}", aws-region: eu-west-1 }
       - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
-      - run: source scripts/deploy/lib.sh && load_config && init_stack "${{ inputs.stack }}"
       - id: register
         env: { STACK: "${{ inputs.stack }}", MODE: register-app, IMAGE_URI: "${{ needs.build.outputs.image }}" }
-        run: scripts/deploy/github-release.sh
+        run: |
+          args=(--action release --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --environment "${{ inputs.stack }}" --step "$MODE")
+          [[ -z "${IMAGE_URI:-}" ]] || args+=(--image-uri "$IMAGE_URI")
+          [[ -z "${APP_TASK_DEFINITION:-}" ]] || args+=(--app-task-definition "$APP_TASK_DEFINITION")
+          [[ -z "${MAINTENANCE_TASK_DEFINITION:-}" ]] || args+=(--maintenance-task-definition "$MAINTENANCE_TASK_DEFINITION")
+          [[ -z "${PREVIOUS_TASK_DEFINITION:-}" ]] || args+=(--previous-task-definition "$PREVIOUS_TASK_DEFINITION")
+          scripts/deploy/aws-deployment.sh "${args[@]}" --apply
   activate:
     needs: [build, prepare, register-app]
     environment: _${{ inputs.stack }}
@@ -78,10 +88,15 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v5
         with: { role-to-assume: "${{ vars.AWS_MAINTENANCE_ROLE_ARN }}", aws-region: eu-west-1 }
       - run: cp infra/config/deployment.env.example infra/config/deployment.env && sed -i "s/AWS_ACCOUNT_ID=.*/AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}/;s/STATE_BUCKET=.*/STATE_BUCKET=${{ vars.STATE_BUCKET }}/;s/OPERATIONS_BUCKET=.*/OPERATIONS_BUCKET=${{ vars.OPERATIONS_BUCKET }}/" infra/config/deployment.env
-      - run: source scripts/deploy/lib.sh && load_config && init_stack "${{ inputs.stack }}"
       - id: maintenance
         env: { STACK: "${{ inputs.stack }}", MODE: register-maintenance, IMAGE_URI: "${{ needs.build.outputs.image }}" }
-        run: scripts/deploy/github-release.sh
+        run: |
+          args=(--action release --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --environment "${{ inputs.stack }}" --step "$MODE")
+          [[ -z "${IMAGE_URI:-}" ]] || args+=(--image-uri "$IMAGE_URI")
+          [[ -z "${APP_TASK_DEFINITION:-}" ]] || args+=(--app-task-definition "$APP_TASK_DEFINITION")
+          [[ -z "${MAINTENANCE_TASK_DEFINITION:-}" ]] || args+=(--maintenance-task-definition "$MAINTENANCE_TASK_DEFINITION")
+          [[ -z "${PREVIOUS_TASK_DEFINITION:-}" ]] || args+=(--previous-task-definition "$PREVIOUS_TASK_DEFINITION")
+          scripts/deploy/aws-deployment.sh "${args[@]}" --apply
       - name: Initialize, release, and verify
         env:
           STACK: "${{ inputs.stack }}"
@@ -89,7 +104,13 @@ jobs:
           APP_TASK_DEFINITION: "${{ needs.register-app.outputs.revision }}"
           MAINTENANCE_TASK_DEFINITION: "${{ steps.maintenance.outputs.revision }}"
           PREVIOUS_TASK_DEFINITION: "${{ needs.prepare.outputs.previous }}"
-        run: scripts/deploy/github-release.sh
+        run: |
+          args=(--action release --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --environment "${{ inputs.stack }}" --step "$MODE")
+          [[ -z "${IMAGE_URI:-}" ]] || args+=(--image-uri "$IMAGE_URI")
+          [[ -z "${APP_TASK_DEFINITION:-}" ]] || args+=(--app-task-definition "$APP_TASK_DEFINITION")
+          [[ -z "${MAINTENANCE_TASK_DEFINITION:-}" ]] || args+=(--maintenance-task-definition "$MAINTENANCE_TASK_DEFINITION")
+          [[ -z "${PREVIOUS_TASK_DEFINITION:-}" ]] || args+=(--previous-task-definition "$PREVIOUS_TASK_DEFINITION")
+          scripts/deploy/aws-deployment.sh "${args[@]}" --apply
       - name: Release operation lock
         if: success()
-        run: scripts/deploy/operation-lock.sh release
+        run: scripts/deploy/aws-deployment.sh --action lock --account-id "${{ vars.AWS_ACCOUNT_ID }}" --region eu-west-1 --environment "${{ inputs.stack }}" --step release --apply

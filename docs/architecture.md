@@ -41,8 +41,8 @@ The root responsibilities are:
 Every booklet has eight ordered artifact records:
 
 ```text
-Audience Profile → Story Plan → Visual Style → Visual Bible
-→ Booklet Specification → Page Plan → Final Pages → PDF Export
+Audience Profile â†’ Story Plan â†’ Visual Style â†’ Visual Bible
+â†’ Booklet Specification â†’ Page Plan â†’ Final Pages â†’ PDF Export
 ```
 
 `BOOKLET_ARTIFACT_TYPES` in `lib/contracts/domain.ts` defines this order. `ArtifactService` records explicit upstream-version dependencies and derives the current stage as the first artifact that is not approved. Revising an upstream artifact creates a new immutable version and can mark dependent work for review.
@@ -72,8 +72,8 @@ Before a material call, `AgentResolver` reads one complete active MongoDB transa
 Specialists cannot write workflow state, issue approvals, access arbitrary tools, or create durable entity/page IDs. Their result is transient until an application service validates, materializes, and persists it. This is an application-controlled handoff, not a free-form SDK handoff:
 
 ```text
-manager selection → route validation → specialist execution
-→ output validation → application persistence → creator decision
+manager selection â†’ route validation â†’ specialist execution
+â†’ output validation â†’ application persistence â†’ creator decision
 ```
 
 `MODEL_RUNTIME=fake` uses deterministic routing and each registered skill's `run` function for tests and local no-cost work while still resolving persisted versions. `MODEL_RUNTIME=real` uses the OpenAI manager and generic specialist adapters. Manager and specialist calls are recorded separately with provider/model, status, latency, usage, request/trace IDs, cost, resolved definition/version IDs, and immutable effective-configuration snapshots. `ChatService` passes its single preflighted active set to both the manager turn and automatic Story Plan quality review, so an in-flight activation applies only to a later turn. Direct quality review resolves a fresh persisted quality specialist immediately before its call.
@@ -175,3 +175,7 @@ AWS deployment adds a persisted `deployment_control` record. Mutation entrypoint
 `/api/health/live` is the only unauthenticated route and reports process liveness. The deployment proxy applies Basic authentication to pages, APIs, assets, admin actions, and Server Actions. Authenticated readiness verifies MongoDB structure, runner state, maintenance state, and required asset access without invoking a provider. Slow mutation routes stream NDJSON heartbeats and a terminal status/body record. Chat keeps the AI SDK UI stream open with transient heartbeat records.
 
 The AWS topology and operational sequence are documented in [the deployment runbook](deployment/runbook.md). Terraform owns networking, sizing, IAM, buckets, task templates, and a zero-count ECS service. Release workflows own image-digest task revisions and desired count. One S3 conditional lock serializes CloudShell and GitHub operations.
+
+### Consolidated AWS deployment boundary
+
+All AWS shell orchestration is owned by `scripts/deploy/aws-deployment.sh`. It contains the CloudShell setup, Terraform, GitHub configuration, operation-lock, ECS release, and maintenance functions behind a named-argument interface. Preview is the default and mutations require `--apply`. The paste-ready form embeds checksum-verified Terraform source for no-checkout setup; the canonical Terraform files remain under `infra/terraform`. GitHub workflows call the same entrypoint after checkout. TypeScript continues to own application initialization, readiness, drain, migration, backup/restore, and staging-reset behavior.

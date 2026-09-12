@@ -157,3 +157,21 @@ Use STE-flavored language for agent-authored prose. Preserve code, commands, ide
 These workflows may publish a reviewed branch and PR but never merge, deploy,
 release the consumer application, close issues, or mutate GitHub Project fields.
 <!-- core-agent-skills:end -->
+
+## AWS deployment scripts
+
+When you author or change an AWS CloudShell deployment script:
+
+- Use `#!/usr/bin/env bash`, `set -euo pipefail`, and `umask 077`. Organize logic into small, clearly named functions.
+- Parse explicit named arguments, provide `--help`, reject unknown arguments, and reject missing required inputs.
+- Default to preview. Permit mutations only with `--apply`.
+- Before mutation, validate required commands, AWS credentials and caller identity, the exact account and `eu-west-1` region, and all required configuration.
+- Discover current state first. Make changes additive and idempotent. Report `exists`, `would create`, `would update`, `created`, or `updated`. Stop on incompatible or destructive drift.
+- CloudShell setup must not delete resources, copy production data, or perform rollback. Explicit workflow recovery remains governed by the deployment runbook.
+- Never enable shell tracing, embed credentials, print secret values, or retrieve secret contents without need.
+- Quote expansions and use arrays for command arguments. Use `mktemp`, mode `600`, and cleanup traps for sensitive temporary files.
+- Return nonzero with a concise actionable error. After apply, perform read-only verification and report sanitized results.
+- Keep scripts compatible with `bash -n` and ShellCheck. Assume CloudShell supplies Bash and AWS CLI; use `jq` only for structured JSON operations.
+- When presenting a generated script in documentation or chat, output exactly: a short Required inputs list; one complete script in one code block; preview and apply examples; and brief expected-result and recovery notes.
+
+The canonical shell entrypoint is `scripts/deploy/aws-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
