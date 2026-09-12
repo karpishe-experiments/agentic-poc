@@ -6,7 +6,7 @@ Deliver an interactive desktop mockup that the user can evaluate before defining
 
 The user requested a mockup with synthetic data, simulated chat, and persistence between refreshes. Their conversation decisions govern this phase. This plan does not implement or complete the parent issue's runtime requirements. In particular, schemas, migrations, tool execution, workflow routing, result mapping, and runtime integration remain later work. The parent issue still uses “skill”; this mockup uses “specialty”. Do not rename existing runtime symbols.
 
-Status: Checkpoints 1–9 complete. This document records the implemented Phase 0 mockup and its verification evidence. Defaults are experiment choices, not permanent runtime contracts.
+Status: Checkpoints 1–9 complete; checkpoints 10–13 planned. Sections 10–14 govern the next implementation and supersede conflicting baseline instructions. Earlier checkpoint evidence remains historical. Defaults are experiment choices, not permanent runtime contracts.
 
 ### Agreed product model
 
@@ -239,6 +239,10 @@ Use these closed interaction defaults throughout implementation:
 | 7 — Editing assistant | Complete: local AI SDK streaming, typed cards, all editable sections, migration to format 2 | P0-08 and P0-13–P0-15 pass; independent review gate passed |
 | 8 — Agent tests | Complete: stage snapshots, test sessions/history, repeat and editing handoff, format 3 | P0-16–P0-23 pass; independent review gate passed |
 | 9 — Focus and lifecycle UX | Complete: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate passed |
+| 10 — Theme and directory | Pending: application theme, directory/navigation, fresh storage | P0-28, P0-29, P0-34 |
+| 11 — Editor and Assistant | Pending: Edit/Test tabs, header actions, Assistant | P0-30, P0-31 |
+| 12 — Descriptions and notes | Pending: versioned descriptions, confirmation notes | P0-32, P0-33 |
+| 13 — Guideline seed | Pending: PR #26 catalog, booklets, task results | P0-35–P0-37 |
 
 An implementation agent should use the relevant repository React/Next.js, UI review, and browser skills when implementing their surfaces. The primary agent owns edits and integration. A separate read-only reviewer is required after implementation; delegate that bounded review without concurrent edits. A review may find ordinary in-scope defects to fix; it must not expand the mockup into the parent runtime platform.
 
@@ -279,7 +283,7 @@ Run Git commands with repository-required permissions. Do not run paid evaluatio
 | P0-12 | Real management/workflow implementation stays separate | Final diff/import review: no runtime-schema, repository, agent action, routing, model-call, or database changes; only explicit runner opt-out and additive navigation affect shared app files |
 | P0-13 | Editing chat streams answers, questions, and proposals with natural revisions and keyboard controls | Browser Send/Stop, clarification, Copy, Retry, Edit request, Jump to latest |
 | P0-14 | Error diagnostics and refresh recovery retain captured context | Expand seed error, retry, refresh mid-stream, and verify target identity |
-| P0-15 | Format-1 migration preserves management data and shared chat | Fixtures with records, working copies, legacy proposals, and pending response; composer/card refresh |
+| P0-15 | Historical migration coverage; superseded by P0-34 | Preserve prior evidence; retain current-generation composer/card refresh checks |
 | P0-16 | Booklet selection exposes only current and previous stages with appropriate historical context; compatibility warnings allow continuation | Select multiple booklets and earlier stages; verify later artifacts are absent; continue after a mismatch warning |
 | P0-17 | Tests capture unsaved agent content and keep session snapshots fixed | Start with unsaved edits, edit again, reopen the session, and verify the captured version remains unchanged |
 | P0-18 | Text, Image, and Orchestrator tests show appropriate synthetic results and expandable activity | Exercise all three result types and inspect captured tool/reference/context activity |
@@ -291,7 +295,17 @@ Run Git commands with repository-required permissions. Do not run paid evaluatio
 | P0-24 | Focus restores panes/preferences without interrupting conversations | Enter/exit, refresh, Escape with popup/dialog, and editing handoff |
 | P0-25 | Optional notes obey version lifecycle and use simulated suggestions | Save/Discard, confirmed read-only, new-draft blank, suggestion review/apply |
 | P0-26 | Names, lifecycle explanations, and tool summary clarify behavior | Inspect Editing assistant/Test agent labels, disabled reasons, visible specialty edits |
-| P0-27 | Sequential migrations preserve all supported data | Format 1→2→3→4 and direct load of 2/3/4 with chat, tests, working copies, preferences |
+| P0-27 | Historical sequential-migration coverage; superseded by P0-34 | Preserve prior evidence; remove legacy migration tests in checkpoint 10 |
+| P0-28 | Compact application theme preserves generated-content styling | Inspect application pages and booklet content |
+| P0-29 | Directory and URL navigation restore correct views | Entry, refresh, Back/Forward, invalid targets, filters, creation |
+| P0-30 | Edit/Test tabs and header controls preserve editing state | Section restoration, full inner Test space, focus |
+| P0-31 | Assistant layout preserves target safety and running responses | Collapse/reopen, navigation, target context, stale Apply |
+| P0-32 | Descriptions follow version lifecycle and proposal guards | Save/Discard, forks, confirmed edits, frozen tests |
+| P0-33 | Confirmation saves atomically with optional notes | Validation, cancellation, duplicate prevention, suggestion and info access |
+| P0-34 | Fresh storage generation persists work without migration | Ignore old key, recovery, reset, refresh |
+| P0-35 | All 15 guidelines have complete seed coverage | Source manifest, 15 specialties/agents, 14 template references |
+| P0-36 | Fixtures and results match guideline dependencies | All task results, eligibility, frozen inputs, valid source links |
+| P0-37 | Complete seed initializes and resets predictably | Seed revision replacement once; subsequent work survives refresh |
 
 Use user-facing labels and roles in browser selectors. Verify tab order, labels, visible focus, popup Escape, dialog focus return, button disabled explanations, and live announcements for save/chat outcomes. This is a focused desktop check, not an accessibility certification or a cross-browser project.
 
@@ -312,6 +326,10 @@ Update this table during implementation. Use actual commands/results and affecte
 | 7 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (20); `npm run test:mockup:e2e` (25); `npm run mockup:build`; `git diff --check`; streaming, clarification, text/field proposal, diagnostics, and 1280×800/1440×900/1920×1080 screenshots inspected; two consecutive independent reviews passed with no intervening changes | None |
 | 8 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (31); `npm run test:mockup:e2e` (36); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; Test and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
 | 9 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (35); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata clean; focused configuration, focused Test, and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
+| 10 | Pending | Not run | Implementation pending |
+| 11 | Pending | Not run | Implementation pending |
+| 12 | Pending | Not run | Implementation pending |
+| 13 | Pending | Not run | Implementation pending |
 
 ## 5. Handoff and completion boundary
 
@@ -321,7 +339,7 @@ After implementation review passes, reconcile docs through `sync-docs-issues`. U
 
 Report the route, launch command, tested flows, verification outcomes, and known mockup limitations. Do not call issue #22 complete. Do not require a real model, MongoDB, authentication, shared storage, production validations, multi-tab synchronization, schema authoring, runtime tool permissions, actual reference loading by agents, creator team selection, or actual orchestration to finish Phase 0.
 
-Checkpoints 1–9 are complete on the issue branch. Excluded scope remains unchanged: Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring.
+Checkpoints 1–9 are complete; checkpoints 10–13 are pending. Excluded product features remain Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring. Seed-integrity tests are verification, not a user-facing reference/tool-check feature.
 
 ## 6. Checkpoint 7 — Interactive simulated management chat
 
@@ -495,3 +513,152 @@ Acceptance: P0-24–P0-27. Update the mockup guide and relevant architecture des
 Checkpoints 7, 8, and 9 were implemented on `agent/issue-22-specialty-management-mockup` without switching branches. Each checkpoint passed focused verification and two consecutive independent clean reviews. The completion ledger records the final evidence.
 
 At final completion run typecheck, lint, isolated mockup unit/browser tests, isolated build, and whitespace checks. Inspect screenshots of the new states at 1280×800, 1440×900, and 1920×1080. No real model, database, or external requests are required. No merge, deployment, or issue closure is authorized.
+
+## 10. Checkpoint 10 — Application theme and Studio navigation
+
+### Authority and visual scope
+
+Checkpoints 10–13 are planned, not implemented. They incorporate the reviewed user feedback and supersede conflicting baseline behavior in sections 1–9. Completed checkpoint descriptions and ledger evidence remain historical evidence, not instructions to restore superseded interactions.
+
+Apply compact blue/navy UI styling across home, Help, agent administration, booklet workspaces, cards, dialogs, and Agent Studio. Preserve generated artwork, booklet content styling, and PDF output. Use locally bundled Inter with its license; no browser font-service requests. Keep monospace for instructions and code. Use shared neutral/blue tokens, 14px interface text, 12px supplementary text, approximately 32px controls, restrained 6px radii, and 4px spacing increments. Preserve warning/error/success distinctions, readable content, usable hit areas, and visible keyboard focus.
+
+Use shadcn/ui conventions as a visual reference with installed Radix, Tailwind, and Lucide dependencies; no wholesale component-library replacement. Bundling the Inter font is permitted. Remove the Studio-route header gap and fill the remaining viewport with independently scrolling panes.
+
+### Directory and navigation
+
+- Retain the compact Studio sub-header and Agent Studio title. Remove its synthetic-data subtitle. Keep Reset demo data and move Test history here.
+- Reset keeps its existing confirmation and mockup-only scope. Remove this control when a future task integrates the actual runtime Agent Studio; this checkpoint does not implement that integration.
+- Add a full-page searchable directory grouped by specialty, with descriptions, output types, built-in/retired states, agents, and creation controls.
+- Put Show retired in a filter menu beside Add specialty, both in the directory and workspace navigation. Share search/filter semantics. Remove Test history from specialty navigation.
+- The global Agent Studio link opens the directory. Opening an entity enters the workspace; Directory returns without discarding edits.
+- Use URL query state for view, entity/version, Edit/Test tab, editor section, and history session. Refresh and browser Back/Forward restore navigation. Invalid targets return to the directory with a brief explanation. Keep pane preferences and working copies in local storage; the URL is authoritative for navigation.
+- Resolve displayed agent versions using most recently viewed existing version, then active version, then newest version. Show activation separately from the displayed version's draft/confirmed status.
+- Test history opens from the sub-header; its existing filtering and stored-session behavior remain available.
+
+### Fresh storage generation
+
+Use `specialty-management-mockup:v2` with a direct current-format seed and no legacy migration code. Ignore the previous key; do not clear unrelated storage. Use formatVersion 1 for this new independent generation, including empty agent descriptions and navigation defaults needed by subsequent checkpoints. Persist all newly created work, conversations, tests, and preferences. Retain current-format corruption recovery and storage-write error handling.
+
+Checkpoint 13 increments a separate seedRevision to 2 and replaces earlier data under this mockup key once. Normal refresh with the current revision preserves work. No migration or preservation of older mockup generations is required.
+
+Acceptance: P0-28, P0-29, P0-34. Inspect all application UI surfaces with local fixtures; generated content and exports retain their prior styling.
+
+## 11. Checkpoint 11 — Editor tabs and Assistant
+
+### Editor structure
+
+- Move focus controls into specialty and agent headers; keep accessible Exit focus visible when expanded.
+- Move Version actions and prominent Edit as draft beside the agent version selector. Move specialty Retire/Restore into the specialty header. Remove editor footers.
+- Remove repeated version text beneath the agent title. Retain compact unsaved and activation indicators.
+- Add accessible Edit/Test tabs to the agent header. Edit contains Configuration, Main instructions, and References navigation.
+- Test replaces the entire inner workspace, including section navigation. Keep outer specialty navigation and Assistant visible unless focus mode hides them.
+- Edit restores its previous valid section; a deleted reference falls back to Main instructions. Persist this return section.
+- Preserve test setup, sessions, results, ratings, diagnostics, frozen snapshots, repeat/retry, and history.
+- An editing handoff opens Edit → Main instructions, exits focus, reveals Assistant, and appends the prepared request without sending.
+
+### Assistant
+
+- Use “Assistant” as the visible panel title, with Collapse in its header. Show Reopen in the Studio sub-header only when collapsed. Reopening from focus exits focus and reveals the panel.
+- Put a compact current-target line and small suggested-prompt chips directly above the composer.
+- Render assistant prose directly on the panel surface; give user messages a distinct background and border. Keep structured proposals, clarifications, and diagnostics distinguishable.
+- Preserve captured target labels on turns, stale-Apply checks, Copy, Stop, Retry, and near-bottom scrolling.
+- Remove persistent simulation labels from ordinary chrome and bylines. Keep accurate simulation details inside expanded diagnostics and documentation; do not imply real execution.
+- On Test, Test history, and directory, there is no editable target. Disable new editing requests with a concise explanation, retain conversation state, and allow pending responses to finish.
+- Navigation and hidden panes do not cancel either conversation. Existing explicit Stop, deletion, and Reset cancellation rules remain in force.
+
+Acceptance: P0-30, P0-31. Verify tab restoration, full inner Test space, header action accessibility, focus, collapse/reopen, and target-bound proposals.
+
+## 12. Checkpoint 12 — Versioned descriptions and confirmation notes
+
+### Agent description
+
+Add optional plain multiline description beneath Title. It belongs to each agent version like Title. Include it in Save/Discard, complete-version copies, forks, directory summaries, configuration proposals, and frozen test snapshots. Seed concise descriptions; newly created agents start empty.
+
+Confirmed and retired descriptions are read-only. Chat application to them creates a draft. Configuration proposal bases include description, so manual description edits invalidate stale configuration proposals. Extend deterministic requests, proposal rendering, and patch validation accordingly.
+
+### Confirmation and notes
+
+- Remove Version note and Suggest note from Configuration. Remove persistent note text beneath the title and from version-option labels.
+- Confirm opens a native modal with optional Notes (240 characters) and Save and confirm. Allow opening while dirty.
+- The final action validates and atomically saves all visible draft content plus the note, clears its working copy, and locks the version. Activation remains separate.
+- Cancel/Escape leaves saved data and existing working copies unchanged; discard dialog-local note edits. Prevent duplicate submission and return focus to the trigger.
+- Keep Suggest note inside the modal. Preview the deterministic suggestion before replacing entered text and allow editing afterward. No model call.
+- Compare the visible draft with its parent across configuration (title, description, models), Main instructions, and references; ignore the note itself. Use “Initial draft” without a parent and “No configuration or instruction changes.” when none differ. Otherwise list changed categories in that order.
+- Add an information button beside the version selector. Hover/focus shows the selected note; click opens a persistent dismissible popover. Empty notes show “No version note.” Support keyboard access and Escape.
+- Preserve notes in captured test details. All derived drafts start with an empty note.
+
+Acceptance: P0-32, P0-33. Verify atomic save/confirm, validation failure, cancellation, duplicate prevention, description proposal conflicts, read-only versions, note suggestions, and focus return.
+
+## 13. Checkpoint 13 — Complete guideline-based seed
+
+### Source and catalog
+
+Use all 15 Markdown files in `docs/accepted/2026-08-22_guideline-driven-booklet-workflow-v2/task-guidelines/` from [PR #26](https://github.com/karpishe-experiments/agentic-poc/pull/26), pinned to commit `631f547ec3f7ce375f740dd6f2b1b9aaebbde940`. Record provenance with checked-in seed data. Do not merge the PR or fetch GitHub at application startup.
+
+Create one specialty and one agent per guideline:
+
+| Source prefix | Specialty | Primary output |
+| --- | --- | --- |
+| 00 | Orchestrator (built-in) | Text |
+| 01 | Book Concept Brief | Text |
+| 02 | Story Outline | Text |
+| 03 | Draft Character List | Text |
+| 04 | Draft Location List | Text |
+| 05 | Page-by-Page Manuscript | Text |
+| 06 | Final Character List | Text |
+| 07 | Final Location List | Text |
+| 08 | Visual Style Package | Image |
+| 09 | Individual Character Sheet Package | Image |
+| 10 | Location Sheet Package | Image |
+| 11 | Pagination & Layout Plan | Text |
+| 12 | Final Page Bible | Text |
+| 13 | Final Page Illustration Package | Image |
+| 14 | Book Export Package | Text |
+
+Image results contain supporting package text/metadata. Export returns a synthetic manifest and preflight result, not a generated PDF.
+
+- Derive meaningful specialty and agent descriptions from each source purpose.
+- Seed confirmed active v1 and editable draft v2 for each agent. Drafts copy v1 content and have empty notes.
+- Text agents use demo Story; Orchestrator and image agents use demo Reason. Image agents also use demo Watercolor.
+- Allow the existing read-only context tools for all specialties and generate_image only for image specialties. These are fixture permissions.
+- Replace the generic catalog. Empty and retired states remain reachable through controls and focused test fixtures.
+
+### Instructions and references
+
+Preserve every source requirement. Keep purpose, inputs, methods, approval rules, and quality gates in Main instructions. Extract each fenced Required artifact template into an agent-local `artifact-template.md`, with an explicit reference link in Main instructions. Keep sheet requirements and filename rules in Main instructions.
+
+Keep the complete orchestration guideline as Orchestrator instructions; it has no artifact template. Use specialty mentions for cross-task references where appropriate without changing meaning. Add a short mockup execution boundary explaining that Test returns bundled examples.
+
+Store readable local JSON or a collection of JSON files and a source-to-seed manifest covering all guidelines and extracted references. Source instructions describe intended behavior; they do not authorize model calls, approvals, jobs, export execution, or runtime integration.
+
+### Booklet and test fixtures
+
+Replace the old eight-stage fixture catalog with the 14 artifact tasks above. Encode the guideline dependency graph as mockup data, including independent sibling tasks. This is fixture eligibility and context selection, not a runtime workflow engine.
+
+Retain three scenarios:
+
+- Forest Friends: Book Concept Brief approved; Story Outline eligible.
+- Moon Picnic: manuscript and final character/location lists approved; Visual Style Package eligible.
+- The Smallest Garden: all earlier artifacts, required sheets, and every physical Final Page Illustration Package approved. Seed a complete source-page manifest in approved layout order, with matching page geometry, stable page IDs, approved asset references, and revisions. Book Export Package is eligible for testing; include an explicit export request in its captured test context. Completed final-page tasks remain selectable for testing without changing their seeded approvals.
+
+Provide coherent populated artifacts for completed tasks and relevant conversations. Offer completed tasks and currently eligible tasks; future tasks are unavailable. Snapshot only available context and explicit dependencies. Keep existing frozen-session behavior.
+
+Give characters, locations, physical pages, artifacts, and references stable identities. Required sheet and page-source links must resolve. Supply task-specific summary, sample-result, and revision fixtures following the extracted templates. Every artifact task must have at least one applicable test setup.
+
+Use bundled illustration placeholders for image packages. Identify synthetic assets in result details; do not claim actual image-quality verification. Orchestrator chooses an eligible specialty from the frozen catalog without approving artifacts or advancing stages.
+
+History starts empty. Keep one recoverable Assistant failure bound to a valid seed target. Fresh/reset data uses seedRevision 2; replace earlier mockup data once, then retain subsequent edits across refreshes.
+
+Acceptance: P0-35–P0-37. Verify complete source coverage, model/tool validity, reference integrity, dependencies, absence of future-context leakage, all 14 result fixtures, Orchestrator routing, and image/export simulation boundaries.
+
+## 14. Unattended resumption for checkpoints 10–13
+
+Do not start implementation as part of this plan amendment. When implementation is explicitly requested, commit the amended plan first on the existing issue branch and implement checkpoints 10, 11, 12, then 13.
+
+For each checkpoint: implement and run affected checks; obtain independent read-only review; fix in-scope findings and rerun affected checks until two consecutive reviews are clean with no intervening changes. Record actual evidence, then commit. Inspect the next checkpoint and commit any necessary plan adjustment before continuing. Preserve unrelated work.
+
+Run typecheck, lint, relevant application regressions, isolated mockup unit/browser tests, isolated build, and whitespace checks. Confirm runners restore tracked Next metadata. Use local fixtures and no paid model calls for application-wide theme verification.
+
+Inspect directory, Edit, Test, Test history, confirmation, and Assistant open/closed at 1280×800, 1440×900, and 1920×1080. Inspect home, Help, agent administration, and representative booklet cards. Verify keyboard navigation, focus, popover dismissal, long descriptions/notes, and ongoing conversations during navigation.
+
+Update the existing guide and current architecture description after verification. Retain historical evidence and update affected acceptance scenarios. Do not merge, deploy, close issue #22, or merge/close PR #26.
