@@ -18,10 +18,12 @@ export function suggestVersionNote(agent: Agent, version: AgentVersion) {
   if (!parent) return "Initial draft";
   const changed: string[] = [];
   if (
+    version.title !== parent.title ||
+    version.description !== parent.description ||
     !sameModel(version.languageModel, parent.languageModel) ||
     !sameModel(version.imageModel, parent.imageModel)
   )
-    changed.push("models");
+    changed.push("configuration");
   if (version.mainInstructions !== parent.mainInstructions)
     changed.push("Main instructions");
   if (!sameReferences(version.references, parent.references))

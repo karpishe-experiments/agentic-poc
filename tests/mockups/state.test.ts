@@ -18,7 +18,7 @@ describe("mockup state", () => {
     expect(state.booklets).toHaveLength(3);
     expect(
       state.agents.every((agent) =>
-        agent.versions.every((version) => version.description === ""),
+        agent.versions.every((version) => version.description.length > 0),
       ),
     ).toBe(true);
   });

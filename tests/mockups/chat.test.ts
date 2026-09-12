@@ -91,6 +91,36 @@ describe("simulated management chat", () => {
     expect(state.workingCopies.versions[version.id]?.mainInstructions).toBe("Manual edit");
   });
 
+  it("captures, applies, and invalidates configuration descriptions", () => {
+    const state = selectedSeed();
+    if (state.ui.selection.kind !== "agent")
+      throw new Error("Expected agent selection");
+    state.ui.selection.section = "configuration";
+    const target = selectedTarget(state)!;
+    const reply = simulateReply(
+      state,
+      target,
+      "Change the description to Plans lively stories.",
+      "proposal",
+    );
+    if (reply.kind !== "proposal") throw new Error("Expected proposal");
+    expect(reply.proposal.patch).toEqual({
+      description: "Plans lively stories.",
+    });
+    registerProposal(state, reply.proposal);
+    const version = state.agents
+      .find((agent) => agent.id === "agent-playful")!
+      .versions.find((candidate) => candidate.id === "playful-v2")!;
+    state.workingCopies.versions[version.id] = {
+      ...structuredClone(version),
+      description: "Manual description",
+    };
+    expect(applyProposal(state, "proposal", id)).toBe("stale");
+    expect(state.workingCopies.versions[version.id]?.description).toBe(
+      "Manual description",
+    );
+  });
+
   it("answers questions and asks for clarification without mutating proposals", () => {
     const state = selectedSeed();
     const target = selectedTarget(state)!;

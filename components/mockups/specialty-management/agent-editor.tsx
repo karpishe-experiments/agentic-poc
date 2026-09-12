@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { FileText, Maximize2, Minimize2, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
+import { FileText, Info, Maximize2, Minimize2, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
 import { MarkdownEditor } from "./markdown-editor";
 import { SampleResultDialog } from "./sample-result-dialog";
 import { AgentTestWorkspace } from "./test-workspace";
@@ -26,20 +26,19 @@ export function AgentEditor({
   announce(message: string): void;
 }) {
   const [sampleOpen, setSampleOpen] = useState(false);
-  const [noteSuggestion, setNoteSuggestion] = useState<{
-    versionId: string;
-    text: string;
-  } | null>(null);
+  const [confirmNote, setConfirmNote] = useState<string | null>(null);
+  const [suggestedNote, setSuggestedNote] = useState<string | null>(null);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
-  const suggestNoteButton = useRef<HTMLButtonElement>(null);
-  const noteSuggestionDialog = useRef<HTMLDialogElement>(null);
+  const confirmationDialog = useRef<HTMLDialogElement>(null);
+  const confirmationSubmitting = useRef(false);
+  const versionNoteDetails = useRef<HTMLDetailsElement>(null);
   const lifecycleButton = useRef<HTMLButtonElement>(null);
   const editTabButton = useRef<HTMLButtonElement>(null);
   const testTabButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const dialog = noteSuggestionDialog.current;
-    if (noteSuggestion && dialog && !dialog.open) dialog.showModal();
-  }, [noteSuggestion]);
+    const dialog = confirmationDialog.current;
+    if (confirmNote !== null && dialog && !dialog.open) dialog.showModal();
+  }, [confirmNote]);
   const selection = state.ui.selection;
   if (selection.kind !== "agent") return null;
   const specialty = state.specialties.find(
@@ -96,9 +95,12 @@ export function AgentEditor({
   };
   const setReferences = (references: ReferenceFile[]) =>
     setVersion({ references });
-  const closeNoteSuggestion = () => {
-    setNoteSuggestion(null);
-    queueMicrotask(() => suggestNoteButton.current?.focus());
+  const closeConfirmation = () => {
+    if (confirmationDialog.current?.open) confirmationDialog.current.close();
+    confirmationSubmitting.current = false;
+    setConfirmNote(null);
+    setSuggestedNote(null);
+    queueMicrotask(() => lifecycleButton.current?.focus());
   };
   const save = () => {
     if (
@@ -122,6 +124,7 @@ export function AgentEditor({
                     ? { provider: firstImage.provider, model: firstImage.label }
                     : working.imageModel,
                 title: working.title.trim(),
+                description: working.description.trim(),
                 references: working.references.map((ref) => ({
                   ...ref,
                   name: ref.name.trim(),
@@ -138,6 +141,47 @@ export function AgentEditor({
       delete draft.workingCopies.versions[saved.id];
     });
     announce("Agent changes discarded.");
+  };
+  const saveAndConfirm = () => {
+    if (
+      confirmationSubmitting.current ||
+      confirmNote === null ||
+      confirmNote.length > 240 ||
+      !version.title.trim() ||
+      version.references.some((ref) => !ref.name.trim())
+    )
+      return;
+    confirmationSubmitting.current = true;
+    update((draft) => {
+      const target = draft.agents.find((item) => item.id === agent.id);
+      if (!target) return;
+      const visible =
+        draft.workingCopies.versions[saved.id] ??
+        target.versions.find((item) => item.id === saved.id);
+      if (!visible || visible.status !== "draft") return;
+      const firstImage = draft.models.find((item) => item.kind === "image");
+      const confirmed: AgentVersion = {
+        ...structuredClone(visible),
+        title: visible.title.trim(),
+        description: visible.description.trim(),
+        versionNote: confirmNote.trim(),
+        status: "confirmed",
+        imageModel:
+          specialty.outputType === "image" && !visible.imageModel && firstImage
+            ? { provider: firstImage.provider, model: firstImage.label }
+            : visible.imageModel,
+        references: visible.references.map((ref) => ({
+          ...ref,
+          name: ref.name.trim(),
+        })),
+      };
+      target.versions = target.versions.map((item) =>
+        item.id === saved.id ? confirmed : item,
+      );
+      delete draft.workingCopies.versions[saved.id];
+    });
+    closeConfirmation();
+    announce("Draft saved and confirmed.");
   };
   const fork = () =>
     update((draft) => {
@@ -158,7 +202,7 @@ export function AgentEditor({
       };
       draft.ui.selection = { ...selection, versionId: copy.id };
     });
-  const transition = (status: "confirmed" | "retired") => {
+  const transition = (status: "retired") => {
     if (dirty) {
       announce("Save or discard changes first.");
       return;
@@ -170,7 +214,7 @@ export function AgentEditor({
       )!;
       item.status = status;
     });
-    announce(status === "confirmed" ? "Draft confirmed." : "Version retired.");
+    announce("Version retired.");
   };
   const activate = () => {
     if (dirty) {
@@ -367,11 +411,16 @@ export function AgentEditor({
           >
             {editable ? <button role="menuitem" onClick={fork}>Fork draft</button> : null}
             {editable ? (
-              <button role="menuitem" disabled={dirty} onClick={() => transition("confirmed")}>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setSuggestedNote(null);
+                  setConfirmNote(version.versionNote);
+                }}
+              >
                 Confirm · Lock this version
               </button>
             ) : null}
-            {editable && dirty ? <small>Save or discard before locking this version.</small> : null}
             {editable ? (
               <button role="menuitem" disabled={agent.activeVersionId === version.id} onClick={removeVersion}>Delete draft</button>
             ) : null}
@@ -404,9 +453,6 @@ export function AgentEditor({
               ? "Unsaved changes · retained in this browser"
               : `${version.status} · ${agent.activeVersionId === version.id ? "Active" : "Not active"}`}
           </span>
-          <p className="version-note-summary">
-            {version.versionNote || "No version note"}
-          </p>
         </div>
         <div className="agent-header-controls">
           <div className="agent-tabs" role="tablist" aria-label="Agent workspace">
@@ -460,6 +506,7 @@ export function AgentEditor({
           >
             {state.ui.focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
+          <div className="version-control">
           <label>
             Version{" "}
             <select
@@ -482,11 +529,31 @@ export function AgentEditor({
                 .map((item) => (
                   <option key={item.id} value={item.id}>
                     v{item.number} · {item.status}
-                    {item.versionNote ? ` · ${item.versionNote}` : ""}
                   </option>
                 ))}
             </select>
           </label>
+          <details
+            ref={versionNoteDetails}
+            className="version-note-details"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && event.currentTarget.open) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.open = false;
+                event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
+              }
+            }}
+          >
+            <summary aria-label="Show version note" title="Show version note">
+              <Info size={15} />
+            </summary>
+            <div className="version-note-popover">
+              <strong>Version note</strong>
+              <p>{version.versionNote || "No version note."}</p>
+            </div>
+          </details>
+          </div>
           {dirty ? (
             <>
               <button onClick={discard}>Discard</button>
@@ -600,32 +667,16 @@ export function AgentEditor({
                 ) : null}
               </label>
               <label>
-                Version note
-                <small>Optional · {version.versionNote.length}/240</small>
+                Description <small>Optional</small>
                 <textarea
-                  aria-label="Version note"
+                  name="agent-description"
+                  autoComplete="off"
                   disabled={!editable}
-                  maxLength={240}
-                  value={version.versionNote}
+                  value={version.description}
                   onChange={(event) =>
-                    setVersion({ versionNote: event.target.value })
+                    setVersion({ description: event.target.value })
                   }
                 />
-                {editable ? (
-                  <button
-                    ref={suggestNoteButton}
-                    type="button"
-                    className="secondary-button"
-                    onClick={() =>
-                      setNoteSuggestion({
-                        versionId: version.id,
-                        text: suggestVersionNote(agent, version),
-                      })
-                    }
-                  >
-                    Suggest note
-                  </button>
-                ) : null}
               </label>
               <section
                 className="allowed-tools-summary"
@@ -904,30 +955,79 @@ export function AgentEditor({
         }
         onClose={() => setSampleOpen(false)}
       />
-      {noteSuggestion?.versionId === version.id ? (
+      {confirmNote !== null ? (
         <dialog
-          ref={noteSuggestionDialog}
+          ref={confirmationDialog}
           aria-modal="true"
-          aria-labelledby="version-note-suggestion-title"
-          className="note-suggestion-dialog"
+          aria-labelledby="confirm-version-title"
+          className="confirmation-dialog"
           onCancel={(event) => {
             event.preventDefault();
-            closeNoteSuggestion();
+            closeConfirmation();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const items = [
+              ...event.currentTarget.querySelectorAll<HTMLElement>(
+                "textarea, button:not(:disabled)",
+              ),
+            ];
+            if (!items.length) return;
+            const first = items[0]!;
+            const last = items.at(-1)!;
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (
+              !event.shiftKey &&
+              document.activeElement === last
+            ) {
+              event.preventDefault();
+              first.focus();
+            }
           }}
         >
-          <p>Simulated suggestion</p>
-          <h3 id="version-note-suggestion-title">Suggested version note</h3>
-          <p>{noteSuggestion.text}</p>
-          <div>
-            <button autoFocus onClick={closeNoteSuggestion}>Cancel</button>
+          <h3 id="confirm-version-title">Save and confirm v{version.number}</h3>
+          <p>Save all visible draft changes and lock this version. Activation remains separate.</p>
+          <label>
+            Notes <small>Optional · {confirmNote.length}/240</small>
+            <textarea
+              autoFocus
+              aria-label="Confirmation notes"
+              maxLength={240}
+              value={confirmNote}
+              onChange={(event) => setConfirmNote(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setSuggestedNote(suggestVersionNote(agent, version))}
+          >
+            Suggest note
+          </button>
+          {suggestedNote !== null ? (
+            <section className="note-suggestion-preview" aria-label="Simulated note suggestion">
+              <p>Simulated suggestion</p>
+              <p>{suggestedNote}</p>
+              <button type="button" onClick={() => setConfirmNote(suggestedNote)}>
+                Use suggestion
+              </button>
+            </section>
+          ) : null}
+          <div className="dialog-actions">
+            <button type="button" onClick={closeConfirmation}>Cancel</button>
             <button
+              type="button"
               className="primary"
-              onClick={() => {
-                setVersion({ versionNote: noteSuggestion.text });
-                closeNoteSuggestion();
-              }}
+              disabled={
+                confirmNote.length > 240 ||
+                !version.title.trim() ||
+                version.references.some((ref) => !ref.name.trim())
+              }
+              onClick={saveAndConfirm}
             >
-              Use suggestion
+              Save and confirm
             </button>
           </div>
         </dialog>

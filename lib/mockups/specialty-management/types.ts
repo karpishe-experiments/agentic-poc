@@ -88,6 +88,7 @@ export type SpecialtyBase = {
 export type ConfigurationBase = {
   kind: "configuration";
   title: string;
+  description: string;
   languageModel: ModelSelection;
   imageModel: ModelSelection | null;
   outputType: OutputType;
@@ -111,7 +112,7 @@ export type SpecialtyPatch = Partial<
   Pick<Specialty, "name" | "description" | "outputType" | "allowedToolIds">
 >;
 export type ConfigurationPatch = Partial<
-  Pick<AgentVersion, "title" | "languageModel" | "imageModel">
+  Pick<AgentVersion, "title" | "description" | "languageModel" | "imageModel">
 >;
 export type InstructionsPatch = { mainInstructions: string };
 export type ReferencePatch = Partial<

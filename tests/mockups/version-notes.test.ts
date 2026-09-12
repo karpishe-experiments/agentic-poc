@@ -8,11 +8,12 @@ describe("version note suggestions", () => {
     const agent = state.agents.find((item) => item.id === "agent-playful")!;
     const draft = structuredClone(agent.versions.find((item) => item.id === "playful-v2")!);
     draft.languageModel = { provider: "Demo South", model: "Quick" };
+    draft.description = "A revised purpose.";
     draft.mainInstructions = "Changed instructions";
     draft.references = [];
     draft.versionNote = "This text is ignored";
     expect(suggestVersionNote(agent, draft)).toBe(
-      "Updated models, Main instructions, and references.",
+      "Updated configuration, Main instructions, and references.",
     );
   });
 

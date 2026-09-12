@@ -6,7 +6,7 @@ Deliver an interactive desktop mockup that the user can evaluate before defining
 
 The user requested a mockup with synthetic data, simulated chat, and persistence between refreshes. Their conversation decisions govern this phase. This plan does not implement or complete the parent issue's runtime requirements. In particular, schemas, migrations, tool execution, workflow routing, result mapping, and runtime integration remain later work. The parent issue still uses “skill”; this mockup uses “specialty”. Do not rename existing runtime symbols.
 
-Status: Checkpoints 1–9 complete; checkpoints 10–13 planned. Sections 10–14 govern the next implementation and supersede conflicting baseline instructions. Earlier checkpoint evidence remains historical. Defaults are experiment choices, not permanent runtime contracts.
+Status: Checkpoints 1–12 complete; checkpoint 13 planned. Sections 10–14 govern the current implementation and supersede conflicting baseline instructions. Earlier checkpoint evidence remains historical. Defaults are experiment choices, not permanent runtime contracts.
 
 ### Agreed product model
 
@@ -241,7 +241,7 @@ Use these closed interaction defaults throughout implementation:
 | 9 — Focus and lifecycle UX | Complete: focus mode, optional version notes, tool visibility, format 4 | P0-24–P0-27 pass; independent review gate passed |
 | 10 — Theme and directory | Complete: application theme, directory/navigation, fresh storage | P0-28, P0-29, P0-34 |
 | 11 — Editor and Assistant | Complete: Edit/Test tabs, header actions, Assistant | P0-30, P0-31 |
-| 12 — Descriptions and notes | Pending: versioned descriptions, confirmation notes | P0-32, P0-33 |
+| 12 — Descriptions and notes | Complete: versioned descriptions, atomic confirmation notes | P0-32, P0-33 |
 | 13 — Guideline seed | Pending: PR #26 catalog, booklets, task results | P0-35–P0-37 |
 
 An implementation agent should use the relevant repository React/Next.js, UI review, and browser skills when implementing their surfaces. The primary agent owns edits and integration. A separate read-only reviewer is required after implementation; delegate that bounded review without concurrent edits. A review may find ordinary in-scope defects to fix; it must not expand the mockup into the parent runtime platform.
@@ -328,7 +328,7 @@ Update this table during implementation. Use actual commands/results and affecte
 | 9 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (35); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata clean; focused configuration, focused Test, and Test history screenshots generated at 1280×800, 1440×900, and 1920×1080 and inspected at 1280 and 1920; two consecutive independent reviews passed with no intervening changes | None |
 | 10 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (30); `npm run test:mockup:e2e` (41); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; directory, refresh, Back/Forward, invalid-target recovery, shared filtering, and three desktop sizes covered; first review found booklet-content styling and Forward-coverage gaps, both corrected; two subsequent consecutive independent reviews passed with no intervening changes | None |
 | 11 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (30); `npm run test:mockup:e2e` (42), then focused corrected scenarios (2); `npm run mockup:build`; `git diff --check`; Edit/Test restoration, keyboard tabs, full Test space, Assistant collapse/reopen, focus handoff, and pending Directory navigation covered; reviews found focus Reopen, tab semantics/restoration, and Directory stream-lifecycle gaps, all corrected; two subsequent consecutive independent reviews passed with no intervening changes | None |
-| 12 | Pending | Not run | Implementation pending |
+| 12 | Complete | `npm run typecheck`; `npm run lint`; `npm run test:mockup` (31); `npm run test:mockup:e2e` (43), then affected scenarios (4); `npm run mockup:build`; `git diff --check`; tracked Next metadata restored cleanly; description Save/Discard, chat conflicts, confirmation cancellation, atomic dirty-draft save, deterministic note preview, derived-note reset, popover Escape, and focus return covered; two consecutive independent reviews passed with no intervening implementation changes | None |
 | 13 | Pending | Not run | Implementation pending |
 
 ## 5. Handoff and completion boundary
@@ -339,7 +339,7 @@ After implementation review passes, reconcile docs through `sync-docs-issues`. U
 
 Report the route, launch command, tested flows, verification outcomes, and known mockup limitations. Do not call issue #22 complete. Do not require a real model, MongoDB, authentication, shared storage, production validations, multi-tab synchronization, schema authoring, runtime tool permissions, actual reference loading by agents, creator team selection, or actual orchestration to finish Phase 0.
 
-Checkpoints 1–9 are complete; checkpoints 10–13 are pending. Excluded product features remain Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring. Seed-integrity tests are verification, not a user-facing reference/tool-check feature.
+Checkpoints 1–12 are complete; checkpoint 13 is pending. Excluded product features remain Changes view, automated reference/tool checks, workspace import/export, batch evaluation, and automated quality scoring. Seed-integrity tests are verification, not a user-facing reference/tool-check feature.
 
 ## 6. Checkpoint 7 — Interactive simulated management chat
 

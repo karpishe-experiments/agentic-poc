@@ -136,6 +136,7 @@ export function captureBase(
     return {
       kind: "configuration",
       title: found.version!.title,
+      description: found.version!.description,
       languageModel: structuredClone(found.version!.languageModel),
       imageModel:
         found.specialty.outputType === "image"
@@ -179,6 +180,7 @@ export function baseMatches(
       if (expected.kind !== "configuration") return false;
       return (
         current.title === expected.title &&
+        current.description === expected.description &&
         current.outputType === expected.outputType &&
         current.builtIn === expected.builtIn &&
         sameModel(current.languageModel, expected.languageModel) &&
@@ -484,6 +486,17 @@ export function simulateReply(
   } else if (base.kind === "configuration") {
     const title = request.match(/\btitle\s+(?:to\s+)?["“]?(.+?)["”]?$/i)?.[1]?.trim();
     if (title) patch = { title };
+    else if (request.toLowerCase().includes("description")) {
+      const description = request.match(/\bdescription\s+(?:to\s+)?["“]?(.+?)["”]?$/i)?.[1]?.trim();
+      if (!description)
+        return {
+          kind: "clarification",
+          text: "What agent description should I use?",
+          question: "Provide the agent description.",
+          choices: ["Describe its purpose", "Describe its output"],
+        };
+      patch = { description };
+    }
     else {
       const model = state.models.find(
         (item) => item.kind === "language" && request.toLowerCase().includes(item.label.toLowerCase()),
@@ -492,8 +505,8 @@ export function simulateReply(
         return {
           kind: "clarification",
           text: "Choose a configuration change to prepare.",
-          question: "Do you want to change the title or select a language model?",
-          choices: ["Change the title", "Use Story", "Use Quick"],
+          question: "Do you want to change the title, description, or language model?",
+          choices: ["Change the title", "Update the description", "Use Story"],
         };
       patch = { languageModel: { provider: model.provider, model: model.label } };
     }
