@@ -482,8 +482,9 @@ cloudflare_get() {
   if [[ "$CF_STATUS" == 200 ]]; then jq -e '.success == true' "$CF_RESPONSE" >/dev/null || die "Cloudflare rejected discovery for $path"; fi
 }
 verify_cloudflare_token() {
-  local token_id token_status
-  cloudflare_get 'user/tokens/verify'
+  local account_id="$1" token_id token_status
+  [[ "$account_id" =~ ^[a-f0-9]{32}$ ]] || die 'A valid Cloudflare account ID is required for token verification'
+  cloudflare_get "accounts/$account_id/tokens/verify"
   token_id="$(jq -er '.result.id | select(type == "string" and test("^[a-f0-9]{32}$"))' "$CF_RESPONSE")" || die 'Cloudflare did not return a valid token metadata ID'
   token_status="$(jq -er '.result.status' "$CF_RESPONSE")" || die 'Cloudflare did not return a token status'
   [[ "$token_status" == active ]] || die "Cloudflare API token is $token_status"
@@ -588,12 +589,12 @@ discover_configuration() {
   [[ "$STAGING_HOSTNAME" != "$PROD_HOSTNAME" && "$STAGING_HOSTNAME" != "$DEPLOY_HOSTNAME" && "$PROD_HOSTNAME" != "$DEPLOY_HOSTNAME" ]] || die 'Discovery hostnames must be distinct'
   normalize_discovery_output
   read_discovery_cloudflare_token
-  verify_cloudflare_token
   cloudflare_get "zones?name=$ZONE_NAME&status=active"
   [[ "$CF_STATUS" == 200 && "$(jq '.result | length' "$CF_RESPONSE")" == 1 ]] || die "Cloudflare could not find exactly one active zone for $ZONE_NAME"
   zone_response="$TEMP_DIR/discovery-zone.json"; cp "$CF_RESPONSE" "$zone_response"
   TF_VAR_cloudflare_zone_id="$(jq -er '.result[0].id' "$zone_response")"
   TF_VAR_cloudflare_account_id="$(jq -er '.result[0].account.id' "$zone_response")"
+  verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
   R2_STATE_BUCKET=kids-booklet-terraform-state
   export TF_VAR_cloudflare_zone_id TF_VAR_cloudflare_account_id R2_STATE_BUCKET
   printf 'discovered: Cloudflare account ID %s\n' "$TF_VAR_cloudflare_account_id"
