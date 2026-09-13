@@ -1,5 +1,7 @@
 # VPS deployment runbook
 
+For agent-assisted execution, start with the [operator handoff](operator-handoff.md). It defines the checkpoint record and failure procedure. Execute the checkpoints below in order; a command exiting successfully is evidence only for that command.
+
 ## Required inputs
 
 Use an x86_64 Ubuntu VPS with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Before starting, install Docker Engine with Compose v2, Git, GitHub CLI, sudo, jq, Python 3, curl, tar, unzip, OpenSSL and OpenSSH server. Verify `docker compose version`, `gh --version`, and provider-console access. Setup requires systemd and a sudo-capable administrator. Preview downloads missing pinned tools into a temporary workspace; apply installs Terraform 1.11.4, GitHub CLI 2.78.0 and cloudflared 2025.8.1 after checksum verification.
@@ -22,6 +24,11 @@ read -rsp 'R2 Terraform access key ID: ' AWS_ACCESS_KEY_ID; printf '\n'
 read -rsp 'R2 Terraform secret access key: ' AWS_SECRET_ACCESS_KEY; printf '\n'
 export CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json
+```
+
+Inspect the preview and resolve any reported failure. Run apply as a separate command:
+
+```bash
 sudo --preserve-env=CLOUDFLARE_API_TOKEN,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GH_TOKEN,DEPLOYMENT_SECRETS_DIR bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
 ```
 
