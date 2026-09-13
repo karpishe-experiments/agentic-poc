@@ -15,6 +15,7 @@ reject --action discover-config --write-config infra/config/vps.json
 reject --action discover-config --zone invalid --write-config infra/config/vps.json
 reject --action discover-config --zone example.com --prod-hostname booklet.other.example --write-config infra/config/vps.json
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; parse_arguments --action discover-config --zone example.com --prod-hostname example.com --write-config infra/config/vps.json; validate_arguments' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; parse_arguments --action github-login; validate_arguments' _ "$script"
 reject --action check --environment staging --apply
 reject --action reset-staging --environment prod --confirmation kids_booklet
 reject --action restore --environment staging --backup-id 'bad;id' --confirmation kids_booklet

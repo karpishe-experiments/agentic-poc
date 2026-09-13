@@ -1,0 +1,24 @@
+{
+  "repository": "karpishe-experiments/agentic-poc",
+  "image": "ghcr.io/karpishe-experiments/agentic-poc",
+  "cloudflare_account_id": "9fe70413989f2aca355a77e318b068b1",
+  "cloudflare_zone_id": "68aa89fafe2e8f40c6cf028ff83dd6d0",
+  "deploy_hostname": "srv1-deploy.uniwares.co.uk",
+  "state_bucket": "kids-booklet-terraform-state",
+  "atlas_project_id": "6a869d84e65675f845fa22eb",
+  "atlas_cluster_name": "kids-booklet",
+  "environments": {
+    "staging": {
+      "APP_HOSTNAME": "booklet-staging.uniwares.co.uk",
+      "ASSETS_BUCKET": "kids-booklet-staging-assets",
+      "DIAGNOSTICS_BUCKET": "kids-booklet-staging-diagnostics",
+      "RECOVERY_BUCKET": "kids-booklet-staging-recovery"
+    },
+    "prod": {
+      "APP_HOSTNAME": "booklet.uniwares.co.uk",
+      "ASSETS_BUCKET": "kids-booklet-prod-assets",
+      "DIAGNOSTICS_BUCKET": "kids-booklet-prod-diagnostics",
+      "RECOVERY_BUCKET": "kids-booklet-prod-recovery"
+    }
+  }
+}

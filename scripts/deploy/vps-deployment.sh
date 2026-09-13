@@ -25,7 +25,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, github-login, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, reset-staging, resume, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -76,7 +76,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|github-login|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -1021,6 +1021,21 @@ install_auxiliary_tools() {
   fi
   export PATH="$TEMP_DIR/bin:$PATH"
 }
+github_login() {
+  local already_authenticated=false
+  for name in curl jq sha256sum unzip tar; do need_command "$name"; done
+  [[ "$APPLY" == false ]] || require_root
+  install_auxiliary_tools
+  if gh auth status >/dev/null 2>&1; then already_authenticated=true; fi
+  if [[ "$APPLY" == false ]]; then
+    if [[ "$already_authenticated" == true ]]; then printf 'exists: GitHub CLI authentication\n'; else printf 'would update: install GitHub CLI and authenticate interactively\n'; fi
+    return
+  fi
+  commit_auxiliary_tools
+  if [[ "$already_authenticated" == false ]]; then gh auth login --hostname github.com --git-protocol https --web; fi
+  gh auth status >/dev/null 2>&1 || die 'GitHub CLI authentication did not complete'
+  printf 'updated: GitHub CLI authenticated for the VPS administrator\n'
+}
 commit_auxiliary_tools() {
   local tool
   for tool in terraform gh cloudflared; do
@@ -1180,6 +1195,7 @@ main() {
   parse_arguments "$@"; validate_arguments
   case "$ACTION" in
     discover-config) discover_configuration;;
+    github-login) github_login;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
     setup) setup_host;;

@@ -4,7 +4,7 @@ For agent-assisted execution, start with the [operator handoff](operator-handoff
 
 ## Required inputs
 
-Use an x86_64 Ubuntu VPS with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Before starting, install Docker Engine with Compose v2, Git, GitHub CLI, sudo, jq, Python 3, curl, tar, unzip, OpenSSL and OpenSSH server. Verify `docker compose version`, `gh --version`, and provider-console access. Setup requires systemd and a sudo-capable administrator. Preview downloads missing pinned tools into a temporary workspace; apply installs Terraform 1.11.4, GitHub CLI 2.78.0 and cloudflared 2025.8.1 after checksum verification.
+Use an x86_64 Ubuntu VPS with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Before starting, install Docker Engine with Compose v2, Git, sudo, jq, Python 3, curl, tar, unzip, OpenSSL and OpenSSH server. Verify `docker compose version` and provider-console access. Setup requires systemd and a sudo-capable administrator. The GitHub-login action downloads missing pinned tools into a temporary workspace during preview; its apply installs Terraform 1.11.4, GitHub CLI 2.78.0 and cloudflared 2025.8.1 after checksum verification.
 
 Supply a Cloudflare account/zone, three DNS names, an Atlas project and cluster, five application secrets per environment, scoped R2 bucket credentials, and temporary Cloudflare, R2, and Atlas administrator credentials. Keep credentials outside Git. Public GHCR images expose the built application and seeds.
 
@@ -41,7 +41,12 @@ Inspect the candidate and run the same command with `--apply` to write the non-s
 bash scripts/deploy/vps-deployment.sh --action discover-config --zone example.com --write-config infra/config/vps.json --apply
 ```
 
-The configuration must contain three distinct hostnames in the selected zone. Use an Atlas cluster where `kids_booklet` and `kids_booklet_prod` are fresh deployment databases, and keep local development in a separate database. After configuration collection, authenticate GitHub CLI as that administrator (`gh auth login`), then set `GH_TOKEN` without copying it into shell history: `export GH_TOKEN="$(gh auth token)"`. Supply `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` through the session environment. The script prompts silently for the temporary Atlas API keys and application secrets. For multiline values, set `DEPLOYMENT_SECRETS_DIR` to a mode-700 directory containing mode-600 `staging.json` and `prod.json` objects with the five required secret names; the serializer preserves newlines, quotes, and dollar signs. Never put values in command arguments or shell history.
+The configuration must contain three distinct hostnames in the selected zone. Use an Atlas cluster where `kids_booklet` and `kids_booklet_prod` are fresh deployment databases, and keep local development in a separate database. Authenticate the root VPS administrator with GitHub before setup. The preview downloads the pinned GitHub CLI if needed; apply installs it and starts GitHub's interactive device-login flow. Supply `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` through the session environment. The script prompts silently for the temporary Atlas API keys and application secrets. For multiline values, set `DEPLOYMENT_SECRETS_DIR` to a mode-700 directory containing mode-600 `staging.json` and `prod.json` objects with the five required secret names; the serializer preserves newlines, quotes, and dollar signs. Never put values in command arguments or shell history.
+
+```bash
+sudo bash scripts/deploy/vps-deployment.sh --action github-login
+sudo bash scripts/deploy/vps-deployment.sh --action github-login --apply
+```
 
 ```bash
 set +x
@@ -56,7 +61,7 @@ bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.j
 Inspect the preview and resolve any reported failure. Run apply as a separate command:
 
 ```bash
-sudo --preserve-env=CLOUDFLARE_API_TOKEN,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GH_TOKEN,DEPLOYMENT_SECRETS_DIR bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
+sudo --preserve-env=CLOUDFLARE_API_TOKEN,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,DEPLOYMENT_SECRETS_DIR bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
 ```
 
 Run preview first and inspect its result before executing the apply line. At application-secret prompts, supply OpenAI, an access password of at least 16 characters, and separate R2 credentials restricted to that environment's three buckets. Setup generates the MongoDB URI when it creates the Atlas user. If interrupted after bucket creation, create the environment-scoped R2 credentials in Cloudflare and rerun the same apply; completed resources are reused. For an existing Atlas user, supply its matching URI when prompted.
@@ -67,7 +72,7 @@ Successful checkpoints: exact Atlas users and VPS allowlist entry verified; prot
 
 Review and merge the generated configuration PR. Then run `bash scripts/deploy/vps-deployment.sh --action finalize --config infra/config/vps.json` for preview and repeat with `--apply`. Finalize verifies that local configuration equals `master`, creates absent `_staging` and `_prod` branches at that commit, and applies branch protection where the GitHub plan supports it. The repository stays private and workflows do not depend on paid environment protection.
 
-Wait for the configuration merge's Infrastructure workflow to succeed before finalize. Branch creation does not deploy either environment. Retain the checkout at the reviewed kit commit through setup; after the configuration merge, update it to the configured `master` commit before routine operations. Unset administrator credentials when setup is complete: `unset CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY GH_TOKEN`.
+Wait for the configuration merge's Infrastructure workflow to succeed before finalize. Branch creation does not deploy either environment. Retain the checkout at the reviewed kit commit through setup; after the configuration merge, update it to the configured `master` commit before routine operations. Unset administrator credentials when setup is complete: `unset CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY`.
 
 ## First activation
 
