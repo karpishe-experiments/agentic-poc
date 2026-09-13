@@ -4,7 +4,9 @@ import { z } from "zod";
 export const serverEnvSchema = z.object({
   DEPLOYMENT_ENV: z.enum(["local", "_staging", "_prod"]).default("local"),
   ASSET_STORAGE: z.enum(["filesystem", "s3"]).default("filesystem"),
-  AWS_REGION: z.string().default("eu-west-1"),
+  // The AWS SDK is also the S3-compatible R2 client. `auto` is R2's region.
+  AWS_REGION: z.string().default("auto"),
+  OBJECT_STORE_ENDPOINT: z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional()),
   ASSETS_BUCKET: z.string().min(1).optional(),
   DIAGNOSTICS_BUCKET: z.string().min(1).optional(),
   RECOVERY_BUCKET: z.string().min(1).optional(),
@@ -27,6 +29,7 @@ export const serverEnvSchema = z.object({
       if (!env[key]) context.addIssue({ code: "custom", path: [key], message: "Required in deployed environments." });
     }
     if (env.ASSET_STORAGE !== "s3") context.addIssue({ code: "custom", path: ["ASSET_STORAGE"], message: "Deployed environments require S3." });
+    if (!env.OBJECT_STORE_ENDPOINT) context.addIssue({ code: "custom", path: ["OBJECT_STORE_ENDPOINT"], message: "Deployed environments require OBJECT_STORE_ENDPOINT." });
     const expected = env.DEPLOYMENT_ENV === "_staging" ? "kids_booklet" : "kids_booklet_prod";
     if (env.MONGODB_DATABASE !== expected) context.addIssue({ code: "custom", path: ["MONGODB_DATABASE"], message: `Expected ${expected}.` });
   }

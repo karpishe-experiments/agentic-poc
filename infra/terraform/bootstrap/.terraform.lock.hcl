@@ -1,25 +1,19 @@
 # This file is maintained automatically by "terraform init".
 # Manual edits may be lost in future updates.
 
-provider "registry.terraform.io/hashicorp/aws" {
-  version     = "6.10.0"
-  constraints = "6.10.0"
+provider "registry.terraform.io/cloudflare/cloudflare" {
+  version     = "5.10.0"
+  constraints = "5.10.0"
   hashes = [
-    "zh:6a41899ce8ab9cdd6f706160fd350951e5f3fc1432a37e638d3576a780c686fd",
-    "zh:b7fbb1b05972d73d72af58a2179ac124c6d69a4f0392aa2ce4dc855e78f52268",
-    "zh:697adf10c76384195303650555229129d64135f5be3abf95da0bf4b6de742054",
-    "zh:523b1640e2b9e2b548876a1dccc627c290f342255d727568fe4becfd9a8f5689",
-    "zh:404b2a1d360851e63f25945406f2d0c2cb9c20b361552ce01bf7fe3df516a5bf",
-    "zh:b458c357b5f38092e374957e51827d9113447696deccf0cb01f5684d976e7725",
-    "zh:3c92efebaf635372bf7283e04fc667d59b0ff3cf1aacd011fc484a11f70954d9",
-    "zh:6e8fd28299d6bf0ab6922cf987757e578f357a45ac45abc312688580dbde3bee",
-    "zh:69d6177e3e106518844373871d4e6377003336761aab884da32f66b034229b5c",
-    "zh:8fe1f6e0a2718318bae3f53a4fb77bc9eaef0fc4131145996f48482b135830c6",
-    "zh:d95da0dc45df0f30005e17c5206addbd62b0471c265d9855fe8039bf6f2adef7",
-    "zh:b221cfbc9f19ad30719b773f05f45571e88b124c15c35ac230021df1bb1110f5",
-    "zh:7ca4bfb5a8f89586dd0c8dd9c1e638a03bc7c6f456bcc29be57cfb7bdc90fc30",
-    "zh:db5dd4120c6ab6ae13df67353a9bc902ac34d01c1d297812d628ebf61dc6f681",
-    "h1:B+2WRTvA3R5V30SehH9Z89tivr8mstZ6iCJ1s/LPQwE=",
+    "zh:e20fb1b87f9b13c44895aab4a436f39db037b99b81d9e4730144176757d69e14",
+    "zh:49aa85455135ebf2108e861cb7cf1b8217861f1903bb31c2502e09f49eedd9f5",
+    "zh:4f6916bb45c0fbbbece929890a9ed5ce1af0ca36bd4c8ae08f7f9bc6eca5b293",
+    "zh:b5333de6ce85725ad6438e632269feb5183c3d0c54691a065c3b8c5716d99694",
+    "zh:510356e67787a736ab8614942419bd61807bec59aa17a8bd97b58a5259687856",
+    "zh:ea119d9afdf2287484f30429e074b19222e4f353b3906ba96eb2f6ee31b2ed2f",
+    "zh:c74b8e5d15f2ab111e8de0e4b7688a7f7b28fda0009bc6842ba47204db562245",
+    "zh:86ebbc79f5a8ef40fa49429f08f3341b7def4253d0aefaf827c3ec8f08143bd3",
+    "h1:iTw5349FXV6m+EZ3OO85Hn7KzKV+dyA8MkFMVGbw51Y=",
   ]
 }
 

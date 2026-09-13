@@ -3,7 +3,7 @@ import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 
 export class S3AssetStore implements AssetStore {
-  public constructor(private readonly bucket: string, private readonly client = new S3Client({})) {}
+  public constructor(private readonly bucket: string, private readonly client: S3Client) {}
 
   public async put(uri: string, content: Uint8Array, mimeType: string): Promise<StoredAsset> {
     const key = normalizeAssetUri(uri);

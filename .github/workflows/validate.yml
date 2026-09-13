@@ -18,8 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: node scripts/deploy/generate-embedded-terraform.mjs --check
-      - run: node scripts/deploy/sync-runbook.mjs --check
+      - run: npx vitest run --config vitest.deployment.config.ts
       - run: npm test -- --retry=2
       - run: npm run test:agent
       - run: npm run build
@@ -27,9 +26,11 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: 1.11.4 }
       - run: terraform fmt -check -recursive infra/terraform
-      - run: for root in bootstrap shared environment; do terraform -chdir="infra/terraform/$root" init -backend=false && terraform -chdir="infra/terraform/$root" validate; done
-      - run: for root in bootstrap shared environment; do terraform -chdir="infra/terraform/$root" test; done
+      - run: terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate
+      - run: terraform -chdir=infra/terraform test
+      - run: terraform -chdir=infra/terraform/bootstrap init -backend=false && terraform -chdir=infra/terraform/bootstrap validate && terraform -chdir=infra/terraform/bootstrap test
       - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
-      - run: bash -n scripts/deploy/aws-deployment.sh
-      - run: bash tests/shell/deployment-script.test.sh
-      - run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/aws-deployment.sh tests/shell/deployment-script.test.sh
+      - run: bash -n scripts/deploy/vps-deployment.sh
+      - run: bash tests/shell/vps-deployment-script.test.sh
+      - run: bash tests/shell/vps-host.test.sh
+      - run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-deployment-script.test.sh tests/shell/vps-host.test.sh

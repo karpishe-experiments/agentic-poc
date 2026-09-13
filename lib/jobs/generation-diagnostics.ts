@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getServerEnv, resolveDataRoot, type ServerEnv } from "@/lib/config/env";
+import { createObjectStoreClient } from "@/lib/assets/create-object-store-client";
 
 type DiagnosticEventName =
   | "runner_started"
@@ -106,7 +107,7 @@ export class GenerationDiagnostics {
 export function createGenerationDiagnostics(env: ServerEnv = getServerEnv()): GenerationDiagnostics {
   if (env.DEPLOYMENT_ENV !== "local") {
     if (!env.DIAGNOSTICS_BUCKET) throw new Error("DIAGNOSTICS_BUCKET is required.");
-    return new GenerationDiagnostics(undefined, !process.env.VITEST, { bucket: env.DIAGNOSTICS_BUCKET, client: new S3Client({ region: env.AWS_REGION }) });
+    return new GenerationDiagnostics(undefined, !process.env.VITEST, { bucket: env.DIAGNOSTICS_BUCKET, client: createObjectStoreClient(env) });
   }
   return new GenerationDiagnostics(resolveDataRoot(env));
 }

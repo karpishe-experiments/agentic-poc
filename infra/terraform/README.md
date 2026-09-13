@@ -1,82 +1,59 @@
-# Terraform integration contract
+# Cloudflare infrastructure
 
-Use the deployment runbook and `scripts/deploy` entrypoints for account operations.
-These roots do not contain secret values. They pin Terraform 1.11.4 and the AWS
-provider 6.10.0.
+Use Terraform 1.11.4 and Cloudflare provider 5.10.0. Lock files contain official
+release checksums for Linux and Windows. Supply the Cloudflare token through
+`CLOUDFLARE_API_TOKEN` during setup or `TF_VAR_cloudflare_api_token` in the
+infrastructure workflow.
 
-| Root | State key | Owner |
-| --- | --- | --- |
-| `bootstrap` | `kids-booklet/bootstrap.tfstate` | CloudShell administrator |
-| `shared` | `kids-booklet/shared.tfstate` | `master`, GitHub environment `_shared` |
-| `environment`, `environment=staging` | `kids-booklet/staging.tfstate` | `_staging` |
-| `environment`, `environment=prod` | `kids-booklet/prod.tfstate` | `_prod` |
+`bootstrap/` is a separate root with local state. It owns only the protected
+`${project}-terraform-state` R2 bucket and a 30-day lock for its `snapshots/`
+prefix. Inputs are `project` (default
+`kids-booklet`) and `cloudflare_account_id`; outputs are `state_bucket`,
+`account_id`, and `r2_endpoint`. Retain this state in protected administrator
+storage, independently of application state. Setup uploads and verifies separately
+keyed snapshots before and after applies. Setup may supply `TF_VAR_state_bucket`
+to use an exact bucket name instead of the project-derived default.
 
-The key prefix follows the `project` variable. The environment root reads bootstrap
-and shared outputs from their state keys. Backend initialization must set
-`use_lockfile=true`. Plan roles can write the corresponding lock object but cannot
-write state payloads or read application secret values.
+The main root uses an S3 backend. Setup supplies the R2 endpoint, bucket, key,
+region `auto`, and R2 credentials. Set `skip_credentials_validation=true`,
+`skip_region_validation=true`, `skip_requesting_account_id=true`, and
+`skip_metadata_api_check=true`. Setup owns state creation and verification.
 
-Bootstrap starts with a local backend. After its first successful apply, setup
-writes the ignored `bootstrap/backend.generated.tf` containing an empty S3 backend
-block and runs `terraform init -migrate-state` with the generated bucket, region,
-key, and lock settings. Preserve the initial `oidc_provider_arn` and
-`create_service_linked_roles` inputs in setup checkpoints. An existing unmanaged
-OIDC provider is passed by ARN; one created by this root must remain managed by
-this root on reruns. The same ownership rule applies to service-linked roles.
+The main inputs are `cloudflare_account_id`, `cloudflare_zone_id`,
+`staging_hostname`, `prod_hostname`, and `deploy_hostname`. It creates six
+private buckets. Current assets do not expire; diagnostics and recovery objects
+expire after 30 days. Recovery buckets also lock every object against deletion
+and overwrite for 30 days. Incomplete multipart uploads expire after one day.
+R2 has no S3 object versioning: snapshots must use distinct keys.
 
-## Outputs consumed by scripts
+Tunnel ingress uses localhost ports 3100, 3200, and 22, with a final 404 fallback.
+SSH Access allows only the managed deployment service token; rotate it before
+its one-year expiry. Application caching is bypassed except `/_next/static/`.
+One Free-plan API rule matches `/api/` paths across the entire zone, including
+unrelated hostnames, because the Free rate-limit expression cannot filter hosts.
+It blocks after 100 requests per source IP and Cloudflare
+location in ten seconds, for ten seconds. This is not a global exact counter.
 
-Bootstrap exports `state_bucket`, `operations_bucket`, `oidc_provider_arn`,
-`oidc_include_claim_keys`, `roles`, `execution_role_arns`, `task_role_arns`, and
-`maintenance_role_arns`. Runtime role maps use `staging` and `prod` keys. GitHub
-role keys are `shared-plan`, `shared-apply`, and
-`{staging,prod}-{plan,apply,release,maintenance}`.
+Outputs are `tunnel_id`, sensitive `tunnel_token`, `r2_buckets` (full names),
+`deployment_client_id`, sensitive `deployment_client_secret`,
+`access_application_id`, and `hostnames` keyed by staging, prod, and deploy.
 
-Shared exports `vpc_id`, `private_subnet_ids` keyed by environment, `nat_eip`,
-and `nat_allocation_id`.
+**State contains the Tunnel token and deployment service-token secret.**
+OpenAI, MongoDB, and application access passwords are not Terraform inputs.
+Protect state, saved plans, and snapshots. Never publish unfiltered
+`terraform output -json`; extract sensitive fields into protected files or
+masked secret inputs.
 
-Environment exports one `deployment` object:
+The cache and rate-limit resources own their whole zone entrypoint phases.
+Setup and routine plans query those entrypoints and stop if another application
+owns either ruleset or uses the Free rate-rule allowance. Import only after
+verifying ownership and the complete configuration; import alone does not
+preserve unrelated rules.
 
-- `environment`, `cluster`, `cluster_arn`, `service`, `repository_url`.
-- `task_definition_template` and `maintenance_task_definition_template`: complete
-  objects accepted by `aws ecs register-task-definition --cli-input-json` after
-  replacing their container image with an immutable digest.
-- `maintenance_task_definition`: the bootstrap maintenance revision. Its
-  unpublished image is deliberate; never run it before registering a real image.
-- `subnet_ids`, `security_group_ids`, `buckets` keyed by
-  `assets|diagnostics|recovery`, and `secrets` keyed by environment-variable name.
-- `url`, `distribution_id`, and `log_group`.
+In both roots run `terraform init -backend=false`, `terraform validate`, and
+`terraform test`; run `terraform fmt -check -recursive infra/terraform` from the
+repository root. Tests use a mock provider and make no API calls. Live account
+permissions, plan entitlement, Tunnel connectivity, and service-token SSH remain
+setup acceptance checks.
 
-The service starts with zero tasks. Terraform ignores service desired count and
-selected revision; release scripts own these values. The application container is
-named `application`; the maintenance container is named `maintenance`.
-Maintenance commands override the latter container's command. Both templates use
-the same image, separate task roles, and the three injected secrets.
-
-## Validation and limits
-
-Run `terraform init -backend=false`, `terraform validate`, and `terraform test`
-in each root, plus `terraform fmt -check -recursive infra/terraform`. Tests use
-mock AWS providers and do not contact AWS. They check IAM policy quotas, trust,
-environment isolation, private-subnet layout, and task-template separation.
-
-Provider lock files contain the platform archive hashes from HashiCorp's
-6.10.0 checksum manifest, including Linux for CloudShell and GitHub runners.
-Local validation cannot prove live IAM authorization, account quotas, OIDC token
-issuance, Atlas connectivity, or CloudFront behavior. Setup acceptance must
-exercise those checks in the target account before activation.
-
-CloudFront ingress uses AWS's managed origin-facing prefix list. This is an
-explicitly supported VPC-origin configuration and consumes 55 security-group
-rule slots. The ALB is internal. [AWS VPC-origin prerequisites](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
-
-The OIDC `context` key expands directly to `environment:<name>`; the subject
-does not include a literal `context:` segment. Trust also binds repository and
-owner IDs, branch, and the role-specific reusable workflow.
-[GitHub custom OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc#example-requiring-a-reusable-workflow-and-other-claims)
-
-## Consolidated deployment entrypoint
-
-`scripts/deploy/aws-deployment.sh` is the only deployment shell entrypoint. It uses named arguments, previews by default, and requires `--apply` for mutation. GitHub workflows execute the checked-in copy. A CloudShell operator can paste the same file without a checkout; it materializes the canonical Terraform roots into a private temporary workspace and verifies every embedded file before planning.
-
-The Terraform files in this directory remain the reviewable source. Run `node scripts/deploy/generate-embedded-terraform.mjs` after a Terraform change, then `node scripts/deploy/sync-runbook.mjs`. CI checks that the embedded bundle and the runbook copy match. No secret, state, saved plan, application data, or generated account configuration is embedded.
+[Cloudflare provider 5.10.0 schema reference](https://registry.terraform.io/providers/cloudflare/cloudflare/5.10.0/docs).

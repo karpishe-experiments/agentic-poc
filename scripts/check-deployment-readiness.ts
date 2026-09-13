@@ -4,7 +4,8 @@ import { getDatabase } from "@/db/client";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { getServerEnv } from "@/lib/config/env";
 import { verifyMongoStructure } from "@/db/setup";
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { createObjectStoreClient } from "@/lib/assets/create-object-store-client";
 
 if (process.env.RUNNER_ENABLED !== "false") throw new Error("Readiness probes require RUNNER_ENABLED=false.");
 const env = getServerEnv();
@@ -22,7 +23,7 @@ try {
   } finally { await session.endSession(); }
   await assets.put(probe, Buffer.from("ready"), "text/plain");
   if (!(await assets.exists(probe)) || Buffer.from(await assets.get(probe)).toString() !== "ready") throw new Error("S3 probe verification failed.");
-  if (env.ASSET_STORAGE === "s3" && env.ASSETS_BUCKET) await new S3Client({ region: env.AWS_REGION }).send(new DeleteObjectCommand({ Bucket: env.ASSETS_BUCKET, Key: probe }));
+  if (env.ASSET_STORAGE === "s3" && env.ASSETS_BUCKET) await createObjectStoreClient(env).send(new DeleteObjectCommand({ Bucket: env.ASSETS_BUCKET, Key: probe }));
   else await rm(`${env.DATA_ROOT}/${probe}`, { force: true });
   if (process.env.DEPLOYMENT_URL) {
     if (!env.ACCESS_GATE_PASSWORD) throw new Error("ACCESS_GATE_PASSWORD is required for deployed readiness.");

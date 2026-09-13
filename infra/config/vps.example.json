@@ -1,0 +1,24 @@
+{
+  "repository": "karpishe-experiments/agentic-poc",
+  "image": "ghcr.io/karpishe-experiments/agentic-poc",
+  "cloudflare_account_id": "REQUIRED",
+  "cloudflare_zone_id": "REQUIRED",
+  "deploy_hostname": "deploy.example.com",
+  "state_bucket": "kids-booklet-terraform-state",
+  "atlas_project_id": "REQUIRED_24_HEX_ID",
+  "atlas_cluster_name": "REQUIRED_CLUSTER_NAME",
+  "environments": {
+    "staging": {
+      "APP_HOSTNAME": "staging.example.com",
+      "ASSETS_BUCKET": "kids-booklet-staging-assets",
+      "DIAGNOSTICS_BUCKET": "kids-booklet-staging-diagnostics",
+      "RECOVERY_BUCKET": "kids-booklet-staging-recovery"
+    },
+    "prod": {
+      "APP_HOSTNAME": "booklet.example.com",
+      "ASSETS_BUCKET": "kids-booklet-prod-assets",
+      "DIAGNOSTICS_BUCKET": "kids-booklet-prod-diagnostics",
+      "RECOVERY_BUCKET": "kids-booklet-prod-recovery"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+.validation/
+**/.terraform/
+**/*.tfstate*
+**/backend.generated.tf

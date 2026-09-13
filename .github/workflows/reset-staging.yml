@@ -2,16 +2,11 @@ name: Reset staging
 on:
   workflow_dispatch:
     inputs:
-      confirmation: { description: Type kids_booklet, required: true }
-permissions: { contents: read, id-token: write }
-concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+      confirmation: {description: Type kids_booklet, required: true}
+permissions: {contents: read}
+concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
-  branch:
-    runs-on: ubuntu-latest
-    steps:
-      - run: test "$GITHUB_REF_NAME" = "_staging" && test "${{ inputs.confirmation }}" = kids_booklet
   reset:
-    needs: branch
-    uses: ./.github/workflows/aws-maintenance.yml
-    with: { environment: staging, action: reset-staging, confirmation: "${{ inputs.confirmation }}" }
+    uses: ./.github/workflows/vps-operation.yml
+    with: {environment: staging, action: reset-staging, confirmation: '${{ inputs.confirmation }}'}
     secrets: inherit

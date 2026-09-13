@@ -1,53 +1,84 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { createObjectStoreClient } from "@/lib/assets/create-object-store-client";
+import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 import { getDatabase } from "@/db/client";
 import { getServerEnv } from "@/lib/config/env";
+import { backupIdSchema, digest, parseManifest, RecoveryStorage } from "./recovery-storage";
 
 const execute = promisify(execFile);
+async function executeMongo(tool: "mongodump" | "mongorestore", args: string[]) {
+  try { await execute(tool, args); }
+  catch { throw new Error(`${tool} failed; keep maintenance enabled and check database permissions, connectivity and archive validity. Tool output is suppressed because it can contain credentials.`); }
+}
 const env = getServerEnv();
-if (process.env.RUNNER_ENABLED !== "false") throw new Error("Recovery requires RUNNER_ENABLED=false.");
-if (!env.RECOVERY_BUCKET) throw new Error("RECOVERY_BUCKET is required.");
+if (env.RUNNER_ENABLED !== "false") throw new Error("Recovery requires RUNNER_ENABLED=false.");
+if (!env.RECOVERY_BUCKET || !env.ASSETS_BUCKET || env.DEPLOYMENT_ENV === "local") throw new Error("Recovery requires deployed environment and asset/recovery buckets.");
 const operation = process.argv[2];
-const backupId = process.env.BACKUP_ID || `${env.DEPLOYMENT_ENV}-${new Date().toISOString().replaceAll(/[:.]/g, "-")}-${randomUUID()}`;
-const archive = `/tmp/${backupId}.archive.gz`;
+if (operation !== "backup" && operation !== "restore") throw new Error("Usage: recovery.ts backup|restore");
+if (operation === "restore" && (!process.env.BACKUP_ID || process.env.CONFIRM_DATABASE !== env.MONGODB_DATABASE)) throw new Error("Restore requires BACKUP_ID and exact CONFIRM_DATABASE.");
+const backupId = backupIdSchema.parse(process.env.BACKUP_ID || `${env.DEPLOYMENT_ENV}-${new Date().toISOString().replaceAll(/[:.]/g, "-")}-${randomUUID()}`);
 const key = `database/${backupId}.archive.gz`;
-const s3 = new S3Client({ region: env.AWS_REGION });
+const s3 = createObjectStoreClient(env);
+const storage = new RecoveryStorage(s3, env.RECOVERY_BUCKET);
 const database = getDatabase();
-const configFile = `/tmp/${backupId}.mongodb.json`;
-await writeFile(configFile, JSON.stringify({ uri: env.MONGODB_URI }), { mode: 0o600, flag: "wx" });
-
-if (operation === "backup") {
-  await execute("mongodump", [`--config=${configFile}`, `--db=${env.MONGODB_DATABASE}`, `--archive=${archive}`, "--gzip"]);
-  const bytes = await readFile(archive);
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const collections = await database.database.listCollections({}, { nameOnly: true }).toArray();
-  const inventory = Object.fromEntries(await Promise.all(collections.map(async ({ name }) => [name, await database.database.collection(name).countDocuments()] as const)));
-  const assetDocuments = await database.collections.assets.find({}, { projection: { uri: 1 } }).toArray();
-  const assets = await Promise.all(assetDocuments.map(async ({ uri }) => {
-    const object = await s3.send(new HeadObjectCommand({ Bucket: env.ASSETS_BUCKET, Key: uri }));
-    return { uri, versionId: object.VersionId ?? null, bytes: object.ContentLength ?? null, etag: object.ETag ?? null };
-  }));
-  const manifest = { schemaVersion: "1", backupId, database: env.MONGODB_DATABASE, environment: env.DEPLOYMENT_ENV, imageDigest: process.env.RELEASE_IMAGE_DIGEST ?? null, sha256, collections: inventory, assets };
-  await s3.send(new PutObjectCommand({ Bucket: env.RECOVERY_BUCKET, Key: key, Body: bytes, ContentType: "application/gzip", Metadata: { sha256, database: env.MONGODB_DATABASE, environment: env.DEPLOYMENT_ENV }, IfNoneMatch: "*" }));
-  await s3.send(new PutObjectCommand({ Bucket: env.RECOVERY_BUCKET, Key: `database/${backupId}.manifest.json`, Body: JSON.stringify(manifest), ContentType: "application/json", IfNoneMatch: "*" }));
-  console.log(JSON.stringify({ backupId, key, bytes: bytes.length, sha256, database: env.MONGODB_DATABASE, collections: inventory, assetCount: assets.length }));
-} else if (operation === "restore") {
-  if (!process.env.BACKUP_ID || process.env.CONFIRM_DATABASE !== env.MONGODB_DATABASE) throw new Error("Restore requires BACKUP_ID and exact CONFIRM_DATABASE.");
-  const object = await s3.send(new GetObjectCommand({ Bucket: env.RECOVERY_BUCKET, Key: key }));
-  if (object.Metadata?.database !== env.MONGODB_DATABASE || object.Metadata?.environment !== env.DEPLOYMENT_ENV || !object.Body) throw new Error("Backup metadata does not match this environment.");
-  const bytes = await object.Body.transformToByteArray();
-  const manifestObject = await s3.send(new GetObjectCommand({ Bucket: env.RECOVERY_BUCKET, Key: `database/${backupId}.manifest.json` }));
-  if (!manifestObject.Body) throw new Error("Backup manifest is missing.");
-  const manifest = JSON.parse(await manifestObject.Body.transformToString()) as { backupId: string; database: string; environment: string; sha256: string; assets: Array<{ uri: string; versionId: string | null }> };
-  if (manifest.backupId !== backupId || manifest.database !== env.MONGODB_DATABASE || manifest.environment !== env.DEPLOYMENT_ENV) throw new Error("Backup manifest does not match this target.");
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  if (object.Metadata.sha256 !== sha256 || manifest.sha256 !== sha256) throw new Error("Backup checksum verification failed.");
-  await Promise.all(manifest.assets.map(({ uri, versionId }) => s3.send(new HeadObjectCommand({ Bucket: env.ASSETS_BUCKET, Key: uri, VersionId: versionId ?? undefined }))));
-  await writeFile(archive, bytes, { flag: "wx" });
-  await execute("mongorestore", [`--config=${configFile}`, `--nsInclude=${env.MONGODB_DATABASE}.*`, `--archive=${archive}`, "--gzip", "--drop"]);
-  console.log(JSON.stringify({ restored: true, backupId, database: env.MONGODB_DATABASE, sha256 }));
-} else throw new Error("Usage: recovery.ts backup|restore");
-await database.close();
+const workspace = await mkdtemp(join(tmpdir(), "booklet-recovery-"));
+const archive = join(workspace, "database.archive.gz");
+const configFile = join(workspace, "mongodb.json");
+try {
+  await chmod(workspace, 0o700);
+  await writeFile(configFile, JSON.stringify({ uri: env.MONGODB_URI }), { mode: 0o600, flag: "wx" });
+  await writeFile(archive, "", { mode: 0o600, flag: "wx" });
+  if (operation === "backup") {
+    await storage.reserve(backupId);
+    await executeMongo("mongodump", [`--config=${configFile}`, `--db=${env.MONGODB_DATABASE}`, `--archive=${archive}`, "--gzip"]);
+    const bytes = await readFile(archive);
+    const sha256 = digest(bytes);
+    const collections = await database.database.listCollections({}, { nameOnly: true }).toArray();
+    const inventory = Object.fromEntries(await Promise.all(collections.map(async ({ name }) => [name, await database.database.collection(name).countDocuments()] as const)));
+    const documents = await database.collections.assets.find({}, { projection: { uri: 1 } }).toArray();
+    const assets = [];
+    for (const uri of new Set(documents.map(({ uri }) => normalizeAssetUri(uri)))) assets.push(await storage.snapshot(backupId, uri, env.ASSETS_BUCKET));
+    const manifest = { schemaVersion: "1", backupId, database: env.MONGODB_DATABASE, environment: env.DEPLOYMENT_ENV, imageDigest: process.env.RELEASE_IMAGE_DIGEST ?? null, sha256, collections: inventory, assets };
+    parseManifest(manifest, backupId, env.MONGODB_DATABASE, env.DEPLOYMENT_ENV);
+    const manifestBytes = JSON.stringify(manifest);
+    await storage.writeVerified(key, bytes, "application/gzip");
+    await storage.writeVerified(`database/${backupId}.manifest.json`, manifestBytes, "application/json");
+    await storage.writeVerified(`database/${backupId}.complete`, digest(manifestBytes), "text/plain");
+    console.log(JSON.stringify({ backupId, key, bytes: bytes.length, sha256, database: env.MONGODB_DATABASE, collections: inventory, assetCount: assets.length }));
+  } else {
+    const rawManifest = (await storage.read(`database/${backupId}.manifest.json`)).bytes;
+    const complete = (await storage.read(`database/${backupId}.complete`)).bytes;
+    if (Buffer.from(complete).toString() !== digest(rawManifest)) throw new Error("Backup completion marker does not match manifest.");
+    const manifest = parseManifest(JSON.parse(Buffer.from(rawManifest).toString()), backupId, env.MONGODB_DATABASE, env.DEPLOYMENT_ENV);
+    const bytes = (await storage.read(key)).bytes;
+    if (digest(bytes) !== manifest.sha256) throw new Error("Backup archive checksum verification failed.");
+    await writeFile(archive, bytes, { mode: 0o600 });
+    // Verify every object before touching the destination. Local filenames never contain object keys.
+    for (const [index, asset] of manifest.assets.entries()) await writeFile(join(workspace, `asset-${index}`), await storage.verifiedAsset(asset), { mode: 0o600, flag: "wx" });
+    await executeMongo("mongorestore", [`--config=${configFile}`, `--nsInclude=${env.MONGODB_DATABASE}.*`, `--archive=${archive}`, "--gzip", "--dryRun"]);
+    for (const [index, asset] of manifest.assets.entries()) {
+      const body = await readFile(join(workspace, `asset-${index}`));
+      await s3.send(new PutObjectCommand({ Bucket: env.ASSETS_BUCKET, Key: asset.uri, Body: body, ContentType: asset.contentType }));
+      if (digest((await storage.read(asset.uri, env.ASSETS_BUCKET)).bytes) !== asset.sha256) throw new Error("Restored asset checksum verification failed; keep maintenance enabled.");
+    }
+    // --drop removes only collections present in the archive. Drop the selected
+    // database first so collections created after this backup cannot survive.
+    await database.database.dropDatabase();
+    await executeMongo("mongorestore", [`--config=${configFile}`, `--nsInclude=${env.MONGODB_DATABASE}.*`, `--archive=${archive}`, "--gzip", "--stopOnError"]);
+    const restoredCollections = (await database.database.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name).sort();
+    if (JSON.stringify(restoredCollections) !== JSON.stringify(Object.keys(manifest.collections).sort())) throw new Error("Restored collection inventory mismatch; keep maintenance enabled.");
+    for (const [name, count] of Object.entries(manifest.collections)) {
+      if (await database.database.collection(name).countDocuments() !== count) throw new Error("Restored collection inventory mismatch; keep maintenance enabled.");
+    }
+    console.log(JSON.stringify({ restored: true, backupId, database: env.MONGODB_DATABASE, sha256: manifest.sha256 }));
+  }
+} finally {
+  try { await rm(workspace, { recursive: true, force: true }); }
+  finally { await database.close(); s3.destroy(); }
+}

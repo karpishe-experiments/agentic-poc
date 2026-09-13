@@ -1,46 +1,39 @@
 name: Infrastructure
 on:
-  push: { branches: [master], paths: ['infra/**', 'scripts/deploy/**', '.github/workflows/aws-infrastructure.yml'] }
-  workflow_dispatch:
-    inputs:
-      apply: { description: Apply the generated plan, type: boolean, default: false }
-permissions: { contents: read, id-token: write }
-concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+  push: { branches: [master], paths: ['infra/**', 'deploy/**', 'scripts/deploy/vps-deployment.sh', '.github/workflows/infrastructure.yml'] }
+  workflow_dispatch: { inputs: { apply: { type: boolean, default: false } } }
+permissions: { contents: read }
+concurrency: { group: kids-booklet-vps-operation, cancel-in-progress: false }
 jobs:
-  decision:
+  terraform:
     runs-on: ubuntu-latest
-    outputs: { apply: "${{ steps.value.outputs.apply }}" }
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - id: value
-        run: echo "apply=${{ github.event_name == 'push' || inputs.apply }}" >> "$GITHUB_OUTPUT"
-  drain-staging:
-    needs: decision
-    if: needs.decision.outputs.apply == 'true'
-    uses: ./.github/workflows/aws-maintenance.yml
-    with: { environment: staging, action: drain-shared }
-    secrets: inherit
-  drain-prod:
-    needs: drain-staging
-    uses: ./.github/workflows/aws-maintenance.yml
-    with: { environment: prod, action: drain-shared, lock_held: true }
-    secrets: inherit
-  apply:
-    needs: [decision, drain-prod]
-    if: always() && needs.decision.result == 'success' && (needs.decision.outputs.apply != 'true' || needs.drain-prod.result == 'success')
-    uses: ./.github/workflows/aws-infrastructure.yml
-    with:
-      stack: master
-      apply: ${{ needs.decision.outputs.apply == 'true' }}
-      lock_held: ${{ needs.decision.outputs.apply == 'true' }}
-    secrets: inherit
-  restart-staging:
-    needs: [apply, decision]
-    if: needs.decision.outputs.apply == 'true' && success()
-    uses: ./.github/workflows/aws-maintenance.yml
-    with: { environment: staging, action: restart-shared, lock_held: true }
-    secrets: inherit
-  restart-prod:
-    needs: restart-staging
-    uses: ./.github/workflows/aws-maintenance.yml
-    with: { environment: prod, action: restart-shared, lock_held: true, release_lock: true }
-    secrets: inherit
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: 1.11.4, terraform_wrapper: false}
+      - name: Verify infrastructure branch
+        run: test "$GITHUB_REF_NAME" = master
+      - uses: ./.github/actions/vps-access
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+      - run: bash scripts/deploy/vps-deployment.sh --action infrastructure --vps-host "$TARGET_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" ${{ (github.event_name == 'push' || inputs.apply) && '--apply' || '' }}
+        env:
+          TARGET_HOST: ${{ vars.VPS_HOST }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          TF_VAR_staging_hostname: ${{ vars.STAGING_HOSTNAME }}
+          TF_VAR_prod_hostname: ${{ vars.PROD_HOSTNAME }}
+          TF_VAR_deploy_hostname: ${{ vars.DEPLOY_HOSTNAME }}
+          R2_STATE_BUCKET: ${{ vars.R2_STATE_BUCKET }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_TERRAFORM_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_TERRAFORM_SECRET_ACCESS_KEY }}
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

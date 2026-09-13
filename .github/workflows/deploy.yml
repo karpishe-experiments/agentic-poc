@@ -1,24 +1,69 @@
 name: Deploy
 on:
-  push: { branches: [_staging, _prod] }
+  push: {branches: [_staging, _prod]}
   workflow_dispatch:
     inputs:
-      environment: { description: Environment, type: choice, options: [staging, prod], required: true }
-permissions: { contents: read, id-token: write }
-concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+      environment: {description: Target environment, type: choice, options: [staging, prod], required: true}
+permissions: {contents: read, packages: write}
+concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
-  branch:
-    runs-on: ubuntu-latest
-    outputs: { stack: "${{ steps.select.outputs.stack }}" }
-    steps:
-      - id: select
-        env: { REQUESTED: "${{ inputs.environment }}" }
-        run: |
-          stack="${REQUESTED:-${GITHUB_REF_NAME#_}}"
-          test "$GITHUB_REF_NAME" = "_$stack"
-          echo "stack=$stack" >> "$GITHUB_OUTPUT"
   deploy:
-    needs: branch
-    uses: ./.github/workflows/aws-release.yml
-    with: { stack: "${{ needs.branch.outputs.stack }}" }
-    secrets: inherit
+    if: github.event_name != 'push' || github.event.created == false
+    runs-on: ubuntu-latest
+    env:
+      TARGET: ${{ inputs.environment || (github.ref_name == '_staging' && 'staging' || 'prod') }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify current branch commit
+        shell: bash
+        run: |
+          test "$GITHUB_REF_NAME" = "_$TARGET"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ github.token }}'}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build or reuse immutable commit image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="$TARGET-$GITHUB_SHA"
+          # Only a confirmed manifest absence permits a build; auth/network errors fail.
+          if docker buildx imagetools inspect "$image:$tag" > "$RUNNER_TEMP/manifest" 2> "$RUNNER_TEMP/manifest-error"; then
+            digest="$(awk '$1=="Digest:" {print $2; exit}' "$RUNNER_TEMP/manifest")"
+          else
+            grep -Eqi 'manifest unknown|not found' "$RUNNER_TEMP/manifest-error" || { cat "$RUNNER_TEMP/manifest-error"; exit 1; }
+            docker buildx build --push --tag "$image:$tag" --label "org.opencontainers.image.revision=$GITHUB_SHA" --metadata-file "$RUNNER_TEMP/image.json" .
+            digest="$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/image.json")"
+          fi
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker buildx imagetools inspect "$image@$digest" --format '{{json .Image}}' > "$RUNNER_TEMP/image-config.json"
+          jq -e --arg sha "$GITHUB_SHA" '.config.Labels["org.opencontainers.image.revision"]==$sha' "$RUNNER_TEMP/image-config.json" >/dev/null || { echo 'Image revision label does not match the immutable commit tag' >&2; exit 1; }
+          owner="${GITHUB_REPOSITORY%%/*}"
+          package="$(jq -rn --arg value "${GITHUB_REPOSITORY#*/}" '$value|@uri')"
+          gh api --method PATCH "orgs/$owner/packages/container/$package" -f visibility=public >/dev/null
+          printf 'digest=%s@%s\n' "$image" "$digest" >> "$GITHUB_OUTPUT"
+          printf 'image=%s\n' "$image" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/anonymous-docker"
+          DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null
+      - uses: ./.github/actions/vps-access
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+      - name: Release and verify
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
+          bash scripts/deploy/vps-deployment.sh --action deploy --environment "$TARGET" --image-digest "$DIGEST" --commit "$GITHUB_SHA" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --vps-host "$VPS_HOST" --apply
+      - name: Publish successful environment alias
+        env: {DIGEST: '${{ steps.image.outputs.digest }}', IMAGE: '${{ steps.image.outputs.image }}'}
+        run: docker buildx imagetools create --tag "$IMAGE:$TARGET" "$DIGEST"
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

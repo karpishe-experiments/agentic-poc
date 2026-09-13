@@ -2,11 +2,11 @@ name: Check deployment
 on:
   workflow_dispatch:
     inputs:
-      environment: { type: choice, options: [staging, prod], required: true }
-permissions: { contents: read, id-token: write }
-concurrency: { group: kids-booklet-aws-operation, cancel-in-progress: false }
+      environment: {description: Target, type: choice, options: [staging, prod], required: true}
+permissions: {contents: read}
+concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
   check:
-    uses: ./.github/workflows/aws-maintenance.yml
-    with: { environment: "${{ inputs.environment }}", action: check }
+    uses: ./.github/workflows/vps-operation.yml
+    with: {environment: '${{ inputs.environment }}', action: check}
     secrets: inherit

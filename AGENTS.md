@@ -158,20 +158,24 @@ These workflows may publish a reviewed branch and PR but never merge, deploy,
 release the consumer application, close issues, or mutate GitHub Project fields.
 <!-- core-agent-skills:end -->
 
-## AWS deployment scripts
+## VPS and Cloudflare deployment
 
-When you author or change an AWS CloudShell deployment script:
+When you author or change deployment automation:
 
 - Use `#!/usr/bin/env bash`, `set -euo pipefail`, and `umask 077`. Organize logic into small, clearly named functions.
 - Parse explicit named arguments, provide `--help`, reject unknown arguments, and reject missing required inputs.
 - Default to preview. Permit mutations only with `--apply`.
-- Before mutation, validate required commands, AWS credentials and caller identity, the exact account and `eu-west-1` region, and all required configuration.
+- Before mutation, validate required commands, the target VPS identity and host key, Cloudflare/Atlas scope when used, and all required configuration.
 - Discover current state first. Make changes additive and idempotent. Report `exists`, `would create`, `would update`, `created`, or `updated`. Stop on incompatible or destructive drift.
-- CloudShell setup must not delete resources, copy production data, or perform rollback. Explicit workflow recovery remains governed by the deployment runbook.
+- Setup must not delete resources, copy production data, or perform rollback. Explicit workflow recovery remains governed by the deployment runbook.
 - Never enable shell tracing, embed credentials, print secret values, or retrieve secret contents without need.
 - Quote expansions and use arrays for command arguments. Use `mktemp`, mode `600`, and cleanup traps for sensitive temporary files.
 - Return nonzero with a concise actionable error. After apply, perform read-only verification and report sanitized results.
-- Keep scripts compatible with `bash -n` and ShellCheck. Assume CloudShell supplies Bash and AWS CLI; use `jq` only for structured JSON operations.
+- Keep scripts compatible with `bash -n` and ShellCheck. Target Ubuntu Bash; verify prerequisites and use `jq` for structured JSON operations.
 - When presenting a generated script in documentation or chat, output exactly: a short Required inputs list; one complete script in one code block; preview and apply examples; and brief expected-result and recovery notes.
 
-The canonical shell entrypoint is `scripts/deploy/aws-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
+The canonical shell entrypoint is `scripts/deploy/vps-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
+
+Terraform owns Cloudflare R2, Tunnel, DNS and rules. Setup owns provider discovery, scoped Atlas users, the exact VPS allowlist, the configuration PR, and host credentials. Finalize owns absent environment-branch creation and supported branch protection. Compose owns non-secret runtime configuration; use the same variable names in both environments and no `STAGING_*` or `PROD_*` application variables. The root-owned final Compose override owns secrets and must never be rendered in logs or artifacts; rotation must stage them over pinned SSH before the serialized Maintenance workflow. GitHub publishes target-environment image tags but the host deploys only immutable digests. Every deployment change must update the compact runbook and relevant architecture guidance, and must keep maintenance, drain, backup, rollback, and environment-isolation contracts intact.
+
+For host-lifecycle changes run both `tests/shell/vps-deployment-script.test.sh` and `tests/shell/vps-host.test.sh`, plus ShellCheck. Recovery changes require `tests/unit/recovery-storage.test.ts`. Validate and test both Terraform roots after infrastructure changes. Use `vitest.deployment.config.ts` for isolated contracts when MongoDB is unavailable; do not report that as a full-suite pass. See `docs/deployment/contracts.md` for current implementation limits. No agent may label the full deployment plan complete while those limits remain.

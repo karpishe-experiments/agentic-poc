@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# Variables below are read by the sourced host functions.
+# shellcheck disable=SC2034
+set -euo pipefail
+# Each scenario runs in a separate Bash process so expected-failure assertions
+# cannot accidentally disable errexit inside the lifecycle being tested.
+if [[ $# -eq 0 ]]; then
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization dispatch-rejection journal-retention reset-guard plan-guard; do
+    bash "$0" "$scenario"
+  done
+  echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
+  exit 0
+fi
+export VPS_DEPLOYMENT_LIBRARY_ONLY=true
+# shellcheck source=../../scripts/deploy/vps-deployment.sh
+source scripts/deploy/vps-deployment.sh
+TEMP_DIR="$(mktemp -d)"
+ROOT="$TEMP_DIR/root" STATE="$TEMP_DIR/state" SECRETS="$TEMP_DIR/secrets"
+ENVIRONMENT=staging COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+IMAGE_DIGEST=ghcr.io/example/kids@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+REQUEST_ID=test ACTION=deploy APPLY=true
+mkdir -p "$ROOT/deploy" "$STATE/operations" "$STATE/releases/staging/old" "$SECRETS/staging"
+CALLS="$TEMP_DIR/calls"; : > "$CALLS"
+CONFIG_FILE="$TEMP_DIR/config.json"
+jq -n '{image:"ghcr.io/example/kids",environments:{staging:{APP_HOSTNAME:"staging.example.com"}}}' > "$CONFIG_FILE"
+printf '%s\n' "$STATE/releases/staging/old" > "$STATE/releases/staging/current"
+printf '{"requestId":"test"}' > "$STATE/operation.json"
+jq -n --arg image "$IMAGE_DIGEST" '{services:{app:{image:$image}}}' > "$STATE/releases/staging/old/image.json"
+printf 'old manifest\n' > "$STATE/releases/staging/old/manifest.sha256"
+prepare_release() {
+  mkdir -p "$STATE/releases/$ENVIRONMENT/$COMMIT"
+  cp "$STATE/releases/staging/old/image.json" "$STATE/releases/$ENVIRONMENT/$COMMIT/image.json"
+  printf 'candidate manifest\n' > "$STATE/releases/$ENVIRONMENT/$COMMIT/manifest.sha256"
+  printf 'prepare\n' >> "$CALLS"
+}
+compose() { printf 'compose %s\n' "$*" >> "$CALLS"; }
+maintenance() { printf 'maintenance %s\n' "$*" >> "$CALLS"; }
+docker() { printf 'docker %s\n' "$*" >> "$CALLS"; }
+verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
+stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
+case "$1" in
+  release)
+    run_lifecycle
+    test -f "$STATE/operations/test.json"
+    test ! -f "$STATE/operation.json"
+    calls="$(cat "$CALLS")"
+    [[ "$calls" == *'deployment-control enable'*'wait-for-deployment-drain'*'stop '*'recovery backup'*'initialize-deployment'*'up -d'*'verify '*'deployment-control disable'* ]]
+    grep -q "$COMMIT" "$STATE/releases/staging/current";;
+  first-release)
+    rm "$STATE/releases/staging/current"
+    run_lifecycle
+    calls="$(cat "$CALLS")"
+    [[ "$calls" == *initialize-deployment* ]]
+    if grep -q 'recovery backup' "$CALLS"; then exit 1; fi;;
+  rollback-on-readiness)
+    # Run a child with real errexit to capture the failure and persisted journal.
+    cat > "$TEMP_DIR/failure.sh" <<'CHILD'
+export VPS_DEPLOYMENT_LIBRARY_ONLY=true
+source scripts/deploy/vps-deployment.sh
+ROOT="$FIXTURE/root" STATE="$FIXTURE/state" SECRETS="$FIXTURE/secrets"
+ENVIRONMENT=staging COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa REQUEST_ID=test ACTION=deploy
+IMAGE_DIGEST=ghcr.io/example/kids@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+prepare_release() {
+  mkdir -p "$STATE/releases/staging/$COMMIT"
+  cp "$STATE/releases/staging/old/image.json" "$STATE/releases/staging/$COMMIT/image.json"
+  printf 'candidate manifest\n' > "$STATE/releases/staging/$COMMIT/manifest.sha256"
+}
+docker() { :; }
+compose() { printf 'compose %s\n' "$*" >> "$FIXTURE/failure-calls"; }
+maintenance() { printf 'maintenance %s\n' "$*" >> "$FIXTURE/failure-calls"; }
+stop_application() { printf 'stop %s\n' "$*" >> "$FIXTURE/failure-calls"; }
+verify_application() { [[ "$1" == */old ]]; }
+run_lifecycle
+CHILD
+    export FIXTURE="$TEMP_DIR"
+    if bash "$TEMP_DIR/failure.sh" >/dev/null 2>&1; then echo 'failed readiness returned success'; exit 1; fi
+    test -f "$STATE/operation.json"
+    grep -q '/old up -d' "$TEMP_DIR/failure-calls"
+    grep -q '/old deployment-control disable' "$TEMP_DIR/failure-calls";;
+  maintenance-preserves-rollback)
+    mkdir -p "$STATE/releases/staging/release-a" "$STATE/releases/staging/release-b"
+    printf '%s\n' "$STATE/releases/staging/release-a" > "$STATE/releases/staging/previous"
+    printf '%s\n' "$STATE/releases/staging/release-b" > "$STATE/releases/staging/current"
+    REQUEST_ID=maintenance-preserves-rollback
+    save_success "$STATE/releases/staging/release-b"
+    [[ "$(<"$STATE/releases/staging/previous")" == "$STATE/releases/staging/release-a" ]]
+    [[ "$(<"$STATE/releases/staging/current")" == "$STATE/releases/staging/release-b" ]];;
+  backup-history)
+    jq '.backupId="staging-prior"' "$STATE/operation.json" > "$STATE/operation.next.json"; mv "$STATE/operation.next.json" "$STATE/operation.json"
+    BACKUP_ID=''
+    ensure_backup_id
+    jq -e '.backupId!="staging-prior" and (.backupHistory | index("staging-prior"))' "$STATE/operation.json" >/dev/null;;
+  secret-rotation)
+    ACTION=rotate-secrets
+    mkdir -p "$STATE/releases/staging/release-a"
+    printf '%s\n' "$STATE/releases/staging/release-a" > "$STATE/releases/staging/previous"
+    printf '{"services":{"app":{"environment":{"OPENAI_API_KEY":"old"}}}}\n' > "$SECRETS/staging/secrets.json"
+    printf '{"services":{"app":{"environment":{"OPENAI_API_KEY":"new"}}}}\n' > "$SECRETS/staging/secrets.pending.json"
+    validate_compose() { :; }
+    run_lifecycle
+    test ! -f "$SECRETS/staging/secrets.pending.json"
+    jq -e '.services.app.environment.OPENAI_API_KEY=="new"' "$SECRETS/staging/secrets.json" >/dev/null
+    [[ "$(<"$STATE/releases/staging/previous")" == "$STATE/releases/staging/release-a" ]];;
+  interrupted-secret-rotation)
+    ACTION=rotate-secrets
+    printf '{"services":{"app":{"environment":{"OPENAI_API_KEY":"new"}}}}\n' > "$SECRETS/staging/secrets.json"
+    printf '{"services":{"app":{"environment":{"OPENAI_API_KEY":"old"}}}}\n' > "$SECRETS/staging/secrets.previous.json"
+    recover_interrupted_rotation
+    test ! -f "$SECRETS/staging/secrets.previous.json"
+    jq -e '.services.app.environment.OPENAI_API_KEY=="old"' "$SECRETS/staging/secrets.json" >/dev/null
+    grep -q 'stop ' "$CALLS";;
+  stale-infrastructure)
+    export GITHUB_ACTIONS=true GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa GITHUB_REPOSITORY=example/kids GH_TOKEN=test
+    git() { printf '%s\n' "$GITHUB_SHA"; }
+    gh() { printf '%s\n' bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; }
+    if (verify_infrastructure_head) >/dev/null 2>&1; then echo 'accepted stale infrastructure commit'; exit 1; fi;;
+  secret-serialization)
+    if [[ "$(uname -s)" == MINGW* ]]; then
+      # Windows Git Bash cannot apply Unix ownership; CI exercises real install.
+      install() { if [[ "$1" == -d ]]; then mkdir -p "$4"; else cp "$3" "$4"; fi; }
+    fi
+    printf '%s\n' 'key$with$dollars' 'mongodb://user:p@db' 'long-password-"quoted"' 'access' 'secret' | write_secret_override staging
+    jq -e '.services.app.environment.OPENAI_API_KEY == "key$$with$$dollars" and .services.app.environment.ACCESS_GATE_PASSWORD == "long-password-\"quoted\""' "$SECRETS/staging/secrets.json" >/dev/null
+    [[ "$(stat -c %a "$SECRETS/staging/secrets.json")" == 600 ]] || [[ "$(uname -s)" == MINGW* ]];;
+  dispatch-rejection)
+    require_root() { :; }
+    export SSH_ORIGINAL_COMMAND='--action deploy;id'
+    if (host_dispatch) >/dev/null 2>&1; then echo 'accepted command injection'; exit 1; fi
+    export SSH_ORIGINAL_COMMAND='--action host-run --request-id injected --apply'
+    if (host_dispatch) >/dev/null 2>&1; then echo 'accepted privileged action'; exit 1; fi;;
+  journal-retention)
+    require_root() { :; }; load_config() { :; }; flock() { :; }
+    export SSH_ORIGINAL_COMMAND='--action backup --environment staging --apply'
+    if (host_dispatch) >/dev/null 2>&1; then echo 'overwrote unresolved journal'; exit 1; fi
+    jq -e '.requestId=="test"' "$STATE/operation.json" >/dev/null;;
+  reset-guard)
+    ACTION=reset-staging ENVIRONMENT=prod CONFIRMATION=kids_booklet
+    if (validate_arguments) >/dev/null 2>&1; then echo 'accepted production reset'; exit 1; fi;;
+  plan-guard)
+    printf '{"resource_changes":[{"type":"cloudflare_r2_bucket","change":{"actions":["delete","create"]}}]}' > "$TEMP_DIR/plan.json"
+    if (validate_plan "$TEMP_DIR/plan.json") >/dev/null 2>&1; then echo 'accepted protected replacement'; exit 1; fi
+    printf '{"resource_changes":[{"type":"cloudflare_zero_trust_access_policy","change":{"actions":["update"]}}]}' > "$TEMP_DIR/plan.json"
+    if (validate_plan "$TEMP_DIR/plan.json") >/dev/null 2>&1; then echo 'accepted Access boundary change'; exit 1; fi;;
+  *) exit 1;;
+esac

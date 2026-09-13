@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { readOperationResponse } from "@/lib/http/read-operation-response";
@@ -12,6 +13,12 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
+  it("publishes a public GHCR package before the anonymous image check", () => {
+    const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
+    expect(workflow.indexOf("visibility=public")).toBeGreaterThan(0);
+    expect(workflow.indexOf("visibility=public")).toBeLessThan(workflow.indexOf("DOCKER_CONFIG="));
+  });
+
   it("preserves safe relative asset keys and rejects traversal", () => {
     expect(normalizeAssetUri("booklets/a/page.png")).toBe("booklets/a/page.png");
     for (const invalid of ["../secret", "/absolute", "a//b", "a/./b", "C:\\secret"]) expect(() => normalizeAssetUri(invalid)).toThrow(/relative path/);
@@ -26,8 +33,8 @@ describe("deployment contracts", () => {
   });
 
   it("requires deployed secrets, S3 buckets, and the fixed database", () => {
-    const base = { NODE_ENV: "production", OPENAI_API_KEY: "key", DEPLOYMENT_ENV: "_prod", ASSET_STORAGE: "s3", AWS_REGION: "eu-west-1", MONGODB_URI: "mongodb://example", MONGODB_DATABASE: "kids_booklet_prod", ACCESS_GATE_PASSWORD: "a-long-enough-password", ASSETS_BUCKET: "assets", DIAGNOSTICS_BUCKET: "diagnostics", RECOVERY_BUCKET: "recovery" } as const;
-    expect(getServerEnv(base).DEPLOYMENT_ENV).toBe("_prod");
+    const base = { NODE_ENV: "production", OPENAI_API_KEY: "key", DEPLOYMENT_ENV: "_prod", ASSET_STORAGE: "s3", AWS_REGION: "auto", MONGODB_URI: "mongodb://example", MONGODB_DATABASE: "kids_booklet_prod", ACCESS_GATE_PASSWORD: "a-long-enough-password", ASSETS_BUCKET: "assets", DIAGNOSTICS_BUCKET: "diagnostics", RECOVERY_BUCKET: "recovery" } as const;
+    expect(getServerEnv({ ...base, OBJECT_STORE_ENDPOINT: "https://example.r2.cloudflarestorage.com" }).DEPLOYMENT_ENV).toBe("_prod");
     expect(() => getServerEnv({ ...base, MONGODB_DATABASE: "kids_booklet" })).toThrow(/kids_booklet_prod/);
     expect(() => getServerEnv({ ...base, ACCESS_GATE_PASSWORD: "" })).toThrow();
   });
