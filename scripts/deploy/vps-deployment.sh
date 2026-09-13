@@ -466,7 +466,7 @@ validate_plan() {
   jq -e '[.resource_changes[]? | select(.type=="cloudflare_ruleset") | .change.before.rules[]? | select(.ref != "application_bypass" and .ref != "next_static" and .ref != "application_api_rate")] | length == 0' "$json" >/dev/null || die 'Ruleset contains unrelated rules; preserve them through an administrator-reviewed change'
 }
 cloudflare_get() {
-  local path="$1" token="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}"
+  local path="$1" token="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}" error_codes
   [[ -n "$token" && "$token" != *$'\n'* && "$token" != *$'\r'* && "$token" != *'"'* ]] || die 'A valid Cloudflare API token is required'
   private_temp
   local config="$TEMP_DIR/cloudflare-curl.conf"
@@ -474,8 +474,20 @@ cloudflare_get() {
   chmod 600 "$config"
   CF_RESPONSE="$TEMP_DIR/cloudflare-response.json"
   CF_STATUS="$(curl --config "$config" --output "$CF_RESPONSE" --write-out '%{http_code}' "https://api.cloudflare.com/client/v4/$path")"
-  if [[ "$CF_STATUS" != 200 && "$CF_STATUS" != 404 ]]; then die "Cloudflare discovery failed for $path (HTTP $CF_STATUS)"; fi
+  if [[ "$CF_STATUS" != 200 && "$CF_STATUS" != 404 ]]; then
+    error_codes="$(jq -r '[.errors[]?.code | tostring] | unique | join(",")' "$CF_RESPONSE" 2>/dev/null || true)"
+    [[ -n "$error_codes" ]] || error_codes=unavailable
+    die "Cloudflare discovery failed for $path (HTTP $CF_STATUS; API error code(s): $error_codes)"
+  fi
   if [[ "$CF_STATUS" == 200 ]]; then jq -e '.success == true' "$CF_RESPONSE" >/dev/null || die "Cloudflare rejected discovery for $path"; fi
+}
+verify_cloudflare_token() {
+  local token_id token_status
+  cloudflare_get 'user/tokens/verify'
+  token_id="$(jq -er '.result.id | select(type == "string" and test("^[a-f0-9]{32}$"))' "$CF_RESPONSE")" || die 'Cloudflare did not return a valid token metadata ID'
+  token_status="$(jq -er '.result.status' "$CF_RESPONSE")" || die 'Cloudflare did not return a token status'
+  [[ "$token_status" == active ]] || die "Cloudflare API token is $token_status"
+  printf 'verified: Cloudflare API token metadata ID %s\n' "$token_id"
 }
 load_atlas_admin_credentials() {
   ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}"
@@ -560,11 +572,12 @@ discover_configuration() {
   local zone_response project cluster candidate os_name public_ip
   for name in curl jq uname nproc awk df; do need_command "$name"; done
   [[ "$APPLY" == false ]] || need_command install
-  [[ -f /etc/os-release ]] && grep -q '^ID=ubuntu$' /etc/os-release || die 'Discovery requires Ubuntu'
+  if [[ ! -f /etc/os-release ]] || ! grep -q '^ID=ubuntu$' /etc/os-release; then die 'Discovery requires Ubuntu'; fi
   [[ "$(uname -m)" == x86_64 ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
   validate_host_capacity
   for name in docker git gh openssl python3 ssh systemctl sudo; do report_discovery_command "$name"; done
   if command -v docker >/dev/null; then docker compose version >/dev/null 2>&1 && printf 'exists: docker compose v2\n' || printf 'missing: docker compose v2\n'; fi
+  # shellcheck disable=SC1091
   os_name="$(. /etc/os-release; printf '%s' "${PRETTY_NAME:-Ubuntu}")"
   public_ip="$(curl -fsS --max-time 15 https://api.ipify.org || true)"
   printf 'exists: VPS %s, x86_64, %s CPU cores, %s MiB RAM, %s MiB free disk, public IP %s\n' "$os_name" "$(nproc)" "$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)" "$(df -Pk / | awk 'NR==2 {print int($4 / 1024)}')" "${public_ip:-unavailable}"
@@ -575,6 +588,7 @@ discover_configuration() {
   [[ "$STAGING_HOSTNAME" != "$PROD_HOSTNAME" && "$STAGING_HOSTNAME" != "$DEPLOY_HOSTNAME" && "$PROD_HOSTNAME" != "$DEPLOY_HOSTNAME" ]] || die 'Discovery hostnames must be distinct'
   normalize_discovery_output
   read_discovery_cloudflare_token
+  verify_cloudflare_token
   cloudflare_get "zones?name=$ZONE_NAME&status=active"
   [[ "$CF_STATUS" == 200 && "$(jq '.result | length' "$CF_RESPONSE")" == 1 ]] || die "Cloudflare could not find exactly one active zone for $ZONE_NAME"
   zone_response="$TEMP_DIR/discovery-zone.json"; cp "$CF_RESPONSE" "$zone_response"

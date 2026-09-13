@@ -23,6 +23,19 @@ reject --action deploy --environment staging --environment prod
 reject --action status --vps-host 'host;id'
 root="$(mktemp -d)"; trap 'rm -rf "$root"' EXIT
 mkdir -p "$root/bin"
+cat > "$root/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+output=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output) output="$2"; shift 2;;
+    *) shift;;
+  esac
+done
+printf '%s\n' '{"success":true,"result":{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"active"}}' > "$output"
+printf '200'
+STUB
 cat > "$root/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$SSH_LOG"
@@ -32,8 +45,11 @@ cat > "$root/bin/cloudflared" <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
-chmod 700 "$root/bin/ssh" "$root/bin/cloudflared"
+chmod 700 "$root/bin/curl" "$root/bin/ssh" "$root/bin/cloudflared"
 export PATH="$root/bin:$PATH" SSH_LOG="$root/ssh.log" CF_ACCESS_CLIENT_ID=test CF_ACCESS_CLIENT_SECRET=never-print-me
+token_check="$(CLOUDFLARE_API_TOKEN=never-print-me VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; verify_cloudflare_token' _ "$script")"
+grep -q 'verified: Cloudflare API token metadata ID aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' <<< "$token_check"
+if grep -q 'never-print-me' <<< "$token_check"; then echo 'Cloudflare API token leaked' >&2; exit 1; fi
 digest=ghcr.io/example/kids@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 bash "$script" --action deploy --environment staging --image-digest "$digest" --commit "$commit" --config "$root/not-required-for-client.json" --vps-user alternate --vps-host vps.example > "$root/output"
