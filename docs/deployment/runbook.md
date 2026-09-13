@@ -10,11 +10,23 @@ Supply a Cloudflare account/zone, three DNS names, an Atlas project and cluster,
 
 Complete Cloudflare DNS activation, R2 enrollment and billing consent first. Use three distinct lowercase hostnames in that zone. The deployment needs unused cache/rate-limit entrypoints; inspect [the zone-wide rule boundary](../../infra/terraform/README.md) before choosing the zone. Cloudflare credentials must manage R2 buckets, Tunnel, DNS, Access and rules. R2 Terraform credentials must read/write state and snapshots and create/delete backend lock objects. Atlas API credentials must manage database users and the IP access list and permit API access from the VPS. GitHub login needs repository administration and organization billing administration. Confirm these permissions before running setup.
 
-Copy `infra/config/vps.example.json` to `infra/config/vps.json` and replace its Cloudflare and Atlas IDs, cluster name, and hostnames. Keep the six application bucket names unchanged: Terraform creates those exact names. Keep `repository` and `image` aligned with the repository checkout. The targets are `kids_booklet` and `kids_booklet_prod`; use an Atlas cluster where these are fresh deployment databases and keep local development in a separate database. This non-secret JSON file is reviewed configuration.
+The collector creates `infra/config/vps.json` from provider discovery. It uses read-only Cloudflare and Atlas API requests, validates the VPS, and never prints entered credentials. Supply a lowercase Cloudflare zone name; the default hostnames are `staging.<zone>`, `booklet.<zone>`, and `deploy.<zone>`. Override those names only when required. The collector lists Atlas projects and clusters when a selection is needed. It keeps the six application bucket names unchanged because Terraform creates those exact names.
 
 ## One-time setup
 
-Open an administrator session on the VPS and check out the reviewed commit. Authenticate GitHub CLI as that administrator (`gh auth login`), then set `GH_TOKEN` without copying it into shell history: `export GH_TOKEN="$(gh auth token)"`. Supply `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` through the session environment. The script prompts silently for the temporary Atlas API keys and application secrets. For multiline values, set `DEPLOYMENT_SECRETS_DIR` to a mode-700 directory containing mode-600 `staging.json` and `prod.json` objects with the five required secret names; the serializer preserves newlines, quotes, and dollar signs. Never put values in command arguments or shell history.
+Open an administrator session on the VPS and check out the reviewed commit. First collect the non-secret configuration. This preview prompts silently for the temporary Cloudflare token and Atlas API keys, reports current provider state, and prints the candidate file without writing it:
+
+```bash
+bash scripts/deploy/vps-deployment.sh --action discover-config --zone example.com --write-config infra/config/vps.json
+```
+
+Inspect the candidate and run the same command with `--apply` to write the non-secret configuration locally:
+
+```bash
+bash scripts/deploy/vps-deployment.sh --action discover-config --zone example.com --write-config infra/config/vps.json --apply
+```
+
+The configuration must contain three distinct hostnames in the selected zone. Use an Atlas cluster where `kids_booklet` and `kids_booklet_prod` are fresh deployment databases, and keep local development in a separate database. After configuration collection, authenticate GitHub CLI as that administrator (`gh auth login`), then set `GH_TOKEN` without copying it into shell history: `export GH_TOKEN="$(gh auth token)"`. Supply `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` through the session environment. The script prompts silently for the temporary Atlas API keys and application secrets. For multiline values, set `DEPLOYMENT_SECRETS_DIR` to a mode-700 directory containing mode-600 `staging.json` and `prod.json` objects with the five required secret names; the serializer preserves newlines, quotes, and dollar signs. Never put values in command arguments or shell history.
 
 ```bash
 set +x

@@ -7,6 +7,7 @@ umask 077
 ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION=''
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 COMPOSE_SECRET_FILE=''
+ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTPUT=''
 ROOT=/opt/kids-booklet
 STATE=/var/lib/kids-booklet
 SECRETS=/etc/kids-booklet
@@ -24,10 +25,15 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: setup, finalize, status, infrastructure, deploy, check, backup, restore, rollback,
-         rotate-secrets, reset-staging, resume, host-dispatch, host-run
+Actions: discover-config, setup, finalize, status, infrastructure, deploy, check, backup,
+         restore, rollback, rotate-secrets, reset-staging, resume, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
+  --zone HOSTNAME                    required for discover-config
+  --staging-hostname HOSTNAME        defaults to staging.<zone> for discover-config
+  --prod-hostname HOSTNAME           defaults to booklet.<zone> for discover-config
+  --deploy-hostname HOSTNAME         defaults to deploy.<zone> for discover-config
+  --write-config PATH                required output for discover-config; must be infra/config/vps.json
   --environment staging|prod        target for application operations
   --image-digest ghcr.io/name@sha256:HEX  required for deploy
   --commit FULL_SHA                 required for deploy
@@ -37,7 +43,9 @@ Options:
   --request-id ID                   identifies an operation; reused by resume/status
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
---apply. Setup runs locally as root on the Ubuntu VPS from a reviewed checkout.
+--apply. discover-config makes read-only provider requests; --apply only writes its
+non-secret local configuration file. Setup runs locally as root on the Ubuntu VPS
+from a reviewed checkout.
 Example: bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json
 Example: sudo bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
 HELP
@@ -48,7 +56,7 @@ parse_arguments() {
     case "$1" in
       --help) usage; exit 0 ;;
       --apply) APPLY=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id)
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -57,6 +65,8 @@ parse_arguments() {
           --action) ACTION="$value";; --config) CONFIG_FILE="$value";; --environment) ENVIRONMENT="$value";;
           --image-digest) IMAGE_DIGEST="$value";; --backup-id) BACKUP_ID="$value";; --confirmation) CONFIRMATION="$value";;
           --vps-host) VPS_HOST="$value";; --vps-user) VPS_USER="$value";; --commit) COMMIT="$value";; --request-id) REQUEST_ID="$value";;
+          --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
+          --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
         shift 2 ;;
       *) die "Unknown or positional argument: $1" ;;
@@ -66,7 +76,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -75,6 +85,10 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
+  [[ -z "$ZONE_NAME" || "$ZONE_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid Cloudflare zone hostname'
+  for hostname in "$STAGING_HOSTNAME" "$PROD_HOSTNAME" "$DEPLOY_HOSTNAME"; do
+    [[ -z "$hostname" || "$hostname" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid application hostname'
+  done
   case "$ACTION" in
     deploy) [[ -n "$ENVIRONMENT" && -n "$IMAGE_DIGEST" && -n "$COMMIT" ]] || die 'Deploy requires environment, image digest and commit';;
     check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
@@ -88,6 +102,12 @@ validate_arguments() {
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
   fi
   case "$ACTION" in status|check) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  if [[ "$ACTION" == discover-config ]]; then
+    [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
+    [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
+    [[ -z "$PROD_HOSTNAME" || "$PROD_HOSTNAME" == "$ZONE_NAME" || "$PROD_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Production hostname must be in the Cloudflare zone'
+    [[ -z "$DEPLOY_HOSTNAME" || "$DEPLOY_HOSTNAME" == "$ZONE_NAME" || "$DEPLOY_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Deployment hostname must be in the Cloudflare zone'
+  fi
 }
 load_config() {
   need_command jq
@@ -474,6 +494,115 @@ atlas_request() {
   [[ -z "$payload" ]] || args+=(--data-binary "@$payload")
   ATLAS_STATUS="$(curl "${args[@]}" "https://cloud.mongodb.com/api/atlas/v2/$path")"
   [[ "$ATLAS_STATUS" == 200 || "$ATLAS_STATUS" == 201 ]] || die "Atlas request failed for $path (HTTP $ATLAS_STATUS)"
+}
+normalize_discovery_output() {
+  local directory filename
+  directory="${CONFIG_OUTPUT%/*}"
+  filename="${CONFIG_OUTPUT##*/}"
+  if [[ "$CONFIG_OUTPUT" != /* ]]; then directory="$REPO_ROOT/$directory"; fi
+  [[ "$directory" != "$CONFIG_OUTPUT" ]] || directory="$REPO_ROOT"
+  directory="$(cd "$directory" && pwd -P)" || die 'Discovery output directory does not exist'
+  CONFIG_OUTPUT="$directory/$filename"
+  [[ "$CONFIG_OUTPUT" == "$REPO_ROOT/infra/config/vps.json" ]] || die 'discover-config can write only infra/config/vps.json in this checkout'
+}
+read_discovery_cloudflare_token() {
+  if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then IFS= read -r -s -p 'Cloudflare API token: ' CLOUDFLARE_API_TOKEN; printf '\n' >&2; fi
+  [[ -n "$CLOUDFLARE_API_TOKEN" && "$CLOUDFLARE_API_TOKEN" != *$'\n'* && "$CLOUDFLARE_API_TOKEN" != *$'\r'* && "$CLOUDFLARE_API_TOKEN" != *'"'* ]] || die 'A valid Cloudflare API token is required'
+}
+report_discovery_command() {
+  if command -v "$1" >/dev/null; then printf 'exists: %s\n' "$1"; else printf 'missing: %s\n' "$1"; fi
+}
+select_atlas_project() {
+  local count choice
+  count="$(jq -r '.results | length' "$TEMP_DIR/atlas-projects.json")"
+  [[ "$count" -gt 0 ]] || die 'The Atlas API credentials cannot read any projects'
+  if [[ "$count" == 1 ]]; then jq -er '.results[0].id' "$TEMP_DIR/atlas-projects.json"; return; fi
+  printf 'Available Atlas projects:\n' >&2
+  jq -r '.results | to_entries[] | "\(.key + 1). \(.value.name) [\(.value.id)]"' "$TEMP_DIR/atlas-projects.json" >&2
+  read -r -p 'Atlas project number: ' choice
+  [[ "$choice" =~ ^[1-9][0-9]*$ && "$choice" -le "$count" ]] || die 'Select a listed Atlas project number'
+  jq -er --argjson index "$((choice - 1))" '.results[$index].id' "$TEMP_DIR/atlas-projects.json"
+}
+select_atlas_cluster() {
+  local count choice
+  count="$(jq -r '.results | length' "$TEMP_DIR/atlas-clusters.json")"
+  [[ "$count" -gt 0 ]] || die 'The selected Atlas project has no clusters'
+  if [[ "$count" == 1 ]]; then jq -er '.results[0].name' "$TEMP_DIR/atlas-clusters.json"; return; fi
+  printf 'Available Atlas clusters:\n' >&2
+  jq -r '.results | to_entries[] | "\(.key + 1). \(.value.name)"' "$TEMP_DIR/atlas-clusters.json" >&2
+  read -r -p 'Atlas cluster number: ' choice
+  [[ "$choice" =~ ^[1-9][0-9]*$ && "$choice" -le "$count" ]] || die 'Select a listed Atlas cluster number'
+  jq -er --argjson index "$((choice - 1))" '.results[$index].name' "$TEMP_DIR/atlas-clusters.json"
+}
+report_discovery_cloudflare_state() {
+  local hostname phase
+  for hostname in "$STAGING_HOSTNAME" "$PROD_HOSTNAME" "$DEPLOY_HOSTNAME"; do
+    cloudflare_get "zones/$TF_VAR_cloudflare_zone_id/dns_records?name=$hostname"
+    [[ "$CF_STATUS" == 200 ]] || die "Cloudflare DNS discovery failed for $hostname"
+    if [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]]; then printf 'available: DNS record %s\n' "$hostname"; else printf 'exists: DNS record %s; setup preview will require ownership review\n' "$hostname"; fi
+  done
+  for phase in http_request_cache_settings http_ratelimit; do
+    cloudflare_get "zones/$TF_VAR_cloudflare_zone_id/rulesets/phases/$phase/entrypoint"
+    case "$CF_STATUS" in
+      404) printf 'available: Cloudflare %s entrypoint\n' "$phase";;
+      200) printf 'exists: Cloudflare %s entrypoint; setup preview will require ownership review\n' "$phase";;
+      *) die "Cloudflare ruleset discovery failed for $phase";;
+    esac
+  done
+  cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$R2_STATE_BUCKET"
+  case "$CF_STATUS" in
+    404) printf 'available: R2 Terraform state bucket name\n';;
+    200) printf 'exists: R2 Terraform state bucket; setup will verify ownership\n';;
+    *) die 'Cloudflare R2 discovery failed';;
+  esac
+}
+discover_configuration() {
+  local zone_response project cluster candidate os_name public_ip
+  for name in curl jq uname nproc awk df; do need_command "$name"; done
+  [[ "$APPLY" == false ]] || need_command install
+  [[ -f /etc/os-release ]] && grep -q '^ID=ubuntu$' /etc/os-release || die 'Discovery requires Ubuntu'
+  [[ "$(uname -m)" == x86_64 ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
+  validate_host_capacity
+  for name in docker git gh openssl python3 ssh systemctl sudo; do report_discovery_command "$name"; done
+  if command -v docker >/dev/null; then docker compose version >/dev/null 2>&1 && printf 'exists: docker compose v2\n' || printf 'missing: docker compose v2\n'; fi
+  os_name="$(. /etc/os-release; printf '%s' "${PRETTY_NAME:-Ubuntu}")"
+  public_ip="$(curl -fsS --max-time 15 https://api.ipify.org || true)"
+  printf 'exists: VPS %s, x86_64, %s CPU cores, %s MiB RAM, %s MiB free disk, public IP %s\n' "$os_name" "$(nproc)" "$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)" "$(df -Pk / | awk 'NR==2 {print int($4 / 1024)}')" "${public_ip:-unavailable}"
+  ZONE_NAME="${ZONE_NAME,,}"
+  STAGING_HOSTNAME="${STAGING_HOSTNAME:-staging.$ZONE_NAME}"; STAGING_HOSTNAME="${STAGING_HOSTNAME,,}"
+  PROD_HOSTNAME="${PROD_HOSTNAME:-booklet.$ZONE_NAME}"; PROD_HOSTNAME="${PROD_HOSTNAME,,}"
+  DEPLOY_HOSTNAME="${DEPLOY_HOSTNAME:-deploy.$ZONE_NAME}"; DEPLOY_HOSTNAME="${DEPLOY_HOSTNAME,,}"
+  [[ "$STAGING_HOSTNAME" != "$PROD_HOSTNAME" && "$STAGING_HOSTNAME" != "$DEPLOY_HOSTNAME" && "$PROD_HOSTNAME" != "$DEPLOY_HOSTNAME" ]] || die 'Discovery hostnames must be distinct'
+  normalize_discovery_output
+  read_discovery_cloudflare_token
+  cloudflare_get "zones?name=$ZONE_NAME&status=active"
+  [[ "$CF_STATUS" == 200 && "$(jq '.result | length' "$CF_RESPONSE")" == 1 ]] || die "Cloudflare could not find exactly one active zone for $ZONE_NAME"
+  zone_response="$TEMP_DIR/discovery-zone.json"; cp "$CF_RESPONSE" "$zone_response"
+  TF_VAR_cloudflare_zone_id="$(jq -er '.result[0].id' "$zone_response")"
+  TF_VAR_cloudflare_account_id="$(jq -er '.result[0].account.id' "$zone_response")"
+  R2_STATE_BUCKET=kids-booklet-terraform-state
+  export TF_VAR_cloudflare_zone_id TF_VAR_cloudflare_account_id R2_STATE_BUCKET
+  printf 'discovered: Cloudflare account ID %s\n' "$TF_VAR_cloudflare_account_id"
+  printf 'discovered: Cloudflare zone ID %s\n' "$TF_VAR_cloudflare_zone_id"
+  report_discovery_cloudflare_state
+  load_atlas_admin_credentials
+  atlas_request GET 'groups?itemsPerPage=100'; cp "$ATLAS_RESPONSE" "$TEMP_DIR/atlas-projects.json"
+  project="$(select_atlas_project)"
+  atlas_request GET "groups/$project/clusters?itemsPerPage=100"; cp "$ATLAS_RESPONSE" "$TEMP_DIR/atlas-clusters.json"
+  cluster="$(select_atlas_cluster)"
+  candidate="$TEMP_DIR/vps.json"
+  jq -n --arg account "$TF_VAR_cloudflare_account_id" --arg zone "$TF_VAR_cloudflare_zone_id" --arg deploy "$DEPLOY_HOSTNAME" --arg project "$project" --arg cluster "$cluster" --arg staging "$STAGING_HOSTNAME" --arg prod "$PROD_HOSTNAME" '{repository:"karpishe-experiments/agentic-poc",image:"ghcr.io/karpishe-experiments/agentic-poc",cloudflare_account_id:$account,cloudflare_zone_id:$zone,deploy_hostname:$deploy,state_bucket:"kids-booklet-terraform-state",atlas_project_id:$project,atlas_cluster_name:$cluster,environments:{staging:{APP_HOSTNAME:$staging,ASSETS_BUCKET:"kids-booklet-staging-assets",DIAGNOSTICS_BUCKET:"kids-booklet-staging-diagnostics",RECOVERY_BUCKET:"kids-booklet-staging-recovery"},prod:{APP_HOSTNAME:$prod,ASSETS_BUCKET:"kids-booklet-prod-assets",DIAGNOSTICS_BUCKET:"kids-booklet-prod-diagnostics",RECOVERY_BUCKET:"kids-booklet-prod-recovery"}}}' > "$candidate"
+  if [[ -e "$CONFIG_OUTPUT" ]]; then
+    cmp -s "$candidate" "$CONFIG_OUTPUT" && { printf 'exists: non-secret deployment configuration\n'; return; }
+    die 'Existing infra/config/vps.json differs; inspect it and resolve the configuration drift'
+  fi
+  if [[ "$APPLY" == false ]]; then
+    printf 'would create: non-secret deployment configuration at %s\n' "$CONFIG_OUTPUT"
+    jq . "$candidate"
+  else
+    install -m 600 "$candidate" "$CONFIG_OUTPUT"
+    printf 'created: non-secret deployment configuration at %s\n' "$CONFIG_OUTPUT"
+  fi
 }
 configure_atlas() {
   local project cluster outbound_ip environment database username password srv payload
@@ -1035,6 +1164,7 @@ finalize_repository() {
 main() {
   parse_arguments "$@"; validate_arguments
   case "$ACTION" in
+    discover-config) discover_configuration;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
     setup) setup_host;;

@@ -176,6 +176,8 @@ When you author or change deployment automation:
 
 The canonical shell entrypoint is `scripts/deploy/vps-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
 
+Use its `discover-config` action to collect non-secret VPS, Cloudflare, and Atlas configuration before setup. Its preview may call provider read APIs but must not write a file or mutate provider resources; only its `--apply` writes `infra/config/vps.json`.
+
 For live runbook execution, use `docs/deployment/operator-handoff.md`: identify the execution host, complete one checkpoint at a time, record sanitized evidence, and recheck workflow/journal/container state after interruption. Honor existing session authorization; do not infer live success from local validation or invent a recovery command.
 
 Terraform owns Cloudflare R2, Tunnel, DNS and rules. Setup owns provider discovery, scoped Atlas users, the exact VPS allowlist, the configuration PR, and host credentials. Finalize owns absent environment-branch creation and supported branch protection. Compose owns non-secret runtime configuration; use the same variable names in both environments and no `STAGING_*` or `PROD_*` application variables. The root-owned final Compose override owns secrets and must never be rendered in logs or artifacts; rotation must stage them over pinned SSH before the serialized Maintenance workflow. GitHub publishes target-environment image tags but the host deploys only immutable digests. Every deployment change must update the compact runbook and relevant architecture guidance, and must keep maintenance, drain, backup, rollback, and environment-isolation contracts intact.

@@ -10,7 +10,7 @@ Use this handoff with Terra High or another coding agent. The [runbook](runbook.
 
 | Checkpoint | Where | Evidence required before proceeding |
 | --- | --- | --- |
-| 1. Identify target | Workstation and VPS | Reviewed commit SHA, repository, VPS identity, hostnames, Cloudflare account/zone and Atlas project/cluster agree with configuration |
+| 1. Identify target | Workstation and VPS | Reviewed commit SHA, repository and VPS identity agree; `discover-config` preview identifies the Cloudflare account/zone and Atlas project/cluster, then its applied non-secret configuration records the three hostnames |
 | 2. Prepare prerequisites | VPS and provider consoles | Required commands available, capacity checks pass, administrator recovery access confirmed, required provider enrollment and credential scopes supplied |
 | 3. Preview setup | VPS checkout | Preview exits zero; proposed resources and target identities inspected; no unresolved drift or permission error |
 | 4. Apply setup | VPS checkout | Setup exits zero; Tunnel active; host configuration installed; GitHub configuration and configuration PR created; application containers remain stopped |
