@@ -12,6 +12,21 @@ Complete Cloudflare DNS activation, R2 enrollment and billing consent first. Use
 
 The collector creates `infra/config/vps.json` from provider discovery. It uses read-only Cloudflare and Atlas API requests, validates the VPS, and never prints entered credentials. Supply a lowercase Cloudflare zone name; the default hostnames are `staging.<zone>`, `booklet.<zone>`, and `deploy.<zone>`. Override those names only when required. The collector lists Atlas projects and clusters when a selection is needed. It keeps the six application bucket names unchanged because Terraform creates those exact names.
 
+## Recorded target values
+
+| Value | Recorded value |
+| --- | --- |
+| Cloudflare zone | `uniwares.co.uk` |
+| Staging hostname | `booklet-staging.uniwares.co.uk` |
+| Production hostname | `booklet.uniwares.co.uk` |
+| Deployment hostname | `srv1-deploy.uniwares.co.uk` |
+| Atlas project ID | `6a869d84e65675f845fa22eb` |
+| Atlas cluster | `kids-booklet` in Ireland (`eu-west-1`) |
+| Staging database | `kids_booklet` |
+| Production database | `kids_booklet_prod` |
+
+The current staging database contains application collections and indexes. The production database contains a `temp` collection. Select a preservation or clean-start procedure before activation; neither database is treated as empty by this runbook. Cloudflare account and zone IDs remain discovery outputs and are added only to the reviewed `infra/config/vps.json`.
+
 ## One-time setup
 
 Open an administrator session on the VPS and check out the reviewed commit. First collect the non-secret configuration. This preview prompts silently for the temporary Cloudflare token and Atlas API keys, reports current provider state, and prints the candidate file without writing it:
