@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Reject inherited tracing before processing any credentials.
-{ set +x; } 2>/dev/null
-set -euo pipefail
-umask 077
+# Direct execution is strict. Source-only credential sessions must preserve the
+# caller's shell options so a failed preview cannot close the SSH login.
+SCRIPT_IS_SOURCED=false
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then SCRIPT_IS_SOURCED=true; fi
+if [[ "$SCRIPT_IS_SOURCED" == false ]]; then
+  # Reject inherited tracing before processing any credentials.
+  { set +x; } 2>/dev/null
+  set -euo pipefail
+  umask 077
+fi
 
 ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION=''
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
@@ -498,15 +504,18 @@ load_cloudflare_access_credentials() {
   prompt_secret_variable CF_ACCESS_CLIENT_ID 'Cloudflare Access service token ID'
   prompt_secret_variable CF_ACCESS_CLIENT_SECRET 'Cloudflare Access service token secret'
 }
-is_sourced() { [[ "${BASH_SOURCE[0]}" != "$0" ]]; }
+is_sourced() { [[ "$SCRIPT_IS_SOURCED" == true ]]; }
 interactive_terminal() { [[ -t 0 && -t 1 ]]; }
 start_credential_session() {
+  local restore_xtrace=false
   is_sourced || die 'credential-session must be sourced into the current SSH shell'
   interactive_terminal || die 'credential-session requires an interactive SSH terminal'
+  case "$-" in *x*) restore_xtrace=true; set +x;; esac
   load_cloudflare_api_token
   load_r2_state_credentials
   load_github_admin_token
   load_atlas_admin_credentials
+  [[ "$restore_xtrace" == true ]] && set -x
   printf 'loaded: deployment credentials remain in this SSH shell until logout or clear-credential-session\n'
 }
 clear_credential_session() {
