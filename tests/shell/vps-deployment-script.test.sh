@@ -66,6 +66,22 @@ grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/accessList?itemsPerPage=1' <
 grep -q 'github: organizations/karpishe-experiments/settings/billing/budgets?per_page=1' <<< "$access_check_output"
 grep -q 'verified: GitHub repository administration and billing API' <<< "$access_check_output"
 set +e
+access_check_failure_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+load_config() { :; }
+need_command() { :; }
+access_check_cloudflare() { printf "verified: Cloudflare\\n"; }
+access_check_r2() { die "R2 access denied"; }
+access_check_atlas() { die "Atlas access denied"; }
+access_check_github() { printf "verified: GitHub\\n"; }
+access_check' _ "$script" 2>&1)"
+access_check_failure_status=$?
+set -e
+test "$access_check_failure_status" -ne 0
+grep -q 'failed: R2 access check; continuing' <<< "$access_check_failure_output"
+grep -q 'failed: Atlas access check; continuing' <<< "$access_check_failure_output"
+grep -q 'passed: GitHub access check' <<< "$access_check_failure_output"
+grep -q 'Access check found 2 failure(s); no changes were made' <<< "$access_check_failure_output"
+set +e
 zero_trust_missing_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; cloudflare_get() { CF_STATUS=404; }; verify_cloudflare_zero_trust aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' _ "$script" 2>&1)"
 zero_trust_missing_status=$?
 set -e

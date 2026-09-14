@@ -600,7 +600,7 @@ verify_cloudflare_zero_trust() {
   printf 'verified: Cloudflare Zero Trust organization and Access application API\n'
 }
 verify_r2_state_access() {
-  local config status
+  local config status detail
   private_temp
   config="$TEMP_DIR/r2-access-curl.conf"
   printf 'silent\nshow-error\naws-sigv4 = "aws:amz:auto:s3"\nuser = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" > "$config"
@@ -609,29 +609,66 @@ verify_r2_state_access() {
   case "$status" in
     200) printf 'verified: R2 Terraform state credentials\n';;
     404) printf 'verified: R2 Terraform state credentials; state bucket is not created\n';;
-    *) die "R2 Terraform state credential check failed (HTTP $status)";;
+    *)
+      detail="$(tr '\n' ' ' < "$TEMP_DIR/r2-access-response" | sed -n 's:.*<Code>\([^<]*\)</Code>.*<Message>\([^<]*\)</Message>.*:\1: \2:p')"
+      [[ -n "$detail" ]] || detail='response did not contain an R2 error code and message'
+      die "R2 Terraform state credential check failed (HTTP $status; $detail)"
+      ;;
   esac
 }
-access_check() {
-  local repository owner project
+access_check_cloudflare() {
   load_config
-  need_command curl; need_command jq
   load_terraform_configuration
   load_cloudflare_api_token
   verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
   verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
+}
+access_check_r2() {
+  load_config
+  load_terraform_configuration
   load_r2_state_credentials
   verify_r2_state_access
+}
+access_check_atlas() {
+  local project
+  load_config
   load_atlas_admin_credentials
   project="$(jq -r .atlas_project_id "$CONFIG_FILE")"
   atlas_request GET "groups/$project"
   atlas_request GET "groups/$project/accessList?itemsPerPage=1"
   printf 'verified: Atlas project and access-list API\n'
+}
+access_check_github() {
+  local repository owner
+  load_config
   repository="$(jq -r .repository "$CONFIG_FILE")"; owner="${repository%%/*}"
   github_get "repos/$repository"
   jq -e '.permissions.admin == true' "$GITHUB_RESPONSE" >/dev/null || die 'GitHub token lacks repository administration'
   github_get "organizations/$owner/settings/billing/budgets?per_page=1"
   printf 'verified: GitHub repository administration and billing API\n'
+}
+run_access_probe() {
+  local name="$1" output
+  shift
+  if output="$("$@" 2>&1)"; then
+    [[ -z "$output" ]] || printf '%s\n' "$output"
+    printf 'passed: %s access check\n' "$name"
+  else
+    [[ -z "$output" ]] || printf '%s\n' "$output" >&2
+    printf 'failed: %s access check; continuing\n' "$name" >&2
+    return 1
+  fi
+}
+access_check() {
+  local failures=0
+  load_config
+  need_command curl; need_command jq
+  run_access_probe Cloudflare access_check_cloudflare || failures=$((failures + 1))
+  run_access_probe R2 access_check_r2 || failures=$((failures + 1))
+  run_access_probe Atlas access_check_atlas || failures=$((failures + 1))
+  run_access_probe GitHub access_check_github || failures=$((failures + 1))
+  [[ "$failures" == 0 ]] || die "Access check found $failures failure(s); no changes were made"
+  printf 'verified: all provider access checks\n'
 }
 load_atlas_admin_credentials() {
   prompt_secret_variable ATLAS_PUBLIC_KEY 'Atlas temporary public API key'
