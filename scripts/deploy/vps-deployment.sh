@@ -937,7 +937,7 @@ stage_and_trigger_rotation() {
 }
 setup_host() {
   load_config
-  for name in curl jq docker python3 systemctl ssh-keygen visudo uname openssl nproc awk df base64 cmp tr git; do need_command "$name"; done
+  for name in curl jq docker python3 systemctl ssh-keygen visudo uname openssl nproc awk df base64 cmp tr git sha256sum tar; do need_command "$name"; done
   if [[ ! -f /etc/os-release ]] || ! grep -q '^ID=ubuntu$' /etc/os-release; then die 'Setup requires Ubuntu'; fi
   [[ "$(uname -m)" == x86_64 ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
   validate_host_capacity
@@ -1024,7 +1024,7 @@ UNIT
 install_auxiliary_tools() {
   local tool version architecture=x86_64 asset expected
   [[ "$(uname -m)" == "$architecture" ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
-  for tool in curl sha256sum unzip tar; do need_command "$tool"; done
+  for tool in curl sha256sum tar python3; do need_command "$tool"; done
   # Preview downloads verified tools only into its disposable workspace.
   # commit_auxiliary_tools installs them on the host only during apply.
   private_temp; mkdir -p "$TEMP_DIR/bin"
@@ -1033,7 +1033,14 @@ install_auxiliary_tools() {
     curl -fsSL "https://releases.hashicorp.com/terraform/$version/$asset" -o "$TEMP_DIR/$asset"
     curl -fsSL "https://releases.hashicorp.com/terraform/$version/terraform_${version}_SHA256SUMS" -o "$TEMP_DIR/checksums"
     (cd "$TEMP_DIR" && grep " $asset$" checksums | sha256sum -c -)
-    unzip -q -o "$TEMP_DIR/$asset" -d "$TEMP_DIR/terraform"
+    mkdir -p "$TEMP_DIR/terraform"
+    python3 - "$TEMP_DIR/$asset" "$TEMP_DIR/terraform" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    archive.extractall(sys.argv[2])
+PY
     install -m 755 "$TEMP_DIR/terraform/terraform" "$TEMP_DIR/bin/terraform"
   fi
   if ! command -v gh >/dev/null || ! gh --version | head -1 | grep -q '2.78.0'; then

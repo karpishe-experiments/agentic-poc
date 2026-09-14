@@ -4,7 +4,7 @@ For agent-assisted execution, start with the [operator handoff](operator-handoff
 
 ## Required inputs
 
-Use an x86_64 Ubuntu VPS with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Before starting, install Docker Engine with Compose v2, Git, sudo, jq, Python 3, curl, tar, unzip, OpenSSL and OpenSSH server. Verify `docker compose version` and provider-console access. Setup requires systemd and a sudo-capable administrator. Preview downloads missing pinned tools into a temporary workspace; apply installs Terraform 1.11.4 and cloudflared 2025.8.1 after checksum verification. GitHub CLI is used only from the temporary workspace and is never installed on the VPS.
+Use an x86_64 Ubuntu VPS with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Before starting, install Docker Engine with Compose v2, Git, sudo, jq, Python 3, curl, tar, OpenSSL and OpenSSH server. Verify `docker compose version` and provider-console access. Setup requires systemd and a sudo-capable administrator. Preview downloads missing pinned tools into a temporary workspace; apply installs Terraform 1.11.4 and cloudflared 2025.8.1 after checksum verification. Python extracts the verified Terraform archive, so `unzip` is not required. GitHub CLI is used only from the temporary workspace and is never installed on the VPS.
 
 Supply a Cloudflare account/zone, three DNS names, an Atlas project and cluster, five application secrets per environment, scoped R2 bucket credentials, and temporary Cloudflare, R2, and Atlas administrator credentials. Keep credentials outside Git. Public GHCR images expose the built application and seeds.
 

@@ -5,6 +5,11 @@ bash "$script" --help >/dev/null
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"
 grep -q 'will_alert:false' "$script"
 grep -q '"\$variables_complete" == true' "$script"
+grep -q 'python3 - "\$TEMP_DIR/\$asset" "\$TEMP_DIR/terraform"' "$script"
+if grep -q '\<unzip\>' "$script"; then
+  echo 'deployment script still requires unzip' >&2
+  exit 1
+fi
 reject() { if bash "$script" "$@" > /dev/null 2>&1; then printf 'unexpected success: %s\n' "$*" >&2; exit 1; fi; }
 reject unexpected
 reject --action unknown
