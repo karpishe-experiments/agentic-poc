@@ -26,14 +26,14 @@ reject --action clear-credential-session --apply
 reject --action access-check --apply
 source_option_check="$(bash -c 'set +e +u +o pipefail; VPS_DEPLOYMENT_LIBRARY_ONLY=true source "$1"; [[ $(set -o | awk "\$1==\"errexit\" {print \$2}") == off && $(set -o | awk "\$1==\"nounset\" {print \$2}") == off && $(set -o | awk "\$1==\"pipefail\" {print \$2}") == off ]]' _ "$script"; printf %s "$?")"
 test "$source_option_check" = 0
-credential_session_check="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; main --action credential-session; test "$CLOUDFLARE_API_TOKEN" = temporary-cloudflare-token; test "$TF_VAR_cloudflare_api_token" = temporary-cloudflare-token; clear_credential_session; test -z "${CLOUDFLARE_API_TOKEN:-}"' _ "$script")"
+credential_session_check="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; main --action credential-session; test "$CLOUDFLARE_API_TOKEN" = temporary-cloudflare-token; test "$TF_VAR_cloudflare_api_token" = temporary-cloudflare-token; clear_credential_session; test -z "${CLOUDFLARE_API_TOKEN:-}"' _ "$script")"
 grep -q 'cleared: deployment credentials' <<< "$credential_session_check"
 grep -q 'next: bash scripts/deploy/vps-deployment.sh --action access-check' <<< "$credential_session_check"
-if ! CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'set -e; source "$1"; interactive_terminal() { :; }; main --action credential-session; set -o | grep -Eq "^errexit[[:space:]]+off$"; false; clear_credential_session; set -o | grep -Eq "^errexit[[:space:]]+on$"' _ "$script" > /dev/null; then
+if ! CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'set -e; source "$1"; interactive_terminal() { :; }; main --action credential-session; set -o | grep -Eq "^errexit[[:space:]]+off$"; false; clear_credential_session; set -o | grep -Eq "^errexit[[:space:]]+on$"' _ "$script" > /dev/null; then
   echo 'credential-session did not suppress and restore errexit' >&2
   exit 1
 fi
-trace_output="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; set -x; start_credential_session; set +x' _ "$script" 2>&1)"
+trace_output="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; set -x; start_credential_session; set +x' _ "$script" 2>&1)"
 if grep -q 'temporary-.*-token\|temporary-r2-secret\|temporary-atlas-private' <<< "$trace_output"; then
   echo 'credential-session leaked a secret through shell tracing' >&2
   exit 1
@@ -42,8 +42,12 @@ github_token_check="$(GITHUB_ADMIN_TOKEN=temporary-github-token VPS_DEPLOYMENT_L
 test "$github_token_check" = temporary-github-token
 cloudflare_token_check="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_cloudflare_api_token; printf "%s:%s" "$CLOUDFLARE_API_TOKEN" "$TF_VAR_cloudflare_api_token"' _ "$script")"
 test "$cloudflare_token_check" = temporary-cloudflare-token:temporary-cloudflare-token
-r2_token_check="$(AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=temporary-r2-secret VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_r2_state_credentials; printf "%s:%s" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"' _ "$script")"
-test "$r2_token_check" = temporary-r2-key:temporary-r2-secret
+r2_token_check="$(AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef AWS_SECRET_ACCESS_KEY=temporary-r2-secret VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_r2_state_credentials; printf "%s:%s" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"' _ "$script")"
+test "$r2_token_check" = 0123456789abcdef0123456789abcdef:temporary-r2-secret
+if AWS_ACCESS_KEY_ID=temporary-cloudflare-api-token AWS_SECRET_ACCESS_KEY=temporary-r2-secret VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_r2_state_credentials' _ "$script" </dev/null > /dev/null 2>&1; then
+  echo 'accepted a non-R2 access key ID' >&2
+  exit 1
+fi
 atlas_token_check="$(ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_atlas_admin_credentials; printf "%s:%s" "$ATLAS_PUBLIC_KEY" "$ATLAS_PRIVATE_KEY"' _ "$script")"
 test "$atlas_token_check" = temporary-atlas-public:temporary-atlas-private
 access_check_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
@@ -70,7 +74,7 @@ r2_error_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
 TEMP_DIR="$(mktemp -d)"
 R2_ENDPOINT=https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com
 R2_STATE_BUCKET=kids-booklet-terraform-state
-AWS_ACCESS_KEY_ID=temporary-r2-key
+AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef
 AWS_SECRET_ACCESS_KEY=temporary-r2-secret
 curl() { local output=""; while [[ $# -gt 0 ]]; do case "$1" in --output) output="$2"; shift 2;; *) shift;; esac; done; printf "%s" "<Error><Code>InvalidAccessKeyId</Code><Message>Access key is invalid</Message></Error>" > "$output"; printf 400; }
 verify_r2_state_access' _ "$script" 2>&1)"

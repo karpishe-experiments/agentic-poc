@@ -510,7 +510,14 @@ load_cloudflare_api_token() {
   export TF_VAR_cloudflare_api_token
 }
 load_r2_state_credentials() {
-  prompt_secret_variable AWS_ACCESS_KEY_ID 'R2 Terraform access key ID'
+  local value="${AWS_ACCESS_KEY_ID:-}"
+  while [[ ! "$value" =~ ^[A-Za-z0-9]{32}$ ]]; do
+    [[ -z "$value" ]] || printf 'error: R2 Terraform access key ID must be 32 letters or digits\n' >&2
+    [[ -t 0 ]] || die 'R2 Terraform access key ID is required through the protected runtime environment'
+    IFS= read -r -s -p 'R2 Terraform access key ID: ' value; printf '\n' >&2
+  done
+  AWS_ACCESS_KEY_ID="$value"
+  export AWS_ACCESS_KEY_ID
   prompt_secret_variable AWS_SECRET_ACCESS_KEY 'R2 Terraform secret access key'
 }
 load_cloudflare_access_credentials() {
