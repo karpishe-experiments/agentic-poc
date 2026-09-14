@@ -36,7 +36,7 @@ usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, reset-staging, resume, credential-session,
+         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, resume, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -90,7 +90,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -105,7 +105,7 @@ validate_arguments() {
   done
   case "$ACTION" in
     deploy) [[ -n "$ENVIRONMENT" && -n "$IMAGE_DIGEST" && -n "$COMMIT" ]] || die 'Deploy requires environment, image digest and commit';;
-    check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
+    check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
   esac
   if [[ "$ACTION" == restore ]]; then
     [[ -n "$BACKUP_ID" ]] || die 'Restore requires backup ID'
@@ -193,6 +193,13 @@ set_step() {
   jq --arg step "$1" '.step=$step' "$STATE/operation.json" > "$STATE/operation.next.json"
   mv "$STATE/operation.next.json" "$STATE/operation.json"
 }
+show_operation_status() {
+  if [[ -f "$STATE/operation.json" ]]; then
+    jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"
+  else
+    printf '{"step":"idle"}\n'
+  fi
+}
 record_release_metadata() {
   local release="$1" prior="$2" image config_hash
   image="$(jq -er .services.app.image "$release/image.json")"
@@ -223,7 +230,8 @@ recover_interrupted_rotation() {
 validate_compose() {
   local release="$1"
   # Do not print this output: it includes secrets. Only jq's exit status is used.
-  compose "$release" config --format json | jq -e '.services.app.environment | [.OPENAI_API_KEY,.MONGODB_URI,.ACCESS_GATE_PASSWORD,.AWS_ACCESS_KEY_ID,.AWS_SECRET_ACCESS_KEY] | all(type == "string" and length > 0)' >/dev/null || die 'Required host secrets are missing'
+  compose "$release" config --format json | jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type == "string" and length > 0)' >/dev/null || die 'Required host secrets are missing'
+  compose "$release" config --format json | jq -e '.services.app.environment.ACCESS_GATE_PASSWORD | type == "string" and length >= 16' >/dev/null || die 'ACCESS_GATE_PASSWORD must contain at least 16 characters'
 }
 prepare_release() {
   local release="$STATE/releases/$ENVIRONMENT/$COMMIT"
@@ -367,10 +375,10 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == status ]]; then
-    if [[ -f "$STATE/operation.json" ]]; then jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"; else printf '{"step":"idle"}\n'; fi
+    show_operation_status
     exit 0
   fi
   if [[ "$ACTION" == stage-secrets ]]; then
@@ -380,9 +388,27 @@ host_dispatch() {
     private_temp
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Staged secret override exceeds 64 KiB'; fi
-    jq -e '.services.app.environment | [.OPENAI_API_KEY,.MONGODB_URI,.ACCESS_GATE_PASSWORD,.AWS_ACCESS_KEY_ID,.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Staged secret override is invalid'
+    jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0) and ($e.ACCESS_GATE_PASSWORD | type=="string" and length>=16)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Staged secret override is invalid; ACCESS_GATE_PASSWORD must contain at least 16 characters'
     install -m 600 "$TEMP_DIR/secrets.json" "$SECRETS/$ENVIRONMENT/secrets.pending.json"
     printf 'updated: staged %s secret rotation\n' "$ENVIRONMENT"; exit 0
+  fi
+  if [[ "$ACTION" == repair-first-activation-secrets ]]; then
+    [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; exit 0; }
+    exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+    [[ -f "$STATE/operation.json" ]] || die 'No interrupted operation recorded'
+    local failed_id
+    failed_id="$(jq -r .requestId "$STATE/operation.json")"
+    jq -e --arg environment "$ENVIRONMENT" '.action=="deploy" and .environment==$environment and .step=="initializing"' "$STATE/operation.json" >/dev/null || die 'Secret repair is limited to a failed first deployment at initialization'
+    [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || die 'Secret repair is unavailable after a successful release'
+    ! systemctl is-active --quiet "kids-booklet-operation-$failed_id.service" || die 'Previous service remains active'
+    [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Application container remains active'
+    private_temp
+    dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
+    if IFS= read -r -n 1; then die 'Secret override exceeds 64 KiB'; fi
+    jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0) and ($e.ACCESS_GATE_PASSWORD | type=="string" and length>=16)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Secret override is invalid; ACCESS_GATE_PASSWORD must contain at least 16 characters'
+    install -m 600 "$TEMP_DIR/secrets.json" "$SECRETS/$ENVIRONMENT/secrets.json"
+    printf 'updated: %s failed first-activation secrets; operation remains ready for explicit resume\n' "$ENVIRONMENT"
+    exit 0
   fi
   if [[ "$ACTION" == sync-host ]]; then
     [[ "$APPLY" == true && -n "$REQUEST_ID" && -f "$STATE/operation.json" ]] || die 'Host synchronization requires the active infrastructure request'
@@ -1171,7 +1197,7 @@ build_secret_override() {
   if [[ -n "${DEPLOYMENT_SECRETS_DIR:-}" ]]; then
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
-    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and ([.[$names[]]] | all(type=="string" and length>0))' "$secret_input" >/dev/null || die 'Secret input file must contain exactly the required non-empty strings'
+    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and ([.[$names[]]] | all(type=="string" and length>0)) and (.ACCESS_GATE_PASSWORD | length>=16)' "$secret_input" >/dev/null || die 'Secret input file must contain exactly the required non-empty strings and ACCESS_GATE_PASSWORD must contain at least 16 characters'
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi
     chmod 600 "$destination"
@@ -1182,6 +1208,7 @@ build_secret_override() {
     if [[ "$name" == MONGODB_URI && -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then value="${GENERATED_MONGODB_URI[$environment]}"
     else IFS= read -r -s -p "$environment $name: " value; printf '\n' >&2; fi
     [[ -n "$value" ]] || die "$name cannot be empty"
+    [[ "$name" != ACCESS_GATE_PASSWORD || ${#value} -ge 16 ]] || die 'ACCESS_GATE_PASSWORD must contain at least 16 characters'
     printf '%s' "$value" > "$TEMP_DIR/value"
     # JSON is valid Compose YAML. Escape dollars for Compose interpolation.
     jq --arg name "$name" --rawfile value "$TEMP_DIR/value" '.services.app.environment[$name]=($value | gsub("\\$";"$$"))' "$destination" > "$TEMP_DIR/next.json"
@@ -1190,9 +1217,29 @@ build_secret_override() {
   done
   chmod 600 "$destination"
 }
+repair_first_activation_secrets() {
+  load_config
+  [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; return; }
+  need_command jq; private_temp
+  build_secret_override "$ENVIRONMENT" "$TEMP_DIR/secrets.json"
+  local remote_command
+  local -a remote=(--action repair-first-activation-secrets --environment "$ENVIRONMENT" --apply)
+  printf -v remote_command ' %s' "${remote[@]}"
+  if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
+    (SSH_ORIGINAL_COMMAND="$remote_command" host_dispatch) < "$TEMP_DIR/secrets.json"
+  else
+    configure_ssh
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/secrets.json"
+  fi
+  printf 'next: run Maintenance with action=resume for %s\n' "$ENVIRONMENT"
+}
 write_secret_override() {
   local environment="$1" destination="$SECRETS/$1/secrets.json"
-  [[ ! -f "$destination" ]] || { printf 'exists: %s host secret override\n' "$environment"; return; }
+  if [[ -f "$destination" ]]; then
+    jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0) and ($e.ACCESS_GATE_PASSWORD | type=="string" and length>=16)' "$destination" >/dev/null || die "$environment host secret override is invalid; ACCESS_GATE_PASSWORD must contain at least 16 characters"
+    printf 'exists: %s valid host secret override\n' "$environment"
+    return
+  fi
   private_temp; build_secret_override "$environment" "$TEMP_DIR/secrets.json"
   install -d -m 700 "$SECRETS/$environment"
   install -m 600 "$TEMP_DIR/secrets.json" "$destination"
@@ -1464,6 +1511,14 @@ main() {
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
     credential-session) start_credential_session;;
     clear-credential-session) clear_credential_session;;
+    status)
+      if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
+        CONFIG_FILE="$ROOT/config.json"; load_config; show_operation_status
+      else
+        if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
+        [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
+        host_call
+      fi;;
     setup) setup_host;;
     finalize) finalize_repository;;
     rotate-secrets)
@@ -1472,6 +1527,7 @@ main() {
         [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
         host_call
       else stage_and_trigger_rotation; fi;;
+    repair-first-activation-secrets) repair_first_activation_secrets;;
     infrastructure) terraform_operation;;
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi

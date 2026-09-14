@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization dispatch-rejection journal-retention reset-guard plan-guard; do
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-schema first-activation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -122,6 +122,24 @@ CHILD
     printf '%s\n' 'key$with$dollars' 'mongodb://user:p@db' 'long-password-"quoted"' 'access' 'secret' | write_secret_override staging
     jq -e '.services.app.environment.OPENAI_API_KEY == "key$$with$$dollars" and .services.app.environment.ACCESS_GATE_PASSWORD == "long-password-\"quoted\""' "$SECRETS/staging/secrets.json" >/dev/null
     [[ "$(stat -c %a "$SECRETS/staging/secrets.json")" == 600 ]] || [[ "$(uname -s)" == MINGW* ]];;
+  secret-schema)
+    compose() { printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"short","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}'; }
+    if (validate_compose unused) >/dev/null 2>&1; then echo 'accepted short access password'; exit 1; fi
+    compose() { printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"sixteen-chars-ok!","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}'; }
+    validate_compose unused
+    printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"short","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}' > "$SECRETS/staging/secrets.json"
+    if (write_secret_override staging) >/dev/null 2>&1; then echo 'accepted existing invalid host secret override'; exit 1; fi;;
+  first-activation-secret-repair)
+    require_root() { :; }; load_config() { :; }; flock() { :; }
+    systemctl() { return 1; }
+    docker() { :; }
+    rm -f "$STATE/releases/staging/current"
+    jq -n '{requestId:"failed",action:"deploy",environment:"staging",step:"initializing"}' > "$STATE/operation.json"
+    export SSH_ORIGINAL_COMMAND='--action repair-first-activation-secrets --environment staging --apply'
+    secret_payload='{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"sixteen-chars-ok!","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}'
+    (host_dispatch) <<< "$secret_payload" >/dev/null
+    jq -e '.services.app.environment.ACCESS_GATE_PASSWORD=="sixteen-chars-ok!"' "$SECRETS/staging/secrets.json" >/dev/null
+    jq -e '.requestId=="failed" and .step=="initializing"' "$STATE/operation.json" >/dev/null;;
   dispatch-rejection)
     require_root() { :; }
     export SSH_ORIGINAL_COMMAND='--action deploy;id'

@@ -93,7 +93,8 @@ For the restore rehearsal, run Maintenance with `action=backup`, then read its c
 | Backup | Maintenance → backup |
 | Restore | Maintenance → restore; exact backup ID and `kids_booklet` or `kids_booklet_prod` |
 | Previous release | Maintenance → rollback |
-| Interrupted application operation | Maintenance → resume; original environment |
+| Interrupted application operation | Inspect it with `sudo /opt/kids-booklet/vps-deployment.sh --action status`, then run Maintenance → resume for the original environment |
+| First activation rejects `ACCESS_GATE_PASSWORD` | Update the issue-branch checkout and install its reviewed script with `sudo install -m 755 scripts/deploy/vps-deployment.sh /opt/kids-booklet/vps-deployment.sh`. Run `bash scripts/deploy/vps-deployment.sh --action repair-first-activation-secrets --environment <target> --config infra/config/vps.json --apply`, enter all five secrets with a password of at least 16 characters, then run Maintenance → resume |
 | Rotate host secrets | Run `bash scripts/deploy/vps-deployment.sh --action rotate-secrets --environment <target> --config infra/config/vps.json --apply`; it stages values over pinned Tunnel SSH and queues Maintenance |
 | Reset staging | Reset staging on `_staging`; type `kids_booklet` |
 
