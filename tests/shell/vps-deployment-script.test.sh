@@ -23,10 +23,12 @@ VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; parse_arguments --action 
 reject --action github-login
 reject --action credential-session --apply
 reject --action clear-credential-session --apply
+reject --action access-check --apply
 source_option_check="$(bash -c 'set +e +u +o pipefail; VPS_DEPLOYMENT_LIBRARY_ONLY=true source "$1"; [[ $(set -o | awk "\$1==\"errexit\" {print \$2}") == off && $(set -o | awk "\$1==\"nounset\" {print \$2}") == off && $(set -o | awk "\$1==\"pipefail\" {print \$2}") == off ]]' _ "$script"; printf %s "$?")"
 test "$source_option_check" = 0
 credential_session_check="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; main --action credential-session; test "$CLOUDFLARE_API_TOKEN" = temporary-cloudflare-token; test "$TF_VAR_cloudflare_api_token" = temporary-cloudflare-token; clear_credential_session; test -z "${CLOUDFLARE_API_TOKEN:-}"' _ "$script")"
 grep -q 'cleared: deployment credentials' <<< "$credential_session_check"
+grep -q 'next: bash scripts/deploy/vps-deployment.sh --action access-check' <<< "$credential_session_check"
 if ! CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=temporary-r2-secret GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'set -e; source "$1"; interactive_terminal() { :; }; main --action credential-session; set -o | grep -Eq "^errexit[[:space:]]+off$"; false; clear_credential_session; set -o | grep -Eq "^errexit[[:space:]]+on$"' _ "$script" > /dev/null; then
   echo 'credential-session did not suppress and restore errexit' >&2
   exit 1
@@ -44,6 +46,25 @@ r2_token_check="$(AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=tempo
 test "$r2_token_check" = temporary-r2-key:temporary-r2-secret
 atlas_token_check="$(ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_atlas_admin_credentials; printf "%s:%s" "$ATLAS_PUBLIC_KEY" "$ATLAS_PRIVATE_KEY"' _ "$script")"
 test "$atlas_token_check" = temporary-atlas-public:temporary-atlas-private
+access_check_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+load_config() { :; }
+load_terraform_configuration() { TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; R2_STATE_BUCKET=kids-booklet-terraform-state; R2_ENDPOINT=https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com; }
+need_command() { :; }
+load_cloudflare_api_token() { :; }
+verify_cloudflare_token() { printf "verified: Cloudflare token\\n"; }
+verify_cloudflare_zero_trust() { printf "verified: Cloudflare Access\\n"; }
+load_r2_state_credentials() { :; }
+verify_r2_state_access() { printf "verified: R2 credentials\\n"; }
+load_atlas_admin_credentials() { :; }
+atlas_request() { printf "atlas: %s %s\\n" "$1" "$2"; }
+github_get() { GITHUB_RESPONSE=/dev/null; printf "github: %s\\n" "$1"; }
+jq() { case "$*" in *atlas_project_id*) printf "%s\\n" 6a869d84e65675f845fa22eb;; *.repository*) printf "%s\\n" karpishe-experiments/agentic-poc;; *.permissions.admin*) return 0;; esac; }
+access_check' _ "$script")"
+grep -q 'verified: Cloudflare token' <<< "$access_check_output"
+grep -q 'verified: R2 credentials' <<< "$access_check_output"
+grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/accessList?itemsPerPage=1' <<< "$access_check_output"
+grep -q 'github: organizations/karpishe-experiments/settings/billing/budgets?per_page=1' <<< "$access_check_output"
+grep -q 'verified: GitHub repository administration and billing API' <<< "$access_check_output"
 set +e
 zero_trust_missing_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; cloudflare_get() { CF_STATUS=404; }; verify_cloudflare_zero_trust aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' _ "$script" 2>&1)"
 zero_trust_missing_status=$?

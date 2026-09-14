@@ -34,7 +34,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, reset-staging, resume, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -57,7 +57,8 @@ Preview is the default; only --apply permits remote mutations. status/check reje
 non-secret local configuration file. Setup runs locally as root on the Ubuntu VPS
 from a reviewed checkout.
 Source credential-session to silently load setup credentials into the current SSH
-shell. They remain in memory until logout or clear-credential-session.
+shell. They remain in memory until logout or clear-credential-session. Run
+access-check after credential-session to validate provider access without mutation.
 Example: bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json
 Example: sudo bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
 HELP
@@ -88,7 +89,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -113,7 +114,7 @@ validate_arguments() {
   if [[ "$ACTION" == reset-staging ]]; then
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
   fi
-  case "$ACTION" in status|check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  case "$ACTION" in status|check|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
     [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
     [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
@@ -130,6 +131,17 @@ load_config() {
   for e in staging prod; do
     jq -e --arg e "$e" '.environments[$e] | (.APP_HOSTNAME | test("^[a-zA-Z0-9][a-zA-Z0-9.-]+$")) and ([.ASSETS_BUCKET,.DIAGNOSTICS_BUCKET,.RECOVERY_BUCKET] | all(test("^[a-z0-9][a-z0-9-]{2,62}$")))' "$CONFIG_FILE" >/dev/null || die "Invalid $e configuration"
   done
+}
+load_terraform_configuration() {
+  TF_VAR_cloudflare_account_id="$(jq -r .cloudflare_account_id "$CONFIG_FILE")"
+  TF_VAR_cloudflare_zone_id="$(jq -r .cloudflare_zone_id "$CONFIG_FILE")"
+  TF_VAR_staging_hostname="$(jq -r .environments.staging.APP_HOSTNAME "$CONFIG_FILE")"
+  TF_VAR_prod_hostname="$(jq -r .environments.prod.APP_HOSTNAME "$CONFIG_FILE")"
+  TF_VAR_deploy_hostname="$(jq -r .deploy_hostname "$CONFIG_FILE")"
+  R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
+  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname R2_STATE_BUCKET
+  export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
+  export TF_VAR_state_bucket="$R2_STATE_BUCKET"
 }
 private_temp() { [[ -n "$TEMP_DIR" ]] || { TEMP_DIR="$(mktemp -d)"; chmod 700 "$TEMP_DIR"; }; }
 configure_ssh() {
@@ -520,6 +532,7 @@ start_credential_session() {
   load_atlas_admin_credentials
   [[ "$restore_xtrace" == true ]] && set -x
   printf 'loaded: deployment credentials remain in this SSH shell until logout or clear-credential-session\n'
+  printf 'next: bash scripts/deploy/vps-deployment.sh --action access-check --config infra/config/vps.json\n'
 }
 clear_credential_session() {
   local restore_errexit="$SESSION_RESTORE_ERREXIT"
@@ -556,6 +569,18 @@ cloudflare_get() {
   fi
   if [[ "$CF_STATUS" == 200 ]]; then jq -e '.success == true' "$CF_RESPONSE" >/dev/null || die "Cloudflare rejected discovery for $path"; fi
 }
+github_get() {
+  local path="$1" token config
+  load_github_admin_token
+  token="$GITHUB_ADMIN_TOKEN"
+  private_temp
+  config="$TEMP_DIR/github-curl.conf"
+  printf 'silent\nshow-error\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github+json"\nheader = "X-GitHub-Api-Version: 2026-03-10"\n' "$token" > "$config"
+  chmod 600 "$config"
+  GITHUB_RESPONSE="$TEMP_DIR/github-response.json"
+  GITHUB_STATUS="$(curl --config "$config" --output "$GITHUB_RESPONSE" --write-out '%{http_code}' "https://api.github.com/$path")"
+  [[ "$GITHUB_STATUS" == 200 ]] || die "GitHub access check failed for $path (HTTP $GITHUB_STATUS)"
+}
 verify_cloudflare_token() {
   local account_id="$1" token_id token_status
   [[ "$account_id" =~ ^[a-f0-9]{32}$ ]] || die 'A valid Cloudflare account ID is required for token verification'
@@ -573,6 +598,40 @@ verify_cloudflare_zero_trust() {
   cloudflare_get "accounts/$account_id/access/apps"
   [[ "$CF_STATUS" == 200 ]] || die 'Cloudflare Access applications are unavailable for this account'
   printf 'verified: Cloudflare Zero Trust organization and Access application API\n'
+}
+verify_r2_state_access() {
+  local config status
+  private_temp
+  config="$TEMP_DIR/r2-access-curl.conf"
+  printf 'silent\nshow-error\naws-sigv4 = "aws:amz:auto:s3"\nuser = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" > "$config"
+  chmod 600 "$config"
+  status="$(curl --config "$config" --output "$TEMP_DIR/r2-access-response" --write-out '%{http_code}' "$R2_ENDPOINT/$R2_STATE_BUCKET?list-type=2&max-keys=1")"
+  case "$status" in
+    200) printf 'verified: R2 Terraform state credentials\n';;
+    404) printf 'verified: R2 Terraform state credentials; state bucket is not created\n';;
+    *) die "R2 Terraform state credential check failed (HTTP $status)";;
+  esac
+}
+access_check() {
+  local repository owner project
+  load_config
+  need_command curl; need_command jq
+  load_terraform_configuration
+  load_cloudflare_api_token
+  verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
+  verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
+  load_r2_state_credentials
+  verify_r2_state_access
+  load_atlas_admin_credentials
+  project="$(jq -r .atlas_project_id "$CONFIG_FILE")"
+  atlas_request GET "groups/$project"
+  atlas_request GET "groups/$project/accessList?itemsPerPage=1"
+  printf 'verified: Atlas project and access-list API\n'
+  repository="$(jq -r .repository "$CONFIG_FILE")"; owner="${repository%%/*}"
+  github_get "repos/$repository"
+  jq -e '.permissions.admin == true' "$GITHUB_RESPONSE" >/dev/null || die 'GitHub token lacks repository administration'
+  github_get "organizations/$owner/settings/billing/budgets?per_page=1"
+  printf 'verified: GitHub repository administration and billing API\n'
 }
 load_atlas_admin_credentials() {
   prompt_secret_variable ATLAS_PUBLIC_KEY 'Atlas temporary public API key'
@@ -994,15 +1053,7 @@ setup_host() {
   if [[ ! -f /etc/os-release ]] || ! grep -q '^ID=ubuntu$' /etc/os-release; then die 'Setup requires Ubuntu'; fi
   [[ "$(uname -m)" == x86_64 ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
   validate_host_capacity
-  TF_VAR_cloudflare_account_id="$(jq -r .cloudflare_account_id "$CONFIG_FILE")"
-  TF_VAR_cloudflare_zone_id="$(jq -r .cloudflare_zone_id "$CONFIG_FILE")"
-  TF_VAR_staging_hostname="$(jq -r .environments.staging.APP_HOSTNAME "$CONFIG_FILE")"
-  TF_VAR_prod_hostname="$(jq -r .environments.prod.APP_HOSTNAME "$CONFIG_FILE")"
-  TF_VAR_deploy_hostname="$(jq -r .deploy_hostname "$CONFIG_FILE")"
-  R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
-  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname R2_STATE_BUCKET
-  export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
-  export TF_VAR_state_bucket="$R2_STATE_BUCKET"
+  load_terraform_configuration
   load_cloudflare_api_token
   verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
   verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
@@ -1275,6 +1326,7 @@ main() {
   parse_arguments "$@"; validate_arguments
   case "$ACTION" in
     discover-config) discover_configuration;;
+    access-check) access_check;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
     credential-session) start_credential_session;;
