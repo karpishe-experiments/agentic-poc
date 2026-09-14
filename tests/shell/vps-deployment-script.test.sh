@@ -44,6 +44,12 @@ r2_token_check="$(AWS_ACCESS_KEY_ID=temporary-r2-key AWS_SECRET_ACCESS_KEY=tempo
 test "$r2_token_check" = temporary-r2-key:temporary-r2-secret
 atlas_token_check="$(ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_atlas_admin_credentials; printf "%s:%s" "$ATLAS_PUBLIC_KEY" "$ATLAS_PRIVATE_KEY"' _ "$script")"
 test "$atlas_token_check" = temporary-atlas-public:temporary-atlas-private
+set +e
+zero_trust_missing_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; cloudflare_get() { CF_STATUS=404; }; verify_cloudflare_zero_trust aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' _ "$script" 2>&1)"
+zero_trust_missing_status=$?
+set -e
+test "$zero_trust_missing_status" -ne 0
+grep -q 'Cloudflare Zero Trust is not enrolled' <<< "$zero_trust_missing_output"
 if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; source "$1"; load_r2_state_credentials' _ "$script" </dev/null > /dev/null 2>&1; then
   echo 'accepted missing noninteractive R2 state credentials' >&2
   exit 1
@@ -86,6 +92,11 @@ token_check="$(CLOUDFLARE_API_TOKEN=never-print-me VPS_DEPLOYMENT_LIBRARY_ONLY=t
 grep -q 'verified: Cloudflare API token metadata ID aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' <<< "$token_check"
 if grep -q 'never-print-me' <<< "$token_check"; then echo 'Cloudflare API token leaked' >&2; exit 1; fi
 grep -q '/accounts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/tokens/verify$' "$CURL_LOG"
+zero_trust_check="$(CLOUDFLARE_API_TOKEN=never-print-me VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; verify_cloudflare_zero_trust aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' _ "$script")"
+grep -q 'verified: Cloudflare Zero Trust organization and Access application API' <<< "$zero_trust_check"
+grep -q '/accounts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/access/organizations$' "$CURL_LOG"
+grep -q '/accounts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/access/apps$' "$CURL_LOG"
+if grep -q 'never-print-me' <<< "$zero_trust_check"; then echo 'Cloudflare API token leaked during Zero Trust verification' >&2; exit 1; fi
 digest=ghcr.io/example/kids@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 bash "$script" --action deploy --environment staging --image-digest "$digest" --commit "$commit" --config "$root/not-required-for-client.json" --vps-user alternate --vps-host vps.example > "$root/output"

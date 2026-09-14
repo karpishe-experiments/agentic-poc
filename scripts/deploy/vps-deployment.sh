@@ -532,7 +532,7 @@ clear_credential_session() {
   printf 'cleared: deployment credentials from this SSH shell\n'
 }
 cloudflare_get() {
-  local path="$1" token error_codes
+  local path="$1" token error_codes access_hint=''
   load_cloudflare_api_token
   token="$CLOUDFLARE_API_TOKEN"
   private_temp
@@ -544,7 +544,15 @@ cloudflare_get() {
   if [[ "$CF_STATUS" != 200 && "$CF_STATUS" != 404 ]]; then
     error_codes="$(jq -r '[.errors[]?.code | tostring] | unique | join(",")' "$CF_RESPONSE" 2>/dev/null || true)"
     [[ -n "$error_codes" ]] || error_codes=unavailable
-    die "Cloudflare discovery failed for $path (HTTP $CF_STATUS; API error code(s): $error_codes)"
+    case "$path" in
+      accounts/*/access/organizations)
+        access_hint=' Complete Cloudflare Zero Trust onboarding for this account, then confirm the active token has Access: Organizations, Identity Providers, and Groups Read.'
+        ;;
+      accounts/*/access/apps)
+        access_hint=' Confirm the active token is scoped to this account and has Access: Apps and Policies Read or Write.'
+        ;;
+    esac
+    die "Cloudflare discovery failed for $path (HTTP $CF_STATUS; API error code(s): $error_codes).$access_hint"
   fi
   if [[ "$CF_STATUS" == 200 ]]; then jq -e '.success == true' "$CF_RESPONSE" >/dev/null || die "Cloudflare rejected discovery for $path"; fi
 }
@@ -556,6 +564,15 @@ verify_cloudflare_token() {
   token_status="$(jq -er '.result.status' "$CF_RESPONSE")" || die 'Cloudflare did not return a token status'
   [[ "$token_status" == active ]] || die "Cloudflare API token is $token_status"
   printf 'verified: Cloudflare API token metadata ID %s\n' "$token_id"
+}
+verify_cloudflare_zero_trust() {
+  local account_id="$1"
+  [[ "$account_id" =~ ^[a-f0-9]{32}$ ]] || die 'A valid Cloudflare account ID is required for Zero Trust verification'
+  cloudflare_get "accounts/$account_id/access/organizations"
+  [[ "$CF_STATUS" == 200 ]] || die 'Cloudflare Zero Trust is not enrolled for this account. In the Cloudflare dashboard, open Zero Trust, choose a team name, select the Free plan, and complete billing consent. Then retry setup.'
+  cloudflare_get "accounts/$account_id/access/apps"
+  [[ "$CF_STATUS" == 200 ]] || die 'Cloudflare Access applications are unavailable for this account'
+  printf 'verified: Cloudflare Zero Trust organization and Access application API\n'
 }
 load_atlas_admin_credentials() {
   prompt_secret_variable ATLAS_PUBLIC_KEY 'Atlas temporary public API key'
@@ -662,6 +679,7 @@ discover_configuration() {
   TF_VAR_cloudflare_zone_id="$(jq -er '.result[0].id' "$zone_response")"
   TF_VAR_cloudflare_account_id="$(jq -er '.result[0].account.id' "$zone_response")"
   verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
+  verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
   R2_STATE_BUCKET=kids-booklet-terraform-state
   export TF_VAR_cloudflare_zone_id TF_VAR_cloudflare_account_id R2_STATE_BUCKET
   printf 'discovered: Cloudflare account ID %s\n' "$TF_VAR_cloudflare_account_id"
@@ -976,8 +994,19 @@ setup_host() {
   if [[ ! -f /etc/os-release ]] || ! grep -q '^ID=ubuntu$' /etc/os-release; then die 'Setup requires Ubuntu'; fi
   [[ "$(uname -m)" == x86_64 ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
   validate_host_capacity
-  docker compose version >/dev/null
+  TF_VAR_cloudflare_account_id="$(jq -r .cloudflare_account_id "$CONFIG_FILE")"
+  TF_VAR_cloudflare_zone_id="$(jq -r .cloudflare_zone_id "$CONFIG_FILE")"
+  TF_VAR_staging_hostname="$(jq -r .environments.staging.APP_HOSTNAME "$CONFIG_FILE")"
+  TF_VAR_prod_hostname="$(jq -r .environments.prod.APP_HOSTNAME "$CONFIG_FILE")"
+  TF_VAR_deploy_hostname="$(jq -r .deploy_hostname "$CONFIG_FILE")"
+  R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
+  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname R2_STATE_BUCKET
+  export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
+  export TF_VAR_state_bucket="$R2_STATE_BUCKET"
   load_cloudflare_api_token
+  verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
+  verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
+  docker compose version >/dev/null
   load_r2_state_credentials
   if [[ "$APPLY" == true ]]; then require_root; fi
   install_auxiliary_tools
@@ -988,15 +1017,6 @@ setup_host() {
   [[ "$(gh api "repos/$repository" --jq .permissions.admin)" == true ]] || die 'GitHub repository administration is required'
   private_temp
   gh api -H 'X-GitHub-Api-Version: 2026-03-10' "organizations/${repository%%/*}/settings/billing/budgets?per_page=100" > "$TEMP_DIR/billing-preflight.json" || die 'GitHub billing-manager access is required before setup can configure the Actions spending guard'
-  TF_VAR_cloudflare_account_id="$(jq -r .cloudflare_account_id "$CONFIG_FILE")"
-  TF_VAR_cloudflare_zone_id="$(jq -r .cloudflare_zone_id "$CONFIG_FILE")"
-  TF_VAR_staging_hostname="$(jq -r .environments.staging.APP_HOSTNAME "$CONFIG_FILE")"
-  TF_VAR_prod_hostname="$(jq -r .environments.prod.APP_HOSTNAME "$CONFIG_FILE")"
-  TF_VAR_deploy_hostname="$(jq -r .deploy_hostname "$CONFIG_FILE")"
-  R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
-  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname R2_STATE_BUCKET
-  export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
-  export TF_VAR_state_bucket="$R2_STATE_BUCKET"
   load_atlas_admin_credentials
   if [[ "$requested_apply" == true ]]; then
     APPLY=false
