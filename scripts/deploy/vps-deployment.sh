@@ -25,6 +25,7 @@ declare -A GENERATED_MONGODB_URI=()
 ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}" ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}" ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}"
 AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}" AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
+SESSION_ACTIVE="${SESSION_ACTIVE:-false}" SESSION_RESTORE_ERREXIT="${SESSION_RESTORE_ERREXIT:-false}"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need_command() { command -v "$1" >/dev/null || die "Required command missing: $1"; }
@@ -483,12 +484,12 @@ secret_value_is_valid() {
 prompt_secret_variable() {
   local name="$1" label="$2" value
   value="${!name:-}"
-  if [[ -z "$value" ]]; then
+  while ! secret_value_is_valid "$value"; do
+    [[ -z "$value" ]] || printf 'error: Enter a valid %s\n' "$label" >&2
     [[ -t 0 ]] || die "$label is required through the protected runtime environment"
     IFS= read -r -s -p "$label: " value; printf '\n' >&2
-    printf -v "$name" '%s' "$value"
-  fi
-  secret_value_is_valid "${!name}" || die "A valid $label is required"
+  done
+  printf -v "$name" '%s' "$value"
   export "$name"
 }
 load_cloudflare_api_token() {
@@ -510,6 +511,8 @@ start_credential_session() {
   local restore_xtrace=false
   is_sourced || die 'credential-session must be sourced into the current SSH shell'
   interactive_terminal || die 'credential-session requires an interactive SSH terminal'
+  case "$-" in *e*) SESSION_RESTORE_ERREXIT=true; set +e;; esac
+  SESSION_ACTIVE=true
   case "$-" in *x*) restore_xtrace=true; set +x;; esac
   load_cloudflare_api_token
   load_r2_state_credentials
@@ -519,9 +522,13 @@ start_credential_session() {
   printf 'loaded: deployment credentials remain in this SSH shell until logout or clear-credential-session\n'
 }
 clear_credential_session() {
+  local restore_errexit="$SESSION_RESTORE_ERREXIT"
   is_sourced || die 'clear-credential-session must be sourced into the current SSH shell'
   cleanup
+  SESSION_ACTIVE=false
+  SESSION_RESTORE_ERREXIT=false
   trap - EXIT
+  [[ "$restore_errexit" == true ]] && set -e
   printf 'cleared: deployment credentials from this SSH shell\n'
 }
 cloudflare_get() {
