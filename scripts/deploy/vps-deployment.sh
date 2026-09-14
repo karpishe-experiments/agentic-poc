@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEMP_DIR=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
-ATLAS_PUBLIC_KEY='' ATLAS_PRIVATE_KEY='' ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
+ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}" ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}" ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}"
 AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}" AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
 
@@ -28,7 +28,8 @@ usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, reset-staging, resume, host-dispatch, host-run
+         restore, rollback, rotate-secrets, reset-staging, resume, credential-session,
+         clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
   --zone HOSTNAME                    required for discover-config
@@ -48,6 +49,8 @@ Preview is the default; only --apply permits remote mutations. status/check reje
 --apply. discover-config makes read-only provider requests; --apply only writes its
 non-secret local configuration file. Setup runs locally as root on the Ubuntu VPS
 from a reviewed checkout.
+Source credential-session to silently load setup credentials into the current SSH
+shell. They remain in memory until logout or clear-credential-session.
 Example: bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json
 Example: sudo bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
 HELP
@@ -78,7 +81,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -103,7 +106,7 @@ validate_arguments() {
   if [[ "$ACTION" == reset-staging ]]; then
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
   fi
-  case "$ACTION" in status|check) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  case "$ACTION" in status|check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
     [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
     [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
@@ -495,6 +498,23 @@ load_cloudflare_access_credentials() {
   prompt_secret_variable CF_ACCESS_CLIENT_ID 'Cloudflare Access service token ID'
   prompt_secret_variable CF_ACCESS_CLIENT_SECRET 'Cloudflare Access service token secret'
 }
+is_sourced() { [[ "${BASH_SOURCE[0]}" != "$0" ]]; }
+interactive_terminal() { [[ -t 0 && -t 1 ]]; }
+start_credential_session() {
+  is_sourced || die 'credential-session must be sourced into the current SSH shell'
+  interactive_terminal || die 'credential-session requires an interactive SSH terminal'
+  load_cloudflare_api_token
+  load_r2_state_credentials
+  load_github_admin_token
+  load_atlas_admin_credentials
+  printf 'loaded: deployment credentials remain in this SSH shell until logout or clear-credential-session\n'
+}
+clear_credential_session() {
+  is_sourced || die 'clear-credential-session must be sourced into the current SSH shell'
+  cleanup
+  trap - EXIT
+  printf 'cleared: deployment credentials from this SSH shell\n'
+}
 cloudflare_get() {
   local path="$1" token error_codes
   load_cloudflare_api_token
@@ -522,10 +542,9 @@ verify_cloudflare_token() {
   printf 'verified: Cloudflare API token metadata ID %s\n' "$token_id"
 }
 load_atlas_admin_credentials() {
-  ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}"
-  ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}"
   prompt_secret_variable ATLAS_PUBLIC_KEY 'Atlas temporary public API key'
   prompt_secret_variable ATLAS_PRIVATE_KEY 'Atlas temporary private API key'
+  export ATLAS_ADMIN_PUBLIC_KEY="$ATLAS_PUBLIC_KEY" ATLAS_ADMIN_PRIVATE_KEY="$ATLAS_PRIVATE_KEY"
 }
 load_github_admin_token() {
   GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-${GH_TOKEN:-}}"
@@ -1222,6 +1241,8 @@ main() {
     discover-config) discover_configuration;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
+    credential-session) start_credential_session;;
+    clear-credential-session) clear_credential_session;;
     setup) setup_host;;
     finalize) finalize_repository;;
     rotate-secrets)
