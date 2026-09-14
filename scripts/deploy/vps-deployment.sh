@@ -19,7 +19,7 @@ STATE=/var/lib/kids-booklet
 SECRETS=/etc/kids-booklet
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEMP_DIR=''
+TEMP_DIR='' ATLAS_PLAN_FILE=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
 ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}" ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}" ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
@@ -813,24 +813,20 @@ discover_configuration() {
     printf 'created: non-secret deployment configuration at %s\n' "$CONFIG_OUTPUT"
   fi
 }
-configure_atlas() {
-  local project cluster outbound_ip environment database username password srv payload
+plan_atlas_configuration() {
+  local project cluster outbound_ip environment database username srv access_action user_action
   project="$(jq -r .atlas_project_id "$CONFIG_FILE")"; cluster="$(jq -r .atlas_cluster_name "$CONFIG_FILE")"
   outbound_ip="$(curl -fsS --max-time 15 https://api.ipify.org)"
   [[ "$outbound_ip" =~ ^[0-9a-fA-F:.]+$ ]] || die 'Could not verify the VPS outbound IP'
+  private_temp; ATLAS_PLAN_FILE="$TEMP_DIR/atlas-plan.json"
   atlas_request GET "groups/$project/accessList?itemsPerPage=100"
   if jq -e --arg ip "$outbound_ip" '.results[]? | select(.ipAddress==$ip)' "$ATLAS_RESPONSE" >/dev/null; then
-    printf 'exists: exact VPS Atlas access-list entry\n'
-  elif [[ "$APPLY" == false ]]; then printf 'would create: exact VPS Atlas access-list entry\n'
-  else
-    payload="$TEMP_DIR/atlas-access.json"
-    jq -n --arg ip "$outbound_ip" '[{ipAddress:$ip,comment:"kids-booklet VPS"}]' > "$payload"
-    atlas_request POST "groups/$project/accessList" "$payload"
-    printf 'created: exact VPS Atlas access-list entry\n'
-  fi
+    access_action=exists
+  else access_action=create; fi
   atlas_request GET "groups/$project/clusters/$cluster"
   srv="$(jq -er '.connectionStrings.standardSrv' "$ATLAS_RESPONSE")"
   srv="${srv#mongodb+srv://}"
+  jq -n --arg project "$project" --arg cluster "$cluster" --arg ip "$outbound_ip" --arg srv "$srv" --arg access "$access_action" '{project:$project,cluster:$cluster,outbound_ip:$ip,srv:$srv,access_action:$access,users:{}}' > "$ATLAS_PLAN_FILE"
   for environment in staging prod; do
     database=kids_booklet; [[ "$environment" == staging ]] || database=kids_booklet_prod
     username="kids_booklet_$environment"
@@ -838,9 +834,40 @@ configure_atlas() {
     if jq -e --arg username "$username" '.results[]? | select(.username==$username and .databaseName=="admin")' "$ATLAS_RESPONSE" >/dev/null; then
       jq -e --arg username "$username" --arg database "$database" --arg cluster "$cluster" '.results[] | select(.username==$username and .databaseName=="admin") | ([.roles[] | select(.roleName=="readWrite" and .databaseName==$database)] | length)==1 and ([.roles[] | select(.databaseName!=$database or .roleName!="readWrite")] | length)==0 and ([.scopes[]? | select(.type=="CLUSTER" and .name==$cluster)] | length)==1' "$ATLAS_RESPONSE" >/dev/null || die "$environment Atlas user exists with incompatible scope or roles"
       if [[ -f "$STATE/atlas-$environment-uri.pending" ]]; then GENERATED_MONGODB_URI[$environment]="$(<"$STATE/atlas-$environment-uri.pending")"; fi
-      printf 'exists: %s Atlas database user with exact scope\n' "$environment"
-    elif [[ "$APPLY" == false ]]; then printf 'would create: %s Atlas database user\n' "$environment"
-    else
+      user_action=exists
+    else user_action=create; fi
+    jq --arg environment "$environment" --arg database "$database" --arg username "$username" --arg action "$user_action" '.users[$environment]={database:$database,username:$username,action:$action}' "$ATLAS_PLAN_FILE" > "$TEMP_DIR/atlas-plan.next.json"
+    mv "$TEMP_DIR/atlas-plan.next.json" "$ATLAS_PLAN_FILE"
+  done
+}
+report_atlas_plan() {
+  local environment action
+  [[ "$(jq -r .access_action "$ATLAS_PLAN_FILE")" == exists ]] && printf 'exists: exact VPS Atlas access-list entry\n' || printf 'would create: exact VPS Atlas access-list entry\n'
+  for environment in staging prod; do
+    action="$(jq -r --arg environment "$environment" '.users[$environment].action' "$ATLAS_PLAN_FILE")"
+    [[ "$action" == exists ]] && printf 'exists: %s Atlas database user with exact scope\n' "$environment" || printf 'would create: %s Atlas database user\n' "$environment"
+  done
+}
+apply_atlas_plan() {
+  local project cluster expected_ip current_ip environment database username password srv payload action
+  [[ -n "$ATLAS_PLAN_FILE" && -f "$ATLAS_PLAN_FILE" ]] || die 'Atlas apply requires a successful setup preview; rerun setup'
+  project="$(jq -r .project "$ATLAS_PLAN_FILE")"; cluster="$(jq -r .cluster "$ATLAS_PLAN_FILE")"
+  expected_ip="$(jq -r .outbound_ip "$ATLAS_PLAN_FILE")"
+  current_ip="$(curl -fsS --max-time 15 https://api.ipify.org)"
+  [[ "$current_ip" == "$expected_ip" ]] || die 'VPS outbound IP changed after Atlas preview; rerun setup'
+  action="$(jq -r .access_action "$ATLAS_PLAN_FILE")"
+  if [[ "$action" == create ]]; then
+    payload="$TEMP_DIR/atlas-access.json"
+    jq -n --arg ip "$expected_ip" '[{ipAddress:$ip,comment:"kids-booklet VPS"}]' > "$payload"
+    atlas_request POST "groups/$project/accessList" "$payload"
+    printf 'created: exact VPS Atlas access-list entry\n'
+  else printf 'exists: exact VPS Atlas access-list entry\n'; fi
+  srv="$(jq -r .srv "$ATLAS_PLAN_FILE")"
+  for environment in staging prod; do
+    action="$(jq -r --arg environment "$environment" '.users[$environment].action' "$ATLAS_PLAN_FILE")"
+    database="$(jq -r --arg environment "$environment" '.users[$environment].database' "$ATLAS_PLAN_FILE")"
+    username="$(jq -r --arg environment "$environment" '.users[$environment].username' "$ATLAS_PLAN_FILE")"
+    if [[ "$action" == create ]]; then
       password="$(openssl rand -hex 24)"
       payload="$TEMP_DIR/atlas-user-$environment.json"
       jq -n --arg username "$username" --arg password "$password" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,password:$password,roles:[{databaseName:$database,roleName:"readWrite"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
@@ -850,8 +877,14 @@ configure_atlas() {
       chmod 600 "$STATE/atlas-$environment-uri.pending"
       unset password
       printf 'created: %s Atlas database user\n' "$environment"
+    else
+      if [[ -f "$STATE/atlas-$environment-uri.pending" ]]; then GENERATED_MONGODB_URI[$environment]="$(<"$STATE/atlas-$environment-uri.pending")"; fi
+      printf 'exists: %s Atlas database user with exact scope\n' "$environment"
     fi
   done
+}
+configure_atlas() {
+  if [[ "$APPLY" == true ]]; then apply_atlas_plan; else plan_atlas_configuration; report_atlas_plan; fi
 }
 assert_no_unmanaged_cloudflare_resources() {
   local account="$TF_VAR_cloudflare_account_id" zone="$TF_VAR_cloudflare_zone_id" name environment kind hostname phase

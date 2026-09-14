@@ -50,6 +50,18 @@ if AWS_ACCESS_KEY_ID=temporary-cloudflare-api-token AWS_SECRET_ACCESS_KEY=012345
 fi
 atlas_token_check="$(ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; load_atlas_admin_credentials; printf "%s:%s" "$ATLAS_PUBLIC_KEY" "$ATLAS_PRIVATE_KEY"' _ "$script")"
 test "$atlas_token_check" = temporary-atlas-public:temporary-atlas-private
+atlas_handoff_check="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+plan_atlas_configuration() { printf plan; }
+report_atlas_plan() { printf report; }
+apply_atlas_plan() { printf apply; }
+APPLY=false; configure_atlas
+APPLY=true; configure_atlas' _ "$script")"
+test "$atlas_handoff_check" = planreportapply
+apply_atlas_block="$(sed -n '/^apply_atlas_plan()/,/^}/p' "$script")"
+if grep -q 'atlas_request GET' <<< "$apply_atlas_block"; then
+  echo 'Atlas apply performs a redundant discovery request' >&2
+  exit 1
+fi
 access_check_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
 load_config() { :; }
 load_terraform_configuration() { TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; R2_STATE_BUCKET=kids-booklet-terraform-state; R2_ENDPOINT=https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com; }
