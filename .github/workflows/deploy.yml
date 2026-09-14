@@ -48,7 +48,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/anonymous-docker"
           if ! DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null 2>&1; then
             if ! gh api --method PATCH "orgs/$owner/packages/container/$package" -f visibility=public >/dev/null 2>&1; then
-              echo "GHCR package is private and GITHUB_TOKEN cannot change its visibility. Set https://github.com/orgs/$owner/packages/container/package/$package/settings to Public, then rerun this workflow." >&2
+              echo "GHCR package is private and GITHUB_TOKEN cannot change its visibility. Set https://github.com/orgs/$owner/packages/container/$package/settings to Public, then rerun this workflow." >&2
               exit 1
             fi
             DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null

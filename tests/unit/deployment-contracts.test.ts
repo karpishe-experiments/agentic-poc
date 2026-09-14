@@ -19,6 +19,8 @@ describe("deployment contracts", () => {
     expect(workflow.indexOf("visibility=public")).toBeGreaterThan(0);
     expect(workflow.indexOf("DOCKER_CONFIG=")).toBeLessThan(workflow.indexOf("visibility=public"));
     expect(workflow).toContain("GHCR package is private and GITHUB_TOKEN cannot change its visibility");
+    expect(workflow).toContain("packages/container/$package/settings");
+    expect(workflow).not.toContain("packages/container/package/$package/settings");
   });
 
   it("preserves safe relative asset keys and rejects traversal", () => {
