@@ -20,30 +20,31 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [[ "$GITHUB_EVENT_NAME" = workflow_dispatch ]]; then
-            printf '%s\n' 'app=true' 'terraform=true' 'workflow=true' 'shell=true' >> "$GITHUB_OUTPUT"
+            printf '%s\n' 'app=true' 'deployment=true' 'terraform=true' 'workflow=true' 'shell=true' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          app=false terraform=false workflow=false shell=false
+          app=false deployment=false terraform=false workflow=false shell=false
           while IFS= read -r file; do
             case "$file" in infra/terraform/*) terraform=true ;; esac
             case "$file" in .github/*) workflow=true ;; esac
+            case "$file" in .github/workflows/deploy.yml|tests/unit/deployment-contracts.test.ts|vitest.deployment.config.ts) deployment=true ;; esac
             case "$file" in deploy/*|infra/config/*|scripts/deploy/*|tests/shell/*) shell=true ;; esac
             case "$file" in
-              .github/*|deploy/*|docs/*|infra/*|scripts/deploy/*|tests/shell/*|AGENTS.md) ;;
+              .github/*|deploy/*|docs/*|infra/*|scripts/deploy/*|tests/shell/*|tests/unit/deployment-contracts.test.ts|AGENTS.md) ;;
               *) app=true ;;
             esac
           done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
-          printf '%s\n' "app=$app" "terraform=$terraform" "workflow=$workflow" "shell=$shell" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "app=$app" "deployment=$deployment" "terraform=$terraform" "workflow=$workflow" "shell=$shell" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
-        if: steps.scope.outputs.app == 'true'
+        if: steps.scope.outputs.app == 'true' || steps.scope.outputs.deployment == 'true'
         with: { node-version: 24.21.0, cache: npm }
-      - if: steps.scope.outputs.app == 'true'
+      - if: steps.scope.outputs.app == 'true' || steps.scope.outputs.deployment == 'true'
         run: npm ci
       - if: steps.scope.outputs.app == 'true'
         run: npm run typecheck
       - if: steps.scope.outputs.app == 'true'
         run: npm run lint
-      - if: steps.scope.outputs.app == 'true'
+      - if: steps.scope.outputs.app == 'true' || steps.scope.outputs.deployment == 'true'
         run: npx vitest run --config vitest.deployment.config.ts
       - if: steps.scope.outputs.app == 'true'
         run: npm test -- --retry=2
