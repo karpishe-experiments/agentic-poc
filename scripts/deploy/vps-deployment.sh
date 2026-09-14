@@ -647,6 +647,7 @@ access_check_atlas() {
   load_config
   load_atlas_admin_credentials
   project="$(jq -r .atlas_project_id "$CONFIG_FILE")"
+  verify_atlas_admin_access "$project"
   atlas_request GET "groups/$project"
   atlas_request GET "groups/$project/accessList?itemsPerPage=1"
   printf 'verified: Atlas project and access-list API\n'
@@ -694,7 +695,7 @@ load_github_admin_token() {
   export GH_TOKEN="$GITHUB_ADMIN_TOKEN"
 }
 atlas_request() {
-  local method="$1" path="$2" payload="${3:-}" config
+  local method="$1" path="$2" payload="${3:-}" config detail
   private_temp; config="$TEMP_DIR/atlas-curl.conf"
   printf 'silent\nshow-error\ndigest\nuser = "%s:%s"\nheader = "Accept: application/vnd.atlas.2025-03-12+json"\nheader = "Content-Type: application/json"\n' "$ATLAS_PUBLIC_KEY" "$ATLAS_PRIVATE_KEY" > "$config"
   chmod 600 "$config"
@@ -702,7 +703,17 @@ atlas_request() {
   local -a args=(--config "$config" --request "$method" --output "$ATLAS_RESPONSE" --write-out '%{http_code}')
   [[ -z "$payload" ]] || args+=(--data-binary "@$payload")
   ATLAS_STATUS="$(curl "${args[@]}" "https://cloud.mongodb.com/api/atlas/v2/$path")"
-  [[ "$ATLAS_STATUS" == 200 || "$ATLAS_STATUS" == 201 ]] || die "Atlas request failed for $path (HTTP $ATLAS_STATUS)"
+  if [[ "$ATLAS_STATUS" != 200 && "$ATLAS_STATUS" != 201 ]]; then
+    detail="$(jq -r '[.errorCode, .reason, .detail] | map(select(type=="string" and length>0)) | unique | join(": ")' "$ATLAS_RESPONSE" 2>/dev/null || true)"
+    [[ -n "$detail" ]] || detail='response did not contain an Atlas error code or reason'
+    die "Atlas $method request failed for $path (HTTP $ATLAS_STATUS; $detail)"
+  fi
+}
+verify_atlas_admin_access() {
+  local project="$1"
+  atlas_request GET "groups/$project/apiKeys?itemsPerPage=100"
+  jq -e --arg public_key "$ATLAS_PUBLIC_KEY" --arg project "$project" '.results[]? | select(.publicKey==$public_key) | .roles[]? | select((.groupId==$project and .roleName=="GROUP_OWNER") or .roleName=="ORG_OWNER")' "$ATLAS_RESPONSE" >/dev/null || die 'Atlas temporary API key must have Project Owner access to the configured project'
+  printf 'verified: Atlas temporary API key has Project Owner access\n'
 }
 normalize_discovery_output() {
   local directory filename
@@ -1152,6 +1163,7 @@ setup_host() {
   private_temp
   gh api -H 'X-GitHub-Api-Version: 2026-03-10' "organizations/${repository%%/*}/settings/billing/budgets?per_page=100" > "$TEMP_DIR/billing-preflight.json" || die 'GitHub billing-manager access is required before setup can configure the Actions spending guard'
   load_atlas_admin_credentials
+  verify_atlas_admin_access "$(jq -r .atlas_project_id "$CONFIG_FILE")"
   if [[ "$requested_apply" == true ]]; then
     APPLY=false
     configure_atlas

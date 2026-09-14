@@ -79,8 +79,31 @@ access_check' _ "$script")"
 grep -q 'verified: Cloudflare token' <<< "$access_check_output"
 grep -q 'verified: R2 credentials' <<< "$access_check_output"
 grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/accessList?itemsPerPage=1' <<< "$access_check_output"
+grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/apiKeys?itemsPerPage=100' <<< "$access_check_output"
+grep -q 'verified: Atlas temporary API key has Project Owner access' <<< "$access_check_output"
 grep -q 'github: organizations/karpishe-experiments/settings/billing/budgets?per_page=1' <<< "$access_check_output"
 grep -q 'verified: GitHub repository administration and billing API' <<< "$access_check_output"
+set +e
+atlas_role_failure_output="$(ATLAS_PUBLIC_KEY=temporary-atlas-public VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+atlas_request() { ATLAS_RESPONSE=/dev/null; }
+jq() { return 1; }
+verify_atlas_admin_access 6a869d84e65675f845fa22eb' _ "$script" 2>&1)"
+atlas_role_failure_status=$?
+set -e
+test "$atlas_role_failure_status" -ne 0
+grep -q 'Atlas temporary API key must have Project Owner access' <<< "$atlas_role_failure_output"
+set +e
+atlas_method_error_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+TEMP_DIR="$(mktemp -d)"
+ATLAS_PUBLIC_KEY=temporary-atlas-public
+ATLAS_PRIVATE_KEY=temporary-atlas-private
+curl() { local output=""; while [[ $# -gt 0 ]]; do case "$1" in --output) output="$2"; shift 2;; *) shift;; esac; done; printf "%s" "{}" > "$output"; printf 401; }
+jq() { printf "%s" UNAUTHORIZED; }
+atlas_request POST groups/6a869d84e65675f845fa22eb/accessList' _ "$script" 2>&1)"
+atlas_method_error_status=$?
+set -e
+test "$atlas_method_error_status" -ne 0
+grep -q 'Atlas POST request failed for groups/6a869d84e65675f845fa22eb/accessList (HTTP 401; UNAUTHORIZED)' <<< "$atlas_method_error_output"
 set +e
 r2_error_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
 TEMP_DIR="$(mktemp -d)"
