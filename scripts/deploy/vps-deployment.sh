@@ -503,7 +503,7 @@ prompt_secret_variable() {
     IFS= read -r -s -p "$label: " value; printf '\n' >&2
   done
   printf -v "$name" '%s' "$value"
-  export "$name"
+  export "${name?}"
 }
 load_cloudflare_api_token() {
   prompt_secret_variable CLOUDFLARE_API_TOKEN 'Cloudflare API token'
@@ -1081,11 +1081,7 @@ preview_github_setup() {
   done
   gh api -H 'X-GitHub-Api-Version: 2026-03-10' "organizations/$owner/settings/billing/budgets?per_page=100" > "$TEMP_DIR/budgets.json" || die 'GitHub billing-manager access is required to inspect the Actions spending guard'
   if jq -e --arg repository "$repository" '.budgets[]? | select(.budget_scope=="repository" and .budget_entity_name==$repository and .budget_amount==0 and .prevent_further_usage==true)' "$TEMP_DIR/budgets.json" >/dev/null; then printf 'exists: GitHub Actions zero-dollar overage budget\n'; else printf 'would create: GitHub Actions zero-dollar overage budget\n'; fi
-  if gh api "repos/$repository/contents/infra/config/vps.json?ref=master" > "$TEMP_DIR/master-config.json" 2>/dev/null; then
-    jq -r .content "$TEMP_DIR/master-config.json" | tr -d '\n' | base64 -d > "$TEMP_DIR/master-vps.json"
-    if cmp -s "$CONFIG_FILE" "$TEMP_DIR/master-vps.json"; then printf 'exists: reviewed configuration merged to master\n'; return; fi
-  fi
-  if [[ "$(gh pr list --repo "$repository" --head agent/deployment-config --base master --state open --json number --jq length)" -gt 0 ]]; then printf 'would update: existing configuration pull request\n'; else printf 'would create: configuration pull request\n'; fi
+  printf 'exists: deployment configuration loaded from checkout\n'
   for branch in _staging _prod; do if gh api "repos/$repository/git/ref/heads/$branch" >/dev/null 2>&1; then printf 'exists: %s branch (finalize will preserve it)\n' "$branch"; fi; done
 }
 verify_infrastructure_head() {
@@ -1394,7 +1390,6 @@ configure_github() {
     fi
   done
   configure_actions_budget "$repository"
-  create_configuration_pr "$repository"
 }
 configure_actions_budget() {
   local repository="$1" owner endpoint budget_id payload
@@ -1414,40 +1409,6 @@ configure_actions_budget() {
     gh api --method POST -H 'X-GitHub-Api-Version: 2026-03-10' "$endpoint" --input "$payload" >/dev/null
     printf 'created: GitHub Actions zero-dollar overage budget\n'
   fi
-}
-create_configuration_pr() {
-  local repository="$1" branch=agent/deployment-config base_sha encoded existing_sha payload
-  if gh api "repos/$repository/contents/infra/config/vps.json?ref=master" > "$TEMP_DIR/master-config.json" 2>/dev/null; then
-    jq -r .content "$TEMP_DIR/master-config.json" | tr -d '\n' | base64 -d > "$TEMP_DIR/master-vps.json"
-    if cmp -s "$CONFIG_FILE" "$TEMP_DIR/master-vps.json"; then printf 'exists: reviewed configuration merged to master\n'; return; fi
-  fi
-  base_sha="$(git rev-parse HEAD)"
-  if gh api "repos/$repository/git/ref/heads/$branch" >/dev/null 2>&1; then
-    gh api "repos/$repository/compare/master...$branch" > "$TEMP_DIR/config-compare.json"
-    jq -e '[.files[]?.filename | select(. != "infra/config/vps.json")] | length == 0' "$TEMP_DIR/config-compare.json" >/dev/null || die 'The existing configuration branch contains unrelated changes'
-  else
-    payload="$TEMP_DIR/config-ref.json"
-    jq -n --arg ref "refs/heads/$branch" --arg sha "$base_sha" '{ref:$ref,sha:$sha}' > "$payload"
-    gh api --method POST "repos/$repository/git/refs" --input "$payload" >/dev/null
-    printf 'created: configuration branch\n'
-  fi
-  encoded="$(base64 -w 0 "$CONFIG_FILE")"
-  existing_sha=''
-  if gh api "repos/$repository/contents/infra/config/vps.json?ref=$branch" > "$TEMP_DIR/existing-config.json" 2>/dev/null; then
-    existing_sha="$(jq -r .sha "$TEMP_DIR/existing-config.json")"
-    jq -r .content "$TEMP_DIR/existing-config.json" | tr -d '\n' | base64 -d > "$TEMP_DIR/existing-vps.json"
-    if cmp -s "$CONFIG_FILE" "$TEMP_DIR/existing-vps.json"; then printf 'exists: reviewed configuration content\n'; encoded=''; fi
-  fi
-  if [[ -n "$encoded" ]]; then
-    payload="$TEMP_DIR/config-content.json"
-    jq -n --arg message 'Configure VPS deployment' --arg content "$encoded" --arg branch "$branch" --arg sha "$existing_sha" '{message:$message,content:$content,branch:$branch} + (if $sha=="" then {} else {sha:$sha} end)' > "$payload"
-    gh api --method PUT "repos/$repository/contents/infra/config/vps.json" --input "$payload" >/dev/null
-    printf 'updated: configuration branch content\n'
-  fi
-  if [[ "$(gh pr list --repo "$repository" --head "$branch" --base master --state open --json number --jq length)" == 0 ]]; then
-    gh pr create --repo "$repository" --head "$branch" --base master --title 'Configure VPS deployment' --body 'Adds the reviewed, non-secret VPS and provider resource identifiers required by the deployment workflows.' >/dev/null
-    printf 'created: configuration pull request\n'
-  else printf 'exists: configuration pull request\n'; fi
 }
 protect_branch() {
   local repository="$1" branch="$2" payload="$TEMP_DIR/protection-$2.json"

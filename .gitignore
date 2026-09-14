@@ -20,6 +20,7 @@ test-results/
 infra/config/deployment.env
 infra/terraform/bootstrap/bootstrap.auto.tfvars.json
 infra/terraform/bootstrap/backend.generated.tf
+infra/terraform/.validation/
 **/.terraform/
 *.tfstate
 *.tfstate.*

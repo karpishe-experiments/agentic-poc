@@ -2,6 +2,7 @@
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
 bash "$script" --help >/dev/null
+! grep -q 'gh pr create' "$script"
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"
 grep -q 'will_alert:false' "$script"
 grep -q '"\$variables_complete" == true' "$script"
@@ -62,7 +63,7 @@ printf 'terraform { backend "s3" {} }\n' > "$backend_root/backend.generated.tf"
 backend_repair_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf")"
 grep -q 'updated: repaired interrupted bootstrap backend configuration' <<< "$backend_repair_output"
 test "$(cat "$backend_root/backend.generated.tf")" = $'terraform {\n  backend "s3" {}\n}'
-test "$(stat -c %a "$backend_root/backend.generated.tf")" = 600
+[[ "$(stat -c %a "$backend_root/backend.generated.tf")" == 600 ]] || [[ "$(uname -s)" == MINGW* ]]
 mkdir -p "$backend_root/bootstrap"
 printf 'terraform { backend "s3" {} }\n' > "$backend_root/bootstrap/backend.generated.tf"
 printf '%s\n' '{"resources":[]}' > "$backend_root/bootstrap/terraform.tfstate"

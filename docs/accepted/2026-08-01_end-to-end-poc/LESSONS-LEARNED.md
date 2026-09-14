@@ -4,15 +4,6 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 ## Candidates
 
-### Break the first-image cycle with a zero-task service and registration template
-
-- **Context:** Terraform must create an ECS service and ECR repository before GitHub can publish the first application image.
-- **Observation:** A zero-count service can reference an unpublished bootstrap tag safely while Terraform exports a complete task-definition template. The release workflow can then publish by commit, resolve the digest, and register the first runnable revision without starting a placeholder application.
-- **Guidance:** Keep desired count zero during infrastructure bootstrap, prohibit starting the bootstrap revision, and split ownership so Terraform manages the task template while the release workflow supplies only the immutable image digest and service revision.
-- **Evidence:** `infra/terraform/modules/environment/ecs.tf`, `scripts/deploy/aws-deployment.sh`, and `infra/terraform/environment/deployment.tftest.hcl`; the mocked Terraform tests passed on 2026-09-12.
-- **Promotion target:** Documentation.
-- **Status:** Candidate.
-
 ### Prefer an installed Chrome channel when Playwright's bundled Chromium is unavailable
 
 - **Context:** Running the isolated deterministic Playwright suite on the Windows development host.
