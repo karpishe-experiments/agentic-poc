@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { RevisionService } from "@/lib/application/revision-service";
+import { streamOperation } from "@/lib/http/stream-operation";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ bo
 export async function POST(_request: Request, { params }: { params: Promise<{ bookletId: string; pageId: string }> }) {
   try {
     const { bookletId, pageId } = await params;
-    return NextResponse.json({ data: await new RevisionService().regeneratePageVisual(bookletId, pageId) });
+    return streamOperation(() => new RevisionService().regeneratePageVisual(bookletId, pageId));
   } catch (error) {
     return NextResponse.json({ error: { message: error instanceof Error ? error.message : "The page visual could not be regenerated." } }, { status: 400 });
   }

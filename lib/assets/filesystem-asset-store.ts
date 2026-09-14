@@ -1,13 +1,10 @@
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
+import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 
 function normalizeUri(uri: string): string {
-  const normalized = uri.replaceAll("\\", "/");
-  if (!normalized || path.posix.isAbsolute(normalized) || normalized.split("/").includes("..")) {
-    throw new Error("Asset URI must be a non-empty relative path without traversal");
-  }
-  return normalized;
+  return normalizeAssetUri(uri);
 }
 
 export class FilesystemAssetStore implements AssetStore {
@@ -38,8 +35,9 @@ export class FilesystemAssetStore implements AssetStore {
     try {
       await access(this.resolve(uri));
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
     }
   }
 }

@@ -157,3 +157,30 @@ Use STE-flavored language for agent-authored prose. Preserve code, commands, ide
 These workflows may publish a reviewed branch and PR but never merge, deploy,
 release the consumer application, close issues, or mutate GitHub Project fields.
 <!-- core-agent-skills:end -->
+
+## VPS and Cloudflare deployment
+
+When you author or change deployment automation:
+
+- Use `#!/usr/bin/env bash`, `set -euo pipefail`, and `umask 077`. Organize logic into small, clearly named functions.
+- Parse explicit named arguments, provide `--help`, reject unknown arguments, and reject missing required inputs.
+- Default to preview. Permit mutations only with `--apply`.
+- Before mutation, validate required commands, the target VPS identity and host key, Cloudflare account and zone write-permission policies, Atlas temporary Project Owner access when used, and all required configuration.
+- Discover current state first. Make changes additive and idempotent. Report `exists`, `would create`, `would update`, `created`, or `updated`. Stop on incompatible or destructive drift.
+- Setup must not delete resources, copy production data, or perform rollback. Explicit workflow recovery remains governed by the deployment runbook.
+- Never enable shell tracing, embed credentials, print secret values, or retrieve secret contents without need.
+- Interactive deployment actions must silently prompt for each required provider token or key when it is absent, validate it, and export it only inside the script process for its required child commands. A child script cannot modify its caller's shell. The canonical script may provide clearly named source-only credential-session and clear-credential-session actions. The session action must keep credentials only in the current SSH shell's memory until explicit clearing or SSH logout, disable `errexit` until clearing so a failed child command cannot terminate that SSH login, and temporarily disable shell tracing while it reads or assigns credentials. Clear must restore a previously enabled `errexit` setting. Noninteractive workflow and host-dispatch actions must read the same values from protected runtime variables and fail clearly when they are absent. Do not require an operator to run `read` or `export` commands before invoking a deployment script.
+- Quote expansions and use arrays for command arguments. Use `mktemp`, mode `600`, and cleanup traps for sensitive temporary files.
+- Return nonzero with a concise actionable error. After apply, perform read-only verification and report sanitized results.
+- Keep scripts compatible with `bash -n` and ShellCheck. Target Ubuntu Bash; verify prerequisites and use `jq` for structured JSON operations.
+- When presenting a generated script in documentation or chat, output exactly: a short Required inputs list; one complete script in one code block; preview and apply examples; and brief expected-result and recovery notes.
+
+The canonical shell entrypoint is `scripts/deploy/vps-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
+
+Use its `discover-config` action to collect non-secret VPS, Cloudflare, and Atlas configuration before setup. Its preview may call provider read APIs but must not write a file or mutate provider resources; only its `--apply` writes `infra/config/vps.json`.
+
+For live execution, follow `docs/deployment/runbook.md`: identify the execution host, complete one checkpoint at a time, record sanitized evidence, and recheck workflow, journal, and container state after interruption. Honor existing session authorization; do not infer live success from local validation or invent a recovery command.
+
+Terraform owns Cloudflare R2, Tunnel, DNS and rules. Before Terraform use, an administrator must complete Cloudflare Zero Trust enrollment and Free-plan billing consent in the selected account; scripts must verify its organization and Access application API before provider mutation or auxiliary tool installation. `credential-session` loads credentials only. Run the read-only `access-check` action after each credential session to verify the configured Cloudflare, R2, Atlas, and GitHub scopes before setup. Setup owns provider discovery, scoped Atlas users, the exact VPS allowlist, and host credentials. Finalize owns absent environment-branch creation and supported branch protection. Compose owns non-secret runtime configuration; use the same variable names in both environments and no `STAGING_*` or `PROD_*` application variables. The root-owned final Compose override owns secrets and must never be rendered in logs or artifacts; rotation must stage them over pinned SSH before the serialized Maintenance workflow. GitHub publishes target-environment image tags but the host deploys only immutable digests. Every deployment change must update the compact runbook and relevant architecture guidance, and must keep maintenance, drain, backup, rollback, and environment-isolation contracts intact.
+
+For host-lifecycle changes run both `tests/shell/vps-deployment-script.test.sh` and `tests/shell/vps-host.test.sh`, plus ShellCheck. Recovery changes require `tests/unit/recovery-storage.test.ts`. Validate and test both Terraform roots after infrastructure changes. Use `vitest.deployment.config.ts` for isolated contracts when MongoDB is unavailable; do not report that as a full-suite pass. See `docs/deployment/contracts.md` for current implementation limits. No agent may label the full deployment plan complete while those limits remain.

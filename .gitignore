@@ -13,3 +13,18 @@ playwright-report/
 test-results/
 .playwright-cli/
 *.tsbuildinfo
+
+# Deployment working files contain state and must never be committed.
+.tools/
+.deploy/
+infra/config/deployment.env
+infra/terraform/bootstrap/bootstrap.auto.tfvars.json
+infra/terraform/bootstrap/backend.generated.tf
+infra/terraform/.validation/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.json
+*.tfplan.meta.json
+crash.log

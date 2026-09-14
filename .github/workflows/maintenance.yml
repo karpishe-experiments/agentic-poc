@@ -1,0 +1,19 @@
+name: Maintenance
+on:
+  workflow_dispatch:
+    inputs:
+      environment: {description: Target, type: choice, options: [staging, prod], required: true}
+      action: {description: Operation, type: choice, options: [backup, restore, rollback, rotate-secrets, resume], required: true}
+      backup_id: {description: Exact backup ID for restore, required: false}
+      confirmation: {description: Exact database name for restore, required: false}
+permissions: {contents: read}
+concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
+jobs:
+  run:
+    uses: ./.github/workflows/vps-operation.yml
+    with:
+      environment: ${{ inputs.environment }}
+      action: ${{ inputs.action }}
+      backup_id: ${{ inputs.backup_id }}
+      confirmation: ${{ inputs.confirmation }}
+    secrets: inherit

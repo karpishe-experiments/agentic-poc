@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { getAgentManagementService, AgentManagementError } from "@/lib/application/agent-management-service";
 import { agentVersionConfigurationSchema } from "@/lib/contracts/agents";
+import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
+import { runTrackedMutation } from "@/lib/application/deployment-control";
 
 export type AgentActionState = { kind: "idle" | "success" | "validation_error" | "conflict" | "failure"; message: string; fieldErrors?: Record<string, string> };
 
@@ -26,7 +29,10 @@ function validateConfiguration(formData: FormData): AgentActionState | null {
 }
 
 async function run(operation: () => Promise<unknown>, successMessage: string): Promise<AgentActionState> {
-  try { await operation(); revalidatePath("/admin/agents"); return { kind: "success", message: successMessage }; }
+  try {
+    if (!hasValidBasicAuthorization((await headers()).get("authorization"))) return { kind: "failure", message: "Authentication required." };
+    await runTrackedMutation(operation); revalidatePath("/admin/agents"); return { kind: "success", message: successMessage };
+  }
   catch (error) {
     if (error instanceof AgentManagementError) {
       const kind = error.code === "agent_invalid_configuration" ? "validation_error" : error.code === "agent_conflict" || error.code === "agent_coverage_conflict" || error.code === "agent_delete_blocked" ? "conflict" : "failure";

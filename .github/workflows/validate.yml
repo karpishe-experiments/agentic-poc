@@ -1,0 +1,36 @@
+name: Validate
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: test-key
+      MODEL_RUNTIME: fake
+      IMAGE_PROVIDER_MODE: fake
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.21.0, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx vitest run --config vitest.deployment.config.ts
+      - run: npm test -- --retry=2
+      - run: npm run test:agent
+      - run: npm run build
+      - run: docker build --tag kids-booklet-validation:${{ github.sha }} .
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.11.4 }
+      - run: terraform fmt -check -recursive infra/terraform
+      - run: terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate
+      - run: terraform -chdir=infra/terraform test
+      - run: terraform -chdir=infra/terraform/bootstrap init -backend=false && terraform -chdir=infra/terraform/bootstrap validate && terraform -chdir=infra/terraform/bootstrap test
+      - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
+      - run: bash -n scripts/deploy/vps-deployment.sh
+      - run: bash tests/shell/vps-deployment-script.test.sh
+      - run: bash tests/shell/vps-host.test.sh
+      - run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-deployment-script.test.sh tests/shell/vps-host.test.sh

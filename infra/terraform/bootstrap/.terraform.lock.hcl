@@ -1,0 +1,19 @@
+# This file is maintained automatically by "terraform init".
+# Manual edits may be lost in future updates.
+
+provider "registry.terraform.io/cloudflare/cloudflare" {
+  version     = "5.10.0"
+  constraints = "5.10.0"
+  hashes = [
+    "zh:e20fb1b87f9b13c44895aab4a436f39db037b99b81d9e4730144176757d69e14",
+    "zh:49aa85455135ebf2108e861cb7cf1b8217861f1903bb31c2502e09f49eedd9f5",
+    "zh:4f6916bb45c0fbbbece929890a9ed5ce1af0ca36bd4c8ae08f7f9bc6eca5b293",
+    "zh:b5333de6ce85725ad6438e632269feb5183c3d0c54691a065c3b8c5716d99694",
+    "zh:510356e67787a736ab8614942419bd61807bec59aa17a8bd97b58a5259687856",
+    "zh:ea119d9afdf2287484f30429e074b19222e4f353b3906ba96eb2f6ee31b2ed2f",
+    "zh:c74b8e5d15f2ab111e8de0e4b7688a7f7b28fda0009bc6842ba47204db562245",
+    "zh:86ebbc79f5a8ef40fa49429f08f3341b7def4253d0aefaf827c3ec8f08143bd3",
+    "h1:iTw5349FXV6m+EZ3OO85Hn7KzKV+dyA8MkFMVGbw51Y=",
+  ]
+}
+

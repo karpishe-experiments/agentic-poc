@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { BookletNotFoundError } from "@/lib/application/booklet-service";
 import { AgentConfigurationUnavailableError } from "@/lib/application/agent-resolver";
+import { MaintenanceModeError } from "@/lib/application/deployment-control";
 
 export type ErrorEnvelope = {
   error: {
@@ -13,6 +14,7 @@ export type ErrorEnvelope = {
 };
 
 export function toErrorEnvelope(error: unknown): { status: number; body: ErrorEnvelope } {
+  if (error instanceof MaintenanceModeError) return { status: error.status, body: { error: { code: error.code, message: error.message, recoverable: true } } };
   if (error instanceof BookletNotFoundError) {
     return {
       status: 404,

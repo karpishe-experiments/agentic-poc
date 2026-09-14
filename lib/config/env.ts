@@ -2,6 +2,16 @@ import path from "node:path";
 import { z } from "zod";
 
 export const serverEnvSchema = z.object({
+  DEPLOYMENT_ENV: z.enum(["local", "_staging", "_prod"]).default("local"),
+  ASSET_STORAGE: z.enum(["filesystem", "s3"]).default("filesystem"),
+  // The AWS SDK is also the S3-compatible R2 client. `auto` is R2's region.
+  AWS_REGION: z.string().default("auto"),
+  OBJECT_STORE_ENDPOINT: z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional()),
+  ASSETS_BUCKET: z.string().min(1).optional(),
+  DIAGNOSTICS_BUCKET: z.string().min(1).optional(),
+  RECOVERY_BUCKET: z.string().min(1).optional(),
+  ACCESS_GATE_PASSWORD: z.string().min(16).optional(),
+  RUNNER_ENABLED: z.enum(["true", "false"]).default("true"),
   OPENAI_API_KEY: z.string().min(1),
   MODEL_RUNTIME: z.enum(["fake", "real"]).default("fake"),
   IMAGE_PROVIDER_MODE: z.enum(["fake", "real"]).default("fake"),
@@ -12,6 +22,17 @@ export const serverEnvSchema = z.object({
   DATA_ROOT: z.string().min(1).default("./data/assets"),
   COMIC_COPY_MODE: z.enum(["creative", "exact"]).default("creative"),
   OPENAI_TRACE_INCLUDE_SENSITIVE_DATA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+}).superRefine((env, context) => {
+  if (env.ASSET_STORAGE === "s3" && !env.ASSETS_BUCKET) context.addIssue({ code: "custom", path: ["ASSETS_BUCKET"], message: "S3 storage requires ASSETS_BUCKET." });
+  if (env.DEPLOYMENT_ENV !== "local") {
+    for (const key of ["ASSETS_BUCKET", "DIAGNOSTICS_BUCKET", "RECOVERY_BUCKET", "ACCESS_GATE_PASSWORD"] as const) {
+      if (!env[key]) context.addIssue({ code: "custom", path: [key], message: "Required in deployed environments." });
+    }
+    if (env.ASSET_STORAGE !== "s3") context.addIssue({ code: "custom", path: ["ASSET_STORAGE"], message: "Deployed environments require S3." });
+    if (!env.OBJECT_STORE_ENDPOINT) context.addIssue({ code: "custom", path: ["OBJECT_STORE_ENDPOINT"], message: "Deployed environments require OBJECT_STORE_ENDPOINT." });
+    const expected = env.DEPLOYMENT_ENV === "_staging" ? "kids_booklet" : "kids_booklet_prod";
+    if (env.MONGODB_DATABASE !== expected) context.addIssue({ code: "custom", path: ["MONGODB_DATABASE"], message: `Expected ${expected}.` });
+  }
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

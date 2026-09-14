@@ -1,0 +1,35 @@
+name: kids-booklet-${DEPLOYMENT_ENV:?DEPLOYMENT_ENV is required}
+
+services:
+  app:
+    image: ${IMAGE_DIGEST:?IMAGE_DIGEST is required}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=1g"]
+    ports: ["127.0.0.1:${APP_PORT:?APP_PORT is required}:3000"]
+    cpus: "1.0"
+    mem_limit: 2g
+    environment:
+      DEPLOYMENT_ENV: ""
+      APP_HOSTNAME: ""
+      MONGODB_DATABASE: ""
+      ASSET_STORAGE: s3
+      ASSETS_BUCKET: ""
+      DIAGNOSTICS_BUCKET: ""
+      RECOVERY_BUCKET: ""
+      OBJECT_STORE_ENDPOINT: ""
+      AWS_REGION: auto
+      RUNNER_ENABLED: "true"
+      MODEL_RUNTIME: real
+      IMAGE_PROVIDER_MODE: real
+      OPENAI_API_KEY: ""
+      MONGODB_URI: ""
+      ACCESS_GATE_PASSWORD: ""
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
