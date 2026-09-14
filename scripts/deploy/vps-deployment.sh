@@ -154,6 +154,7 @@ configure_ssh() {
 }
 host_call() {
   configure_ssh
+  local remote_command
   local -a remote=(--action "$ACTION")
   [[ -z "$ENVIRONMENT" ]] || remote+=(--environment "$ENVIRONMENT")
   [[ -z "$IMAGE_DIGEST" ]] || remote+=(--image-digest "$IMAGE_DIGEST")
@@ -162,7 +163,8 @@ host_call() {
   [[ -z "$CONFIRMATION" ]] || remote+=(--confirmation "$CONFIRMATION")
   [[ -z "$REQUEST_ID" ]] || remote+=(--request-id "$REQUEST_ID")
   [[ "$APPLY" == false ]] || remote+=(--apply)
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "${remote[@]}"
+  printf -v remote_command ' %s' "${remote[@]}"
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command"
 }
 require_root() { [[ "$EUID" -eq 0 ]] || die 'This operation requires root on the VPS'; }
 validate_host_capacity() {
@@ -1096,8 +1098,10 @@ sync_host_configuration() {
   [[ -f "$REPO_ROOT/infra/config/vps.json" ]] || die 'Reviewed infra/config/vps.json is required for host synchronization'
   tar -C "$REPO_ROOT" -cf "$TEMP_DIR/host-bundle.tar" scripts/deploy/vps-deployment.sh deploy/compose.yml deploy/compose.staging.yml deploy/compose.prod.yml infra/config/vps.json
   configure_ssh
+  local remote_command
   local -a remote=(--action sync-host --request-id "$REQUEST_ID" --apply)
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "${remote[@]}" < "$TEMP_DIR/host-bundle.tar"
+  printf -v remote_command ' %s' "${remote[@]}"
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar"
 }
 terraform_operation() {
   need_command terraform; need_command jq
@@ -1202,8 +1206,10 @@ stage_and_trigger_rotation() {
   load_github_admin_token
   gh workflow view maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" >/dev/null
   build_secret_override "$ENVIRONMENT" "$TEMP_DIR/rotation.json"
+  local remote_command
   local -a remote=(--action stage-secrets --environment "$ENVIRONMENT" --apply)
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "${remote[@]}" < "$TEMP_DIR/rotation.json"
+  printf -v remote_command ' %s' "${remote[@]}"
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/rotation.json"
   gh workflow run maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" --ref "_$ENVIRONMENT" -f "environment=$ENVIRONMENT" -f action=rotate-secrets
   printf 'updated: secrets staged; Maintenance rotation queued\n'
 }
