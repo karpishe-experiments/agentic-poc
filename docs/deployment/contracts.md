@@ -30,7 +30,7 @@ The project-wide Actions concurrency group serializes workflows. Host operations
 
 ## Verification
 
-CI selects checks from the pull-request diff. Application changes run typecheck, lint, application and deployment tests, agent fixtures, the production build, and a container build. Terraform, workflow, Compose, and deployment-shell changes run their matching validation suites. Manual Validate dispatches always run the complete suite.
+CI selects checks from the pull-request diff. Application changes run typecheck, lint, application and deployment tests, agent fixtures, the production build, and a container build. Deployment workflow contracts run the isolated deployment tests without the application builds. Terraform, workflow, Compose, and deployment-shell changes run their matching validation suites. Manual Validate dispatches always run the complete suite.
 
 Live acceptance must verify provider scopes and quotas, public GHCR pulls, Tunnel and Access connectivity, closed public origin ports, Atlas transactions, streamed transport, host restart recovery, and a staging backup/restore rehearsal. Local checks cannot prove these properties.
 
