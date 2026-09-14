@@ -165,7 +165,7 @@ When you author or change deployment automation:
 - Use `#!/usr/bin/env bash`, `set -euo pipefail`, and `umask 077`. Organize logic into small, clearly named functions.
 - Parse explicit named arguments, provide `--help`, reject unknown arguments, and reject missing required inputs.
 - Default to preview. Permit mutations only with `--apply`.
-- Before mutation, validate required commands, the target VPS identity and host key, Cloudflare scope, Atlas temporary Project Owner access when used, and all required configuration.
+- Before mutation, validate required commands, the target VPS identity and host key, Cloudflare account and zone write-permission policies, Atlas temporary Project Owner access when used, and all required configuration.
 - Discover current state first. Make changes additive and idempotent. Report `exists`, `would create`, `would update`, `created`, or `updated`. Stop on incompatible or destructive drift.
 - Setup must not delete resources, copy production data, or perform rollback. Explicit workflow recovery remains governed by the deployment runbook.
 - Never enable shell tracing, embed credentials, print secret values, or retrieve secret contents without need.

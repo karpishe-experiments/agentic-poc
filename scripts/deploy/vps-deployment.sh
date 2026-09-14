@@ -23,6 +23,7 @@ TEMP_DIR='' ATLAS_PLAN_FILE=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
 ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}" ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}" ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
+CLOUDFLARE_TOKEN_ID=''
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}"
 AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}" AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
 SESSION_ACTIVE="${SESSION_ACTIVE:-false}" SESSION_RESTORE_ERREXIT="${SESSION_RESTORE_ERREXIT:-false}"
@@ -595,13 +596,53 @@ github_get() {
   [[ "$GITHUB_STATUS" == 200 ]] || die "GitHub access check failed for $path (HTTP $GITHUB_STATUS)"
 }
 verify_cloudflare_token() {
-  local account_id="$1" token_id token_status
+  local account_id="$1" token_status
   [[ "$account_id" =~ ^[a-f0-9]{32}$ ]] || die 'A valid Cloudflare account ID is required for token verification'
   cloudflare_get "accounts/$account_id/tokens/verify"
-  token_id="$(jq -er '.result.id | select(type == "string" and test("^[a-f0-9]{32}$"))' "$CF_RESPONSE")" || die 'Cloudflare did not return a valid token metadata ID'
+  CLOUDFLARE_TOKEN_ID="$(jq -er '.result.id | select(type == "string" and test("^[a-f0-9]{32}$"))' "$CF_RESPONSE")" || die 'Cloudflare did not return a valid token metadata ID'
   token_status="$(jq -er '.result.status' "$CF_RESPONSE")" || die 'Cloudflare did not return a token status'
   [[ "$token_status" == active ]] || die "Cloudflare API token is $token_status"
-  printf 'verified: Cloudflare API token metadata ID %s\n' "$token_id"
+  printf 'verified: Cloudflare API token metadata ID %s\n' "$CLOUDFLARE_TOKEN_ID"
+}
+cloudflare_policy_allows() {
+  local aliases="$1" scope="$2" account_id="$3" zone_id="$4" token_file="$5" permission_file="$6"
+  jq -e --slurpfile available "$permission_file" --argjson aliases "$aliases" --arg scope "$scope" --arg account "$account_id" --arg zone "$zone_id" '
+    any(.result.policies[]?;
+      (.effect == "allow") and
+      any(.permission_groups[]?;
+        . as $assigned |
+        ($assigned.name // ([$available[0].result[]? | select(.id==$assigned.id) | .name][0])) as $name |
+        $aliases | index($name)) and
+      ((.resources | tostring) as $resources |
+        if $scope == "zone" then
+          ($resources | contains($zone)) or (($resources | contains($account)) and ($resources | contains("zone.*")))
+        else
+          ($resources | contains($account))
+        end))
+  ' "$token_file" >/dev/null
+}
+verify_cloudflare_token_permissions() {
+  local account_id="$1" zone_id="$2" joined='' token_file permission_file
+  local -a missing=()
+  [[ "$CLOUDFLARE_TOKEN_ID" =~ ^[a-f0-9]{32}$ ]] || die 'Verify the Cloudflare token before checking its permissions'
+  private_temp; token_file="$TEMP_DIR/cloudflare-token-details.json"; permission_file="$TEMP_DIR/cloudflare-token-permissions.json"
+  cloudflare_get "accounts/$account_id/tokens/$CLOUDFLARE_TOKEN_ID"
+  cp "$CF_RESPONSE" "$token_file"
+  cloudflare_get "accounts/$account_id/tokens/permission_groups"
+  cp "$CF_RESPONSE" "$permission_file"
+  chmod 600 "$token_file" "$permission_file"
+  cloudflare_policy_allows '["DNS Write","DNS Edit"]' zone "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('DNS Write')
+  cloudflare_policy_allows '["Cache Settings Write","Cache Rules Edit"]' zone "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('Cache Settings Write')
+  cloudflare_policy_allows '["Zone WAF Write","Zone WAF Edit"]' zone "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('Zone WAF Write')
+  cloudflare_policy_allows '["Workers R2 Storage Write","Workers R2 Storage Edit"]' account "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('Workers R2 Storage Write')
+  cloudflare_policy_allows '["Cloudflare Tunnel Write","Cloudflare Tunnel Edit"]' account "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('Cloudflare Tunnel Write')
+  cloudflare_policy_allows '["Access: Apps and Policies Write","Access: Apps and Policies Edit"]' account "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('Access: Apps and Policies Write')
+  cloudflare_policy_allows '["Access: Service Tokens Write","Access: Service Tokens Edit"]' account "$account_id" "$zone_id" "$token_file" "$permission_file" || missing+=('Access: Service Tokens Write')
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf -v joined '%s, ' "${missing[@]}"
+    die "Cloudflare API token lacks required permissions for the configured resources: ${joined%, }"
+  fi
+  printf 'verified: Cloudflare API token has required account and zone write permissions\n'
 }
 verify_cloudflare_zero_trust() {
   local account_id="$1"
@@ -634,6 +675,7 @@ access_check_cloudflare() {
   load_terraform_configuration
   load_cloudflare_api_token
   verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
+  verify_cloudflare_token_permissions "$TF_VAR_cloudflare_account_id" "$TF_VAR_cloudflare_zone_id"
   verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
 }
 access_check_r2() {
@@ -1178,6 +1220,7 @@ setup_host() {
   load_terraform_configuration
   load_cloudflare_api_token
   verify_cloudflare_token "$TF_VAR_cloudflare_account_id"
+  verify_cloudflare_token_permissions "$TF_VAR_cloudflare_account_id" "$TF_VAR_cloudflare_zone_id"
   verify_cloudflare_zero_trust "$TF_VAR_cloudflare_account_id"
   docker compose version >/dev/null
   load_r2_state_credentials

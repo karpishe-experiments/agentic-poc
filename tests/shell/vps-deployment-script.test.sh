@@ -99,6 +99,7 @@ load_terraform_configuration() { TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaa
 need_command() { :; }
 load_cloudflare_api_token() { :; }
 verify_cloudflare_token() { printf "verified: Cloudflare token\\n"; }
+verify_cloudflare_token_permissions() { printf "verified: Cloudflare write permissions\\n"; }
 verify_cloudflare_zero_trust() { printf "verified: Cloudflare Access\\n"; }
 load_r2_state_credentials() { :; }
 verify_r2_state_access() { printf "verified: R2 credentials\\n"; }
@@ -108,6 +109,7 @@ github_get() { GITHUB_RESPONSE=/dev/null; printf "github: %s\\n" "$1"; }
 jq() { case "$*" in *atlas_project_id*) printf "%s\\n" 6a869d84e65675f845fa22eb;; *.repository*) printf "%s\\n" karpishe-experiments/agentic-poc;; *.permissions.admin*) return 0;; esac; }
 access_check' _ "$script")"
 grep -q 'verified: Cloudflare token' <<< "$access_check_output"
+grep -q 'verified: Cloudflare write permissions' <<< "$access_check_output"
 grep -q 'verified: R2 credentials' <<< "$access_check_output"
 grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/accessList?itemsPerPage=1' <<< "$access_check_output"
 grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/apiKeys?itemsPerPage=100' <<< "$access_check_output"
@@ -171,6 +173,17 @@ zero_trust_missing_status=$?
 set -e
 test "$zero_trust_missing_status" -ne 0
 grep -q 'Cloudflare Zero Trust is not enrolled' <<< "$zero_trust_missing_output"
+set +e
+cloudflare_permission_failure_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+CLOUDFLARE_TOKEN_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+cloudflare_get() { CF_RESPONSE=/dev/null; }
+cloudflare_policy_allows() { [[ "$1" != *"DNS Write"* ]]; }
+verify_cloudflare_token_permissions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' _ "$script" 2>&1)"
+cloudflare_permission_failure_status=$?
+set -e
+test "$cloudflare_permission_failure_status" -ne 0
+grep -q 'lacks required permissions.*DNS Write' <<< "$cloudflare_permission_failure_output"
+if grep -q 'Cache Settings Write' <<< "$cloudflare_permission_failure_output"; then echo 'Cloudflare permission check reported a permission that passed' >&2; exit 1; fi
 if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; source "$1"; load_r2_state_credentials' _ "$script" </dev/null > /dev/null 2>&1; then
   echo 'accepted missing noninteractive R2 state credentials' >&2
   exit 1

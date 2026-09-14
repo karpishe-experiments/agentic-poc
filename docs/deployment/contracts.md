@@ -38,6 +38,8 @@ Setup discovers provider and host state, configures exact Atlas users and the VP
 
 The temporary Atlas API key must have Project Owner access to the configured project. `access-check` verifies that role through the project API-key listing before setup attempts an Atlas mutation.
 
+`access-check` reads the account-owned Cloudflare token policy and verifies its required account and configured-zone write permissions before Terraform can apply. The token also needs Account API Tokens Read to inspect its own policy.
+
 ## Cost boundary
 
 | Service | Expected monthly cost for the experimental workload | Limit or overage exposure |
