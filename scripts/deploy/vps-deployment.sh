@@ -16,16 +16,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEMP_DIR=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
-ATLAS_PUBLIC_KEY='' ATLAS_PRIVATE_KEY='' ATLAS_RESPONSE='' ATLAS_STATUS=''
+ATLAS_PUBLIC_KEY='' ATLAS_PRIVATE_KEY='' ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need_command() { command -v "$1" >/dev/null || die "Required command missing: $1"; }
-cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; unset ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
+cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; unset ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
 trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, github-login, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, reset-staging, resume, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -76,7 +76,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|github-login|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -497,6 +497,12 @@ load_atlas_admin_credentials() {
   if [[ -z "$ATLAS_PRIVATE_KEY" ]]; then IFS= read -r -s -p 'Atlas temporary private API key: ' ATLAS_PRIVATE_KEY; printf '\n' >&2; fi
   [[ -n "$ATLAS_PUBLIC_KEY" && -n "$ATLAS_PRIVATE_KEY" && "$ATLAS_PUBLIC_KEY$ATLAS_PRIVATE_KEY" != *$'\n'* && "$ATLAS_PUBLIC_KEY$ATLAS_PRIVATE_KEY" != *$'\r'* && "$ATLAS_PUBLIC_KEY$ATLAS_PRIVATE_KEY" != *'"'* ]] || die 'Valid temporary Atlas API credentials are required'
 }
+load_github_admin_token() {
+  GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-${GH_TOKEN:-}}"
+  if [[ -z "$GITHUB_ADMIN_TOKEN" ]]; then IFS= read -r -s -p 'GitHub temporary administrator token: ' GITHUB_ADMIN_TOKEN; printf '\n' >&2; fi
+  [[ -n "$GITHUB_ADMIN_TOKEN" && "$GITHUB_ADMIN_TOKEN" != *$'\n'* && "$GITHUB_ADMIN_TOKEN" != *$'\r'* && "$GITHUB_ADMIN_TOKEN" != *'"'* ]] || die 'A valid temporary GitHub administrator token is required'
+  export GH_TOKEN="$GITHUB_ADMIN_TOKEN"
+}
 atlas_request() {
   local method="$1" path="$2" payload="${3:-}" config
   private_temp; config="$TEMP_DIR/atlas-curl.conf"
@@ -895,7 +901,7 @@ stage_and_trigger_rotation() {
   [[ "$APPLY" == true ]] || { printf 'would update: staged %s secrets followed by serialized Maintenance rotation\n' "$ENVIRONMENT"; return; }
   need_command gh; need_command jq; private_temp
   configure_ssh
-  gh auth status >/dev/null 2>&1 || die 'Run gh auth login before rotating secrets'
+  load_github_admin_token
   gh workflow view maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" >/dev/null
   build_secret_override "$ENVIRONMENT" "$TEMP_DIR/rotation.json"
   local -a remote=(--action stage-secrets --environment "$ENVIRONMENT" --apply)
@@ -914,7 +920,7 @@ setup_host() {
   if [[ "$APPLY" == true ]]; then require_root; fi
   install_auxiliary_tools
   for name in terraform gh cloudflared; do need_command "$name"; done
-  gh auth status >/dev/null 2>&1 || die 'Run gh auth login before setup'
+  load_github_admin_token
   local repository requested_apply="$APPLY"
   repository="$(jq -r .repository "$CONFIG_FILE")"
   [[ "$(gh api "repos/$repository" --jq .permissions.admin)" == true ]] || die 'GitHub repository administration is required'
@@ -1021,24 +1027,9 @@ install_auxiliary_tools() {
   fi
   export PATH="$TEMP_DIR/bin:$PATH"
 }
-github_login() {
-  local already_authenticated=false
-  for name in curl jq sha256sum unzip tar; do need_command "$name"; done
-  [[ "$APPLY" == false ]] || require_root
-  install_auxiliary_tools
-  if gh auth status >/dev/null 2>&1; then already_authenticated=true; fi
-  if [[ "$APPLY" == false ]]; then
-    if [[ "$already_authenticated" == true ]]; then printf 'exists: GitHub CLI authentication\n'; else printf 'would update: install GitHub CLI and authenticate interactively\n'; fi
-    return
-  fi
-  commit_auxiliary_tools
-  if [[ "$already_authenticated" == false ]]; then gh auth login --hostname github.com --git-protocol https --web; fi
-  gh auth status >/dev/null 2>&1 || die 'GitHub CLI authentication did not complete'
-  printf 'updated: GitHub CLI authenticated for the VPS administrator\n'
-}
 commit_auxiliary_tools() {
   local tool
-  for tool in terraform gh cloudflared; do
+  for tool in terraform cloudflared; do
     if [[ -f "$TEMP_DIR/bin/$tool" ]]; then install -m 755 "$TEMP_DIR/bin/$tool" "/usr/local/bin/$tool"; printf 'updated: pinned %s installed\n' "$tool"; fi
   done
 }
@@ -1167,8 +1158,8 @@ protect_branch() {
   else die "Could not configure $branch branch protection"; fi
 }
 finalize_repository() {
-  load_config; need_command gh; need_command git; need_command jq; need_command base64; private_temp
-  gh auth status >/dev/null 2>&1 || die 'Run gh auth login before finalize'
+  load_config; need_command git; need_command jq; need_command base64; private_temp
+  install_auxiliary_tools; need_command gh; load_github_admin_token
   local repository master_sha branch payload
   repository="$(jq -r .repository "$CONFIG_FILE")"
   [[ "$(gh api "repos/$repository" --jq .permissions.admin)" == true ]] || die 'GitHub repository administration is required'
@@ -1195,7 +1186,6 @@ main() {
   parse_arguments "$@"; validate_arguments
   case "$ACTION" in
     discover-config) discover_configuration;;
-    github-login) github_login;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
     setup) setup_host;;
