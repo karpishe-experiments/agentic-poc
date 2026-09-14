@@ -972,7 +972,9 @@ preview_setup() {
   cloudflare_get "accounts/$account/r2/buckets/$R2_STATE_BUCKET"
   if [[ "$CF_STATUS" == 200 ]]; then
     printf 'exists: R2 Terraform state bucket\n'
-    verify_bootstrap_state_ownership
+    if interrupted_bootstrap_state_is_resumable; then
+      printf 'would update: resume interrupted bootstrap state migration\n'
+    else verify_bootstrap_state_ownership; fi
     terraform_operation
   else
     assert_no_unmanaged_cloudflare_resources
@@ -983,12 +985,37 @@ preview_setup() {
   [[ ! -e "$SECRETS/staging/secrets.json" ]] || printf 'exists: staging host secret override\n'
   [[ ! -e "$SECRETS/prod/secrets.json" ]] || printf 'exists: production host secret override\n'
 }
+write_s3_backend_block() {
+  local destination="$1"
+  printf 'terraform {\n  backend "s3" {}\n}\n' > "$destination"
+  chmod 600 "$destination"
+}
+interrupted_bootstrap_state_is_resumable() {
+  local directory="$STATE/bootstrap" generated="$STATE/bootstrap/backend.generated.tf"
+  [[ -f "$generated" && "$(<"$generated")" == 'terraform { backend "s3" {} }' ]] || return 1
+  [[ -f "$directory/terraform.tfstate" && -f "$directory/local-state.backup" ]] || die 'Interrupted bootstrap is missing its recoverable local state or backup'
+  cmp -s "$directory/terraform.tfstate" "$directory/local-state.backup" || die 'Interrupted bootstrap local state differs from its backup'
+  jq -e --arg account "$TF_VAR_cloudflare_account_id" --arg bucket "$R2_STATE_BUCKET" '.resources[]? | select(.type=="cloudflare_r2_bucket" and .name=="state") | .instances[]? | select(.attributes.account_id==$account and .attributes.name==$bucket)' "$directory/terraform.tfstate" >/dev/null || die 'Interrupted bootstrap local state does not own the configured R2 state bucket'
+}
+repair_generated_s3_backend_block() {
+  local destination="$1" content
+  [[ -f "$destination" ]] || return 0
+  content="$(<"$destination")"
+  case "$content" in
+    $'terraform {\n  backend "s3" {}\n}') ;;
+    'terraform { backend "s3" {} }')
+      write_s3_backend_block "$destination"
+      printf 'updated: repaired interrupted bootstrap backend configuration\n'
+      ;;
+    *) die 'Generated bootstrap backend configuration contains incompatible drift' ;;
+  esac
+}
 verify_bootstrap_state_ownership() {
   local directory="$TEMP_DIR/bootstrap-remote"
   mkdir -p "$directory"
   cp "$REPO_ROOT/infra/terraform/bootstrap/"*.tf "$directory/"
   cp "$REPO_ROOT/infra/terraform/bootstrap/.terraform.lock.hcl" "$directory/"
-  printf 'terraform { backend "s3" {} }\n' > "$directory/backend.generated.tf"
+  write_s3_backend_block "$directory/backend.generated.tf"
   backend_init "$directory" bootstrap.tfstate
   terraform -chdir="$directory" state pull > "$directory/state.json"
   jq -e '.resources[]? | select(.type=="cloudflare_r2_bucket" and .name=="state")' "$directory/state.json" >/dev/null || die 'The R2 state bucket exists without matching bootstrap state; verify ownership before continuing'
@@ -1069,11 +1096,12 @@ bootstrap_state() {
   mkdir -p "$directory"
   cp "$REPO_ROOT/infra/terraform/bootstrap/"*.tf "$directory/"
   cp "$REPO_ROOT/infra/terraform/bootstrap/.terraform.lock.hcl" "$directory/"
+  repair_generated_s3_backend_block "$directory/backend.generated.tf"
   if [[ ! -f "$directory/backend.generated.tf" ]]; then
     cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$R2_STATE_BUCKET"
     if [[ "$CF_STATUS" == 200 ]]; then
       verify_bootstrap_state_ownership
-      printf 'terraform { backend "s3" {} }\n' > "$directory/backend.generated.tf"
+      write_s3_backend_block "$directory/backend.generated.tf"
     else
       terraform -chdir="$directory" init -input=false
       terraform -chdir="$directory" plan -input=false -out=bootstrap.tfplan
@@ -1081,7 +1109,7 @@ bootstrap_state() {
       validate_plan "$directory/plan.json"
       terraform -chdir="$directory" apply -input=false bootstrap.tfplan
       cp "$directory/terraform.tfstate" "$directory/local-state.backup"
-      printf 'terraform { backend "s3" {} }\n' > "$directory/backend.generated.tf"
+      write_s3_backend_block "$directory/backend.generated.tf"
     fi
   fi
   terraform -chdir="$directory" init -input=false -migrate-state -force-copy "-backend-config=bucket=$R2_STATE_BUCKET" -backend-config=key=bootstrap.tfstate -backend-config=region=auto "-backend-config=endpoints={s3=\"$R2_ENDPOINT\"}" -backend-config=skip_credentials_validation=true -backend-config=skip_requesting_account_id=true -backend-config=skip_region_validation=true -backend-config=skip_s3_checksum=true -backend-config=use_lockfile=true

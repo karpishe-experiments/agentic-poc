@@ -57,6 +57,37 @@ apply_atlas_plan() { printf apply; }
 APPLY=false; configure_atlas
 APPLY=true; configure_atlas' _ "$script")"
 test "$atlas_handoff_check" = planreportapply
+backend_root="$(mktemp -d)"
+printf 'terraform { backend "s3" {} }\n' > "$backend_root/backend.generated.tf"
+backend_repair_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf")"
+grep -q 'updated: repaired interrupted bootstrap backend configuration' <<< "$backend_repair_output"
+test "$(cat "$backend_root/backend.generated.tf")" = $'terraform {\n  backend "s3" {}\n}'
+test "$(stat -c %a "$backend_root/backend.generated.tf")" = 600
+mkdir -p "$backend_root/bootstrap"
+printf 'terraform { backend "s3" {} }\n' > "$backend_root/bootstrap/backend.generated.tf"
+printf '%s\n' '{"resources":[]}' > "$backend_root/bootstrap/terraform.tfstate"
+cp "$backend_root/bootstrap/terraform.tfstate" "$backend_root/bootstrap/local-state.backup"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; STATE="$2"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; R2_STATE_BUCKET=kids-booklet-terraform-state; jq() { return 0; }; interrupted_bootstrap_state_is_resumable' _ "$script" "$backend_root"
+printf '%s\n' changed > "$backend_root/bootstrap/local-state.backup"
+set +e
+resume_drift_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; STATE="$2"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; R2_STATE_BUCKET=kids-booklet-terraform-state; jq() { return 0; }; interrupted_bootstrap_state_is_resumable' _ "$script" "$backend_root" 2>&1)"
+resume_drift_status=$?
+set -e
+test "$resume_drift_status" -ne 0
+grep -q 'Interrupted bootstrap local state differs from its backup' <<< "$resume_drift_output"
+rm -f "$backend_root/bootstrap/backend.generated.tf" "$backend_root/bootstrap/terraform.tfstate" "$backend_root/bootstrap/local-state.backup"
+rmdir "$backend_root/bootstrap"
+printf 'terraform {\n  backend "s3" {}\n}\n' > "$backend_root/backend.generated.tf"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf"
+printf 'terraform {\n  backend "local" {}\n}\n' > "$backend_root/backend.generated.tf"
+set +e
+reject_backend_drift_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf" 2>&1)"
+reject_backend_drift_status=$?
+set -e
+test "$reject_backend_drift_status" -ne 0
+grep -q 'Generated bootstrap backend configuration contains incompatible drift' <<< "$reject_backend_drift_output"
+rm -f "$backend_root/backend.generated.tf"
+rmdir "$backend_root"
 apply_atlas_block="$(sed -n '/^apply_atlas_plan()/,/^}/p' "$script")"
 if grep -q 'atlas_request GET' <<< "$apply_atlas_block"; then
   echo 'Atlas apply performs a redundant discovery request' >&2
