@@ -52,6 +52,13 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 6. After Review passes, use `sync-docs-issues`; compose it with `capture-project-learnings` when verified work reveals durable knowledge.
 7. The core workflow may publish a reviewed branch and pull request. Merging, deployment, issue closure, and GitHub Project mutations remain outside that authority.
 
+For issue-backed work, select one issue branch and keep all implementation,
+review corrections, deployment fixes, and follow-up changes for that issue on
+that branch. Do not create or switch to another working branch while the issue
+remains active unless the user explicitly requests the branch change. If the
+issue branch was already merged, update that same branch from `master` and open
+a follow-up pull request from it when more issue work is required.
+
 ## Delegation and multi-agent work
 
 - The primary agent owns the implementation sequence, shared architecture, integration, verification, commits, and project-management updates.

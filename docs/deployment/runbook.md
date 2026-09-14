@@ -75,7 +75,7 @@ Wait for the merge's Infrastructure workflow to succeed before finalize. Branch 
 
 ## First activation
 
-1. After finalize, merge a release to `_staging` or dispatch Deploy on that branch. Initialization creates the database defaults and required seed assets directly in R2. The workflow makes the GHCR package public, then proves an anonymous digest pull before it contacts the VPS.
+1. After finalize, merge a release to `_staging` or dispatch Deploy on that branch. Initialization creates the database defaults and required seed assets directly in R2. The workflow links the image package to this repository and proves an anonymous digest pull before it contacts the VPS. GitHub can deny its repository token permission to change the first package's visibility. If the workflow reports that specific error, open the package settings URL printed by the job, select **Change visibility → Public**, type the package name to confirm, and rerun the failed workflow. This is a one-time package setting; do not store a classic GitHub PAT for it.
 2. Run Check deployment on `_staging`. Rehearse backup and restore using Maintenance before activating production.
 3. Release `_prod` and run Check deployment on `_prod`.
 
