@@ -17,10 +17,12 @@ TEMP_DIR=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
 ATLAS_PUBLIC_KEY='' ATLAS_PRIVATE_KEY='' ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}"
+AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}" AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need_command() { command -v "$1" >/dev/null || die "Required command missing: $1"; }
-cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; unset ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
+cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; CLOUDFLARE_API_TOKEN=''; AWS_ACCESS_KEY_ID=''; AWS_SECRET_ACCESS_KEY=''; unset ATLAS_PUBLIC_KEY ATLAS_PRIVATE_KEY ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_api_token AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET TUNNEL_SERVICE_TOKEN_ID TUNNEL_SERVICE_TOKEN_SECRET; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
 trap cleanup EXIT
 usage() {
   cat <<'HELP'
@@ -123,7 +125,7 @@ private_temp() { [[ -n "$TEMP_DIR" ]] || { TEMP_DIR="$(mktemp -d)"; chmod 700 "$
 configure_ssh() {
   need_command ssh
   need_command cloudflared
-  [[ -n "${CF_ACCESS_CLIENT_ID:-}" && -n "${CF_ACCESS_CLIENT_SECRET:-}" ]] || die 'Cloudflare Access service credentials are required'
+  load_cloudflare_access_credentials
   # cloudflared reads these variables; secrets never enter ProxyCommand arguments.
   export TUNNEL_SERVICE_TOKEN_ID="$CF_ACCESS_CLIENT_ID" TUNNEL_SERVICE_TOKEN_SECRET="$CF_ACCESS_CLIENT_SECRET"
 }
@@ -465,9 +467,38 @@ validate_plan() {
   jq -e '[.resource_changes[]? | select(.type | startswith("cloudflare_zero_trust_access")) | select(.change.actions | index("update"))] | length == 0' "$json" >/dev/null || die 'Access boundary updates require separate administrator review'
   jq -e '[.resource_changes[]? | select(.type=="cloudflare_ruleset") | .change.before.rules[]? | select(.ref != "application_bypass" and .ref != "next_static" and .ref != "application_api_rate")] | length == 0' "$json" >/dev/null || die 'Ruleset contains unrelated rules; preserve them through an administrator-reviewed change'
 }
+secret_value_is_valid() {
+  local value="$1"
+  [[ -n "$value" && "$value" != *$'\n'* && "$value" != *$'\r'* && "$value" != *'"'* ]]
+}
+prompt_secret_variable() {
+  local name="$1" label="$2" value
+  value="${!name:-}"
+  if [[ -z "$value" ]]; then
+    [[ -t 0 ]] || die "$label is required through the protected runtime environment"
+    IFS= read -r -s -p "$label: " value; printf '\n' >&2
+    printf -v "$name" '%s' "$value"
+  fi
+  secret_value_is_valid "${!name}" || die "A valid $label is required"
+  export "$name"
+}
+load_cloudflare_api_token() {
+  prompt_secret_variable CLOUDFLARE_API_TOKEN 'Cloudflare API token'
+  TF_VAR_cloudflare_api_token="$CLOUDFLARE_API_TOKEN"
+  export TF_VAR_cloudflare_api_token
+}
+load_r2_state_credentials() {
+  prompt_secret_variable AWS_ACCESS_KEY_ID 'R2 Terraform access key ID'
+  prompt_secret_variable AWS_SECRET_ACCESS_KEY 'R2 Terraform secret access key'
+}
+load_cloudflare_access_credentials() {
+  prompt_secret_variable CF_ACCESS_CLIENT_ID 'Cloudflare Access service token ID'
+  prompt_secret_variable CF_ACCESS_CLIENT_SECRET 'Cloudflare Access service token secret'
+}
 cloudflare_get() {
-  local path="$1" token="${CLOUDFLARE_API_TOKEN:-${TF_VAR_cloudflare_api_token:-}}" error_codes
-  [[ -n "$token" && "$token" != *$'\n'* && "$token" != *$'\r'* && "$token" != *'"'* ]] || die 'A valid Cloudflare API token is required'
+  local path="$1" token error_codes
+  load_cloudflare_api_token
+  token="$CLOUDFLARE_API_TOKEN"
   private_temp
   local config="$TEMP_DIR/cloudflare-curl.conf"
   printf 'silent\nshow-error\nheader = "Authorization: Bearer %s"\nheader = "Content-Type: application/json"\n' "$token" > "$config"
@@ -493,14 +524,12 @@ verify_cloudflare_token() {
 load_atlas_admin_credentials() {
   ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}"
   ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}"
-  if [[ -z "$ATLAS_PUBLIC_KEY" ]]; then IFS= read -r -s -p 'Atlas temporary public API key: ' ATLAS_PUBLIC_KEY; printf '\n' >&2; fi
-  if [[ -z "$ATLAS_PRIVATE_KEY" ]]; then IFS= read -r -s -p 'Atlas temporary private API key: ' ATLAS_PRIVATE_KEY; printf '\n' >&2; fi
-  [[ -n "$ATLAS_PUBLIC_KEY" && -n "$ATLAS_PRIVATE_KEY" && "$ATLAS_PUBLIC_KEY$ATLAS_PRIVATE_KEY" != *$'\n'* && "$ATLAS_PUBLIC_KEY$ATLAS_PRIVATE_KEY" != *$'\r'* && "$ATLAS_PUBLIC_KEY$ATLAS_PRIVATE_KEY" != *'"'* ]] || die 'Valid temporary Atlas API credentials are required'
+  prompt_secret_variable ATLAS_PUBLIC_KEY 'Atlas temporary public API key'
+  prompt_secret_variable ATLAS_PRIVATE_KEY 'Atlas temporary private API key'
 }
 load_github_admin_token() {
   GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-${GH_TOKEN:-}}"
-  if [[ -z "$GITHUB_ADMIN_TOKEN" ]]; then IFS= read -r -s -p 'GitHub temporary administrator token: ' GITHUB_ADMIN_TOKEN; printf '\n' >&2; fi
-  [[ -n "$GITHUB_ADMIN_TOKEN" && "$GITHUB_ADMIN_TOKEN" != *$'\n'* && "$GITHUB_ADMIN_TOKEN" != *$'\r'* && "$GITHUB_ADMIN_TOKEN" != *'"'* ]] || die 'A valid temporary GitHub administrator token is required'
+  prompt_secret_variable GITHUB_ADMIN_TOKEN 'GitHub temporary administrator token'
   export GH_TOKEN="$GITHUB_ADMIN_TOKEN"
 }
 atlas_request() {
@@ -524,10 +553,7 @@ normalize_discovery_output() {
   CONFIG_OUTPUT="$directory/$filename"
   [[ "$CONFIG_OUTPUT" == "$REPO_ROOT/infra/config/vps.json" ]] || die 'discover-config can write only infra/config/vps.json in this checkout'
 }
-read_discovery_cloudflare_token() {
-  if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then IFS= read -r -s -p 'Cloudflare API token: ' CLOUDFLARE_API_TOKEN; printf '\n' >&2; fi
-  [[ -n "$CLOUDFLARE_API_TOKEN" && "$CLOUDFLARE_API_TOKEN" != *$'\n'* && "$CLOUDFLARE_API_TOKEN" != *$'\r'* && "$CLOUDFLARE_API_TOKEN" != *'"'* ]] || die 'A valid Cloudflare API token is required'
-}
+read_discovery_cloudflare_token() { load_cloudflare_api_token; }
 report_discovery_command() {
   if command -v "$1" >/dev/null; then printf 'exists: %s\n' "$1"; else printf 'missing: %s\n' "$1"; fi
 }
@@ -916,7 +942,8 @@ setup_host() {
   [[ "$(uname -m)" == x86_64 ]] || die 'This kit currently requires an x86_64 Ubuntu VPS'
   validate_host_capacity
   docker compose version >/dev/null
-  [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]] || die 'Supply scoped Cloudflare and R2 bootstrap credentials through the environment'
+  load_cloudflare_api_token
+  load_r2_state_credentials
   if [[ "$APPLY" == true ]]; then require_root; fi
   install_auxiliary_tools
   for name in terraform gh cloudflared; do need_command "$name"; done
