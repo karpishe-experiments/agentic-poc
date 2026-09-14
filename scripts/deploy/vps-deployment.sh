@@ -610,7 +610,7 @@ verify_r2_state_access() {
     200) printf 'verified: R2 Terraform state credentials\n';;
     404) printf 'verified: R2 Terraform state credentials; state bucket is not created\n';;
     *)
-      detail="$(tr '\n' ' ' < "$TEMP_DIR/r2-access-response" | sed -n 's:.*<Code>\([^<]*\)</Code>.*<Message>\([^<]*\)</Message>.*:\1: \2:p')"
+      detail="$(tr '\n' ' ' < "$TEMP_DIR/r2-access-response" | sed -n 's#.*<Code>\([^<]*\)</Code>.*<Message>\([^<]*\)</Message>.*#\1: \2#p')"
       [[ -n "$detail" ]] || detail='response did not contain an R2 error code and message'
       die "R2 Terraform state credential check failed (HTTP $status; $detail)"
       ;;

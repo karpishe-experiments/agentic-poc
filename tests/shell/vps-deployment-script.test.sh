@@ -66,6 +66,20 @@ grep -q 'atlas: GET groups/6a869d84e65675f845fa22eb/accessList?itemsPerPage=1' <
 grep -q 'github: organizations/karpishe-experiments/settings/billing/budgets?per_page=1' <<< "$access_check_output"
 grep -q 'verified: GitHub repository administration and billing API' <<< "$access_check_output"
 set +e
+r2_error_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+TEMP_DIR="$(mktemp -d)"
+R2_ENDPOINT=https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com
+R2_STATE_BUCKET=kids-booklet-terraform-state
+AWS_ACCESS_KEY_ID=temporary-r2-key
+AWS_SECRET_ACCESS_KEY=temporary-r2-secret
+curl() { local output=""; while [[ $# -gt 0 ]]; do case "$1" in --output) output="$2"; shift 2;; *) shift;; esac; done; printf "%s" "<Error><Code>InvalidAccessKeyId</Code><Message>Access key is invalid</Message></Error>" > "$output"; printf 400; }
+verify_r2_state_access' _ "$script" 2>&1)"
+r2_error_status=$?
+set -e
+test "$r2_error_status" -ne 0
+grep -q 'R2 Terraform state credential check failed (HTTP 400; InvalidAccessKeyId: Access key is invalid)' <<< "$r2_error_output"
+if grep -q 'temporary-r2-secret' <<< "$r2_error_output"; then echo 'R2 secret leaked through access-check error' >&2; exit 1; fi
+set +e
 access_check_failure_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
 load_config() { :; }
 need_command() { :; }
