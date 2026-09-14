@@ -214,6 +214,9 @@ printf '200'
 STUB
 cat > "$root/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
+for argument in "$@"; do
+  [[ "$argument" != --* ]] || { printf 'OpenSSH rejected option-like remote command: %s\n' "$argument" >&2; exit 88; }
+done
 printf '%s\n' "$*" >> "$SSH_LOG"
 exit "${SSH_EXIT:-0}"
 STUB
