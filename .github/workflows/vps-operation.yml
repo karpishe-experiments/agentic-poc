@@ -47,18 +47,17 @@ jobs:
           OUTCOME: ${{ steps.run-operation.outcome }}
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2016
           {
-            printf '## VPS operation result\n\n'
-            printf '| Environment | Operation | Outcome |\n'
-            printf '| --- | --- | --- |\n'
-            printf '| `%s` | `%s` | **%s** |\n\n' "$TARGET" "$OPERATION" "$OUTCOME"
+            printf "## VPS operation result\n\n"
+            printf "| Environment | Operation | Outcome |\n"
+            printf "| --- | --- | --- |\n"
+            printf "| \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$OPERATION" "$OUTCOME"
             if [[ -s "$RUNNER_TEMP/vps-operation-output.txt" ]]; then
-              printf '```text\n'
-              grep -E '^(exists|verified|created|updated|failed|error|result): ' "$RUNNER_TEMP/vps-operation-output.txt" || true
-              printf '```\n'
+              printf "\`\`\`text\n"
+              grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/vps-operation-output.txt" || true
+              printf "\`\`\`\n"
             else
-              printf 'No sanitized operation result was produced. Inspect the failed step logs.\n'
+              printf "No sanitized operation result was produced. Inspect the failed step logs.\n"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove SSH material
