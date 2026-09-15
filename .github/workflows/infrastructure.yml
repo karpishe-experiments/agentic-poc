@@ -45,6 +45,7 @@ jobs:
           OUTCOME: ${{ job.status }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016
           {
             printf '## Infrastructure result\n\n'
             printf '| Mode | Commit | Outcome |\n'

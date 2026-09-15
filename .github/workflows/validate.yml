@@ -86,6 +86,7 @@ jobs:
           OUTCOME: ${{ job.status }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016
           {
             printf '## Validation result\n\n'
             printf '**Outcome:** %s\n\n' "$OUTCOME"

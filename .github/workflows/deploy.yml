@@ -78,6 +78,7 @@ jobs:
           OUTCOME: ${{ job.status }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016
           {
             printf '## Deployment result\n\n'
             printf '| Environment | Commit | Image digest | Outcome |\n'

@@ -47,6 +47,7 @@ jobs:
           OUTCOME: ${{ steps.run-operation.outcome }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016
           {
             printf '## VPS operation result\n\n'
             printf '| Environment | Operation | Outcome |\n'
