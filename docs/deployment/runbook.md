@@ -81,7 +81,7 @@ Wait for the merge's Infrastructure workflow to succeed before finalize. Branch 
 
 For every manual workflow, select **Actions → workflow → Run workflow**, choose `_staging` or `_prod` as the branch, and select the matching environment. Wait for each run to finish before the next step. Sign in at the configured HTTPS hostname with username `booklet` and that environment's access password; confirm unauthenticated pages and assets are blocked. Confirm streamed requests, Atlas transactions, R2 access and host restart recovery in staging before production. Pull-request validation selects the suites affected by the changed files; manually dispatch Validate when you need the complete suite.
 
-For the restore rehearsal, run Maintenance with `action=backup`, then read its completed journal on the VPS: `sudo jq '{requestId,action,environment,backupId,step}' /var/lib/kids-booklet/operations/<run-id>-<attempt>.json`. Obtain the run ID from the Actions URL and the attempt number from that run. Run Maintenance with `action=restore`, the exact `backup_id`, and `confirmation=kids_booklet`; finish with Check deployment. Do not activate production until this succeeds.
+For the restore rehearsal, run Maintenance with `action=backup`. Copy the exact `backupId` from the workflow job summary. The summary contains the sanitized completed-operation record; the host retains the same record under `/var/lib/kids-booklet/operations/`. Run Maintenance with `action=restore`, that exact `backup_id`, and `confirmation=kids_booklet`; finish with Check deployment. Do not activate production until this succeeds.
 
 ## Routine workflows
 

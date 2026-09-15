@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+workflow=.github/workflows/vps-operation.yml
 if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
   echo 'Terraform executes inside the read-only repository checkout' >&2
   exit 1
 fi
 bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
+grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
+grep -q "grep -E '.*result" "$workflow"
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"
 grep -q 'will_alert:false' "$script"
 grep -q '"\$variables_complete" == true' "$script"

@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema first-activation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema first-activation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -90,6 +90,13 @@ CHILD
     BACKUP_ID=''
     ensure_backup_id
     jq -e '.backupId!="staging-prior" and (.backupHistory | index("staging-prior"))' "$STATE/operation.json" >/dev/null;;
+  operation-result)
+    jq -n '{requestId:"test",action:"backup",environment:"staging",backupId:"staging-backup",step:"complete"}' > "$STATE/operations/test.json"
+    systemctl() { printf 'inactive\n'; }
+    result="$(wait_operation)"
+    [[ "$result" == *'updated: backup staging'* ]]
+    result_json="${result##*result: }"
+    jq -e '.requestId=="test" and .action=="backup" and .environment=="staging" and .backupId=="staging-backup" and .step=="complete"' <<< "$result_json" >/dev/null;;
   secret-rotation)
     ACTION=rotate-secrets
     mkdir -p "$STATE/releases/staging/release-a"

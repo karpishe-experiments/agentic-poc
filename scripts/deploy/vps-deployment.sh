@@ -508,13 +508,16 @@ host_dispatch() {
   wait_operation
 }
 wait_operation() {
-  local active
+  local active completed_journal
   while :; do
     active="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")"
     case "$active" in active|activating|reloading|deactivating) sleep 5;; *) break;; esac
   done
-  [[ -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Operation failed; journal retained. Use status and resume'
+  completed_journal="$STATE/operations/$REQUEST_ID.json"
+  [[ -f "$completed_journal" ]] || die 'Operation failed; journal retained. Use status and resume'
   printf 'updated: %s %s\n' "$ACTION" "$ENVIRONMENT"
+  printf 'result: '
+  jq -c '{requestId,action,environment,commit,backupId,image,configHash,priorRelease,step}' "$completed_journal"
 }
 backend_init() {
   local directory="$1" key="$2"
