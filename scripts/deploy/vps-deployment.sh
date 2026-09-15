@@ -1278,22 +1278,22 @@ display_generated_password() {
   printf 'generated %s ACCESS_GATE_PASSWORD: %s\n' "$1" "$2" > /dev/tty
 }
 prompt_application_secret() {
-  local environment="$1" name="$2" destination="$3" value=''
+  local environment="$1" name="$2" destination="$3" entered=''
   if [[ "$name" == ACCESS_GATE_PASSWORD && "$GENERATE_PASSWORD" == true ]]; then
     interactive_terminal || die '--generate-password requires an interactive terminal'
     need_command openssl
-    value="$(openssl rand -base64 24)"
-    application_secret_value_is_valid "$name" "$value" || die 'Generated access password is invalid'
-    display_generated_password "$environment" "$value"
-    printf -v "$destination" '%s' "$value"
-    unset value
+    entered="$(openssl rand -base64 24)"
+    application_secret_value_is_valid "$name" "$entered" || die 'Generated access password is invalid'
+    display_generated_password "$environment" "$entered"
+    printf -v "$destination" '%s' "$entered"
+    unset entered
     return
   fi
   while :; do
-    IFS= read -r -s -p "$environment $name: " value
+    IFS= read -r -s -p "$environment $name: " entered
     printf '\n' >&2
-    if application_secret_value_is_valid "$name" "$value"; then
-      printf -v "$destination" '%s' "$value"
+    if application_secret_value_is_valid "$name" "$entered"; then
+      printf -v "$destination" '%s' "$entered"
       return
     fi
     printf 'error: %s %s; re-enter only this value\n' "$name" "$(application_secret_requirement "$name")" >&2
