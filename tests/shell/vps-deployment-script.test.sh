@@ -17,10 +17,13 @@ grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
 done
-grep -q 'actions: read' .github/workflows/deploy.yml
-grep -q 'actions/workflows/infrastructure.yml/runs' .github/workflows/deploy.yml
-grep -q 'infrastructure-verified master' .github/workflows/deploy.yml
-grep -q 'VERIFIED_MASTER_SHA' .github/workflows/deploy.yml
+grep -Fq 'test "$GITHUB_REF_NAME" = "_$TARGET"' .github/workflows/deploy.yml
+test "$(grep -Fc 'commits/$GITHUB_REF_NAME' .github/workflows/deploy.yml)" = 2
+! grep -q 'actions/workflows/infrastructure.yml/runs' .github/workflows/deploy.yml
+! grep -q 'infrastructure-verified master' .github/workflows/deploy.yml
+! grep -q 'VERIFIED_MASTER_SHA' .github/workflows/deploy.yml
+! grep -q 'commits/master' .github/workflows/deploy.yml
+! grep -q 'compare/.*master_sha' .github/workflows/deploy.yml
 grep -q 'REQUEST_ID:.*github.run_id' .github/workflows/infrastructure.yml
 grep -q 'retained infrastructure journal' .github/workflows/infrastructure.yml
 for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
