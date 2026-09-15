@@ -11,7 +11,9 @@ if [[ "$SCRIPT_IS_SOURCED" == false ]]; then
 fi
 
 ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION=''
+GENERATE_PASSWORD=false
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
+SECRET_NAME=''
 COMPOSE_SECRET_FILE=''
 ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTPUT=''
 ROOT=/opt/kids-booklet
@@ -36,7 +38,7 @@ usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, reset-staging, resume, credential-session,
+         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -52,6 +54,8 @@ Options:
   --confirmation kids_booklet       required for reset-staging
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
+  --secret-name NAME                repair or rotate only one application secret
+  --generate-password               generate and display ACCESS_GATE_PASSWORD once
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
 --apply. discover-config makes read-only provider requests; --apply only writes its
@@ -70,7 +74,8 @@ parse_arguments() {
     case "$1" in
       --help) usage; exit 0 ;;
       --apply) APPLY=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
+      --generate-password) GENERATE_PASSWORD=true; shift ;;
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -79,6 +84,7 @@ parse_arguments() {
           --action) ACTION="$value";; --config) CONFIG_FILE="$value";; --environment) ENVIRONMENT="$value";;
           --image-digest) IMAGE_DIGEST="$value";; --backup-id) BACKUP_ID="$value";; --confirmation) CONFIRMATION="$value";;
           --vps-host) VPS_HOST="$value";; --vps-user) VPS_USER="$value";; --commit) COMMIT="$value";; --request-id) REQUEST_ID="$value";;
+          --secret-name) SECRET_NAME="$value";;
           --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
           --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
@@ -90,7 +96,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -99,13 +105,20 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
+  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)$ ]] || die 'Invalid application secret name'
+  [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
+  if [[ "$GENERATE_PASSWORD" == true ]]; then
+    [[ "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets)$ ]] || die '--generate-password is only valid for application secret repair or rotation'
+    [[ -z "$SECRET_NAME" || "$SECRET_NAME" == ACCESS_GATE_PASSWORD ]] || die '--generate-password conflicts with the selected secret name'
+    [[ -z "${GITHUB_ACTIONS:-}" ]] || die '--generate-password is forbidden in GitHub Actions'
+  fi
   [[ -z "$ZONE_NAME" || "$ZONE_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid Cloudflare zone hostname'
   for hostname in "$STAGING_HOSTNAME" "$PROD_HOSTNAME" "$DEPLOY_HOSTNAME"; do
     [[ -z "$hostname" || "$hostname" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid application hostname'
   done
   case "$ACTION" in
     deploy) [[ -n "$ENVIRONMENT" && -n "$IMAGE_DIGEST" && -n "$COMMIT" ]] || die 'Deploy requires environment, image digest and commit';;
-    check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
+    check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
   esac
   if [[ "$ACTION" == restore ]]; then
     [[ -n "$BACKUP_ID" ]] || die 'Restore requires backup ID'
@@ -193,6 +206,13 @@ set_step() {
   jq --arg step "$1" '.step=$step' "$STATE/operation.json" > "$STATE/operation.next.json"
   mv "$STATE/operation.next.json" "$STATE/operation.json"
 }
+show_operation_status() {
+  if [[ -f "$STATE/operation.json" ]]; then
+    jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"
+  else
+    printf '{"step":"idle"}\n'
+  fi
+}
 record_release_metadata() {
   local release="$1" prior="$2" image config_hash
   image="$(jq -er .services.app.image "$release/image.json")"
@@ -221,9 +241,13 @@ recover_interrupted_rotation() {
   rm -f "$SECRETS/$ENVIRONMENT/secrets.previous.json"
 }
 validate_compose() {
-  local release="$1"
+  local release="$1" resolved
   # Do not print this output: it includes secrets. Only jq's exit status is used.
-  compose "$release" config --format json | jq -e '.services.app.environment | [.OPENAI_API_KEY,.MONGODB_URI,.ACCESS_GATE_PASSWORD,.AWS_ACCESS_KEY_ID,.AWS_SECRET_ACCESS_KEY] | all(type == "string" and length > 0)' >/dev/null || die 'Required host secrets are missing'
+  private_temp
+  resolved="$TEMP_DIR/resolved-compose.json"
+  compose "$release" config --format json > "$resolved"
+  chmod 600 "$resolved"
+  application_secret_override_is_valid "$resolved" || die 'Resolved Compose secrets do not satisfy the application secret contract'
 }
 prepare_release() {
   local release="$STATE/releases/$ENVIRONMENT/$COMMIT"
@@ -365,12 +389,12 @@ host_dispatch() {
   local -a args=()
   read -r -a args <<< "$original"
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
-  SEEN=(); ACTION=''; APPLY=false
+  SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == status ]]; then
-    if [[ -f "$STATE/operation.json" ]]; then jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"; else printf '{"step":"idle"}\n'; fi
+    show_operation_status
     exit 0
   fi
   if [[ "$ACTION" == stage-secrets ]]; then
@@ -380,9 +404,45 @@ host_dispatch() {
     private_temp
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Staged secret override exceeds 64 KiB'; fi
-    jq -e '.services.app.environment | [.OPENAI_API_KEY,.MONGODB_URI,.ACCESS_GATE_PASSWORD,.AWS_ACCESS_KEY_ID,.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Staged secret override is invalid'
-    install -m 600 "$TEMP_DIR/secrets.json" "$SECRETS/$ENVIRONMENT/secrets.pending.json"
+    if [[ -n "$SECRET_NAME" ]]; then
+      jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
+    else
+      cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
+    fi
+    application_secret_override_is_valid "$TEMP_DIR/merged-secrets.json" || die 'Staged secret override does not satisfy the application secret contract'
+    install -m 600 "$TEMP_DIR/merged-secrets.json" "$SECRETS/$ENVIRONMENT/secrets.pending.json"
     printf 'updated: staged %s secret rotation\n' "$ENVIRONMENT"; exit 0
+  fi
+  if [[ "$ACTION" == repair-first-activation-secrets ]]; then
+    [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; exit 0; }
+    exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+    local failed_id='' interrupted=false
+    [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || die 'Secret repair is unavailable after a successful release'
+    if [[ -f "$STATE/operation.json" ]]; then
+      interrupted=true
+      failed_id="$(jq -r .requestId "$STATE/operation.json")"
+      jq -e --arg environment "$ENVIRONMENT" '.action=="deploy" and .environment==$environment and .step=="initializing"' "$STATE/operation.json" >/dev/null || die 'Secret repair is limited to a failed first deployment at initialization'
+      ! systemctl is-active --quiet "kids-booklet-operation-$failed_id.service" || die 'Previous service remains active'
+    fi
+    [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Application container remains active'
+    private_temp
+    dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
+    if IFS= read -r -n 1; then die 'Secret override exceeds 64 KiB'; fi
+    if [[ -n "$SECRET_NAME" ]]; then
+      jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret repair payload is invalid'
+      jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
+    else
+      cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
+    fi
+    application_secret_override_is_valid "$TEMP_DIR/merged-secrets.json" || die 'Secret override does not satisfy the application secret contract'
+    install -m 600 "$TEMP_DIR/merged-secrets.json" "$SECRETS/$ENVIRONMENT/secrets.json"
+    if [[ "$interrupted" == true ]]; then
+      printf 'updated: %s failed first-activation secrets; operation remains ready for explicit resume\n' "$ENVIRONMENT"
+    else
+      printf 'updated: %s pre-activation secrets\n' "$ENVIRONMENT"
+    fi
+    exit 0
   fi
   if [[ "$ACTION" == sync-host ]]; then
     [[ "$APPLY" == true && -n "$REQUEST_ID" && -f "$STATE/operation.json" ]] || die 'Host synchronization requires the active infrastructure request'
@@ -454,19 +514,22 @@ host_dispatch() {
   wait_operation
 }
 wait_operation() {
-  local active
+  local active completed_journal
   while :; do
     active="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")"
     case "$active" in active|activating|reloading|deactivating) sleep 5;; *) break;; esac
   done
-  [[ -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Operation failed; journal retained. Use status and resume'
+  completed_journal="$STATE/operations/$REQUEST_ID.json"
+  [[ -f "$completed_journal" ]] || die 'Operation failed; journal retained. Use status and resume'
   printf 'updated: %s %s\n' "$ACTION" "$ENVIRONMENT"
+  printf 'result: '
+  jq -c '{requestId,action,environment,commit,backupId,image,configHash,priorRelease,step}' "$completed_journal"
 }
 backend_init() {
   local directory="$1" key="$2"
   [[ -n "${R2_STATE_BUCKET:-}" && -n "${R2_ENDPOINT:-}" ]] || die 'R2_STATE_BUCKET and R2_ENDPOINT required'
   [[ "$R2_ENDPOINT" =~ ^https://[a-f0-9]{32}\.r2\.cloudflarestorage\.com$ ]] || die 'Invalid R2 backend endpoint'
-  terraform -chdir="$directory" init -input=false "-backend-config=bucket=$R2_STATE_BUCKET" "-backend-config=key=$key" -backend-config=region=auto "-backend-config=endpoints={s3=\"$R2_ENDPOINT\"}" -backend-config=skip_credentials_validation=true -backend-config=skip_requesting_account_id=true -backend-config=skip_region_validation=true -backend-config=skip_s3_checksum=true -backend-config=use_lockfile=true
+  terraform -chdir="$directory" init -input=false -lockfile=readonly "-backend-config=bucket=$R2_STATE_BUCKET" "-backend-config=key=$key" -backend-config=region=auto "-backend-config=endpoints={s3=\"$R2_ENDPOINT\"}" -backend-config=skip_credentials_validation=true -backend-config=skip_requesting_account_id=true -backend-config=skip_region_validation=true -backend-config=skip_s3_checksum=true -backend-config=use_lockfile=true
 }
 r2_state_snapshot() {
   local directory="$1" label="$2"
@@ -869,7 +932,7 @@ discover_configuration() {
   fi
 }
 plan_atlas_configuration() {
-  local project cluster outbound_ip environment database username srv access_action user_action
+  local project cluster outbound_ip environment database username srv access_action user_action roles
   project="$(jq -r .atlas_project_id "$CONFIG_FILE")"; cluster="$(jq -r .atlas_cluster_name "$CONFIG_FILE")"
   outbound_ip="$(curl -fsS --max-time 15 https://api.ipify.org)"
   [[ "$outbound_ip" =~ ^[0-9a-fA-F:.]+$ ]] || die 'Could not verify the VPS outbound IP'
@@ -887,9 +950,14 @@ plan_atlas_configuration() {
     username="kids_booklet_$environment"
     atlas_request GET "groups/$project/databaseUsers?itemsPerPage=100"
     if jq -e --arg username "$username" '.results[]? | select(.username==$username and .databaseName=="admin")' "$ATLAS_RESPONSE" >/dev/null; then
-      jq -e --arg username "$username" --arg database "$database" --arg cluster "$cluster" '.results[] | select(.username==$username and .databaseName=="admin") | ([.roles[] | select(.roleName=="readWrite" and .databaseName==$database)] | length)==1 and ([.roles[] | select(.databaseName!=$database or .roleName!="readWrite")] | length)==0 and ([.scopes[]? | select(.type=="CLUSTER" and .name==$cluster)] | length)==1' "$ATLAS_RESPONSE" >/dev/null || die "$environment Atlas user exists with incompatible scope or roles"
+      jq -e --arg username "$username" --arg cluster "$cluster" '.results[] | select(.username==$username and .databaseName=="admin") | ([.scopes[]?] | length)==1 and ([.scopes[]? | select(.type=="CLUSTER" and .name==$cluster)] | length)==1' "$ATLAS_RESPONSE" >/dev/null || die "$environment Atlas user exists with incompatible cluster scope"
+      roles="$(jq -r --arg username "$username" --arg database "$database" '.results[] | select(.username==$username and .databaseName=="admin") | if ([.roles[]? | select(.databaseName!=$database or (.collectionName? != null))] | length)>0 then "incompatible" else ([.roles[]?.roleName] | sort | join(",")) end' "$ATLAS_RESPONSE")"
+      case "$roles" in
+        dbAdmin,readWrite) user_action=exists;;
+        readWrite) user_action=update;;
+        *) die "$environment Atlas user exists with incompatible database roles";;
+      esac
       if [[ -f "$STATE/atlas-$environment-uri.pending" ]]; then GENERATED_MONGODB_URI[$environment]="$(<"$STATE/atlas-$environment-uri.pending")"; fi
-      user_action=exists
     else user_action=create; fi
     jq --arg environment "$environment" --arg database "$database" --arg username "$username" --arg action "$user_action" '.users[$environment]={database:$database,username:$username,action:$action}' "$ATLAS_PLAN_FILE" > "$TEMP_DIR/atlas-plan.next.json"
     mv "$TEMP_DIR/atlas-plan.next.json" "$ATLAS_PLAN_FILE"
@@ -900,7 +968,11 @@ report_atlas_plan() {
   [[ "$(jq -r .access_action "$ATLAS_PLAN_FILE")" == exists ]] && printf 'exists: exact VPS Atlas access-list entry\n' || printf 'would create: exact VPS Atlas access-list entry\n'
   for environment in staging prod; do
     action="$(jq -r --arg environment "$environment" '.users[$environment].action' "$ATLAS_PLAN_FILE")"
-    [[ "$action" == exists ]] && printf 'exists: %s Atlas database user with exact scope\n' "$environment" || printf 'would create: %s Atlas database user\n' "$environment"
+    case "$action" in
+      exists) printf 'exists: %s Atlas database user with recovery scope\n' "$environment";;
+      update) printf 'would update: %s Atlas database user with database recovery privilege\n' "$environment";;
+      create) printf 'would create: %s Atlas database user\n' "$environment";;
+    esac
   done
 }
 apply_atlas_plan() {
@@ -925,7 +997,7 @@ apply_atlas_plan() {
     if [[ "$action" == create ]]; then
       password="$(openssl rand -hex 24)"
       payload="$TEMP_DIR/atlas-user-$environment.json"
-      jq -n --arg username "$username" --arg password "$password" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,password:$password,roles:[{databaseName:$database,roleName:"readWrite"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
+      jq -n --arg username "$username" --arg password "$password" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,password:$password,roles:[{databaseName:$database,roleName:"readWrite"},{databaseName:$database,roleName:"dbAdmin"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
       atlas_request POST "groups/$project/databaseUsers" "$payload"
       GENERATED_MONGODB_URI[$environment]="mongodb+srv://$username:$password@$srv/$database?retryWrites=true&w=majority"
       printf '%s' "${GENERATED_MONGODB_URI[$environment]}" > "$STATE/atlas-$environment-uri.pending"
@@ -933,13 +1005,39 @@ apply_atlas_plan() {
       unset password
       printf 'created: %s Atlas database user\n' "$environment"
     else
+      if [[ "$action" == update ]]; then
+        payload="$TEMP_DIR/atlas-user-$environment.json"
+        jq -n --arg username "$username" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,roles:[{databaseName:$database,roleName:"readWrite"},{databaseName:$database,roleName:"dbAdmin"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
+        atlas_request PATCH "groups/$project/databaseUsers/admin/$username" "$payload"
+        printf 'updated: %s Atlas database user with database recovery privilege\n' "$environment"
+      else
+        printf 'exists: %s Atlas database user with recovery scope\n' "$environment"
+      fi
       if [[ -f "$STATE/atlas-$environment-uri.pending" ]]; then GENERATED_MONGODB_URI[$environment]="$(<"$STATE/atlas-$environment-uri.pending")"; fi
-      printf 'exists: %s Atlas database user with exact scope\n' "$environment"
     fi
   done
 }
 configure_atlas() {
   if [[ "$APPLY" == true ]]; then apply_atlas_plan; else plan_atlas_configuration; report_atlas_plan; fi
+}
+reconcile_atlas() {
+  local requested_apply="$APPLY" project environment action
+  load_config; need_command curl; need_command jq
+  load_atlas_admin_credentials
+  project="$(jq -r .atlas_project_id "$CONFIG_FILE")"
+  verify_atlas_admin_access "$project"
+  plan_atlas_configuration
+  [[ "$(jq -r .access_action "$ATLAS_PLAN_FILE")" == exists ]] || die 'Atlas reconciliation requires the existing exact VPS access-list entry; run setup instead'
+  for environment in staging prod; do
+    action="$(jq -r --arg environment "$environment" '.users[$environment].action' "$ATLAS_PLAN_FILE")"
+    [[ "$action" == exists || "$action" == update ]] || die "Atlas reconciliation cannot create the missing $environment user; run setup instead"
+  done
+  if [[ "$requested_apply" == true ]]; then
+    APPLY=false; report_atlas_plan
+    APPLY=true; apply_atlas_plan
+  else
+    report_atlas_plan
+  fi
 }
 assert_no_unmanaged_cloudflare_resources() {
   local account="$TF_VAR_cloudflare_account_id" zone="$TF_VAR_cloudflare_zone_id" name environment kind hostname phase
@@ -964,8 +1062,8 @@ assert_no_unmanaged_cloudflare_resources() {
   done
 }
 verify_cloudflare_ownership() {
-  local state phase address expected environment kind name hostname key present
-  state="$(terraform -chdir="$REPO_ROOT/infra/terraform" state list 2>/dev/null || true)"
+  local directory="$1" state phase address expected environment kind name hostname key present
+  state="$(terraform -chdir="$directory" state list 2>/dev/null || true)"
   if [[ -z "$state" ]]; then assert_no_unmanaged_cloudflare_resources; return; fi
   for environment in staging prod; do
     for kind in assets diagnostics recovery; do
@@ -1104,13 +1202,19 @@ sync_host_configuration() {
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar"
 }
 terraform_operation() {
+  local directory
   need_command terraform; need_command jq
   verify_infrastructure_head
   private_temp
-  backend_init "$REPO_ROOT/infra/terraform" infrastructure.tfstate
-  verify_cloudflare_ownership
-  terraform -chdir="$REPO_ROOT/infra/terraform" plan -input=false -out="$TEMP_DIR/plan"
-  terraform -chdir="$REPO_ROOT/infra/terraform" show -json "$TEMP_DIR/plan" > "$TEMP_DIR/plan.json"
+  directory="$TEMP_DIR/infrastructure"
+  mkdir -p "$directory"
+  cp "$REPO_ROOT/infra/terraform/"*.tf "$directory/"
+  cp "$REPO_ROOT/infra/terraform/.terraform.lock.hcl" "$directory/"
+  chmod 600 "$directory"/*
+  backend_init "$directory" infrastructure.tfstate
+  verify_cloudflare_ownership "$directory"
+  terraform -chdir="$directory" plan -input=false -out="$TEMP_DIR/plan"
+  terraform -chdir="$directory" show -json "$TEMP_DIR/plan" > "$TEMP_DIR/plan.json"
   chmod 600 "$TEMP_DIR"/*
   validate_plan "$TEMP_DIR/plan.json"
   if [[ "$APPLY" == true ]]; then
@@ -1120,10 +1224,10 @@ terraform_operation() {
       COMMIT="$GITHUB_SHA"
       ACTION=infra-lock; host_call; ACTION=infrastructure
     fi
-    r2_state_snapshot "$REPO_ROOT/infra/terraform" infrastructure-before
-    terraform -chdir="$REPO_ROOT/infra/terraform" apply -input=false "$TEMP_DIR/plan"
-    terraform -chdir="$REPO_ROOT/infra/terraform" state list >/dev/null
-    r2_state_snapshot "$REPO_ROOT/infra/terraform" infrastructure-after
+    r2_state_snapshot "$directory" infrastructure-before
+    terraform -chdir="$directory" apply -input=false "$TEMP_DIR/plan"
+    terraform -chdir="$directory" state list >/dev/null
+    r2_state_snapshot "$directory" infrastructure-after
     if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
       sync_host_configuration
       ACTION=infra-unlock; host_call; ACTION=infrastructure
@@ -1169,9 +1273,10 @@ build_secret_override() {
   local environment="$1" destination="$2" name value secret_input=''
   private_temp
   if [[ -n "${DEPLOYMENT_SECRETS_DIR:-}" ]]; then
+    [[ "$GENERATE_PASSWORD" == false ]] || die '--generate-password cannot be combined with DEPLOYMENT_SECRETS_DIR'
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
-    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and ([.[$names[]]] | all(type=="string" and length>0))' "$secret_input" >/dev/null || die 'Secret input file must contain exactly the required non-empty strings'
+    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$"))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi
     chmod 600 "$destination"
@@ -1179,9 +1284,12 @@ build_secret_override() {
   fi
   printf '{"services":{"app":{"environment":{}}}}\n' > "$destination"
   for name in OPENAI_API_KEY MONGODB_URI ACCESS_GATE_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
-    if [[ "$name" == MONGODB_URI && -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then value="${GENERATED_MONGODB_URI[$environment]}"
-    else IFS= read -r -s -p "$environment $name: " value; printf '\n' >&2; fi
-    [[ -n "$value" ]] || die "$name cannot be empty"
+    if [[ "$name" == MONGODB_URI && -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then
+      value="${GENERATED_MONGODB_URI[$environment]}"
+      application_secret_value_is_valid "$name" "$value" || die 'Generated MONGODB_URI is invalid'
+    else
+      prompt_application_secret "$environment" "$name" value
+    fi
     printf '%s' "$value" > "$TEMP_DIR/value"
     # JSON is valid Compose YAML. Escape dollars for Compose interpolation.
     jq --arg name "$name" --rawfile value "$TEMP_DIR/value" '.services.app.environment[$name]=($value | gsub("\\$";"$$"))' "$destination" > "$TEMP_DIR/next.json"
@@ -1190,9 +1298,93 @@ build_secret_override() {
   done
   chmod 600 "$destination"
 }
+application_secret_value_is_valid() {
+  local name="$1" value="$2"
+  case "$name" in
+    OPENAI_API_KEY) [[ -n "$value" ]];;
+    MONGODB_URI) [[ "$value" =~ ^mongodb(\+srv)?:// ]];;
+    ACCESS_GATE_PASSWORD) [[ ${#value} -ge 16 ]];;
+    AWS_ACCESS_KEY_ID) [[ "$value" =~ ^[A-Za-z0-9]{32}$ ]];;
+    AWS_SECRET_ACCESS_KEY) [[ "$value" =~ ^[A-Fa-f0-9]{64}$ ]];;
+    *) return 1;;
+  esac
+}
+application_secret_requirement() {
+  case "$1" in
+    OPENAI_API_KEY) printf 'must not be empty';;
+    MONGODB_URI) printf 'must begin with mongodb:// or mongodb+srv://';;
+    ACCESS_GATE_PASSWORD) printf 'must contain at least 16 characters';;
+    AWS_ACCESS_KEY_ID) printf 'must be a 32-character R2 access key ID';;
+    AWS_SECRET_ACCESS_KEY) printf 'must be a 64-character hexadecimal R2 secret key';;
+  esac
+}
+display_generated_password() {
+  printf 'generated %s ACCESS_GATE_PASSWORD: %s\n' "$1" "$2" > /dev/tty
+}
+prompt_application_secret() {
+  local environment="$1" name="$2" destination="$3" entered=''
+  if [[ "$name" == ACCESS_GATE_PASSWORD && "$GENERATE_PASSWORD" == true ]]; then
+    interactive_terminal || die '--generate-password requires an interactive terminal'
+    need_command openssl
+    entered="$(openssl rand -base64 24)"
+    application_secret_value_is_valid "$name" "$entered" || die 'Generated access password is invalid'
+    display_generated_password "$environment" "$entered"
+    printf -v "$destination" '%s' "$entered"
+    unset entered
+    return
+  fi
+  while :; do
+    IFS= read -r -s -p "$environment $name: " entered
+    printf '\n' >&2
+    if application_secret_value_is_valid "$name" "$entered"; then
+      printf -v "$destination" '%s' "$entered"
+      return
+    fi
+    printf 'error: %s %s; re-enter only this value\n' "$name" "$(application_secret_requirement "$name")" >&2
+  done
+}
+application_secret_override_is_valid() {
+  jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$"))' "$1" >/dev/null
+}
+build_secret_patch() {
+  local environment="$1" name="$2" destination="$3" value
+  printf '{"services":{"app":{"environment":{}}}}\n' > "$destination"
+  prompt_application_secret "$environment" "$name" value
+  printf '%s' "$value" > "$TEMP_DIR/value"
+  jq --arg name "$name" --rawfile value "$TEMP_DIR/value" '.services.app.environment[$name]=($value | gsub("\\$";"$$"))' "$destination" > "$TEMP_DIR/next.json"
+  mv "$TEMP_DIR/next.json" "$destination"
+  chmod 600 "$destination"
+  unset value
+}
+repair_first_activation_secrets() {
+  load_config
+  [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; return; }
+  need_command jq; private_temp
+  local outbound_payload="$TEMP_DIR/outbound-secrets.json"
+  if [[ -n "$SECRET_NAME" ]]; then
+    build_secret_patch "$ENVIRONMENT" "$SECRET_NAME" "$outbound_payload"
+  else
+    build_secret_override "$ENVIRONMENT" "$outbound_payload"
+  fi
+  local remote_command
+  local -a remote=(--action repair-first-activation-secrets --environment "$ENVIRONMENT" --apply)
+  [[ -z "$SECRET_NAME" ]] || remote+=(--secret-name "$SECRET_NAME")
+  printf -v remote_command ' %s' "${remote[@]}"
+  if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
+    (TEMP_DIR=''; SSH_ORIGINAL_COMMAND="$remote_command" host_dispatch) < "$outbound_payload"
+  else
+    configure_ssh
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$outbound_payload"
+  fi
+  printf 'next: run Maintenance with action=resume for %s\n' "$ENVIRONMENT"
+}
 write_secret_override() {
   local environment="$1" destination="$SECRETS/$1/secrets.json"
-  [[ ! -f "$destination" ]] || { printf 'exists: %s host secret override\n' "$environment"; return; }
+  if [[ -f "$destination" ]]; then
+    application_secret_override_is_valid "$destination" || die "$environment host secret override does not satisfy the application secret contract"
+    printf 'exists: %s valid host secret override\n' "$environment"
+    return
+  fi
   private_temp; build_secret_override "$environment" "$TEMP_DIR/secrets.json"
   install -d -m 700 "$SECRETS/$environment"
   install -m 600 "$TEMP_DIR/secrets.json" "$destination"
@@ -1205,9 +1397,14 @@ stage_and_trigger_rotation() {
   configure_ssh
   load_github_admin_token
   gh workflow view maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" >/dev/null
-  build_secret_override "$ENVIRONMENT" "$TEMP_DIR/rotation.json"
+  if [[ -n "$SECRET_NAME" ]]; then
+    build_secret_patch "$ENVIRONMENT" "$SECRET_NAME" "$TEMP_DIR/rotation.json"
+  else
+    build_secret_override "$ENVIRONMENT" "$TEMP_DIR/rotation.json"
+  fi
   local remote_command
   local -a remote=(--action stage-secrets --environment "$ENVIRONMENT" --apply)
+  [[ -z "$SECRET_NAME" ]] || remote+=(--secret-name "$SECRET_NAME")
   printf -v remote_command ' %s' "${remote[@]}"
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/rotation.json"
   gh workflow run maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" --ref "_$ENVIRONMENT" -f "environment=$ENVIRONMENT" -f action=rotate-secrets
@@ -1273,7 +1470,7 @@ setup_host() {
   visudo -cf "$STATE/sudoers" >/dev/null
   install -m 440 "$STATE/sudoers" /etc/sudoers.d/kids-booklet-deploy
   write_secret_override staging; write_secret_override prod
-  terraform -chdir="$REPO_ROOT/infra/terraform" output -raw tunnel_token > "$SECRETS/tunnel.token"
+  terraform -chdir="$TEMP_DIR/infrastructure" output -raw tunnel_token > "$SECRETS/tunnel.token"
   chmod 600 "$SECRETS/tunnel.token"
   cat > /etc/systemd/system/kids-booklet-tunnel.service <<'UNIT'
 [Unit]
@@ -1327,9 +1524,9 @@ PY
   fi
   if ! command -v cloudflared >/dev/null || ! cloudflared --version | grep -q '2025.8.1'; then
     version=2025.8.1
-    curl -fsSL "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" -o "$TEMP_DIR/release.json"
+    curl -fsSL --retry 4 --retry-all-errors --retry-delay 2 "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" -o "$TEMP_DIR/release.json"
     expected="$(jq -er '.assets[] | select(.name=="cloudflared-linux-amd64") | .digest | select(startswith("sha256:"))' "$TEMP_DIR/release.json")"
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64" -o "$TEMP_DIR/cloudflared"
+    curl -fsSL --retry 4 --retry-all-errors --retry-delay 2 "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64" -o "$TEMP_DIR/cloudflared"
     printf '%s  %s\n' "${expected#sha256:}" "$TEMP_DIR/cloudflared" | sha256sum -c -
     install -m 755 "$TEMP_DIR/cloudflared" "$TEMP_DIR/bin/cloudflared"
   fi
@@ -1346,8 +1543,8 @@ configure_github() {
   repository="$(jq -r .repository "$CONFIG_FILE")"
   # GitHub Free may not support environment protections on a private repository.
   # Repository secrets remain usable under the explicitly accepted writer-trust model.
-  terraform -chdir="$REPO_ROOT/infra/terraform" output -raw deployment_client_id > "$TEMP_DIR/deployment-client-id"
-  terraform -chdir="$REPO_ROOT/infra/terraform" output -raw deployment_client_secret > "$TEMP_DIR/deployment-client-secret"
+  terraform -chdir="$TEMP_DIR/infrastructure" output -raw deployment_client_id > "$TEMP_DIR/deployment-client-id"
+  terraform -chdir="$TEMP_DIR/infrastructure" output -raw deployment_client_secret > "$TEMP_DIR/deployment-client-secret"
   chmod 600 "$TEMP_DIR/deployment-client-"*
   {
     printf '%s\n' "$VPS_HOST" "$R2_STATE_BUCKET" "$R2_ENDPOINT" "$TF_VAR_cloudflare_account_id" "$TF_VAR_cloudflare_zone_id" "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname" "$CLOUDFLARE_API_TOKEN" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
@@ -1464,7 +1661,16 @@ main() {
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
     credential-session) start_credential_session;;
     clear-credential-session) clear_credential_session;;
+    status)
+      if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
+        CONFIG_FILE="$ROOT/config.json"; load_config; show_operation_status
+      else
+        if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
+        [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
+        host_call
+      fi;;
     setup) setup_host;;
+    atlas-reconcile) reconcile_atlas;;
     finalize) finalize_repository;;
     rotate-secrets)
       if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
@@ -1472,6 +1678,7 @@ main() {
         [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
         host_call
       else stage_and_trigger_rotation; fi;;
+    repair-first-activation-secrets) repair_first_activation_secrets;;
     infrastructure) terraform_operation;;
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi

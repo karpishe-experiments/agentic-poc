@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+workflow=.github/workflows/vps-operation.yml
+vps_access=.github/actions/vps-access/action.yml
+if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
+  echo 'Terraform executes inside the read-only repository checkout' >&2
+  exit 1
+fi
 bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
+grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
+grep -q 'grep -E' "$workflow"
+grep -q 'result): ' "$workflow"
+test "$(grep -Fc -- '--retry 4 --retry-all-errors --retry-delay 2' "$vps_access")" = 2
+grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
+for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
+  grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
+done
+for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
+  grep -q 'uses: ./.github/workflows/vps-operation.yml' "$reusable_caller"
+done
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"
 grep -q 'will_alert:false' "$script"
 grep -q '"\$variables_complete" == true' "$script"
@@ -58,6 +75,30 @@ apply_atlas_plan() { printf apply; }
 APPLY=false; configure_atlas
 APPLY=true; configure_atlas' _ "$script")"
 test "$atlas_handoff_check" = planreportapply
+if command -v jq >/dev/null; then
+atlas_recovery_role_check="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+TEMP_DIR="$(mktemp -d)"; STATE="$TEMP_DIR/state"; mkdir -p "$STATE"
+CONFIG_FILE="$TEMP_DIR/config.json"
+jq -n "{atlas_project_id:\"aaaaaaaaaaaaaaaaaaaaaaaa\",atlas_cluster_name:\"kids-booklet\"}" > "$CONFIG_FILE"
+curl() { printf "51.195.218.185"; }
+atlas_request() {
+  case "$2" in
+    *accessList*) printf "{\"results\":[{\"ipAddress\":\"51.195.218.185\"}]}" ;;
+    *clusters/*) printf "{\"connectionStrings\":{\"standardSrv\":\"mongodb+srv://kids-booklet.example\"}}" ;;
+    *databaseUsers*) printf "{\"results\":[{\"username\":\"kids_booklet_staging\",\"databaseName\":\"admin\",\"roles\":[{\"databaseName\":\"kids_booklet\",\"roleName\":\"readWrite\"}],\"scopes\":[{\"type\":\"CLUSTER\",\"name\":\"kids-booklet\"}]},{\"username\":\"kids_booklet_prod\",\"databaseName\":\"admin\",\"roles\":[{\"databaseName\":\"kids_booklet_prod\",\"roleName\":\"readWrite\"}],\"scopes\":[{\"type\":\"CLUSTER\",\"name\":\"kids-booklet\"}]}]}" ;;
+    *) return 1 ;;
+  esac > "$TEMP_DIR/atlas-response.json"
+  ATLAS_RESPONSE="$TEMP_DIR/atlas-response.json"
+}
+plan_atlas_configuration
+jq -e ".access_action == \"exists\" and .users.staging.action == \"update\" and .users.prod.action == \"update\"" "$ATLAS_PLAN_FILE" >/dev/null
+rm -rf "$TEMP_DIR"' _ "$script")"
+test -z "$atlas_recovery_role_check"
+grep -q 'roleName:"dbAdmin"' "$script"
+grep -q 'atlas_request PATCH "groups/\$project/databaseUsers/admin/\$username"' "$script"
+else
+  printf '%s\n' 'skipped: Atlas recovery-role fixture requires jq'
+fi
 backend_root="$(mktemp -d)"
 printf 'terraform { backend "s3" {} }\n' > "$backend_root/backend.generated.tf"
 backend_repair_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf")"
@@ -190,6 +231,18 @@ if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'unset AWS_ACCESS_KEY_ID AWS_SECRET_
   exit 1
 fi
 reject --action check --environment staging --apply
+reject --action repair-first-activation-secrets
+reject --action repair-first-activation-secrets --environment staging --secret-name INVALID
+reject --action status --secret-name ACCESS_GATE_PASSWORD
+reject --action status --generate-password
+reject --action repair-first-activation-secrets --environment staging --secret-name OPENAI_API_KEY --generate-password
+reject --action repair-first-activation-secrets --environment staging --generate-password --apply
+preview_single_rotation="$(env -u GITHUB_ACTIONS bash "$script" --action rotate-secrets --environment staging --secret-name OPENAI_API_KEY --vps-host vps.example)"
+grep -q 'would update: staged staging secrets' <<< "$preview_single_rotation"
+preview_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --vps-host vps.example)"
+grep -q 'would update: staging failed first-activation secrets' <<< "$preview_repair"
+preview_single_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --secret-name ACCESS_GATE_PASSWORD --vps-host vps.example)"
+grep -q 'would update: staging failed first-activation secrets' <<< "$preview_single_repair"
 reject --action reset-staging --environment prod --confirmation kids_booklet
 reject --action restore --environment staging --backup-id 'bad;id' --confirmation kids_booklet
 reject --action restore --environment staging --backup-id valid --confirmation kids_booklet_prod

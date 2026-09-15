@@ -58,17 +58,39 @@ jobs:
           ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
       - name: Release and verify
+        id: release
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           VPS_HOST: ${{ vars.VPS_HOST }}
           DIGEST: ${{ steps.image.outputs.digest }}
         run: |
+          set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
-          bash scripts/deploy/vps-deployment.sh --action deploy --environment "$TARGET" --image-digest "$DIGEST" --commit "$GITHUB_SHA" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --vps-host "$VPS_HOST" --apply
+          bash scripts/deploy/vps-deployment.sh --action deploy --environment "$TARGET" --image-digest "$DIGEST" --commit "$GITHUB_SHA" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --vps-host "$VPS_HOST" --apply 2>&1 | tee "$RUNNER_TEMP/deploy-output.txt"
       - name: Publish successful environment alias
         env: {DIGEST: '${{ steps.image.outputs.digest }}', IMAGE: '${{ steps.image.outputs.image }}'}
         run: docker buildx imagetools create --tag "$IMAGE:$TARGET" "$DIGEST"
+      - name: Publish deployment summary
+        if: always()
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          {
+            printf "## Deployment result\n\n"
+            printf "| Environment | Commit | Image digest | Outcome |\n"
+            printf "| --- | --- | --- | --- |\n"
+            printf "| \`%s\` | \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$GITHUB_SHA" "${DIGEST:-unavailable}" "$OUTCOME"
+            if [[ -s "$RUNNER_TEMP/deploy-output.txt" ]]; then
+              printf "\`\`\`text\n"
+              grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/deploy-output.txt" || true
+              printf "\`\`\`\n"
+            else
+              printf "No sanitized release result was produced. Inspect the failed step logs.\n"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove SSH material
         if: always()
         run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

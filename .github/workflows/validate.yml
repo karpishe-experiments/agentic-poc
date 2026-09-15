@@ -75,3 +75,25 @@ jobs:
         run: bash tests/shell/vps-host.test.sh
       - if: steps.scope.outputs.shell == 'true'
         run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-deployment-script.test.sh tests/shell/vps-host.test.sh
+      - name: Publish validation summary
+        if: always()
+        env:
+          APP: ${{ steps.scope.outputs.app || 'not-selected' }}
+          DEPLOYMENT: ${{ steps.scope.outputs.deployment || 'not-selected' }}
+          TERRAFORM: ${{ steps.scope.outputs.terraform || 'not-selected' }}
+          WORKFLOW: ${{ steps.scope.outputs.workflow || 'not-selected' }}
+          SHELL: ${{ steps.scope.outputs.shell || 'not-selected' }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          {
+            printf "## Validation result\n\n"
+            printf "**Outcome:** %s\n\n" "$OUTCOME"
+            printf "| Validation area | Selected |\n"
+            printf "| --- | --- |\n"
+            printf "| Application | \`%s\` |\n" "$APP"
+            printf "| Deployment contracts | \`%s\` |\n" "$DEPLOYMENT"
+            printf "| Terraform | \`%s\` |\n" "$TERRAFORM"
+            printf "| Workflow syntax | \`%s\` |\n" "$WORKFLOW"
+            printf "| Shell deployment | \`%s\` |\n" "$SHELL"
+          } >> "$GITHUB_STEP_SUMMARY"
