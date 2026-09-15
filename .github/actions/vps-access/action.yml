@@ -1,0 +1,25 @@
+name: Prepare VPS access
+description: Install pinned cloudflared and scoped SSH material
+inputs:
+  ssh-key: {required: true, description: Deployment SSH key}
+  host-key: {required: true, description: Pinned SSH host key}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SSH_KEY: ${{ inputs.ssh-key }}
+        HOST_KEY: ${{ inputs.host-key }}
+      run: |
+        set -euo pipefail
+        umask 077
+        install -m 700 -d "$HOME/.ssh" "$RUNNER_TEMP/cloudflared"
+        printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/id_ed25519"
+        printf '%s\n' "$HOST_KEY" > "$HOME/.ssh/known_hosts"
+        version=2025.8.1
+        curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" > "$RUNNER_TEMP/cloudflared/release.json"
+        digest="$(jq -er '.assets[] | select(.name=="cloudflared-linux-amd64") | .digest | select(startswith("sha256:"))' "$RUNNER_TEMP/cloudflared/release.json")"
+        curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64" > "$RUNNER_TEMP/cloudflared/cloudflared"
+        printf '%s  %s\n' "${digest#sha256:}" "$RUNNER_TEMP/cloudflared/cloudflared" | sha256sum -c -
+        chmod 700 "$RUNNER_TEMP/cloudflared/cloudflared"
+        echo "$RUNNER_TEMP/cloudflared" >> "$GITHUB_PATH"

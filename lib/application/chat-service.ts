@@ -21,6 +21,7 @@ import { resolveComicCopyMode } from "@/lib/config/env";
 
 import { bookletMessageMetadataSchema, bookletUIMessageDataSchemas, type BookletUIMessage } from "@/lib/contracts/messages";
 import type { GenUICard } from "@/lib/contracts/cards";
+import { assertMutationsAllowed } from "@/lib/application/deployment-control";
 
 export type ChatTurn = { userMessage: BookletUIMessage; assistantMessage: BookletUIMessage };
 
@@ -59,6 +60,7 @@ export class ChatService {
   }
 
   public async createTurn(bookletId: string, input: unknown): Promise<ChatTurn> {
+    await assertMutationsAllowed();
     const [message] = await validateUIMessages<BookletUIMessage>({
       messages: [input],
       metadataSchema: bookletMessageMetadataSchema,

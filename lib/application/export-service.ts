@@ -4,7 +4,7 @@ import { getDatabase, type Database } from "@/db/client";
 import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 
 const pagePoints = {
   landscape_5_4: [720, 576] as const,
@@ -16,14 +16,12 @@ export class ExportService {
   private readonly repositories: Repositories;
   private readonly artifacts: ArtifactService;
   private assets?: AssetStore;
-  private readonly dataRoot?: string;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore } = {}) {
     const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database });
     this.assets = dependencies.assets;
-    this.dataRoot = dependencies.assets ? undefined : resolveDataRoot(getServerEnv());
   }
 
   public async export(bookletId: string) {
@@ -70,8 +68,7 @@ export class ExportService {
 
   private async getAssetStore(): Promise<AssetStore> {
     if (this.assets) return this.assets;
-    const { FilesystemAssetStore } = await import("@/lib/assets/filesystem-asset-store");
-    this.assets = new FilesystemAssetStore(this.dataRoot ?? resolveDataRoot(getServerEnv()));
+    this.assets = createAssetStore();
     return this.assets;
   }
 }

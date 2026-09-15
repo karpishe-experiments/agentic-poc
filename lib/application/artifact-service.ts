@@ -4,6 +4,7 @@ import { createRepositories, type Repositories } from "@/db/repositories";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 import { pagePlanSchema, parseArtifactDocument, storyPlanSchema, visualBibleSchema, type ArtifactDetail } from "@/lib/contracts/artifacts";
 import { BOOKLET_ARTIFACT_TYPES, type ArtifactType } from "@/lib/contracts/domain";
+import { assertMutationsAllowed } from "@/lib/application/deployment-control";
 
 const upstreamArtifactTypes: Record<ArtifactType, ArtifactType[]> = {
   audience_profile: [],
@@ -31,6 +32,7 @@ export class ArtifactService {
   }
 
   public async revise(bookletId: string, artifactType: ArtifactType, content: unknown, options: { createdBy?: "agent" | "user_edit" | "repair" | "application"; sourceExecutionBatchId?: string | null } = {}): Promise<ArtifactDetail> {
+    await assertMutationsAllowed();
     const parsedContent = parseArtifactDocument(artifactType, content);
     const artifactSummaries = await this.repositories.artifacts.listByBooklet(bookletId);
     if (artifactSummaries.length !== BOOKLET_ARTIFACT_TYPES.length) {
@@ -60,6 +62,7 @@ export class ArtifactService {
   }
 
   public async approve(bookletId: string, artifactType: ArtifactType, artifactVersionId: string, options: { scope?: "artifact_content" | "reference" | "page" | "artifact"; subjectKey?: string | null } = {}): Promise<ArtifactDetail> {
+    await assertMutationsAllowed();
     const detail = await this.get(bookletId, artifactType);
     if (detail.currentVersion?.id !== artifactVersionId) {
       throw new RecoverableApplicationError({ code: "artifact_version_not_current", message: "Approve the current saved version after reviewing it.", status: 409 });

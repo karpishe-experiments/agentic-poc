@@ -4,7 +4,9 @@ import { createRepositories, type Repositories } from "@/db/repositories";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ArtifactService } from "@/lib/application/artifact-service";
 import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
+import { getServerEnv } from "@/lib/config/env";
+import { assertMutationsAllowed } from "@/lib/application/deployment-control";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { imageRequestSchema, type ImageRequest } from "@/lib/contracts/images";
 import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
 
@@ -13,7 +15,7 @@ import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
 import { composePage } from "@/lib/composition/compose-page";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import type { GenUICard } from "@/lib/contracts/cards";
-import { describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
+import { createGenerationDiagnostics, describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
 import { pagePlanSchema } from "@/lib/contracts/artifacts";
 
 type ReferenceItem = {
@@ -46,19 +48,16 @@ export class GenerationService {
   private readonly repositories: Repositories;
   private readonly artifacts: ArtifactService;
   private assets?: AssetStore;
-  private readonly dataRoot?: string;
   private readonly diagnostics: GenerationDiagnostics;
   private readonly diagnosticWaitMs: number;
 
   public constructor(dependencies: { database?: Database; repositories?: Repositories; artifacts?: ArtifactService; assets?: AssetStore; diagnostics?: GenerationDiagnostics; diagnosticWaitMs?: number } = {}) {
     const database = dependencies.database ?? dependencies.repositories?.database ?? getDatabase();
-    const needsEnvironment = !dependencies.assets;
-    const env = needsEnvironment ? getServerEnv() : null;
+    if (!dependencies.assets) getServerEnv();
     this.repositories = dependencies.repositories ?? createRepositories(database);
     this.artifacts = dependencies.artifacts ?? new ArtifactService({ database });
     this.assets = dependencies.assets;
-    this.dataRoot = env ? resolveDataRoot(env) : undefined;
-    this.diagnostics = dependencies.diagnostics ?? new GenerationDiagnostics(this.dataRoot);
+    this.diagnostics = dependencies.diagnostics ?? (dependencies.assets ? new GenerationDiagnostics() : createGenerationDiagnostics());
     this.diagnosticWaitMs = dependencies.diagnosticWaitMs ?? 30_000;
   }
 
@@ -92,6 +91,7 @@ export class GenerationService {
 
   public async runReferenceJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}) {
     return this.runExclusively(jobId, async () => {
+      await assertMutationsAllowed();
       if (!options.retryItemId && await this.haltForSavedFailure(jobId)) return;
       const item = await this.repositories.jobs.claimNextPending(jobId, Date.now(), Boolean(options.retryItemId));
       if (!item) { await this.finalizeReferences(bookletId, jobId); return; }
@@ -187,6 +187,7 @@ export class GenerationService {
 
   public async runPageJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}) {
     return this.runExclusively(jobId, async () => {
+      await assertMutationsAllowed();
       if (!options.retryItemId && await this.haltForSavedFailure(jobId)) return;
       const item = await this.repositories.jobs.claimNextPending(jobId, Date.now(), Boolean(options.retryItemId));
       if (!item) { await this.finalizePages(bookletId, jobId); return; }
@@ -318,8 +319,7 @@ export class GenerationService {
 
   private async getAssetStore(): Promise<AssetStore> {
     if (this.assets) return this.assets;
-    const { FilesystemAssetStore } = await import("@/lib/assets/filesystem-asset-store");
-    this.assets = new FilesystemAssetStore(this.dataRoot ?? resolveDataRoot(getServerEnv()));
+    this.assets = createAssetStore();
     return this.assets;
   }
 

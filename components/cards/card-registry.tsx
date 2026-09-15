@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import type { CardAction, GenUICard } from "@/lib/contracts/cards";
 import { publishJobStatus, subscribeToJobStatus, type PolledJobItem, type PolledJobStatus } from "@/components/workspace/job-status-poller";
 import type { RegenerationRequest } from "@/lib/contracts/regeneration";
+import { readOperationResponse } from "@/lib/http/read-operation-response";
 
 type SubmitCard = (input: { action: CardAction; value?: unknown; revisionInstruction?: string }) => Promise<void>;
 type ReopenCard = () => Promise<void>;
@@ -97,8 +98,9 @@ function VisualGallery({ card, bookletId, disabled, refreshWorkspace }: Readonly
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target, ...(instruction ? { instruction } : {}) }),
       });
-      const body = await response.json() as { data?: PolledJobStatus; error?: { message?: string } };
-      if (!response.ok || !body.data) throw new Error(body.error?.message ?? "The selected image could not be regenerated.");
+      const terminal = await readOperationResponse<{ data?: PolledJobStatus; error?: { message?: string } }>(response);
+      const body = terminal.body;
+      if (!terminal.ok || !body.data) throw new Error(body.error?.message ?? "The selected image could not be regenerated.");
       if (body.data.id) publishJobStatus(body.data.id, body.data);
       setStatus(`${item.label} regeneration started. The current image remains available until its replacement succeeds.`);
       refreshWorkspace?.();

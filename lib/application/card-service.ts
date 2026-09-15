@@ -7,6 +7,7 @@ import type { GenerationService } from "@/lib/application/generation-service";
 import { createProgressCard, createRecoveryCard } from "@/lib/application/card-factories";
 import { QualityService } from "@/lib/application/quality-service";
 import { cardResponseSchema, genUICardSchema,  } from "@/lib/contracts/cards";
+import { assertMutationsAllowed } from "@/lib/application/deployment-control";
 
 type PageGenerationStart = { jobId: string; total: number; reused: boolean; generation: Pick<GenerationService, "startPageJob"> };
 
@@ -25,6 +26,7 @@ export class CardService {
   }
 
   public async submit(bookletId: string, input: unknown) {
+    await assertMutationsAllowed();
     const parsed = cardResponseSchema.parse(input);
     const card = await this.repositories.conversation.getCard(bookletId, parsed.cardId);
     if (!card) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
@@ -242,6 +244,7 @@ export class CardService {
   }
 
   public async reopen(bookletId: string, cardId: string) {
+    await assertMutationsAllowed();
     const previous = await this.repositories.conversation.getCard(bookletId, cardId);
     if (!previous) throw new RecoverableApplicationError({ code: "card_not_found", message: "This card is no longer available.", status: 404 });
     if (previous.status === "active") throw new RecoverableApplicationError({ code: "card_already_active", message: "This card is already open for a response." });

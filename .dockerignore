@@ -1,0 +1,14 @@
+.git
+.github
+.tools
+.deploy
+.next
+node_modules
+data
+evaluations
+prototype
+test-results
+playwright-report
+*.tfstate*
+*.tfplan*
+.env*

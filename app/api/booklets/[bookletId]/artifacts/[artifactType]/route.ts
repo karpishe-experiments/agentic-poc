@@ -5,6 +5,7 @@ import { materializePagePlan, materializeStoryPlan } from "@/lib/application/ent
 import { pagePlanDraftSchema, persistentPagePlanToDraft, persistentStoryPlanToDraft, storyPlanDraftSchema } from "@/lib/contracts/drafts";
 import { pagePlanSchema, storyPlanSchema } from "@/lib/contracts/artifacts";
 import { toErrorEnvelope } from "@/lib/http/errors";
+import { runTrackedMutation } from "@/lib/application/deployment-control";
 
 export const runtime = "nodejs";
 
@@ -32,16 +33,16 @@ export async function PATCH(request: Request, { params }: RouteProperties) {
       const previous = current.currentVersion ? storyPlanSchema.parse(current.currentVersion.content) : null;
       const draft = storyPlanDraftSchema.safeParse(content).data ?? persistentStoryPlanToDraft(content, previous);
       if (!draft) throw new Error("Use existing entity IDs only, or submit new Story Plan entities with kind 'new' and a clientKey.");
-      return Response.json({ data: await service.revise(bookletId, type, materializeStoryPlan(draft, previous)) });
+      return Response.json({ data: await runTrackedMutation(() => service.revise(bookletId, type, materializeStoryPlan(draft, previous))) });
     }
     if (type === "page_plan") {
       const current = await service.get(bookletId, type);
       const previous = current.currentVersion ? pagePlanSchema.parse(current.currentVersion.content) : null;
       const draft = pagePlanDraftSchema.safeParse(content).data ?? persistentPagePlanToDraft(content, previous);
       if (!draft) throw new Error("Use the existing Page Plan IDs when editing an existing plan.");
-      return Response.json({ data: await service.revise(bookletId, type, materializePagePlan(draft, previous)) });
+      return Response.json({ data: await runTrackedMutation(() => service.revise(bookletId, type, materializePagePlan(draft, previous))) });
     }
-    return Response.json({ data: await service.revise(bookletId, type, content) });
+    return Response.json({ data: await runTrackedMutation(() => service.revise(bookletId, type, content)) });
   } catch (error) {
     const response = toErrorEnvelope(error);
     return Response.json(response.body, { status: response.status });

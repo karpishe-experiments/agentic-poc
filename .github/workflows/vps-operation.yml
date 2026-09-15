@@ -1,0 +1,65 @@
+name: VPS operation
+on:
+  workflow_call:
+    inputs:
+      environment: {type: string, required: true}
+      action: {type: string, required: true}
+      backup_id: {type: string, default: ''}
+      confirmation: {type: string, default: ''}
+permissions: {contents: read}
+jobs:
+  operation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify branch and inputs
+        env: {TARGET: '${{ inputs.environment }}', OPERATION: '${{ inputs.action }}'}
+        run: |
+          [[ "$TARGET" =~ ^(staging|prod)$ ]]
+          test "$GITHUB_REF_NAME" = "_$TARGET"
+          [[ "$OPERATION" =~ ^(check|backup|restore|rollback|rotate-secrets|reset-staging|resume)$ ]]
+      - uses: ./.github/actions/vps-access
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+      - name: Run operation
+        id: run-operation
+        env:
+          TARGET: ${{ inputs.environment }}
+          OPERATION: ${{ inputs.action }}
+          BACKUP: ${{ inputs.backup_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          args=(--action "$OPERATION" --environment "$TARGET" --vps-host "$VPS_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          if [[ "$OPERATION" != check ]]; then args+=(--apply); fi
+          if [[ -n "$BACKUP" ]]; then args+=(--backup-id "$BACKUP"); fi
+          if [[ -n "$CONFIRMATION" ]]; then args+=(--confirmation "$CONFIRMATION"); fi
+          bash scripts/deploy/vps-deployment.sh "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/vps-operation-output.txt"
+      - name: Publish operation summary
+        if: always()
+        env:
+          TARGET: ${{ inputs.environment }}
+          OPERATION: ${{ inputs.action }}
+          OUTCOME: ${{ steps.run-operation.outcome }}
+        run: |
+          set -euo pipefail
+          {
+            printf "## VPS operation result\n\n"
+            printf "| Environment | Operation | Outcome |\n"
+            printf "| --- | --- | --- |\n"
+            printf "| \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$OPERATION" "$OUTCOME"
+            if [[ -s "$RUNNER_TEMP/vps-operation-output.txt" ]]; then
+              printf "\`\`\`text\n"
+              grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/vps-operation-output.txt" || true
+              printf "\`\`\`\n"
+            else
+              printf "No sanitized operation result was produced. Inspect the failed step logs.\n"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

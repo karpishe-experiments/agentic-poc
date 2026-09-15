@@ -10,7 +10,7 @@ import { executionTargetKeyForImage, type ExecutionBatch } from "@/lib/contracts
 import { cardResponseSchema, validateCardResponseValue, type GenUICard } from "@/lib/contracts/cards";
 import { imageRequestSchema } from "@/lib/contracts/images";
 import { composePage } from "@/lib/composition/compose-page";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
 
 const readyInputSchema = z.object({ kind: z.literal("image"), jobId: z.string().uuid(), itemId: z.string().uuid(), itemKey: z.string().min(1), position: z.number().int().nonnegative(), target: z.enum(["reference", "page"]), subjectLabel: z.string().min(1), request: imageRequestSchema, page: z.unknown().nullable() });
@@ -40,7 +40,7 @@ export class ImageAgentRunService {
 
   private result(summary: string): CardResult { return { kind: "saved", duplicate: false, followupRequired: false, summary, refreshRequired: true }; }
   private candidates(pool: Awaited<ReturnType<CandidatePoolService["resolve"]>>) { return pool.candidates.map((candidate) => ({ agentId: candidate.agentId, agentVersionId: candidate.id, displayName: candidate.displayName, purpose: candidate.purpose, profileSummary: `${candidate.profileId} · ${candidate.modelId}`, eligible: true })); }
-  private async store(): Promise<AssetStore> { if (this.assets) return this.assets; const { FilesystemAssetStore } = await import("@/lib/assets/filesystem-asset-store"); this.assets = new FilesystemAssetStore(resolveDataRoot(getServerEnv())); return this.assets; }
+  private async store(): Promise<AssetStore> { if (this.assets) return this.assets; this.assets = createAssetStore(); return this.assets; }
   private async requireCard(bookletId: string, cardId: string): Promise<AgentRunCard> { const card = await this.repositories.conversation.getCard(bookletId, cardId); if (!card || card.family !== "agent_run") throw new Error("The Image Agent run card was not found."); return card; }
 
   public async createReady(input: { bookletId: string; jobId: string; itemId: string; itemKey: string; position: number; target: "reference" | "page"; subjectLabel: string; request: unknown; page?: unknown | null }): Promise<string> {

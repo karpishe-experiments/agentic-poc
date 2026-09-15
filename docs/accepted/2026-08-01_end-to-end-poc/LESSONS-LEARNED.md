@@ -26,8 +26,8 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 - **Context:** Pinning a new Next.js/TypeScript/ESLint foundation from package versions that install successfully.
 - **Observation:** `typescript@7.0.2` and `eslint@10.8.0` both installed, but the version-matched `typescript-eslint` and React lint plugins bundled by `eslint-config-next@16.2.12` rejected those versions at runtime.
-- **Guidance:** Run typecheck and lint immediately after bootstrap; reconcile top-level compiler/linter pins with the transitive plugins’ declared peer ranges before treating the toolchain as locked.
-- **Evidence:** Slice 0 failures and passing corrections documented in `PLAN.md` under “Bootstrap correction (2026-08-01)”; `npm.cmd run typecheck` and `npm.cmd run lint` then passed.
+- **Guidance:** Run typecheck and lint immediately after bootstrap; reconcile top-level compiler/linter pins with the transitive pluginsâ€™ declared peer ranges before treating the toolchain as locked.
+- **Evidence:** Slice 0 failures and passing corrections documented in `PLAN.md` under â€œBootstrap correction (2026-08-01)â€; `npm.cmd run typecheck` and `npm.cmd run lint` then passed.
 - **Promotion target:** Documentation.
 - **Status:** Candidate.
 
@@ -116,7 +116,7 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 - **Context:** A Visual Bible specialist turns an approved Story Plan and visual style into canonical-reference definitions.
 - **Observation:** A real specialist result can contain valid-looking but mismatched character/location subjects; accepting its membership directly blocks the workflow or lets the model alter downstream identity.
-- **Guidance:** Derive the Visual Bible’s eligible character/location set, stable IDs, reference requirement, reference-asset lineage, and style references in application code from the approved Story Plan and selected style. Use model output only to enrich visual details matched by ID or normalized name.
+- **Guidance:** Derive the Visual Bibleâ€™s eligible character/location set, stable IDs, reference requirement, reference-asset lineage, and style references in application code from the approved Story Plan and selected style. Use model output only to enrich visual details matched by ID or normalized name.
 - **Evidence:** `lib/application/entity-materialization.ts`, `lib/application/chat-service.ts`, and `tests/unit/application/entity-materialization.test.ts`; the focused identity test and full 62-test suite passed on 2026-08-03.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
@@ -126,7 +126,7 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 - **Context:** A card response in an AI SDK conversation can either require server-side follow-up, create a persisted generation job, or safely begin the next deterministic stage.
 - **Observation:** Treating every successful response as a passive refresh left the creator at an empty stage with a disabled composer. Reusing a submitted response ID for a non-follow-up stage returned `card_response_not_found`.
 - **Guidance:** Send the server-declared response continuation only when `followupRequired` is true. For safe non-job transitions, send a fresh staged turn without the old response ID; for reference/page generation and final-page approval, refresh and let the persisted job or later export stage own the next action.
-- **Evidence:** `components/workspace/workspace-conversation.tsx` and `tests/e2e/golden-path.spec.ts`; the fake-provider browser journey automatically advanced Audience → Story, Story → Style, and references → Booklet Specification, then passed through Final Pages on 2026-08-03.
+- **Evidence:** `components/workspace/workspace-conversation.tsx` and `tests/e2e/golden-path.spec.ts`; the fake-provider browser journey automatically advanced Audience â†’ Story, Story â†’ Style, and references â†’ Booklet Specification, then passed through Final Pages on 2026-08-03.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.
 
@@ -205,7 +205,7 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 ### Separate provider-native request sizes from final composition canvases
 
 - **Context:** A booklet supports square, 5:4 landscape, and 4:5 portrait output while configured GPT Image models may accept only fixed native request sizes.
-- **Observation:** Requesting final canvas dimensions such as `1536x1536` directly caused a provider HTTP 400 on a fixed-size model, even though those dimensions are valid for the application’s composed asset. The supported native sizes do not exactly match every final booklet ratio.
+- **Observation:** Requesting final canvas dimensions such as `1536x1536` directly caused a provider HTTP 400 on a fixed-size model, even though those dimensions are valid for the applicationâ€™s composed asset. The supported native sizes do not exactly match every final booklet ratio.
 - **Guidance:** Declare and test a provider-specific geometry map independently from final canvas dimensions. Request `1024x1024`, `1536x1024`, or `1024x1536`, then normalize to the approved final canvas with crop/pad/resize that preserves aspect ratio and never stretches. Keep both contracts explicit so changing a provider does not silently change PDF geometry.
 - **Evidence:** `lib/images/openai-image-provider.ts`, `lib/composition/compose-page.ts`, and their focused tests verify all three request mappings and all three final canvases; the full 86-test suite and production build passed on 2026-08-08.
 - **Promotion target:** Agent instruction.
@@ -233,7 +233,7 @@ Keep only verified, reusable lessons. Merge or revise existing entries instead o
 
 - **Context:** A gallery lets a user regenerate one page or canonical reference, optionally by editing the current image with a correction instruction.
 - **Observation:** Sending only an asset ID from a persisted gallery is insufficient because old cards can become stale and a failed replacement must not erase the working image. Resolving a typed page/reference target against the current artifact provides both authorization scope and the correct edit target.
-- **Guidance:** Put typed regeneration metadata on new gallery items, reject generic asset targets, and resolve every target server-side against the booklet’s current artifact. Create a one-item persisted job, reserve provider input capacity for the edit target, and publish the new asset into a revised artifact only after generation succeeds; otherwise retain the active asset unchanged.
+- **Guidance:** Put typed regeneration metadata on new gallery items, reject generic asset targets, and resolve every target server-side against the bookletâ€™s current artifact. Create a one-item persisted job, reserve provider input capacity for the edit target, and publish the new asset into a revised artifact only after generation succeeds; otherwise retain the active asset unchanged.
 - **Evidence:** `lib/contracts/regeneration.ts`, `lib/application/revision-service.ts`, `lib/application/generation-service.ts`, and `tests/integration/specification-page-plan.test.ts`; the integration test regenerates one instructed page, and verifies all unrelated pages retain their asset IDs.
 - **Promotion target:** Agent instruction.
 - **Status:** Candidate.

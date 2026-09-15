@@ -3,12 +3,12 @@ import { createRepositories } from "@/db/repositories";
 import { AgentRunService } from "@/lib/application/agent-run-service";
 import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
 import { GenerationService } from "@/lib/application/generation-service";
-import { getServerEnv, resolveDataRoot } from "@/lib/config/env";
-import { describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
+import { describeGenerationError, createGenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
+import { readDeploymentControl } from "@/lib/application/deployment-control";
 
 const RUNNER_STATE = Symbol.for("kids-booklet-poc.job-runner");
 
-type RunnerState = { promise: Promise<void> };
+type RunnerState = { promise: Promise<void>; started: boolean; initialized: boolean; recovered: boolean; heartbeatAtMs: number; fatalError: string | null };
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -17,8 +17,12 @@ function delay(milliseconds: number): Promise<void> {
 async function runLoop(): Promise<void> {
   const database = getDatabase();
   const repositories = createRepositories(database);
-  const diagnostics = new GenerationDiagnostics(resolveDataRoot(getServerEnv()));
+  const diagnostics = createGenerationDiagnostics();
   await diagnostics.record({ event: "runner_started" });
+  const state = (globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState })[RUNNER_STATE];
+  let control = await readDeploymentControl();
+  if (state) state.initialized = true;
+  while (control.maintenance) { if (state) state.heartbeatAtMs = Date.now(); await delay(500); control = await readDeploymentControl(); }
   await repositories.conversation.recoverInterruptedFollowups();
   const generation = new GenerationService({ database, repositories, diagnostics });
   const recoveredTextExecutions = await new AgentRunService({ repositories }).recoverInterrupted();
@@ -30,10 +34,14 @@ async function runLoop(): Promise<void> {
     },
   }).recoverInterrupted();
   const recoveredItems = await repositories.jobs.recoverInterrupted();
+  if (state) state.recovered = true;
   await diagnostics.record({ event: "runner_recovered_interrupted_work", recoveredItems, recoveredExecutionBatches: recoveredTextExecutions.length + recoveredImageExecutions.length });
 
   for (;;) {
     try {
+      const state = globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState };
+      if (state[RUNNER_STATE]) state[RUNNER_STATE].heartbeatAtMs = Date.now();
+      if ((await readDeploymentControl()).maintenance) { await delay(500); continue; }
       const jobs = await repositories.jobs.listRunnable();
       for (const job of jobs) {
         await diagnostics.record({ event: "runner_job_started", bookletId: job.bookletId, jobId: job.id });
@@ -56,11 +64,19 @@ export function ensureRunnerStarted(): boolean {
   const state = globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState };
   if (state[RUNNER_STATE]) return false;
   if (process.env.VITEST) {
-    state[RUNNER_STATE] = { promise: Promise.resolve() };
+    state[RUNNER_STATE] = { promise: Promise.resolve(), started: true, initialized: true, recovered: true, heartbeatAtMs: Date.now(), fatalError: null };
     return true;
   }
-  state[RUNNER_STATE] = { promise: runLoop().catch((error) => {
+  const runner: RunnerState = { promise: Promise.resolve(), started: true, initialized: false, recovered: false, heartbeatAtMs: Date.now(), fatalError: null };
+  runner.promise = runLoop().catch((error) => {
+    runner.fatalError = describeGenerationError(error).message;
     console.error("Kids Booklet job runner stopped:", error);
-  }) };
+  });
+  state[RUNNER_STATE] = runner;
   return true;
+}
+
+export function getRunnerStatus() {
+  const state = (globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState })[RUNNER_STATE];
+  return { started: Boolean(state?.started), initialized: Boolean(state?.initialized), recovered: Boolean(state?.recovered), heartbeatAtMs: state?.heartbeatAtMs ?? null, fatalError: state?.fatalError ?? null };
 }

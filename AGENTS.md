@@ -52,6 +52,13 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 6. After Review passes, use `sync-docs-issues`; compose it with `capture-project-learnings` when verified work reveals durable knowledge.
 7. The core workflow may publish a reviewed branch and pull request. Merging, deployment, issue closure, and GitHub Project mutations remain outside that authority.
 
+For issue-backed work, select one issue branch and keep all implementation,
+review corrections, deployment fixes, and follow-up changes for that issue on
+that branch. Do not create or switch to another working branch while the issue
+remains active unless the user explicitly requests the branch change. If the
+issue branch was already merged, update that same branch from `master` and open
+a follow-up pull request from it when more issue work is required.
+
 ## Delegation and multi-agent work
 
 - The primary agent owns the implementation sequence, shared architecture, integration, verification, commits, and project-management updates.
@@ -157,3 +164,37 @@ Use STE-flavored language for agent-authored prose. Preserve code, commands, ide
 These workflows may publish a reviewed branch and PR but never merge, deploy,
 release the consumer application, close issues, or mutate GitHub Project fields.
 <!-- core-agent-skills:end -->
+
+## VPS and Cloudflare deployment
+
+When you author or change deployment automation:
+
+- Use `#!/usr/bin/env bash`, `set -euo pipefail`, and `umask 077`. Organize logic into small, clearly named functions.
+- Parse explicit named arguments, provide `--help`, reject unknown arguments, and reject missing required inputs.
+- Default to preview. Permit mutations only with `--apply`.
+- Before mutation, validate required commands, the target VPS identity and host key, Cloudflare account and zone write-permission policies, Atlas temporary Project Owner access when used, and all required configuration.
+- Discover current state first. Make changes additive and idempotent. Report `exists`, `would create`, `would update`, `created`, or `updated`. Stop on incompatible or destructive drift.
+- Setup must not delete resources, copy production data, or perform rollback. Explicit workflow recovery remains governed by the deployment runbook.
+- Never enable shell tracing, embed credentials, print secret values, or retrieve secret contents without need.
+- Validate application secret schemas before storing or staging them. In particular, reject an `ACCESS_GATE_PASSWORD` shorter than 16 characters before any host lifecycle mutation.
+- Validate each interactively entered secret immediately. Re-prompt only the invalid field and retain earlier valid values for the rest of the command. Secret repair must support changing one named field without reading, displaying, or re-entering unrelated stored secrets.
+- Password generation must be explicit and interactive. Display a generated access password once on the operator terminal, never through workflow output, and reject generation in GitHub Actions or noninteractive execution.
+- Interactive deployment actions must silently prompt for each required provider token or key when it is absent, validate it, and export it only inside the script process for its required child commands. A child script cannot modify its caller's shell. The canonical script may provide clearly named source-only credential-session and clear-credential-session actions. The session action must keep credentials only in the current SSH shell's memory until explicit clearing or SSH logout, disable `errexit` until clearing so a failed child command cannot terminate that SSH login, and temporarily disable shell tracing while it reads or assigns credentials. Clear must restore a previously enabled `errexit` setting. Noninteractive workflow and host-dispatch actions must read the same values from protected runtime variables and fail clearly when they are absent. Do not require an operator to run `read` or `export` commands before invoking a deployment script.
+- Quote expansions and use arrays for command arguments. Use `mktemp`, mode `600`, and cleanup traps for sensitive temporary files.
+- Return nonzero with a concise actionable error. After apply, perform read-only verification and report sanitized results.
+- Every GitHub workflow must publish a concise `$GITHUB_STEP_SUMMARY`, including its target or validation scope, outcome, and the identifiers needed for the next operator action. Reusable workflows may own the summary for thin callers. Capture only sanitized, allowlisted status lines and explicit non-secret result fields; never copy arbitrary logs, credentials, rendered Compose configuration, or secret-bearing command output into a summary.
+- A deployment workflow must prove that its target branch contains the current `master` commit and that Infrastructure succeeded for that exact master commit before it builds or contacts the VPS. Infrastructure failure summaries must identify the request ID and retained-lock recovery checkpoint.
+- Keep scripts compatible with `bash -n` and ShellCheck. Target Ubuntu Bash; verify prerequisites and use `jq` for structured JSON operations.
+- When presenting a generated script in documentation or chat, output exactly: a short Required inputs list; one complete script in one code block; preview and apply examples; and brief expected-result and recovery notes.
+
+The canonical shell entrypoint is `scripts/deploy/vps-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
+
+Treat every deployment environment, including the VPS, as a read-only Git consumer. It may fetch and fast-forward the already selected reviewed branch. Deployment scripts and operators must never create or amend commits, rewrite history, switch or create branches, or push from that environment. Terraform must not rewrite tracked files, including the checked-in provider lock file. Run Terraform initialization, plans, and provider downloads from a private workspace outside the checkout. Keep durable runtime files under `/opt/kids-booklet`, `/etc/kids-booklet`, or `/var/lib/kids-booklet`.
+
+Use its `discover-config` action to collect non-secret VPS, Cloudflare, and Atlas configuration before setup. Its preview may call provider read APIs but must not write a file or mutate provider resources; only its `--apply` writes `infra/config/vps.json`.
+
+For live execution, follow `docs/deployment/runbook.md`: identify the execution host, complete one checkpoint at a time, and recheck workflow, journal, and container state after interruption. Keep only the latest accepted baseline and durable operating guidance in deployment documentation; do not maintain a chronological incident ledger. Honor existing session authorization; do not infer live success from local validation or invent a recovery command.
+
+Terraform owns Cloudflare R2, Tunnel, DNS and rules. Before Terraform use, an administrator must complete Cloudflare Zero Trust enrollment and Free-plan billing consent in the selected account; scripts must verify its organization and Access application API before provider mutation or auxiliary tool installation. `credential-session` loads credentials only. Run the read-only `access-check` action after each credential session to verify the configured Cloudflare, R2, Atlas, and GitHub scopes before setup. Setup owns provider discovery, scoped Atlas users, the exact VPS allowlist, and host credentials. Atlas application users require exactly `readWrite` and `dbAdmin` on their environment database and one selected cluster: this permits explicit restore without granting database-user administration or access to another environment. `atlas-reconcile` may only upgrade existing `readWrite` users after it verifies the existing allowlist and scope; it must not create resources. Finalize owns absent environment-branch creation and supported branch protection. Compose owns non-secret runtime configuration; use the same variable names in both environments and no `STAGING_*` or `PROD_*` application variables. The root-owned final Compose override owns secrets and must never be rendered in logs or artifacts; rotation must stage them over pinned SSH before the serialized Maintenance workflow. GitHub publishes target-environment image tags but the host deploys only immutable digests. Every deployment change must update the compact runbook and relevant architecture guidance, and must keep maintenance, drain, backup, rollback, and environment-isolation contracts intact.
+
+For host-lifecycle changes run both `tests/shell/vps-deployment-script.test.sh` and `tests/shell/vps-host.test.sh`, plus ShellCheck. Recovery changes require `tests/unit/recovery-storage.test.ts`. Validate and test both Terraform roots after infrastructure changes. Use `vitest.deployment.config.ts` for isolated contracts when MongoDB is unavailable; do not report that as a full-suite pass. See `docs/deployment/contracts.md` for current contracts and the accepted live baseline.

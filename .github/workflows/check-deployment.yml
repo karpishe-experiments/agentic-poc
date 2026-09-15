@@ -1,0 +1,12 @@
+name: Check deployment
+on:
+  workflow_dispatch:
+    inputs:
+      environment: {description: Target, type: choice, options: [staging, prod], required: true}
+permissions: {contents: read}
+concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
+jobs:
+  check:
+    uses: ./.github/workflows/vps-operation.yml
+    with: {environment: '${{ inputs.environment }}', action: check}
+    secrets: inherit

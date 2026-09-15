@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ArtifactDetail } from "@/lib/contracts/artifacts";
 import type { ArtifactType } from "@/lib/contracts/domain";
+import { readOperationResponse } from "@/lib/http/read-operation-response";
 
 type ApiResponse = { data?: ArtifactDetail; error?: { message?: string } };
 type VisualDefinition = { entityId: string; name: string; visualDetails: string[]; continuityConstraints: string[]; referenceRequired: boolean; currentReferenceAssetId: string | null; revisionNumber: number };
@@ -59,8 +60,9 @@ export function ArtifactViewer({ bookletId, artifactType, detail, label }: Reado
 
   async function request(path: string, options: RequestInit) {
     const response = await fetch(path, options);
-    const body = await response.json() as ApiResponse;
-    if (!response.ok || !body.data) throw new Error(body.error?.message ?? "The artifact could not be updated.");
+    const terminal = await readOperationResponse<ApiResponse>(response);
+    const body = terminal.body;
+    if (!terminal.ok || !body.data) throw new Error(body.error?.message ?? "The artifact could not be updated.");
     router.refresh();
   }
 
