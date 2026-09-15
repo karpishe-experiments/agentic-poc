@@ -195,8 +195,14 @@ if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'unset AWS_ACCESS_KEY_ID AWS_SECRET_
 fi
 reject --action check --environment staging --apply
 reject --action repair-first-activation-secrets
+reject --action repair-first-activation-secrets --environment staging --secret-name INVALID
+reject --action status --secret-name ACCESS_GATE_PASSWORD
+preview_single_rotation="$(bash "$script" --action rotate-secrets --environment staging --secret-name OPENAI_API_KEY --vps-host vps.example)"
+grep -q 'would update: staged staging secrets' <<< "$preview_single_rotation"
 preview_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --vps-host vps.example)"
 grep -q 'would update: staging failed first-activation secrets' <<< "$preview_repair"
+preview_single_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --secret-name ACCESS_GATE_PASSWORD --vps-host vps.example)"
+grep -q 'would update: staging failed first-activation secrets' <<< "$preview_single_repair"
 reject --action reset-staging --environment prod --confirmation kids_booklet
 reject --action restore --environment staging --backup-id 'bad;id' --confirmation kids_booklet
 reject --action restore --environment staging --backup-id valid --confirmation kids_booklet_prod

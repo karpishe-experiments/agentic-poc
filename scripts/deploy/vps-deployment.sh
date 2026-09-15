@@ -12,6 +12,7 @@ fi
 
 ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION=''
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
+SECRET_NAME=''
 COMPOSE_SECRET_FILE=''
 ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTPUT=''
 ROOT=/opt/kids-booklet
@@ -52,6 +53,7 @@ Options:
   --confirmation kids_booklet       required for reset-staging
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
+  --secret-name NAME                repair or rotate only one application secret
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
 --apply. discover-config makes read-only provider requests; --apply only writes its
@@ -70,7 +72,7 @@ parse_arguments() {
     case "$1" in
       --help) usage; exit 0 ;;
       --apply) APPLY=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -79,6 +81,7 @@ parse_arguments() {
           --action) ACTION="$value";; --config) CONFIG_FILE="$value";; --environment) ENVIRONMENT="$value";;
           --image-digest) IMAGE_DIGEST="$value";; --backup-id) BACKUP_ID="$value";; --confirmation) CONFIRMATION="$value";;
           --vps-host) VPS_HOST="$value";; --vps-user) VPS_USER="$value";; --commit) COMMIT="$value";; --request-id) REQUEST_ID="$value";;
+          --secret-name) SECRET_NAME="$value";;
           --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
           --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
@@ -99,6 +102,8 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
+  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)$ ]] || die 'Invalid application secret name'
+  [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
   [[ -z "$ZONE_NAME" || "$ZONE_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid Cloudflare zone hostname'
   for hostname in "$STAGING_HOSTNAME" "$PROD_HOSTNAME" "$DEPLOY_HOSTNAME"; do
     [[ -z "$hostname" || "$hostname" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid application hostname'
@@ -228,10 +233,13 @@ recover_interrupted_rotation() {
   rm -f "$SECRETS/$ENVIRONMENT/secrets.previous.json"
 }
 validate_compose() {
-  local release="$1"
+  local release="$1" resolved
   # Do not print this output: it includes secrets. Only jq's exit status is used.
-  compose "$release" config --format json | jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type == "string" and length > 0)' >/dev/null || die 'Required host secrets are missing'
-  compose "$release" config --format json | jq -e '.services.app.environment.ACCESS_GATE_PASSWORD | type == "string" and length >= 16' >/dev/null || die 'ACCESS_GATE_PASSWORD must contain at least 16 characters'
+  private_temp
+  resolved="$TEMP_DIR/resolved-compose.json"
+  compose "$release" config --format json > "$resolved"
+  chmod 600 "$resolved"
+  application_secret_override_is_valid "$resolved" || die 'Resolved Compose secrets do not satisfy the application secret contract'
 }
 prepare_release() {
   local release="$STATE/releases/$ENVIRONMENT/$COMMIT"
@@ -373,7 +381,7 @@ host_dispatch() {
   local -a args=()
   read -r -a args <<< "$original"
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
-  SEEN=(); ACTION=''; APPLY=false
+  SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
   case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
@@ -388,8 +396,14 @@ host_dispatch() {
     private_temp
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Staged secret override exceeds 64 KiB'; fi
-    jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0) and ($e.ACCESS_GATE_PASSWORD | type=="string" and length>=16)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Staged secret override is invalid; ACCESS_GATE_PASSWORD must contain at least 16 characters'
-    install -m 600 "$TEMP_DIR/secrets.json" "$SECRETS/$ENVIRONMENT/secrets.pending.json"
+    if [[ -n "$SECRET_NAME" ]]; then
+      jq -e --arg name "$SECRET_NAME" '.services.app.environment | type=="object" and keys==[$name] and (.[$name] | type=="string" and length>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
+    else
+      cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
+    fi
+    application_secret_override_is_valid "$TEMP_DIR/merged-secrets.json" || die 'Staged secret override does not satisfy the application secret contract'
+    install -m 600 "$TEMP_DIR/merged-secrets.json" "$SECRETS/$ENVIRONMENT/secrets.pending.json"
     printf 'updated: staged %s secret rotation\n' "$ENVIRONMENT"; exit 0
   fi
   if [[ "$ACTION" == repair-first-activation-secrets ]]; then
@@ -405,8 +419,14 @@ host_dispatch() {
     private_temp
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Secret override exceeds 64 KiB'; fi
-    jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0) and ($e.ACCESS_GATE_PASSWORD | type=="string" and length>=16)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Secret override is invalid; ACCESS_GATE_PASSWORD must contain at least 16 characters'
-    install -m 600 "$TEMP_DIR/secrets.json" "$SECRETS/$ENVIRONMENT/secrets.json"
+    if [[ -n "$SECRET_NAME" ]]; then
+      jq -e --arg name "$SECRET_NAME" '.services.app.environment | type=="object" and keys==[$name] and (.[$name] | type=="string" and length>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret repair payload is invalid'
+      jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
+    else
+      cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
+    fi
+    application_secret_override_is_valid "$TEMP_DIR/merged-secrets.json" || die 'Secret override does not satisfy the application secret contract'
+    install -m 600 "$TEMP_DIR/merged-secrets.json" "$SECRETS/$ENVIRONMENT/secrets.json"
     printf 'updated: %s failed first-activation secrets; operation remains ready for explicit resume\n' "$ENVIRONMENT"
     exit 0
   fi
@@ -1203,7 +1223,7 @@ build_secret_override() {
   if [[ -n "${DEPLOYMENT_SECRETS_DIR:-}" ]]; then
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
-    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and ([.[$names[]]] | all(type=="string" and length>0)) and (.ACCESS_GATE_PASSWORD | length>=16)' "$secret_input" >/dev/null || die 'Secret input file must contain exactly the required non-empty strings and ACCESS_GATE_PASSWORD must contain at least 16 characters'
+    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$"))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi
     chmod 600 "$destination"
@@ -1211,10 +1231,12 @@ build_secret_override() {
   fi
   printf '{"services":{"app":{"environment":{}}}}\n' > "$destination"
   for name in OPENAI_API_KEY MONGODB_URI ACCESS_GATE_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
-    if [[ "$name" == MONGODB_URI && -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then value="${GENERATED_MONGODB_URI[$environment]}"
-    else IFS= read -r -s -p "$environment $name: " value; printf '\n' >&2; fi
-    [[ -n "$value" ]] || die "$name cannot be empty"
-    [[ "$name" != ACCESS_GATE_PASSWORD || ${#value} -ge 16 ]] || die 'ACCESS_GATE_PASSWORD must contain at least 16 characters'
+    if [[ "$name" == MONGODB_URI && -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then
+      value="${GENERATED_MONGODB_URI[$environment]}"
+      application_secret_value_is_valid "$name" "$value" || die 'Generated MONGODB_URI is invalid'
+    else
+      prompt_application_secret "$environment" "$name" value
+    fi
     printf '%s' "$value" > "$TEMP_DIR/value"
     # JSON is valid Compose YAML. Escape dollars for Compose interpolation.
     jq --arg name "$name" --rawfile value "$TEMP_DIR/value" '.services.app.environment[$name]=($value | gsub("\\$";"$$"))' "$destination" > "$TEMP_DIR/next.json"
@@ -1223,13 +1245,63 @@ build_secret_override() {
   done
   chmod 600 "$destination"
 }
+application_secret_value_is_valid() {
+  local name="$1" value="$2"
+  case "$name" in
+    OPENAI_API_KEY) [[ -n "$value" ]];;
+    MONGODB_URI) [[ "$value" =~ ^mongodb(\+srv)?:// ]];;
+    ACCESS_GATE_PASSWORD) [[ ${#value} -ge 16 ]];;
+    AWS_ACCESS_KEY_ID) [[ "$value" =~ ^[A-Za-z0-9]{32}$ ]];;
+    AWS_SECRET_ACCESS_KEY) [[ "$value" =~ ^[A-Fa-f0-9]{64}$ ]];;
+    *) return 1;;
+  esac
+}
+application_secret_requirement() {
+  case "$1" in
+    OPENAI_API_KEY) printf 'must not be empty';;
+    MONGODB_URI) printf 'must begin with mongodb:// or mongodb+srv://';;
+    ACCESS_GATE_PASSWORD) printf 'must contain at least 16 characters';;
+    AWS_ACCESS_KEY_ID) printf 'must be a 32-character R2 access key ID';;
+    AWS_SECRET_ACCESS_KEY) printf 'must be a 64-character hexadecimal R2 secret key';;
+  esac
+}
+prompt_application_secret() {
+  local environment="$1" name="$2" destination="$3" value=''
+  while :; do
+    IFS= read -r -s -p "$environment $name: " value
+    printf '\n' >&2
+    if application_secret_value_is_valid "$name" "$value"; then
+      printf -v "$destination" '%s' "$value"
+      return
+    fi
+    printf 'error: %s %s; re-enter only this value\n' "$name" "$(application_secret_requirement "$name")" >&2
+  done
+}
+application_secret_override_is_valid() {
+  jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$"))' "$1" >/dev/null
+}
+build_secret_patch() {
+  local environment="$1" name="$2" destination="$3" value
+  printf '{"services":{"app":{"environment":{}}}}\n' > "$destination"
+  prompt_application_secret "$environment" "$name" value
+  printf '%s' "$value" > "$TEMP_DIR/value"
+  jq --arg name "$name" --rawfile value "$TEMP_DIR/value" '.services.app.environment[$name]=($value | gsub("\\$";"$$"))' "$destination" > "$TEMP_DIR/next.json"
+  mv "$TEMP_DIR/next.json" "$destination"
+  chmod 600 "$destination"
+  unset value
+}
 repair_first_activation_secrets() {
   load_config
   [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; return; }
   need_command jq; private_temp
-  build_secret_override "$ENVIRONMENT" "$TEMP_DIR/secrets.json"
+  if [[ -n "$SECRET_NAME" ]]; then
+    build_secret_patch "$ENVIRONMENT" "$SECRET_NAME" "$TEMP_DIR/secrets.json"
+  else
+    build_secret_override "$ENVIRONMENT" "$TEMP_DIR/secrets.json"
+  fi
   local remote_command
   local -a remote=(--action repair-first-activation-secrets --environment "$ENVIRONMENT" --apply)
+  [[ -z "$SECRET_NAME" ]] || remote+=(--secret-name "$SECRET_NAME")
   printf -v remote_command ' %s' "${remote[@]}"
   if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
     (SSH_ORIGINAL_COMMAND="$remote_command" host_dispatch) < "$TEMP_DIR/secrets.json"
@@ -1242,7 +1314,7 @@ repair_first_activation_secrets() {
 write_secret_override() {
   local environment="$1" destination="$SECRETS/$1/secrets.json"
   if [[ -f "$destination" ]]; then
-    jq -e '.services.app.environment as $e | [$e.OPENAI_API_KEY,$e.MONGODB_URI,$e.AWS_ACCESS_KEY_ID,$e.AWS_SECRET_ACCESS_KEY] | all(type=="string" and length>0) and ($e.ACCESS_GATE_PASSWORD | type=="string" and length>=16)' "$destination" >/dev/null || die "$environment host secret override is invalid; ACCESS_GATE_PASSWORD must contain at least 16 characters"
+    application_secret_override_is_valid "$destination" || die "$environment host secret override does not satisfy the application secret contract"
     printf 'exists: %s valid host secret override\n' "$environment"
     return
   fi
@@ -1258,9 +1330,14 @@ stage_and_trigger_rotation() {
   configure_ssh
   load_github_admin_token
   gh workflow view maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" >/dev/null
-  build_secret_override "$ENVIRONMENT" "$TEMP_DIR/rotation.json"
+  if [[ -n "$SECRET_NAME" ]]; then
+    build_secret_patch "$ENVIRONMENT" "$SECRET_NAME" "$TEMP_DIR/rotation.json"
+  else
+    build_secret_override "$ENVIRONMENT" "$TEMP_DIR/rotation.json"
+  fi
   local remote_command
   local -a remote=(--action stage-secrets --environment "$ENVIRONMENT" --apply)
+  [[ -z "$SECRET_NAME" ]] || remote+=(--secret-name "$SECRET_NAME")
   printf -v remote_command ' %s' "${remote[@]}"
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/rotation.json"
   gh workflow run maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" --ref "_$ENVIRONMENT" -f "environment=$ENVIRONMENT" -f action=rotate-secrets
