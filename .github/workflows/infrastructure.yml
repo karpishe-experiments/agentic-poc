@@ -43,17 +43,21 @@ jobs:
         env:
           MODE: ${{ (github.event_name == 'push' || inputs.apply) && 'apply' || 'preview' }}
           OUTCOME: ${{ job.status }}
+          REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           {
             printf "## Infrastructure result\n\n"
-            printf "| Mode | Commit | Outcome |\n"
-            printf "| --- | --- | --- |\n"
-            printf "| \`%s\` | \`%s\` | **%s** |\n\n" "$MODE" "$GITHUB_SHA" "$OUTCOME"
+            printf "| Mode | Commit | Request ID | Outcome |\n"
+            printf "| --- | --- | --- | --- |\n"
+            printf "| \`%s\` | \`%s\` | \`%s\` | **%s** |\n\n" "$MODE" "$GITHUB_SHA" "$REQUEST_ID" "$OUTCOME"
             if [[ -s "$RUNNER_TEMP/infrastructure-output.txt" ]]; then
               printf "\`\`\`text\n"
               grep -E "^(exists|would create|would update|created|updated|verified|failed|error|result): " "$RUNNER_TEMP/infrastructure-output.txt" || true
               printf "\`\`\`\n"
+              if [[ "$OUTCOME" == failure ]] && grep -Fxq 'updated: infrastructure lock acquired' "$RUNNER_TEMP/infrastructure-output.txt"; then
+                printf "\nThe VPS retained infrastructure journal \`%s\`. Confirm this run has stopped, inspect \`--action status\`, and release only this request with the runbook's \`infra-unlock\` procedure before retrying.\n" "$REQUEST_ID"
+              fi
             else
               printf "No sanitized infrastructure result was produced. Inspect the failed step logs.\n"
             fi

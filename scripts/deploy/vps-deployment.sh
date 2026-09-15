@@ -1256,7 +1256,9 @@ terraform_operation() {
   verify_cloudflare_ownership "$directory"
   terraform -chdir="$directory" plan -input=false -out="$TEMP_DIR/plan"
   terraform -chdir="$directory" show -json "$TEMP_DIR/plan" > "$TEMP_DIR/plan.json"
-  chmod 600 "$TEMP_DIR"/*
+  # Keep the mode-700 workspace and its directories traversable. Only these
+  # sensitive files need a mode change here.
+  chmod 600 "$TEMP_DIR/plan" "$TEMP_DIR/plan.json"
   validate_plan "$TEMP_DIR/plan.json"
   if [[ "$APPLY" == true ]]; then
     verify_infrastructure_head

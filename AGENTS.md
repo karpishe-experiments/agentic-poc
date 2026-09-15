@@ -183,6 +183,7 @@ When you author or change deployment automation:
 - Quote expansions and use arrays for command arguments. Use `mktemp`, mode `600`, and cleanup traps for sensitive temporary files.
 - Return nonzero with a concise actionable error. After apply, perform read-only verification and report sanitized results.
 - Every GitHub workflow must publish a concise `$GITHUB_STEP_SUMMARY`, including its target or validation scope, outcome, and the identifiers needed for the next operator action. Reusable workflows may own the summary for thin callers. Capture only sanitized, allowlisted status lines and explicit non-secret result fields; never copy arbitrary logs, credentials, rendered Compose configuration, or secret-bearing command output into a summary.
+- A deployment workflow must prove that its target branch contains the current `master` commit and that Infrastructure succeeded for that exact master commit before it builds or contacts the VPS. Infrastructure failure summaries must identify the request ID and retained-lock recovery checkpoint.
 - Keep scripts compatible with `bash -n` and ShellCheck. Target Ubuntu Bash; verify prerequisites and use `jq` for structured JSON operations.
 - When presenting a generated script in documentation or chat, output exactly: a short Required inputs list; one complete script in one code block; preview and apply examples; and brief expected-result and recovery notes.
 
