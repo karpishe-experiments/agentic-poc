@@ -18,7 +18,7 @@ Compose merges base, environment overlay, root-only secret JSON, and image overr
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | GitHub repository secrets for noninteractive Tunnel SSH |
 | `CLOUDFLARE_API_TOKEN`, `R2_TERRAFORM_ACCESS_KEY_ID`, `R2_TERRAFORM_SECRET_ACCESS_KEY` | GitHub infrastructure credentials, never application container credentials |
 
-Tunnel and Access tokens are sensitive Terraform outputs and are present in protected remote state. Before and after each apply, the script writes a separately keyed state snapshot, verifies its bytes, and protects the `snapshots/` prefix with a 30-day R2 lock. Do not publish Terraform state, full outputs, saved plans, or snapshots. Application secrets never enter Terraform.
+Tunnel and Access tokens are sensitive Terraform outputs and are present in protected remote state. Before and after each apply, the script writes a separately keyed state snapshot, verifies its bytes, and protects the `snapshots/` prefix with a 30-day R2 lock. If an interrupted first apply created one of the six exact application R2 buckets but did not record it in application state, preview reports it and apply snapshots then adopts that exact bucket before creating a new plan. It never adopts any other resource. Do not publish Terraform state, full outputs, saved plans, or snapshots. Application secrets never enter Terraform.
 
 ## Lifecycle
 
