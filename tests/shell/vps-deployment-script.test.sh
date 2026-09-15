@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
+  echo 'Terraform executes inside the read-only repository checkout' >&2
+  exit 1
+fi
 bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"

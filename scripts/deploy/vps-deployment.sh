@@ -492,7 +492,7 @@ backend_init() {
   local directory="$1" key="$2"
   [[ -n "${R2_STATE_BUCKET:-}" && -n "${R2_ENDPOINT:-}" ]] || die 'R2_STATE_BUCKET and R2_ENDPOINT required'
   [[ "$R2_ENDPOINT" =~ ^https://[a-f0-9]{32}\.r2\.cloudflarestorage\.com$ ]] || die 'Invalid R2 backend endpoint'
-  terraform -chdir="$directory" init -input=false "-backend-config=bucket=$R2_STATE_BUCKET" "-backend-config=key=$key" -backend-config=region=auto "-backend-config=endpoints={s3=\"$R2_ENDPOINT\"}" -backend-config=skip_credentials_validation=true -backend-config=skip_requesting_account_id=true -backend-config=skip_region_validation=true -backend-config=skip_s3_checksum=true -backend-config=use_lockfile=true
+  terraform -chdir="$directory" init -input=false -lockfile=readonly "-backend-config=bucket=$R2_STATE_BUCKET" "-backend-config=key=$key" -backend-config=region=auto "-backend-config=endpoints={s3=\"$R2_ENDPOINT\"}" -backend-config=skip_credentials_validation=true -backend-config=skip_requesting_account_id=true -backend-config=skip_region_validation=true -backend-config=skip_s3_checksum=true -backend-config=use_lockfile=true
 }
 r2_state_snapshot() {
   local directory="$1" label="$2"
@@ -990,8 +990,8 @@ assert_no_unmanaged_cloudflare_resources() {
   done
 }
 verify_cloudflare_ownership() {
-  local state phase address expected environment kind name hostname key present
-  state="$(terraform -chdir="$REPO_ROOT/infra/terraform" state list 2>/dev/null || true)"
+  local directory="$1" state phase address expected environment kind name hostname key present
+  state="$(terraform -chdir="$directory" state list 2>/dev/null || true)"
   if [[ -z "$state" ]]; then assert_no_unmanaged_cloudflare_resources; return; fi
   for environment in staging prod; do
     for kind in assets diagnostics recovery; do
@@ -1130,13 +1130,19 @@ sync_host_configuration() {
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar"
 }
 terraform_operation() {
+  local directory
   need_command terraform; need_command jq
   verify_infrastructure_head
   private_temp
-  backend_init "$REPO_ROOT/infra/terraform" infrastructure.tfstate
-  verify_cloudflare_ownership
-  terraform -chdir="$REPO_ROOT/infra/terraform" plan -input=false -out="$TEMP_DIR/plan"
-  terraform -chdir="$REPO_ROOT/infra/terraform" show -json "$TEMP_DIR/plan" > "$TEMP_DIR/plan.json"
+  directory="$TEMP_DIR/infrastructure"
+  mkdir -p "$directory"
+  cp "$REPO_ROOT/infra/terraform/"*.tf "$directory/"
+  cp "$REPO_ROOT/infra/terraform/.terraform.lock.hcl" "$directory/"
+  chmod 600 "$directory"/*
+  backend_init "$directory" infrastructure.tfstate
+  verify_cloudflare_ownership "$directory"
+  terraform -chdir="$directory" plan -input=false -out="$TEMP_DIR/plan"
+  terraform -chdir="$directory" show -json "$TEMP_DIR/plan" > "$TEMP_DIR/plan.json"
   chmod 600 "$TEMP_DIR"/*
   validate_plan "$TEMP_DIR/plan.json"
   if [[ "$APPLY" == true ]]; then
@@ -1146,10 +1152,10 @@ terraform_operation() {
       COMMIT="$GITHUB_SHA"
       ACTION=infra-lock; host_call; ACTION=infrastructure
     fi
-    r2_state_snapshot "$REPO_ROOT/infra/terraform" infrastructure-before
-    terraform -chdir="$REPO_ROOT/infra/terraform" apply -input=false "$TEMP_DIR/plan"
-    terraform -chdir="$REPO_ROOT/infra/terraform" state list >/dev/null
-    r2_state_snapshot "$REPO_ROOT/infra/terraform" infrastructure-after
+    r2_state_snapshot "$directory" infrastructure-before
+    terraform -chdir="$directory" apply -input=false "$TEMP_DIR/plan"
+    terraform -chdir="$directory" state list >/dev/null
+    r2_state_snapshot "$directory" infrastructure-after
     if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
       sync_host_configuration
       ACTION=infra-unlock; host_call; ACTION=infrastructure

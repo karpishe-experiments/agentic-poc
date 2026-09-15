@@ -185,6 +185,8 @@ When you author or change deployment automation:
 
 The canonical shell entrypoint is `scripts/deploy/vps-deployment.sh`. Do not add a second deployment shell entrypoint or source helper shell files.
 
+Treat the VPS repository checkout as read-only. Deployment scripts must never run Git commands that change refs, the index, commits, or remotes, and Terraform must not rewrite the checked-in provider lock file. Run Terraform initialization, plans, and provider downloads from a private workspace outside the checkout. Keep durable runtime files under `/opt/kids-booklet`, `/etc/kids-booklet`, or `/var/lib/kids-booklet`.
+
 Use its `discover-config` action to collect non-secret VPS, Cloudflare, and Atlas configuration before setup. Its preview may call provider read APIs but must not write a file or mutate provider resources; only its `--apply` writes `infra/config/vps.json`.
 
 For live execution, follow `docs/deployment/runbook.md`: identify the execution host, complete one checkpoint at a time, record sanitized evidence, and recheck workflow, journal, and container state after interruption. Honor existing session authorization; do not infer live success from local validation or invent a recovery command.
