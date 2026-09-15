@@ -1,116 +1,127 @@
 # VPS deployment runbook
 
-Execute the checkpoints below in order. Record the commit, command or workflow, exit status, sanitized result, and next action after each checkpoint. After an interruption, inspect the workflow, operation journal, and container state before resuming. A successful command proves only that command.
+This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
-## Required inputs
+## Current deployment status
 
-Use an x86_64 Ubuntu VPS with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Before starting, install Docker Engine with Compose v2, Git, sudo, jq, Python 3, curl, tar, OpenSSL and OpenSSH server. Verify `docker compose version` and provider-console access. Setup requires systemd and a sudo-capable administrator. Preview downloads missing pinned tools into a temporary workspace; apply installs Terraform 1.11.4 and cloudflared 2025.8.1 after checksum verification. Python extracts the verified Terraform archive, so `unzip` is not required. GitHub CLI is used only from the temporary workspace and is never installed on the VPS.
+Live acceptance completed on 2026-09-15.
 
-The temporary Atlas API key must have Project Owner access to the selected project. Read-only access is insufficient because setup creates the exact VPS IP access-list entry and the two environment database users. Each environment user has `readWrite` and `dbAdmin` only on its own application database, which permits the verified restore rehearsal to replace that database.
-
-The account-owned Cloudflare API token must have Account API Tokens Read so preflight can inspect its policies. For `uniwares.co.uk`, it must also have DNS Write, Cache Settings Write, and Zone WAF Write. At account scope it must have Workers R2 Storage Write, Cloudflare Tunnel Write, Access: Apps and Policies Write, and Access: Service Tokens Write.
-
-Supply a Cloudflare account/zone, three DNS names, an Atlas project and cluster, five application secrets per environment, scoped R2 bucket credentials, and temporary Cloudflare, R2, and Atlas administrator credentials. The R2 Terraform Access Key ID is a distinct 32-character S3 credential and its Secret Access Key has 64 hexadecimal characters; neither is the Cloudflare API token. Keep credentials outside Git. Public GHCR images expose the built application and seeds.
-
-Complete Cloudflare DNS activation, R2 enrollment, and billing consent first. Also open **Zero Trust** for the selected Cloudflare account, choose a team name, select the Free plan, and complete its billing consent. This manual enrollment is required before Terraform can manage the Tunnel and Access application. Use three distinct lowercase hostnames in that zone. The deployment needs unused cache/rate-limit entrypoints; inspect [the zone-wide rule boundary](../../infra/terraform/README.md) before choosing the zone. Cloudflare credentials must manage R2 buckets, Tunnel, DNS, Access and rules. R2 Terraform credentials must read/write state and snapshots and create/delete backend lock objects. Atlas API credentials must manage database users and the IP access list and permit API access from the VPS. A temporary GitHub administrator token needs repository administration, Actions secrets and variables access, branch administration, and organization billing administration. Confirm these permissions before running setup.
-
-The collector creates `infra/config/vps.json` from provider discovery. It uses read-only Cloudflare and Atlas API requests, validates the VPS, and never prints entered credentials. Enter the secret value of the account-scoped Cloudflare token, never its ID or policy payload. It reports the token metadata ID and active status, which lets you compare it with the Cloudflare dashboard without exposing the token secret. Supply a lowercase Cloudflare zone name; the default hostnames are `staging.<zone>`, `booklet.<zone>`, and `deploy.<zone>`. Override those names only when required. The collector lists Atlas projects and clusters when a selection is needed. It keeps the six application bucket names unchanged because Terraform creates those exact names.
-
-## Recorded target values
-
-| Value | Recorded value |
+| Checkpoint | Verified state |
 | --- | --- |
+| Infrastructure | Cloudflare infrastructure applied successfully for `master` commit `fc81f4e272a3fba2086a1c24b40d7cc15d291c73` |
+| Staging | Deploy and Check deployment passed; `https://booklet-staging.uniwares.co.uk` is operational |
+| Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
+| Recovery | Staging backup and restore rehearsal passed |
+| Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
+
+This table records the accepted baseline. Use current workflow summaries and host state for later releases.
+
+## Configuration and access
+
+| Value | Current value |
+| --- | --- |
+| Repository | `karpishe-experiments/agentic-poc` |
 | Cloudflare zone | `uniwares.co.uk` |
 | Staging hostname | `booklet-staging.uniwares.co.uk` |
 | Production hostname | `booklet.uniwares.co.uk` |
 | Deployment hostname | `srv1-deploy.uniwares.co.uk` |
-| Atlas project ID | `6a869d84e65675f845fa22eb` |
-| Atlas cluster | `kids-booklet` in Ireland (`eu-west-1`) |
+| Atlas project | `6a869d84e65675f845fa22eb` |
+| Atlas cluster | `kids-booklet`, Ireland (`eu-west-1`) |
 | Staging database | `kids_booklet` |
 | Production database | `kids_booklet_prod` |
 
-This is the first deployment. Setup initializes `kids_booklet` and `kids_booklet_prod`; it does not copy data or deployment artifacts from an earlier platform. Cloudflare account and zone IDs are recorded in the reviewed `infra/config/vps.json`.
+Sign in with username `booklet` and that environment's `ACCESS_GATE_PASSWORD`. Host secrets are root-owned files under `/etc/kids-booklet/<environment>/secrets.json`. Do not print, commit, or upload resolved Compose configuration.
 
-## One-time setup
+The VPS is a read-only Git consumer. Do not commit, create or switch branches, rewrite history, or push from it. Runtime state belongs under `/opt/kids-booklet`, `/etc/kids-booklet`, and `/var/lib/kids-booklet`.
 
-Open an administrator session on the VPS and check out the reviewed commit. First collect the non-secret configuration. This preview prompts silently for the temporary Cloudflare token and Atlas API keys, reports current provider state, and prints the candidate file without writing it:
+## Routine release
+
+1. Merge reviewed application changes into `master`.
+2. Require Infrastructure to pass for the exact current `master` commit. It starts automatically only when the merge changes `infra/**`, `deploy/**`, `scripts/deploy/vps-deployment.sh`, or `.github/workflows/infrastructure.yml`. For every other merge, manually run **Infrastructure** from `master` with `apply=true`.
+3. Open and merge `master` into `_staging`. The merge starts Deploy.
+4. Require Deploy and Check deployment to pass for staging. Verify the browser flow when user behavior changed.
+5. Open and merge the same verified `master` into `_prod`.
+6. Require Deploy and Check deployment to pass for production.
+
+Deploy rejects a target branch that does not contain current `master`, or when Infrastructure did not succeed for that exact commit. It publishes `staging-<full-sha>` or `prod-<full-sha>`, verifies anonymous GHCR access, and deploys the immutable digest. The short environment tag advances only after success.
+
+For a manual environment workflow, open **Actions → workflow name → Run workflow**, select `_staging` or `_prod`, and select the matching environment. For a manual Infrastructure run, select `master` and set `apply=true`. Never start another mutating workflow while one is active. Every workflow summary reports its target, outcome, revision, and required next identifier.
+
+## Routine operations
+
+| Need | Action |
+| --- | --- |
+| Verify an environment | Run **Check deployment** on its environment branch |
+| Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; require **Infrastructure** to pass; then release each affected environment |
+| Create a backup | Run **Maintenance** with `action=backup`; retain the exact `backupId` from the summary |
+| Restore | Run **Maintenance** with `action=restore`, the exact `backup_id`, and confirmation `kids_booklet` or `kids_booklet_prod` |
+| Roll back application code | Run **Maintenance** with `action=rollback`; this restores the prior digest and matching non-secret configuration, not the database |
+| Resume an interrupted operation | Inspect host status, then run **Maintenance** with `action=resume` for the recorded environment |
+| Rotate one host secret | Run `bash scripts/deploy/vps-deployment.sh --action rotate-secrets --environment <target> --secret-name <name> --config infra/config/vps.json --apply` |
+| Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
+| Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
+| Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |
+
+Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
+
+## Interruption and recovery
+
+Inspect the journal first:
 
 ```bash
-bash scripts/deploy/vps-deployment.sh --action discover-config --zone example.com --write-config infra/config/vps.json
+sudo /opt/kids-booklet/vps-deployment.sh --action status
 ```
 
-Inspect the candidate and run the same command with `--apply` to write the non-secret configuration locally:
+| Observed state | Safe response |
+| --- | --- |
+| `{"step":"idle"}` | No operation is retained; start the intended workflow |
+| Active detached service | Let it finish; do not start a competing workflow |
+| Failed application operation | Read its workflow summary and host service log, correct the cause, then use **Maintenance → resume** for the same environment |
+| Drain timeout | The old application remains selected; wait for active work to finish before resume |
+| Failed readiness | Inspect the candidate and prior-release checks; the database was not restored automatically |
+| Infrastructure journal retained after its Actions run stopped | Match its request ID and commit to the workflow summary, inspect Terraform state and the failed phase, then use guarded `infra-unlock` |
+| Tunnel unavailable | Use provider-console access and inspect `kids-booklet-tunnel.service` and its protected token file |
+
+Release a stopped infrastructure operation only after the request ID and commit match:
 
 ```bash
-bash scripts/deploy/vps-deployment.sh --action discover-config --zone example.com --write-config infra/config/vps.json --apply
+bash scripts/deploy/vps-deployment.sh \
+  --action infra-unlock \
+  --request-id <recorded-id> \
+  --vps-host srv1-deploy.uniwares.co.uk \
+  --apply
 ```
 
-The configuration must contain three distinct hostnames in the selected zone. Use an Atlas cluster where `kids_booklet` and `kids_booklet_prod` are fresh deployment databases, and keep local development in a separate database. The VPS checkout stays read-only. Terraform copies reviewed source and its provider lock file into a private temporary workspace before initialization or planning. Start a credential session once to silently enter the Cloudflare API token, R2 Terraform Access Key ID and Secret Access Key, Atlas API keys, and temporary GitHub administrator token. Source it into the current SSH shell; preview and apply reuse its in-memory values until SSH logout or the explicit clear command. Session setup disables `errexit`, disables tracing while it reads credentials, and returns to the prompt if preview fails. Clearing restores a previously enabled `errexit` setting. The GitHub token configures repository secrets, variables, environments, branches, protection, and the Actions spending budget. It is not used for `git pull` or saved to the VPS. Setup still prompts for application secrets when each value is needed. For multiline application values, set `DEPLOYMENT_SECRETS_DIR` to a mode-700 directory containing mode-600 `staging.json` and `prod.json` objects with the five required secret names; the serializer preserves newlines, quotes, and dollar signs. Never put values in command arguments or shell history.
+Rerun Infrastructure once and require its summary to report the same commit and success before promotion. Never delete a lock or edit the journal manually.
+
+Backups contain the MongoDB archive, collection inventory, checksums, and referenced assets. Restore accepts only a completed backup marker for the matching environment and database. Partial backup IDs remain reserved. Recovery objects expire after 30 days; current assets do not expire.
+
+## Provider credential session
+
+Provider administration is needed only for infrastructure repair, credential rotation, or rebuilding setup. Load temporary credentials into the current SSH login, verify all providers, perform one operation, and clear them:
 
 ```bash
 source scripts/deploy/vps-deployment.sh --action credential-session
-
-# In the same SSH shell:
 bash scripts/deploy/vps-deployment.sh --action access-check --config infra/config/vps.json
-
-# Only after access-check passes:
-bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json
+# Run the required preview and apply command.
+source scripts/deploy/vps-deployment.sh --action clear-credential-session
 ```
 
-Inspect the preview and resolve any reported failure. Run apply as a separate command:
+`access-check` verifies Cloudflare, R2 Terraform state, Atlas Project Owner, and GitHub administration access without mutation. The R2 Terraform Access Key ID and Secret Access Key are S3-compatible credentials; they are separate from the Cloudflare API token.
 
-```bash
-sudo --preserve-env=CLOUDFLARE_API_TOKEN,TF_VAR_cloudflare_api_token,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GITHUB_ADMIN_TOKEN,GH_TOKEN,ATLAS_PUBLIC_KEY,ATLAS_PRIVATE_KEY,ATLAS_ADMIN_PUBLIC_KEY,ATLAS_ADMIN_PRIVATE_KEY,DEPLOYMENT_SECRETS_DIR bash scripts/deploy/vps-deployment.sh --action setup --config infra/config/vps.json --apply
-```
+## Rebuild setup
 
-Run preview first and inspect its result before executing the apply line. At application-secret prompts, supply OpenAI, an access password of at least 16 characters, and separate R2 credentials restricted to that environment's three buckets. Setup generates the MongoDB URI when it creates the Atlas user. If interrupted after bucket creation, create the environment-scoped R2 credentials in Cloudflare and rerun the same apply; completed resources are reused. For an existing Atlas user, supply its matching URI when prompted.
+Use this section only to rebuild or reconcile the deployment. The canonical entrypoint is `scripts/deploy/vps-deployment.sh`; all actions preview unless `--apply` is present.
 
-`access-check` is read-only and rejects `--apply`. It verifies the active Cloudflare token, Zero Trust Access API, R2 Terraform state credentials, Atlas project/access-list API, and GitHub repository-administration/billing API. It reports every provider failure in one run and returns nonzero after the final probe. Run it after every new credential session and resolve its reported provider scope before setup. Preview discovers Atlas, Cloudflare, R2, host, GitHub configuration, and Terraform state and produces non-mutating plans. Apply can install pinned host tools after host and credential preflight. Setup retains bootstrap state and any newly generated Atlas URI checkpoint under `/var/lib/kids-booklet` until remote state and the root-only Compose override are verified. Repeat setup after interruption; do not delete those files.
+Required host tools are Docker Engine with Compose v2, Git, sudo, jq, Python 3, curl, tar, OpenSSL, OpenSSH, and systemd. Use an x86_64 Ubuntu host with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Complete Cloudflare DNS, R2, and Zero Trust Free-plan enrollment and billing consent before setup.
 
-Successful checkpoints: exact Atlas users and VPS allowlist entry verified; protected R2 state verified; Cloudflare resources applied; root-owned dispatcher and secret overrides installed; Tunnel active; deployment credentials and variables uploaded; zero-dollar Actions overage budget configured. Both application services remain stopped. Setup preserves the VPS firewall: verify tunneled SSH and provider-console access before closing public SSH.
+1. Run `discover-config` in preview with the zone and three hostnames. Repeat with `--apply` only after reviewing the generated non-secret configuration.
+2. Source `credential-session`, then require `access-check` to pass.
+3. Run setup preview, resolve drift, and repeat with `--apply`.
+4. Require exact Atlas users and VPS allowlist, protected R2 state, Cloudflare resources, root-owned dispatcher and secret overrides, active Tunnel, GitHub credentials and variables, and the zero-dollar Actions overage budget.
+5. Run finalize preview and apply. It creates missing environment branches and applies protection where the GitHub plan supports it.
+6. Clear the credential session, then follow the routine release sequence.
 
-Merge the reviewed deployment PR containing `infra/config/vps.json`. Then run `bash scripts/deploy/vps-deployment.sh --action finalize --config infra/config/vps.json` for preview and repeat with `--apply`. Finalize verifies that local configuration equals `master`, creates absent `_staging` and `_prod` branches at that commit, and applies branch protection where the GitHub plan supports it. The repository stays private and workflows do not depend on paid environment protection.
+Setup is additive and resumable. It does not delete resources, copy production data, or roll back automatically. Terraform runs from a private workspace outside the checkout and must not rewrite tracked files.
 
-Wait for the merge's Infrastructure workflow to succeed for the current `master` commit before finalize. Branch creation does not deploy either environment. Update the VPS checkout to the configured `master` commit before finalization. Finalize reuses the temporary GitHub administrator token in the current credential session. Clear credentials when finalization is complete: `source scripts/deploy/vps-deployment.sh --action clear-credential-session`.
-
-## First activation
-
-1. After finalize, confirm Infrastructure succeeded for the current `master`, then merge that exact master into `_staging` or dispatch Deploy on the updated branch. Deploy rejects a target branch that omits current `master` or whose current master commit lacks a successful Infrastructure run. Initialization creates the database defaults and required seed assets directly in R2. The workflow links the image package to this repository and proves an anonymous digest pull before it contacts the VPS. GitHub can deny its repository token permission to change the first package's visibility. If the workflow reports that specific error, open the package settings URL printed by the job, select **Change visibility → Public**, type the package name to confirm, and rerun the failed workflow. This is a one-time package setting; do not store a classic GitHub PAT for it.
-2. Run Check deployment on `_staging`. Rehearse backup and restore using Maintenance before activating production.
-3. Release `_prod` and run Check deployment on `_prod`.
-
-For every manual workflow, select **Actions → workflow → Run workflow**, choose `_staging` or `_prod` as the branch, and select the matching environment. Wait for each run to finish before the next step. Read the job summary for the outcome, target, commit or image, sanitized result, and any identifier required by the next operation. Sign in at the configured HTTPS hostname with username `booklet` and that environment's access password; confirm unauthenticated pages and assets are blocked. Confirm streamed requests, Atlas transactions, R2 access and host restart recovery in staging before production. Pull-request validation selects the suites affected by the changed files and lists that scope in its summary; manually dispatch Validate when you need the complete suite.
-
-For the restore rehearsal, run Maintenance with `action=backup`. Copy the exact `backupId` from the workflow job summary. The summary contains the sanitized completed-operation record; the host retains the same record under `/var/lib/kids-booklet/operations/`. Run Maintenance with `action=restore`, that exact `backup_id`, and `confirmation=kids_booklet`; finish with Check deployment. Do not activate production until this succeeds. If restore reports a missing Atlas `dropDatabase` privilege, update the VPS checkout and run `bash scripts/deploy/vps-deployment.sh --action atlas-reconcile --config infra/config/vps.json` for preview, then repeat with `--apply`; it upgrades only the affected environment users from `readWrite` to database-scoped `readWrite` plus `dbAdmin`. Resume the retained restore operation after that update.
-
-## Routine workflows
-
-| Need | Workflow and inputs |
-| --- | --- |
-| Application release | Deploy on `_staging` or `_prod`; matching target |
-| Cloudflare or host configuration | Infrastructure on `master`; preview by manual dispatch, apply by merge or explicit input. Successful apply installs the reviewed script, Compose files, and non-secret configuration under the same host lock. Deploy each affected environment branch afterward to apply changed Compose values to its running container |
-| Read-only readiness | Check deployment on the environment branch |
-| Backup | Maintenance → backup |
-| Restore | Maintenance → restore; exact backup ID and `kids_booklet` or `kids_booklet_prod` |
-| Previous release | Maintenance → rollback |
-| Interrupted application operation | Inspect it with `sudo /opt/kids-booklet/vps-deployment.sh --action status`, then run Maintenance → resume for the original environment |
-| First activation detects an invalid `ACCESS_GATE_PASSWORD` | Update the issue-branch checkout. Run `sudo bash scripts/deploy/vps-deployment.sh --action repair-first-activation-secrets --environment <target> --secret-name ACCESS_GATE_PASSWORD --generate-password --config infra/config/vps.json --apply` to generate, display once, and store a strong password. Omit `--generate-password` to enter one; invalid input is re-prompted immediately. If the first deployment was interrupted, then run Maintenance → resume. Before the first deployment, the command repairs the host-only value without starting an operation. |
-| Rotate host secrets | Run `bash scripts/deploy/vps-deployment.sh --action rotate-secrets --environment <target> --secret-name <name> --config infra/config/vps.json --apply` to change one field, or omit `--secret-name` to replace all five; it validates each entry immediately, stages values over pinned Tunnel SSH, and queues Maintenance |
-| Reset staging | Reset staging on `_staging`; type `kids_booklet` |
-
-Images use `staging-<full-sha>` or `prod-<full-sha>`. Deployment uses the digest. The short environment alias advances only after success. Host operations run in detached systemd services and retain a journal on failure. Do not remove a lock just because a workflow disconnected.
-
-## Recovery
-
-| Failure | Safe action |
-| --- | --- |
-| Drain timeout | Old application continues; inspect active work, then resume after it completes |
-| New readiness fails | Previous image starts and is checked; database is not automatically restored |
-| Interrupted restore | Keep maintenance enabled; resume retries the recorded backup and confirmation |
-| Failed backup ID | Use a new ID; reserved/partial IDs cannot be reused |
-| Infrastructure apply fails | Read the request ID from the workflow summary. Verify that Actions run has stopped, then run `sudo /opt/kids-booklet/vps-deployment.sh --action status` and require an `infrastructure` journal with the same request ID and commit. Inspect Terraform state and the failed phase. If its only error is that one of the six exact application R2 buckets is outside state after an interrupted first apply, rerun Infrastructure; preview reports each pending adoption and apply snapshots then imports only its exact bucket. For any other resource, do not import it automatically. After proving the failed run stopped and recording whether apply started, an administrator may release only that journal with `bash scripts/deploy/vps-deployment.sh --action infra-unlock --request-id <recorded-id> --vps-host <deploy-host> --apply`; rerun Infrastructure once and require its summary to report the same commit and success before promotion. |
-| Lost Tunnel | Use provider console; inspect `kids-booklet-tunnel.service` and protected token file |
-
-Recovery backups contain verified database and asset snapshots. Every operation journal records its image digest, configuration hash, prior release, current backup ID, and prior-attempt backup history. Recovery objects are locked for 30 days; assets have no expiry. Each resumed non-restore attempt uses a new reserved backup ID while retaining earlier recovery points. Resume never treats a partially restored database as safe merely because an old image starts.
-
-See [deployment contracts](contracts.md) for ownership, secrets, validation, and current limitations. Repository tests remain separate from the live acceptance checks above.
+See [deployment contracts](contracts.md) for ownership, secrets, security boundaries, cost limits, and validation requirements.
