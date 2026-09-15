@@ -38,7 +38,7 @@ usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, resume, credential-session,
+         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -96,7 +96,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -926,7 +926,7 @@ discover_configuration() {
   fi
 }
 plan_atlas_configuration() {
-  local project cluster outbound_ip environment database username srv access_action user_action
+  local project cluster outbound_ip environment database username srv access_action user_action roles
   project="$(jq -r .atlas_project_id "$CONFIG_FILE")"; cluster="$(jq -r .atlas_cluster_name "$CONFIG_FILE")"
   outbound_ip="$(curl -fsS --max-time 15 https://api.ipify.org)"
   [[ "$outbound_ip" =~ ^[0-9a-fA-F:.]+$ ]] || die 'Could not verify the VPS outbound IP'
@@ -944,9 +944,14 @@ plan_atlas_configuration() {
     username="kids_booklet_$environment"
     atlas_request GET "groups/$project/databaseUsers?itemsPerPage=100"
     if jq -e --arg username "$username" '.results[]? | select(.username==$username and .databaseName=="admin")' "$ATLAS_RESPONSE" >/dev/null; then
-      jq -e --arg username "$username" --arg database "$database" --arg cluster "$cluster" '.results[] | select(.username==$username and .databaseName=="admin") | ([.roles[] | select(.roleName=="readWrite" and .databaseName==$database)] | length)==1 and ([.roles[] | select(.databaseName!=$database or .roleName!="readWrite")] | length)==0 and ([.scopes[]? | select(.type=="CLUSTER" and .name==$cluster)] | length)==1' "$ATLAS_RESPONSE" >/dev/null || die "$environment Atlas user exists with incompatible scope or roles"
+      jq -e --arg username "$username" --arg cluster "$cluster" '.results[] | select(.username==$username and .databaseName=="admin") | ([.scopes[]?] | length)==1 and ([.scopes[]? | select(.type=="CLUSTER" and .name==$cluster)] | length)==1' "$ATLAS_RESPONSE" >/dev/null || die "$environment Atlas user exists with incompatible cluster scope"
+      roles="$(jq -r --arg username "$username" --arg database "$database" '.results[] | select(.username==$username and .databaseName=="admin") | if ([.roles[]? | select(.databaseName!=$database or (.collectionName? != null))] | length)>0 then "incompatible" else ([.roles[]?.roleName] | sort | join(",")) end' "$ATLAS_RESPONSE")"
+      case "$roles" in
+        dbAdmin,readWrite) user_action=exists;;
+        readWrite) user_action=update;;
+        *) die "$environment Atlas user exists with incompatible database roles";;
+      esac
       if [[ -f "$STATE/atlas-$environment-uri.pending" ]]; then GENERATED_MONGODB_URI[$environment]="$(<"$STATE/atlas-$environment-uri.pending")"; fi
-      user_action=exists
     else user_action=create; fi
     jq --arg environment "$environment" --arg database "$database" --arg username "$username" --arg action "$user_action" '.users[$environment]={database:$database,username:$username,action:$action}' "$ATLAS_PLAN_FILE" > "$TEMP_DIR/atlas-plan.next.json"
     mv "$TEMP_DIR/atlas-plan.next.json" "$ATLAS_PLAN_FILE"
@@ -957,7 +962,11 @@ report_atlas_plan() {
   [[ "$(jq -r .access_action "$ATLAS_PLAN_FILE")" == exists ]] && printf 'exists: exact VPS Atlas access-list entry\n' || printf 'would create: exact VPS Atlas access-list entry\n'
   for environment in staging prod; do
     action="$(jq -r --arg environment "$environment" '.users[$environment].action' "$ATLAS_PLAN_FILE")"
-    [[ "$action" == exists ]] && printf 'exists: %s Atlas database user with exact scope\n' "$environment" || printf 'would create: %s Atlas database user\n' "$environment"
+    case "$action" in
+      exists) printf 'exists: %s Atlas database user with recovery scope\n' "$environment";;
+      update) printf 'would update: %s Atlas database user with database recovery privilege\n' "$environment";;
+      create) printf 'would create: %s Atlas database user\n' "$environment";;
+    esac
   done
 }
 apply_atlas_plan() {
@@ -982,7 +991,7 @@ apply_atlas_plan() {
     if [[ "$action" == create ]]; then
       password="$(openssl rand -hex 24)"
       payload="$TEMP_DIR/atlas-user-$environment.json"
-      jq -n --arg username "$username" --arg password "$password" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,password:$password,roles:[{databaseName:$database,roleName:"readWrite"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
+      jq -n --arg username "$username" --arg password "$password" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,password:$password,roles:[{databaseName:$database,roleName:"readWrite"},{databaseName:$database,roleName:"dbAdmin"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
       atlas_request POST "groups/$project/databaseUsers" "$payload"
       GENERATED_MONGODB_URI[$environment]="mongodb+srv://$username:$password@$srv/$database?retryWrites=true&w=majority"
       printf '%s' "${GENERATED_MONGODB_URI[$environment]}" > "$STATE/atlas-$environment-uri.pending"
@@ -990,13 +999,39 @@ apply_atlas_plan() {
       unset password
       printf 'created: %s Atlas database user\n' "$environment"
     else
+      if [[ "$action" == update ]]; then
+        payload="$TEMP_DIR/atlas-user-$environment.json"
+        jq -n --arg username "$username" --arg database "$database" --arg cluster "$cluster" '{databaseName:"admin",username:$username,roles:[{databaseName:$database,roleName:"readWrite"},{databaseName:$database,roleName:"dbAdmin"}],scopes:[{name:$cluster,type:"CLUSTER"}]}' > "$payload"
+        atlas_request PATCH "groups/$project/databaseUsers/admin/$username" "$payload"
+        printf 'updated: %s Atlas database user with database recovery privilege\n' "$environment"
+      else
+        printf 'exists: %s Atlas database user with recovery scope\n' "$environment"
+      fi
       if [[ -f "$STATE/atlas-$environment-uri.pending" ]]; then GENERATED_MONGODB_URI[$environment]="$(<"$STATE/atlas-$environment-uri.pending")"; fi
-      printf 'exists: %s Atlas database user with exact scope\n' "$environment"
     fi
   done
 }
 configure_atlas() {
   if [[ "$APPLY" == true ]]; then apply_atlas_plan; else plan_atlas_configuration; report_atlas_plan; fi
+}
+reconcile_atlas() {
+  local requested_apply="$APPLY" project environment action
+  load_config; need_command curl; need_command jq
+  load_atlas_admin_credentials
+  project="$(jq -r .atlas_project_id "$CONFIG_FILE")"
+  verify_atlas_admin_access "$project"
+  plan_atlas_configuration
+  [[ "$(jq -r .access_action "$ATLAS_PLAN_FILE")" == exists ]] || die 'Atlas reconciliation requires the existing exact VPS access-list entry; run setup instead'
+  for environment in staging prod; do
+    action="$(jq -r --arg environment "$environment" '.users[$environment].action' "$ATLAS_PLAN_FILE")"
+    [[ "$action" == exists || "$action" == update ]] || die "Atlas reconciliation cannot create the missing $environment user; run setup instead"
+  done
+  if [[ "$requested_apply" == true ]]; then
+    APPLY=false; report_atlas_plan
+    APPLY=true; apply_atlas_plan
+  else
+    report_atlas_plan
+  fi
 }
 assert_no_unmanaged_cloudflare_resources() {
   local account="$TF_VAR_cloudflare_account_id" zone="$TF_VAR_cloudflare_zone_id" name environment kind hostname phase
@@ -1629,6 +1664,7 @@ main() {
         host_call
       fi;;
     setup) setup_host;;
+    atlas-reconcile) reconcile_atlas;;
     finalize) finalize_repository;;
     rotate-secrets)
       if [[ -n "${GITHUB_ACTIONS:-}" ]]; then

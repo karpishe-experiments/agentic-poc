@@ -71,6 +71,30 @@ apply_atlas_plan() { printf apply; }
 APPLY=false; configure_atlas
 APPLY=true; configure_atlas' _ "$script")"
 test "$atlas_handoff_check" = planreportapply
+if command -v jq >/dev/null; then
+atlas_recovery_role_check="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+TEMP_DIR="$(mktemp -d)"; STATE="$TEMP_DIR/state"; mkdir -p "$STATE"
+CONFIG_FILE="$TEMP_DIR/config.json"
+jq -n "{atlas_project_id:\"aaaaaaaaaaaaaaaaaaaaaaaa\",atlas_cluster_name:\"kids-booklet\"}" > "$CONFIG_FILE"
+curl() { printf "51.195.218.185"; }
+atlas_request() {
+  case "$2" in
+    *accessList*) printf "{\"results\":[{\"ipAddress\":\"51.195.218.185\"}]}" ;;
+    *clusters/*) printf "{\"connectionStrings\":{\"standardSrv\":\"mongodb+srv://kids-booklet.example\"}}" ;;
+    *databaseUsers*) printf "{\"results\":[{\"username\":\"kids_booklet_staging\",\"databaseName\":\"admin\",\"roles\":[{\"databaseName\":\"kids_booklet\",\"roleName\":\"readWrite\"}],\"scopes\":[{\"type\":\"CLUSTER\",\"name\":\"kids-booklet\"}]},{\"username\":\"kids_booklet_prod\",\"databaseName\":\"admin\",\"roles\":[{\"databaseName\":\"kids_booklet_prod\",\"roleName\":\"readWrite\"}],\"scopes\":[{\"type\":\"CLUSTER\",\"name\":\"kids-booklet\"}]}]}" ;;
+    *) return 1 ;;
+  esac > "$TEMP_DIR/atlas-response.json"
+  ATLAS_RESPONSE="$TEMP_DIR/atlas-response.json"
+}
+plan_atlas_configuration
+jq -e ".access_action == \"exists\" and .users.staging.action == \"update\" and .users.prod.action == \"update\"" "$ATLAS_PLAN_FILE" >/dev/null
+rm -rf "$TEMP_DIR"' _ "$script")"
+test -z "$atlas_recovery_role_check"
+grep -q 'roleName:"dbAdmin"' "$script"
+grep -q 'atlas_request PATCH "groups/\$project/databaseUsers/admin/\$username"' "$script"
+else
+  printf '%s\n' 'skipped: Atlas recovery-role fixture requires jq'
+fi
 backend_root="$(mktemp -d)"
 printf 'terraform { backend "s3" {} }\n' > "$backend_root/backend.generated.tf"
 backend_repair_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf")"
