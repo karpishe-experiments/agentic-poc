@@ -1518,9 +1518,9 @@ PY
   fi
   if ! command -v cloudflared >/dev/null || ! cloudflared --version | grep -q '2025.8.1'; then
     version=2025.8.1
-    curl -fsSL "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" -o "$TEMP_DIR/release.json"
+    curl -fsSL --retry 4 --retry-all-errors --retry-delay 2 "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" -o "$TEMP_DIR/release.json"
     expected="$(jq -er '.assets[] | select(.name=="cloudflared-linux-amd64") | .digest | select(startswith("sha256:"))' "$TEMP_DIR/release.json")"
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64" -o "$TEMP_DIR/cloudflared"
+    curl -fsSL --retry 4 --retry-all-errors --retry-delay 2 "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64" -o "$TEMP_DIR/cloudflared"
     printf '%s  %s\n' "${expected#sha256:}" "$TEMP_DIR/cloudflared" | sha256sum -c -
     install -m 755 "$TEMP_DIR/cloudflared" "$TEMP_DIR/bin/cloudflared"
   fi

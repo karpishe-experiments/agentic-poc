@@ -2,6 +2,7 @@
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
 workflow=.github/workflows/vps-operation.yml
+vps_access=.github/actions/vps-access/action.yml
 if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
   echo 'Terraform executes inside the read-only repository checkout' >&2
   exit 1
@@ -10,6 +11,8 @@ bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
 grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
 grep -q "grep -E '.*result" "$workflow"
+test "$(grep -Fc -- '--retry 4 --retry-all-errors --retry-delay 2' "$vps_access")" = 2
+grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
 done
