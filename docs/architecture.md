@@ -41,8 +41,8 @@ The root responsibilities are:
 Every booklet has eight ordered artifact records:
 
 ```text
-Audience Profile â†’ Story Plan â†’ Visual Style â†’ Visual Bible
-â†’ Booklet Specification â†’ Page Plan â†’ Final Pages â†’ PDF Export
+Audience Profile → Story Plan → Visual Style → Visual Bible
+→ Booklet Specification → Page Plan → Final Pages → PDF Export
 ```
 
 `BOOKLET_ARTIFACT_TYPES` in `lib/contracts/domain.ts` defines this order. `ArtifactService` records explicit upstream-version dependencies and derives the current stage as the first artifact that is not approved. Revising an upstream artifact creates a new immutable version and can mark dependent work for review.
@@ -72,8 +72,8 @@ Before a material call, `AgentResolver` reads one complete active MongoDB transa
 Specialists cannot write workflow state, issue approvals, access arbitrary tools, or create durable entity/page IDs. Their result is transient until an application service validates, materializes, and persists it. This is an application-controlled handoff, not a free-form SDK handoff:
 
 ```text
-manager selection â†’ route validation â†’ specialist execution
-â†’ output validation â†’ application persistence â†’ creator decision
+manager selection → route validation → specialist execution
+→ output validation → application persistence → creator decision
 ```
 
 `MODEL_RUNTIME=fake` uses deterministic routing and each registered skill's `run` function for tests and local no-cost work while still resolving persisted versions. `MODEL_RUNTIME=real` uses the OpenAI manager and generic specialist adapters. Manager and specialist calls are recorded separately with provider/model, status, latency, usage, request/trace IDs, cost, resolved definition/version IDs, and immutable effective-configuration snapshots. `ChatService` passes its single preflighted active set to both the manager turn and automatic Story Plan quality review, so an in-flight activation applies only to a later turn. Direct quality review resolves a fresh persisted quality specialist immediately before its call.
