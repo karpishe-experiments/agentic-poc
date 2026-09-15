@@ -417,12 +417,14 @@ host_dispatch() {
   if [[ "$ACTION" == repair-first-activation-secrets ]]; then
     [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; exit 0; }
     exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
-    [[ -f "$STATE/operation.json" ]] || die 'No interrupted operation recorded'
-    local failed_id
-    failed_id="$(jq -r .requestId "$STATE/operation.json")"
-    jq -e --arg environment "$ENVIRONMENT" '.action=="deploy" and .environment==$environment and .step=="initializing"' "$STATE/operation.json" >/dev/null || die 'Secret repair is limited to a failed first deployment at initialization'
+    local failed_id='' interrupted=false
     [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || die 'Secret repair is unavailable after a successful release'
-    ! systemctl is-active --quiet "kids-booklet-operation-$failed_id.service" || die 'Previous service remains active'
+    if [[ -f "$STATE/operation.json" ]]; then
+      interrupted=true
+      failed_id="$(jq -r .requestId "$STATE/operation.json")"
+      jq -e --arg environment "$ENVIRONMENT" '.action=="deploy" and .environment==$environment and .step=="initializing"' "$STATE/operation.json" >/dev/null || die 'Secret repair is limited to a failed first deployment at initialization'
+      ! systemctl is-active --quiet "kids-booklet-operation-$failed_id.service" || die 'Previous service remains active'
+    fi
     [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Application container remains active'
     private_temp
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
@@ -435,7 +437,11 @@ host_dispatch() {
     fi
     application_secret_override_is_valid "$TEMP_DIR/merged-secrets.json" || die 'Secret override does not satisfy the application secret contract'
     install -m 600 "$TEMP_DIR/merged-secrets.json" "$SECRETS/$ENVIRONMENT/secrets.json"
-    printf 'updated: %s failed first-activation secrets; operation remains ready for explicit resume\n' "$ENVIRONMENT"
+    if [[ "$interrupted" == true ]]; then
+      printf 'updated: %s failed first-activation secrets; operation remains ready for explicit resume\n' "$ENVIRONMENT"
+    else
+      printf 'updated: %s pre-activation secrets\n' "$ENVIRONMENT"
+    fi
     exit 0
   fi
   if [[ "$ACTION" == sync-host ]]; then
