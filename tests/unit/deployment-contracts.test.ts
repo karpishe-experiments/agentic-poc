@@ -13,10 +13,14 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
-  it("publishes a public GHCR package before the anonymous image check", () => {
+  it("links GHCR to the repository and accepts only an anonymously readable image", () => {
     const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
+    expect(workflow).toContain("org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY");
     expect(workflow.indexOf("visibility=public")).toBeGreaterThan(0);
-    expect(workflow.indexOf("visibility=public")).toBeLessThan(workflow.indexOf("DOCKER_CONFIG="));
+    expect(workflow.indexOf("DOCKER_CONFIG=")).toBeLessThan(workflow.indexOf("visibility=public"));
+    expect(workflow).toContain("GHCR package is private and GITHUB_TOKEN cannot change its visibility");
+    expect(workflow).toContain("packages/container/$package/settings");
+    expect(workflow).not.toContain("packages/container/package/$package/settings");
   });
 
   it("preserves safe relative asset keys and rejects traversal", () => {

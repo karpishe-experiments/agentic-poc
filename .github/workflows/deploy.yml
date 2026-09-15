@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment: {description: Target environment, type: choice, options: [staging, prod], required: true}
-permissions: {contents: read, packages: write}
+permissions: {actions: read, contents: read, packages: write}
 concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
   deploy:
@@ -18,8 +18,22 @@ jobs:
       - name: Verify current branch commit
         shell: bash
         run: |
+          set -euo pipefail
           test "$GITHUB_REF_NAME" = "_$TARGET"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
+          master_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)"
+          compare_status="$(gh api "repos/$GITHUB_REPOSITORY/compare/$master_sha...$GITHUB_SHA" --jq .status)"
+          [[ "$compare_status" == ahead || "$compare_status" == identical ]] || {
+            echo "The target branch does not contain current master $master_sha" >&2
+            exit 1
+          }
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/infrastructure.yml/runs?branch=master&status=success&head_sha=$master_sha&per_page=1" \
+            --jq ".workflow_runs | any(.head_sha == \"$master_sha\")" | grep -Fx true >/dev/null || {
+              echo "Infrastructure has not succeeded for current master $master_sha" >&2
+              exit 1
+            }
+          printf 'VERIFIED_MASTER_SHA=%s\n' "$master_sha" >> "$GITHUB_ENV"
+          printf 'verified: target contains infrastructure-verified master %s\n' "$master_sha"
       - uses: docker/login-action@v3
         with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ github.token }}'}
       - uses: docker/setup-buildx-action@v3
@@ -35,7 +49,7 @@ jobs:
             digest="$(awk '$1=="Digest:" {print $2; exit}' "$RUNNER_TEMP/manifest")"
           else
             grep -Eqi 'manifest unknown|not found' "$RUNNER_TEMP/manifest-error" || { cat "$RUNNER_TEMP/manifest-error"; exit 1; }
-            docker buildx build --push --tag "$image:$tag" --label "org.opencontainers.image.revision=$GITHUB_SHA" --metadata-file "$RUNNER_TEMP/image.json" .
+            docker buildx build --push --tag "$image:$tag" --label "org.opencontainers.image.revision=$GITHUB_SHA" --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --metadata-file "$RUNNER_TEMP/image.json" .
             digest="$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/image.json")"
           fi
           [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
@@ -43,27 +57,55 @@ jobs:
           jq -e --arg sha "$GITHUB_SHA" '.config.Labels["org.opencontainers.image.revision"]==$sha' "$RUNNER_TEMP/image-config.json" >/dev/null || { echo 'Image revision label does not match the immutable commit tag' >&2; exit 1; }
           owner="${GITHUB_REPOSITORY%%/*}"
           package="$(jq -rn --arg value "${GITHUB_REPOSITORY#*/}" '$value|@uri')"
-          gh api --method PATCH "orgs/$owner/packages/container/$package" -f visibility=public >/dev/null
           printf 'digest=%s@%s\n' "$image" "$digest" >> "$GITHUB_OUTPUT"
           printf 'image=%s\n' "$image" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/anonymous-docker"
-          DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null
+          if ! DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null 2>&1; then
+            if ! gh api --method PATCH "orgs/$owner/packages/container/$package" -f visibility=public >/dev/null 2>&1; then
+              echo "GHCR package is private and GITHUB_TOKEN cannot change its visibility. Set https://github.com/orgs/$owner/packages/container/$package/settings to Public, then rerun this workflow." >&2
+              exit 1
+            fi
+            DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null
+          fi
       - uses: ./.github/actions/vps-access
         with:
           ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
       - name: Release and verify
+        id: release
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           VPS_HOST: ${{ vars.VPS_HOST }}
           DIGEST: ${{ steps.image.outputs.digest }}
         run: |
+          set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
-          bash scripts/deploy/vps-deployment.sh --action deploy --environment "$TARGET" --image-digest "$DIGEST" --commit "$GITHUB_SHA" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --vps-host "$VPS_HOST" --apply
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$VERIFIED_MASTER_SHA"
+          bash scripts/deploy/vps-deployment.sh --action deploy --environment "$TARGET" --image-digest "$DIGEST" --commit "$GITHUB_SHA" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --vps-host "$VPS_HOST" --apply 2>&1 | tee "$RUNNER_TEMP/deploy-output.txt"
       - name: Publish successful environment alias
         env: {DIGEST: '${{ steps.image.outputs.digest }}', IMAGE: '${{ steps.image.outputs.image }}'}
         run: docker buildx imagetools create --tag "$IMAGE:$TARGET" "$DIGEST"
+      - name: Publish deployment summary
+        if: always()
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          {
+            printf "## Deployment result\n\n"
+            printf "| Environment | Commit | Image digest | Outcome |\n"
+            printf "| --- | --- | --- | --- |\n"
+            printf "| \`%s\` | \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$GITHUB_SHA" "${DIGEST:-unavailable}" "$OUTCOME"
+            if [[ -s "$RUNNER_TEMP/deploy-output.txt" ]]; then
+              printf "\`\`\`text\n"
+              grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/deploy-output.txt" || true
+              printf "\`\`\`\n"
+            else
+              printf "No sanitized release result was produced. Inspect the failed step logs.\n"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove SSH material
         if: always()
         run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
