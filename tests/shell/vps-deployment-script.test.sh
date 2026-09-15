@@ -10,7 +10,8 @@ fi
 bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
 grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
-grep -q "grep -E '.*result" "$workflow"
+grep -q 'grep -E' "$workflow"
+grep -q 'result): ' "$workflow"
 test "$(grep -Fc -- '--retry 4 --retry-all-errors --retry-delay 2' "$vps_access")" = 2
 grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do

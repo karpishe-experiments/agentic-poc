@@ -92,6 +92,7 @@ CHILD
     jq -e '.backupId!="staging-prior" and (.backupHistory | index("staging-prior"))' "$STATE/operation.json" >/dev/null;;
   operation-result)
     jq -n '{requestId:"test",action:"backup",environment:"staging",backupId:"staging-backup",step:"complete"}' > "$STATE/operations/test.json"
+    ACTION=backup
     systemctl() { printf 'inactive\n'; }
     result="$(wait_operation)"
     [[ "$result" == *'updated: backup staging'* ]]
