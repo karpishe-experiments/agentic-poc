@@ -1040,14 +1040,16 @@ reconcile_atlas() {
   fi
 }
 assert_no_unmanaged_cloudflare_resources() {
-  local account="$TF_VAR_cloudflare_account_id" zone="$TF_VAR_cloudflare_zone_id" name environment kind hostname phase
-  for environment in staging prod; do
-    for kind in assets diagnostics recovery; do
-      name="kids-booklet-$environment-$kind"
-      cloudflare_get "accounts/$account/r2/buckets/$name"
-      [[ "$CF_STATUS" == 404 ]] || die "R2 bucket $name exists without Terraform state; import or choose a clean project"
+  local allow_r2_adoption="${1:-false}" account="$TF_VAR_cloudflare_account_id" zone="$TF_VAR_cloudflare_zone_id" name environment kind hostname phase
+  if [[ "$allow_r2_adoption" == false ]]; then
+    for environment in staging prod; do
+      for kind in assets diagnostics recovery; do
+        name="kids-booklet-$environment-$kind"
+        cloudflare_get "accounts/$account/r2/buckets/$name"
+        [[ "$CF_STATUS" == 404 ]] || die "R2 bucket $name exists without Terraform state; import or choose a clean project"
+      done
     done
-  done
+  fi
   cloudflare_get "accounts/$account/cfd_tunnel?name=kids-booklet-vps&is_deleted=false"
   [[ "$CF_STATUS" == 200 && "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || die 'A kids-booklet Tunnel exists without Terraform state; verify ownership and import it'
   for hostname in "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname"; do
@@ -1061,10 +1063,48 @@ assert_no_unmanaged_cloudflare_resources() {
     [[ "$CF_STATUS" == 404 ]] || die "The Cloudflare $phase entrypoint already exists; verify all rules and import it before setup"
   done
 }
+r2_bucket_address() {
+  local name="$1"
+  printf 'cloudflare_r2_bucket.bucket["%s"]' "$name"
+}
+adopt_existing_r2_buckets() {
+  # A failed first apply can leave a bucket created remotely but absent from the
+  # application state. Only the six fixed project bucket addresses are eligible
+  # for state adoption; every other Cloudflare resource remains a hard drift.
+  local directory="$1" state address name environment kind imported=false
+  state="$(terraform -chdir="$directory" state list 2>/dev/null || true)"
+  for environment in staging prod; do
+    for kind in assets diagnostics recovery; do
+      name="kids-booklet-$environment-$kind"
+      address="$(r2_bucket_address "$name")"
+      cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$name"
+      if grep -Fqx "$address" <<< "$state"; then
+        [[ "$CF_STATUS" == 200 ]] || die "Terraform tracks missing R2 bucket $name"
+      elif [[ "$CF_STATUS" == 404 ]]; then
+        :
+      elif [[ "$CF_STATUS" == 200 ]]; then
+        if [[ "$APPLY" == false ]]; then
+          printf 'would update: adopt existing R2 bucket %s into Terraform state\n' "$name"
+        else
+          if [[ "$imported" == false ]]; then
+            r2_state_snapshot "$directory" infrastructure-before-r2-adoption
+            imported=true
+          fi
+          terraform -chdir="$directory" import -input=false "$address" "$TF_VAR_cloudflare_account_id/$name/default"
+          terraform -chdir="$directory" state show "$address" >/dev/null || die "Terraform did not adopt R2 bucket $name"
+          printf 'updated: adopted existing R2 bucket %s into Terraform state\n' "$name"
+          state+=$'\n'"$address"
+        fi
+      else
+        die "Cloudflare returned HTTP $CF_STATUS while checking R2 bucket $name"
+      fi
+    done
+  done
+}
 verify_cloudflare_ownership() {
   local directory="$1" state phase address expected environment kind name hostname key present
   state="$(terraform -chdir="$directory" state list 2>/dev/null || true)"
-  if [[ -z "$state" ]]; then assert_no_unmanaged_cloudflare_resources; return; fi
+  if [[ -z "$state" ]]; then assert_no_unmanaged_cloudflare_resources true; return; fi
   for environment in staging prod; do
     for kind in assets diagnostics recovery; do
       name="kids-booklet-$environment-$kind"; address="cloudflare_r2_bucket.bucket[\"$name\"]"
@@ -1212,6 +1252,7 @@ terraform_operation() {
   cp "$REPO_ROOT/infra/terraform/.terraform.lock.hcl" "$directory/"
   chmod 600 "$directory"/*
   backend_init "$directory" infrastructure.tfstate
+  adopt_existing_r2_buckets "$directory"
   verify_cloudflare_ownership "$directory"
   terraform -chdir="$directory" plan -input=false -out="$TEMP_DIR/plan"
   terraform -chdir="$directory" show -json "$TEMP_DIR/plan" > "$TEMP_DIR/plan.json"

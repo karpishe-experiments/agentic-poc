@@ -108,7 +108,7 @@ Images use `staging-<full-sha>` or `prod-<full-sha>`. Deployment uses the digest
 | New readiness fails | Previous image starts and is checked; database is not automatically restored |
 | Interrupted restore | Keep maintenance enabled; resume retries the recorded backup and confirmation |
 | Failed backup ID | Use a new ID; reserved/partial IDs cannot be reused |
-| Infrastructure apply fails | Verify its Actions run stopped and inspect Terraform state; an administrator may release its exact journal with `--action infra-unlock --request-id <recorded-id> --vps-host <deploy-host> --apply` before a new plan |
+| Infrastructure apply fails | Verify its Actions run stopped and inspect Terraform state. If its only error is that one of the six exact application R2 buckets is outside state after an interrupted first apply, rerun Infrastructure; preview reports each pending adoption and apply snapshots then imports only its exact bucket. For any other resource, do not import it automatically. An administrator may release its exact journal with `--action infra-unlock --request-id <recorded-id> --vps-host <deploy-host> --apply` before a new plan |
 | Lost Tunnel | Use provider console; inspect `kids-booklet-tunnel.service` and protected token file |
 
 Recovery backups contain verified database and asset snapshots. Every operation journal records its image digest, configuration hash, prior release, current backup ID, and prior-attempt backup history. Recovery objects are locked for 30 days; assets have no expiry. Each resumed non-restore attempt uses a new reserved backup ID while retaining earlier recovery points. Resume never treats a partially restored database as safe merely because an old image starts.

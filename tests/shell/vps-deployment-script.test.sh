@@ -193,6 +193,39 @@ set -e
 test "$r2_error_status" -ne 0
 grep -q 'R2 Terraform state credential check failed (HTTP 400; InvalidAccessKeyId: Access key is invalid)' <<< "$r2_error_output"
 if grep -q '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' <<< "$r2_error_output"; then echo 'R2 secret leaked through access-check error' >&2; exit 1; fi
+adoption_preview="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+terraform() { [[ "$*" == *"state list"* ]] && return 0; }
+cloudflare_get() { CF_STATUS=200; }
+adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
+test "$(grep -c "would update: adopt existing R2 bucket" <<< "$adoption_preview")" = 6
+grep -q 'kids-booklet-staging-assets' <<< "$adoption_preview"
+grep -q 'kids-booklet-prod-recovery' <<< "$adoption_preview"
+adoption_apply="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+APPLY=true; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+r2_state_snapshot() { printf "snapshot\\n"; }
+terraform() {
+  if [[ "$2" == state && ( "$3" == list || "$3" == show ) ]]; then return 0; fi
+  if [[ "$2" == import ]]; then printf "import: %s\\n" "$*"; return 0; fi
+  return 1
+}
+cloudflare_get() { CF_STATUS=200; }
+adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
+test "$(grep -c '^updated: adopted existing R2 bucket' <<< "$adoption_apply")" = 6
+test "$(grep -c '^snapshot$' <<< "$adoption_apply")" = 1
+test "$(grep -c '^import:' <<< "$adoption_apply")" = 6
+grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-staging-assets"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-staging-assets/default' <<< "$adoption_apply"
+grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-prod-recovery"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-prod-recovery/default' <<< "$adoption_apply"
+set +e
+adoption_drift_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+terraform() { [[ "$2" == state && "$3" == list ]] && printf "%s\\n" "cloudflare_r2_bucket.bucket[\"kids-booklet-staging-assets\"]"; }
+cloudflare_get() { CF_STATUS=404; }
+adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script" 2>&1)"
+adoption_drift_status=$?
+set -e
+test "$adoption_drift_status" -ne 0
+grep -q 'Terraform tracks missing R2 bucket kids-booklet-staging-assets' <<< "$adoption_drift_output"
 set +e
 access_check_failure_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
 load_config() { :; }

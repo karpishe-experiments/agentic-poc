@@ -46,9 +46,13 @@ masked secret inputs.
 
 The cache and rate-limit resources own their whole zone entrypoint phases.
 Setup and routine plans query those entrypoints and stop if another application
-owns either ruleset or uses the Free rate-rule allowance. Import only after
-verifying ownership and the complete configuration; import alone does not
-preserve unrelated rules.
+owns either ruleset or uses the Free rate-rule allowance. When an interrupted
+first apply leaves one of the six exact `kids-booklet-<environment>-<kind>`
+buckets outside the application state, preview reports the pending state
+adoption. Apply snapshots state, imports only that exact bucket with the
+`default` jurisdiction, then makes a normal destructive-change-checked plan.
+It never imports Tunnel, DNS, Access, ruleset, unrelated, or mismatched bucket
+resources. Import alone does not preserve unrelated rules.
 
 In both roots run `terraform init -backend=false`, `terraform validate`, and
 `terraform test`; run `terraform fmt -check -recursive infra/terraform` from the
