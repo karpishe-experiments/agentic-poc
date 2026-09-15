@@ -13,6 +13,8 @@ grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
 grep -q 'grep -E' "$workflow"
 grep -q 'result): ' "$workflow"
 test "$(grep -Fc -- '--retry 4 --retry-all-errors --retry-delay 2' "$vps_access")" = 2
+grep -Fq 'GH_TOKEN: ${{ github.token }}' "$vps_access"
+grep -Fq -- '--header "Authorization: Bearer $GH_TOKEN"' "$vps_access"
 grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"

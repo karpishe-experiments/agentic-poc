@@ -8,6 +8,7 @@ runs:
   steps:
     - shell: bash
       env:
+        GH_TOKEN: ${{ github.token }}
         SSH_KEY: ${{ inputs.ssh-key }}
         HOST_KEY: ${{ inputs.host-key }}
       run: |
@@ -17,7 +18,7 @@ runs:
         printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/id_ed25519"
         printf '%s\n' "$HOST_KEY" > "$HOME/.ssh/known_hosts"
         version=2025.8.1
-        curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" > "$RUNNER_TEMP/cloudflared/release.json"
+        curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 --header "Authorization: Bearer $GH_TOKEN" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/$version" > "$RUNNER_TEMP/cloudflared/release.json"
         digest="$(jq -er '.assets[] | select(.name=="cloudflared-linux-amd64") | .digest | select(startswith("sha256:"))' "$RUNNER_TEMP/cloudflared/release.json")"
         curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64" > "$RUNNER_TEMP/cloudflared/cloudflared"
         printf '%s  %s\n' "${digest#sha256:}" "$RUNNER_TEMP/cloudflared/cloudflared" | sha256sum -c -
