@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+workflow=.github/workflows/vps-operation.yml
+vps_access=.github/actions/vps-access/action.yml
+if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
+  echo 'Terraform executes inside the read-only repository checkout' >&2
+  exit 1
+fi
 bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
+grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
+grep -q 'grep -E' "$workflow"
+grep -q 'result): ' "$workflow"
+test "$(grep -Fc -- '--retry 4 --retry-all-errors --retry-delay 2' "$vps_access")" = 2
+grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
+for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
+  grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
+done
+grep -q 'actions: read' .github/workflows/deploy.yml
+grep -q 'actions/workflows/infrastructure.yml/runs' .github/workflows/deploy.yml
+grep -q 'infrastructure-verified master' .github/workflows/deploy.yml
+grep -q 'VERIFIED_MASTER_SHA' .github/workflows/deploy.yml
+grep -q 'REQUEST_ID:.*github.run_id' .github/workflows/infrastructure.yml
+grep -q 'retained infrastructure journal' .github/workflows/infrastructure.yml
+for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
+  grep -q 'uses: ./.github/workflows/vps-operation.yml' "$reusable_caller"
+done
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"
 grep -q 'will_alert:false' "$script"
 grep -q '"\$variables_complete" == true' "$script"
@@ -58,6 +81,30 @@ apply_atlas_plan() { printf apply; }
 APPLY=false; configure_atlas
 APPLY=true; configure_atlas' _ "$script")"
 test "$atlas_handoff_check" = planreportapply
+if command -v jq >/dev/null; then
+atlas_recovery_role_check="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+TEMP_DIR="$(mktemp -d)"; STATE="$TEMP_DIR/state"; mkdir -p "$STATE"
+CONFIG_FILE="$TEMP_DIR/config.json"
+jq -n "{atlas_project_id:\"aaaaaaaaaaaaaaaaaaaaaaaa\",atlas_cluster_name:\"kids-booklet\"}" > "$CONFIG_FILE"
+curl() { printf "51.195.218.185"; }
+atlas_request() {
+  case "$2" in
+    *accessList*) printf "{\"results\":[{\"ipAddress\":\"51.195.218.185\"}]}" ;;
+    *clusters/*) printf "{\"connectionStrings\":{\"standardSrv\":\"mongodb+srv://kids-booklet.example\"}}" ;;
+    *databaseUsers*) printf "{\"results\":[{\"username\":\"kids_booklet_staging\",\"databaseName\":\"admin\",\"roles\":[{\"databaseName\":\"kids_booklet\",\"roleName\":\"readWrite\"}],\"scopes\":[{\"type\":\"CLUSTER\",\"name\":\"kids-booklet\"}]},{\"username\":\"kids_booklet_prod\",\"databaseName\":\"admin\",\"roles\":[{\"databaseName\":\"kids_booklet_prod\",\"roleName\":\"readWrite\"}],\"scopes\":[{\"type\":\"CLUSTER\",\"name\":\"kids-booklet\"}]}]}" ;;
+    *) return 1 ;;
+  esac > "$TEMP_DIR/atlas-response.json"
+  ATLAS_RESPONSE="$TEMP_DIR/atlas-response.json"
+}
+plan_atlas_configuration
+jq -e ".access_action == \"exists\" and .users.staging.action == \"update\" and .users.prod.action == \"update\"" "$ATLAS_PLAN_FILE" >/dev/null
+rm -rf "$TEMP_DIR"' _ "$script")"
+test -z "$atlas_recovery_role_check"
+grep -q 'roleName:"dbAdmin"' "$script"
+grep -q 'atlas_request PATCH "groups/\$project/databaseUsers/admin/\$username"' "$script"
+else
+  printf '%s\n' 'skipped: Atlas recovery-role fixture requires jq'
+fi
 backend_root="$(mktemp -d)"
 printf 'terraform { backend "s3" {} }\n' > "$backend_root/backend.generated.tf"
 backend_repair_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; repair_generated_s3_backend_block "$2"' _ "$script" "$backend_root/backend.generated.tf")"
@@ -152,6 +199,39 @@ set -e
 test "$r2_error_status" -ne 0
 grep -q 'R2 Terraform state credential check failed (HTTP 400; InvalidAccessKeyId: Access key is invalid)' <<< "$r2_error_output"
 if grep -q '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' <<< "$r2_error_output"; then echo 'R2 secret leaked through access-check error' >&2; exit 1; fi
+adoption_preview="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+terraform() { [[ "$*" == *"state list"* ]] && return 0; }
+cloudflare_get() { CF_STATUS=200; }
+adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
+test "$(grep -c "would update: adopt existing R2 bucket" <<< "$adoption_preview")" = 6
+grep -q 'kids-booklet-staging-assets' <<< "$adoption_preview"
+grep -q 'kids-booklet-prod-recovery' <<< "$adoption_preview"
+adoption_apply="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+APPLY=true; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+r2_state_snapshot() { printf "snapshot\\n"; }
+terraform() {
+  if [[ "$2" == state && ( "$3" == list || "$3" == show ) ]]; then return 0; fi
+  if [[ "$2" == import ]]; then printf "import: %s\\n" "$*"; return 0; fi
+  return 1
+}
+cloudflare_get() { CF_STATUS=200; }
+adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
+test "$(grep -c '^updated: adopted existing R2 bucket' <<< "$adoption_apply")" = 6
+test "$(grep -c '^snapshot$' <<< "$adoption_apply")" = 1
+test "$(grep -c '^import:' <<< "$adoption_apply")" = 6
+grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-staging-assets"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-staging-assets/default' <<< "$adoption_apply"
+grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-prod-recovery"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-prod-recovery/default' <<< "$adoption_apply"
+set +e
+adoption_drift_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+terraform() { [[ "$2" == state && "$3" == list ]] && printf "%s\\n" "cloudflare_r2_bucket.bucket[\"kids-booklet-staging-assets\"]"; }
+cloudflare_get() { CF_STATUS=404; }
+adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script" 2>&1)"
+adoption_drift_status=$?
+set -e
+test "$adoption_drift_status" -ne 0
+grep -q 'Terraform tracks missing R2 bucket kids-booklet-staging-assets' <<< "$adoption_drift_output"
 set +e
 access_check_failure_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
 load_config() { :; }
@@ -190,11 +270,65 @@ if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'unset AWS_ACCESS_KEY_ID AWS_SECRET_
   exit 1
 fi
 reject --action check --environment staging --apply
+reject --action repair-first-activation-secrets
+reject --action repair-first-activation-secrets --environment staging --secret-name INVALID
+reject --action status --secret-name ACCESS_GATE_PASSWORD
+reject --action status --generate-password
+reject --action repair-first-activation-secrets --environment staging --secret-name OPENAI_API_KEY --generate-password
+reject --action repair-first-activation-secrets --environment staging --generate-password --apply
+preview_single_rotation="$(env -u GITHUB_ACTIONS bash "$script" --action rotate-secrets --environment staging --secret-name OPENAI_API_KEY --vps-host vps.example)"
+grep -q 'would update: staged staging secrets' <<< "$preview_single_rotation"
+preview_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --vps-host vps.example)"
+grep -q 'would update: staging failed first-activation secrets' <<< "$preview_repair"
+preview_single_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --secret-name ACCESS_GATE_PASSWORD --vps-host vps.example)"
+grep -q 'would update: staging failed first-activation secrets' <<< "$preview_single_repair"
 reject --action reset-staging --environment prod --confirmation kids_booklet
 reject --action restore --environment staging --backup-id 'bad;id' --confirmation kids_booklet
 reject --action restore --environment staging --backup-id valid --confirmation kids_booklet_prod
 reject --action deploy --environment staging --environment prod
 reject --action status --vps-host 'host;id'
+terraform_apply_path="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+REPO_ROOT="$2"
+APPLY=true
+GITHUB_ACTIONS=true
+GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+VPS_HOST=vps.example
+REQUEST_ID=test-apply-path
+R2_STATE_BUCKET=state
+R2_ENDPOINT=https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com
+verify_infrastructure_head() { :; }
+adopt_existing_r2_buckets() { [[ -x "$1" ]]; }
+verify_cloudflare_ownership() { [[ -x "$1" ]]; }
+host_call() { printf "host:%s\n" "$ACTION"; }
+sync_host_configuration() { printf "host:sync\n"; }
+r2_state_snapshot() { [[ -x "$1" ]]; printf "snapshot:%s\n" "$2"; }
+terraform() {
+  local directory="${1#-chdir=}" output argument
+  shift
+  [[ -d "$directory" && -x "$directory" ]] || { printf "workspace is not traversable\n" >&2; return 90; }
+  case "$1" in
+    init) ;;
+    plan)
+      for argument in "$@"; do
+        case "$argument" in -out=*) output="${argument#-out=}";; esac
+      done
+      : > "${output:-$directory/preview.tfplan}"
+      ;;
+    show) printf "%s\n" "{\"resource_changes\":[]}";;
+    apply) printf "terraform:apply\n";;
+    state) printf "state-entry\n";;
+    *) printf "unexpected terraform command: %s\n" "$*" >&2; return 91;;
+  esac
+}
+terraform_operation
+' _ "$script" "$PWD")"
+grep -q '^host:infra-lock$' <<< "$terraform_apply_path"
+grep -q '^snapshot:infrastructure-before$' <<< "$terraform_apply_path"
+grep -q '^terraform:apply$' <<< "$terraform_apply_path"
+grep -q '^snapshot:infrastructure-after$' <<< "$terraform_apply_path"
+grep -q '^host:sync$' <<< "$terraform_apply_path"
+grep -q '^host:infra-unlock$' <<< "$terraform_apply_path"
 root="$(mktemp -d)"; trap 'rm -rf "$root"' EXIT
 mkdir -p "$root/bin"
 cat > "$root/bin/curl" <<'STUB'
