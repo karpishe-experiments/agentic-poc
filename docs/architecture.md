@@ -6,6 +6,14 @@ This document describes the current implementation for contributors and coding a
 
 Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser renders a persisted workspace and uses Vercel AI SDK UI for chat transport. Route handlers call deterministic application services, which are the only owners of workflow state, durable IDs, artifact versions, approvals, jobs, assets, and exports. OpenAI Agents SDK agents may route or author validated proposals, but they cannot persist data or advance the workflow directly.
 
+### Isolated specialty-management mockup
+
+`/mockups/specialty-management` is the separate Phase 0 Agent Studio design surface. It uses bundled synthetic JSON and browser `localStorage`. It does not import the runtime agent repositories, skill registry, contracts, services, model adapters, or MongoDB setup. `npm run mockup:dev` starts Next.js with `SPECIALTY_MOCKUP_ONLY=1`; the instrumentation bootstrap then skips the job runner. Mockup development, browser tests, and builds use separate Next output directories so they do not share a development lock or generated type metadata with the ordinary application process.
+
+The Assistant uses the installed AI SDK `useChat` hook, typed `UIMessage` data parts, and a local `ChatTransport`. The transport emits deterministic browser-local stream chunks and does not call a route handler, model provider, database, or external service. Local JSON stores the durable conversation, captured section bases, proposals, composer text, clarification state, recovery diagnostics, and synthetic agent-test sessions. Test sessions freeze an agent's visible configuration and working copy with one synthetic booklet-task snapshot, specialty tool/output settings, and routing catalog. Their deterministic results and activity evidence remain in the browser and do not run runtime agents, tools, models, or booklet services. This mockup does not change the runtime architecture or define production persistence and permission contracts.
+
+The bundled seed is generated from 15 task-guideline files pinned to PR #26 commit `631f547ec3f7ce375f740dd6f2b1b9aaebbde940`. The checked-in manifest records each source path and SHA-256 digest; application startup reads only local fixtures. Fourteen artifact tasks define explicit dependency snapshots for three demo booklets, including stable sheet and physical-page references for the synthetic export scenario. Seed revision 2 replaces earlier mockup data once, then preserves current edits. The experiment does not provide sequential storage migration.
+
 ```mermaid
 flowchart TB
   UI[Next.js workspace and typed cards] --> API[Route handlers]
@@ -41,8 +49,8 @@ The root responsibilities are:
 Every booklet has eight ordered artifact records:
 
 ```text
-Audience Profile â†’ Story Plan â†’ Visual Style â†’ Visual Bible
-â†’ Booklet Specification â†’ Page Plan â†’ Final Pages â†’ PDF Export
+Audience Profile → Story Plan → Visual Style → Visual Bible
+→ Booklet Specification → Page Plan → Final Pages → PDF Export
 ```
 
 `BOOKLET_ARTIFACT_TYPES` in `lib/contracts/domain.ts` defines this order. `ArtifactService` records explicit upstream-version dependencies and derives the current stage as the first artifact that is not approved. Revising an upstream artifact creates a new immutable version and can mark dependent work for review.
@@ -72,8 +80,8 @@ Before a material call, `AgentResolver` reads one complete active MongoDB transa
 Specialists cannot write workflow state, issue approvals, access arbitrary tools, or create durable entity/page IDs. Their result is transient until an application service validates, materializes, and persists it. This is an application-controlled handoff, not a free-form SDK handoff:
 
 ```text
-manager selection â†’ route validation â†’ specialist execution
-â†’ output validation â†’ application persistence â†’ creator decision
+manager selection → route validation → specialist execution
+→ output validation → application persistence → creator decision
 ```
 
 `MODEL_RUNTIME=fake` uses deterministic routing and each registered skill's `run` function for tests and local no-cost work while still resolving persisted versions. `MODEL_RUNTIME=real` uses the OpenAI manager and generic specialist adapters. Manager and specialist calls are recorded separately with provider/model, status, latency, usage, request/trace IDs, cost, resolved definition/version IDs, and immutable effective-configuration snapshots. `ChatService` passes its single preflighted active set to both the manager turn and automatic Story Plan quality review, so an in-flight activation applies only to a later turn. Direct quality review resolves a fresh persisted quality specialist immediately before its call.

@@ -68,6 +68,8 @@ npm run db:verify
 | `dev`, `build`, `start` | Run the Next.js application. |
 | `typecheck`, `lint`, `test` | Run focused static and automated checks with fake providers. |
 | `test:agent`, `test:e2e` | Run deterministic agent fixtures and the isolated desktop Chromium golden path. `test:e2e` creates temporary state below `output/playwright/runtime`. |
+| `mockup:dev`, `mockup:build` | Run or build the isolated specialty-management mockup without credentials or MongoDB. |
+| `test:mockup`, `test:mockup:e2e` | Run the isolated specialty-management unit and browser suites. |
 | `db:reset`, `db:verify` | Destructively recreate the current MongoDB/data-root baseline, then validate it. |
 | `eval:real` | Run one named retained real-provider evaluation after reporting its expected cost range. |
 
@@ -111,6 +113,7 @@ Database state lives in MongoDB. Filesystem assets remain under `data/` and are 
 - [Accepted implementation plan](docs/accepted/2026-08-01_end-to-end-poc/PLAN.md)
 - [Agent-management PRD](docs/accepted/2026-08-15_database-backed-agent-management/database-backed-agent-management-prd.md)
 - [Agent-management implementation plan](docs/accepted/2026-08-15_database-backed-agent-management/PLAN.md)
+- [Specialty-management Phase 0 mockup guide](docs/accepted/2026-09-11_specialty-management-mockup/README.md)
 - [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)
 - [Verified lessons](docs/accepted/2026-08-01_end-to-end-poc/LESSONS-LEARNED.md)
 - [Implementation issue #6](https://github.com/karpishe-experiments/agentic-poc/issues/6)
