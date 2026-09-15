@@ -36,14 +36,16 @@ The VPS is a read-only Git consumer. Do not commit, create or switch branches, r
 
 ## Routine release
 
-1. Merge reviewed application changes into `master`.
-2. Require Infrastructure to pass for the exact current `master` commit. It starts automatically only when the merge changes `infra/**`, `deploy/**`, `scripts/deploy/vps-deployment.sh`, or `.github/workflows/infrastructure.yml`. For every other merge, manually run **Infrastructure** from `master` with `apply=true`.
-3. Open and merge `master` into `_staging`. The merge starts Deploy.
-4. Require Deploy and Check deployment to pass for staging. Verify the browser flow when user behavior changed.
-5. Open and merge the same verified `master` into `_prod`.
-6. Require Deploy and Check deployment to pass for production.
+1. Select the reviewed commit or branch for the target environment.
+2. Open and merge it into `_staging` or `_prod`. The merge starts Deploy for that environment.
+3. Require Deploy and Check deployment to pass. Verify the browser flow when user behavior changed.
+4. Promote the same reviewed change to the other environment only when that environment must receive it.
 
-Deploy rejects a target branch that does not contain current `master`, or when Infrastructure did not succeed for that exact commit. It publishes `staging-<full-sha>` or `prod-<full-sha>`, verifies anonymous GHCR access, and deploys the immutable digest. The short environment tag advances only after success.
+`_staging` and `_prod` are independent reviewed release lines and may diverge from `master` and from each other. Deploy verifies that the selected environment matches the target branch and that the remote branch still points to the workflow commit. It does not require `master` ancestry or a successful Infrastructure run. It publishes `staging-<full-sha>` or `prod-<full-sha>`, verifies anonymous GHCR access, and deploys the immutable digest. The short environment tag advances only after success.
+
+Infrastructure remains master-owned. Merge Cloudflare, Terraform, installed host configuration, or deployment-bootstrap changes into `master` and require Infrastructure to pass before relying on those infrastructure changes. An Infrastructure result does not control whether an environment branch can deploy its own application release.
+
+After the independent-deployment workflow first merges to `master`, promote that reviewed commit once to `_staging` and `_prod`. Each environment uses the workflow stored on its own branch, so this one-time promotion activates the new behavior there. Later releases do not need to contain the current `master` commit.
 
 For a manual environment workflow, open **Actions → workflow name → Run workflow**, select `_staging` or `_prod`, and select the matching environment. For a manual Infrastructure run, select `master` and set `apply=true`. Never start another mutating workflow while one is active. Every workflow summary reports its target, outcome, revision, and required next identifier.
 
