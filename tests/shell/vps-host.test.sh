@@ -154,8 +154,9 @@ CHILD
     jq -e '.services.app.environment.ACCESS_GATE_PASSWORD=="sixteen-chars-ok!"' "$SECRETS/staging/secrets.json" >/dev/null
     jq -e '.requestId=="failed" and .step=="initializing"' "$STATE/operation.json" >/dev/null
     export SSH_ORIGINAL_COMMAND='--action repair-first-activation-secrets --environment staging --secret-name ACCESS_GATE_PASSWORD --apply'
-    patch_payload='{"services":{"app":{"environment":{"ACCESS_GATE_PASSWORD":"replacement-pass!"}}}}'
-    (host_dispatch) <<< "$patch_payload" >/dev/null
+    outbound_payload="$TEMP_DIR/outbound-secrets.json"
+    printf '%s\n' '{"services":{"app":{"environment":{"ACCESS_GATE_PASSWORD":"replacement-pass!"}}}}' > "$outbound_payload"
+    (TEMP_DIR=''; host_dispatch) < "$outbound_payload" >/dev/null
     jq -e '.services.app.environment.ACCESS_GATE_PASSWORD=="replacement-pass!" and .services.app.environment.OPENAI_API_KEY=="key"' "$SECRETS/staging/secrets.json" >/dev/null;;
   dispatch-rejection)
     require_root() { :; }

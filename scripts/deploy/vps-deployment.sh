@@ -405,7 +405,7 @@ host_dispatch() {
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Staged secret override exceeds 64 KiB'; fi
     if [[ -n "$SECRET_NAME" ]]; then
-      jq -e --arg name "$SECRET_NAME" '.services.app.environment | type=="object" and keys==[$name] and (.[$name] | type=="string" and length>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
       jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
     else
       cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
@@ -428,7 +428,7 @@ host_dispatch() {
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Secret override exceeds 64 KiB'; fi
     if [[ -n "$SECRET_NAME" ]]; then
-      jq -e --arg name "$SECRET_NAME" '.services.app.environment | type=="object" and keys==[$name] and (.[$name] | type=="string" and length>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret repair payload is invalid'
+      jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret repair payload is invalid'
       jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
     else
       cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
@@ -1316,20 +1316,21 @@ repair_first_activation_secrets() {
   load_config
   [[ "$APPLY" == true ]] || { printf 'would update: %s failed first-activation secrets\n' "$ENVIRONMENT"; return; }
   need_command jq; private_temp
+  local outbound_payload="$TEMP_DIR/outbound-secrets.json"
   if [[ -n "$SECRET_NAME" ]]; then
-    build_secret_patch "$ENVIRONMENT" "$SECRET_NAME" "$TEMP_DIR/secrets.json"
+    build_secret_patch "$ENVIRONMENT" "$SECRET_NAME" "$outbound_payload"
   else
-    build_secret_override "$ENVIRONMENT" "$TEMP_DIR/secrets.json"
+    build_secret_override "$ENVIRONMENT" "$outbound_payload"
   fi
   local remote_command
   local -a remote=(--action repair-first-activation-secrets --environment "$ENVIRONMENT" --apply)
   [[ -z "$SECRET_NAME" ]] || remote+=(--secret-name "$SECRET_NAME")
   printf -v remote_command ' %s' "${remote[@]}"
   if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
-    (SSH_ORIGINAL_COMMAND="$remote_command" host_dispatch) < "$TEMP_DIR/secrets.json"
+    (TEMP_DIR=''; SSH_ORIGINAL_COMMAND="$remote_command" host_dispatch) < "$outbound_payload"
   else
     configure_ssh
-    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/secrets.json"
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$outbound_payload"
   fi
   printf 'next: run Maintenance with action=resume for %s\n' "$ENVIRONMENT"
 }
