@@ -17,6 +17,12 @@ grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
 done
+grep -q 'actions: read' .github/workflows/deploy.yml
+grep -q 'actions/workflows/infrastructure.yml/runs' .github/workflows/deploy.yml
+grep -q 'infrastructure-verified master' .github/workflows/deploy.yml
+grep -q 'VERIFIED_MASTER_SHA' .github/workflows/deploy.yml
+grep -q 'REQUEST_ID:.*github.run_id' .github/workflows/infrastructure.yml
+grep -q 'retained infrastructure journal' .github/workflows/infrastructure.yml
 for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
   grep -q 'uses: ./.github/workflows/vps-operation.yml' "$reusable_caller"
 done
@@ -281,6 +287,48 @@ reject --action restore --environment staging --backup-id 'bad;id' --confirmatio
 reject --action restore --environment staging --backup-id valid --confirmation kids_booklet_prod
 reject --action deploy --environment staging --environment prod
 reject --action status --vps-host 'host;id'
+terraform_apply_path="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+REPO_ROOT="$2"
+APPLY=true
+GITHUB_ACTIONS=true
+GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+VPS_HOST=vps.example
+REQUEST_ID=test-apply-path
+R2_STATE_BUCKET=state
+R2_ENDPOINT=https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com
+verify_infrastructure_head() { :; }
+adopt_existing_r2_buckets() { [[ -x "$1" ]]; }
+verify_cloudflare_ownership() { [[ -x "$1" ]]; }
+host_call() { printf "host:%s\n" "$ACTION"; }
+sync_host_configuration() { printf "host:sync\n"; }
+r2_state_snapshot() { [[ -x "$1" ]]; printf "snapshot:%s\n" "$2"; }
+terraform() {
+  local directory="${1#-chdir=}" output argument
+  shift
+  [[ -d "$directory" && -x "$directory" ]] || { printf "workspace is not traversable\n" >&2; return 90; }
+  case "$1" in
+    init) ;;
+    plan)
+      for argument in "$@"; do
+        case "$argument" in -out=*) output="${argument#-out=}";; esac
+      done
+      : > "${output:-$directory/preview.tfplan}"
+      ;;
+    show) printf "%s\n" "{\"resource_changes\":[]}";;
+    apply) printf "terraform:apply\n";;
+    state) printf "state-entry\n";;
+    *) printf "unexpected terraform command: %s\n" "$*" >&2; return 91;;
+  esac
+}
+terraform_operation
+' _ "$script" "$PWD")"
+grep -q '^host:infra-lock$' <<< "$terraform_apply_path"
+grep -q '^snapshot:infrastructure-before$' <<< "$terraform_apply_path"
+grep -q '^terraform:apply$' <<< "$terraform_apply_path"
+grep -q '^snapshot:infrastructure-after$' <<< "$terraform_apply_path"
+grep -q '^host:sync$' <<< "$terraform_apply_path"
+grep -q '^host:infra-unlock$' <<< "$terraform_apply_path"
 root="$(mktemp -d)"; trap 'rm -rf "$root"' EXIT
 mkdir -p "$root/bin"
 cat > "$root/bin/curl" <<'STUB'
