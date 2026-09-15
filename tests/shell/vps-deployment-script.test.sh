@@ -197,6 +197,9 @@ reject --action check --environment staging --apply
 reject --action repair-first-activation-secrets
 reject --action repair-first-activation-secrets --environment staging --secret-name INVALID
 reject --action status --secret-name ACCESS_GATE_PASSWORD
+reject --action status --generate-password
+reject --action repair-first-activation-secrets --environment staging --secret-name OPENAI_API_KEY --generate-password
+reject --action repair-first-activation-secrets --environment staging --generate-password --apply
 preview_single_rotation="$(bash "$script" --action rotate-secrets --environment staging --secret-name OPENAI_API_KEY --vps-host vps.example)"
 grep -q 'would update: staged staging secrets' <<< "$preview_single_rotation"
 preview_repair="$(bash "$script" --action repair-first-activation-secrets --environment staging --vps-host vps.example)"

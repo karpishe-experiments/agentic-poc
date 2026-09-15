@@ -11,6 +11,7 @@ if [[ "$SCRIPT_IS_SOURCED" == false ]]; then
 fi
 
 ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION=''
+GENERATE_PASSWORD=false
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 SECRET_NAME=''
 COMPOSE_SECRET_FILE=''
@@ -54,6 +55,7 @@ Options:
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
   --secret-name NAME                repair or rotate only one application secret
+  --generate-password               generate and display ACCESS_GATE_PASSWORD once
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
 --apply. discover-config makes read-only provider requests; --apply only writes its
@@ -72,6 +74,7 @@ parse_arguments() {
     case "$1" in
       --help) usage; exit 0 ;;
       --apply) APPLY=true; shift ;;
+      --generate-password) GENERATE_PASSWORD=true; shift ;;
       --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
@@ -104,6 +107,11 @@ validate_arguments() {
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
   [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)$ ]] || die 'Invalid application secret name'
   [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
+  if [[ "$GENERATE_PASSWORD" == true ]]; then
+    [[ "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets)$ ]] || die '--generate-password is only valid for application secret repair or rotation'
+    [[ -z "$SECRET_NAME" || "$SECRET_NAME" == ACCESS_GATE_PASSWORD ]] || die '--generate-password conflicts with the selected secret name'
+    [[ -z "${GITHUB_ACTIONS:-}" ]] || die '--generate-password is forbidden in GitHub Actions'
+  fi
   [[ -z "$ZONE_NAME" || "$ZONE_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid Cloudflare zone hostname'
   for hostname in "$STAGING_HOSTNAME" "$PROD_HOSTNAME" "$DEPLOY_HOSTNAME"; do
     [[ -z "$hostname" || "$hostname" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || die 'Invalid application hostname'
@@ -1221,6 +1229,7 @@ build_secret_override() {
   local environment="$1" destination="$2" name value secret_input=''
   private_temp
   if [[ -n "${DEPLOYMENT_SECRETS_DIR:-}" ]]; then
+    [[ "$GENERATE_PASSWORD" == false ]] || die '--generate-password cannot be combined with DEPLOYMENT_SECRETS_DIR'
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
     jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $names | (keys|sort)==($names|sort) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$"))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
@@ -1265,8 +1274,21 @@ application_secret_requirement() {
     AWS_SECRET_ACCESS_KEY) printf 'must be a 64-character hexadecimal R2 secret key';;
   esac
 }
+display_generated_password() {
+  printf 'generated %s ACCESS_GATE_PASSWORD: %s\n' "$1" "$2" > /dev/tty
+}
 prompt_application_secret() {
   local environment="$1" name="$2" destination="$3" value=''
+  if [[ "$name" == ACCESS_GATE_PASSWORD && "$GENERATE_PASSWORD" == true ]]; then
+    interactive_terminal || die '--generate-password requires an interactive terminal'
+    need_command openssl
+    value="$(openssl rand -base64 24)"
+    application_secret_value_is_valid "$name" "$value" || die 'Generated access password is invalid'
+    display_generated_password "$environment" "$value"
+    printf -v "$destination" '%s' "$value"
+    unset value
+    return
+  fi
   while :; do
     IFS= read -r -s -p "$environment $name: " value
     printf '\n' >&2

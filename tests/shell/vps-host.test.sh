@@ -126,7 +126,15 @@ CHILD
     value=''
     prompt_output="$(printf '%s\n' short sixteen-chars-ok! | { prompt_application_secret staging ACCESS_GATE_PASSWORD value; printf '%s' "$value"; } 2>&1)"
     grep -q 're-enter only this value' <<< "$prompt_output"
-    grep -q 'sixteen-chars-ok!' <<< "$prompt_output";;
+    grep -q 'sixteen-chars-ok!' <<< "$prompt_output"
+    GENERATE_PASSWORD=true
+    interactive_terminal() { :; }
+    openssl() { printf '%s\n' generated-password-value-123456; }
+    display_generated_password() { printf 'displayed %s %s\n' "$1" "$2" >> "$CALLS"; }
+    generated=''
+    prompt_application_secret staging ACCESS_GATE_PASSWORD generated
+    [[ "$generated" == generated-password-value-123456 ]]
+    grep -q 'displayed staging generated-password-value-123456' "$CALLS";;
   secret-schema)
     compose() { printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"mongodb://db","ACCESS_GATE_PASSWORD":"short","AWS_ACCESS_KEY_ID":"0123456789abcdef0123456789abcdef","AWS_SECRET_ACCESS_KEY":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}}}'; }
     if (validate_compose unused) >/dev/null 2>&1; then echo 'accepted short access password'; exit 1; fi
