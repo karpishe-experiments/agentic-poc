@@ -1429,7 +1429,7 @@ setup_host() {
   visudo -cf "$STATE/sudoers" >/dev/null
   install -m 440 "$STATE/sudoers" /etc/sudoers.d/kids-booklet-deploy
   write_secret_override staging; write_secret_override prod
-  terraform -chdir="$REPO_ROOT/infra/terraform" output -raw tunnel_token > "$SECRETS/tunnel.token"
+  terraform -chdir="$TEMP_DIR/infrastructure" output -raw tunnel_token > "$SECRETS/tunnel.token"
   chmod 600 "$SECRETS/tunnel.token"
   cat > /etc/systemd/system/kids-booklet-tunnel.service <<'UNIT'
 [Unit]
@@ -1502,8 +1502,8 @@ configure_github() {
   repository="$(jq -r .repository "$CONFIG_FILE")"
   # GitHub Free may not support environment protections on a private repository.
   # Repository secrets remain usable under the explicitly accepted writer-trust model.
-  terraform -chdir="$REPO_ROOT/infra/terraform" output -raw deployment_client_id > "$TEMP_DIR/deployment-client-id"
-  terraform -chdir="$REPO_ROOT/infra/terraform" output -raw deployment_client_secret > "$TEMP_DIR/deployment-client-secret"
+  terraform -chdir="$TEMP_DIR/infrastructure" output -raw deployment_client_id > "$TEMP_DIR/deployment-client-id"
+  terraform -chdir="$TEMP_DIR/infrastructure" output -raw deployment_client_secret > "$TEMP_DIR/deployment-client-secret"
   chmod 600 "$TEMP_DIR/deployment-client-"*
   {
     printf '%s\n' "$VPS_HOST" "$R2_STATE_BUCKET" "$R2_ENDPOINT" "$TF_VAR_cloudflare_account_id" "$TF_VAR_cloudflare_zone_id" "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname" "$CLOUDFLARE_API_TOKEN" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"

@@ -33,6 +33,7 @@ jobs:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
+          set -euo pipefail
           args=(--action "$OPERATION" --environment "$TARGET" --vps-host "$VPS_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
           if [[ "$OPERATION" != check ]]; then args+=(--apply); fi
           if [[ -n "$BACKUP" ]]; then args+=(--backup-id "$BACKUP"); fi
@@ -45,6 +46,7 @@ jobs:
           OPERATION: ${{ inputs.action }}
           OUTCOME: ${{ steps.run-operation.outcome }}
         run: |
+          set -euo pipefail
           {
             printf '## VPS operation result\n\n'
             printf '| Environment | Operation | Outcome |\n'

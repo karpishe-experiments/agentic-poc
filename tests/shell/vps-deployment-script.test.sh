@@ -10,6 +10,12 @@ bash "$script" --help >/dev/null
 ! grep -q 'gh pr create' "$script"
 grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
 grep -q "grep -E '.*result" "$workflow"
+for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
+  grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
+done
+for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
+  grep -q 'uses: ./.github/workflows/vps-operation.yml' "$reusable_caller"
+done
 grep -q 'organizations/\$owner/settings/billing/budgets' "$script"
 grep -q 'will_alert:false' "$script"
 grep -q '"\$variables_complete" == true' "$script"
