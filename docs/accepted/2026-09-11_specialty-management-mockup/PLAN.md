@@ -1,5 +1,12 @@
 # Phase 0: Agent Studio mockup
 
+## 2026-09-16 feedback update
+
+- Use a simple specialty list with vertically stacked, nested agent cards. Each specialty has explicit Open and Add agent actions.
+- Keep directory and editor navigation headers fixed while their lists scroll. Hide the Assistant in the directory and restore its prior state for an entity editor.
+- Use regular body text and input values. Use medium weight for labels, controls, and selected navigation.
+- Remove synthetic agent tests, test history, booklet fixtures, and their persisted state. Old test URLs resolve to Configuration or Directory with a notice. Evaluations and future booklet-studio testing are deferred.
+
 ## Purpose and authority
 
 Deliver an interactive desktop mockup that the user can evaluate before defining the runtime platform. Parent: [issue #22](https://github.com/karpishe-experiments/agentic-poc/issues/22). This document is the complete implementation handoff for Phase 0. Checkpoints below are sequential and do not require separate checkpoint files.

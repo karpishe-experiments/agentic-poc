@@ -4,7 +4,6 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
-  History,
   Maximize2,
   Minimize2,
   MessageSquare,
@@ -29,8 +28,6 @@ import type {
 } from "@/lib/mockups/specialty-management/types";
 import { AgentEditor } from "./agent-editor";
 import { ChatPanel } from "./chat-panel";
-import { TestHistoryWorkspace } from "./test-workspace";
-import { completeTestResponse } from "@/lib/mockups/specialty-management/testing";
 import { StudioDirectory } from "./studio-directory";
 
 type Update = (fn: (draft: MockupState) => void) => void;
@@ -49,11 +46,9 @@ function selectionUrl(selection: Selection) {
     query.set("specialty", selection.specialtyId);
     query.set("agent", selection.agentId);
     query.set("version", selection.versionId);
-    query.set("tab", selection.section === "test" ? "test" : "edit");
-    if (selection.section !== "test") query.set("section", selection.section);
+    query.set("tab", "edit");
+    query.set("section", selection.section);
   }
-  if (selection.kind === "test-history" && selection.sessionId)
-    query.set("session", selection.sessionId);
   return `?${query.toString()}`;
 }
 
@@ -84,6 +79,7 @@ function selectionFromUrl(state: MockupState) {
       const referenceId = requested.startsWith("reference:")
         ? requested.slice(10)
         : null;
+      const requestedTest = tab === "test" || requested === "test";
       const validSection =
         requested === "configuration" ||
         requested === "instructions" ||
@@ -94,25 +90,18 @@ function selectionFromUrl(state: MockupState) {
           specialtyId,
           agentId,
           versionId,
-          section:
-            tab === "test"
-              ? "test"
-              : validSection
-                ? (requested as EditableAgentSection)
-                : "configuration",
+          section: validSection ? (requested as EditableAgentSection) : "configuration",
         } as Selection,
-        notice: validSection || tab === "test" ? null : "That editor section is unavailable. Configuration was opened instead.",
+        notice: requestedTest
+          ? "Agent testing has been removed. Configuration was opened instead."
+          : validSection ? null : "That editor section is unavailable. Configuration was opened instead.",
       };
     }
   }
-  if (view === "test-history") {
-    const sessionId = query.get("session");
-    if (!sessionId || state.testSessions.some((item) => item.id === sessionId))
-      return {
-        selection: { kind: "test-history", sessionId } as Selection,
-        notice: null,
-      };
-  }
+  if (view === "test-history") return {
+    selection: { kind: "directory" } as Selection,
+    notice: "Agent testing has been removed. The directory was opened.",
+  };
   return {
     selection: { kind: "directory" } as Selection,
     notice: "That Agent Studio target is unavailable. The directory was opened instead.",
@@ -382,10 +371,6 @@ function SpecialtyEditor({
   announce(message: string): void;
 }) {
   if (state.ui.selection.kind === "directory") return null;
-  if (state.ui.selection.kind === "test-history")
-    return (
-      <TestHistoryWorkspace state={state} update={update} announce={announce} />
-    );
   if (state.ui.selection.kind !== "specialty")
     return <AgentEditor state={state} update={update} announce={announce} />;
   const id = state.ui.selection.specialtyId;
@@ -661,15 +646,6 @@ export function SpecialtyManagementMockup() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [state.workingCopies]);
   useEffect(() => {
-    if (!state.pendingTestResponse) return;
-    const timer = window.setTimeout(() => {
-      update((draft) => {
-        completeTestResponse(draft, uid);
-      });
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [state.pendingTestResponse]);
-  useEffect(() => {
     if (!state.ui.focusMode) return;
     const exit = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -725,19 +701,7 @@ export function SpecialtyManagementMockup() {
               <ArrowLeft aria-hidden="true" size={15} /> Directory
             </button>
           ) : null}
-          <button
-            className="toolbar-text-button"
-            aria-current={state.ui.selection.kind === "test-history" ? "page" : undefined}
-            onClick={() =>
-              select({
-                kind: "test-history",
-                sessionId: state.testSessions[0]?.id ?? null,
-              })
-            }
-          >
-            <History aria-hidden="true" size={15} /> Test history
-          </button>
-          {!state.ui.chatOpen ? <button
+          {state.ui.selection.kind !== "directory" && !state.ui.chatOpen ? <button
             className="toolbar-icon-button"
             aria-label="Reopen Assistant"
             title="Reopen Assistant"
@@ -760,6 +724,17 @@ export function SpecialtyManagementMockup() {
           </button>
         </div>
       </header>
+      {state.ui.navigationNotice ? (
+        <div className="navigation-notice" role="status">
+          {state.ui.navigationNotice}
+          <button
+            className="link-button"
+            onClick={() => update((draft) => { draft.ui.navigationNotice = null; })}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       {saveError ? (
         <div className="storage-alert" role="alert">
           {saveError}{" "}
@@ -774,7 +749,7 @@ export function SpecialtyManagementMockup() {
           gridTemplateColumns: state.ui.focusMode
             ? "minmax(360px,1fr)"
             : state.ui.selection.kind === "directory"
-              ? `minmax(560px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`
+              ? "minmax(560px,1fr)"
               : `${state.ui.navWidth}px 7px minmax(360px,1fr)${state.ui.chatOpen ? ` 7px ${state.ui.chatWidth}px` : ""}`,
         }}
       >
@@ -815,7 +790,7 @@ export function SpecialtyManagementMockup() {
             announce={setAnnouncement}
           />
         ) : null}
-        {!state.ui.focusMode && state.ui.chatOpen ? (
+        {!state.ui.focusMode && state.ui.selection.kind !== "directory" && state.ui.chatOpen ? (
           <ResizeHandle
             label="Resize editing assistant pane"
             onMove={(delta) =>
@@ -833,7 +808,7 @@ export function SpecialtyManagementMockup() {
           state={state}
           update={update}
           announce={setAnnouncement}
-          hidden={state.ui.focusMode || !state.ui.chatOpen}
+          hidden={state.ui.focusMode || state.ui.selection.kind === "directory" || !state.ui.chatOpen}
           resetToken={chatResetToken}
           onCollapse={() =>
             update((draft) => {

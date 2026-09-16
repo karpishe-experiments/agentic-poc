@@ -1280,12 +1280,6 @@
     "chatOpen": true,
     "editorMode": "edit",
     "imageDescriptions": {},
-    "testSetup": {
-      "bookletId": "demo-forest",
-      "stageId": "story_outline",
-      "openingRequest": "Produce a sample result",
-      "sourceSessionId": null
-    },
     "focusMode": false,
     "lastEditorSections": {},
     "navigationNotice": null
@@ -1296,8 +1290,5 @@
     "pendingResponse": null,
     "composerText": "",
     "pendingClarification": null
-  },
-  "booklets": [],
-  "testSessions": [],
-  "pendingTestResponse": null
+  }
 }

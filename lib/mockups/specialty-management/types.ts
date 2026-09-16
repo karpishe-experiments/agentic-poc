@@ -6,7 +6,6 @@ export type EditableAgentSection =
   | "configuration"
   | "instructions"
   | `reference:${string}`;
-export type EditorSection = EditableAgentSection | "test";
 export type ModelSelection = { provider: string; model: string };
 export type ReferenceFile = {
   id: string;
@@ -57,9 +56,8 @@ export type Selection =
       specialtyId: string;
       agentId: string;
       versionId: string;
-      section: EditorSection;
-    }
-  | { kind: "test-history"; sessionId: string | null };
+      section: EditableAgentSection;
+    };
 
 export type SpecialtyEditingTarget = {
   kind: "specialty";
@@ -198,152 +196,6 @@ export type PendingChatResponse = {
 };
 export type PendingClarification = ClarificationCard;
 
-export type BookletStageId =
-  | "book_concept_brief"
-  | "story_outline"
-  | "draft_character_list"
-  | "draft_location_list"
-  | "page_by_page_manuscript"
-  | "final_character_list"
-  | "final_location_list"
-  | "visual_style_package"
-  | "character_sheet_package"
-  | "location_sheet_package"
-  | "pagination_layout_plan"
-  | "final_page_bible"
-  | "final_page_illustration_package"
-  | "book_export_package";
-export type TaskCatalogItem = {
-  id: BookletStageId;
-  label: string;
-  index: number;
-  specialtyId: string;
-  dependsOn: BookletStageId[];
-  outputType: OutputType;
-};
-export type StageArtifact = {
-  id: string;
-  stageId: BookletStageId;
-  label: string;
-  content: string;
-  status: "approved";
-  version: number;
-  entityId?: string;
-  assetPath?: string;
-  assetId?: string;
-  filename?: string;
-  revision?: number;
-  geometry?: string;
-};
-export type BookletStageSnapshot = {
-  id: string;
-  bookletId: string;
-  stageId: BookletStageId;
-  stageLabel: string;
-  stageIndex: number;
-  premise: string;
-  audience: string;
-  artifacts: StageArtifact[];
-  currentArtifact?: StageArtifact;
-  conversation: Array<{ role: "user" | "assistant"; text: string }>;
-  taskContext: string;
-};
-export type SourcePageRecord = {
-  readingOrder: number;
-  pageId: string;
-  geometry: string;
-  approvedAssetId: string;
-  approvedFilename: string;
-  revision: number;
-  approved: true;
-};
-export type BookletFixture = {
-  id: string;
-  title: string;
-  premise: string;
-  audience: string;
-  currentStageId: BookletStageId;
-  completedTaskIds: BookletStageId[];
-  eligibleTaskIds: BookletStageId[];
-  characters: Array<{ id: string; name: string; sheetAssetId?: string }>;
-  locations: Array<{ id: string; name: string; sheetAssetId?: string }>;
-  sourcePageManifest: SourcePageRecord[];
-  snapshots: BookletStageSnapshot[];
-};
-export type Compatibility = "compatible" | "warning" | "undefined";
-export type TestActivity = {
-  id: string;
-  kind: "context-read" | "reference-read" | "tool-call";
-  label: string;
-  input: string;
-  output: string;
-};
-export type TestResult =
-  | {
-      kind: "text";
-      markdown: string;
-      revisionNote?: string;
-    }
-  | {
-      kind: "image";
-      imagePath: string;
-      description: string;
-      metadata: Record<string, string>;
-      revisionNote?: string;
-    }
-  | {
-      kind: "orchestrator";
-      selectedSpecialtyId: string | null;
-      explanation: string;
-    }
-  | { kind: "unsupported"; explanation: string };
-export type TestMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  createdAt: string;
-  state: "complete" | "cancelled" | "interrupted" | "error";
-  result?: TestResult;
-  activityIds?: string[];
-  rating?: "useful" | "needs-work";
-  note?: string;
-  retryRequest?: string;
-};
-export type TestSession = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-  agentId: string;
-  agentName: string;
-  agentVersionId: string;
-  agentVersionNumber: number;
-  specialtyId: string;
-  specialtyName: string;
-  agentSnapshot: AgentVersion;
-  specialtySnapshot: Pick<Specialty, "id" | "name" | "outputType" | "allowedToolIds">;
-  stageSnapshot: BookletStageSnapshot;
-  routingCatalog: Array<Pick<Specialty, "id" | "name" | "retired">>;
-  taskCatalogSnapshot: TaskCatalogItem[];
-  sourceSessionId: string | null;
-  openingRequest: string;
-  messages: TestMessage[];
-  activity: TestActivity[];
-};
-export type PendingTestResponse = {
-  id: string;
-  sessionId: string;
-  request: string;
-  startedAt: string;
-  kind: "opening" | "followup" | "retry";
-};
-export type TestSetup = {
-  bookletId: string;
-  stageId: BookletStageId;
-  openingRequest: string;
-  sourceSessionId: string | null;
-};
-
 export type MockupState = {
   formatVersion: 1;
   seedRevision: number;
@@ -351,7 +203,6 @@ export type MockupState = {
   agents: Agent[];
   tools: ToolFixture[];
   models: ModelFixture[];
-  taskCatalog: TaskCatalogItem[];
   workingCopies: {
     specialties: Record<string, Specialty>;
     versions: Record<string, AgentVersion>;
@@ -367,7 +218,6 @@ export type MockupState = {
     chatOpen: boolean;
     editorMode: "edit" | "preview";
     imageDescriptions: Record<string, string>;
-    testSetup: TestSetup;
     focusMode: boolean;
     navigationNotice: string | null;
     lastEditorSections: Record<string, EditableAgentSection>;
@@ -379,9 +229,6 @@ export type MockupState = {
     composerText: string;
     pendingClarification: PendingClarification | null;
   };
-  booklets: BookletFixture[];
-  testSessions: TestSession[];
-  pendingTestResponse: PendingTestResponse | null;
 };
 export type MockupAction =
   | { type: "replace"; state: MockupState }

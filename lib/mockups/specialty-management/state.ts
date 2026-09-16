@@ -1,5 +1,4 @@
 import seed from "./seed.json";
-import { bookletFixtures, TASK_CATALOG } from "./booklets";
 import { captureBase } from "./chat";
 import type {
   EditingBase,
@@ -54,21 +53,9 @@ const interruptedMessage = (
 
 function normalize(state: MockupState): MockupState {
   state.ui.recentVersionIds ??= {};
-  state.ui.testSetup ??= {
-    bookletId: "demo-forest",
-    stageId: "story_outline",
-    openingRequest: "Produce a sample result",
-    sourceSessionId: null,
-  };
   state.ui.focusMode ??= false;
   state.ui.navigationNotice ??= null;
   state.ui.lastEditorSections ??= {};
-  state.booklets ??= bookletFixtures();
-  state.taskCatalog ??= structuredClone(TASK_CATALOG);
-  state.testSessions ??= [];
-  for (const session of state.testSessions)
-    session.taskCatalogSnapshot ??= structuredClone(state.taskCatalog);
-  state.pendingTestResponse ??= null;
   state.chat.composerText ??= "";
   state.chat.pendingClarification ??= null;
   state.agents.forEach((agent) =>
@@ -82,19 +69,6 @@ function normalize(state: MockupState): MockupState {
     version.versionNote ??= "";
   });
 
-  if (state.pendingTestResponse) {
-    const pending = state.pendingTestResponse;
-    const session = state.testSessions.find((item) => item.id === pending.sessionId);
-    session?.messages.push({
-      id: `interrupted-${pending.id}`,
-      role: "assistant",
-      text: "The simulated test response was interrupted during refresh.",
-      createdAt: new Date().toISOString(),
-      state: "interrupted",
-      retryRequest: pending.request,
-    });
-    state.pendingTestResponse = null;
-  }
   if (state.chat.pendingResponse) {
     const pending = state.chat.pendingResponse;
     state.chat.messages.push(
@@ -119,21 +93,12 @@ export const freshSeed = (): MockupState => {
   current.ui.navigationNotice = null;
   current.ui.lastEditorSections ??= {};
   current.ui.recentVersionIds ??= {};
-  current.ui.testSetup ??= {
-    bookletId: "demo-forest",
-    stageId: "story_outline",
-    openingRequest: "Produce a sample result",
-    sourceSessionId: null,
-  };
   current.ui.focusMode ??= false;
   current.chat.messages ??= [];
   current.chat.proposals ??= [];
   current.chat.pendingResponse ??= null;
   current.chat.composerText ??= "";
   current.chat.pendingClarification ??= null;
-  current.booklets = bookletFixtures();
-  current.testSessions = [];
-  current.pendingTestResponse = null;
   const normalized = normalize(current);
   const target: EditingTarget = {
     kind: "agent",
@@ -194,13 +159,25 @@ export const isMockupState = (value: unknown): value is MockupState =>
   typeof value.seedRevision === "number" &&
   Array.isArray(value.specialties) &&
   Array.isArray(value.agents) &&
-  Array.isArray(value.taskCatalog) &&
   isRecord(value.ui) &&
   isRecord(value.chat) &&
   Array.isArray(value.chat.messages) &&
-  Array.isArray(value.chat.proposals) &&
-  Array.isArray(value.booklets) &&
-  Array.isArray(value.testSessions);
+  Array.isArray(value.chat.proposals);
+
+function removeTestingState(value: UnknownRecord) {
+  delete value.taskCatalog;
+  delete value.booklets;
+  delete value.testSessions;
+  delete value.pendingTestResponse;
+  if (!isRecord(value.ui)) return;
+  delete value.ui.testSetup;
+  if (isRecord(value.ui.selection)) {
+    const selection = value.ui.selection;
+    if (selection.kind === "test-history") value.ui.selection = { kind: "directory" };
+    if (selection.kind === "agent" && (selection.section === "test" || selection.tab === "test"))
+      selection.section = "configuration";
+  }
+}
 
 export function loadState(storage: Pick<Storage, "getItem">) {
   try {
@@ -214,6 +191,7 @@ export function loadState(storage: Pick<Storage, "getItem">) {
       value.seedRevision < CURRENT_SEED_REVISION
     )
       return { state: freshSeed(), error: null };
+    if (isRecord(value)) removeTestingState(value);
     if (isMockupState(value))
       return {
         state: normalize(value),

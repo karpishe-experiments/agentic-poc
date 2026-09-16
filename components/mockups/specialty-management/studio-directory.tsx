@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, Plus, Search, Settings2 } from "lucide-react";
+import { Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
   Agent,
@@ -89,21 +89,6 @@ export function StudioDirectory({
           </button>
         </div>
       </header>
-      {state.ui.navigationNotice ? (
-        <div className="navigation-notice" role="status">
-          {state.ui.navigationNotice}
-          <button
-            className="link-button"
-            onClick={() =>
-              update((draft) => {
-                draft.ui.navigationNotice = null;
-              })
-            }
-          >
-            Dismiss
-          </button>
-        </div>
-      ) : null}
       <label className="directory-search search">
         <Search aria-hidden="true" size={15} />
         <span className="sr-only">Search specialties and agents</span>
@@ -118,22 +103,23 @@ export function StudioDirectory({
         {groups.map(({ specialty, agents }) => (
           <section className="directory-group" key={specialty.id}>
             <header>
-              <button
-                className="directory-specialty"
-                onClick={() =>
-                  select({ kind: "specialty", specialtyId: specialty.id })
-                }
-              >
+              <div className="directory-specialty">
                 <span>
-                  <Settings2 aria-hidden="true" size={16} />
-                  <strong>{specialty.name}</strong>
+                  <span className="directory-specialty-name">{specialty.name}</span>
                   {specialty.builtIn ? <small>Built-in</small> : null}
                   {specialty.retired ? <small>Retired</small> : null}
                 </span>
                 <span>{specialty.description || "No description"}</span>
-              </button>
-              <div>
+              </div>
+              <div className="directory-group-actions">
                 <span className="output-badge">{specialty.outputType}</span>
+                <button
+                  className="icon-text-button"
+                  aria-label={`Open ${specialty.name} settings`}
+                  onClick={() => select({ kind: "specialty", specialtyId: specialty.id })}
+                >
+                  Open
+                </button>
                 <button
                   className="icon-text-button"
                   onClick={() => addAgent(specialty)}
