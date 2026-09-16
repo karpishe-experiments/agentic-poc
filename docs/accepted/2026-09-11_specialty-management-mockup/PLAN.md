@@ -5,7 +5,14 @@
 - Use a simple specialty list with vertically stacked, nested agent cards. Each specialty has explicit Open and Add agent actions.
 - Keep directory and editor navigation headers fixed while their lists scroll. Hide the Assistant in the directory and restore its prior state for an entity editor.
 - Use regular body text and input values. Use medium weight for labels, controls, and selected navigation.
-- Remove synthetic agent tests, test history, booklet fixtures, and their persisted state. Old test URLs resolve to Configuration or Directory with a notice. Evaluations and future booklet-studio testing are deferred.
+- Remove synthetic agent tests, test history, booklet fixtures, and their persisted state. Invalid URLs use the current generic Directory or Configuration fallback. Evaluations and future booklet-studio testing are deferred.
+
+## 2026-09-16 state-contract update
+
+- Browser state uses one exact `schemaVersion`. The mockup does not migrate, repair, or preserve incompatible saved data. It replaces only its own local-storage record with the current synthetic seed and shows a dismissible reset notice.
+- Navigation URLs contain only the current view, entity identifiers, version, and section. Invalid views resolve to Directory and invalid editor sections resolve to Configuration. Test and Test-history URLs have no special compatibility behavior.
+- Preserve valid current-format working copies, pane preferences, and Assistant conversation. A pending local response becomes one interrupted-response card after refresh.
+- The retained UI uses typed message parts, proposal bases and patches, and structured diagnostics. Do not restore transitional message fields or testing fixtures.
 
 ## Purpose and authority
 
@@ -26,7 +33,7 @@ Status: Checkpoints 1–13 complete. Sections 10–14 govern the implemented moc
 - Agent draft, confirmation, activation, retirement, and fork interactions are represented locally.
 - The editor supports `@` specialty, `/` available tool, and `$` reference menus. All agents can mention specialties. Mentions do not execute anything.
 - The Assistant proposes changes to the selected specialty settings, agent configuration, Main instructions, or reference. Proposals show read-only proposed content and require explicit Apply. Activation is separate.
-- Agent Studio is the visible feature name. Preserve existing routes, storage keys, and internal identifiers. Test conversations are labeled Test agent.
+- Agent Studio is the visible feature name. Preserve the current mockup route and storage key. The mockup has one Assistant conversation.
 - The user explicitly wants simulated responses and simple JSON data, without existing runtime schemas or real model calls.
 
 ## 1. Implementation boundary and startup

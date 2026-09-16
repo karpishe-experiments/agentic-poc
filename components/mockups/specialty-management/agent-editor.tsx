@@ -8,6 +8,7 @@ import type {
   AgentVersion,
   MockupState,
   ReferenceFile,
+  Selection,
 } from "@/lib/mockups/specialty-management/types";
 
 type Update = (fn: (draft: MockupState) => void) => void;
@@ -19,10 +20,12 @@ export function AgentEditor({
   state,
   update,
   announce,
+  select,
 }: {
   state: MockupState;
   update: Update;
   announce(message: string): void;
+  select(selection: Selection, history?: "push" | "replace"): void;
 }) {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [confirmNote, setConfirmNote] = useState<string | null>(null);
@@ -56,12 +59,7 @@ export function AgentEditor({
   const dirty = !!state.workingCopies.versions[saved.id];
   const editable = version.status === "draft";
   const selectSection = (section: typeof selection.section) =>
-    update((draft) => {
-      if (draft.ui.selection.kind === "agent") {
-        draft.ui.selection.section = section;
-        draft.ui.lastEditorSections[agent?.id ?? selection.agentId] = section;
-      }
-    });
+    select({ ...selection, section });
   const setVersion = (patch: Partial<AgentVersion>) => {
     if (!editable) return;
     update((draft) => {
@@ -115,9 +113,14 @@ export function AgentEditor({
     announce("Agent draft saved.");
   };
   const discard = () => {
+    const discardedReference =
+      selection.section.startsWith("reference:") &&
+      !saved.references.some((reference) => reference.id === selection.section.slice(10));
     update((draft) => {
       delete draft.workingCopies.versions[saved.id];
     });
+    if (discardedReference)
+      select({ ...selection, section: "configuration" }, "replace");
     announce("Agent changes discarded.");
   };
   const saveAndConfirm = () => {
@@ -161,14 +164,15 @@ export function AgentEditor({
     closeConfirmation();
     announce("Draft saved and confirmed.");
   };
-  const fork = () =>
+  const fork = () => {
+    const copyId = uid("version");
     update((draft) => {
       const target = draft.agents.find((item) => item.id === agent.id)!;
       const source =
         draft.workingCopies.versions[saved.id] ??
         target.versions.find((item) => item.id === saved.id)!;
       const copy = structuredClone(source);
-      copy.id = uid("version");
+      copy.id = copyId;
       copy.number = Math.max(...target.versions.map((item) => item.number)) + 1;
       copy.parentVersionId = saved.id;
       copy.status = "draft";
@@ -178,8 +182,9 @@ export function AgentEditor({
         ...draft.ui.recentVersionIds,
         [agent.id]: copy.id,
       };
-      draft.ui.selection = { ...selection, versionId: copy.id };
     });
+    select({ ...selection, versionId: copyId });
+  };
   const transition = (status: "retired") => {
     if (dirty) {
       announce("Save or discard changes first.");
@@ -211,6 +216,10 @@ export function AgentEditor({
     });
   const removeVersion = () => {
     if (!confirm("Delete this inactive draft?")) return;
+    const remaining = agent.versions.filter((item) => item.id !== saved.id);
+    const nextSelection: Selection = !remaining.length
+      ? { kind: "specialty", specialtyId: specialty.id } as Selection
+      : { ...selection, versionId: (remaining.find((item) => item.id === agent.activeVersionId) ?? newest(remaining)!).id, section: "configuration" };
     update((draft) => {
       const target = draft.agents.find((item) => item.id === agent.id)!;
       draft.chat.proposals.forEach((proposal) => {
@@ -232,18 +241,10 @@ export function AgentEditor({
       delete draft.workingCopies.versions[saved.id];
       if (!target.versions.length) {
         draft.agents = draft.agents.filter((item) => item.id !== target.id);
-        draft.ui.selection = { kind: "specialty", specialtyId: specialty.id };
         return;
       }
-      const next =
-        target.versions.find((item) => item.id === target.activeVersionId) ??
-        newest(target.versions)!;
-      draft.ui.selection = {
-        ...selection,
-        versionId: next.id,
-        section: "configuration",
-      };
     });
+    select(nextSelection, "replace");
     announce("Draft deleted; related chat proposals are unavailable.");
   };
   const addReference = () => {
@@ -257,13 +258,14 @@ export function AgentEditor({
       content: "",
     };
     if (!editable) {
+      const copyId = uid("version");
       update((draft) => {
         const target = draft.agents.find((item) => item.id === agent.id)!;
         const source =
           draft.workingCopies.versions[saved.id] ??
           target.versions.find((item) => item.id === saved.id)!;
         const copy = structuredClone(source);
-        copy.id = uid("version");
+        copy.id = copyId;
         copy.number =
           Math.max(...target.versions.map((item) => item.number)) + 1;
         copy.parentVersionId = saved.id;
@@ -272,14 +274,8 @@ export function AgentEditor({
         copy.references.push(ref);
         target.versions.push(copy);
         draft.ui.recentVersionIds[agent.id] = copy.id;
-        draft.ui.selection = {
-          kind: "agent",
-          specialtyId: specialty.id,
-          agentId: agent.id,
-          versionId: copy.id,
-          section: `reference:${ref.id}`,
-        };
       });
+      select({ kind: "agent", specialtyId: specialty.id, agentId: agent.id, versionId: copyId, section: `reference:${ref.id}` });
       announce("Draft created with a new reference.");
       return;
     }
@@ -321,10 +317,7 @@ export function AgentEditor({
     update((draft) => {
       draft.ui.editorMode = mode;
     });
-  const openSpecialty = (specialtyId: string) =>
-    update((draft) => {
-      draft.ui.selection = { kind: "specialty", specialtyId };
-    });
+  const openSpecialty = (specialtyId: string) => select({ kind: "specialty", specialtyId });
   const openReference = (id: string) => selectSection(`reference:${id}`);
   const markdownProps = {
     disabled: !editable,
@@ -452,16 +445,7 @@ export function AgentEditor({
             <select
               value={version.id}
               onChange={(event) =>
-                update((draft) => {
-                  if (draft.ui.selection.kind === "agent") {
-                    draft.ui.recentVersionIds = {
-                      ...draft.ui.recentVersionIds,
-                      [agent.id]: event.target.value,
-                    };
-                    draft.ui.selection.versionId = event.target.value;
-                    draft.ui.selection.section = "configuration";
-                  }
-                })
+                select({ ...selection, versionId: event.target.value, section: "configuration" })
               }
             >
               {agent.versions
@@ -859,7 +843,7 @@ export function AgentEditor({
                       announce(
                         "Reference removed; related chat proposals are unavailable.",
                       );
-                      selectSection("instructions");
+                      selectSection("configuration");
                     }
                   }}
                 >

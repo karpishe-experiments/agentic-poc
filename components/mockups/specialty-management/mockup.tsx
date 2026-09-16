@@ -46,7 +46,6 @@ function selectionUrl(selection: Selection) {
     query.set("specialty", selection.specialtyId);
     query.set("agent", selection.agentId);
     query.set("version", selection.versionId);
-    query.set("tab", "edit");
     query.set("section", selection.section);
   }
   return `?${query.toString()}`;
@@ -72,14 +71,15 @@ function selectionFromUrl(state: MockupState) {
     const agent = state.agents.find(
       (item) => item.id === agentId && item.specialtyId === specialtyId,
     );
-    const version = agent?.versions.find((item) => item.id === versionId);
-    if (agent && version) {
-      const tab = query.get("tab");
+      const savedVersion = agent?.versions.find((item) => item.id === versionId);
+      const version = savedVersion
+        ? (state.workingCopies.versions[savedVersion.id] ?? savedVersion)
+        : undefined;
+      if (agent && version) {
       const requested = query.get("section") ?? "configuration";
       const referenceId = requested.startsWith("reference:")
         ? requested.slice(10)
         : null;
-      const requestedTest = tab === "test" || requested === "test";
       const validSection =
         requested === "configuration" ||
         requested === "instructions" ||
@@ -92,20 +92,30 @@ function selectionFromUrl(state: MockupState) {
           versionId,
           section: validSection ? (requested as EditableAgentSection) : "configuration",
         } as Selection,
-        notice: requestedTest
-          ? "Agent testing has been removed. Configuration was opened instead."
-          : validSection ? null : "That editor section is unavailable. Configuration was opened instead.",
+        notice: validSection ? null : "That editor section is unavailable. Configuration was opened instead.",
       };
     }
   }
-  if (view === "test-history") return {
-    selection: { kind: "directory" } as Selection,
-    notice: "Agent testing has been removed. The directory was opened.",
-  };
   return {
     selection: { kind: "directory" } as Selection,
     notice: "That Agent Studio target is unavailable. The directory was opened instead.",
   };
+}
+
+function loadBrowserState() {
+  try {
+    return loadState(window.localStorage);
+  } catch {
+    return { state: freshSeed(), recovered: true };
+  }
+}
+
+function persistBrowserState(state: MockupState) {
+  try {
+    return saveState(window.localStorage, state);
+  } catch {
+    return "Changes cannot be retained after refresh.";
+  }
 }
 
 function ResizeHandle({
@@ -305,19 +315,7 @@ function Navigation({
                           className={`agent-row ${agentSelected ? "selected" : ""}`}
                           aria-current={agentSelected ? "page" : undefined}
                           onClick={() =>
-                            update((draft) => {
-                              draft.ui.recentVersionIds = {
-                                ...draft.ui.recentVersionIds,
-                                [agent.id]: version.id,
-                              };
-                              draft.ui.selection = {
-                                kind: "agent",
-                                specialtyId: specialty.id,
-                                agentId: agent.id,
-                                versionId: version.id,
-                                section: "configuration",
-                              };
-                            })
+                            select({ kind: "agent", specialtyId: specialty.id, agentId: agent.id, versionId: version.id, section: "configuration" })
                           }
                         >
                           <span>
@@ -336,7 +334,7 @@ function Navigation({
                             ) : null}
                           </span>
                           <small>
-                            {agent.activeVersionId ? "Active" : "Inactive"} · v
+                            {agent.activeVersionId === version.id ? "Active" : "Inactive"} · v
                             {version.number}
                           </small>
                         </button>
@@ -365,14 +363,16 @@ function SpecialtyEditor({
   state,
   update,
   announce,
+  select,
 }: {
   state: MockupState;
   update: Update;
   announce(message: string): void;
+  select(selection: Selection, history?: "push" | "replace"): void;
 }) {
   if (state.ui.selection.kind === "directory") return null;
   if (state.ui.selection.kind !== "specialty")
-    return <AgentEditor state={state} update={update} announce={announce} />;
+    return <AgentEditor state={state} update={update} announce={announce} select={select} />;
   const id = state.ui.selection.specialtyId;
   const saved = state.specialties.find((item) => item.id === id);
   if (!saved) return null;
@@ -392,7 +392,15 @@ function SpecialtyEditor({
       const working = next.workingCopies.specialties[id];
       if (working)
         next.specialties = next.specialties.map((item) =>
-          item.id === id ? { ...working, name: working.name.trim() } : item,
+          item.id === id
+            ? {
+                ...item,
+                name: working.name.trim(),
+                description: working.description,
+                outputType: working.outputType,
+                allowedToolIds: working.allowedToolIds,
+              }
+            : item,
         );
       delete next.workingCopies.specialties[id];
     });
@@ -428,7 +436,7 @@ function SpecialtyEditor({
             {state.ui.focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
           <button
-            disabled={saved.builtIn}
+            disabled={saved.builtIn || dirty}
             onClick={() =>
               update((next) => {
                 const item = next.specialties.find((value) => value.id === id);
@@ -438,6 +446,7 @@ function SpecialtyEditor({
           >
             {saved.retired ? "Restore" : "Retire"}
           </button>
+          {dirty ? <small className="action-note">Save or discard changes first.</small> : null}
           <button disabled={!dirty} onClick={discard}>
             Discard
           </button>
@@ -526,14 +535,14 @@ function SpecialtyEditor({
 export function SpecialtyManagementMockup() {
   const [state, dispatch] = useReducer(reducer, undefined, freshSeed);
   const [hydrated, setHydrated] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [chatResetToken, setChatResetToken] = useState(0);
+  const hydratedOnce = useRef(false);
   const update: Update = (fn) =>
     dispatch({ type: "mutate", mutate: (current) => change(current, fn) });
   const select = (selection: Selection, history: "push" | "replace" = "push") => {
-    if (history === "push")
+    if (history === "push" && window.location.search !== selectionUrl(selection))
       window.history.pushState(null, "", selectionUrl(selection));
     else window.history.replaceState(null, "", selectionUrl(selection));
     update((draft) => {
@@ -595,24 +604,25 @@ export function SpecialtyManagementMockup() {
     });
   };
   useEffect(() => {
-    const result = loadState(localStorage);
+    if (hydratedOnce.current) return;
+    hydratedOnce.current = true;
+    const result = loadBrowserState();
     queueMicrotask(() => {
-      if (result.state) {
-        const resolved = selectionFromUrl(result.state);
-        result.state.ui.selection = resolved.selection;
-        result.state.ui.navigationNotice = resolved.notice;
-        if (resolved.selection.kind === "agent")
-          result.state.ui.recentVersionIds[resolved.selection.agentId] =
-            resolved.selection.versionId;
-        dispatch({ type: "replace", state: result.state });
-        window.history.replaceState(null, "", selectionUrl(resolved.selection));
-      }
-      else setLoadError(result.error);
+      const resolved = selectionFromUrl(result.state);
+      result.state.ui.selection = resolved.selection;
+      result.state.ui.navigationNotice = result.recovered
+        ? "Saved mockup data was incompatible and has been reset."
+        : resolved.notice;
+      if (resolved.selection.kind === "agent")
+        result.state.ui.recentVersionIds[resolved.selection.agentId] =
+          resolved.selection.versionId;
+      dispatch({ type: "replace", state: result.state });
+      window.history.replaceState(null, "", selectionUrl(resolved.selection));
       setHydrated(true);
     });
   }, []);
   useEffect(() => {
-    if (!hydrated || loadError) return;
+    if (!hydrated) return;
     const onPopState = () => {
       const resolved = selectionFromUrl(state);
       update((draft) => {
@@ -625,17 +635,13 @@ export function SpecialtyManagementMockup() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [hydrated, loadError, state]);
+  }, [hydrated, state]);
   useEffect(() => {
-    if (!hydrated || loadError) return;
-    window.history.replaceState(null, "", selectionUrl(state.ui.selection));
-  }, [hydrated, loadError, state.ui.selection]);
-  useEffect(() => {
-    if (hydrated && !loadError) {
-      const error = saveState(localStorage, state);
+    if (hydrated) {
+      const error = persistBrowserState(state);
       queueMicrotask(() => setSaveError(error));
     }
-  }, [hydrated, loadError, state]);
+  }, [hydrated, state]);
   useEffect(() => {
     const dirty =
       Object.keys(state.workingCopies.specialties).length > 0 ||
@@ -668,21 +674,12 @@ export function SpecialtyManagementMockup() {
   const reset = () => {
     if (!confirm("Reset all specialty-management demo data?")) return;
     const next = freshSeed();
-    setLoadError(null);
-    setSaveError(saveState(localStorage, next));
+    setSaveError(persistBrowserState(next));
     setChatResetToken((value) => value + 1);
     dispatch({ type: "replace", state: next });
     window.history.replaceState(null, "", selectionUrl(next.ui.selection));
   };
   if (!hydrated) return <div role="status">Loading management mockup…</div>;
-  if (loadError)
-    return (
-      <section>
-        <h1>Agent Studio</h1>
-        <p role="alert">{loadError}</p>
-        <button onClick={reset}>Reset demo data</button>
-      </section>
-    );
   return (
     <section data-management-mockup className="management-mockup">
       <div className="sr-only" role="status" aria-live="polite">
@@ -724,25 +721,20 @@ export function SpecialtyManagementMockup() {
           </button>
         </div>
       </header>
-      {state.ui.navigationNotice ? (
-        <div className="navigation-notice" role="status">
-          {state.ui.navigationNotice}
-          <button
-            className="link-button"
-            onClick={() => update((draft) => { draft.ui.navigationNotice = null; })}
-          >
-            Dismiss
-          </button>
-        </div>
-      ) : null}
-      {saveError ? (
-        <div className="storage-alert" role="alert">
-          {saveError}{" "}
-          <button onClick={() => setSaveError(saveState(localStorage, state))}>
-            Retry
-          </button>
-        </div>
-      ) : null}
+      <div className="mockup-notices">
+          {state.ui.navigationNotice ? (
+            <div className="navigation-notice" role="status">
+              {state.ui.navigationNotice}
+              <button className="link-button" onClick={() => update((draft) => { draft.ui.navigationNotice = null; })}>Dismiss</button>
+            </div>
+          ) : null}
+          {saveError ? (
+            <div className="storage-alert" role="alert">
+              {saveError}{" "}
+              <button onClick={() => setSaveError(persistBrowserState(state))}>Retry</button>
+            </div>
+          ) : null}
+      </div>
       <div
         className={`mockup-shell ${state.ui.focusMode ? "focus-mode" : ""} ${state.ui.selection.kind === "directory" ? "directory-shell" : ""}`}
         style={{
@@ -788,6 +780,7 @@ export function SpecialtyManagementMockup() {
             state={state}
             update={update}
             announce={setAnnouncement}
+            select={select}
           />
         ) : null}
         {!state.ui.focusMode && state.ui.selection.kind !== "directory" && state.ui.chatOpen ? (
@@ -808,6 +801,7 @@ export function SpecialtyManagementMockup() {
           state={state}
           update={update}
           announce={setAnnouncement}
+          select={select}
           hidden={state.ui.focusMode || state.ui.selection.kind === "directory" || !state.ui.chatOpen}
           resetToken={chatResetToken}
           onCollapse={() =>

@@ -10,7 +10,7 @@ npm run mockup:dev
 
 Open `http://127.0.0.1:3100/mockups/specialty-management`.
 
-The page saves demo records, unsaved editor content, navigation state, and the shared editing conversation in browser `localStorage`. Refreshing restores that state in the same browser profile. Existing synthetic test records are removed during loading while other edits remain. **Reset demo data** removes only the mockup state after confirmation. The data is not shared between browsers, devices, profiles, or tabs.
+The page saves demo records, unsaved editor content, navigation state, and the shared editing conversation in browser `localStorage`. Refreshing restores valid current-format data in the same browser profile. Incompatible or unreadable mockup data is replaced with the current synthetic seed and a notice. **Reset demo data** removes only the mockup state after confirmation. The data is not shared between browsers, devices, profiles, or tabs.
 
 The **Assistant** uses the AI SDK chat hook with a browser-local streaming transport. All answers, clarification choices, progress labels, proposals, and diagnostics are deterministic simulations. No request leaves the browser, and the selected model is context only.
 

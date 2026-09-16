@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { freshSeed, isMockupState, loadState, saveState, STORAGE_KEY } from "@/lib/mockups/specialty-management/state";
+import { beginResponse } from "@/lib/mockups/specialty-management/chat";
 
 describe("mockup state", () => {
-  it("starts an independent directory generation", () => {
+  it("starts an independent current-format directory generation", () => {
     const state = freshSeed();
     expect(STORAGE_KEY).toBe("specialty-management-mockup:v2");
     expect(state.ui.selection).toEqual({ kind: "directory" });
-    expect(state).not.toHaveProperty("testSessions");
-    expect(state).not.toHaveProperty("booklets");
+    expect(state.schemaVersion).toBe(1);
+    expect(state.chat.messages[0]?.metadata?.state).toBe("error");
   });
 
   it("persists current editing preferences", () => {
@@ -22,23 +23,26 @@ describe("mockup state", () => {
     expect(loaded.chat.composerText).toBe("Keep this request");
   });
 
-  it("removes obsolete testing state without resetting edits", () => {
-    const legacy = freshSeed() as unknown as Record<string, unknown>;
-    legacy.testSessions = [{ id: "session" }];
-    legacy.pendingTestResponse = { id: "pending" };
-    legacy.booklets = [{ id: "booklet" }];
-    legacy.taskCatalog = [{ id: "task" }];
-    (legacy.ui as Record<string, unknown>).testSetup = { bookletId: "booklet" };
-    (legacy.ui as Record<string, unknown>).selection = { kind: "test-history" };
-    const loaded = loadState({ getItem: () => JSON.stringify(legacy) }).state!;
-    expect(loaded.ui.selection).toEqual({ kind: "directory" });
-    expect(loaded.agents).toHaveLength(15);
-    expect(loaded).not.toHaveProperty("testSessions");
-    expect(loaded).not.toHaveProperty("booklets");
+  it("resets malformed, incompatible, incomplete, and future state", () => {
+    const cases = ["{", JSON.stringify({ schemaVersion: 0 }), JSON.stringify({ schemaVersion: 2 }), JSON.stringify({ schemaVersion: 1 })];
+    for (const value of cases) {
+      const loaded = loadState({ getItem: () => value });
+      expect(loaded.recovered).toBe(true);
+      expect(loaded.state.schemaVersion).toBe(1);
+    }
   });
 
-  it("reports malformed and unwritable storage", () => {
-    expect(loadState({ getItem: () => "{" }).error).toMatch(/could not/);
+  it("recovers inaccessible storage and reports unwritable storage", () => {
+    expect(loadState({ getItem: () => { throw new Error("blocked"); } }).recovered).toBe(true);
     expect(saveState({ setItem: () => { throw new Error("quota"); } }, freshSeed())).toMatch(/cannot be retained/);
+  });
+
+  it("recovers an interrupted current response once without migrating state", () => {
+    const state = freshSeed();
+    const target = { kind: "agent" as const, specialtyId: "sp-story", agentId: "agent-playful", versionId: "playful-v2", section: "instructions" as const };
+    beginResponse(state, target, "Make this concise", (prefix) => `${prefix}-1`);
+    const loaded = loadState({ getItem: () => JSON.stringify(state) }).state;
+    expect(loaded.chat.pendingResponse).toBeNull();
+    expect(loaded.chat.messages.filter((message) => message.metadata?.state === "interrupted")).toHaveLength(1);
   });
 });

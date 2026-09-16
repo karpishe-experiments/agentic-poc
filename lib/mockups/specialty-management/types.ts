@@ -72,8 +72,6 @@ export type AgentEditingTarget = {
   section: EditableAgentSection;
 };
 export type EditingTarget = SpecialtyEditingTarget | AgentEditingTarget;
-/** Kept as a named alias while checkpoint 7 callers migrate. */
-export type ProposalTarget = EditingTarget;
 
 export type SpecialtyBase = {
   kind: "specialty";
@@ -136,10 +134,6 @@ export type ChatProposal = {
   patch: EditingPatch;
   status: ProposalStatus;
   createdAt: string;
-  /** Read-only presentation text for Markdown sections and legacy UI. */
-  proposedText?: string;
-  /** Preserved during v1 migration; new code must use `base`. */
-  baseText?: string;
 };
 
 export type WorkingStatusCard = {
@@ -176,12 +170,7 @@ export type ManagementMessageMetadata = {
 export type ManagementUIMessage = UIMessage<
   ManagementMessageMetadata,
   ManagementChatData
-> & {
-  /** Transitional read-only conveniences for the checkpoint-6 panel. */
-  text?: string;
-  target?: AgentEditingTarget | null;
-  retryRequest?: string;
-};
+>;
 
 export type PendingChatResponse = {
   id: string;
@@ -190,15 +179,11 @@ export type PendingChatResponse = {
   base: EditingBase;
   startedAt: string;
   stage: WorkingStatusCard["label"];
-  /** Transitional fields retained until the former timer-based panel is removed. */
-  baseText?: string;
-  inputText?: string;
 };
 export type PendingClarification = ClarificationCard;
 
 export type MockupState = {
-  formatVersion: 1;
-  seedRevision: number;
+  schemaVersion: 1;
   specialties: Specialty[];
   agents: Agent[];
   tools: ToolFixture[];
@@ -220,7 +205,6 @@ export type MockupState = {
     imageDescriptions: Record<string, string>;
     focusMode: boolean;
     navigationNotice: string | null;
-    lastEditorSections: Record<string, EditableAgentSection>;
   };
   chat: {
     messages: ManagementUIMessage[];

@@ -22,10 +22,15 @@ import type {
   ErrorDetails,
   ManagementUIMessage,
   MockupState,
+  Selection,
 } from "@/lib/mockups/specialty-management/types";
 
 type Update = (fn: (draft: MockupState) => void) => void;
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
+const selectionForTarget = (target: EditingTarget): Selection =>
+  target.kind === "specialty"
+    ? { kind: "specialty", specialtyId: target.specialtyId }
+    : target;
 const textOf = (message: ManagementUIMessage) =>
   message.parts
     .filter((part) => part.type === "text")
@@ -67,11 +72,13 @@ function ProposalCard({
   state,
   update,
   announce,
+  select,
 }: {
   proposal: ChatProposal;
   state: MockupState;
   update: Update;
   announce(message: string): void;
+  select(selection: Selection): void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const found = resolveTarget(state, proposal.target);
@@ -82,22 +89,7 @@ function ProposalCard({
   const long = fields.some((field) => field.value.length > 360);
   const openTarget = () => {
     const target = proposal.target;
-    update((draft) => {
-      if (target.kind === "specialty") {
-        draft.ui.selection = { kind: "specialty", specialtyId: target.specialtyId };
-        return;
-      }
-      const agent = draft.agents.find((item) => item.id === target.agentId);
-      if (!agent?.versions.some((item) => item.id === target.versionId)) return;
-      draft.ui.recentVersionIds[agent.id] = target.versionId;
-      draft.ui.selection = {
-        kind: "agent",
-        specialtyId: target.specialtyId,
-        agentId: target.agentId,
-        versionId: target.versionId,
-        section: target.section,
-      };
-    });
+    select(selectionForTarget(target));
     announce("Proposal target opened.");
   };
   return (
@@ -157,12 +149,14 @@ function ErrorCard({
   state,
   composer,
   update,
+  select,
   send,
 }: {
   details: ErrorDetails;
   state: MockupState;
   composer: string;
   update: Update;
+  select(selection: Selection): void;
   send(text: string, target: EditingTarget): void;
 }) {
   const [open, setOpen] = useState(false);
@@ -178,18 +172,8 @@ function ErrorCard({
     update((draft) => {
       const separator = draft.chat.composerText.trim() ? "\n\n---\n\n" : "";
       draft.chat.composerText = `${draft.chat.composerText}${separator}${details.request}`;
-      if (details.target!.kind === "specialty") {
-        draft.ui.selection = { kind: "specialty", specialtyId: details.target!.specialtyId };
-      } else {
-        draft.ui.selection = {
-          kind: "agent",
-          specialtyId: details.target!.specialtyId,
-          agentId: details.target!.agentId,
-          versionId: details.target!.versionId,
-          section: details.target!.section,
-        };
-      }
     });
+    select(selectionForTarget(details.target));
   };
   return (
     <div className="chat-error-card">
@@ -231,6 +215,7 @@ export function ChatPanel({
   state,
   update,
   announce,
+  select,
   hidden = false,
   resetToken = 0,
   onCollapse,
@@ -238,6 +223,7 @@ export function ChatPanel({
   state: MockupState;
   update: Update;
   announce(message: string): void;
+  select(selection: Selection): void;
   hidden?: boolean;
   resetToken?: number;
   onCollapse(): void;
@@ -370,7 +356,7 @@ export function ChatPanel({
               {message.parts.map((part, index) => {
                 if (part.type === "data-proposal") {
                   const proposal = state.chat.proposals.find((item) => item.id === part.data.proposalId);
-                  return proposal ? <ProposalCard key={`${message.id}-${index}`} proposal={proposal} state={state} update={update} announce={announce} /> : null;
+                  return proposal ? <ProposalCard key={`${message.id}-${index}`} proposal={proposal} state={state} update={update} announce={announce} select={select} /> : null;
                 }
                 if (part.type === "data-clarification") {
                   const matches = !!current && targetKey(current) === targetKey(part.data.target);
@@ -380,16 +366,13 @@ export function ChatPanel({
                       <strong>{part.data.question}</strong>
                       <div className="chat-suggestions">
                         {part.data.choices.map((choice) => <button key={choice} disabled={!active || !matches || running} onClick={() => send(choice, part.data.target)}>{choice}</button>)}
-                        {active && !matches ? <button onClick={() => update((draft) => {
-                          const target = part.data.target;
-                          draft.ui.selection = target.kind === "specialty" ? { kind: "specialty", specialtyId: target.specialtyId } : { kind: "agent", specialtyId: target.specialtyId, agentId: target.agentId, versionId: target.versionId, section: target.section };
-                        })}>Open target</button> : null}
+                        {active && !matches ? <button onClick={() => select(selectionForTarget(part.data.target))}>Open target</button> : null}
                       </div>
                       <small>You can also type a free-text reply below.</small>
                     </div>
                   );
                 }
-                if (part.type === "data-error-details") return <ErrorCard key={`${message.id}-${index}`} details={part.data} state={state} composer={state.chat.composerText} update={update} send={send} />;
+                if (part.type === "data-error-details") return <ErrorCard key={`${message.id}-${index}`} details={part.data} state={state} composer={state.chat.composerText} update={update} send={send} select={select} />;
                 return null;
               })}
             </article>
@@ -407,12 +390,7 @@ export function ChatPanel({
       {pendingClarification && !clarificationMatches ? (
         <div className="clarification-binding">
           <span>Open {targetLabel(state, pendingClarification.target)} to answer the pending clarification.</span>
-          <button onClick={() => update((draft) => {
-            const target = pendingClarification.target;
-            draft.ui.selection = target.kind === "specialty"
-              ? { kind: "specialty", specialtyId: target.specialtyId }
-              : { kind: "agent", specialtyId: target.specialtyId, agentId: target.agentId, versionId: target.versionId, section: target.section };
-          })}>Open clarification target</button>
+          <button onClick={() => select(selectionForTarget(pendingClarification.target))}>Open clarification target</button>
         </div>
       ) : null}
       <div className="composer-context">
