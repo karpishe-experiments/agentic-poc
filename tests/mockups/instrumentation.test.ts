@@ -1,0 +1,3 @@
+import{afterEach,describe,expect,it,vi}from"vitest";
+const start=vi.fn();vi.mock("@/lib/jobs/runner-bootstrap",()=>({ensureRunnerStarted:start}));
+describe("mockup startup isolation",()=>{afterEach(()=>{delete process.env.SPECIALTY_MOCKUP_ONLY;delete process.env.NEXT_RUNTIME;start.mockClear()});it("does not start the runner in mockup mode",async()=>{process.env.SPECIALTY_MOCKUP_ONLY="1";const{register}=await import("@/instrumentation");await register();expect(start).not.toHaveBeenCalled()});it("preserves normal Node startup",async()=>{process.env.NEXT_RUNTIME="nodejs";const{register}=await import("@/instrumentation");await register();expect(start).toHaveBeenCalledOnce()})});
