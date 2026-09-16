@@ -285,7 +285,7 @@ function transformedInstructions(definition, source, referenceId) {
     instructions += `\n\n## Related specialties\n\n${mentions.join("\n")}`;
   }
   instructions +=
-    "\n\n## Agent Studio mockup boundary\n\nTest agent returns bundled synthetic examples only. Do not execute approvals, jobs, exports, model calls, or application-owned state changes.";
+    "\n\n## Agent Studio mockup boundary\n\nThe Assistant proposes deterministic local edits only. Do not execute approvals, jobs, exports, model calls, or application-owned state changes.";
   return instructions;
 }
 
@@ -383,8 +383,7 @@ const taskCatalog = definitions
   }));
 
 const seed = {
-  formatVersion: 1,
-  seedRevision: 2,
+  schemaVersion: 1,
   specialties,
   agents,
   tools: [
@@ -452,7 +451,6 @@ const seed = {
       kind: "image",
     },
   ],
-  taskCatalog,
   workingCopies: { specialties: {}, versions: {} },
   ui: {
     selection: { kind: "directory" },
@@ -465,14 +463,7 @@ const seed = {
     chatOpen: true,
     editorMode: "edit",
     imageDescriptions: {},
-    testSetup: {
-      bookletId: "demo-forest",
-      stageId: "story_outline",
-      openingRequest: "Produce a sample result",
-      sourceSessionId: null,
-    },
     focusMode: false,
-    lastEditorSections: {},
     navigationNotice: null,
   },
   chat: {
@@ -482,9 +473,6 @@ const seed = {
     composerText: "",
     pendingClarification: null,
   },
-  booklets: [],
-  testSessions: [],
-  pendingTestResponse: null,
 };
 const manifest = {
   repository: "karpishe-experiments/agentic-poc",

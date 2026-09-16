@@ -10,17 +10,15 @@ npm run mockup:dev
 
 Open `http://127.0.0.1:3100/mockups/specialty-management`.
 
-The page saves all demo records, unsaved editor content, navigation state, the shared editing conversation, and agent test sessions in browser `localStorage`. Refreshing the page restores that state in the same browser profile. **Reset demo data** removes only the mockup state after confirmation and restores the bundled synthetic examples. A seed revision can replace an older mockup generation once; no backward-compatibility contract applies to this experiment. The data is not shared between browsers, devices, profiles, or tabs.
+The page saves demo records, unsaved editor content, navigation state, and the shared editing conversation in browser `localStorage`. Refreshing restores valid current-format data in the same browser profile. Incompatible or unreadable mockup data is replaced with the current synthetic seed and a notice. **Reset demo data** removes only the mockup state after confirmation. The data is not shared between browsers, devices, profiles, or tabs.
 
 The **Assistant** uses the AI SDK chat hook with a browser-local streaming transport. All answers, clarification choices, progress labels, proposals, and diagnostics are deterministic simulations. No request leaves the browser, and the selected model is context only.
 
 The assistant follows the selected specialty settings, agent configuration, Main instructions, or reference. Suggestions fill the composer without sending. Press Enter to send or Shift+Enter for a newline. Proposals are read-only and require explicit Apply, followed by the editor's normal Save action. Apply is disabled after the selected section changes. Applying a proposal to a confirmed version creates a complete draft and leaves the confirmed version unchanged.
 
-Each agent has a **Test** workspace. Select one of three synthetic booklets and an available task, review its frozen explicit dependencies, then start a deterministic test conversation. The bundled catalog contains 14 guideline-derived artifact tasks. Forest Friends stops after its concept brief, Moon Picnic is ready for visual-style work, and The Smallest Garden is ready for synthetic export preflight. Test sessions capture visible unsaved agent content without saving it. Results, activity details, ratings, notes, and session names persist. **Repeat test with current edits** preserves the original session and booklet snapshot, but waits for an explicit **Start test** before it captures current agent content. **Test history** shows every stored session and retains frozen evidence after a source version or agent is deleted.
+The mockup has no agent-testing or evaluation workspace. Testing inside the future booklet studio is deferred.
 
-Test conversations are separate from the Assistant. **Send to editing chat** appends a prepared request to any existing composer text and never sends or applies it automatically. Test Stop/Retry and refresh interruption operate only on the frozen test session. The Assistant and Test agent can each have one independent simulated response in progress.
-
-**Focus mode** hides Studio navigation, agent section navigation, and the Assistant so the current editor or Test workspace can use the full shell. The exit control remains in the toolbar; Escape exits when no dialog or menu is open. Pane sizes and chat visibility return unchanged. Hidden Assistant and Test agent responses continue, and an explicit test-result handoff exits focus mode.
+**Focus mode** hides Studio navigation, agent section navigation, and the Assistant so the current editor can use the full shell. The exit control remains in the toolbar; Escape exits when no dialog or menu is open. Pane sizes and chat visibility return unchanged.
 
 Each agent version has an optional description. Confirmation opens a native dialog where **Suggest note** previews a deterministic summary of configuration, Main instructions, and reference changes. **Save and confirm** atomically saves visible draft edits and the optional 240-character note, then locks the version; it never calls a model. Confirmed and retired versions are read-only, and every derived draft begins with an empty note. The version information control exposes the selected version's saved note. Agent configuration also shows the specialty's visible allowed tools, including unsaved specialty changes. **Version actions** groups confirmation, activation, retirement, deletion, and forking while keeping Save/Discard and Edit as draft prominent.
 
@@ -32,15 +30,12 @@ Each agent version has an optional description. Confirmation opens a native dial
 2. Create an agent, then edit its configuration, Main instructions, and a reference.
 3. Insert `@` specialty, `/` tool, and `$` reference mentions. Inspect the Markdown preview.
 4. Ask the Assistant a question, try a clarification, then review and apply a read-only proposal.
-5. Open **Test**, run a synthetic booklet stage, inspect activity, and record feedback.
-6. Repeat the test with current edits, then inspect both sessions in **Test history**.
-7. Send a result to the Assistant and confirm that the prepared request does not send automatically.
-8. Refresh the page and confirm that synthetic records, conversations, and tests remain.
-9. Try Focus mode, confirm a draft with a suggested note, and inspect Version actions and Allowed tools.
-10. Browse the 15 guideline-derived specialties, then run The Smallest Garden's Book Export Package test and confirm that it returns only a synthetic manifest and preflight.
+5. Refresh the page and confirm that local edits and the Assistant conversation remain.
+6. Try Focus mode, confirm a draft with a suggested note, and inspect Version actions and Allowed tools.
+7. Browse the 15 guideline-derived specialties and open a specialty or agent from the directory.
 
 Please focus feedback on pane navigation, prompt authoring, proposal review, streaming, clarification, and recovery. Lifecycle and permission rules are illustrative and are not a runtime specification.
 
 ## Limits
 
-This mockup has no real orchestration, model execution, booklet database access, uploads, schema authoring, runtime tool permission enforcement, multi-tab synchronization, or production persistence. Agent selection and activation only change synthetic local records.
+This mockup has no real orchestration, model execution, evaluation, booklet database access, uploads, schema authoring, runtime tool permission enforcement, multi-tab synchronization, or production persistence. Agent selection and activation only change synthetic local records.

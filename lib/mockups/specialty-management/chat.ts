@@ -13,7 +13,6 @@ import type {
   ManagementUIMessage,
   ModelSelection,
   MockupState,
-  ProposalTarget,
   ReferenceBase,
   ReferencePatch,
   Specialty,
@@ -30,8 +29,6 @@ const chatMessage = (
 ): ManagementUIMessage => ({
   id,
   role,
-  text,
-  target: target?.kind === "agent" ? target : null,
   metadata: { target, createdAt: new Date().toISOString(), state },
   parts: [{ type: "text" as const, text, state: "done" as const }],
 });
@@ -83,30 +80,11 @@ export function resolveTarget(
   if (target.section.startsWith("reference:") && !reference) return null;
   return { target, specialty, agent, savedVersion, version, reference };
 }
-
-/** Compatibility helper for old target-only callers. */
-export function getTarget(state: MockupState, target: ProposalTarget) {
-  const found = resolveTarget(state, target);
-  if (!found || target.kind !== "agent" || !found.agent || !found.savedVersion || !found.version)
-    return null;
-  const text =
-    target.section === "instructions"
-      ? found.version.mainInstructions
-      : found.reference?.content;
-  return text === undefined
-    ? null
-    : { agent: found.agent, saved: found.savedVersion, version: found.version, text };
-}
-
 export function selectedTarget(state: MockupState): EditingTarget | null {
   const selection = state.ui.selection;
   if (selection.kind === "specialty")
     return { kind: "specialty", specialtyId: selection.specialtyId, section: "settings" };
-  if (
-    selection.kind === "directory" ||
-    selection.kind === "test-history" ||
-    selection.section === "test"
-  )
+  if (selection.kind === "directory")
     return null;
   return {
     kind: "agent",
@@ -400,7 +378,6 @@ export function cancelResponse(state: MockupState, createId: (prefix: string) =>
     pending.target,
     "cancelled",
   );
-  message.retryRequest = pending.request;
   const stoppedAt = new Date().toISOString();
   const details: ErrorDetails = {
     request: pending.request,
@@ -476,13 +453,10 @@ export function simulateReply(
     };
 
   let patch: EditingPatch;
-  let proposedText: string | undefined;
   if (base.kind === "instructions") {
-    proposedText = simulateSuggestion(priorProposalText(state, target) ?? base.mainInstructions, request);
-    patch = { mainInstructions: proposedText };
+    patch = { mainInstructions: simulateSuggestion(priorProposalText(state, target) ?? base.mainInstructions, request) };
   } else if (base.kind === "reference") {
-    proposedText = simulateSuggestion(priorProposalText(state, target) ?? base.content, request);
-    patch = { content: proposedText };
+    patch = { content: simulateSuggestion(priorProposalText(state, target) ?? base.content, request) };
   } else if (base.kind === "configuration") {
     const title = request.match(/\btitle\s+(?:to\s+)?["“]?(.+?)["”]?$/i)?.[1]?.trim();
     if (title) patch = { title };
@@ -536,13 +510,6 @@ export function simulateReply(
     patch,
     status: "pending",
     createdAt,
-    proposedText,
-    baseText:
-      base.kind === "instructions"
-        ? base.mainInstructions
-        : base.kind === "reference"
-          ? base.content
-          : undefined,
   };
   return { kind: "proposal", proposal, text: "I prepared a simulated proposal. Review it before applying the change." };
 }
@@ -584,13 +551,4 @@ export function simulateSuggestion(text: string, request: string) {
   if (lower.includes("example"))
     return `${text.trimEnd()}\n\n## Example\nFor example, describe one clear choice and the reason for it.`;
   return `${text.trimEnd()}\n\n## Requested guidance\n${request}`;
-}
-
-/** Compatibility helper; canonical callers should use `applyProposal`. */
-export function writeTarget(version: AgentVersion, target: AgentEditingTarget, text: string) {
-  if (target.section === "instructions") version.mainInstructions = text;
-  else if (target.section.startsWith("reference:")) {
-    const reference = version.references.find((item) => item.id === target.section.slice(10));
-    if (reference) reference.content = text;
-  }
 }
