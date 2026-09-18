@@ -7,12 +7,12 @@ This is the handoff for future coding and Dify setup. Runtime routes and command
 | Coding owner | Dify operator |
 |---|---|
 | Read plan.md and tools.openapi.json. Build state/tools/page with fixtures and fake adapters. | Create a Dify Cloud account and workspace. Use the new Agent type, not Legacy Agent. |
-| Implement the four tools and their auth tests first. | Configure the Gemini provider with an authorized Google AI Studio key; select gemini-2.5-flash. |
+| Implement the four tools and their auth tests first. | Configure the OpenAI provider with the Booklet project key; select gpt-5.6-terra. |
 | Implement review/revision/approval, background runs, polling and persisted image. | Create booklet_manager and paste manager-prompt.md; try build-request.md if desired. |
 | Implement fake tests and real Dify/image adapters; prepare staging configuration. | Package story-writing/SKILL.md as a skill ZIP and upload through Configure → Skills. |
 | Supply a deployed staging origin, project ID and tool key privately when ready. | Prepare the Swagger/OpenAPI import using tools.openapi.json. Live import tests wait for staging. |
 
-Account links: [Dify Cloud](https://cloud.dify.ai/), [Google AI Studio](https://aistudio.google.com/).
+Account links: [Dify Cloud](https://cloud.dify.ai/), [OpenAI Platform](https://platform.openai.com/).
 If the expected Agent/model is unavailable, record the actual blocker before spending time on an alternate architecture.
 
 ### Package the writing skill
@@ -46,7 +46,7 @@ The goal of this checkpoint is an accessible staging page with fake mode visibly
 5. Configure API-key authentication with custom header X-Booklet-Tool-Key and the dedicated value supplied privately. Verify that a test call sends exactly that header; do not use the browser Basic Auth password.
 6. Test get_project_context with {"project_id":"booklet-dify-trial"}. Expect current_revision=0 and state=draft_needed on a fresh project. If the importer cannot send the configured header or parse the contract, record that concrete failure; do not weaken endpoint authentication.
 7. Attach all four imported operations to booklet_manager. Confirm prompt, model, and skill against build-request.md. Do not attach a direct image plugin.
-8. Publish the agent. In its Access Point / API section, create the app API key. Configure DIFY_API_KEY server-side and switch DIFY_EXPERIMENT_MODE to real while keeping DIFY_IMAGE_ENABLED=false.
+8. Publish the agent. In its Access Point / API section, create the app API key. Install DIFY_API_KEY server-side. The temporary staging host overlay already selects real mode and enables the image path; do not approve an image call until its separate key is installed and spending is authorized.
 9. Confirm /api/experiments/dify/setup reports only safe readiness booleans and mode names. Keys must not be returned.
 
 A Dify preview tool call reaches the same saved project as the page. Avoid running preview and browser turns concurrently. Provider tools cannot initialize or approve projects.
@@ -58,7 +58,7 @@ Follow [verification.md](verification.md) and record observations in Issue #50.
 1. Create the story from the staging page; verify revision 1 and a review card.
 2. Try the image tool through Dify's tool test UI before approval; expect approval_required and no provider attempt.
 3. Submit the supplied feedback; verify revision 2 and unchanged panel one.
-4. After confirming image-provider access and spending approval, enable DIFY_IMAGE_ENABLED through the reviewed configuration procedure.
+4. Confirm image-provider access, spending approval, and installation of DIFY_IMAGE_OPENAI_API_KEY. The staging image path is already enabled in Compose.
 5. Click Approve and illustrate. Watch the saved image state progress to ready. Inspect the matching Dify tool trace.
 6. Refresh the page, then Resume. Check that no new revision or provider attempt was created.
 7. Restart/redeploy through the existing runbook only if needed to verify persistence; re-open the same project and image.

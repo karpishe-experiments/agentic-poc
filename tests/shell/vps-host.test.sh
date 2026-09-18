@@ -33,6 +33,8 @@ prepare_release() {
   printf 'candidate manifest\n' > "$STATE/releases/$ENVIRONMENT/$COMMIT/manifest.sha256"
   printf 'prepare\n' >> "$CALLS"
 }
+# The sourced host lifecycle calls this stub with arguments.
+# shellcheck disable=SC2120
 compose() { printf 'compose %s\n' "$*" >> "$CALLS"; }
 maintenance() { printf 'maintenance %s\n' "$*" >> "$CALLS"; }
 docker() { printf 'docker %s\n' "$*" >> "$CALLS"; }
@@ -148,6 +150,21 @@ CHILD
     if (validate_compose unused) >/dev/null 2>&1; then echo 'accepted short access password'; exit 1; fi
     compose() { printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"mongodb://db","ACCESS_GATE_PASSWORD":"sixteen-chars-ok!","AWS_ACCESS_KEY_ID":"0123456789abcdef0123456789abcdef","AWS_SECRET_ACCESS_KEY":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}}}'; }
     validate_compose unused
+    compose > "$SECRETS/staging/secrets.json"
+    application_secret_override_is_valid "$SECRETS/staging/secrets.json"
+    jq '.services.app.environment.DIFY_TOOL_KEY="0123456789abcdef0123456789abcdef" | .services.app.environment.DIFY_API_KEY="dify-test-key" | .services.app.environment.DIFY_IMAGE_OPENAI_API_KEY="image-test-key"' "$SECRETS/staging/secrets.json" > "$TEMP_DIR/optional.json"
+    application_secret_override_is_valid "$TEMP_DIR/optional.json"
+    jq '.services.app.environment.DIFY_TOOL_KEY="short"' "$TEMP_DIR/optional.json" > "$TEMP_DIR/invalid-optional.json"
+    if application_secret_override_is_valid "$TEMP_DIR/invalid-optional.json"; then echo 'accepted a short Dify tool key'; exit 1; fi
+    mkdir -m 700 "$TEMP_DIR/secret-input"
+    jq '.services.app.environment' "$TEMP_DIR/optional.json" > "$TEMP_DIR/secret-input/staging.json"
+    chmod 600 "$TEMP_DIR/secret-input/staging.json"
+    DEPLOYMENT_SECRETS_DIR="$TEMP_DIR/secret-input" build_secret_override staging "$TEMP_DIR/generated-optional.json"
+    application_secret_override_is_valid "$TEMP_DIR/generated-optional.json"
+    jq '.DIFY_TOOL_KEY="short"' "$TEMP_DIR/secret-input/staging.json" > "$TEMP_DIR/secret-input/invalid.json"
+    mv "$TEMP_DIR/secret-input/invalid.json" "$TEMP_DIR/secret-input/staging.json"
+    chmod 600 "$TEMP_DIR/secret-input/staging.json"
+    if (DEPLOYMENT_SECRETS_DIR="$TEMP_DIR/secret-input" build_secret_override staging "$TEMP_DIR/rejected-optional.json") >/dev/null 2>&1; then echo 'accepted a short Dify tool key in flat input'; exit 1; fi
     printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"short","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}' > "$SECRETS/staging/secrets.json"
     if (write_secret_override staging) >/dev/null 2>&1; then echo 'accepted existing invalid host secret override'; exit 1; fi;;
   first-activation-secret-repair)
