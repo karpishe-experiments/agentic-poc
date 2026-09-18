@@ -1,17 +1,28 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, resolve, sep } from "node:path";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { createMongoDatabase } from "@/db/client";
 import { seedVisualAssets } from "@/db/seed";
 import { seedDefaultAgents, setupMongoStructure } from "@/db/setup";
 
 const replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
+const difyExperiment = process.argv.includes("--dify-experiment");
 process.env.MONGODB_URI = replicaSet.getUri();
 process.env.MONGODB_DATABASE = "kids_booklet_e2e";
-process.env.DATA_ROOT = "./output/playwright/runtime/assets";
+const dataRoot = await mkdtemp(join(tmpdir(), "booklet-e2e-assets-"));
+process.env.DATA_ROOT = dataRoot;
 process.env.MODEL_RUNTIME = "fake";
 process.env.IMAGE_PROVIDER_MODE = "fake";
 process.env.OPENAI_API_KEY ??= "e2e-fake-key";
+if (difyExperiment) {
+  process.env.DEPLOYMENT_ENV = "local";
+  process.env.DIFY_EXPERIMENT_ENABLED = "true";
+  process.env.DIFY_EXPERIMENT_MODE = "fake";
+  process.env.DIFY_IMAGE_ENABLED = "true";
+}
 const database = createMongoDatabase({ uri: process.env.MONGODB_URI, databaseName: process.env.MONGODB_DATABASE });
 await setupMongoStructure(database);
 await seedDefaultAgents(database);
@@ -31,8 +42,8 @@ async function reservePort(): Promise<string> {
 }
 
 const port = process.env.E2E_PORT ?? await reservePort();
-const baseUrl = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--port", port], { env: process.env, stdio: "inherit" });
+const baseUrl = `http://${difyExperiment ? "localhost" : "127.0.0.1"}:${port}`;
+const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", difyExperiment ? "dev" : "start", "--port", port], { env: process.env, stdio: "inherit" });
 
 function stopServer(): void {
   if (server.killed) return;
@@ -57,7 +68,7 @@ async function waitForServer(): Promise<void> {
 let exitCode = 1;
 try {
   await waitForServer();
-  const playwright = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(2)], {
+  const playwright = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(2).filter((argument) => argument !== "--dify-experiment")], {
     env: { ...process.env, PLAYWRIGHT_REUSE_SERVER: "1", PLAYWRIGHT_BASE_URL: baseUrl }, stdio: "inherit",
   });
   const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => playwright.once("exit", (code, signal) => resolve({ code, signal })));
@@ -65,5 +76,8 @@ try {
 } finally {
   stopServer();
   await replicaSet.stop();
+  if (resolve(dataRoot).startsWith(`${resolve(tmpdir())}${sep}`) && basename(dataRoot).startsWith("booklet-e2e-assets-")) {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
 }
 process.exit(exitCode);

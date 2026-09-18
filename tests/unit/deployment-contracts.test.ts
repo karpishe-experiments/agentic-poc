@@ -36,6 +36,13 @@ describe("deployment contracts", () => {
     expect(hasValidBasicAuthorization(`Basic ${btoa(`other:${password}`)}`, password)).toBe(false);
   });
 
+  it("keeps the Dify tool-auth exception scoped to four staging routes", () => {
+    const proxy = readFileSync("proxy.ts", "utf8");
+    expect(proxy).toContain('process.env.DEPLOYMENT_ENV === "_staging"');
+    expect(proxy).toContain('process.env.DIFY_EXPERIMENT_ENABLED === "true"');
+    for (const path of ["context", "draft", "review", "image"]) expect(proxy).toContain(`/api/experiments/dify/tools/${path}`);
+  });
+
   it("requires deployed secrets, S3 buckets, and the fixed database", () => {
     const base = { NODE_ENV: "production", OPENAI_API_KEY: "key", DEPLOYMENT_ENV: "_prod", ASSET_STORAGE: "s3", AWS_REGION: "auto", MONGODB_URI: "mongodb://example", MONGODB_DATABASE: "kids_booklet_prod", ACCESS_GATE_PASSWORD: "a-long-enough-password", ASSETS_BUCKET: "assets", DIAGNOSTICS_BUCKET: "diagnostics", RECOVERY_BUCKET: "recovery" } as const;
     expect(getServerEnv({ ...base, OBJECT_STORE_ENDPOINT: "https://example.r2.cloudflarestorage.com" }).DEPLOYMENT_ENV).toBe("_prod");

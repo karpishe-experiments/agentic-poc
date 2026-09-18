@@ -1,10 +1,10 @@
 # Agent platform decision: validate Dify before Mastra
 
-**Status:** Accepted for validation; not implemented  
+**Status:** Accepted for validation; implementation and live verification in progress
 **Decision date:** 2026-09-16  
 **Applies to:** The next internal experiment for configuring, running, and evaluating Booklet agents
 
-**Current experiment (2026-09-17):** Follow [plan.md](plan.md) and [runbook.md](runbook.md). The trial now covers a small staging lifecycle: load context, write three panels, save/revise, request review, approve, generate panel one, and resume. The broader checks below are deferred product questions, not additional requirements for this trial. This record preserves the rationale; it does not claim Dify integration is implemented.
+**Current experiment (2026-09-18):** Follow [plan.md](plan.md) and [runbook.md](runbook.md). The trial covers a small staging lifecycle: load context, write three panels, save/revise, request review, approve, generate panel one, and resume. The application code and fake-provider checks exist locally; Dify Cloud integration, staging deployment, and live-provider results are not yet verified. The broader checks below are deferred product questions, not additional requirements for this trial.
 
 ## Decision
 

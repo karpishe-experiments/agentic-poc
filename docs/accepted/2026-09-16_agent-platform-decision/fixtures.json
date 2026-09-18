@@ -45,11 +45,13 @@
   "negative_requests": {
     "before_approval": {
       "project_id": "booklet-dify-trial",
+      "run_id": "00000000-0000-4000-8000-000000000001",
       "expected_revision": 1,
       "panel_number": 1
     },
     "stale_save": {
       "project_id": "booklet-dify-trial",
+      "run_id": "00000000-0000-4000-8000-000000000001",
       "expected_revision": 0,
       "story": {
         "title": "Pip and the Thirsty Sunflower",

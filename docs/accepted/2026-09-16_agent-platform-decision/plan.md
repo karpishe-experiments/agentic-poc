@@ -1,6 +1,6 @@
 # Dify booklet lifecycle experiment on staging
 
-Status: planning artifacts only; coding, Dify configuration, and live runs have not started.
+Status: implementation in progress. The isolated staging routes, fake lifecycle, tool contract, and optional real adapters exist. Dify's OpenAI provider and Story Writer Workflow have passed a synthetic create test; the Booklet integration has not run on staging.
 Issue: [#50](https://github.com/karpishe-experiments/agentic-poc/issues/50).
 Start with the [compact runbook](runbook.md). Use the [verification checklist](verification.md) at the end.
 
@@ -8,7 +8,7 @@ Start with the [compact runbook](runbook.md). Use the [verification checklist](v
 
 A Dify manager loads Booklet context, writes a short storyline and three panels, saves a draft, responds to feedback, waits for approval, generates the first panel's image, and resumes without repeating completed work.
 
-Use one synthetic project, one operator, one manager, one writing skill, three story moments, and one image. “Panel” means one sequential story moment, not a multi-panel page or a change to the canonical Booklet PRD.
+Use one synthetic project, one operator, one manager, one Story Writer Workflow based on the writing instructions, three story moments, and one image. “Panel” means one sequential story moment, not a multi-panel page or a change to the canonical Booklet PRD.
 
 Run the experiment on _staging inside the existing application. The browser uses ordinary requests and polling. No local web server, local streaming setup, tunnel, or self-hosted Dify installation is needed.
 
@@ -17,7 +17,7 @@ This plan replaces the previous one-shot generation, concept-proposal, and local
 ## The full small scenario
 
 1. Open /experiments/dify on staging. Initialize the synthetic project from [fixtures.json](fixtures.json) if absent.
-2. Click **Create story**. Booklet starts a Dify turn. The manager loads context, follows its writing skill, saves revision 1, requests review, and stops.
+2. Click **Create story**. Booklet starts a Dify turn. The manager loads context, calls `write_story`, saves revision 1, requests review, and stops.
 3. The page displays the saved storyline and three panels in a review card.
 4. Submit “Make the ending funnier, but keep Pip kind and preserve the first panel.” Booklet saves feedback. The manager reloads context, saves revision 2, requests review, and stops.
 5. Click **Approve and illustrate** on revision 2. Booklet records approval and then starts a continuation turn.
@@ -31,8 +31,8 @@ One negative check is part of the live scenario: call generate_panel_image befor
 
 | Component | Responsibility |
 |---|---|
-| Dify manager | Decide next action, follow writing skill, call the four tools, explain progress. |
-| Writing skill | Write/revise storyline, three panels, and the first-panel image prompt within one manager model. |
+| Dify manager | Decide next action, call the Story Writer specialty and the four Booklet tools, explain progress. |
+| Story Writer Workflow | Propose/revise storyline, three panels, and the first-panel image prompt as typed Story output. |
 | Booklet experiment service | Validate tool requests, load context, persist revisions, enforce approval, dispatch and save the image. |
 | Staging page | Show persisted artifacts and review controls; collect feedback and approval; poll progress. |
 | Existing staging MongoDB and R2 | Persist isolated experiment state and its image across requests and deployments. |
@@ -41,19 +41,20 @@ Dify never owns approval or durable project state. Its chat text is not the revi
 
 Use existing Next.js, MongoDB access, R2 asset infrastructure, Zod, and fetch. Keep experiment code grouped under an experiment module; do not add stages to the normal booklet workflow, route normal chat through Dify, or copy full runtime services.
 
-Use gemini-2.5-flash in Dify and gemini-2.5-flash-image in the server image adapter. One Google provider account suffices. Dify gets text-model credentials; the server holds image credentials. No Dify image plugin is attached because that would bypass Booklet's approval tool.
+Use `gpt-5.6-terra` in Dify and `gpt-image-2` in the server image adapter. The Booklet OpenAI project holds separate restricted text and image keys. Dify stores the text credential; the server holds `DIFY_IMAGE_OPENAI_API_KEY` for images. No Dify image plugin is attached because that would bypass Booklet's approval tool.
 
 ## Shared artifacts
 
 - [tools.openapi.json](tools.openapi.json): importable OpenAPI 3.0 tool definition and Story/Context schemas. Replace only its server URL before import.
 - [manager-prompt.md](manager-prompt.md): paste into the manager's instructions.
-- [story-writing/SKILL.md](story-writing/SKILL.md): package as a Dify skill; instructions only.
+- [story-writing/SKILL.md](story-writing/SKILL.md): source instructions for the Story Writer Workflow.
+- [story-writer-workflow.md](story-writer-workflow.md): Dify Workflow-as-Tool configuration.
 - [build-request.md](build-request.md): conversational setup request and configuration checks.
 - [fixtures.json](fixtures.json): seed data, a valid example draft, feedback, and expected outcomes.
 - [configuration.md](configuration.md): settings, credential ownership, and deployment requirements.
 - [verification.md](verification.md): fake-provider checks, live sequence, and issue-comment template.
 
-These are authored contracts and examples, not tested Dify exports or runtime implementation. Export the actual working Dify definition after setup and preserve skill sources separately.
+These are authored contracts and examples, not tested Dify exports. Export the actual working Dify definition after setup and preserve the Story Writer instructions separately.
 
 ## Four application tools
 
@@ -66,7 +67,7 @@ All tools live below /api/experiments/dify/tools. Only these four paths accept t
 | request_review | Mark the current revision ready for review; repeat calls for that revision are harmless. |
 | generate_panel_image | Require current revision approval, panel 1, image opt-in and remaining attempt allowance; start one attempt and return immediately. |
 
-Schemas and request bodies are in tools.openapi.json. No tool accepts an approval flag, role, budget, filesystem path, provider URL, or model override. The manager cannot approve its own work.
+Schemas and request bodies are in tools.openapi.json. The three mutating tools require run_id from the current Booklet turn. No tool accepts an approval flag, role, budget, filesystem path, provider URL, or model override. The manager cannot approve its own work.
 
 Use HTTP 401 for missing/wrong tool key; 404 for unknown project; 422 for invalid input; 409 for stale_revision, approval_required, busy or image_attempt_exists; 403 for image_disabled or image_limit_reached. Return the common error envelope and actionable message. The context tool remains usable after errors.
 
@@ -78,7 +79,7 @@ The prompt describes only panel one with the saved character and illustration st
 
 ### Context and lifecycle
 
-Return the current story, current_revision, review_revision, approved_revision, pending feedback, image summary, and allowed_actions. Include saved audience, language, style, and character details every time. Supply recent feedback (last five entries) rather than whole run logs.
+Return the current story, current_revision, review_revision, approved_revision, pending feedback, image summary, and allowed_actions. Include saved audience, language, style, and character details every time. Supply recent feedback (last five entries) rather than whole run logs. Do not expose active_run_id in any Dify tool response; only the browser project view receives it.
 
 Derive state and permitted mutation tools as follows; get_project_context is always available:
 
@@ -110,15 +111,15 @@ Fake tests use an isolated test database and fake asset store. Do not populate t
 
 Use the existing staging assets bucket with keys under experiments/dify/booklet-dify-trial/. Save the image bytes through the existing storage layer; keep asset key, MIME, revision, prompt, attempt_count and status in the experiment document. Do not invent normal booklet asset records. An authenticated experiment asset route serves only the saved image key; there is no arbitrary URL/key proxy.
 
-A Dify turn and image attempt have explicit deadlines. Any running record past its deadline is shown as unknown on the next state read/resume; do not automatically retry it. A late worker may commit only if its attempt/run ID still matches and is still running. Retain completed drafts if Dify fails after saving.
+A Dify turn and image attempt have explicit deadlines. Any running record past its deadline is shown as unknown on the next state read/resume; do not automatically retry it. Booklet sends its server run ID in the manager turn message. Each mutating Booklet tool requires that exact run_id and atomically checks it against the active run. A late turn cannot mutate state after another turn starts. Retain completed drafts if Dify fails after saving.
 
-Image dispatch is one background task using Next.js after and the existing tracked-mutation wrapper for its full duration. Return generating promptly to Dify. Existing maintenance/drain controls govern both manager turns and image work; no experiment mutation bypasses them. One active manager turn per project, but its HTTP tools must be able to write without acquiring the manager-turn lock again.
+Image dispatch is one background task using Next.js after and the existing tracked-mutation wrapper for its full duration. Return generating promptly to Dify. Existing maintenance/drain controls govern manager turns, image work, and expiration recovery writes. No experiment mutation bypasses them. One active manager turn per project, but its HTTP tools must be able to write without acquiring the manager-turn lock again.
 
 No general queue, distributed workflow engine, or automatic provider retries. This is sufficient for a single-instance experiment, not an exactly-once billing guarantee.
 
 ## Staging page and server interface
 
-Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain the existing Basic Auth gate. Return 404 outside _staging or when DIFY_EXPERIMENT_ENABLED=false. Tests use injected configuration; there is no need to deploy to run fake tests.
+Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain the existing Basic Auth gate. Return 404 outside _staging or when DIFY_EXPERIMENT_ENABLED=false. The only exception is enabled fake mode in a local development server for the isolated browser test. It cannot enable real calls or run in a production build.
 
 | Relative API path | Contract |
 |---|---|
@@ -136,15 +137,15 @@ Require JSON and same-origin checks for browser mutations. Do not expose approva
 
 ## Dify adapter
 
-Call POST /chat-messages from the server with inputs={}, response_mode=streaming, user=booklet-trial-operator, auto_generate_name=false, no conversation_id, and a query containing only project ID and an action hint. The manager loads the actual idea and feedback through get_project_context.
+Call POST /chat-messages from the server with inputs={}, response_mode=streaming, user=booklet-trial-operator, auto_generate_name=false, no conversation_id, and a query containing the project ID, action hint, and current server run ID. The manager passes that ID to mutating Booklet tools and loads the actual idea and feedback through get_project_context.
 
-Consume Dify's required SSE internally. The browser does not implement streaming. Accumulate agent_message text, replace it with the closing message, and finish on message_end. Parse arbitrary chunk boundaries; ignore unknown events. Persist tool names/status and final explanatory text, not raw reasoning. Persist usage when available, otherwise record unavailable.
+Consume Dify's required SSE internally. The browser does not implement streaming. Accumulate agent_message text, replace it with the closing message, and return when message_end arrives, even if the connection remains open. Parse arbitrary chunk boundaries; ignore unknown events, but fail on an error event, malformed event, or stream that ends before message_end. Persist tool names/status and final explanatory text, not raw reasoning. Persist usage when available, otherwise record unavailable.
 
-Run the adapter in Next.js after with tracked-mutation accounting; a five-minute deadline bounds one turn. If interrupted/timed out, best-effort call Dify's stop endpoint with task_id and the same user. Keep saved artifacts and show Resume. Every Resume starts fresh and proves state comes from Booklet.
+Run the adapter in Next.js after with tracked-mutation accounting; a five-minute deadline bounds one turn. If interrupted/timed out, best-effort call Dify's stop endpoint with task_id and the same user, with a five-second timeout on that call. Keep saved artifacts and show Resume. Every Resume starts fresh and proves state comes from Booklet.
 
 ## Image adapter
 
-Only generate_panel_image can dispatch a provider request. It reads the approved saved prompt, atomically reserves the attempt, and calls Gemini generateContent with x-goog-api-key. Use contents containing one user text part and generationConfig.responseModalities=["TEXT","IMAGE"]. Take the first image inlineData part, validate image MIME, decode it, and store it in staging R2.
+Only generate_panel_image can dispatch a provider request. It reads the approved saved prompt, atomically reserves the attempt, and calls OpenAI's image generation endpoint with `gpt-image-2`, square size, and medium quality. Decode the returned image bytes and store them in staging R2. A duplicate tool call returns the existing image state and does not schedule another provider request.
 
 A refusal/no-image response or definite provider error becomes failed. A 120-second timeout becomes unknown because the provider may have charged. Do not auto-retry.
 
@@ -156,7 +157,7 @@ Dispatch atomically requires image=null, current approval and image_attempt_coun
 
 | Coding track | Dify setup track |
 |---|---|
-| Implement experiment state/tools/UI with fixture-backed fake adapters. | Create Cloud account, configure Gemini text model, create agent and paste prompt/skill. |
+| Implement experiment state/tools/UI with fixture-backed fake adapters. | Create Cloud account, configure the OpenAI provider, create the manager, and publish Story Writer as `write_story`. |
 | Implement internal Dify SSE consumption and image adapter; test auth/state transitions. | Import OpenAPI with placeholder server; configure tools and prepare app publication. Endpoint tests wait for staging. |
 | Prepare optional credential support and staging-only flag through canonical deployment configuration. | Supply Dify app key privately; obtain a dedicated tool key from the operator. |
 | Publish reviewed code and prepare staging deployment using the deployment runbook. | Replace server URL with actual staging origin; set tool-key header; publish. |
@@ -172,7 +173,7 @@ After implementation run typecheck, lint, focused experiment contract/service/ad
 
 Use [verification.md](verification.md) to prove initial draft, revision, approval, one image, persisted resume and rejection before approval. Keep results in issue comments; record setup effort, latency, tool errors, observed usage and image cost separately. No numeric scoring system or model-comparison framework.
 
-This covers context loading, static tool discovery, orchestration, structured artifacts, review/revision/approval, image generation, durable state, custom UI and resume. It does not prove multi-agent delegation, dynamic tool discovery, large-context retrieval, multi-user permissions, payments, cancellation guarantees, full-book consistency, asset reuse/personalization, layout or PDFs.
+This covers context loading, static tool discovery, manager-to-specialty Workflow delegation, orchestration, structured artifacts, review/revision/approval, image generation, durable state, custom UI and resume. It does not prove general agent-to-agent delegation, dynamic tool discovery, large-context retrieval, multi-user permissions, payments, cancellation guarantees, full-book consistency, asset reuse/personalization, layout or PDFs.
 
 ## Source notes
 
@@ -181,7 +182,6 @@ Checked 2026-09-17; live access, imports and provider behavior still need verifi
 - [Dify Agent setup, skills and export](https://docs.dify.ai/en/cloud/use-dify/build/new-agent/build)
 - [Dify OpenAPI tools](https://docs.dify.ai/en/cloud/use-dify/workspace/tools)
 - [Dify Agent API](https://docs.dify.ai/en/api-reference/guides/agent)
-- [Gemini image model](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image)
-- [Gemini generateContent](https://ai.google.dev/api/generate-content)
+- [OpenAI image generation](https://developers.openai.com/api/docs/guides/image-generation)
 
-No experiment runtime is implemented by this documentation delivery. Update current-state architecture and deployment guidance when the corresponding code is implemented, not as if these planned behaviors already exist.
+The experiment runtime is implemented locally but not deployed or verified end to end. Record live behavior only after the staging trial.
