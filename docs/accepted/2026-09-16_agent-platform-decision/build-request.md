@@ -2,13 +2,13 @@
 
 Paste this into Dify Build after creating booklet_manager:
 
-> Configure a small Booklet manager using gemini-2.5-flash. It must first load project state through get_project_context, use the attached story-writing skill to write or revise a storyline and three panels, save through save_story_draft, request_review, and wait for the operator. Only an application-confirmed approval permits generate_panel_image for panel one. Read the supplied manager instructions and apply them. These four tools will be imported from the supplied OpenAPI definition; do not invent tools, add a direct image plugin, or create a second project database. Do not make live image requests during configuration.
+> Configure a small Booklet manager using gpt-5.6-terra. It must first load project state through get_project_context, call the attached write_story Workflow tool to create or revise a storyline and three panels, save through save_story_draft, request_review, and wait for the operator. Booklet provides a Run ID in each turn; pass that exact run_id to each mutating Booklet tool. Only an application-confirmed approval permits generate_panel_image for panel one. Read the supplied manager instructions and apply them. The four Booklet tools will be imported from the supplied OpenAPI definition; do not invent tools, add a direct image plugin, or create a second project database. Do not make live image requests during configuration.
 
 After applying the Build draft, check:
 
-- Model is gemini-2.5-flash and supports tool calling.
+- Model is gpt-5.6-terra and supports tool calling.
 - Manager prompt matches [manager-prompt.md](manager-prompt.md).
-- Exactly one writing skill is attached.
+- The `write_story` Workflow tool is attached; no writing skill is attached to the manager.
 - Exactly the four Booklet HTTP tools are attached once their endpoint is available.
 - No provider credentials or tool keys appear in prompts or files.
 - The Build note does not contradict approval, context-loading, or retry instructions.

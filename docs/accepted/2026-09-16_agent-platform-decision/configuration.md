@@ -1,6 +1,6 @@
 # Experiment configuration
 
-These settings are planned additions, not supported runtime variables yet. Keep production unchanged. The experiment requires DEPLOYMENT_ENV=_staging and DIFY_EXPERIMENT_ENABLED=true.
+The runtime supports these settings. Keep production unchanged. The experiment requires DEPLOYMENT_ENV=_staging and DIFY_EXPERIMENT_ENABLED=true.
 
 | Setting | Default | Where it belongs |
 |---|---|---|
@@ -11,27 +11,25 @@ These settings are planned additions, not supported runtime variables yet. Keep 
 | DIFY_IMAGE_MAX_ATTEMPTS | 2 | Server configuration; project-wide, not agent-controlled |
 | DIFY_API_KEY | absent | Protected host application secret; published Dify app key |
 | DIFY_TOOL_KEY | absent | Protected host secret; independent random value of at least 32 bytes; Dify tool credential sends it as X-Booklet-Tool-Key |
-| GEMINI_API_KEY | absent | Protected host secret for server image generation; separately configured in Dify for text |
-| Text model | gemini-2.5-flash | Dify agent configuration |
-| Image model | gemini-2.5-flash-image | Fixed experiment server default |
+| DIFY_IMAGE_OPENAI_API_KEY | absent | Protected host secret for experiment image calls; use a separate restricted Booklet project key with Images Write |
+| Text model | gpt-5.6-terra | Dify manager and Story Writer configuration |
+| Image model | gpt-image-2 | Fixed experiment server default |
 
-Missing credentials disable affected experiment operations with a readable setup error. They must not stop the existing application from starting when the experiment is disabled. Real mode requires DIFY_API_KEY; enabled real image calls require GEMINI_API_KEY. Tool handlers always require DIFY_TOOL_KEY.
+Missing credentials disable affected experiment operations with a readable setup error. They must not stop the existing application from starting when the experiment is disabled. Real mode requires DIFY_API_KEY; enabled real image calls require DIFY_IMAGE_OPENAI_API_KEY. Tool handlers always require DIFY_TOOL_KEY. The existing OPENAI_API_KEY remains for normal Booklet runtime calls.
 
 Use the actual staging origin from the current deployment configuration. Replace tools.openapi.json's example server URL in the copy imported into Dify. Never put keys into that file. The tool key grants access only to booklet-dify-trial.
 
-## Deployment work needed during implementation
+## Deployment configuration checkpoint
 
-The existing deployment script accepts exactly five application secrets. Therefore adding environment variables to app code alone is insufficient.
+The deployment script now keeps its five required application secrets and accepts the three optional Dify keys above. Existing secret files without those keys remain valid. Select and rotate each optional key by name; normal production operations do not prompt for it.
 
-Extend the canonical secret-name allowlist, input validation, prompting, secret staging/rotation and Compose rendering to support the three optional keys above. Preserve all five currently required secrets and their validations. Existing secret files without optional keys must remain valid. Prompt for optional experiment keys only when explicitly selected; never request them for normal production operations.
+The reviewed Compose configuration has the non-secret flags and optional secret slots. Absent optional values do not break interpolation, rotation, readiness, or rollback. The same names apply in both environments; there are no `STAGING_*` secret variants.
 
-Add non-secret flags and optional secret slots to the reviewed Compose configuration. Absent optional values must not break interpolation, rotation, readiness or rollback. Use the same names across environments; do not create STAGING_* secret variants.
+Before publication, run the focused configuration tests, both deployment shell tests, `bash -n`, and ShellCheck. The optional-key rotation procedure is in the canonical [deployment runbook](../../deployment/runbook.md).
 
-Update focused configuration/secret tests, both deployment shell tests, bash -n and ShellCheck. Document the supported optional key rotation in the canonical deployment runbook after code exists.
+Installed host script/Compose changes remain Infrastructure-owned. Publish and merge the reviewed change to `master` through the normal review process; run Infrastructure for the installed configuration, then promote the reviewed application change to `_staging`. Use the deployment runbook at every live checkpoint. Do not edit `secrets.json` manually, add a deployment entrypoint, or mutate production directly.
 
-Installed host script/Compose changes remain Infrastructure-owned. Publish and merge the reviewed change to master through the normal review process; run Infrastructure for the installed configuration, then promote the reviewed application change to _staging. Use [the deployment runbook](../../deployment/runbook.md) at every live checkpoint. No manual secrets.json edits, new deployment entrypoint, or direct production mutation.
-
-Before billable runs, confirm provider access and the operator's spending approval. Included Dify text credits do not imply free Gemini image calls. Report image charges separately if Dify usage omits them.
+Before billable runs, confirm provider access and the operator's spending approval. Dify text usage and the server image call are charged separately. Report image charges separately if Dify usage omits them.
 
 ## Disabled and recovery behavior
 

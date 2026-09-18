@@ -23,6 +23,12 @@ export type ExecutionPreferenceDocument = BaseDocument & { bookletId: string; ta
 export type ExecutionBatchDocument = BaseDocument & { bookletId: string; cardId: string; targetKey: string; subjectKind: string; subjectId: string; previousBatchId: string | null; poolFingerprint: string; status: string; materializationStatus: string; resultChoicePolicy: string; canonicalInputJson: string; workflowFingerprintJson: string; schemaVersion: string; selectedItemId: string | null; selectionMode: string | null; selectionResponseId: string | null; producedArtifactVersionId: string | null; producedQualityReviewId: string | null; producedAssetId: string | null; queuedAtMs: number; startedAtMs: number | null; terminalAtMs: number | null; completedAtMs: number | null; updatedAtMs: number };
 export type ExecutionItemDocument = BaseDocument & { batchId: string; agentId: string; agentVersionId: string; profileId: string; profileVersion: number; agentSnapshotJson: string; profileSnapshotJson: string; status: string; attemptCount: number; attemptsJson: string; resultSummaryJson: string | null; canonicalResultJson: string | null; candidateAssetId: string | null; safeErrorJson: string | null; startedAtMs: number | null; finishedAtMs: number | null; updatedAtMs: number };
 export type DeploymentControlDocument = BaseDocument & { schemaVersion: "1"; environment: string; maintenance: boolean; reason: string | null; activeMutations: number; updatedAtMs: number };
+export type DifyExperimentDocument = BaseDocument & {
+  schemaVersion: "1"; projectId: "booklet-dify-trial"; idea: string; preferences: import("@/lib/contracts/dify-experiment").DifyExperimentPreferences;
+  revisions: import("@/lib/contracts/dify-experiment").DifyExperimentRevision[]; feedback: import("@/lib/contracts/dify-experiment").DifyExperimentFeedback[];
+  currentRevision: number; reviewRevision: number | null; approvedRevision: number | null; image: import("@/lib/contracts/dify-experiment").DifyExperimentImage | null;
+  imageAttemptCount: number; runs: import("@/lib/contracts/dify-experiment").DifyExperimentRun[]; activeRunId: string | null; createdAtMs: number; updatedAtMs: number;
+};
 export type MongoDocumentMap = {
   booklets: BookletDocument;
   artifacts: ArtifactDocument;
@@ -46,7 +52,8 @@ export type MongoDocumentMap = {
   execution_batches: ExecutionBatchDocument;
   execution_items: ExecutionItemDocument;
   deployment_control: DeploymentControlDocument;
+  dify_experiment_projects: DifyExperimentDocument;
 };
 
 export type CollectionName = keyof MongoDocumentMap;
-export const COLLECTION_NAMES = ["booklets", "artifacts", "artifact_versions", "artifact_dependencies", "messages", "cards", "card_responses", "assets", "style_catalog", "generation_jobs", "generation_items", "model_calls", "agent_definitions", "agent_versions", "agent_version_events", "quality_reviews", "approvals", "exports", "execution_preferences", "execution_batches", "execution_items", "deployment_control"] as const satisfies readonly CollectionName[];
+export const COLLECTION_NAMES = ["booklets", "artifacts", "artifact_versions", "artifact_dependencies", "messages", "cards", "card_responses", "assets", "style_catalog", "generation_jobs", "generation_items", "model_calls", "agent_definitions", "agent_versions", "agent_version_events", "quality_reviews", "approvals", "exports", "execution_preferences", "execution_batches", "execution_items", "deployment_control", "dify_experiment_projects"] as const satisfies readonly CollectionName[];

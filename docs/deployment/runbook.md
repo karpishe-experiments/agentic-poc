@@ -64,6 +64,8 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |
 
+The Dify experiment is enabled only in staging and starts in fake mode with image calls disabled. Its optional host secrets are `DIFY_API_KEY`, `DIFY_TOOL_KEY`, and `DIFY_IMAGE_OPENAI_API_KEY`; rotate each by name through the same serialized command only after the Dify setup has been reviewed. Production keeps the experiment disabled. Do not put these values in Compose files, workflow variables, Dify prompts, or logs.
+
 Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
 
 ## Interruption and recovery
