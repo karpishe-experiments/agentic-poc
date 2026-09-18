@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 test("keeps the synthetic story, review, and image across a refresh", async ({ page }) => {
-  await page.goto("/experiments/dify");
+  await page.goto("/");
+  await page.getByRole("link", { name: "Dify experiment" }).click();
+  await expect(page).toHaveURL(/\/experiments\/dify$/);
   await expect(page.getByText("Dify experiment · fake mode")).toBeVisible();
   await page.getByRole("button", { name: "Initialize experiment" }).click();
   await expect(page.getByRole("button", { name: "Create story" })).toBeVisible();
