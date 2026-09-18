@@ -33,6 +33,8 @@ prepare_release() {
   printf 'candidate manifest\n' > "$STATE/releases/$ENVIRONMENT/$COMMIT/manifest.sha256"
   printf 'prepare\n' >> "$CALLS"
 }
+# The sourced host lifecycle calls this stub with arguments.
+# shellcheck disable=SC2120
 compose() { printf 'compose %s\n' "$*" >> "$CALLS"; }
 maintenance() { printf 'maintenance %s\n' "$*" >> "$CALLS"; }
 docker() { printf 'docker %s\n' "$*" >> "$CALLS"; }
