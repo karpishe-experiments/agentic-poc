@@ -15,7 +15,8 @@ const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 async function eventually<T>(read: () => Promise<T | null>): Promise<T> {
-  for (let attempt = 0; attempt < 150; attempt += 1) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
     const value = await read();
     if (value) return value;
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -153,6 +154,7 @@ describe("reference generation", () => {
     const composed = await repositories.assets.get(completed.assetId!);
     expect(composed).toMatchObject({ kind: "page_composed", sourceAssetId: result.sourceAssetId });
     expect(await assets.exists(composed!.uri)).toBe(true);
+    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" ? true : null);
     await database.collections.execution_batches.updateOne({ _id: result.executionBatchId }, { $set: { status: "materializing", materializationStatus: "running", selectedItemId: (await repositories.execution.getItems(result.executionBatchId))[0]!.id } });
     expect(await agentRuns.recoverInterrupted()).toContain(result.executionBatchId);
     await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" ? true : null);
