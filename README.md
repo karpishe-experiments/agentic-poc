@@ -114,6 +114,7 @@ Database state lives in MongoDB. Filesystem assets remain under `data/` and are 
 - [Agent-management PRD](docs/accepted/2026-08-15_database-backed-agent-management/database-backed-agent-management-prd.md)
 - [Agent-management implementation plan](docs/accepted/2026-08-15_database-backed-agent-management/PLAN.md)
 - [Specialty-management Phase 0 mockup guide](docs/accepted/2026-09-11_specialty-management-mockup/README.md)
+- [Agent platform decision: validate Dify before Mastra](docs/accepted/2026-09-16_agent-platform-decision/DECISION.md)
 - [User guide](docs/accepted/2026-08-01_end-to-end-poc/USER-GUIDE.md)
 - [Verified lessons](docs/accepted/2026-08-01_end-to-end-poc/LESSONS-LEARNED.md)
 - [Implementation issue #6](https://github.com/karpishe-experiments/agentic-poc/issues/6)

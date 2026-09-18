@@ -1,0 +1,645 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Booklet Dify lifecycle experiment",
+    "version": "1.0.0",
+    "description": "Specification only. Replace the server URL with the staging origin before importing. Authentication is configured in Dify, never in this file."
+  },
+  "servers": [
+    {
+      "url": "https://replace-with-staging-origin.example"
+    }
+  ],
+  "security": [
+    {
+      "BookletToolKey": []
+    }
+  ],
+  "paths": {
+    "/api/experiments/dify/tools/context": {
+      "post": {
+        "operationId": "get_project_context",
+        "summary": "get_project_context",
+        "description": "Load authoritative saved story, feedback, review, approval and allowed actions. Call first on every turn.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "enum": [
+                      "booklet-dify-trial"
+                    ]
+                  }
+                },
+                "required": [
+                  "project_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current authoritative context after the operation. Image dispatch returns generating.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Context"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Non-2xx error; status codes and transitions are specified in plan.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/dify/tools/draft": {
+      "post": {
+        "operationId": "save_story_draft",
+        "summary": "save_story_draft",
+        "description": "Save or revise the full story. expected_revision must equal current_revision. Never supplies approval. Reload context on stale_revision.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "enum": [
+                      "booklet-dify-trial"
+                    ]
+                  },
+                  "run_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The exact Run ID supplied in the manager turn. Never use an ID from a later turn."
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "story": {
+                    "$ref": "#/components/schemas/Story"
+                  }
+                },
+                "required": [
+                  "project_id",
+                  "run_id",
+                  "expected_revision",
+                  "story"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current authoritative context after the operation. Image dispatch returns generating.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Context"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Non-2xx error; status codes and transitions are specified in plan.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/dify/tools/review": {
+      "post": {
+        "operationId": "request_review",
+        "summary": "request_review",
+        "description": "Request user review of the current draft, then stop. This does not approve the draft.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "enum": [
+                      "booklet-dify-trial"
+                    ]
+                  },
+                  "run_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The exact Run ID supplied in the manager turn."
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "project_id",
+                  "run_id",
+                  "expected_revision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current authoritative context after the operation. Image dispatch returns generating.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Context"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Non-2xx error; status codes and transitions are specified in plan.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/dify/tools/image": {
+      "post": {
+        "operationId": "generate_panel_image",
+        "summary": "generate_panel_image",
+        "description": "Request only panel 1 of the approved current revision. Returns promptly with generating; do not poll or repeat. User UI handles completion.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "enum": [
+                      "booklet-dify-trial"
+                    ]
+                  },
+                  "run_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The exact Run ID supplied in the manager turn."
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "panel_number": {
+                    "type": "integer",
+                    "enum": [
+                      1
+                    ]
+                  }
+                },
+                "required": [
+                  "project_id",
+                  "run_id",
+                  "expected_revision",
+                  "panel_number"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current authoritative context after the operation. Image dispatch returns generating.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Context"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Non-2xx error; status codes and transitions are specified in plan.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BookletToolKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Booklet-Tool-Key"
+      }
+    },
+    "schemas": {
+      "Story": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "storyline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "character_description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "panels": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "scene": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "number",
+                "text",
+                "scene"
+              ]
+            }
+          },
+          "first_panel_image_prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "title",
+          "storyline",
+          "character_description",
+          "panels",
+          "first_panel_image_prompt"
+        ],
+        "description": "Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules."
+      },
+      "Image": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "generating",
+              "ready",
+              "failed",
+              "unknown"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "attempt_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "asset_path": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "status",
+          "revision",
+          "attempt_count",
+          "prompt",
+          "asset_path",
+          "error"
+        ]
+      },
+      "Context": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "enum": [
+              "booklet-dify-trial"
+            ]
+          },
+          "idea": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "preferences": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "age_range": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "language": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "visual_style": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "character": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "age_range",
+              "language",
+              "visual_style",
+              "character"
+            ]
+          },
+          "current_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "story": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "storyline": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "character_description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "panels": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "number": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "scene": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "number",
+                    "text",
+                    "scene"
+                  ]
+                }
+              },
+              "first_panel_image_prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "title",
+              "storyline",
+              "character_description",
+              "panels",
+              "first_panel_image_prompt"
+            ],
+            "description": "Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules.",
+            "nullable": true
+          },
+          "review_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "approved_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "pending_feedback": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "generating",
+                  "ready",
+                  "failed",
+                  "unknown"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "attempt_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              },
+              "asset_path": {
+                "type": "string",
+                "nullable": true
+              },
+              "error": {
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "status",
+              "revision",
+              "attempt_count",
+              "prompt",
+              "asset_path",
+              "error"
+            ],
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft_needed",
+              "draft_saved",
+              "awaiting_review",
+              "ready_for_image",
+              "generating",
+              "complete",
+              "image_failed"
+            ]
+          },
+          "allowed_actions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "save_story_draft",
+                "request_review",
+                "generate_panel_image"
+              ]
+            }
+          },
+          "image_attempt_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          }
+        },
+        "required": [
+          "project_id",
+          "idea",
+          "preferences",
+          "current_revision",
+          "story",
+          "review_revision",
+          "approved_revision",
+          "pending_feedback",
+          "image",
+          "state",
+          "allowed_actions",
+          "image_attempt_count"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    }
+  }
+}

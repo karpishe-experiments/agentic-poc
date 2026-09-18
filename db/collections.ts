@@ -13,5 +13,6 @@ export function createCollectionHandles(database: Db): MongoCollections {
     quality_reviews: database.collection("quality_reviews"), approvals: database.collection("approvals"), exports: database.collection("exports"),
     execution_preferences: database.collection("execution_preferences"), execution_batches: database.collection("execution_batches"), execution_items: database.collection("execution_items"),
     deployment_control: database.collection("deployment_control"),
+    dify_experiment_projects: database.collection("dify_experiment_projects"),
   };
 }

@@ -14,4 +14,14 @@ describe("runtime environment", () => {
     expect(resolveComicCopyMode({})).toBe("creative");
     expect(resolveComicCopyMode({ COMIC_COPY_MODE: "exact" })).toBe("exact");
   });
+
+  it("keeps the Dify experiment disabled unless staging explicitly enables it", () => {
+    const disabled = getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key" });
+    expect(disabled).toMatchObject({ DIFY_EXPERIMENT_ENABLED: false, DIFY_EXPERIMENT_MODE: "fake", DIFY_IMAGE_ENABLED: false, DIFY_IMAGE_MAX_ATTEMPTS: 2 });
+    const enabled = getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key", DIFY_EXPERIMENT_ENABLED: "true", DIFY_EXPERIMENT_MODE: "real", DIFY_IMAGE_ENABLED: "true", DIFY_IMAGE_MAX_ATTEMPTS: "2" });
+    expect(enabled).toMatchObject({ DIFY_EXPERIMENT_ENABLED: true, DIFY_EXPERIMENT_MODE: "real", DIFY_IMAGE_ENABLED: true, DIFY_IMAGE_MAX_ATTEMPTS: 2 });
+    expect(enabled.DIFY_IMAGE_OPENAI_API_KEY).toBeUndefined();
+    expect(getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key", DIFY_IMAGE_OPENAI_API_KEY: "image-test-key" }).DIFY_IMAGE_OPENAI_API_KEY).toBe("image-test-key");
+    expect(() => getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key", DIFY_IMAGE_MAX_ATTEMPTS: "3" })).toThrow();
+  });
 });

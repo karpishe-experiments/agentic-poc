@@ -1,0 +1,81 @@
+{
+  "note": "Synthetic author-written examples. Seed only seed_project. example_story is for fake tests and schema checks, not a claimed model result.",
+  "seed_project": {
+    "project_id": "booklet-dify-trial",
+    "idea": "Pip discovers a thirsty sunflower in a sunny garden, finds a way to help, and the story ends happily.",
+    "preferences": {
+      "age_range": "6-8",
+      "language": "English",
+      "visual_style": "Warm watercolor, square illustration, no lettering or speech bubbles",
+      "character": "Pip, a small orange fox wearing a blue scarf"
+    }
+  },
+  "example_story": {
+    "title": "Pip and the Thirsty Sunflower",
+    "storyline": "Pip finds a drooping sunflower in the garden. He brings water in a little watering can. The sunflower stands tall again, and Pip rests happily in its shade.",
+    "character_description": "Pip, a small orange fox wearing a blue scarf",
+    "panels": [
+      {
+        "number": 1,
+        "text": "Pip found a sunflower with its head hanging low. Its soil was dry.",
+        "scene": "Pip stands beside a drooping sunflower in a sunny garden, looking at the dry soil."
+      },
+      {
+        "number": 2,
+        "text": "Pip filled his little watering can. He gave the thirsty sunflower a gentle drink.",
+        "scene": "Pip pours water onto the sunflower's soil with a small watering can."
+      },
+      {
+        "number": 3,
+        "text": "The sunflower lifted its bright face. Pip smiled and rested in its cool shade.",
+        "scene": "Pip rests beneath the healthy sunflower, smiling in the garden."
+      }
+    ],
+    "first_panel_image_prompt": "Single square warm watercolor illustration. Pip, a small orange fox wearing a blue scarf, stands beside a drooping sunflower in a sunny garden, looking at its dry soil with gentle concern. No lettering, speech bubbles, borders, or collage."
+  },
+  "revision_feedback": "Make the ending funnier, but keep Pip kind and preserve the first panel.",
+  "expected": {
+    "initial_revision": 1,
+    "revised_revision": 2,
+    "panels": 3,
+    "illustrated_panel": 1,
+    "approval_before_image": true,
+    "resume_additional_images": 0
+  },
+  "negative_requests": {
+    "before_approval": {
+      "project_id": "booklet-dify-trial",
+      "run_id": "00000000-0000-4000-8000-000000000001",
+      "expected_revision": 1,
+      "panel_number": 1
+    },
+    "stale_save": {
+      "project_id": "booklet-dify-trial",
+      "run_id": "00000000-0000-4000-8000-000000000001",
+      "expected_revision": 0,
+      "story": {
+        "title": "Pip and the Thirsty Sunflower",
+        "storyline": "Pip finds a drooping sunflower in the garden. He brings water in a little watering can. The sunflower stands tall again, and Pip rests happily in its shade.",
+        "character_description": "Pip, a small orange fox wearing a blue scarf",
+        "panels": [
+          {
+            "number": 1,
+            "text": "Pip found a sunflower with its head hanging low. Its soil was dry.",
+            "scene": "Pip stands beside a drooping sunflower in a sunny garden, looking at the dry soil."
+          },
+          {
+            "number": 2,
+            "text": "Pip filled his little watering can. He gave the thirsty sunflower a gentle drink.",
+            "scene": "Pip pours water onto the sunflower's soil with a small watering can."
+          },
+          {
+            "number": 3,
+            "text": "The sunflower lifted its bright face. Pip smiled and rested in its cool shade.",
+            "scene": "Pip rests beneath the healthy sunflower, smiling in the garden."
+          }
+        ],
+        "first_panel_image_prompt": "Single square warm watercolor illustration. Pip, a small orange fox wearing a blue scarf, stands beside a drooping sunflower in a sunny garden, looking at its dry soil with gentle concern. No lettering, speech bubbles, borders, or collage."
+      }
+    }
+  }
+}
