@@ -7,15 +7,17 @@ function available(deployment: "local" | "_staging" | "_prod", mode: "fake" | "r
 }
 
 describe("Dify experiment availability", () => {
-  it("allows enabled staging but not production or disabled staging", () => {
+  it("allows staging regardless of the host flag and never allows production", () => {
     expect(available("_staging", "real")).toBe(true);
     expect(available("_prod", "fake")).toBe(false);
-    expect(available("_staging", "fake", false)).toBe(false);
+    expect(available("_staging", "fake", false)).toBe(true);
+    expect(available("_prod", "real", true)).toBe(false);
   });
 
   it("limits local access to fake mode on a development server", () => {
     vi.stubEnv("NODE_ENV", "development");
     expect(available("local", "fake")).toBe(true);
+    expect(available("local", "fake", false)).toBe(false);
     expect(available("local", "real")).toBe(false);
     vi.stubEnv("NODE_ENV", "production");
     expect(available("local", "fake")).toBe(false);

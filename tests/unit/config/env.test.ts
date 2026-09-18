@@ -15,7 +15,7 @@ describe("runtime environment", () => {
     expect(resolveComicCopyMode({ COMIC_COPY_MODE: "exact" })).toBe("exact");
   });
 
-  it("keeps the Dify experiment disabled unless staging explicitly enables it", () => {
+  it("parses the local Dify flag and optional runtime settings", () => {
     const disabled = getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key" });
     expect(disabled).toMatchObject({ DIFY_EXPERIMENT_ENABLED: false, DIFY_EXPERIMENT_MODE: "fake", DIFY_IMAGE_ENABLED: false, DIFY_IMAGE_MAX_ATTEMPTS: 2 });
     const enabled = getServerEnv({ NODE_ENV: "test", OPENAI_API_KEY: "test-key", DIFY_EXPERIMENT_ENABLED: "true", DIFY_EXPERIMENT_MODE: "real", DIFY_IMAGE_ENABLED: "true", DIFY_IMAGE_MAX_ATTEMPTS: "2" });
