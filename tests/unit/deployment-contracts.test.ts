@@ -39,7 +39,7 @@ describe("deployment contracts", () => {
   it("keeps the Dify tool-auth exception scoped to four staging routes", () => {
     const proxy = readFileSync("proxy.ts", "utf8");
     expect(proxy).toContain('process.env.DEPLOYMENT_ENV === "_staging"');
-    expect(proxy).toContain('process.env.DIFY_EXPERIMENT_ENABLED === "true"');
+    expect(proxy).not.toContain("DIFY_EXPERIMENT_ENABLED");
     for (const path of ["context", "draft", "review", "image"]) expect(proxy).toContain(`/api/experiments/dify/tools/${path}`);
   });
 

@@ -22,11 +22,11 @@ describe("Dify tool route authentication", () => {
     expect(getContext).not.toHaveBeenCalled();
   });
 
-  it("accepts the exact key only for an enabled staging tool path", async () => {
+  it("accepts the exact key only for a staging tool path", async () => {
     const key = "0123456789abcdef0123456789abcdef";
     vi.stubEnv("DIFY_TOOL_KEY", key);
     vi.stubEnv("DEPLOYMENT_ENV", "_staging");
-    vi.stubEnv("DIFY_EXPERIMENT_ENABLED", "true");
+    vi.stubEnv("DIFY_EXPERIMENT_ENABLED", "false");
     vi.stubEnv("ACCESS_GATE_PASSWORD", "sixteen-chars-ok!");
 
     const response = await getProjectContext(new Request("https://staging.example/api/experiments/dify/tools/context", {
@@ -40,7 +40,7 @@ describe("Dify tool route authentication", () => {
       expect(gated.status).toBe(401);
     }
     expect(proxy(new NextRequest("https://staging.example/api/experiments/dify/tools/context", { headers: { "X-Booklet-Tool-Key": key } })).status).toBe(200);
-    vi.stubEnv("DIFY_EXPERIMENT_ENABLED", "false");
+    vi.stubEnv("DEPLOYMENT_ENV", "_prod");
     expect(proxy(new NextRequest("https://staging.example/api/experiments/dify/tools/context", { headers: { "X-Booklet-Tool-Key": key } })).status).toBe(401);
   });
 });

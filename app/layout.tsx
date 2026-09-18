@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import localFont from "next/font/local";
+import { DifyExperimentLink } from "@/components/dify-experiment/dify-experiment-link";
 import "./globals.css";
 
 const inter = localFont({
@@ -24,7 +25,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link className="font-semibold no-underline" href="/">
               Kids Booklet
             </Link>
-            <div className="flex gap-4"><Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link><Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link><Link className="text-sm text-[var(--muted-ink)]" href="/mockups/specialty-management?view=directory">Agent Studio</Link></div>
+            <div className="flex gap-4"><Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link><Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link><Link className="text-sm text-[var(--muted-ink)]" href="/mockups/specialty-management?view=directory">Agent Studio</Link><DifyExperimentLink /></div>
           </nav>
         </header>
         <main className="app-main" id="main-content">{children}</main>

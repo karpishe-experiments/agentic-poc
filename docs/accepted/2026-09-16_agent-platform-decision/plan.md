@@ -119,7 +119,7 @@ No general queue, distributed workflow engine, or automatic provider retries. Th
 
 ## Staging page and server interface
 
-Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain the existing Basic Auth gate. Return 404 outside _staging or when DIFY_EXPERIMENT_ENABLED=false. The only exception is enabled fake mode in a local development server for the isolated browser test. It cannot enable real calls or run in a production build.
+Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain the existing Basic Auth gate. The application enables the experiment on _staging without a host feature flag. When the authenticated setup endpoint reports that it is available, the main header shows a Dify experiment link. Return 404 in _prod. A local development server can enable fake mode with DIFY_EXPERIMENT_ENABLED=true for the isolated browser test; it cannot enable real calls or run in a production build.
 
 | Relative API path | Contract |
 |---|---|
@@ -159,13 +159,13 @@ Dispatch atomically requires image=null, current approval and image_attempt_coun
 |---|---|
 | Implement experiment state/tools/UI with fixture-backed fake adapters. | Create Cloud account, configure the OpenAI provider, create the manager, and publish Story Writer as `write_story`. |
 | Implement internal Dify SSE consumption and image adapter; test auth/state transitions. | Import OpenAPI with placeholder server; configure tools and prepare app publication. Endpoint tests wait for staging. |
-| Prepare optional credential support and staging-only flag through canonical deployment configuration. | Supply Dify app key privately; obtain a dedicated tool key from the operator. |
+| Keep staging availability in application code; prepare optional credential support through canonical deployment configuration. | Supply Dify app key privately; obtain a dedicated tool key from the operator. |
 | Publish reviewed code and prepare staging deployment using the deployment runbook. | Replace server URL with actual staging origin; set tool-key header; publish. |
 | Verify staging readiness and auth without mutating the sample; then enable live mode and run the full scenario together. | Inspect Dify traces and correct instructions if needed. |
 
 The server URL and operation IDs are the only integration handshake. Code can begin against fixtures; Dify setup can begin against schemas and prompts. Neither track needs the other's implementation to start.
 
-Implement in three slices: state/tools and fake page; Dify setup and adapter; real image and live staging verification. Full run follows the [runbook](runbook.md). Deployment configuration changes must follow master-owned infrastructure installation before the reviewed application change is promoted to _staging. Do not modify _prod settings or deploy production.
+Implement in three slices: state/tools and fake page; Dify setup and adapter; real image and live staging verification. Full run follows the [runbook](runbook.md). The reviewed application change exposes the page on _staging. The merged temporary host configuration selects real mode there; affected operations still need protected credentials. Do not modify _prod settings or deploy production.
 
 ## Verification and boundaries
 
