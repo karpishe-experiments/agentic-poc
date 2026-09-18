@@ -14,6 +14,7 @@ Compose merges base, environment overlay, root-only secret JSON, and image overr
 | `DEPLOYMENT_ENV`, `MONGODB_DATABASE`, `AWS_REGION`, `OBJECT_STORE_ENDPOINT` | Compose identity, fixed databases, R2 region/endpoint |
 | `MODEL_RUNTIME`, `IMAGE_PROVIDER_MODE` | Compose sets both to `real` |
 | `OPENAI_API_KEY`, `MONGODB_URI`, `ACCESS_GATE_PASSWORD`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Root-only `/etc/kids-booklet/<environment>/secrets.json` |
+| Optional `DIFY_API_KEY`, `DIFY_TOOL_KEY`, `DIFY_IMAGE_OPENAI_API_KEY` for the temporary staging trial | Same root-only secret override; absent values remain valid |
 | `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_HOST_KEY` | GitHub repository secrets for restricted, pinned SSH |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | GitHub repository secrets for noninteractive Tunnel SSH |
 | `CLOUDFLARE_API_TOKEN`, `R2_TERRAFORM_ACCESS_KEY_ID`, `R2_TERRAFORM_SECRET_ACCESS_KEY` | GitHub infrastructure credentials, never application container credentials |

@@ -41,7 +41,7 @@ Dify never owns approval or durable project state. Its chat text is not the revi
 
 Use existing Next.js, MongoDB access, R2 asset infrastructure, Zod, and fetch. Keep experiment code grouped under an experiment module; do not add stages to the normal booklet workflow, route normal chat through Dify, or copy full runtime services.
 
-Use gemini-2.5-flash in Dify and gemini-2.5-flash-image in the server image adapter. One Google provider account suffices. Dify gets text-model credentials; the server holds image credentials. No Dify image plugin is attached because that would bypass Booklet's approval tool.
+Use gpt-5.6-terra in Dify and gpt-image-2 in the server image adapter. Dify stores the text-model credential; the server holds a separate restricted OpenAI image credential. No Dify image plugin is attached because that would bypass Booklet's approval tool.
 
 ## Shared artifacts
 
@@ -118,7 +118,7 @@ No general queue, distributed workflow engine, or automatic provider retries. Th
 
 ## Staging page and server interface
 
-Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain the existing Basic Auth gate. Return 404 outside _staging or when DIFY_EXPERIMENT_ENABLED=false. Tests use injected configuration; there is no need to deploy to run fake tests.
+Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain the existing Basic Auth gate. The application release enables the experiment on _staging regardless of DIFY_EXPERIMENT_ENABLED. Return 404 in _prod. Local fake-mode tests use a development server.
 
 | Relative API path | Contract |
 |---|---|
@@ -132,7 +132,7 @@ Use /experiments/dify and /api/experiments/dify/*; browser-facing paths retain t
 
 The page shows the idea/preferences, Create story, a saved review card, feedback input, Approve and illustrate, Resume, progress, image, and compact run details. Poll /project every two seconds while a manager run or image is active, then stop. Load once on page open. Disable conflicting actions while busy.
 
-Require JSON and same-origin checks for browser mutations. Do not expose approval through the tool schema. The auth exception in proxy.ts must match only the four exact tool paths and apply only when staging experiment mode is enabled; handlers must validate the dedicated key. All other paths keep existing Basic Auth. Never give Dify the staging access password.
+Require JSON and same-origin checks for browser mutations. Do not expose approval through the tool schema. The auth exception in proxy.ts must match only the four exact tool paths and apply only on _staging; handlers must validate the dedicated key. All other paths keep existing Basic Auth. Never give Dify the staging access password.
 
 ## Dify adapter
 
@@ -144,11 +144,11 @@ Run the adapter in Next.js after with tracked-mutation accounting; a five-minute
 
 ## Image adapter
 
-Only generate_panel_image can dispatch a provider request. It reads the approved saved prompt, atomically reserves the attempt, and calls Gemini generateContent with x-goog-api-key. Use contents containing one user text part and generationConfig.responseModalities=["TEXT","IMAGE"]. Take the first image inlineData part, validate image MIME, decode it, and store it in staging R2.
+Only generate_panel_image can dispatch a provider request. It reads the approved saved prompt, atomically reserves the attempt, and calls OpenAI image generation with gpt-image-2. Decode the image bytes and store them in staging R2.
 
 A refusal/no-image response or definite provider error becomes failed. A 120-second timeout becomes unknown because the provider may have charged. Do not auto-retry.
 
-Duplicate requests return the existing generating/ready image state. Failed/unknown attempts return image_attempt_exists until the operator explicitly retries. At most two real attempts across the project, including failures; Retry explains possible previous billing. Default DIFY_IMAGE_ENABLED=false. Fake mode never calls a provider and marks output visibly as fake; real mode never silently falls back to fake.
+Duplicate requests return the existing generating/ready image state. Failed/unknown attempts return image_attempt_exists until the operator explicitly retries. At most two real attempts across the project, including failures; Retry explains possible previous billing. Default DIFY_IMAGE_ENABLED=false; the temporary staging host overlay sets it true. Fake mode never calls a provider and marks output visibly as fake; real mode never silently falls back to fake.
 
 Dispatch atomically requires image=null, current approval and image_attempt_count below the cap; increment image_attempt_count and create the generating image with attempt_count equal to that value in the same update. Retry transitions image_failed to ready_for_image by clearing only image, not approval or the project counter. Repeated Retry while already ready_for_image is harmless; Retry while generating or at the cap fails. Old attempts cannot publish because their IDs no longer match. Include image_attempt_count in context even when image is null.
 
@@ -156,9 +156,9 @@ Dispatch atomically requires image=null, current approval and image_attempt_coun
 
 | Coding track | Dify setup track |
 |---|---|
-| Implement experiment state/tools/UI with fixture-backed fake adapters. | Create Cloud account, configure Gemini text model, create agent and paste prompt/skill. |
+| Implement experiment state/tools/UI with fixture-backed fake adapters. | Create Cloud account, configure the OpenAI text model, create agent and paste prompt/skill. |
 | Implement internal Dify SSE consumption and image adapter; test auth/state transitions. | Import OpenAPI with placeholder server; configure tools and prepare app publication. Endpoint tests wait for staging. |
-| Prepare optional credential support and staging-only flag through canonical deployment configuration. | Supply Dify app key privately; obtain a dedicated tool key from the operator. |
+| Prepare temporary optional credential support and staging-only real mode through canonical deployment configuration. | Supply Dify app key privately; obtain a dedicated tool key from the operator. |
 | Publish reviewed code and prepare staging deployment using the deployment runbook. | Replace server URL with actual staging origin; set tool-key header; publish. |
 | Verify staging readiness and auth without mutating the sample; then enable live mode and run the full scenario together. | Inspect Dify traces and correct instructions if needed. |
 
@@ -181,7 +181,6 @@ Checked 2026-09-17; live access, imports and provider behavior still need verifi
 - [Dify Agent setup, skills and export](https://docs.dify.ai/en/cloud/use-dify/build/new-agent/build)
 - [Dify OpenAPI tools](https://docs.dify.ai/en/cloud/use-dify/workspace/tools)
 - [Dify Agent API](https://docs.dify.ai/en/api-reference/guides/agent)
-- [Gemini image model](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image)
-- [Gemini generateContent](https://ai.google.dev/api/generate-content)
+- [OpenAI image generation](https://developers.openai.com/api/docs/guides/image-generation)
 
 No experiment runtime is implemented by this documentation delivery. Update current-state architecture and deployment guidance when the corresponding code is implemented, not as if these planned behaviors already exist.

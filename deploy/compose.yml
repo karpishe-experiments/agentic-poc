@@ -23,6 +23,8 @@ services:
       RUNNER_ENABLED: "true"
       MODEL_RUNTIME: real
       IMAGE_PROVIDER_MODE: real
+      DIFY_EXPERIMENT_MODE: fake
+      DIFY_IMAGE_ENABLED: "false"
       OPENAI_API_KEY: ""
       MONGODB_URI: ""
       ACCESS_GATE_PASSWORD: ""

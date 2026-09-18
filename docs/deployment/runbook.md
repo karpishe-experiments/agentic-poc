@@ -64,6 +64,8 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |
 
+Temporary Dify trial support: the master-installed host bundle accepts optional `DIFY_API_KEY`, `DIFY_TOOL_KEY`, and `DIFY_IMAGE_OPENAI_API_KEY` secrets. Staging Compose selects real Dify mode and enables the image path; production stays in fake mode with images disabled. The application still controls staging availability and requires a current approved story before an image call. Do not start a real turn until the Dify app and tool keys are installed. Do not approve a paid image call until the separate image key is installed and spending is authorized. Rotate each key by name using the serialized command above. When the platform trial decision is recorded, remove this host support if Dify is rejected or replace it with the approved long-term design if Dify is adopted. See the [experiment configuration](../accepted/2026-09-16_agent-platform-decision/configuration.md).
+
 Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
 
 ## Interruption and recovery
