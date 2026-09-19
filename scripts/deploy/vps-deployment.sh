@@ -1472,7 +1472,7 @@ rotate_protected_dify_key() {
   configure_ssh
   printf -v remote_command ' %s' --action stage-secrets --environment staging --secret-name "$SECRET_NAME" --apply
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$payload"
-  value=''; DIFY_TOOL_KEY=''; DIFY_API_KEY=''; unset value DIFY_TOOL_KEY DIFY_API_KEY
+  value=''; unset value DIFY_TOOL_KEY DIFY_API_KEY
   ACTION=rotate-secrets; SECRET_NAME=''
   host_call
 }
