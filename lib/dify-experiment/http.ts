@@ -30,5 +30,21 @@ export function assertDifyToolProjectId(projectId: string): void {
 export function assertSameOriginJsonRequest(request: Request): void {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) throw new DifyExperimentError({ code: "invalid_request", message: "A JSON request is required.", status: 422 });
   const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin) throw new DifyExperimentError({ code: "invalid_origin", message: "The request origin is not permitted.", status: 403 });
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  let expectedOrigin: string | null = new URL(request.url).origin;
+
+  if (forwardedHost !== null || forwardedProto !== null) {
+    expectedOrigin = null;
+    if (forwardedHost && forwardedProto && !forwardedHost.includes(",") && !forwardedProto.includes(",") && /^(https?|HTTPS?)$/.test(forwardedProto)) {
+      try {
+        const forwardedUrl = new URL(`${forwardedProto.toLowerCase()}://${forwardedHost}`);
+        if (!forwardedUrl.username && !forwardedUrl.password && forwardedUrl.pathname === "/" && !forwardedUrl.search && !forwardedUrl.hash) expectedOrigin = forwardedUrl.origin;
+      } catch {
+        // Reject malformed proxy metadata as an origin mismatch.
+      }
+    }
+  }
+
+  if (!origin || origin !== expectedOrigin) throw new DifyExperimentError({ code: "invalid_origin", message: "The request origin is not permitted.", status: 403 });
 }
