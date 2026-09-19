@@ -60,6 +60,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Roll back application code | Run **Maintenance** with `action=rollback`; this restores the prior digest and matching non-secret configuration, not the database |
 | Resume an interrupted operation | Inspect host status, then run **Maintenance** with `action=resume` for the recorded environment |
 | Rotate one host secret | Run `bash scripts/deploy/vps-deployment.sh --action rotate-secrets --environment <target> --secret-name <name> --config infra/config/vps.json --apply` |
+| Install the temporary staging Dify tool key without local Cloudflare credentials | Store it as the protected repository secret `DIFY_TOOL_KEY`, then run **Dify staging tool key** on `master`; remove the repository secret after success |
 | Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |

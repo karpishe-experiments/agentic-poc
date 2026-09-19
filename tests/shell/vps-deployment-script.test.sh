@@ -19,6 +19,28 @@ grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
 done
+grep -Fq 'test "$GITHUB_REF_NAME" = master' .github/workflows/dify-tool-key.yml
+grep -Fq 'DIFY_TOOL_KEY: ${{ secrets.DIFY_TOOL_KEY }}' .github/workflows/dify-tool-key.yml
+grep -Fq -- '--action rotate-dify-tool-key --environment staging' .github/workflows/dify-tool-key.yml
+! grep -q 'inputs.*DIFY_TOOL_KEY\|DIFY_TOOL_KEY.*inputs' .github/workflows/dify-tool-key.yml
+grep -Fq 'rotate-dify-tool-key is available only through GitHub Actions' "$script"
+protected_rotation_root="$(mktemp -d)"
+protected_rotation_output="$(GITHUB_ACTIONS=true DIFY_TOOL_KEY='0123456789abcdef0123456789abcdef' VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$2"; ENVIRONMENT=staging; APPLY=true; REQUEST_ID=123-1; VPS_HOST=deploy.example
+load_config() { :; }
+need_command() { :; }
+private_temp() { :; }
+configure_ssh() { :; }
+ssh() { cat > "$TEMP_DIR/staged.json"; printf "updated: staged staging secret rotation\n"; }
+host_call() { [[ "$ACTION" == rotate-secrets && -z "$SECRET_NAME" && -z "${DIFY_TOOL_KEY:-}" ]]; printf "updated: rotation invoked\n"; }
+rotate_protected_dify_tool_key
+jq -e '\''(.services.app.environment | keys)==["DIFY_TOOL_KEY"] and (.services.app.environment.DIFY_TOOL_KEY|length==32)'\'' "$TEMP_DIR/staged.json" >/dev/null
+' _ "$script" "$protected_rotation_root")"
+grep -q 'updated: staged staging secret rotation' <<< "$protected_rotation_output"
+grep -q 'updated: rotation invoked' <<< "$protected_rotation_output"
+! grep -q '0123456789abcdef' <<< "$protected_rotation_output"
+rm -rf "$protected_rotation_root"
 grep -Fq 'test "$GITHUB_REF_NAME" = "_$TARGET"' .github/workflows/deploy.yml
 test "$(grep -Fc 'commits/$GITHUB_REF_NAME' .github/workflows/deploy.yml)" = 2
 ! grep -q 'actions/workflows/infrastructure.yml/runs' .github/workflows/deploy.yml
