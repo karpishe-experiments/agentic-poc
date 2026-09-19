@@ -31,16 +31,16 @@ jobs:
         run: |
           set -euo pipefail
           {
-            printf "## Dify staging tool-key rotation\n\n"
-            printf "| Environment | Request ID | Outcome |\n"
-            printf "| --- | --- | --- |\n"
-            printf "| `staging` | `%s` | **%s** |\n\n" "$REQUEST_ID" "$OUTCOME"
+            printf '## Dify staging tool-key rotation\n\n'
+            printf '| Environment | Request ID | Outcome |\n'
+            printf '| --- | --- | --- |\n'
+            printf '| `staging` | `%s` | **%s** |\n\n' "$REQUEST_ID" "$OUTCOME"
             if [[ -s "$RUNNER_TEMP/dify-tool-key-output.txt" ]]; then
-              printf "```text\n"
+              printf '```text\n'
               grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/dify-tool-key-output.txt" || true
-              printf "```\n"
+              printf '```\n'
             else
-              printf "No sanitized rotation result was produced. Inspect the failed step logs.\n"
+              printf 'No sanitized rotation result was produced. Inspect the failed step logs.\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove SSH material
