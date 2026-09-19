@@ -32,13 +32,13 @@ SESSION_ACTIVE="${SESSION_ACTIVE:-false}" SESSION_RESTORE_ERREXIT="${SESSION_RES
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need_command() { command -v "$1" >/dev/null || die "Required command missing: $1"; }
-cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; CLOUDFLARE_API_TOKEN=''; AWS_ACCESS_KEY_ID=''; AWS_SECRET_ACCESS_KEY=''; DIFY_TOOL_KEY=''; unset ATLAS_PUBLIC_KEY ATLAS_PRIVATE_KEY ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_api_token AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET TUNNEL_SERVICE_TOKEN_ID TUNNEL_SERVICE_TOKEN_SECRET DIFY_TOOL_KEY; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
+cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; CLOUDFLARE_API_TOKEN=''; AWS_ACCESS_KEY_ID=''; AWS_SECRET_ACCESS_KEY=''; DIFY_TOOL_KEY=''; DIFY_API_KEY=''; unset ATLAS_PUBLIC_KEY ATLAS_PRIVATE_KEY ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_api_token AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET TUNNEL_SERVICE_TOKEN_ID TUNNEL_SERVICE_TOKEN_SECRET DIFY_TOOL_KEY DIFY_API_KEY; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
 trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, rotate-dify-tool-key, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
+         restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -96,7 +96,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-dify-tool-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -118,7 +118,7 @@ validate_arguments() {
   done
   case "$ACTION" in
     deploy) [[ -n "$ENVIRONMENT" && -n "$IMAGE_DIGEST" && -n "$COMMIT" ]] || die 'Deploy requires environment, image digest and commit';;
-    check|backup|restore|rollback|rotate-secrets|rotate-dify-tool-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
+    check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
   esac
   if [[ "$ACTION" == restore ]]; then
     [[ -n "$BACKUP_ID" ]] || die 'Restore requires backup ID'
@@ -1457,21 +1457,22 @@ stage_and_trigger_rotation() {
   gh workflow run maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" --ref "_$ENVIRONMENT" -f "environment=$ENVIRONMENT" -f action=rotate-secrets
   printf 'updated: secrets staged; Maintenance rotation queued\n'
 }
-rotate_protected_dify_tool_key() {
-  [[ "${GITHUB_ACTIONS:-}" == true ]] || die 'rotate-dify-tool-key is available only through GitHub Actions'
-  [[ "$ENVIRONMENT" == staging && "$APPLY" == true && -n "$REQUEST_ID" ]] || die 'rotate-dify-tool-key requires staging, --apply, and a request ID'
+rotate_protected_dify_key() {
+  [[ "${GITHUB_ACTIONS:-}" == true ]] || die 'rotate-protected-dify-key is available only through GitHub Actions'
+  [[ "$ENVIRONMENT" == staging && "$APPLY" == true && -n "$REQUEST_ID" ]] || die 'rotate-protected-dify-key requires staging, --apply, and a request ID'
+  [[ "$SECRET_NAME" =~ ^(DIFY_TOOL_KEY|DIFY_API_KEY)$ ]] || die 'rotate-protected-dify-key accepts only DIFY_TOOL_KEY or DIFY_API_KEY'
   load_config
   need_command jq; private_temp
-  local value="${DIFY_TOOL_KEY:-}" payload="$TEMP_DIR/rotation.json" remote_command
-  application_secret_value_is_valid DIFY_TOOL_KEY "$value" || die 'Protected DIFY_TOOL_KEY must contain at least 32 bytes'
+  local value="${!SECRET_NAME:-}" payload="$TEMP_DIR/rotation.json" remote_command
+  application_secret_value_is_valid "$SECRET_NAME" "$value" || die "Protected $SECRET_NAME is invalid"
   printf '%s' "$value" > "$TEMP_DIR/value"
   chmod 600 "$TEMP_DIR/value"
-  jq -n --rawfile value "$TEMP_DIR/value" '{services:{app:{environment:{DIFY_TOOL_KEY:($value | gsub("\\$";"$$"))}}}}' > "$payload"
+  jq -n --arg name "$SECRET_NAME" --rawfile value "$TEMP_DIR/value" '{services:{app:{environment:{($name):($value | gsub("\\$";"$$"))}}}}' > "$payload"
   chmod 600 "$payload"
   configure_ssh
-  printf -v remote_command ' %s' --action stage-secrets --environment staging --secret-name DIFY_TOOL_KEY --apply
+  printf -v remote_command ' %s' --action stage-secrets --environment staging --secret-name "$SECRET_NAME" --apply
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$payload"
-  value=''; DIFY_TOOL_KEY=''; unset value DIFY_TOOL_KEY
+  value=''; DIFY_TOOL_KEY=''; DIFY_API_KEY=''; unset value DIFY_TOOL_KEY DIFY_API_KEY
   ACTION=rotate-secrets; SECRET_NAME=''
   host_call
 }
@@ -1743,7 +1744,7 @@ main() {
         [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
         host_call
       else stage_and_trigger_rotation; fi;;
-    rotate-dify-tool-key) rotate_protected_dify_tool_key;;
+    rotate-protected-dify-key) rotate_protected_dify_key;;
     repair-first-activation-secrets) repair_first_activation_secrets;;
     infrastructure) terraform_operation;;
     *)
