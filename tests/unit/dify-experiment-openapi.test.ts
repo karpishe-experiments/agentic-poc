@@ -24,6 +24,7 @@ describe("Dify experiment OpenAPI contract", () => {
     expect(dsl).toContain("valid: {type: boolean, children: null}");
     expect(dsl).toContain("file: [generate_image, files]");
     expect(dsl).not.toContain("image: {type: file, children: null}");
+    expect(dsl).not.toMatch(/key: expected_revision, type: number/);
     expect(dsl).toContain("value_type: secret");
     expect(dsl).toContain("value: ''");
     expect(dsl).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);

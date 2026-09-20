@@ -43,7 +43,7 @@ Confirm before publishing:
 
 Expected: the workflow imports and validates. Record the target Dify version and any importer repair. The checked-in DSL is not considered verified until this checkpoint passes.
 
-Recovery: delete only the failed imported draft and repeat from the checked-in file or manual node instructions. If Dify reports that a Code output has type `file`, the obsolete import is still open; replace it with the current DSL. Do not change the saved Booklet project.
+Recovery: delete only the failed imported draft and repeat from the checked-in file or manual node instructions. If Dify reports that a Code output has type `file`, or that an HTTP body entry has type `number`, the obsolete import is still open; replace it with the current DSL. Do not change the saved Booklet project.
 
 ## 4. Deploy the application
 

@@ -269,7 +269,7 @@ workflow:
           type: json
           data:
           - {id: failure-project, key: project_id, type: text, value: '{{#start.project_id#}}'}
-          - {id: failure-revision, key: expected_revision, type: number, value: '{{#parse_authorization.revision#}}'}
+          - {id: failure-revision, key: expected_revision, type: text, value: '{{#parse_authorization.revision#}}'}
           - {id: failure-attempt, key: attempt_id, type: text, value: '{{#parse_authorization.attempt_id#}}'}
           - {id: failure-category, key: category, type: text, value: generation_unknown}
         retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
@@ -290,7 +290,7 @@ workflow:
           type: json
           data:
           - {id: upload-project, key: project_id, type: text, value: '{{#start.project_id#}}'}
-          - {id: upload-revision, key: expected_revision, type: number, value: '{{#parse_authorization.revision#}}'}
+          - {id: upload-revision, key: expected_revision, type: text, value: '{{#parse_authorization.revision#}}'}
           - {id: upload-attempt, key: attempt_id, type: text, value: '{{#parse_authorization.attempt_id#}}'}
           - {id: upload-category, key: category, type: text, value: upload_failed}
         retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
