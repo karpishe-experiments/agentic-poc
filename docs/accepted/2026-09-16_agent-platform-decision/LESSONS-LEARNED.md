@@ -8,3 +8,12 @@
 - **Evidence:** `lib/dify-experiment/service.ts`, `lib/dify-experiment/http.ts`, and `tests/integration/dify-experiment.test.ts`.
 - **Promotion target:** Documentation for future third-party agent integrations.
 - **Status:** Candidate; live Dify behavior is not yet verified.
+
+## Candidate: Inline nested request objects for Dify Swagger tools
+
+- **Context:** A Dify Swagger API tool accepts a nested object in a JSON request body.
+- **Observation:** The live Dify import represented `save_story_draft.story` as a string when the property used `$ref: "#/components/schemas/Story"`. The same object works as the structured output of the Story Writer workflow. The Booklet endpoint correctly rejected the string because its request contract requires an object.
+- **Guidance:** Inline nested request-object schemas at the Dify tool boundary. Keep a reusable component only when a contract test proves that the inline schema is identical. Confirm the imported parameter type before a live mutation.
+- **Evidence:** The sanitized Dify exports, the imported tool parameter view, `tools.openapi.json`, and `tests/unit/dify-experiment-openapi.test.ts`.
+- **Promotion target:** Documentation for integrations that import OpenAPI definitions into Dify.
+- **Status:** Candidate; verify that reimporting the inline schema produces an object parameter before promotion.

@@ -1,21 +1,21 @@
 # Start the Dify booklet experiment
 
-This is the handoff for the Dify setup and remaining verification. The staging routes and fake lifecycle exist. The OpenAI provider and Story Writer are configured in Dify; Booklet's staging integration and full lifecycle remain unverified. Follow [plan.md](plan.md) for the implementation contract.
+This is the handoff for the Dify setup and remaining verification. The staging routes and fake lifecycle exist. The OpenAI provider, Story Writer, manager, and authenticated Booklet tools are configured. A live context load is verified; the corrected tool import and the remaining lifecycle still require verification. Follow [plan.md](plan.md) for the implementation contract.
 
 Before staging, run `npm run test:dify:browser` to check the synthetic create, feedback, approval, image, refresh, and Resume path. This uses a local fake-only development server; it is not a Dify or provider test. On staging, the page displays its current `fake` or `real` mode. Do not mistake a fake result for live provider verification.
 
 ## Current Dify checkpoint
 
-- Completed 2026-09-17: the shared Dify workspace has an OpenAI provider credential for the `Booklet` OpenAI project. It uses the Responses API and has no organization header. The OpenAI project has a $20 monthly limit. The unpublished `booklet_manager` agent uses `gpt-5.6-terra`.
-- Completed 2026-09-17: the manager has the Story Writer tool attached. The manager prompt was initially pasted in its earlier single-agent form; verify that the current [manager-prompt.md](manager-prompt.md) has replaced it before publication.
+- Completed 2026-09-17: the shared Dify workspace has an OpenAI provider credential for the `Booklet` OpenAI project. It uses the Responses API and has no organization header. The OpenAI project has a $20 monthly limit. The published `booklet_manager` agent uses `gpt-5.6-terra`.
+- Completed 2026-09-20: the manager has the Story Writer tool and four authenticated Booklet staging tools attached. Its API key is installed in staging, and the current [manager-prompt.md](manager-prompt.md) is published.
 - Decision 2026-09-17: test a separate Dify `story_writer` Workflow published as the `write_story` tool. This is Dify configuration only. Booklet keeps its four HTTP tools and all lifecycle authority.
 - Completed 2026-09-17: Story Writer has the three typed inputs, `gpt-5.6-terra`, and the Booklet Story structured-output schema. Workflow version 1 is published internally as the `write_story` tool and attached to the manager. Before the live run, synchronize its system prompt with the current story-writing/SKILL.md and republish if changed.
 - Verified 2026-09-17: the Story Writer synthetic create test returned a valid three-panel Story object. This verifies only Dify configuration and the text model; it did not contact Booklet or an image provider.
-- Not yet completed: no Booklet HTTP tools, published manager app key, staging deployment, or end-to-end Booklet run exists.
+- Verified 2026-09-20: staging runs in real mode, initializes the synthetic project, and calls `get_project_context` through Dify. The first create run reached `save_story_draft` but failed because Dify imported the referenced `story` request schema as a string. The OpenAPI definition now inlines that object. Reimport and a successful lifecycle run remain.
 
 ## What remains before a live run
 
-The Booklet-side state, tools, page, adapters, and fake tests are implemented locally. The application release makes the page available on `_staging`; the host feature flag does not block it. The merged temporary host configuration selects real Dify mode and enables the image path in staging. Missing keys still prevent affected operations. The Dify operator must synchronize the manager and Story Writer instructions, import the four Booklet tools after staging is reachable, then publish the manager and supply its app key privately. Do not infer that local fake tests verify Dify or staging.
+The Booklet-side state, tools, page, adapters, and fake tests are deployed on `_staging`. The host feature flag does not block the page. The temporary host configuration selects real Dify mode and enables the image path in staging. The manager, Story Writer, Booklet tools, tool key, and manager app key are configured. Replace the existing Booklet tool import with the corrected inline request schema, then resume the lifecycle test. Do not infer that local fake tests or the successful context call verify the remaining mutations or image path.
 
 Account links: [Dify Cloud](https://cloud.dify.ai/), [OpenAI Platform](https://platform.openai.com/).
 If the expected Agent/model is unavailable, record the actual blocker before spending time on an alternate architecture.
@@ -36,12 +36,12 @@ The goal of this checkpoint is an accessible staging page that reports real mode
 
 1. Confirm the reviewed application commit is deployed on `_staging`. For real Dify calls, set the mode and credentials in configuration.md through the supported host secret/configuration procedure. The installed DIFY_EXPERIMENT_ENABLED value does not control staging availability.
 2. Open the staging /experiments/dify page using the existing browser access gate. Initialize the synthetic project once.
-3. In a copy of tools.openapi.json, replace https://replace-with-staging-origin.example with the actual staging origin. Keep the /api/experiments/dify/tools paths unchanged.
-4. In Dify Integrations → Tools, create a Swagger/OpenAPI tool and import that copy. Name it Booklet experiment.
-5. Configure API-key authentication with custom header X-Booklet-Tool-Key and the dedicated value supplied privately. Verify that a test call sends exactly that header; do not use the browser Basic Auth password.
-6. Test get_project_context with {"project_id":"booklet-dify-trial"}. Expect current_revision=0 and state=draft_needed on a fresh project. If the importer cannot send the configured header or parse the contract, record that concrete failure; do not weaken endpoint authentication.
-7. Attach all four imported operations to booklet_manager. Confirm the current prompt passes Booklet's turn Run ID as `run_id` in every mutating tool call. Confirm the model and `write_story` tool against build-request.md. Do not attach a direct image plugin or the writing skill to the manager.
-8. Publish the agent. In its Access Point / API section, create the app API key. Install DIFY_API_KEY server-side. Staging Compose already selects real mode and enables the image path; do not approve the billable image step until its separate key and operator spending approval are in place.
+3. In a copy of tools.openapi.json, replace https://replace-with-staging-origin.example with the actual staging origin. Keep the /api/experiments/dify/tools paths unchanged. Keep the `save_story_draft.story` schema inline; Dify imports a request-body `$ref` there as a string.
+4. For a first import, create a Swagger/OpenAPI tool named Booklet staging tools. To replace the existing import safely, create Booklet staging tools v2 from the corrected copy. Keep the old integration attached until the replacement passes step 6.
+5. Configure the new tool's API-key authentication with custom header X-Booklet-Tool-Key and the dedicated value supplied privately. Do not use the browser Basic Auth password.
+6. Confirm that the imported `save_story_draft` shows `story` as an object with its nested fields, not as a string. Test get_project_context with {"project_id":"booklet-dify-trial"}. Expect the saved current state; a fresh project has current_revision=0 and state=draft_needed. If the importer cannot send the configured header or parse the contract, record that concrete failure; do not weaken endpoint authentication.
+7. Attach all four replacement operations to booklet_manager and remove its four old Booklet operations. Confirm the current prompt passes Booklet's turn Run ID as `run_id` in every mutating tool call. Confirm the model and `write_story` tool against build-request.md. Do not attach a direct image plugin or the writing skill to the manager. After the manager is republished and verified, the old integration can be deleted.
+8. Publish the agent. For a first setup only, create the app API key in Access Point / API and install DIFY_API_KEY server-side. When replacing only the Swagger tool, retain the existing manager app key; no server-side key change is required. Staging Compose already selects real mode and enables the image path; do not approve the billable image step until its separate key and operator spending approval are in place.
 9. Confirm /api/experiments/dify/setup reports only safe readiness booleans and mode names. Keys must not be returned.
 
 A Dify preview tool call reaches the same saved project as the page. Avoid running preview and browser turns concurrently. Provider tools cannot initialize or approve projects.

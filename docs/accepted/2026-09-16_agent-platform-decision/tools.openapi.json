@@ -96,7 +96,69 @@
                     "minimum": 0
                   },
                   "story": {
-                    "$ref": "#/components/schemas/Story"
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "storyline": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "character_description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "panels": {
+                        "type": "array",
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "number": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "scene": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "required": [
+                            "number",
+                            "text",
+                            "scene"
+                          ]
+                        }
+                      },
+                      "first_panel_image_prompt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "storyline",
+                      "character_description",
+                      "panels",
+                      "first_panel_image_prompt"
+                    ],
+                    "description": "Dify requires this request object inline; keep it identical to components.schemas.Story. Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules."
                   }
                 },
                 "required": [
