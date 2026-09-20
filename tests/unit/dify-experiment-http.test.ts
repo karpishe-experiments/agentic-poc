@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MaintenanceModeError } from "@/lib/application/deployment-control";
-import { assertDifyToolProjectId, assertSameOriginJsonRequest, difyExperimentErrorResponse, difyToolContext } from "@/lib/dify-experiment/http";
+import { assertDifyToolProjectId, assertSameOriginJsonRequest, difyExperimentErrorResponse, difyToolContext, uniqueSearchParams } from "@/lib/dify-experiment/http";
 
 describe("Dify experiment error response", () => {
   it("preserves the maintenance status and code", async () => {
@@ -49,5 +49,10 @@ describe("Dify experiment error response", () => {
     const request = new Request("http://app:3000/api/experiments/dify/initialize", { method: "POST", headers });
 
     expect(() => assertSameOriginJsonRequest(request)).toThrowError("The request origin is not permitted.");
+  });
+
+  it("rejects duplicate query parameters before callback validation", () => {
+    const request = new Request("https://staging.example/callback?attempt_id=one&attempt_id=two");
+    expect(() => uniqueSearchParams(request)).toThrowError("Query parameters must not be repeated.");
   });
 });

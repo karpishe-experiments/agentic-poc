@@ -38,7 +38,7 @@ export const difyExperimentStorySchema = z.object({
 export const difyExperimentActionSchema = z.enum(["create", "resume", "revise"]);
 export const difyExperimentImageStatusSchema = z.enum(["generating", "ready", "failed", "unknown"]);
 export const difyExperimentStateSchema = z.enum(["draft_needed", "draft_saved", "awaiting_review", "ready_for_image", "generating", "complete", "image_failed"]);
-export const difyExperimentAllowedActionSchema = z.enum(["save_story_draft", "request_review", "generate_panel_image"]);
+export const difyExperimentAllowedActionSchema = z.enum(["save_story_draft", "request_review", "illustrate_panel"]);
 
 export type DifyExperimentPreferences = z.infer<typeof difyExperimentPreferencesSchema>;
 export type DifyExperimentStory = z.infer<typeof difyExperimentStorySchema>;
@@ -47,7 +47,13 @@ export type DifyExperimentImageStatus = z.infer<typeof difyExperimentImageStatus
 
 export type DifyExperimentRevision = { revision: number; story: DifyExperimentStory; createdAtMs: number };
 export type DifyExperimentFeedback = { text: string; basedOnRevision: number; consumedByRevision: number | null; createdAtMs: number };
-export type DifyExperimentImage = { id: string; status: DifyExperimentImageStatus; revision: number; attemptCount: number; prompt: string; assetPath: string | null; mimeType: string | null; error: string | null; startedAtMs: number; completedAtMs: number | null };
+export type DifyExperimentImage = {
+  id: string; status: DifyExperimentImageStatus; revision: number; attemptCount: number; prompt: string;
+  assetPath: string | null; mimeType: string | null; error: string | null; startedAtMs: number; completedAtMs: number | null;
+  originatingRunId?: string; workflowRunId?: string; deadlineAtMs?: number; savedDigest?: string;
+  failureCategory?: "generation_failed" | "generation_unknown" | "upload_failed";
+  completionClaim?: { id: string; deadlineAtMs: number } | null;
+};
 export type DifyExperimentRun = { id: string; action: DifyExperimentAction; status: "running" | "completed" | "failed" | "unknown"; startedAtMs: number; deadlineAtMs: number; finishedAtMs: number | null; message: string | null; error: string | null; toolCalls: string[]; providerTaskId: string | null; providerConversationId: string | null; providerMessageId: string | null; usage: { inputTokens: number; outputTokens: number } | null };
 
 export const difyExperimentContextSchema = z.object({
@@ -60,12 +66,15 @@ export const difyExperimentContextSchema = z.object({
   approved_revision: z.int().min(1).nullable(),
   pending_feedback: z.array(requiredText(2_000)).max(5),
   image: z.object({
+    attempt_id: z.string().uuid(),
     status: difyExperimentImageStatusSchema,
     revision: z.int().min(1),
     attempt_count: z.int().min(1).max(DIFY_EXPERIMENT_MAX_IMAGE_ATTEMPTS),
     prompt: requiredText(4_000),
     asset_path: z.string().nullable(),
     error: z.string().nullable(),
+    workflow_run_id: z.string().nullable(),
+    completion_in_progress: z.boolean(),
   }).nullable(),
   state: difyExperimentStateSchema,
   allowed_actions: z.array(difyExperimentAllowedActionSchema),

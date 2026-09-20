@@ -1,10 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import sharp, { type Metadata } from "sharp";
 import { z } from "zod";
 import type { MongoDatabaseContext } from "@/db/client";
 import type { DifyExperimentDocument } from "@/db/documents";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/deployment-control";
 import { RecoverableApplicationError } from "@/lib/application/application-error";
+import { DIFY_EXPERIMENT_COMPLETION_CLAIM_TIMEOUT_MS, DIFY_EXPERIMENT_IMAGE_TIMEOUT_MS, DIFY_EXPERIMENT_TURN_TIMEOUT_MS } from "@/lib/dify-experiment/timeouts";
 import {
   DIFY_EXPERIMENT_PROJECT_ID,
   DIFY_EXPERIMENT_SCHEMA_VERSION,
@@ -83,7 +85,7 @@ function contextFor(document: DifyExperimentDocument): DifyExperimentContext {
   const allowedActions = state === "draft_needed" ? ["save_story_draft"] as const
     : state === "draft_saved" ? ["save_story_draft", "request_review"] as const
       : state === "awaiting_review" ? (pendingFeedback.length ? ["save_story_draft"] as const : ["request_review"] as const)
-        : state === "ready_for_image" ? ["generate_panel_image"] as const : [] as const;
+        : state === "ready_for_image" ? ["illustrate_panel"] as const : [] as const;
   return difyExperimentContextSchema.parse({
     project_id: document.projectId,
     idea: document.idea,
@@ -93,7 +95,7 @@ function contextFor(document: DifyExperimentDocument): DifyExperimentContext {
     review_revision: document.reviewRevision,
     approved_revision: document.approvedRevision,
     pending_feedback: pendingFeedback.map((feedback) => feedback.text),
-    image: document.image ? { status: document.image.status, revision: document.image.revision, attempt_count: document.image.attemptCount, prompt: document.image.prompt, asset_path: document.image.assetPath, error: document.image.error } : null,
+    image: document.image ? { attempt_id: document.image.id, status: document.image.status, revision: document.image.revision, attempt_count: document.image.attemptCount, prompt: document.image.prompt, asset_path: document.image.assetPath, error: document.image.error, workflow_run_id: document.image.workflowRunId ?? null, completion_in_progress: Boolean(document.image.completionClaim && document.image.completionClaim.deadlineAtMs > Date.now()) } : null,
     state,
     allowed_actions: [...allowedActions],
     image_attempt_count: document.imageAttemptCount,
@@ -129,10 +131,11 @@ export class DifyExperimentService {
       project = await this.collection.findOne({ _id: projectDocumentId });
       if (!project) error("project_not_initialized", "Initialize the synthetic experiment project first.", 404);
     }
-    if (project.image?.status === "generating" && project.image.startedAtMs + 120_000 <= now) {
+    const imageDeadline = project.image?.deadlineAtMs ?? (project.image ? project.image.startedAtMs + 120_000 : null);
+    if (project.image?.status === "generating" && imageDeadline !== null && imageDeadline <= now) {
       const image = project.image;
       await runTrackedMutation(() => this.collection.updateOne(
-        { _id: projectDocumentId, "image.id": image.id, "image.status": "generating", "image.startedAtMs": { $lte: now - 120_000 } },
+        { _id: projectDocumentId, "image.id": image.id, "image.status": "generating" },
         { $set: { "image.status": "unknown", "image.error": "The image request was interrupted. Inspect the attempt before retrying.", "image.completedAtMs": now, updatedAtMs: now } },
       ));
       project = await this.collection.findOne({ _id: projectDocumentId });
@@ -217,7 +220,7 @@ export class DifyExperimentService {
   public async startTurn(input: { action: unknown; expectedRevision?: unknown; feedback?: unknown }): Promise<{ context: DifyExperimentContext; run: DifyExperimentRun }> {
     this.assertAvailable(); await assertMutationsAllowed(); const action = difyExperimentActionSchema.parse(input.action); const project = await this.requireProject();
     if (project.activeRunId) error("busy", "An agent turn is already running.");
-    const now = this.now(); const run: DifyExperimentRun = { id: randomUUID(), action, status: "running", startedAtMs: now, deadlineAtMs: now + 300_000, finishedAtMs: null, message: null, error: null, toolCalls: [], providerTaskId: null, providerConversationId: null, providerMessageId: null, usage: null };
+    const now = this.now(); const run: DifyExperimentRun = { id: randomUUID(), action, status: "running", startedAtMs: now, deadlineAtMs: now + DIFY_EXPERIMENT_TURN_TIMEOUT_MS, finishedAtMs: null, message: null, error: null, toolCalls: [], providerTaskId: null, providerConversationId: null, providerMessageId: null, usage: null };
     let filter: Record<string, unknown> = { _id: projectDocumentId, activeRunId: null };
     let update: Record<string, unknown> = { $set: { activeRunId: run.id, updatedAtMs: now }, $push: { runs: run } };
     if (action === "create") {
@@ -234,28 +237,25 @@ export class DifyExperimentService {
     return { context: contextFor(result), run };
   }
 
-  public async requestPanelImage(input: { projectId: unknown; runId: unknown; expectedRevision: unknown; panelNumber: unknown }): Promise<DifyExperimentContext> {
-    return (await this.claimPanelImage(input)).context;
-  }
-
-  public async claimPanelImage(input: { projectId: unknown; runId: unknown; expectedRevision: unknown; panelNumber: unknown }): Promise<{ context: DifyExperimentContext; started: boolean }> {
+  public async authorizeIllustration(input: { projectId: unknown; runId: unknown; expectedRevision: unknown; panelNumber: unknown; workflowRunId: unknown }): Promise<{ context: DifyExperimentContext; started: boolean; attemptId: string; prompt?: string }> {
     this.assertAvailable(); await assertMutationsAllowed(); projectIdSchema.parse(input.projectId);
     const expectedRevision = z.number().int().min(1).parse(input.expectedRevision); z.literal(1).parse(input.panelNumber);
     const project = await this.requireProject();
     if (project.currentRevision !== expectedRevision || project.approvedRevision !== expectedRevision) error("approval_required", "Approve the current revision before requesting its image.");
     const runId = this.assertActiveRun(project, input.runId);
-    if (project.image?.status === "generating" || project.image?.status === "ready") return { context: contextFor(project), started: false };
+    const workflowRunId = z.string().trim().min(1).max(200).parse(input.workflowRunId);
+    if (project.image?.status === "generating" || project.image?.status === "ready") return { context: contextFor(project), started: false, attemptId: project.image.id };
     if (project.image) error("image_attempt_exists", "Retry the saved failed image explicitly from the application.");
     if (!this.input.config.imageEnabled) error("image_disabled", "Enable image generation before requesting an image.", 403);
     if (project.imageAttemptCount >= this.input.config.imageMaxAttempts) error("image_limit_reached", "The image attempt limit has been reached.", 403);
     const story = currentStory(project); if (!story) error("story_missing", "The approved story could not be found.");
-    const now = this.now(); const image: DifyExperimentImage = { id: randomUUID(), status: "generating", revision: expectedRevision, attemptCount: project.imageAttemptCount + 1, prompt: story.first_panel_image_prompt, assetPath: null, mimeType: null, error: null, startedAtMs: now, completedAtMs: null };
+    const now = this.now(); const image: DifyExperimentImage = { id: randomUUID(), status: "generating", revision: expectedRevision, attemptCount: project.imageAttemptCount + 1, prompt: story.first_panel_image_prompt, assetPath: null, mimeType: null, error: null, startedAtMs: now, completedAtMs: null, originatingRunId: runId, workflowRunId, deadlineAtMs: now + DIFY_EXPERIMENT_IMAGE_TIMEOUT_MS, completionClaim: null };
     const result = await this.collection.findOneAndUpdate(
       { _id: projectDocumentId, activeRunId: runId, currentRevision: expectedRevision, approvedRevision: expectedRevision, image: null, imageAttemptCount: project.imageAttemptCount },
       { $set: { image, updatedAtMs: now }, $inc: { imageAttemptCount: 1 } }, { returnDocument: "after" },
     );
     if (!result) error("busy", "The image state changed before generation could start.");
-    return { context: contextFor(result), started: true };
+    return { context: contextFor(result), started: true, attemptId: image.id, prompt: image.prompt };
   }
 
   public async retryImage(input: { expectedRevision: unknown }): Promise<DifyExperimentContext> {
@@ -263,7 +263,8 @@ export class DifyExperimentService {
     if (project.image === null && project.approvedRevision === expectedRevision) return contextFor(project);
     if (project.currentRevision !== expectedRevision || project.approvedRevision !== expectedRevision || !project.image || !["failed", "unknown"].includes(project.image.status)) error("image_retry_unavailable", "Only the current failed or unknown image can be retried.");
     if (project.activeRunId || project.imageAttemptCount >= this.input.config.imageMaxAttempts) error("image_limit_reached", "The image attempt limit has been reached.", 403);
-    const result = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: expectedRevision, approvedRevision: expectedRevision, activeRunId: null, "image.id": project.image.id, "image.status": { $in: ["failed", "unknown"] } }, { $set: { image: null, updatedAtMs: this.now() } }, { returnDocument: "after" });
+    if (project.image.completionClaim && project.image.completionClaim.deadlineAtMs > this.now()) error("image_completion_busy", "The existing image is being saved. Wait before retrying.");
+    const result = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: expectedRevision, approvedRevision: expectedRevision, activeRunId: null, "image.id": project.image.id, "image.status": { $in: ["failed", "unknown"] }, $or: [{ "image.completionClaim": null }, { "image.completionClaim": { $exists: false } }, { "image.completionClaim.deadlineAtMs": { $lte: this.now() } }] }, { $set: { image: null, updatedAtMs: this.now() } }, { returnDocument: "after" });
     if (!result) error("busy", "The image state changed before retry could be prepared.");
     return contextFor(result);
   }
@@ -280,8 +281,8 @@ export class DifyExperimentService {
       } else if (context.state === "draft_saved") {
         await this.requestReview({ projectId: DIFY_EXPERIMENT_PROJECT_ID, runId, expectedRevision: context.current_revision }); calls.push("request_review");
       } else if (context.state === "ready_for_image" && this.input.config.imageEnabled) {
-        await this.requestPanelImage({ projectId: DIFY_EXPERIMENT_PROJECT_ID, runId, expectedRevision: context.current_revision, panelNumber: 1 }); calls.push("generate_panel_image");
-        const latest = await this.requireProject(); if (latest.image?.status === "generating") await this.completeFakeImage(latest.image.id);
+        const authorized = await this.authorizeIllustration({ projectId: DIFY_EXPERIMENT_PROJECT_ID, runId, expectedRevision: context.current_revision, panelNumber: 1, workflowRunId: `fake-${runId}` }); calls.push("illustrate_panel");
+        if (authorized.started) await this.completeFakeImage(authorized.attemptId);
       }
       await this.completeRun(runId, { status: "completed", toolCalls: calls, message: context.state === "complete" ? "The saved booklet experiment is complete." : "The saved state is ready for the next review step." });
     } catch (caught) {
@@ -308,18 +309,51 @@ export class DifyExperimentService {
     if (project.image?.status === "generating") await this.completeFakeImage(project.image.id);
   }
 
-  public async completeImage(imageId: string, input: { bytes: Uint8Array; mimeType: string }): Promise<void> {
-    const project = await this.requireProject(); const image = project.image;
-    if (!image || image.id !== imageId || image.status !== "generating") return;
-    const extension = input.mimeType === "image/png" ? "png" : input.mimeType === "image/jpeg" ? "jpg" : null;
-    if (!extension) throw new Error("The image provider returned an unsupported image type.");
-    const path = `experiments/dify/${DIFY_EXPERIMENT_PROJECT_ID}/panel-1-attempt-${image.attemptCount}.${extension}`;
-    if (!(await this.input.assets.exists(path))) await this.input.assets.put(path, input.bytes, input.mimeType);
-    const now = this.now(); await this.collection.updateOne({ _id: projectDocumentId, "image.id": imageId, "image.status": "generating" }, { $set: { updatedAtMs: now, "image.status": "ready", "image.assetPath": path, "image.mimeType": input.mimeType, "image.completedAtMs": now } });
+  public async completeImage(input: { projectId: unknown; expectedRevision: unknown; attemptId: unknown; bytes: Uint8Array }): Promise<DifyExperimentContext> {
+    this.assertAvailable(); await assertMutationsAllowed();
+    projectIdSchema.parse(input.projectId); const revision = z.number().int().min(1).parse(input.expectedRevision); const attemptId = z.string().uuid().parse(input.attemptId);
+    if (input.bytes.byteLength > 20 * 1024 * 1024) error("image_too_large", "The image exceeds the 20 MiB limit.", 413);
+    if (!Buffer.from(input.bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) error("invalid_image", "A valid PNG image is required.", 422);
+    let metadata: Metadata;
+    try { metadata = await sharp(input.bytes).metadata(); } catch { error("invalid_image", "A valid PNG image is required.", 422); }
+    if (metadata.format !== "png" || metadata.width !== 1536 || metadata.height !== 1536) error("invalid_image", "The image must be a 1536 by 1536 PNG.", 422);
+    const digest = createHash("sha256").update(input.bytes).digest("hex"); const now = this.now(); const claimId = randomUUID();
+    const existing = await this.requireProject();
+    if (existing.image?.id === attemptId && existing.image.status === "ready") {
+      if (existing.image.savedDigest === digest) return contextFor(existing);
+      error("image_conflict", "This attempt already has a different saved image.");
+    }
+    const claimed = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: revision, approvedRevision: revision, "image.id": attemptId, "image.status": { $in: ["generating", "failed", "unknown"] }, $or: [{ "image.completionClaim": null }, { "image.completionClaim": { $exists: false } }, { "image.completionClaim.deadlineAtMs": { $lte: now } }] }, { $set: { "image.completionClaim": { id: claimId, deadlineAtMs: now + DIFY_EXPERIMENT_COMPLETION_CLAIM_TIMEOUT_MS }, updatedAtMs: now } }, { returnDocument: "after" });
+    if (!claimed) error("image_completion_busy", "This image cannot be completed because its attempt changed or another completion is active.");
+    // A claimant can resume after its 60-second lease expires. Give every claim a
+    // distinct object key so that a stale writer cannot overwrite the asset that a
+    // newer claim commits to MongoDB.
+    const path = `experiments/dify/${DIFY_EXPERIMENT_PROJECT_ID}/panel-1-${attemptId}-${claimId}.png`;
+    try {
+      if (await this.input.assets.exists(path)) {
+        const storedDigest = createHash("sha256").update(await this.input.assets.get(path)).digest("hex");
+        if (storedDigest !== digest) error("image_conflict", "This attempt already has a different stored image.");
+      } else {
+        await this.input.assets.put(path, input.bytes, "image/png");
+      }
+      const completedAtMs = this.now();
+      const completed = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: revision, approvedRevision: revision, "image.id": attemptId, "image.status": { $in: ["generating", "failed", "unknown"] }, "image.completionClaim.id": claimId }, { $set: { updatedAtMs: completedAtMs, "image.status": "ready", "image.assetPath": path, "image.mimeType": "image/png", "image.savedDigest": digest, "image.completedAtMs": completedAtMs, "image.completionClaim": null } }, { returnDocument: "after" });
+      if (!completed) error("image_superseded", "The image attempt changed before completion.");
+      return contextFor(completed);
+    } catch (caught) {
+      await this.collection.updateOne({ _id: projectDocumentId, "image.id": attemptId, "image.completionClaim.id": claimId }, { $set: { "image.completionClaim": null, updatedAtMs: this.now() } });
+      throw caught;
+    }
   }
 
-  public async failImage(imageId: string, status: "failed" | "unknown", message: string): Promise<void> {
-    const now = this.now(); await this.collection.updateOne({ _id: projectDocumentId, "image.id": imageId, "image.status": "generating" }, { $set: { updatedAtMs: now, "image.status": status, "image.error": message.slice(0, 1_000), "image.completedAtMs": now } });
+  public async reportImageFailure(input: { projectId: unknown; expectedRevision: unknown; attemptId: unknown; category: unknown }): Promise<DifyExperimentContext> {
+    this.assertAvailable(); await assertMutationsAllowed();
+    projectIdSchema.parse(input.projectId); const revision = z.number().int().min(1).parse(input.expectedRevision); const attemptId = z.string().uuid().parse(input.attemptId);
+    const category = z.enum(["generation_failed", "generation_unknown", "upload_failed"]).parse(input.category); const status = category === "generation_failed" ? "failed" : "unknown";
+    const messages = { generation_failed: "Dify image generation failed.", generation_unknown: "The Dify image outcome is unknown. Inspect the workflow before retrying.", upload_failed: "Dify generated an image but could not save it. Download the workflow output and use Save existing image." } as const;
+    const now = this.now(); const result = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: revision, approvedRevision: revision, "image.id": attemptId, "image.status": "generating", $or: [{ "image.completionClaim": null }, { "image.completionClaim": { $exists: false } }, { "image.completionClaim.deadlineAtMs": { $lte: now } }] }, { $set: { updatedAtMs: now, "image.status": status, "image.error": messages[category], "image.failureCategory": category, "image.completedAtMs": now, "image.completionClaim": null } }, { returnDocument: "after" });
+    if (!result) error("image_failure_rejected", "The image attempt is complete, superseded, or being saved.");
+    return contextFor(result);
   }
 
   public async currentGeneratingImage(): Promise<DifyExperimentImage | null> {

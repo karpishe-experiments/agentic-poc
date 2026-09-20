@@ -1,0 +1,325 @@
+app:
+  description: 'IMPORT TEMPLATE ONLY: replace the inspected OpenAI Tools 0.2.1 dependency with a reviewed no-provider-retry build before publishing. Authorizes one Booklet attempt, generates one PNG, and saves it to Booklet.'
+  icon: 🎨
+  icon_background: '#FFF4E6'
+  icon_type: emoji
+  mode: workflow
+  name: booklet_illustrator
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai_tool:0.2.1@1a646f99f1ccbb3b5903704f5845d1f3ac7e4cfb6947087f28557a033976a039
+    version: null
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - description: Booklet staging origin, without a trailing slash.
+    id: 00000000-0000-4000-8000-000000000001
+    name: BOOKLET_BASE_URL
+    selector: [env, BOOKLET_BASE_URL]
+    value: https://booklet-staging.uniwares.co.uk
+    value_type: string
+  - description: Existing Booklet callback key. Set after import.
+    id: 00000000-0000-4000-8000-000000000002
+    name: BOOKLET_TOOL_KEY
+    selector: [env, BOOKLET_TOOL_KEY]
+    value: ''
+    value_type: secret
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+    - {id: start-build, source: start, sourceHandle: source, target: build_authorization, targetHandle: target, type: custom, data: {sourceType: start, targetType: code}}
+    - {id: build-authorize, source: build_authorization, sourceHandle: source, target: authorize, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
+    - {id: authorize-parse, source: authorize, sourceHandle: source, target: parse_authorization, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: code}}
+    - {id: parse-gate, source: parse_authorization, sourceHandle: source, target: authorization_gate, targetHandle: target, type: custom, data: {sourceType: code, targetType: if-else}}
+    - {id: gate-generate, source: authorization_gate, sourceHandle: 'true', target: generate_image, targetHandle: target, type: custom, data: {sourceType: if-else, targetType: tool}}
+    - {id: gate-stop, source: authorization_gate, sourceHandle: 'false', target: not_authorized, targetHandle: target, type: custom, data: {sourceType: if-else, targetType: end}}
+    - {id: generate-validate, source: generate_image, sourceHandle: source, target: validate_image, targetHandle: target, type: custom, data: {sourceType: tool, targetType: code}}
+    - {id: validate-complete, source: validate_image, sourceHandle: source, target: complete, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
+    - {id: complete-check, source: complete, sourceHandle: source, target: require_completion, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: code}}
+    - {id: check-end, source: require_completion, sourceHandle: source, target: success, targetHandle: target, type: custom, data: {sourceType: code, targetType: end}}
+    - {id: generate-failure, source: generate_image, sourceHandle: fail-branch, target: report_generation_failure, targetHandle: target, type: custom, data: {sourceType: tool, targetType: http-request}}
+    - {id: validate-failure, source: validate_image, sourceHandle: fail-branch, target: report_generation_failure, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
+    - {id: report-generation-end, source: report_generation_failure, sourceHandle: source, target: failure, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: end}}
+    - {id: complete-failure, source: complete, sourceHandle: fail-branch, target: report_upload_failure, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: http-request}}
+    - {id: check-failure, source: require_completion, sourceHandle: fail-branch, target: report_upload_failure, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
+    - {id: report-upload-end, source: report_upload_failure, sourceHandle: source, target: upload_failure, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: end}}
+    nodes:
+    - id: start
+      type: custom
+      position: {x: 80, y: 280}
+      positionAbsolute: {x: 80, y: 280}
+      data:
+        title: User Input
+        type: start
+        variables:
+        - {label: project_id, variable: project_id, type: text-input, required: true, default: booklet-dify-trial, options: []}
+        - {label: booklet_run_id, variable: booklet_run_id, type: text-input, required: true, default: '', options: []}
+        - {label: expected_revision, variable: expected_revision, type: number, required: true, default: 1, options: []}
+        - {label: panel_number, variable: panel_number, type: number, required: true, default: 1, options: []}
+    - id: build_authorization
+      type: custom
+      position: {x: 380, y: 280}
+      positionAbsolute: {x: 380, y: 280}
+      data:
+        title: Build authorization JSON
+        type: code
+        code_language: python3
+        code: |
+          import json
+          def main(project_id, booklet_run_id, expected_revision, panel_number, workflow_run_id):
+              return {"body": json.dumps({"project_id": project_id, "run_id": booklet_run_id, "expected_revision": int(expected_revision), "panel_number": int(panel_number), "workflow_run_id": workflow_run_id})}
+        variables:
+        - {variable: project_id, value_selector: [start, project_id]}
+        - {variable: booklet_run_id, value_selector: [start, booklet_run_id]}
+        - {variable: expected_revision, value_selector: [start, expected_revision]}
+        - {variable: panel_number, value_selector: [start, panel_number]}
+        - {variable: workflow_run_id, value_selector: [sys, workflow_run_id]}
+        outputs:
+          body: {type: string, children: null}
+    - id: authorize
+      type: custom
+      position: {x: 680, y: 280}
+      positionAbsolute: {x: 680, y: 280}
+      data:
+        title: Authorize attempt
+        type: http-request
+        method: post
+        url: '{{#env.BOOKLET_BASE_URL#}}/api/experiments/dify/tools/image/authorize'
+        headers: "Content-Type: application/json\nX-Booklet-Tool-Key: {{#env.BOOKLET_TOOL_KEY#}}"
+        params: ''
+        authorization: {type: no-auth, config: null}
+        body:
+          type: raw-text
+          data: '{{#build_authorization.body#}}'
+        retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
+        timeout: {max_connect_timeout: 10, max_read_timeout: 60, max_write_timeout: 10}
+    - id: parse_authorization
+      type: custom
+      position: {x: 980, y: 280}
+      positionAbsolute: {x: 980, y: 280}
+      data:
+        title: Require new authorization
+        type: code
+        code_language: python3
+        code: |
+          import json
+          def main(status_code, body):
+              if int(status_code) != 200:
+                  return {"authorized": False, "attempt_id": "", "revision": 0, "prompt": "", "status": "rejected"}
+              try:
+                  data = json.loads(body).get("data", {})
+              except Exception:
+                  return {"authorized": False, "attempt_id": "", "revision": 0, "prompt": "", "status": "malformed"}
+              if data.get("started") is not True:
+                  return {"authorized": False, "attempt_id": str(data.get("attempt_id", "")), "revision": int(data.get("revision", 0)), "prompt": "", "status": str(data.get("status", "not_started"))}
+              return {"authorized": True, "attempt_id": data["attempt_id"], "revision": int(data["revision"]), "prompt": data["prompt"], "status": "started"}
+        variables:
+        - {variable: status_code, value_selector: [authorize, status_code]}
+        - {variable: body, value_selector: [authorize, body]}
+        outputs:
+          authorized: {type: boolean, children: null}
+          attempt_id: {type: string, children: null}
+          revision: {type: number, children: null}
+          prompt: {type: string, children: null}
+          status: {type: string, children: null}
+    - id: authorization_gate
+      type: custom
+      position: {x: 1130, y: 280}
+      positionAbsolute: {x: 1130, y: 280}
+      data:
+        title: Newly authorized?
+        type: if-else
+        logical_operator: and
+        cases:
+        - case_id: 'true'
+          logical_operator: and
+          conditions:
+          - id: authorization-started
+            variable_selector: [parse_authorization, authorized]
+            comparison_operator: is
+            value: true
+    - id: generate_image
+      type: custom
+      position: {x: 1280, y: 280}
+      positionAbsolute: {x: 1280, y: 280}
+      data:
+        title: Generate one panel PNG
+        type: tool
+        provider_id: langgenius/openai_tool/openai
+        provider_name: langgenius/openai_tool/openai
+        provider_type: builtin
+        tool_name: gpt_image_2_generate
+        tool_label: GPT Image 2 / 2.5 Generate
+        tool_node_version: '2'
+        error_strategy: fail-branch
+        is_team_authorization: true
+        tool_configurations:
+          model: gpt-image-2
+          size: 1536x1536
+          quality: medium
+          n: 1
+          output_format: png
+          background: opaque
+          moderation: auto
+        tool_parameters:
+          prompt: {type: variable, value: [parse_authorization, prompt]}
+    - id: not_authorized
+      type: custom
+      position: {x: 1280, y: 40}
+      positionAbsolute: {x: 1280, y: 40}
+      data:
+        title: Not authorized
+        type: end
+        outputs:
+        - {variable: status, value_selector: [parse_authorization, status]}
+    - id: validate_image
+      type: custom
+      position: {x: 1580, y: 280}
+      positionAbsolute: {x: 1580, y: 280}
+      data:
+        title: Require one PNG
+        type: code
+        error_strategy: fail-branch
+        code_language: python3
+        code: |
+          def main(files):
+              if not isinstance(files, list) or len(files) != 1:
+                  raise ValueError("Image tool must return exactly one file")
+              file = files[0]
+              mime = file.get("mime_type") if isinstance(file, dict) else getattr(file, "mime_type", None)
+              if mime != "image/png":
+                  raise ValueError("Image tool must return PNG")
+              return {"image": file}
+        variables:
+        - {variable: files, value_selector: [generate_image, files]}
+        outputs:
+          image: {type: file, children: null}
+    - id: complete
+      type: custom
+      position: {x: 1880, y: 280}
+      positionAbsolute: {x: 1880, y: 280}
+      data:
+        title: Complete attempt
+        type: http-request
+        method: post
+        url: '{{#env.BOOKLET_BASE_URL#}}/api/experiments/dify/tools/image/complete?project_id={{#start.project_id#}}&expected_revision={{#parse_authorization.revision#}}&attempt_id={{#parse_authorization.attempt_id#}}'
+        headers: "Content-Type: image/png\nX-Booklet-Tool-Key: {{#env.BOOKLET_TOOL_KEY#}}"
+        params: ''
+        authorization: {type: no-auth, config: null}
+        body:
+          type: binary
+          data: '{{#validate_image.image#}}'
+        retry_config: {retry_enabled: true, max_retries: 1, retry_interval: 500}
+        error_strategy: fail-branch
+        timeout: {max_connect_timeout: 10, max_read_timeout: 60, max_write_timeout: 60}
+    - id: require_completion
+      type: custom
+      position: {x: 2180, y: 280}
+      positionAbsolute: {x: 2180, y: 280}
+      data:
+        title: Require saved completion
+        type: code
+        error_strategy: fail-branch
+        code_language: python3
+        code: |
+          import json
+          def main(status_code, body):
+              if int(status_code) != 200:
+                  raise ValueError("Booklet did not save the generated image")
+              parsed = json.loads(body)
+              return {"status": parsed.get("data", {}).get("state", "complete")}
+        variables:
+        - {variable: status_code, value_selector: [complete, status_code]}
+        - {variable: body, value_selector: [complete, body]}
+        outputs:
+          status: {type: string, children: null}
+    - id: report_generation_failure
+      type: custom
+      position: {x: 1580, y: 600}
+      positionAbsolute: {x: 1580, y: 600}
+      data:
+        title: Report uncertain generation
+        type: http-request
+        method: post
+        url: '{{#env.BOOKLET_BASE_URL#}}/api/experiments/dify/tools/image/failure'
+        headers: "Content-Type: application/json\nX-Booklet-Tool-Key: {{#env.BOOKLET_TOOL_KEY#}}"
+        params: ''
+        authorization: {type: no-auth, config: null}
+        body:
+          type: json
+          data:
+          - {id: failure-project, key: project_id, type: text, value: '{{#start.project_id#}}'}
+          - {id: failure-revision, key: expected_revision, type: number, value: '{{#parse_authorization.revision#}}'}
+          - {id: failure-attempt, key: attempt_id, type: text, value: '{{#parse_authorization.attempt_id#}}'}
+          - {id: failure-category, key: category, type: text, value: generation_unknown}
+        retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
+        timeout: {max_connect_timeout: 10, max_read_timeout: 30, max_write_timeout: 10}
+    - id: report_upload_failure
+      type: custom
+      position: {x: 2180, y: 600}
+      positionAbsolute: {x: 2180, y: 600}
+      data:
+        title: Report upload failure
+        type: http-request
+        method: post
+        url: '{{#env.BOOKLET_BASE_URL#}}/api/experiments/dify/tools/image/failure'
+        headers: "Content-Type: application/json\nX-Booklet-Tool-Key: {{#env.BOOKLET_TOOL_KEY#}}"
+        params: ''
+        authorization: {type: no-auth, config: null}
+        body:
+          type: json
+          data:
+          - {id: upload-project, key: project_id, type: text, value: '{{#start.project_id#}}'}
+          - {id: upload-revision, key: expected_revision, type: number, value: '{{#parse_authorization.revision#}}'}
+          - {id: upload-attempt, key: attempt_id, type: text, value: '{{#parse_authorization.attempt_id#}}'}
+          - {id: upload-category, key: category, type: text, value: upload_failed}
+        retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
+        timeout: {max_connect_timeout: 10, max_read_timeout: 30, max_write_timeout: 10}
+    - id: success
+      type: custom
+      position: {x: 2480, y: 280}
+      positionAbsolute: {x: 2480, y: 280}
+      data:
+        title: End
+        type: end
+        outputs:
+        - {variable: status, value_selector: [require_completion, status]}
+    - id: failure
+      type: custom
+      position: {x: 1880, y: 600}
+      positionAbsolute: {x: 1880, y: 600}
+      data:
+        title: Generation outcome unknown
+        type: end
+        outputs:
+        - {variable: status, value_selector: [report_generation_failure, body]}
+    - id: upload_failure
+      type: custom
+      position: {x: 2480, y: 600}
+      positionAbsolute: {x: 2480, y: 600}
+      data:
+        title: Upload failed; preserve generated file
+        type: end
+        outputs:
+        - {variable: status, value_selector: [report_upload_failure, body]}
+        - {variable: recovery_file, value_selector: [validate_image, image]}
+    viewport: {x: 0, y: 0, zoom: 0.7}

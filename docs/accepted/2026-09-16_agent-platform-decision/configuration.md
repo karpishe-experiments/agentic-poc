@@ -1,38 +1,48 @@
 # Experiment configuration
 
-The runtime supports these settings. Keep production unchanged. Application code enables the experiment whenever DEPLOYMENT_ENV=_staging, regardless of the host's DIFY_EXPERIMENT_ENABLED value. The flag is used only for local fake-mode development.
+The staging experiment uses Dify for manager, story-writing, and illustration execution. Booklet remains the system of record and owns authorization, attempts, revisions, approval, assets, and UI state. Production remains disabled.
 
-| Setting | Default | Where it belongs |
+## Booklet host
+
+| Setting | Purpose |
+|---|---|
+| `DIFY_BASE_URL` | Dify API origin; default `https://api.dify.ai/v1` |
+| `DIFY_EXPERIMENT_MODE` | `real` on staging and `fake` for isolated local checks |
+| `DIFY_IMAGE_ENABLED` | Enables Booklet authorization for the illustration workflow |
+| `DIFY_IMAGE_MAX_ATTEMPTS` | Fixed at `2` for this experiment |
+| `DIFY_API_KEY` | Existing published manager application key |
+| `DIFY_TOOL_KEY` | Existing 32-byte minimum callback credential sent as `X-Booklet-Tool-Key` |
+
+The application enables this experiment only on `_staging` or in explicit local fake mode. The setup endpoint reports `image_execution=dify_workflow` and whether the required Booklet credentials exist. It does not verify OpenAI access inside Dify.
+
+`DIFY_IMAGE_OPENAI_API_KEY` remains an optional legacy deployment field for compatibility. The current runtime does not read it. Do not rotate or install it for this rollout. No Compose, Terraform, Cloudflare, or infrastructure-workflow change is required.
+
+## Dify manager
+
+- Retain the existing manager application and its `DIFY_API_KEY`.
+- Retain the working `write_story` Workflow tool and Story JSON-string mapping.
+- Import [tools.openapi.json](tools.openapi.json), configure its API-key authentication with the existing `DIFY_TOOL_KEY`, and attach its three operations to the manager.
+- Attach the published `illustrate_panel` Workflow tool.
+- Remove the retired `generate_panel_image` tool from the manager.
+- Paste [manager-prompt.md](manager-prompt.md) and publish the manager.
+
+## Dify illustration workflow
+
+Import [illustrate-panel.yml](illustrate-panel.yml) as `booklet_illustrator`. Its published Workflow tool name is `illustrate_panel`.
+
+Set these workflow environment variables after import:
+
+| Variable | Type | Value |
 |---|---|---|
-| DIFY_EXPERIMENT_ENABLED | false | Local fake-mode development only; ignored on _staging and _prod |
-| DIFY_BASE_URL | https://api.dify.ai/v1 | Non-secret server configuration |
-| DIFY_EXPERIMENT_MODE | fake | Staging Compose selects real; separate from normal MODEL_RUNTIME |
-| DIFY_IMAGE_ENABLED | false | Staging Compose selects true; Booklet approval and a separate key still gate billable calls |
-| DIFY_IMAGE_MAX_ATTEMPTS | 2 | Server configuration; project-wide, not agent-controlled |
-| DIFY_API_KEY | absent | Protected host application secret; published Dify app key |
-| DIFY_TOOL_KEY | absent | Protected host secret; independent random value of at least 32 bytes; Dify tool credential sends it as X-Booklet-Tool-Key |
-| DIFY_IMAGE_OPENAI_API_KEY | absent | Protected host secret for experiment image calls; use a separate restricted Booklet project key with Images Write |
-| Text model | gpt-5.6-terra | Dify manager and Story Writer configuration |
-| Image model | gpt-image-2 | Fixed experiment server default |
+| `BOOKLET_BASE_URL` | text | `https://booklet-staging.uniwares.co.uk` |
+| `BOOKLET_TOOL_KEY` | secret | The existing `DIFY_TOOL_KEY` value |
 
-Missing credentials disable affected experiment operations with a readable setup error. They must not stop the existing application from starting when the experiment is disabled. Real mode requires DIFY_API_KEY; enabled real image calls require DIFY_IMAGE_OPENAI_API_KEY. Tool handlers always require DIFY_TOOL_KEY. The existing OPENAI_API_KEY remains for normal Booklet runtime calls.
+OpenAI Tools `langgenius/openai_tool` version `0.2.1` is the inspected baseline and the dependency recorded in the DSL. Do not publish it unchanged: its image implementation uses the OpenAI Python SDK's default two retries. First install a reviewed pinned build of the same plugin whose image client sets `max_retries=0`, then bind the existing key used by the Dify credential named `dify-booklet-manager-test`. The workflow fixes generation to `gpt-image-2`, `1536x1536`, medium quality, one PNG. Credential validation does not prove model access; verify access only through the approved live checkpoint.
 
-Use the actual staging origin from the current deployment configuration. Replace tools.openapi.json's example server URL in the copy imported into Dify. Never put keys into that file. The tool key grants access only to booklet-dify-trial.
+Do not add the OpenAI Tools plugin to the manager. Do not expose Booklet's authorize, complete, or failure callbacks to the manager. Do not create another Dify API key.
 
-## Deployment configuration checkpoint
+## Authentication and isolation
 
-The deployment script now keeps its five required application secrets and accepts the three optional Dify keys above. Existing secret files without those keys remain valid. Select and rotate each optional key by name; normal production operations do not prompt for it.
+Only the exact callback paths documented in [illustrator-workflow.md](illustrator-workflow.md) bypass staging Basic Auth. Each still requires the tool key and experiment availability. Browser actions keep the normal browser gate and same-origin check. `_prod` returns 404 for the experiment.
 
-The reviewed Compose configuration has the non-secret mode settings and optional secret slots. An installed host bundle can still supply DIFY_EXPERIMENT_ENABLED=false; the application ignores that value on _staging. Absent optional values do not break interpolation, rotation, readiness, or rollback. The same names apply in both environments; there are no `STAGING_*` secret variants.
-
-Before publication, run the focused configuration tests, both deployment shell tests, `bash -n`, and ShellCheck. The optional-key rotation procedure is in the canonical [deployment runbook](../../deployment/runbook.md).
-
-The host change is merged into `master`. Require Infrastructure to pass for that merge before relying on the installed staging configuration. The staging overlay selects real mode and enables the image path; install the optional keys before the affected operations. Use the deployment runbook at every live checkpoint. Do not edit `secrets.json` manually, add a deployment entrypoint, or mutate production directly.
-
-Before billable runs, confirm provider access and the operator's spending approval. Dify text usage and the server image call are charged separately. Report image charges separately if Dify usage omits them.
-
-## Disabled and recovery behavior
-
-In _prod, all experiment routes return 404. In local development, they require the flag, fake mode, and a development server. On _staging, the application enables them regardless of the flag. Tools also require the dedicated key. Existing Basic Auth still protects browser, approval, and asset routes.
-
-To disable the experiment on _staging, release an application change that removes staging availability. Drain any running work using existing deployment procedures. Keep saved experiment documents/assets for diagnosis; cleanup is a later explicit operation scoped to the experiment collection/project and asset prefix, never a staging database reset.
+Before any billable run, confirm explicit spending approval. Booklet's attempt reservation limits application-authorized calls, but it cannot prove exactly-once provider billing after a network failure.

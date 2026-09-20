@@ -34,7 +34,7 @@ test("offers image retry only while an attempt remains", async ({ page }) => {
   await page.route("**/api/experiments/dify/project", async (route) => {
     await route.fulfill({ json: { data: { context: {
       idea: "A synthetic story", current_revision: 2, state: "image_failed", image_attempt_count: attempts,
-      image: { status: "failed", error: "The image provider failed.", attempt_count: attempts },
+      image: { attempt_id: "00000000-0000-4000-8000-000000000001", status: "failed", error: "The image provider failed.", attempt_count: attempts, completion_in_progress: false, workflow_run_id: "workflow-test" },
       active_run_id: null, story: null, approved_revision: 2,
     }, revisions: [], runs: [] } } });
   });
@@ -42,6 +42,8 @@ test("offers image retry only while an attempt remains", async ({ page }) => {
   await expect(page.getByText("The image-attempt limit is reached.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry image" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Resume" })).toHaveCount(0);
+  await expect(page.getByText("Save existing image")).toBeVisible();
+  await expect(page.getByText("workflow-test")).toBeVisible();
 
   attempts = 1;
   await page.reload();

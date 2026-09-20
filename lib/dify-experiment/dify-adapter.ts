@@ -17,7 +17,7 @@ export class DifyExperimentAdapter {
   private url(path: string) { return new URL(path, this.input.baseUrl.endsWith("/") ? this.input.baseUrl : `${this.input.baseUrl}/`).toString(); }
 
   public async run(action: string, runId: string): Promise<DifyTurnResult> {
-    const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 300_000);
+    const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), DIFY_EXPERIMENT_TURN_TIMEOUT_MS);
     let taskId: string | null = null; let conversationId: string | null = null; let messageId: string | null = null; let message = ""; const toolCalls = new Set<string>(); let usage: DifyTurnResult["usage"] = null;
     try {
       const response = await this.fetcher(this.url("chat-messages"), {
@@ -61,3 +61,4 @@ export class DifyExperimentAdapter {
     await this.fetcher(this.url(`chat-messages/${encodeURIComponent(taskId)}/stop`), { method: "POST", signal: AbortSignal.timeout(5_000), headers: { Authorization: `Bearer ${this.input.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ user: "booklet-trial-operator" }) });
   }
 }
+import { DIFY_EXPERIMENT_TURN_TIMEOUT_MS } from "@/lib/dify-experiment/timeouts";

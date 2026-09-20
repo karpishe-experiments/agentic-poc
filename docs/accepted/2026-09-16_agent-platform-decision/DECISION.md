@@ -4,7 +4,7 @@
 **Decision date:** 2026-09-16  
 **Applies to:** The next internal experiment for configuring, running, and evaluating Booklet agents
 
-**Current experiment (2026-09-18):** Follow [plan.md](plan.md) and [runbook.md](runbook.md). The trial covers a small staging lifecycle: load context, write three panels, save/revise, request review, approve, generate panel one, and resume. The application code and fake-provider checks exist locally; Dify Cloud integration, staging deployment, and live-provider results are not yet verified. The broader checks below are deferred product questions, not additional requirements for this trial.
+**Current experiment (2026-09-20):** Follow [plan.md](plan.md) and [runbook.md](runbook.md). The trial covers a small staging lifecycle: load context, write three panels, save/revise, request review, approve, delegate panel-one illustration to a Dify Workflow, and resume. Booklet authorizes each paid attempt and stores the result; Dify owns image-provider execution. Local verification does not establish target-workspace import or live-provider success. The broader checks below are deferred product questions, not additional requirements for this trial.
 
 ## Decision
 
@@ -19,6 +19,7 @@ The intended operating model is:
 - Booklet tools authenticate the caller and enforce permissions, schemas, revision checks, approvals, cost limits, and idempotency.
 - Booklet remains the system of record for users, books, artifacts, revisions, approvals, assets, jobs, and payments.
 - Dify owns agent configuration and execution for the validation trial. It does not own customer-facing product state or the Booklet interface.
+- Dify also owns the bounded illustration Workflow. Booklet returns the approved saved prompt only after it atomically reserves an allowed attempt, and Booklet validates and persists the returned PNG.
 
 In short, the agent decides what action to request. Booklet decides whether the action is valid and how to commit it.
 
