@@ -25,7 +25,7 @@ The host script retains its five required application secrets and accepts the th
 
 Rotate each optional key by name through the serialized procedure in the [deployment runbook](../../deployment/runbook.md). Supply DIFY_TOOL_KEY to Dify as the X-Booklet-Tool-Key credential. Do not place any key in Git, workflow variables, prompts, or logs.
 
-For the trial only, an operator without the local Cloudflare Access service token can store `DIFY_TOOL_KEY` as a protected GitHub repository secret and run the master-owned **Dify staging tool key** workflow. The workflow stages and rotates only this staging key through the existing serialized host path. Remove the repository secret after the successful rotation. It is not a general secret-management interface.
+For the trial only, an operator without the local Cloudflare Access service token can store `DIFY_TOOL_KEY` or `DIFY_API_KEY` as a protected GitHub repository secret and run the master-owned **Dify staging key** workflow with that key selected. The workflow stages and rotates only the selected staging key through the existing serialized host path. Remove each repository secret after its successful rotation. It is not a general secret-management interface.
 
 The staging Compose overlay selects real Dify text and enables the image path. Production keeps fake mode and images disabled. The image path still requires a separate image key and approval of the current story revision. Do not approve the image step until the operator has authorized the billed image call and installed that key.
 
