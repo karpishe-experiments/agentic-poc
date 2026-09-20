@@ -22,10 +22,10 @@
 
 - **Context:** A Dify Workflow reserves one application-owned paid attempt before it invokes an image plugin.
 - **Observation:** Disabling the Dify tool node's retry does not disable retries inside the plugin. OpenAI Tools `0.2.1` constructs `OpenAI(...)` without `max_retries=0`; the OpenAI Python SDK retries eligible errors twice by default.
-- **Guidance:** For paid operations that require one provider request per reservation, inspect the pinned plugin and its provider library. Do not publish until every retry layer is disabled or charged attempts use a different explicit contract.
+- **Guidance:** Inspect every retry layer before a paid operation. If the experiment accepts provider-library retries, state that the application reservation count is not an exact provider-request or billing count and require explicit spending approval.
 - **Evidence:** `langgenius/dify-official-plugins` `gpt_image_2_generate.py`, the OpenAI Python SDK retry documentation, [plan.md](plan.md), and [runbook.md](runbook.md).
 - **Promotion target:** Third-party workflow and paid-provider integration guidance.
-- **Status:** Candidate; a no-retry plugin build and target-workspace verification remain incomplete.
+- **Status:** Candidate; source inspection is verified, while target-workspace and live billing behavior remain incomplete.
 
 ## Candidate: Isolate storage writes by completion claim
 

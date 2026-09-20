@@ -12,11 +12,11 @@ Recovery: do not edit either published application until both backups exist.
 
 ## 2. Install and authorize the image plugin
 
-Inspect Dify Marketplace plugin `langgenius/openai_tool` version `0.2.1`. Its current image implementation creates the OpenAI client without `max_retries=0`, so the SDK can retry a paid request twice. Do not publish or run this plugin unchanged. Prepare or obtain a reviewed pinned build of the same plugin with provider retries disabled, install that build, and authorize it with the existing `dify-booklet-manager-test` key. Do not create or copy an API key into Booklet.
+Install Dify Marketplace plugin `langgenius/openai_tool` version `0.2.1` and authorize it with the existing `dify-booklet-manager-test` key. Do not create or copy an API key into Booklet. Disable retries on the workflow's image node. The plugin can still retry eligible provider failures internally, so Booklet's attempt count is not an exact provider-request or billing count.
 
-Expected: source inspection proves `max_retries=0`, Dify accepts the credential, and the installed package identity is recorded. Credential validation does not prove access to `gpt-image-2`.
+Expected: Dify accepts the existing credential and the installed package identity is recorded. Credential validation does not prove access to `gpt-image-2`.
 
-Recovery: if the no-retry build is unavailable or validation fails, stop the rollout. Repair the plugin or existing Dify credential. Do not use the Marketplace build unchanged and do not rotate Booklet host secrets.
+Recovery: if installation or credential validation fails, stop the rollout and repair the plugin or existing Dify credential. Do not rotate Booklet host secrets.
 
 ## 3. Import the workflow
 

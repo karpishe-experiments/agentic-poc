@@ -1,5 +1,5 @@
 app:
-  description: 'IMPORT TEMPLATE ONLY: replace the inspected OpenAI Tools 0.2.1 dependency with a reviewed no-provider-retry build before publishing. Authorizes one Booklet attempt, generates one PNG, and saves it to Booklet.'
+  description: 'Authorizes one Booklet attempt, generates one PNG, and saves it to Booklet. Dify node retries are disabled, but the pinned provider plugin can retry internally; Booklet attempts are not an exact provider-request or billing count.'
   icon: 🎨
   icon_background: '#FFF4E6'
   icon_type: emoji
