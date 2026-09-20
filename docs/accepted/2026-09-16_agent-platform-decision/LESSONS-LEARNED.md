@@ -27,6 +27,15 @@
 - **Promotion target:** Third-party workflow and paid-provider integration guidance.
 - **Status:** Candidate; source inspection is verified, while target-workspace and live billing behavior remain incomplete.
 
+## Candidate: Keep generated files out of Dify Code outputs
+
+- **Context:** A Dify Workflow validates a generated image before an HTTP Request node uploads it as a binary body.
+- **Observation:** Dify Cloud rejects a Code node that declares a `file` output. Dify's current HTTP Request editor accepts upstream `file` and `array[file]` variables directly for a Binary body.
+- **Guidance:** Use Code only to validate file metadata and return a scalar result. Bind the original file-producing node directly to the HTTP binary body; do not return or forward the file through Code.
+- **Evidence:** The target-workspace `CodeNodeData` validation error, Dify's `web/app/components/workflow/nodes/http/components/edit-body/index.tsx`, [illustrate-panel.yml](illustrate-panel.yml), and `tests/unit/dify-experiment-openapi.test.ts`.
+- **Promotion target:** Documentation for Dify workflows that upload generated files.
+- **Status:** Candidate; schema validation is verified, while a live binary upload remains incomplete.
+
 ## Candidate: Isolate storage writes by completion claim
 
 - **Context:** An asynchronous callback uses an expiring database claim before it writes an asset to object storage.
