@@ -24,6 +24,11 @@ grep -Fq 'DIFY_TOOL_KEY: ${{ secrets.DIFY_TOOL_KEY }}' .github/workflows/dify-to
 grep -Fq 'DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}' .github/workflows/dify-tool-key.yml
 grep -Fq -- '--action rotate-protected-dify-key --environment staging --secret-name "$SECRET_NAME"' .github/workflows/dify-tool-key.yml
 grep -Fq 'rotate-protected-dify-key is available only through GitHub Actions' "$script"
+GITHUB_ACTIONS=true VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+ACTION=rotate-protected-dify-key; ENVIRONMENT=staging; SECRET_NAME=DIFY_API_KEY; APPLY=true; REQUEST_ID=123-1; VPS_USER=kids-booklet-deploy
+validate_arguments
+' _ "$script"
 for protected_name in DIFY_TOOL_KEY DIFY_API_KEY; do
 protected_rotation_root="$(mktemp -d)"
 protected_rotation_output="$(GITHUB_ACTIONS=true DIFY_TOOL_KEY='0123456789abcdef0123456789abcdef' DIFY_API_KEY='app-test-secret' VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
