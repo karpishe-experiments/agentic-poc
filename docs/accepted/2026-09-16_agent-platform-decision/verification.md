@@ -31,7 +31,7 @@ Also parse the OpenAPI JSON, inspect the DSL for secrets and credential IDs, and
 
 ## Target Dify checks
 
-Record the Dify version and exact OpenAI Tools plugin package identity. Verify in source that the image client sets `max_retries=0`; Marketplace `0.2.1` does not and is not approved for a live run.
+Record the Dify version and exact OpenAI Tools plugin package identity. Confirm that the Dify image node retry is disabled. Record that Marketplace `0.2.1` can retry eligible provider failures internally and that Booklet attempts are not an exact provider-request or billing count.
 
 1. Import [illustrate-panel.yml](illustrate-panel.yml).
 2. Bind `dify-booklet-manager-test` and the two workflow environment variables.

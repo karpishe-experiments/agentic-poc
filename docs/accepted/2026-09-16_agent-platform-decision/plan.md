@@ -1,6 +1,6 @@
 # Dify booklet lifecycle experiment on staging
 
-Status: Booklet-side implementation is complete locally. Dify publication is blocked until the pinned image plugin disables its provider-level retries; target-workspace import and the live paid checkpoint remain operator verification. Issue: [#50](https://github.com/karpishe-experiments/agentic-poc/issues/50).
+Status: Booklet-side implementation is complete locally. Target-workspace import, non-billable authorization testing, and the live paid checkpoint remain operator verification. Issue: [#50](https://github.com/karpishe-experiments/agentic-poc/issues/50).
 
 ## Scope and accepted architecture
 
@@ -77,7 +77,7 @@ The workflow must not give the manager the raw OpenAI tool or internal callbacks
 
 The checked-in DSL is sanitized. Import, credential binding, failure-branch inspection, binary binding, and plugin retry inspection in the target workspace are required before it is called verified.
 
-OpenAI Tools `0.2.1` currently creates the OpenAI Python client without `max_retries=0`. The SDK retries eligible failures twice by default. A disabled Dify node retry therefore does not provide the required one-provider-call boundary. Do not publish or run the checked-in image node unchanged. The smallest acceptable resolution is a reviewed pinned plugin build whose image client sets `max_retries=0`, followed by target-workspace import and non-billable verification. Do not silently change the image model or add a direct host-provider path.
+OpenAI Tools `0.2.1` creates the OpenAI Python client without `max_retries=0`. The SDK retries eligible failures twice by default. Disable the Dify image node's retry, but accept that one authorized Booklet attempt can still cause more than one provider request. This experiment records that billing uncertainty instead of maintaining a custom plugin build. Do not treat the Booklet attempt counter as an exact provider-request or billing count, silently change the image model, or add a direct host-provider path.
 
 ## Verification and completion
 
