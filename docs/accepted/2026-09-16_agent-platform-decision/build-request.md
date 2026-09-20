@@ -1,17 +1,17 @@
 # Build-mode request
 
-Paste this into Dify Build after creating booklet_manager:
+Paste this into Dify Build after the three Booklet tools and both Workflow tools are available:
 
-> Configure a small Booklet manager using gpt-5.6-terra. It must first load project state through get_project_context, call the attached write_story Workflow tool to create or revise a storyline and three panels, save through save_story_draft, request_review, and wait for the operator. Booklet provides a Run ID in each turn; pass that exact run_id to each mutating Booklet tool. Only an application-confirmed approval permits generate_panel_image for panel one. Read the supplied manager instructions and apply them. The four Booklet tools will be imported from the supplied OpenAPI definition; do not invent tools, add a direct image plugin, or create a second project database. Do not make live image requests during configuration.
+> Configure the existing `booklet_manager` with `gpt-5.6-terra`. On every turn it must first call `get_project_context`. It may call `write_story` to create or revise the three-panel Story, then save it through `save_story_draft`, call `request_review`, and stop. Preserve the exact Booklet Run ID for those mutations. Only when Booklet reports the current revision approved and includes `illustrate_panel` in allowed actions may it call `illustrate_panel` with the project ID, original Booklet Run ID, current revision, and panel number 1. It must never pass or rewrite the image prompt, use a raw image tool, call internal callbacks, retry an uncertain paid action, or treat chat text as approval. Use the attached complete manager instructions. Keep `write_story` and the existing Story JSON-text mapping unchanged.
 
-After applying the Build draft, check:
+After Build applies its draft, check Configure:
 
-- Model is gpt-5.6-terra and supports tool calling.
-- Manager prompt matches [manager-prompt.md](manager-prompt.md).
-- The `write_story` Workflow tool is attached; no writing skill is attached to the manager.
-- Exactly the four Booklet HTTP tools are attached once their endpoint is available.
-- No provider credentials or tool keys appear in prompts or files.
-- The Build note does not contradict approval, context-loading, or retry instructions.
-- Publish before API use. A saved draft alone is not the active configuration.
+- model is `gpt-5.6-terra` and supports tool calling;
+- prompt exactly matches [manager-prompt.md](manager-prompt.md);
+- `write_story` and `illustrate_panel` are attached;
+- Booklet exposes only `get_project_context`, `save_story_draft`, and `request_review`;
+- no raw OpenAI image tool or callback operation is attached;
+- no provider credential or Booklet tool key appears in the prompt or files;
+- publish before API use.
 
-If Build cannot perform an item, finish that item in Configure and record the manual work. Conversational setup quality is an observation, not a reason to block the whole experiment.
+If Build cannot complete an item, configure it manually and record that work. Conversational setup quality is an observation, not a reason to weaken the Booklet boundary.

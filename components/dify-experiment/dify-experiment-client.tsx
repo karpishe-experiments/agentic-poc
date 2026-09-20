@@ -8,7 +8,7 @@ type ProjectView = { context: DifyExperimentContext; revisions: DifyExperimentRe
 type ApiResponse<T> = { data?: T; error?: { message?: string } };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
+  const response = await fetch(path, { ...init, headers: { ...(typeof init?.body === "string" ? { "Content-Type": "application/json" } : {}), ...init?.headers } });
   const body = await response.json() as ApiResponse<T>;
   if (!response.ok || !body.data) throw new Error(body.error?.message ?? "The experiment request failed.");
   return body.data;
@@ -42,6 +42,11 @@ export function DifyExperimentClient({ mode, maxImageAttempts }: { mode: "fake" 
     await execute(async () => { await request("/api/experiments/dify/turn", { method: "POST", body: JSON.stringify({ action: "revise", expected_revision: project.context.current_revision, feedback }) }); setFeedback(""); });
   }
 
+  async function recoverImage(file: File | undefined) {
+    if (!project || !file || !project.context.image) return;
+    await execute(() => request(`/api/experiments/dify/image/recover?expected_revision=${project.context.current_revision}&attempt_id=${encodeURIComponent(project.context.image!.attempt_id)}`, { method: "POST", headers: { "Content-Type": "image/png" }, body: file }));
+  }
+
   const context = project?.context; const working = busy || Boolean(context?.active_run_id) || context?.image?.status === "generating";
   return (
     <section className="space-y-6">
@@ -60,12 +65,13 @@ export function DifyExperimentClient({ mode, maxImageAttempts }: { mode: "fake" 
         {context.image?.status === "ready" ? <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5"><h2 className="text-lg font-semibold">First panel image</h2><Image alt="Illustration of Pip beside the thirsty sunflower" className="mt-3 h-auto w-full max-w-md rounded-xl border border-[var(--border)]" height={768} src="/api/experiments/dify/assets/panel-1" unoptimized width={768}/><p className="mt-2 text-sm text-[var(--muted-ink)]">{context.image.prompt}</p></section> : null}
         {context.state === "image_failed" ? <div className="space-y-2">
           <p className="text-sm text-red-700" role="status">{context.image?.error ?? "The image attempt failed."}</p>
+          {context.image ? <label className="inline-flex cursor-pointer rounded-xl border border-[var(--border)] px-4 py-2 font-semibold text-[var(--ink)]">Save existing image<input accept="image/png" className="sr-only" disabled={working || context.image.completion_in_progress} onChange={(event) => void recoverImage(event.target.files?.[0])} type="file"/></label> : null}
           {context.image_attempt_count < maxImageAttempts
-            ? <button className="rounded-xl border border-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent)] disabled:opacity-60" disabled={working} onClick={() => void execute(async () => { await request("/api/experiments/dify/image/retry", { method: "POST", body: JSON.stringify({ expected_revision: context.current_revision }) }); await request("/api/experiments/dify/turn", { method: "POST", body: JSON.stringify({ action: "resume" }) }); })}>Retry image</button>
+            ? <button className="rounded-xl border border-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent)] disabled:opacity-60" disabled={working || Boolean(context.image?.completion_in_progress)} onClick={() => void execute(async () => { await request("/api/experiments/dify/image/retry", { method: "POST", body: JSON.stringify({ expected_revision: context.current_revision }) }); await request("/api/experiments/dify/turn", { method: "POST", body: JSON.stringify({ action: "resume" }) }); })}>Retry image</button>
             : <p className="text-sm text-[var(--muted-ink)]">The image-attempt limit is reached. No further retry is available for this experiment.</p>}
         </div> : null}
         {context.current_revision > 0 && !working && !(context.state === "image_failed" && context.image_attempt_count >= maxImageAttempts) ? <button className="rounded-xl border border-[var(--border)] px-4 py-2 font-semibold disabled:opacity-60" disabled={busy} onClick={() => void execute(() => request("/api/experiments/dify/turn", { method: "POST", body: JSON.stringify({ action: "resume" }) }))}>Resume</button> : null}
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5"><h2 className="text-lg font-semibold">Run details</h2><ul className="mt-3 space-y-2 text-sm">{project.runs.slice().reverse().map((run) => <li className="rounded-lg bg-[#fffaf2] p-3" key={run.id}><span className="font-medium">{run.action}</span> — {run.status}{run.toolCalls.length ? ` (${run.toolCalls.join(", ")})` : ""}{run.message ? <p className="mt-1 text-[var(--muted-ink)]">{run.message}</p> : null}{run.error ? <p className="mt-1 text-red-700">{run.error}</p> : null}</li>)}</ul></section>
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5"><h2 className="text-lg font-semibold">Run details</h2>{context.image ? <div className="mt-2 text-xs text-[var(--muted-ink)]"><p>Image attempt: {context.image.attempt_id}</p>{context.image.workflow_run_id ? <p>Dify workflow run: {context.image.workflow_run_id}</p> : null}</div> : null}<ul className="mt-3 space-y-2 text-sm">{project.runs.slice().reverse().map((run) => <li className="rounded-lg bg-[#fffaf2] p-3" key={run.id}><span className="font-medium">{run.action}</span> — {run.status}{run.toolCalls.length ? ` (${run.toolCalls.join(", ")})` : ""}{run.message ? <p className="mt-1 text-[var(--muted-ink)]">{run.message}</p> : null}{run.error ? <p className="mt-1 text-red-700">{run.error}</p> : null}</li>)}</ul></section>
       </> : null}
     </section>
   );

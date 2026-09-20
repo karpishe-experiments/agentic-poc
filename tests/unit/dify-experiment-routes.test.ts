@@ -35,11 +35,14 @@ describe("Dify tool route authentication", () => {
     expect(response.status).toBe(200);
     expect(getContext).toHaveBeenCalledOnce();
 
-    for (const path of ["/api/experiments/dify/approve", "/api/experiments/dify/assets/panel-1", "/api/experiments/dify/tools/context/extra"]) {
+    for (const path of ["/api/experiments/dify/approve", "/api/experiments/dify/assets/panel-1", "/api/experiments/dify/image/recover", "/api/experiments/dify/tools/context/extra", "/api/experiments/dify/tools/image/authorize/extra"]) {
       const gated = proxy(new NextRequest(`https://staging.example${path}`, { headers: { "X-Booklet-Tool-Key": key } }));
       expect(gated.status).toBe(401);
     }
     expect(proxy(new NextRequest("https://staging.example/api/experiments/dify/tools/context", { headers: { "X-Booklet-Tool-Key": key } })).status).toBe(200);
+    for (const path of ["/api/experiments/dify/tools/image/authorize", "/api/experiments/dify/tools/image/complete", "/api/experiments/dify/tools/image/failure"]) {
+      expect(proxy(new NextRequest(`https://staging.example${path}`, { headers: { "X-Booklet-Tool-Key": key } })).status).toBe(200);
+    }
     vi.stubEnv("DEPLOYMENT_ENV", "_prod");
     expect(proxy(new NextRequest("https://staging.example/api/experiments/dify/tools/context", { headers: { "X-Booklet-Tool-Key": key } })).status).toBe(401);
   });

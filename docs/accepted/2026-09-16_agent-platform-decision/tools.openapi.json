@@ -158,7 +158,7 @@
                       "panels",
                       "first_panel_image_prompt"
                     ],
-                    "description": "Dify requires this request object inline; keep it identical to components.schemas.Story. Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules."
+                    "description": "Dify exposes this parameter to the model as a string. Supply the complete Story as valid JSON text with no Markdown fences or wrapper. Because this schema is inline with type object, Dify parses that text into the HTTP request object. Keep this schema identical to components.schemas.Story. Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules."
                   }
                 },
                 "required": [
@@ -228,75 +228,6 @@
                   "project_id",
                   "run_id",
                   "expected_revision"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Current authoritative context after the operation. Image dispatch returns generating.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Context"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Non-2xx error; status codes and transitions are specified in plan.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments/dify/tools/image": {
-      "post": {
-        "operationId": "generate_panel_image",
-        "summary": "generate_panel_image",
-        "description": "Request only panel 1 of the approved current revision. Returns promptly with generating; do not poll or repeat. User UI handles completion.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "project_id": {
-                    "type": "string",
-                    "enum": [
-                      "booklet-dify-trial"
-                    ]
-                  },
-                  "run_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "description": "The exact Run ID supplied in the manager turn."
-                  },
-                  "expected_revision": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "panel_number": {
-                    "type": "integer",
-                    "enum": [
-                      1
-                    ]
-                  }
-                },
-                "required": [
-                  "project_id",
-                  "run_id",
-                  "expected_revision",
-                  "panel_number"
                 ]
               }
             }
@@ -405,6 +336,10 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -435,15 +370,25 @@
           "error": {
             "type": "string",
             "nullable": true
+          },
+          "workflow_run_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "completion_in_progress": {
+            "type": "boolean"
           }
         },
         "required": [
+          "attempt_id",
           "status",
           "revision",
           "attempt_count",
           "prompt",
           "asset_path",
-          "error"
+          "error",
+          "workflow_run_id",
+          "completion_in_progress"
         ]
       },
       "Context": {
@@ -465,6 +410,10 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
+              "attempt_id": {
+                "type": "string",
+                "format": "uuid"
+              },
               "age_range": {
                 "type": "string",
                 "minLength": 1,
@@ -586,6 +535,10 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
+              "attempt_id": {
+                "type": "string",
+                "format": "uuid"
+              },
               "status": {
                 "type": "string",
                 "enum": [
@@ -616,15 +569,25 @@
               "error": {
                 "type": "string",
                 "nullable": true
+              },
+              "workflow_run_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "completion_in_progress": {
+                "type": "boolean"
               }
             },
             "required": [
+              "attempt_id",
               "status",
               "revision",
               "attempt_count",
               "prompt",
               "asset_path",
-              "error"
+              "error",
+              "workflow_run_id",
+              "completion_in_progress"
             ],
             "nullable": true
           },
@@ -648,7 +611,7 @@
               "enum": [
                 "save_story_draft",
                 "request_review",
-                "generate_panel_image"
+                "illustrate_panel"
               ]
             }
           },

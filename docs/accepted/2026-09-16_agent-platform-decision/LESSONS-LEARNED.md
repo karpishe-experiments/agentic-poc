@@ -9,11 +9,29 @@
 - **Promotion target:** Documentation for future third-party agent integrations.
 - **Status:** Candidate; live Dify behavior is not yet verified.
 
-## Candidate: Inline nested request objects for Dify Swagger tools
+## Candidate: Encode inline Dify object parameters as JSON text
 
 - **Context:** A Dify Swagger API tool accepts a nested object in a JSON request body.
-- **Observation:** The live Dify import represented `save_story_draft.story` as a string when the property used `$ref: "#/components/schemas/Story"`. The same object works as the structured output of the Story Writer workflow. The Booklet endpoint correctly rejected the string because its request contract requires an object.
-- **Guidance:** Inline nested request-object schemas at the Dify tool boundary. Keep a reusable component only when a contract test proves that the inline schema is identical. Confirm the imported parameter type before a live mutation.
-- **Evidence:** The sanitized Dify exports, the imported tool parameter view, `tools.openapi.json`, and `tests/unit/dify-experiment-openapi.test.ts`.
+- **Observation:** A clean Dify Cloud import exposes an inline `type: object` request property as a string tool parameter. Dify's official parser has no object tool-parameter type, while its custom-tool request assembly applies `json.loads` to a string when the original inline property has `type: object`. A property-level `$ref` bypasses that conversion path.
+- **Guidance:** Keep the request property inline as `type: object`, and instruct the model to supply the complete object as valid JSON text without Markdown or a wrapper. Keep a reusable component only when a contract test proves that the inline schema is identical. Seeing a string parameter in Dify is expected; validate the emitted HTTP body before changing the server contract.
+- **Evidence:** The clean Dify schema-test import, Dify's official `api/core/tools/utils/parser.py` and `api/core/tools/custom_tool/tool.py`, `tools.openapi.json`, and `tests/unit/dify-experiment-openapi.test.ts`.
 - **Promotion target:** Documentation for integrations that import OpenAPI definitions into Dify.
-- **Status:** Candidate; verify that reimporting the inline schema produces an object parameter before promotion.
+- **Status:** Candidate; verify one live save through the inline conversion path before promotion.
+
+## Candidate: Inspect provider-library retries below workflow retry controls
+
+- **Context:** A Dify Workflow reserves one application-owned paid attempt before it invokes an image plugin.
+- **Observation:** Disabling the Dify tool node's retry does not disable retries inside the plugin. OpenAI Tools `0.2.1` constructs `OpenAI(...)` without `max_retries=0`; the OpenAI Python SDK retries eligible errors twice by default.
+- **Guidance:** For paid operations that require one provider request per reservation, inspect the pinned plugin and its provider library. Do not publish until every retry layer is disabled or charged attempts use a different explicit contract.
+- **Evidence:** `langgenius/dify-official-plugins` `gpt_image_2_generate.py`, the OpenAI Python SDK retry documentation, [plan.md](plan.md), and [runbook.md](runbook.md).
+- **Promotion target:** Third-party workflow and paid-provider integration guidance.
+- **Status:** Candidate; a no-retry plugin build and target-workspace verification remain incomplete.
+
+## Candidate: Isolate storage writes by completion claim
+
+- **Context:** An asynchronous callback uses an expiring database claim before it writes an asset to object storage.
+- **Observation:** Matching the final database update to the claim does not protect a shared object key. A slow writer can resume after its claim expires and overwrite the bytes selected by a newer claimant.
+- **Guidance:** Give each claim a distinct object key and persist only the winning claim's key. Treat uncommitted objects as cleanup candidates; never let an expired claimant write to the committed object's key.
+- **Evidence:** `DifyExperimentService.completeImage` and the expired-claim concurrency test in `tests/integration/dify-experiment.test.ts`.
+- **Promotion target:** Documentation for callback-driven asset ingestion.
+- **Status:** Candidate; verified with the fake asset store and MongoDB integration test.
