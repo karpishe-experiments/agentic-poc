@@ -20,7 +20,7 @@
     "test:mockup": "vitest run --config vitest.mockup.config.ts",
     "test:mockup:e2e": "node scripts/test-management-mockup.mjs",
     "test:agent": "tsx scripts/test-agent-fixtures.ts",
-    "test:dify": "vitest run tests/integration/dify-experiment.test.ts tests/unit/dify-experiment-adapter.test.ts tests/unit/dify-experiment-http.test.ts tests/unit/dify-experiment-routes.test.ts tests/unit/dify-experiment-availability.test.ts tests/unit/config/env.test.ts tests/unit/deployment-contracts.test.ts",
+    "test:dify": "vitest run tests/integration/dify-experiment.test.ts tests/unit/dify-experiment-adapter.test.ts tests/unit/dify-experiment-http.test.ts tests/unit/dify-experiment-routes.test.ts tests/unit/dify-experiment-availability.test.ts tests/unit/dify-experiment-openapi.test.ts tests/unit/config/env.test.ts tests/unit/deployment-contracts.test.ts",
     "smoke:agent:real": "tsx scripts/smoke-real-agent.ts",
     "test:e2e": "node --import tsx scripts/run-e2e.ts",
     "test:dify:browser": "node --import tsx scripts/run-e2e.ts --dify-experiment tests/e2e/dify-experiment.spec.ts",
