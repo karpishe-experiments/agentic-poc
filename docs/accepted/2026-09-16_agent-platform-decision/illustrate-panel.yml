@@ -53,7 +53,8 @@ workflow:
     - {id: gate-generate, source: authorization_gate, sourceHandle: 'true', target: generate_image, targetHandle: target, type: custom, data: {sourceType: if-else, targetType: tool}}
     - {id: gate-stop, source: authorization_gate, sourceHandle: 'false', target: not_authorized, targetHandle: target, type: custom, data: {sourceType: if-else, targetType: end}}
     - {id: generate-validate, source: generate_image, sourceHandle: source, target: validate_image, targetHandle: target, type: custom, data: {sourceType: tool, targetType: code}}
-    - {id: validate-complete, source: validate_image, sourceHandle: source, target: complete, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
+    - {id: validate-select, source: validate_image, sourceHandle: source, target: select_image, targetHandle: target, type: custom, data: {sourceType: code, targetType: list-operator}}
+    - {id: select-complete, source: select_image, sourceHandle: source, target: complete, targetHandle: target, type: custom, data: {sourceType: list-operator, targetType: http-request}}
     - {id: complete-check, source: complete, sourceHandle: source, target: require_completion, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: code}}
     - {id: check-end, source: require_completion, sourceHandle: source, target: success, targetHandle: target, type: custom, data: {sourceType: code, targetType: end}}
     - {id: generate-failure, source: generate_image, sourceHandle: fail-branch, target: report_generation_failure, targetHandle: target, type: custom, data: {sourceType: tool, targetType: http-request}}
@@ -109,9 +110,10 @@ workflow:
         authorization: {type: no-auth, config: null}
         body:
           type: raw-text
-          data: '{{#build_authorization.body#}}'
+          data:
+          - {id: authorization-json, type: text, value: '{{#build_authorization.body#}}'}
         retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
-        timeout: {max_connect_timeout: 10, max_read_timeout: 60, max_write_timeout: 10}
+        timeout: {connect: 10, read: 60, write: 10}
     - id: parse_authorization
       type: custom
       position: {x: 980, y: 280}
@@ -127,11 +129,16 @@ workflow:
                   return {"authorized": False, "attempt_id": "", "revision": 0, "prompt": "", "status": "rejected"}
               try:
                   data = json.loads(body).get("data", {})
+                  if data.get("started") is not True:
+                      return {"authorized": False, "attempt_id": str(data.get("attempt_id", "")), "revision": int(data.get("revision", 0)), "prompt": "", "status": str(data.get("status", "not_started"))}
+                  attempt_id = str(data["attempt_id"])
+                  revision = int(data["revision"])
+                  prompt = str(data["prompt"])
+                  if not attempt_id or revision < 1 or not prompt:
+                      raise ValueError("Incomplete authorization")
+                  return {"authorized": True, "attempt_id": attempt_id, "revision": revision, "prompt": prompt, "status": "started"}
               except Exception:
                   return {"authorized": False, "attempt_id": "", "revision": 0, "prompt": "", "status": "malformed"}
-              if data.get("started") is not True:
-                  return {"authorized": False, "attempt_id": str(data.get("attempt_id", "")), "revision": int(data.get("revision", 0)), "prompt": "", "status": str(data.get("status", "not_started"))}
-              return {"authorized": True, "attempt_id": data["attempt_id"], "revision": int(data["revision"]), "prompt": data["prompt"], "status": "started"}
         variables:
         - {variable: status_code, value_selector: [authorize, status_code]}
         - {variable: body, value_selector: [authorize, body]}
@@ -154,6 +161,7 @@ workflow:
           logical_operator: and
           conditions:
           - id: authorization-started
+            varType: boolean
             variable_selector: [parse_authorization, authorized]
             comparison_operator: is
             value: true
@@ -190,7 +198,7 @@ workflow:
         title: Not authorized
         type: end
         outputs:
-        - {variable: status, value_selector: [parse_authorization, status]}
+        - {variable: status, value_type: string, value_selector: [parse_authorization, status]}
     - id: validate_image
       type: custom
       position: {x: 1580, y: 280}
@@ -213,10 +221,22 @@ workflow:
         - {variable: files, value_selector: [generate_image, files]}
         outputs:
           valid: {type: boolean, children: null}
+    - id: select_image
+      type: custom
+      position: {x: 1830, y: 280}
+      positionAbsolute: {x: 1830, y: 280}
+      data:
+        title: Select validated PNG
+        type: list-operator
+        variable: [generate_image, files]
+        filter_by: {enabled: false, conditions: []}
+        order_by: {enabled: false, key: '', value: asc}
+        limit: {enabled: false, size: 1}
+        extract_by: {enabled: false, serial: '1'}
     - id: complete
       type: custom
-      position: {x: 1880, y: 280}
-      positionAbsolute: {x: 1880, y: 280}
+      position: {x: 2080, y: 280}
+      positionAbsolute: {x: 2080, y: 280}
       data:
         title: Complete attempt
         type: http-request
@@ -228,10 +248,10 @@ workflow:
         body:
           type: binary
           data:
-          - {id: completion-image, type: file, file: [generate_image, files]}
+          - {id: completion-image, type: file, file: [select_image, first_record]}
         retry_config: {retry_enabled: true, max_retries: 1, retry_interval: 500}
         error_strategy: fail-branch
-        timeout: {max_connect_timeout: 10, max_read_timeout: 60, max_write_timeout: 60}
+        timeout: {connect: 10, read: 60, write: 60}
     - id: require_completion
       type: custom
       position: {x: 2180, y: 280}
@@ -247,7 +267,10 @@ workflow:
               if int(status_code) != 200:
                   raise ValueError("Booklet did not save the generated image")
               parsed = json.loads(body)
-              return {"status": parsed.get("data", {}).get("state", "complete")}
+              status = parsed.get("data", {}).get("state")
+              if status != "complete":
+                  raise ValueError("Booklet did not confirm image completion")
+              return {"status": status}
         variables:
         - {variable: status_code, value_selector: [complete, status_code]}
         - {variable: body, value_selector: [complete, body]}
@@ -268,12 +291,12 @@ workflow:
         body:
           type: json
           data:
-          - {id: failure-project, key: project_id, type: text, value: '{{#start.project_id#}}'}
-          - {id: failure-revision, key: expected_revision, type: text, value: '{{#parse_authorization.revision#}}'}
-          - {id: failure-attempt, key: attempt_id, type: text, value: '{{#parse_authorization.attempt_id#}}'}
-          - {id: failure-category, key: category, type: text, value: generation_unknown}
+          - id: failure-json
+            type: text
+            value: '{"project_id":"{{#start.project_id#}}","expected_revision":{{#parse_authorization.revision#}},"attempt_id":"{{#parse_authorization.attempt_id#}}","category":"generation_unknown"}'
         retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
-        timeout: {max_connect_timeout: 10, max_read_timeout: 30, max_write_timeout: 10}
+        error_strategy: fail-branch
+        timeout: {connect: 10, read: 30, write: 10}
     - id: report_upload_failure
       type: custom
       position: {x: 2180, y: 600}
@@ -289,12 +312,12 @@ workflow:
         body:
           type: json
           data:
-          - {id: upload-project, key: project_id, type: text, value: '{{#start.project_id#}}'}
-          - {id: upload-revision, key: expected_revision, type: text, value: '{{#parse_authorization.revision#}}'}
-          - {id: upload-attempt, key: attempt_id, type: text, value: '{{#parse_authorization.attempt_id#}}'}
-          - {id: upload-category, key: category, type: text, value: upload_failed}
+          - id: upload-json
+            type: text
+            value: '{"project_id":"{{#start.project_id#}}","expected_revision":{{#parse_authorization.revision#}},"attempt_id":"{{#parse_authorization.attempt_id#}}","category":"upload_failed"}'
         retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
-        timeout: {max_connect_timeout: 10, max_read_timeout: 30, max_write_timeout: 10}
+        error_strategy: fail-branch
+        timeout: {connect: 10, read: 30, write: 10}
     - id: success
       type: custom
       position: {x: 2480, y: 280}
@@ -303,7 +326,7 @@ workflow:
         title: End
         type: end
         outputs:
-        - {variable: status, value_selector: [require_completion, status]}
+        - {variable: status, value_type: string, value_selector: [require_completion, status]}
     - id: failure
       type: custom
       position: {x: 1880, y: 600}
@@ -312,7 +335,7 @@ workflow:
         title: Generation outcome unknown
         type: end
         outputs:
-        - {variable: status, value_selector: [report_generation_failure, body]}
+        - {variable: status, value_type: string, value_selector: [report_generation_failure, body]}
     - id: upload_failure
       type: custom
       position: {x: 2480, y: 600}
@@ -321,6 +344,6 @@ workflow:
         title: Upload failed; preserve generated file
         type: end
         outputs:
-        - {variable: status, value_selector: [report_upload_failure, body]}
-        - {variable: recovery_file, value_selector: [generate_image, files]}
+        - {variable: status, value_type: string, value_selector: [report_upload_failure, body]}
+        - {variable: recovery_file, value_type: file, value_selector: [select_image, first_record]}
     viewport: {x: 0, y: 0, zoom: 0.7}
