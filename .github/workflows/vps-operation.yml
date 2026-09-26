@@ -7,17 +7,40 @@ on:
       backup_id: {type: string, default: ''}
       confirmation: {type: string, default: ''}
 permissions: {contents: read}
+defaults: {run: {shell: bash}}
 jobs:
   operation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Verify branch and inputs
-        env: {TARGET: '${{ inputs.environment }}', OPERATION: '${{ inputs.action }}'}
+        env:
+          TARGET: ${{ inputs.environment }}
+          OPERATION: ${{ inputs.action }}
+          BACKUP: ${{ inputs.backup_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
+          set -euo pipefail
           [[ "$TARGET" =~ ^(staging|prod)$ ]]
           test "$GITHUB_REF_NAME" = "_$TARGET"
           [[ "$OPERATION" =~ ^(check|backup|restore|rollback|rotate-secrets|reset-staging|resume)$ ]]
+          for name in VPS_HOST DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_HOST_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
+            [[ -n "${!name}" ]] || { printf 'Missing required configuration: %s\n' "$name" >&2; exit 1; }
+          done
+          if [[ "$OPERATION" == restore ]]; then
+            [[ -n "$BACKUP" && "$BACKUP" =~ ^[a-zA-Z0-9._-]+$ ]]
+            expected=kids_booklet
+            if [[ "$TARGET" == prod ]]; then expected=kids_booklet_prod; fi
+            [[ "$CONFIRMATION" == "$expected" ]]
+          fi
+          if [[ "$OPERATION" == reset-staging ]]; then
+            [[ "$TARGET" == staging && "$CONFIRMATION" == kids_booklet ]]
+          fi
       - uses: ./.github/actions/vps-access
         with:
           ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -44,7 +67,7 @@ jobs:
         env:
           TARGET: ${{ inputs.environment }}
           OPERATION: ${{ inputs.action }}
-          OUTCOME: ${{ steps.run-operation.outcome }}
+          OUTCOME: ${{ job.status }}
         run: |
           set -euo pipefail
           {

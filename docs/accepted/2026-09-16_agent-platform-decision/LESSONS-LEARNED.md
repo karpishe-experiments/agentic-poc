@@ -30,8 +30,8 @@
 ## Candidate: Keep generated files out of Dify Code outputs
 
 - **Context:** A Dify Workflow validates a generated image before an HTTP Request node uploads it as a binary body.
-- **Observation:** Dify Cloud rejects a Code node that declares a `file` output. Dify's current HTTP Request editor accepts upstream `file` and `array[file]` variables directly for a Binary body.
-- **Guidance:** Use Code only to validate file metadata and return a scalar result. Bind the original file-producing node directly to the HTTP binary body; do not return or forward the file through Code.
+- **Observation:** Dify Cloud rejects a Code node that declares a `file` output. The OpenAI tool returns `array[file]`, but Graphon's Binary HTTP executor resolves one `file`. A List Operator exposes that array's `first_record` as a file.
+- **Guidance:** Use Code only to validate file metadata and return a scalar result. After validation, use a List Operator to select `first_record` and bind that file to the HTTP binary body. Do not return a file through Code or bind an `array[file]` directly to a Binary body.
 - **Evidence:** The target-workspace `CodeNodeData` validation error, Dify's `web/app/components/workflow/nodes/http/components/edit-body/index.tsx`, [illustrate-panel.yml](illustrate-panel.yml), and `tests/unit/dify-experiment-openapi.test.ts`.
 - **Promotion target:** Documentation for Dify workflows that upload generated files.
 - **Status:** Candidate; schema validation is verified, while a live binary upload remains incomplete.

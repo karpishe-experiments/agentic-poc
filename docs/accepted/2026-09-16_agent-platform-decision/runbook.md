@@ -34,16 +34,18 @@ Confirm before publishing:
 - authorization JSON is built by Code;
 - only HTTP 200 plus literal `started=true` reaches generation;
 - generation is `gpt-image-2`, `1536x1536`, medium, one PNG;
-- the validation Code node returns a boolean only, and the completion binary body reads the OpenAI tool's `files` output directly;
+- the validation Code node returns a boolean only, a List Operator exposes `first_record`, and the completion binary body reads that single file;
+- each failure callback has exactly one JSON body item containing the complete JSON object;
 - authorization and generation retries are disabled;
 - completion sends raw PNG bytes and has at most one retry;
+- completion reaches success only after Booklet returns HTTP 200 with state `complete`;
 - generation errors report `generation_failed` or `generation_unknown`;
 - upload errors report `upload_failed` and return the generated file;
 - no secret, credential ID, or raw provider failure appears in outputs.
 
 Expected: the workflow imports and validates. Record the target Dify version and any importer repair. The checked-in DSL is not considered verified until this checkpoint passes.
 
-Recovery: delete only the failed imported draft and repeat from the checked-in file or manual node instructions. If Dify reports that a Code output has type `file`, the obsolete import is still open; replace it with the current DSL. Do not change the saved Booklet project.
+Recovery: delete only the failed imported draft and repeat from the checked-in file or manual node instructions. If Dify reports that a Code output has type `file`, that an HTTP body entry has type `number`, that a JSON body has multiple items, or that a Binary body cannot fetch `generate_image.files`, the obsolete import is still open; replace it with the current DSL. Do not change the saved Booklet project.
 
 ## 4. Deploy the application
 
