@@ -36,6 +36,15 @@
 - **Promotion target:** Documentation for Dify workflows that upload generated files.
 - **Status:** Candidate; schema validation is verified, while a live binary upload remains incomplete.
 
+## Candidate: Check Dify publication separately from import and branch execution
+
+- **Context:** An imported workflow passes a non-billable authorization-rejection test.
+- **Observation:** The target workspace still rejects publication for duplicate End output names, an empty prompt binding, and an invalid recovery-file binding. The rejection path does not exercise those nodes.
+- **Guidance:** Check the publish checklist as a separate checkpoint. Use globally unique End output names, the text editor's mixed-variable representation for prompts, and explicit List Operator array/item types. Inspect both upload and recovery file selectors.
+- **Evidence:** The operator's publish checklist, Dify's [text-input helper](https://github.com/langgenius/dify/blob/main/web/app/components/workflow/nodes/_base/components/form-input-item.helpers.ts) and [List Operator helper](https://github.com/langgenius/dify/blob/main/web/app/components/workflow/nodes/list-operator/use-config.helpers.ts), and `tests/unit/dify-experiment-openapi.test.ts`.
+- **Promotion target:** Dify import and verification documentation.
+- **Status:** Candidate; local contract checks pass. Target-workspace publication and paid generation still require verification.
+
 ## Candidate: Isolate storage writes by completion claim
 
 - **Context:** An asynchronous callback uses an expiring database claim before it writes an asset to object storage.
@@ -44,3 +53,21 @@
 - **Evidence:** `DifyExperimentService.completeImage` and the expired-claim concurrency test in `tests/integration/dify-experiment.test.ts`.
 - **Promotion target:** Documentation for callback-driven asset ingestion.
 - **Status:** Candidate; verified with the fake asset store and MongoDB integration test.
+
+## Candidate: Synchronize the published Workflow Tool version
+
+- **Context:** Dify editor tests used the repaired callback credential, but the manager's attached Workflow Tool still returned 401.
+- **Observation:** Publishing the workflow did not update its Workflow Tool binding. Saving **Workflow as Tool** synchronized the binding; the next manager run reached authorization and generation.
+- **Guidance:** After publishing workflow changes, save the Workflow Tool configuration and confirm the update. Do not infer the attached tool's version from the editor page alone.
+- **Evidence:** The staging authorization traces and Dify's `workflow_tools_manage_service.py` version update behavior; [runbook.md](runbook.md).
+- **Promotion target:** Dify publication documentation.
+- **Status:** Candidate; verified in the target workspace. This does not establish successful image storage.
+
+## Candidate: Separate quality preferences from completion invariants
+
+- **Context:** A generated image exists, but a strict preferred-size check prevents the experiment from completing.
+- **Observation:** Focused tests can preserve original PNG/JPEG/WebP bytes and complete recovery with warnings while retaining approval, attempt caps, digest identity, and concurrent-write protection.
+- **Guidance:** Enforce required structure and safety limits. Report quality deviations separately. Validate decoded bytes rather than a filename or MIME label, and provide recovery without another paid call.
+- **Evidence:** `tests/integration/dify-experiment.test.ts` and the shared Dify completion validator.
+- **Promotion target:** Experiment-design documentation, not a change to normal Booklet validation.
+- **Status:** Candidate; local tests pass. Live recovery remains a separate checkpoint.

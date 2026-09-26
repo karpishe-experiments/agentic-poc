@@ -1,6 +1,8 @@
 # Dify illustration rollout
 
-Use these checkpoints in order. Stop at the first unexpected result. This rollout does not rotate host secrets, run Infrastructure, reset data, or change Terraform, Compose, or Cloudflare.
+For the current project, generation has already used attempts `2/2`. Deploy the validation update and proceed to checkpoint 9 to recover the existing file. Do not repeat checkpoint 8 or reset the experiment.
+
+For a fresh authorized rollout, use these checkpoints in order. Stop at the first unexpected result. This rollout does not rotate host secrets, run Infrastructure, reset data, or change Terraform, Compose, or Cloudflare.
 
 ## 1. Back up Dify configuration
 
@@ -37,7 +39,7 @@ Confirm before publishing:
 - the validation Code node returns a boolean only, a List Operator exposes `first_record`, and the completion binary body reads that single file;
 - each failure callback has exactly one JSON body item containing the complete JSON object;
 - authorization and generation retries are disabled;
-- completion sends raw PNG bytes and has at most one retry;
+- completion sends one raw file, leaves HTTP error handling unset, and disables retry so rejected response bodies reach the completion parser;
 - completion reaches success only after Booklet returns HTTP 200 with state `complete`;
 - generation errors report `generation_failed` or `generation_unknown`;
 - upload errors report `upload_failed` and return the generated file;
@@ -51,7 +53,7 @@ Recovery: delete only the failed imported draft and repeat from the checked-in f
 
 Review and publish the application change through Issue #50's existing branch workflow. Deploy the reviewed `_staging` release during an idle experiment window. Use the normal deployment runbook. No Infrastructure run or host secret rotation is required.
 
-Expected: `/experiments/dify` reports real mode, existing revision 1, approval, failed attempt, and `1/2` attempts. The setup endpoint reports Dify workflow image execution, and the new callback routes are available.
+Expected: `/experiments/dify` reports real mode, existing revision 1, approval, failed/unknown attempt, and `2/2` attempts for the current recovery. Preserve the saved approval and attempt ID. The setup endpoint reports Dify workflow image execution, and the new callback routes are available.
 
 Recovery: stop new experiment actions and inspect active mutations before rolling back the application and Dify manager together. Retain the project and assets. The retired direct-provider route is not a rollback image path.
 
@@ -70,7 +72,7 @@ Recovery: if the OpenAI node runs, unpublish or disable the workflow and repair 
 
 ## 6. Publish the workflow tool
 
-Publish the workflow as `illustrate_panel`. Its description must say that Booklet supplies the approved prompt after authorization and that callers provide identifiers only.
+Publish the workflow, then open **Workflow as Tool**, save `illustrate_panel`, and confirm the update. Repeat this after every workflow publication to synchronize the tool's pinned version. Its description must say that Booklet supplies the approved prompt after authorization and that callers provide identifiers only.
 
 Expected: the manager can attach `illustrate_panel`; no workflow API key is created.
 
@@ -107,15 +109,15 @@ Do not click Retry again, call the workflow manually with a live Run ID, or rese
 
 ## 9. Recover a generated but unsaved file
 
-If Dify produced a PNG but Booklet reports `upload_failed` or an unknown upload result:
+If Dify produced an image but Booklet reports `upload_failed` or an unknown upload result:
 
 1. Open the Dify workflow run named by the Booklet run details.
-2. Download its single generated PNG.
+2. Download its single original generated file. Inspect its decoded format and actual dimensions, not only a browser preview.
 3. In Booklet, use **Save existing image** for the same attempt.
 
-Expected: Booklet validates and saves the file without incrementing attempts or invoking Dify. This remains permitted at `2/2`.
+Expected: Booklet validates and saves the file without incrementing attempts or invoking Dify. This remains permitted at `2/2`. If transport failed or the failure callback also failed, download the file from the generation node's run log.
 
-Recovery: if Booklet rejects it, verify that it is the original 1536-by-1536 PNG for the displayed attempt. Do not regenerate. If no image exists after the final attempt, stop and record the failure.
+Recovery: if Booklet rejects it, inspect the bounded validation message and confirm the displayed attempt/revision. PNG, JPEG, and WebP are accepted if they fully decode, contain one frame, and meet the 20 MiB/64-megapixel limits. Size, aspect ratio, and supported format differences are warnings. Successful recovery clears the current image error, keeps attempts at `2/2`, and displays the original image with warnings. Do not regenerate. If no image exists after the final attempt, stop and record the failure.
 
 ## 10. Record evidence
 

@@ -1,15 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { getContext } = vi.hoisted(() => ({ getContext: vi.fn(async () => ({ project_id: "booklet-dify-trial", active_run_id: null })) }));
-vi.mock("@/lib/dify-experiment/get-service", () => ({ getDifyExperimentService: () => ({ getContext }) }));
+const { getContext, completeImage } = vi.hoisted(() => ({ getContext: vi.fn(async () => ({ project_id: "booklet-dify-trial", active_run_id: null })), completeImage: vi.fn(async () => ({ state: "complete", active_run_id: null })) }));
+vi.mock("@/lib/dify-experiment/get-service", () => ({ getDifyExperimentService: () => ({ getContext, completeImage }) }));
+vi.mock("@/lib/application/deployment-control", async (importOriginal) => ({ ...await importOriginal<object>(), runTrackedMutation: (operation: () => Promise<unknown>) => operation() }));
 
 import { POST as getProjectContext } from "@/app/api/experiments/dify/tools/context/route";
+import { POST as complete } from "@/app/api/experiments/dify/tools/image/complete/route";
+import { POST as recover } from "@/app/api/experiments/dify/image/recover/route";
 import { proxy } from "@/proxy";
 
-afterEach(() => { vi.unstubAllEnvs(); getContext.mockClear(); });
+afterEach(() => { vi.unstubAllEnvs(); getContext.mockClear(); completeImage.mockClear(); });
 
 describe("Dify tool route authentication", () => {
+  it.each([undefined, "application/octet-stream", "image/jpeg", "text/plain"])("delegates byte validation regardless of MIME %s", async (mime) => {
+    vi.stubEnv("DIFY_TOOL_KEY", "test-key");
+    for (const [handler, path] of [[complete, "tools/image/complete?project_id=booklet-dify-trial&"], [recover, "image/recover?"]] as const) {
+      const response = await handler(new Request(`https://staging.example/api/experiments/dify/${path}expected_revision=1&attempt_id=00000000-0000-4000-8000-000000000001`, {
+        method: "POST", headers: { origin: "https://staging.example", "X-Booklet-Tool-Key": "test-key", ...(mime ? { "Content-Type": mime } : {}) }, body: new Uint8Array([1, 2, 3]),
+      }));
+      expect(response.status).toBe(200);
+    }
+    expect(completeImage).toHaveBeenCalledTimes(2);
+  });
   it("rejects missing and incorrect tool keys before reading the project", async () => {
     vi.stubEnv("DIFY_TOOL_KEY", "0123456789abcdef0123456789abcdef");
     for (const key of [null, "wrong-key"]) {

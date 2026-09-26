@@ -39,6 +39,8 @@ Set these workflow environment variables after import:
 
 OpenAI Tools `langgenius/openai_tool` version `0.2.1` is the inspected and pinned Marketplace dependency in the DSL. Install it and bind the existing key used by the Dify credential named `dify-booklet-manager-test`. Disable retries on the Dify image node. The plugin still uses the OpenAI Python SDK's default retries, so one Booklet attempt can cause more than one provider request after an eligible failure. For this disposable experiment, accept and record that bounded billing uncertainty. The workflow fixes generation to `gpt-image-2`, `1536x1536`, medium quality, one PNG. Credential validation does not prove model access; verify access only through the approved live checkpoint.
 
+Requested image settings are preferences, not completion gates. Booklet accepts supported image bytes and reports deviations as warnings; see [plan.md](plan.md). After publishing workflow changes, save **Workflow as Tool** to update its pinned workflow version.
+
 Do not add the OpenAI Tools plugin to the manager. Do not expose Booklet's authorize, complete, or failure callbacks to the manager. Do not create another Dify API key.
 
 ## Authentication and isolation

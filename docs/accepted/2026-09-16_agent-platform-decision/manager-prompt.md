@@ -12,6 +12,8 @@ If a draft exists but review has not been requested, call `request_review` witho
 
 Only when `approved_revision` equals `current_revision` and `illustrate_panel` is present in `allowed_actions`, call the `illustrate_panel` Workflow tool. Pass only `project_id`, the original Booklet Run ID as `booklet_run_id`, `current_revision` as `expected_revision`, and `panel_number=1`. Never supply, copy, or rewrite the image prompt. Do not call a raw image tool or any internal Booklet callback. Treat the workflow result and the next Booklet context as authoritative. Stop after the workflow succeeds or fails. Do not poll, retry, or generate another image when the outcome is uncertain.
 
+Preferred story lengths, image dimensions/aspect ratio, and PNG format are quality targets. Booklet can save usable output with `story_warnings` or `image.warnings`. Warnings are not failures and never justify another generation or revision. Required content, exactly three ordered panels, one image, approval, and attempt limits remain mandatory.
+
 If the saved image is ready, report completion without another mutation. If it failed or its outcome is unknown, direct the operator to the application's Retry or Save existing image control. Do not retry a paid action yourself.
 
 For `stale_revision` or `stale_run`, reload context once and explain the current saved state. Do not overwrite newer work. For `invalid_request` from `save_story_draft`, verify once that `story` is valid JSON text containing only the complete Story, correct it once, and retry once. For `approval_required`, request user review and stop. For authentication, setup, or repeated validation errors, explain the problem and stop.

@@ -13,6 +13,8 @@ import {
   difyExperimentActionSchema,
   difyExperimentContextSchema,
   difyExperimentStorySchema,
+  difyStoryWarnings,
+  difyImageWarnings,
   type DifyExperimentContext,
   type DifyExperimentImage,
   type DifyExperimentRun,
@@ -92,10 +94,11 @@ function contextFor(document: DifyExperimentDocument): DifyExperimentContext {
     preferences: document.preferences,
     current_revision: document.currentRevision,
     story: currentStory(document),
+    story_warnings: difyStoryWarnings(currentStory(document)),
     review_revision: document.reviewRevision,
     approved_revision: document.approvedRevision,
     pending_feedback: pendingFeedback.map((feedback) => feedback.text),
-    image: document.image ? { attempt_id: document.image.id, status: document.image.status, revision: document.image.revision, attempt_count: document.image.attemptCount, prompt: document.image.prompt, asset_path: document.image.assetPath, error: document.image.error, workflow_run_id: document.image.workflowRunId ?? null, completion_in_progress: Boolean(document.image.completionClaim && document.image.completionClaim.deadlineAtMs > Date.now()) } : null,
+    image: document.image ? { attempt_id: document.image.id, status: document.image.status, revision: document.image.revision, attempt_count: document.image.attemptCount, prompt: document.image.prompt, asset_path: document.image.assetPath, error: document.image.error, workflow_run_id: document.image.workflowRunId ?? null, width: document.image.width ?? null, height: document.image.height ?? null, format: document.image.format ?? null, warnings: difyImageWarnings(document.image), completion_in_progress: Boolean(document.image.completionClaim && document.image.completionClaim.deadlineAtMs > Date.now()) } : null,
     state,
     allowed_actions: [...allowedActions],
     image_attempt_count: document.imageAttemptCount,
@@ -313,12 +316,31 @@ export class DifyExperimentService {
     this.assertAvailable(); await assertMutationsAllowed();
     projectIdSchema.parse(input.projectId); const revision = z.number().int().min(1).parse(input.expectedRevision); const attemptId = z.string().uuid().parse(input.attemptId);
     if (input.bytes.byteLength > 20 * 1024 * 1024) error("image_too_large", "The image exceeds the 20 MiB limit.", 413);
-    if (!Buffer.from(input.bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) error("invalid_image", "A valid PNG image is required.", 422);
     let metadata: Metadata;
-    try { metadata = await sharp(input.bytes).metadata(); } catch { error("invalid_image", "A valid PNG image is required.", 422); }
-    if (metadata.format !== "png" || metadata.width !== 1536 || metadata.height !== 1536) error("invalid_image", "The image must be a 1536 by 1536 PNG.", 422);
+    try { metadata = await sharp(input.bytes, { limitInputPixels: 64_000_000, failOn: "warning" }).metadata(); } catch { error("invalid_image", "Select a decodable PNG, JPEG, or WebP image up to 64 megapixels.", 422); }
+    if (!["png", "jpeg", "webp"].includes(metadata.format ?? "")) error("invalid_image", "Only PNG, JPEG, and WebP images are supported.", 422);
+    if ((metadata.pages ?? 1) !== 1) error("invalid_image", "Select one single-frame image, not an animation.", 422);
+    // libvips can decode only the default APNG frame without reporting pages.
+    // Inspect the PNG animation-control chunk as well as decoder metadata.
+    if (metadata.format === "png") {
+      const png = Buffer.from(input.bytes.buffer, input.bytes.byteOffset, input.bytes.byteLength);
+      for (let offset = 8; offset + 12 <= png.length;) {
+        const length = png.readUInt32BE(offset);
+        if (offset + length + 12 > png.length) break;
+        if (png.toString("ascii", offset + 4, offset + 8) === "acTL" && length >= 8 && png.readUInt32BE(offset + 8) > 1) error("invalid_image", "Select one single-frame image, not an animation.", 422);
+        offset += length + 12;
+      }
+    }
+    if (!metadata.width || !metadata.height || metadata.width * metadata.height > 64_000_000) error("invalid_image", "The image must have positive dimensions and at most 64 megapixels.", 422);
+    // Metadata alone accepts some truncated files. stats forces full pixel decoding
+    // without retaining a second raw image buffer or changing the saved bytes.
+    try { await sharp(input.bytes, { limitInputPixels: 64_000_000, failOn: "warning" }).stats(); } catch { error("invalid_image", "The image could not be fully decoded. Download the original file and try again.", 422); }
+    const format = metadata.format as "png" | "jpeg" | "webp";
+    const mimeType = `image/${format}`;
+    const { width, height } = metadata.autoOrient;
     const digest = createHash("sha256").update(input.bytes).digest("hex"); const now = this.now(); const claimId = randomUUID();
     const existing = await this.requireProject();
+    if (existing.currentRevision !== revision || existing.approvedRevision !== revision) error("stale_revision", "Only the current approved revision can receive this image.");
     if (existing.image?.id === attemptId && existing.image.status === "ready") {
       if (existing.image.savedDigest === digest) return contextFor(existing);
       error("image_conflict", "This attempt already has a different saved image.");
@@ -328,21 +350,22 @@ export class DifyExperimentService {
     // A claimant can resume after its 60-second lease expires. Give every claim a
     // distinct object key so that a stale writer cannot overwrite the asset that a
     // newer claim commits to MongoDB.
-    const path = `experiments/dify/${DIFY_EXPERIMENT_PROJECT_ID}/panel-1-${attemptId}-${claimId}.png`;
+    const path = `experiments/dify/${DIFY_EXPERIMENT_PROJECT_ID}/panel-1-${attemptId}-${claimId}.${format}`;
     try {
       if (await this.input.assets.exists(path)) {
         const storedDigest = createHash("sha256").update(await this.input.assets.get(path)).digest("hex");
         if (storedDigest !== digest) error("image_conflict", "This attempt already has a different stored image.");
       } else {
-        await this.input.assets.put(path, input.bytes, "image/png");
+        await this.input.assets.put(path, input.bytes, mimeType);
       }
       const completedAtMs = this.now();
-      const completed = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: revision, approvedRevision: revision, "image.id": attemptId, "image.status": { $in: ["generating", "failed", "unknown"] }, "image.completionClaim.id": claimId }, { $set: { updatedAtMs: completedAtMs, "image.status": "ready", "image.assetPath": path, "image.mimeType": "image/png", "image.savedDigest": digest, "image.completedAtMs": completedAtMs, "image.completionClaim": null } }, { returnDocument: "after" });
+      const completed = await this.collection.findOneAndUpdate({ _id: projectDocumentId, currentRevision: revision, approvedRevision: revision, "image.id": attemptId, "image.status": { $in: ["generating", "failed", "unknown"] }, "image.completionClaim.id": claimId }, { $set: { updatedAtMs: completedAtMs, "image.status": "ready", "image.assetPath": path, "image.mimeType": mimeType, "image.width": width, "image.height": height, "image.format": format, "image.error": null, "image.savedDigest": digest, "image.completedAtMs": completedAtMs, "image.completionClaim": null }, $unset: { "image.failureCategory": "" } }, { returnDocument: "after" });
       if (!completed) error("image_superseded", "The image attempt changed before completion.");
       return contextFor(completed);
     } catch (caught) {
       await this.collection.updateOne({ _id: projectDocumentId, "image.id": attemptId, "image.completionClaim.id": claimId }, { $set: { "image.completionClaim": null, updatedAtMs: this.now() } });
-      throw caught;
+      if (caught instanceof DifyExperimentError) throw caught;
+      error("image_storage_failed", "The image could not be stored. Retain the original file and use Save existing image after storage is available.", 500);
     }
   }
 

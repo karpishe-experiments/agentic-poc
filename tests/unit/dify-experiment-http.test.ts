@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { MaintenanceModeError } from "@/lib/application/deployment-control";
+import { difyExperimentStorySchema } from "@/lib/contracts/dify-experiment";
+import fixtures from "@/docs/accepted/2026-09-16_agent-platform-decision/fixtures.json";
 import { assertDifyToolProjectId, assertSameOriginJsonRequest, difyExperimentErrorResponse, difyToolContext, uniqueSearchParams } from "@/lib/dify-experiment/http";
 
 describe("Dify experiment error response", () => {
+  it.each([
+    { title: "" }, { title: "x".repeat(1001) }, { storyline: "x".repeat(16001) },
+    { panels: fixtures.example_story.panels.slice(0, 2) },
+    { panels: fixtures.example_story.panels.map((panel) => ({ ...panel, number: 1 })) },
+    { panels: fixtures.example_story.panels.map((panel) => ({ ...panel, scene: "" })) },
+  ])("rejects invalid required story structure with field errors", async (override) => {
+    const result = difyExperimentStorySchema.safeParse({ ...fixtures.example_story, ...override });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("Expected validation failure");
+    const response = difyExperimentErrorResponse(result.error);
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.error.message).toMatch(/title|storyline|panels/);
+    expect(body.error.message.length).toBeLessThan(500);
+  });
   it("preserves the maintenance status and code", async () => {
     const response = difyExperimentErrorResponse(new MaintenanceModeError("release drain"));
     expect(response.status).toBe(503);

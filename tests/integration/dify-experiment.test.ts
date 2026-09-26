@@ -6,6 +6,7 @@ import type { MongoDatabaseContext } from "@/db/client";
 import fixtures from "@/docs/accepted/2026-09-16_agent-platform-decision/fixtures.json";
 import sharp from "sharp";
 import { createHash, randomUUID } from "node:crypto";
+import { crc32 } from "node:zlib";
 
 class MemoryAssetStore implements AssetStore {
   protected readonly values = new Map<string, { bytes: Uint8Array; mimeType: string }>();
@@ -193,21 +194,77 @@ describe("Dify experiment lifecycle", () => {
     await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: png })).resolves.toMatchObject({ state: "complete", image_attempt_count: 1 });
   });
 
-  it("rejects malformed, oversized, wrong-size, and wrong-attempt completions", async () => {
+  it("rejects malformed, oversized, unsupported, truncated, and wrong-attempt completions", async () => {
     const { authorization, service } = await prepareAuthorizedImage();
     await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: new Uint8Array([1, 2, 3]) })).rejects.toMatchObject({ code: "invalid_image" });
     await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: new Uint8Array(20 * 1024 * 1024 + 1) })).rejects.toMatchObject({ code: "image_too_large" });
-    const wrongSize = new Uint8Array(await sharp({ create: { width: 512, height: 512, channels: 3, background: "orange" } }).png().toBuffer());
-    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: wrongSize })).rejects.toMatchObject({ code: "invalid_image" });
+    const gif = await sharp({ create: { width: 2, height: 2, channels: 3, background: "orange" } }).gif().toBuffer();
+    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: gif })).rejects.toMatchObject({ code: "invalid_image" });
     const png = new Uint8Array(await sharp({ create: { width: 1536, height: 1536, channels: 3, background: "orange" } }).png().toBuffer());
+    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: png.subarray(0, Math.floor(png.length / 2)) })).rejects.toMatchObject({ code: "invalid_image" });
     await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: randomUUID(), bytes: png })).rejects.toMatchObject({ code: "image_completion_busy" });
+  });
+
+  it.each([
+    { format: "png" as const, width: 1536, height: 1536, warnings: 0 },
+    { format: "png" as const, width: 1254, height: 1254, warnings: 1 },
+    { format: "png" as const, width: 640, height: 320, warnings: 1 },
+    { format: "jpeg" as const, width: 640, height: 320, warnings: 2 },
+    { format: "webp" as const, width: 1536, height: 1536, warnings: 1 },
+  ])("saves original $format bytes at $width × $height with warnings", async ({ format, width, height, warnings }) => {
+    const { authorization, service } = await prepareAuthorizedImage();
+    const bytes = await sharp({ create: { width, height, channels: 3, background: "orange" } }).toFormat(format).toBuffer();
+    const saved = await service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes });
+    expect(saved).toMatchObject({ state: "complete", image: { width, height, format, error: null } });
+    expect(saved.image?.warnings).toHaveLength(warnings);
+    expect(saved.image?.asset_path).toMatch(new RegExp(`\\.${format}$`));
+    const asset = await service.getImageAsset();
+    expect(asset.mimeType).toBe(`image/${format}`);
+    expect(Buffer.from(asset.bytes)).toEqual(bytes);
+  });
+
+  it("rejects animated WebP and images above the pixel limit", async () => {
+    const { authorization, service } = await prepareAuthorizedImage();
+    const frames = Buffer.concat([Buffer.alloc(2 * 2 * 3, 0), Buffer.alloc(2 * 2 * 3, 255)]);
+    const animated = await sharp(frames, { raw: { width: 2, height: 4, channels: 3, pageHeight: 2 } }).webp({ loop: 0, delay: [100, 100] }).toBuffer();
+    expect((await sharp(animated).metadata()).pages).toBe(2);
+    const oversized = await sharp({ create: { width: 8001, height: 8000, channels: 3, background: "white" } }).png().toBuffer();
+    for (const bytes of [animated, oversized]) await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes })).rejects.toMatchObject({ code: "invalid_image" });
+  });
+
+  it("rejects PNG animation declarations even when the decoder exposes only its default frame", async () => {
+    const { authorization, service } = await prepareAuthorizedImage();
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "orange" } }).png().toBuffer();
+    const chunk = Buffer.alloc(20);
+    chunk.writeUInt32BE(8, 0); chunk.write("acTL", 4); chunk.writeUInt32BE(2, 8);
+    chunk.writeUInt32BE(crc32(chunk.subarray(4, 16)), 16);
+    const animatedDeclaration = Buffer.concat([png.subarray(0, 33), chunk, png.subarray(33)]);
+    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: animatedDeclaration })).rejects.toMatchObject({ code: "invalid_image" });
+  });
+
+  it("reports display dimensions for an EXIF-oriented JPEG without rewriting it", async () => {
+    const { authorization, service } = await prepareAuthorizedImage();
+    const bytes = await sharp({ create: { width: 640, height: 320, channels: 3, background: "orange" } }).jpeg().withMetadata({ orientation: 6 }).toBuffer();
+    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes })).resolves.toMatchObject({ image: { width: 320, height: 640, format: "jpeg" } });
+    expect(Buffer.from((await service.getImageAsset()).bytes)).toEqual(bytes);
+  });
+
+  it("saves long story content with warnings and strips only content extras", async () => {
+    const { service } = await createService(); await service.initialize();
+    const run = await service.startTurn({ action: "create" });
+    const story = { ...fixtures.example_story, title: "T".repeat(161), storyline: "word ".repeat(101), extra: "ignored", panels: fixtures.example_story.panels.map((panel) => ({ ...panel, text: "word ".repeat(41), extra: "ignored" })) };
+    const saved = await service.saveStoryDraft({ projectId: "booklet-dify-trial", runId: run.run.id, expectedRevision: 0, story });
+    expect(saved.story_warnings).toHaveLength(5);
+    expect(saved.story).not.toHaveProperty("extra");
+    expect(saved.story?.panels[0]).not.toHaveProperty("extra");
+    expect((await service.getContext()).story_warnings).toEqual(saved.story_warnings);
   });
 
   it("releases a completion claim after storage failure", async () => {
     const assets = new ControlledAssetStore(); assets.failNextPut = true;
     const { authorization, database, service } = await prepareAuthorizedImage({ assets });
     const png = new Uint8Array(await sharp({ create: { width: 1536, height: 1536, channels: 3, background: "orange" } }).png().toBuffer());
-    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: png })).rejects.toThrow("simulated storage failure");
+    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: png })).rejects.toMatchObject({ code: "image_storage_failed" });
     expect((await database.collections.dify_experiment_projects.findOne({ projectId: "booklet-dify-trial" }))?.image?.completionClaim).toBeNull();
     await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, bytes: png })).resolves.toMatchObject({ state: "complete" });
   });
@@ -239,14 +296,17 @@ describe("Dify experiment lifecycle", () => {
   });
 
   it("recovers the second failed attempt at the cap without incrementing it", async () => {
-    const { authorization, run, service } = await prepareAuthorizedImage();
+    const { authorization, run, service, database } = await prepareAuthorizedImage();
     await service.reportImageFailure({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: authorization.attemptId, category: "generation_failed" });
     await service.completeRun(run.run.id, { status: "completed", toolCalls: [], message: null }); await service.retryImage({ expectedRevision: 1 });
     const retryRun = await service.startTurn({ action: "resume" });
     const second = await service.authorizeIllustration({ projectId: "booklet-dify-trial", runId: retryRun.run.id, expectedRevision: 1, panelNumber: 1, workflowRunId: "workflow-2" });
     await service.reportImageFailure({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: second.attemptId, category: "upload_failed" });
-    const png = new Uint8Array(await sharp({ create: { width: 1536, height: 1536, channels: 3, background: "orange" } }).png().toBuffer());
-    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: second.attemptId, bytes: png })).resolves.toMatchObject({ state: "complete", image_attempt_count: 2 });
+    const png = new Uint8Array(await sharp({ create: { width: 1254, height: 1254, channels: 3, background: "orange" } }).png().toBuffer());
+    const before = await service.getProjectView();
+    await expect(service.completeImage({ projectId: "booklet-dify-trial", expectedRevision: 1, attemptId: second.attemptId, bytes: png })).resolves.toMatchObject({ state: "complete", current_revision: 1, approved_revision: 1, image_attempt_count: 2, image: { error: null, width: 1254, height: 1254, warnings: [expect.any(String)] } });
+    expect((await service.getProjectView()).runs).toEqual(before.runs);
+    expect((await database.collections.dify_experiment_projects.findOne({ projectId: "booklet-dify-trial" }))?.image).not.toHaveProperty("failureCategory");
   });
 
   it("reads a pre-callback failed attempt without optional metadata", async () => {
