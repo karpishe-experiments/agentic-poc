@@ -73,6 +73,20 @@ counterpart already exists, set the upstream to `origin/<branch-name>`. Verify
 the branch and upstream after creation or correction. Until first publication,
 leave the upstream unset rather than tracking a differently named branch.
 
+## Computer and browser control authorization
+
+Before using any computer-use or Chrome/browser-control plugin, obtain explicit
+user authorization at least once per usage topic per chat session. This includes read-only inspection,
+tab discovery, screenshots, and interactive control. An explicit request to use
+the tool counts as authorization; a general task request does not.
+
+Authorization applies only to the approved topic and scope in that chat session.
+Obtain new authorization before using these plugins for a different topic. Do not
+carry authorization into another chat session. Do not ask again for the same topic and scope unless
+the user revokes authorization or an action-specific policy requires confirmation.
+Session authorization does not replace required confirmations or user handoffs
+for sensitive actions.
+
 ## Delegation and multi-agent work
 
 - The primary agent owns the implementation sequence, shared architecture, integration, verification, commits, and project-management updates.

@@ -4,8 +4,11 @@ Canonical operating guide and evidence register for
 [#66](https://github.com/karpishe-experiments/agentic-poc/issues/66), prerequisite to
 [#65](https://github.com/karpishe-experiments/agentic-poc/issues/65).
 
-**Incomplete:** authenticated control, fresh-session MCP discovery, and live probe
-repair/publication/recovery remain unverified. Installation is not completion.
+**Verification incomplete; issue closure requested by the operator.** MCP discovery
+now exposes 172 callable tools, but workspace/app listing returns `AUTH_REQUIRED`.
+The official CLI successfully verified owner access and listed both Studio workflows.
+Live probe repair/publication/recovery remains unverified. Closing #66 does not
+establish that #65's automated-control prerequisite is satisfied.
 
 ## Scope
 
@@ -103,8 +106,8 @@ interfaces only. Cloud server version is unknown.
 
 | Operation / target | Interface / version | Outcome and evidence | Fallback / next check |
 | --- | --- | --- | --- |
-| Local schema validation | MCP stdio 0.3.0 | Passed guide/validation/confirmation gate; 172 tools | Fresh-session tools absent so far |
-| CLI discovery / skill | difyctl 1.17.1 | Passed sitemap, descriptors and installation | Cloud auth/compatibility pending |
+| Local schema validation / tool discovery | MCP stdio 0.3.0 | Local checks passed; current Codex session exposes 172 tools; workspace/app calls return `AUTH_REQUIRED` | Separate bridge authentication required |
+| CLI discovery / authenticated inventory | difyctl 1.17.1 | Identity and workspace calls passed; owner in workspace `98c18fae-e555-47f7-9869-5d602a3dca04`; app listing returned `booklet_illustrator` and `story_writer` | Cloud version and write compatibility remain unverified |
 | Existing illustration workflow | Codex Chrome | Read-only `booklet_illustrator` page showed published state and existing provider binding | Exact workspace/permissions/capacity inventory pending |
 | Workspace / apps / integrations | MCP workspace/app/plugin/provider operations | Pending authentication | Browser inventory; metadata only |
 | Deterministic draft / defaults / validate / run | MCP workflow operations | Pending | Browser graph and test controls |
@@ -153,9 +156,10 @@ Keep issue work on `agent/issue-66-dify-codex-access` with its same-named origin
 upstream. Publish a reviewed PR to `master`; do not import staging runtime changes.
 Validate skills, references, provenance, secrets and the final diff independently.
 Required PR CI applies; no extra application build or deployment is required.
-Update #66/#65 with reviewed SHA, PR, verified results and remaining gaps. Keep #66
-open until every essential operation has a tested unattended path, including
-fresh-session discovery and repair/publication/recovery.
+Update #66/#65 with reviewed SHA, PR, verified results and remaining gaps. The
+operator requested closure before all acceptance criteria passed. Record this as
+an incomplete closure, not verified readiness. Before unattended #65 implementation,
+reopen #66 or explicitly track its unresolved authentication and live-probe checks.
 
 ## Sources
 
