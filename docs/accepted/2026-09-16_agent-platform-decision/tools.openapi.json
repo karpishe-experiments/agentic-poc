@@ -97,22 +97,22 @@
                   },
                   "story": {
                     "type": "object",
-                    "additionalProperties": false,
+                    "additionalProperties": true,
                     "properties": {
                       "title": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 160
+                        "maxLength": 1000
                       },
                       "storyline": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 2000
+                        "maxLength": 16000
                       },
                       "character_description": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 2000
+                        "maxLength": 16000
                       },
                       "panels": {
                         "type": "array",
@@ -120,7 +120,7 @@
                         "maxItems": 3,
                         "items": {
                           "type": "object",
-                          "additionalProperties": false,
+                          "additionalProperties": true,
                           "properties": {
                             "number": {
                               "type": "integer",
@@ -130,12 +130,12 @@
                             "text": {
                               "type": "string",
                               "minLength": 1,
-                              "maxLength": 500
+                              "maxLength": 16000
                             },
                             "scene": {
                               "type": "string",
                               "minLength": 1,
-                              "maxLength": 2000
+                              "maxLength": 16000
                             }
                           },
                           "required": [
@@ -148,7 +148,7 @@
                       "first_panel_image_prompt": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 4000
+                        "maxLength": 16000
                       }
                     },
                     "required": [
@@ -158,7 +158,7 @@
                       "panels",
                       "first_panel_image_prompt"
                     ],
-                    "description": "Dify exposes this parameter to the model as a string. Supply the complete Story as valid JSON text with no Markdown fences or wrapper. Because this schema is inline with type object, Dify parses that text into the HTTP request object. Keep this schema identical to components.schemas.Story. Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules."
+                    "description": "Dify exposes this parameter to the model as a string. Supply the complete Story as valid JSON text with no Markdown fences or wrapper. Because this schema is inline with type object, Dify parses that text into the HTTP request object. Keep this schema identical to components.schemas.Story. Exactly three ordered panel numbers 1,2,3. Prefer storyline <=100 words and panel text <=40 words; length preferences produce warnings. Hard limits: title 1000 characters, other story text 16000. Unknown Story and panel fields are ignored."
                   }
                 },
                 "required": [
@@ -269,22 +269,22 @@
     "schemas": {
       "Story": {
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 160
+            "maxLength": 1000
           },
           "storyline": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 2000
+            "maxLength": 16000
           },
           "character_description": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 2000
+            "maxLength": 16000
           },
           "panels": {
             "type": "array",
@@ -292,7 +292,7 @@
             "maxItems": 3,
             "items": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "properties": {
                 "number": {
                   "type": "integer",
@@ -302,12 +302,12 @@
                 "text": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 500
+                  "maxLength": 16000
                 },
                 "scene": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 2000
+                  "maxLength": 16000
                 }
               },
               "required": [
@@ -320,7 +320,7 @@
           "first_panel_image_prompt": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4000
+            "maxLength": 16000
           }
         },
         "required": [
@@ -330,7 +330,7 @@
           "panels",
           "first_panel_image_prompt"
         ],
-        "description": "Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules."
+        "description": "Exactly three ordered panel numbers 1,2,3. Prefer storyline <=100 words and panel text <=40 words; length preferences produce warnings. Hard limits: title 1000 characters, other story text 16000. Unknown Story and panel fields are ignored."
       },
       "Image": {
         "type": "object",
@@ -361,7 +361,7 @@
           "prompt": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4000
+            "maxLength": 16000
           },
           "asset_path": {
             "type": "string",
@@ -377,6 +377,31 @@
           },
           "completion_in_progress": {
             "type": "boolean"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg",
+              "webp"
+            ],
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -388,7 +413,11 @@
           "asset_path",
           "error",
           "workflow_run_id",
-          "completion_in_progress"
+          "completion_in_progress",
+          "width",
+          "height",
+          "format",
+          "warnings"
         ]
       },
       "Context": {
@@ -448,22 +477,22 @@
           },
           "story": {
             "type": "object",
-            "additionalProperties": false,
+            "additionalProperties": true,
             "properties": {
               "title": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 160
+                "maxLength": 1000
               },
               "storyline": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 2000
+                "maxLength": 16000
               },
               "character_description": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 2000
+                "maxLength": 16000
               },
               "panels": {
                 "type": "array",
@@ -471,7 +500,7 @@
                 "maxItems": 3,
                 "items": {
                   "type": "object",
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "properties": {
                     "number": {
                       "type": "integer",
@@ -481,12 +510,12 @@
                     "text": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 500
+                      "maxLength": 16000
                     },
                     "scene": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 2000
+                      "maxLength": 16000
                     }
                   },
                   "required": [
@@ -499,7 +528,7 @@
               "first_panel_image_prompt": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 4000
+                "maxLength": 16000
               }
             },
             "required": [
@@ -509,7 +538,7 @@
               "panels",
               "first_panel_image_prompt"
             ],
-            "description": "Exactly three ordered panel numbers 1,2,3. Storyline <=100 whitespace words; each panel text <=40 words. Server enforces these additional rules.",
+            "description": "Exactly three ordered panel numbers 1,2,3. Prefer storyline <=100 words and panel text <=40 words; length preferences produce warnings. Hard limits: title 1000 characters, other story text 16000. Unknown Story and panel fields are ignored.",
             "nullable": true
           },
           "review_revision": {
@@ -560,7 +589,7 @@
               "prompt": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 4000
+                "maxLength": 16000
               },
               "asset_path": {
                 "type": "string",
@@ -576,6 +605,31 @@
               },
               "completion_in_progress": {
                 "type": "boolean"
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "nullable": true
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "nullable": true
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "png",
+                  "jpeg",
+                  "webp"
+                ],
+                "nullable": true
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -587,7 +641,11 @@
               "asset_path",
               "error",
               "workflow_run_id",
-              "completion_in_progress"
+              "completion_in_progress",
+              "width",
+              "height",
+              "format",
+              "warnings"
             ],
             "nullable": true
           },
@@ -619,6 +677,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 2
+          },
+          "story_warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -633,7 +697,8 @@
           "image",
           "state",
           "allowed_actions",
-          "image_attempt_count"
+          "image_attempt_count",
+          "story_warnings"
         ]
       },
       "Error": {

@@ -9,7 +9,6 @@ const querySchema = z.object({ project_id: z.string(), expected_revision: z.coer
 export async function POST(request: Request) {
   try {
     assertDifyToolKey(request.headers.get("x-booklet-tool-key"));
-    if (request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "image/png") return Response.json({ error: { code: "invalid_image", message: "A PNG request body is required." } }, { status: 422 });
     const query = querySchema.parse(uniqueSearchParams(request)); const bytes = await readLimitedRequestBody(request, 20 * 1024 * 1024);
     const context = await runTrackedMutation(() => getDifyExperimentService().completeImage({ projectId: query.project_id, expectedRevision: query.expected_revision, attemptId: query.attempt_id, bytes }));
     return Response.json({ data: difyToolContext(context) });

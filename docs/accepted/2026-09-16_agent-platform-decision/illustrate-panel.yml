@@ -60,7 +60,6 @@ workflow:
     - {id: generate-failure, source: generate_image, sourceHandle: fail-branch, target: report_generation_failure, targetHandle: target, type: custom, data: {sourceType: tool, targetType: http-request}}
     - {id: validate-failure, source: validate_image, sourceHandle: fail-branch, target: report_generation_failure, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
     - {id: report-generation-end, source: report_generation_failure, sourceHandle: source, target: failure, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: end}}
-    - {id: complete-failure, source: complete, sourceHandle: fail-branch, target: report_upload_failure, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: http-request}}
     - {id: check-failure, source: require_completion, sourceHandle: fail-branch, target: report_upload_failure, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
     - {id: report-upload-end, source: report_upload_failure, sourceHandle: source, target: upload_failure, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: end}}
     nodes:
@@ -189,7 +188,7 @@ workflow:
           background: opaque
           moderation: auto
         tool_parameters:
-          prompt: {type: variable, value: [parse_authorization, prompt]}
+          prompt: {type: mixed, value: '{{#parse_authorization.prompt#}}'}
     - id: not_authorized
       type: custom
       position: {x: 1280, y: 40}
@@ -198,13 +197,13 @@ workflow:
         title: Not authorized
         type: end
         outputs:
-        - {variable: status, value_type: string, value_selector: [parse_authorization, status]}
+        - {variable: authorization_status, value_type: string, value_selector: [parse_authorization, status]}
     - id: validate_image
       type: custom
       position: {x: 1580, y: 280}
       positionAbsolute: {x: 1580, y: 280}
       data:
-        title: Require one PNG
+        title: Require one image file
         type: code
         error_strategy: fail-branch
         code_language: python3
@@ -212,10 +211,6 @@ workflow:
           def main(files):
               if not isinstance(files, list) or len(files) != 1:
                   raise ValueError("Image tool must return exactly one file")
-              file = files[0]
-              mime = file.get("mime_type") if isinstance(file, dict) else getattr(file, "mime_type", None)
-              if mime != "image/png":
-                  raise ValueError("Image tool must return PNG")
               return {"valid": True}
         variables:
         - {variable: files, value_selector: [generate_image, files]}
@@ -226,9 +221,11 @@ workflow:
       position: {x: 1830, y: 280}
       positionAbsolute: {x: 1830, y: 280}
       data:
-        title: Select validated PNG
+        title: Select image file
         type: list-operator
         variable: [generate_image, files]
+        var_type: array[file]
+        item_var_type: file
         filter_by: {enabled: false, conditions: []}
         order_by: {enabled: false, key: '', value: asc}
         limit: {enabled: false, size: 1}
@@ -242,15 +239,14 @@ workflow:
         type: http-request
         method: post
         url: '{{#env.BOOKLET_BASE_URL#}}/api/experiments/dify/tools/image/complete?project_id={{#start.project_id#}}&expected_revision={{#parse_authorization.revision#}}&attempt_id={{#parse_authorization.attempt_id#}}'
-        headers: "Content-Type: image/png\nX-Booklet-Tool-Key: {{#env.BOOKLET_TOOL_KEY#}}"
+        headers: "Content-Type: application/octet-stream\nX-Booklet-Tool-Key: {{#env.BOOKLET_TOOL_KEY#}}"
         params: ''
         authorization: {type: no-auth, config: null}
         body:
           type: binary
           data:
           - {id: completion-image, type: file, file: [select_image, first_record]}
-        retry_config: {retry_enabled: true, max_retries: 1, retry_interval: 500}
-        error_strategy: fail-branch
+        retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 500}
         timeout: {connect: 10, read: 60, write: 60}
     - id: require_completion
       type: custom
@@ -265,8 +261,19 @@ workflow:
           import json
           def main(status_code, body):
               if int(status_code) != 200:
-                  raise ValueError("Booklet did not save the generated image")
-              parsed = json.loads(body)
+                  try:
+                      error = json.loads(body).get("error", {})
+                      code = error.get("code")
+                  except Exception:
+                      code = None
+                  messages = {"tool_unauthorized": "A valid Booklet tool key is required.", "invalid_request": "Check the completion identifiers and request body.", "invalid_image": "Download the original file; Booklet requires a decodable single-frame PNG, JPEG, or WebP up to 64 megapixels.", "image_too_large": "The image exceeds the 20 MiB limit.", "stale_revision": "The approved revision changed.", "image_completion_busy": "The attempt changed or another completion is active.", "image_conflict": "This attempt already has a different saved image.", "image_superseded": "The attempt changed before completion.", "deployment_maintenance": "Wait until maintenance ends, then save the existing file.", "internal_error": "Booklet could not store the image. Save the existing file after inspecting storage."}
+                  if code not in messages:
+                      raise ValueError("upload_failed: Booklet rejected the upload. Inspect the HTTP status; recover the existing file.")
+                  raise ValueError(code + ": " + messages[code])
+              try:
+                  parsed = json.loads(body)
+              except Exception:
+                  raise ValueError("upload_unknown: Booklet returned malformed completion JSON. Inspect saved state; do not regenerate.")
               status = parsed.get("data", {}).get("state")
               if status != "complete":
                   raise ValueError("Booklet did not confirm image completion")
@@ -335,7 +342,7 @@ workflow:
         title: Generation outcome unknown
         type: end
         outputs:
-        - {variable: status, value_type: string, value_selector: [report_generation_failure, body]}
+        - {variable: generation_failure_response, value_type: string, value_selector: [report_generation_failure, body]}
     - id: upload_failure
       type: custom
       position: {x: 2480, y: 600}
@@ -344,6 +351,7 @@ workflow:
         title: Upload failed; preserve generated file
         type: end
         outputs:
-        - {variable: status, value_type: string, value_selector: [report_upload_failure, body]}
+        - {variable: upload_failure_response, value_type: string, value_selector: [report_upload_failure, body]}
+        - {variable: upload_error, value_type: string, value_selector: [require_completion, error_message]}
         - {variable: recovery_file, value_type: file, value_selector: [select_image, first_record]}
     viewport: {x: 0, y: 0, zoom: 0.7}

@@ -24,10 +24,16 @@ describe("Dify experiment OpenAPI contract", () => {
     expect(dsl).toContain("valid: {type: boolean, children: null}");
     expect(dsl).toContain("type: list-operator");
     expect(dsl).toContain("variable: [generate_image, files]");
+    expect(dsl).toContain("var_type: array[file]");
+    expect(dsl).toContain("item_var_type: file");
+    expect(dsl).toContain("prompt: {type: mixed, value: '{{#parse_authorization.prompt#}}'}");
     expect(dsl).toContain("file: [select_image, first_record]");
     expect(dsl).toContain("value_type: file, value_selector: [select_image, first_record]");
     expect(dsl).not.toContain("image: {type: file, children: null}");
     expect(dsl).not.toContain("file: [generate_image, files]");
+    expect(dsl).not.toContain('mime != "image/png"');
+    expect(dsl).toContain('len(files) != 1');
+    expect(dsl).toContain('"tool_unauthorized": "A valid Booklet tool key is required."');
     expect(dsl).not.toMatch(/key: expected_revision, type: number/);
     expect(dsl).toContain("id: failure-json");
     expect(dsl).toContain("id: upload-json");
@@ -43,5 +49,14 @@ describe("Dify experiment OpenAPI contract", () => {
     expect(dsl).toContain("value: ''");
     expect(dsl).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);
     expect(dsl).not.toContain("credential_id:");
+  });
+
+  it("uses globally unique End output names for Dify publication", () => {
+    const dsl = readFileSync("docs/accepted/2026-09-16_agent-platform-decision/illustrate-panel.yml", "utf8");
+    const endNodes = dsl.split(/^    - id: /m).filter((node) => /\n        type: end\r?\n/.test(node));
+    expect(endNodes).toHaveLength(4);
+    const names = endNodes.flatMap((node) => [...node.matchAll(/- \{variable: (\w+), value_type:/g)].map((match) => match[1]));
+    expect(names).toEqual(["authorization_status", "status", "generation_failure_response", "upload_failure_response", "upload_error", "recovery_file"]);
+    expect(new Set(names).size).toBe(names.length);
   });
 });

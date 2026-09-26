@@ -15,23 +15,21 @@ export const difyExperimentPreferencesSchema = z.object({
 
 export const difyExperimentPanelSchema = z.object({
   number: z.int().min(1).max(3),
-  text: requiredText(500),
-  scene: requiredText(2_000),
-}).strict();
+  text: requiredText(16_000),
+  scene: requiredText(16_000),
+});
 
 const countWords = (value: string) => value.trim().split(/\s+/).filter(Boolean).length;
 
 export const difyExperimentStorySchema = z.object({
-  title: requiredText(160),
-  storyline: requiredText(2_000),
-  character_description: requiredText(2_000),
+  title: requiredText(1_000),
+  storyline: requiredText(16_000),
+  character_description: requiredText(16_000),
   panels: z.array(difyExperimentPanelSchema).length(3),
-  first_panel_image_prompt: requiredText(4_000),
-}).strict().superRefine((story, context) => {
-  if (countWords(story.storyline) > 100) context.addIssue({ code: "custom", path: ["storyline"], message: "Storyline must contain at most 100 words." });
+  first_panel_image_prompt: requiredText(16_000),
+}).superRefine((story, context) => {
   story.panels.forEach((panel, index) => {
     if (panel.number !== index + 1) context.addIssue({ code: "custom", path: ["panels", index, "number"], message: "Panels must be ordered 1, 2, 3." });
-    if (countWords(panel.text) > 40) context.addIssue({ code: "custom", path: ["panels", index, "text"], message: "Panel text must contain at most 40 words." });
   });
 });
 
@@ -42,6 +40,33 @@ export const difyExperimentAllowedActionSchema = z.enum(["save_story_draft", "re
 
 export type DifyExperimentPreferences = z.infer<typeof difyExperimentPreferencesSchema>;
 export type DifyExperimentStory = z.infer<typeof difyExperimentStorySchema>;
+
+// Preferences describe quality, not whether usable experiment output can be saved.
+export function difyStoryWarnings(story: DifyExperimentStory | null): string[] {
+  if (!story) return [];
+  const warnings: string[] = [];
+  const characters = (field: string, text: string, preferred: number) => {
+    if (text.length > preferred) warnings.push(`${field} exceeds the preferred ${preferred} characters.`);
+  };
+  characters("Title", story.title, 160);
+  characters("Storyline", story.storyline, 2_000);
+  characters("Character description", story.character_description, 2_000);
+  characters("Image prompt", story.first_panel_image_prompt, 4_000);
+  if (countWords(story.storyline) > 100) warnings.push("Storyline exceeds the preferred 100 words.");
+  story.panels.forEach((panel) => {
+    characters(`Panel ${panel.number} text`, panel.text, 500);
+    characters(`Panel ${panel.number} scene`, panel.scene, 2_000);
+    if (countWords(panel.text) > 40) warnings.push(`Panel ${panel.number} exceeds the preferred 40 words.`);
+  });
+  return warnings;
+}
+
+export function difyImageWarnings(image: Pick<DifyExperimentImage, "width" | "height" | "format">): string[] {
+  const warnings: string[] = [];
+  if (image.width && image.height && (image.width !== 1536 || image.height !== 1536)) warnings.push(`Image is ${image.width} × ${image.height}; requested 1536 × 1536. Original image retained.`);
+  if (image.format && image.format !== "png") warnings.push(`Image format is ${image.format.toUpperCase()}; requested PNG. Original image retained.`);
+  return warnings;
+}
 export type DifyExperimentAction = z.infer<typeof difyExperimentActionSchema>;
 export type DifyExperimentImageStatus = z.infer<typeof difyExperimentImageStatusSchema>;
 
@@ -51,6 +76,7 @@ export type DifyExperimentImage = {
   id: string; status: DifyExperimentImageStatus; revision: number; attemptCount: number; prompt: string;
   assetPath: string | null; mimeType: string | null; error: string | null; startedAtMs: number; completedAtMs: number | null;
   originatingRunId?: string; workflowRunId?: string; deadlineAtMs?: number; savedDigest?: string;
+  width?: number; height?: number; format?: "png" | "jpeg" | "webp";
   failureCategory?: "generation_failed" | "generation_unknown" | "upload_failed";
   completionClaim?: { id: string; deadlineAtMs: number } | null;
 };
@@ -62,6 +88,7 @@ export const difyExperimentContextSchema = z.object({
   preferences: difyExperimentPreferencesSchema,
   current_revision: z.int().min(0),
   story: difyExperimentStorySchema.nullable(),
+  story_warnings: z.array(z.string()).default([]),
   review_revision: z.int().min(1).nullable(),
   approved_revision: z.int().min(1).nullable(),
   pending_feedback: z.array(requiredText(2_000)).max(5),
@@ -70,7 +97,11 @@ export const difyExperimentContextSchema = z.object({
     status: difyExperimentImageStatusSchema,
     revision: z.int().min(1),
     attempt_count: z.int().min(1).max(DIFY_EXPERIMENT_MAX_IMAGE_ATTEMPTS),
-    prompt: requiredText(4_000),
+    prompt: requiredText(16_000),
+    width: z.int().positive().nullable().default(null),
+    height: z.int().positive().nullable().default(null),
+    format: z.enum(["png", "jpeg", "webp"]).nullable().default(null),
+    warnings: z.array(z.string()).default([]),
     asset_path: z.string().nullable(),
     error: z.string().nullable(),
     workflow_run_id: z.string().nullable(),

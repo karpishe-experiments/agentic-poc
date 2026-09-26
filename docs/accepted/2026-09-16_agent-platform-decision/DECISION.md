@@ -19,7 +19,7 @@ The intended operating model is:
 - Booklet tools authenticate the caller and enforce permissions, schemas, revision checks, approvals, cost limits, and idempotency.
 - Booklet remains the system of record for users, books, artifacts, revisions, approvals, assets, jobs, and payments.
 - Dify owns agent configuration and execution for the validation trial. It does not own customer-facing product state or the Booklet interface.
-- Dify also owns the bounded illustration Workflow. Booklet returns the approved saved prompt only after it atomically reserves an allowed attempt, and Booklet validates and persists the returned PNG.
+- Dify also owns the bounded illustration Workflow. Booklet returns the approved saved prompt only after it atomically reserves an allowed attempt, and Booklet validates and persists the returned image. In this isolated experiment, image size/aspect-ratio/format preferences and story length preferences produce warnings. Required structure, decoded-image safety limits, authorization, approval, attempt caps, and stored completion remain strict; see [plan.md](plan.md).
 
 In short, the agent decides what action to request. Booklet decides whether the action is valid and how to commit it.
 

@@ -13,7 +13,21 @@ export function difyToolContext(context: DifyExperimentContext): Omit<DifyExperi
 export function difyExperimentErrorResponse(error: unknown): Response {
   if (error instanceof DifyExperimentError) return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });
   if (error instanceof MaintenanceModeError) return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });
-  if (error instanceof ZodError) return Response.json({ error: { code: "invalid_request", message: "The request is invalid." } }, { status: 422 });
+  if (error instanceof SyntaxError) return Response.json({ error: { code: "invalid_request", message: "request: Valid JSON is required." } }, { status: 422 });
+  if (error instanceof ZodError) {
+    // Do not echo unknown keys or input values: they can contain credentials.
+    const fields = new Set(["story", "title", "storyline", "character_description", "panels", "number", "text", "scene", "first_panel_image_prompt", "project_id", "run_id", "expected_revision", "attempt_id", "panel_number", "workflow_run_id", "category"]);
+    const message = error.issues.slice(0, 3).map((issue) => {
+      const path = issue.path.map((part) => typeof part === "number" ? `[${part}]` : fields.has(String(part)) ? String(part) : "field").join(".") || "request";
+      const reason = issue.code === "unrecognized_keys" ? "Unexpected fields are not allowed."
+        : issue.code === "too_big" ? `Exceeds the maximum ${issue.maximum}.`
+          : issue.code === "too_small" ? `Requires at least ${issue.minimum}.`
+            : issue.code === "custom" && issue.path.includes("number") ? "Panels must be ordered 1, 2, 3."
+              : "Required value is missing or invalid.";
+      return `${path}: ${reason}`;
+    }).join(" ");
+    return Response.json({ error: { code: "invalid_request", message } }, { status: 422 });
+  }
   if (error instanceof Error && /DIFY_API_KEY/.test(error.message)) return Response.json({ error: { code: "provider_not_configured", message: "The selected provider is not configured." } }, { status: 503 });
   return Response.json({ error: { code: "internal_error", message: "The experiment could not complete that operation." } }, { status: 500 });
 }
