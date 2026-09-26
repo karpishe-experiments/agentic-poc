@@ -1,6 +1,6 @@
 # Agent platform decision: validate Dify before Mastra
 
-**Status:** Accepted for validation; implementation and live verification in progress
+**Status:** Bounded experiment successful; deeper Dify experiment selected, not production adoption
 **Decision date:** 2026-09-16  
 **Applies to:** The next internal experiment for configuring, running, and evaluating Booklet agents
 
@@ -200,7 +200,11 @@ The mockup remains research evidence. It is not a specification that Dify must r
 
 ## Decision review
 
-Review this decision after the bounded lifecycle experiment. Record practical results in Issue #50 and decide whether a deeper Dify integration is worthwhile. There is no numeric score or automatic adoption threshold for this trial.
+The operator accepted the bounded experiment as successful on 2026-09-26. Revision 1 contains three story panels and one panel image, as intended. Recovery stored the original generated image at attempts `2/2`; reload and a context-only Resume preserved completion. See [verification.md](verification.md) for evidence and limitations. This is not proof of a fresh automatic generation-to-storage run through the final workflow or a complete booklet workflow.
+
+External agent configuration is a substantial benefit. Manager-to-specialist delegation needs more testing. The visual workflow and logs were difficult to use, but this is not a platform rejection. Manual configuration, publication, testing, and troubleshooting require too much operator effort. The next experiment must provide Codex-operated control of that cycle.
+
+Continue with a [full-booklet experiment](../../proposed/2026-09-26_dify-booklet-runner/experiment-brief.md). Its product direction is agreed; technical planning and numeric budgets remain open. The custom runtime-skills proposal in [issue #22](https://github.com/karpishe-experiments/agentic-poc/issues/22) is superseded, not implemented. Retain its Agent Studio research rather than build a competing platform. Issue #50 retains the bounded Dify experiment evidence.
 
 If the experiment exposes a material blocker, record it and consider Mastra next. Do not run parallel Dify and Mastra implementations before the first trial produces evidence.
 
