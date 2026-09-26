@@ -1,6 +1,15 @@
 {
   "version": 1,
   "skills": {
+    "difyctl": {
+      "source": "langgenius/dify",
+      "sourceType": "github",
+      "sourceRef": "8387590ace4a094de812b7847fc6a4c3a27cd52b",
+      "version": "1.17.1",
+      "skillPath": ".agents/skills/difyctl/SKILL.md",
+      "generatedBy": "difyctl skills install .agents/skills/difyctl --yes",
+      "computedHash": "5937c0b80087fddd03c6a91ce5e4ed190e83490435d04e8d994e80f0003f3d2d"
+    },
     "ai-sdk": {
       "source": "vercel/ai",
       "sourceType": "github",

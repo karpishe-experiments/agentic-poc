@@ -21,6 +21,8 @@ Project-local skills are copied under `.agents/skills` and pinned in `skills-loc
 - `compile-feature-spec` for turning rough experimental ideas into bounded specifications.
 - `asd-ste100` for unambiguous agent-authored technical prose without changing facts,
   uncertainty, conditions, or scope.
+- `difyctl` for the official Dify CLI's command discovery and inspected command
+  descriptors. Use it for Dify CLI operations, not Booklet runtime development.
 
 Codex also provides maintained system skills that must not be copied into this repository:
 
@@ -58,6 +60,14 @@ that branch. Do not create or switch to another working branch while the issue
 remains active unless the user explicitly requests the branch change. If the
 issue branch was already merged, update that same branch from `master` and open
 a follow-up pull request from it when more issue work is required.
+
+Every local branch must track its same-named counterpart on `origin`. The base
+branch is not the upstream tracking branch: a branch created from `origin/master`
+must not retain `origin/master` as its upstream. Create branches with `--no-track`,
+then use `git push --set-upstream origin <branch-name>` when publishing. If the
+counterpart already exists, set the upstream to `origin/<branch-name>`. Verify
+the branch and upstream after creation or correction. Until first publication,
+leave the upstream unset rather than tracking a differently named branch.
 
 ## Delegation and multi-agent work
 
