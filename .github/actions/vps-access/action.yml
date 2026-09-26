@@ -14,6 +14,8 @@ runs:
       run: |
         set -euo pipefail
         umask 077
+        [[ -n "$SSH_KEY" ]] || { echo 'Missing deployment SSH key' >&2; exit 1; }
+        [[ -n "$HOST_KEY" ]] || { echo 'Missing pinned SSH host key' >&2; exit 1; }
         install -m 700 -d "$HOME/.ssh" "$RUNNER_TEMP/cloudflared"
         printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/id_ed25519"
         printf '%s\n' "$HOST_KEY" > "$HOME/.ssh/known_hosts"
