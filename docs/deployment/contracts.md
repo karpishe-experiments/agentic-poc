@@ -31,7 +31,7 @@ The project-wide Actions concurrency group serializes workflows. Host operations
 
 ## Verification and accepted baseline
 
-CI selects checks from the pull-request diff. Application changes run typecheck, lint, application and deployment tests, agent fixtures, the production build, and a container build. Deployment workflow contracts run the isolated deployment tests without the application builds. Terraform, workflow, Compose, and deployment-shell changes run their matching validation suites. Manual Validate dispatches always run the complete suite.
+CI selects checks from the combined pull-request diff using the [validation policy](../../scripts/ci/README.md). Isolated changes run focused suites; shared changes retain broad coverage. Tests stop after the first failure without retries. Validation performs no production or container builds; Deploy builds the immutable release image. Manual Validate supports `full` non-build checks or `affected` checks with an explicit base ref. Superseded PR checks are cancelled; host operations remain serialized and non-cancelling. Operational workflows reject missing configuration before installation, builds, or remote access.
 
 The initial live acceptance completed on 2026-09-15. It verified provider access, successful Infrastructure and immutable-digest deployments, staging backup/restore, staging and production readiness, and automatic recovery of Docker, Cloudflare Tunnel, and both application containers after a VPS restart. The post-restart Check deployment workflow passed for both environments. Current workflow results and host state remain authoritative for later releases; local checks cannot prove live properties.
 

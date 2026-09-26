@@ -2,11 +2,20 @@ name: Validate
 on:
   pull_request:
   workflow_dispatch:
-permissions:
-  contents: read
+    inputs:
+      mode: {type: choice, options: [full, affected], default: full}
+      base_ref: {description: Required for affected mode, type: string}
+permissions: {contents: read}
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       OPENAI_API_KEY: test-key
       MODEL_RUNTIME: fake
@@ -18,82 +27,73 @@ jobs:
         id: scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" = workflow_dispatch ]]; then
-            printf '%s\n' 'app=true' 'deployment=true' 'terraform=true' 'workflow=true' 'shell=true' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          app=false deployment=false terraform=false workflow=false shell=false
-          while IFS= read -r file; do
-            case "$file" in infra/terraform/*) terraform=true ;; esac
-            case "$file" in .github/*) workflow=true ;; esac
-            case "$file" in .github/workflows/deploy.yml|tests/unit/deployment-contracts.test.ts|vitest.deployment.config.ts) deployment=true ;; esac
-            case "$file" in deploy/*|infra/config/*|scripts/deploy/*|tests/shell/*) shell=true ;; esac
-            case "$file" in
-              .github/*|deploy/*|docs/*|infra/*|scripts/deploy/*|tests/shell/*|tests/unit/deployment-contracts.test.ts|AGENTS.md) ;;
-              *) app=true ;;
-            esac
-          done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
-          printf '%s\n' "app=$app" "deployment=$deployment" "terraform=$terraform" "workflow=$workflow" "shell=$shell" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
-        if: steps.scope.outputs.app == 'true' || steps.scope.outputs.deployment == 'true'
-        with: { node-version: 24.21.0, cache: npm }
-      - if: steps.scope.outputs.app == 'true' || steps.scope.outputs.deployment == 'true'
-        run: npm ci
-      - if: steps.scope.outputs.app == 'true'
-        run: npm run typecheck
-      - if: steps.scope.outputs.app == 'true'
-        run: npm run lint
-      - if: steps.scope.outputs.app == 'true' || steps.scope.outputs.deployment == 'true'
-        run: npx vitest run --config vitest.deployment.config.ts
-      - if: steps.scope.outputs.app == 'true'
-        run: npm test -- --retry=2
-      - if: steps.scope.outputs.app == 'true'
-        run: npm run test:agent
-      - if: steps.scope.outputs.app == 'true'
-        run: npm run build
-      - if: steps.scope.outputs.app == 'true'
-        run: docker build --tag kids-booklet-validation:${{ github.sha }} .
-      - uses: hashicorp/setup-terraform@v3
-        if: steps.scope.outputs.terraform == 'true'
-        with: { terraform_version: 1.11.4 }
-      - if: steps.scope.outputs.terraform == 'true'
-        run: terraform fmt -check -recursive infra/terraform
-      - if: steps.scope.outputs.terraform == 'true'
-        run: terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate
-      - if: steps.scope.outputs.terraform == 'true'
-        run: terraform -chdir=infra/terraform test
-      - if: steps.scope.outputs.terraform == 'true'
-        run: terraform -chdir=infra/terraform/bootstrap init -backend=false && terraform -chdir=infra/terraform/bootstrap validate && terraform -chdir=infra/terraform/bootstrap test
-      - if: steps.scope.outputs.workflow == 'true'
+          BASE_REF: ${{ inputs.base_ref }}
+          CI_MODE: ${{ inputs.mode || 'full' }}
+        run: node scripts/ci/validate.mjs select
+      - name: Test selection
+        if: steps.scope.outputs.selector == 'true'
+        run: node --test scripts/ci/selection.test.mjs
+      - name: Workflow syntax
+        if: steps.scope.outputs.workflow == 'true'
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
-      - if: steps.scope.outputs.shell == 'true'
-        run: bash -n scripts/deploy/vps-deployment.sh
-      - if: steps.scope.outputs.shell == 'true'
-        run: bash tests/shell/vps-deployment-script.test.sh
-      - if: steps.scope.outputs.shell == 'true'
-        run: bash tests/shell/vps-host.test.sh
-      - if: steps.scope.outputs.shell == 'true'
-        run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-deployment-script.test.sh tests/shell/vps-host.test.sh
+      - name: Shell syntax and lint
+        if: steps.scope.outputs.shell == 'true'
+        run: |
+          set -euo pipefail
+          bash -n scripts/deploy/vps-deployment.sh
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-host.test.sh tests/shell/vps-deployment-script.test.sh
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.scope.outputs.terraform == 'true' || steps.scope.outputs.bootstrap == 'true'
+        with: {terraform_version: 1.11.4}
+      - name: Terraform format
+        if: steps.scope.outputs.terraform == 'true' || steps.scope.outputs.bootstrap == 'true'
+        env:
+          ROOT: ${{ steps.scope.outputs.terraform }}
+          BOOTSTRAP: ${{ steps.scope.outputs.bootstrap }}
+        run: |
+          set -euo pipefail
+          if [[ "$ROOT" == true ]]; then terraform -chdir=infra/terraform fmt -check; fi
+          if [[ "$BOOTSTRAP" == true ]]; then terraform -chdir=infra/terraform/bootstrap fmt -check; fi
+      - uses: actions/setup-node@v4
+        if: steps.scope.outputs.node == 'true'
+        with: {node-version: 24.21.0, cache: npm}
+      - if: steps.scope.outputs.node == 'true'
+        run: npm ci
+      - if: steps.scope.outputs.static == 'true'
+        run: npm run typecheck
+      - if: steps.scope.outputs.static == 'true'
+        run: npm run lint
+      - name: Pure contracts
+        if: steps.scope.outputs.node == 'true'
+        run: node scripts/ci/validate.mjs contracts
+      - if: steps.scope.outputs.agent == 'true'
+        run: npm run test:agent
+      - name: Selected tests
+        if: steps.scope.outputs.node == 'true'
+        run: node scripts/ci/validate.mjs tests
+      - name: Deployment shell tests
+        if: steps.scope.outputs.shell == 'true'
+        run: |
+          set -euo pipefail
+          bash tests/shell/vps-deployment-script.test.sh
+          bash tests/shell/vps-host.test.sh
+      - name: Terraform validation and tests
+        if: steps.scope.outputs.terraform == 'true' || steps.scope.outputs.bootstrap == 'true'
+        env:
+          ROOT: ${{ steps.scope.outputs.terraform }}
+          BOOTSTRAP: ${{ steps.scope.outputs.bootstrap }}
+        run: |
+          set -euo pipefail
+          for target in terraform terraform/bootstrap; do
+            if [[ "$target" == terraform && "$ROOT" != true ]] || [[ "$target" == terraform/bootstrap && "$BOOTSTRAP" != true ]]; then continue; fi
+            workspace=$(mktemp -d)
+            cp -a "infra/$target/." "$workspace/"
+            terraform -chdir="$workspace" init -backend=false -lockfile=readonly
+            terraform -chdir="$workspace" validate
+            terraform -chdir="$workspace" test
+          done
       - name: Publish validation summary
         if: always()
         env:
-          APP: ${{ steps.scope.outputs.app || 'not-selected' }}
-          DEPLOYMENT: ${{ steps.scope.outputs.deployment || 'not-selected' }}
-          TERRAFORM: ${{ steps.scope.outputs.terraform || 'not-selected' }}
-          WORKFLOW: ${{ steps.scope.outputs.workflow || 'not-selected' }}
-          SHELL: ${{ steps.scope.outputs.shell || 'not-selected' }}
-          OUTCOME: ${{ job.status }}
-        run: |
-          set -euo pipefail
-          {
-            printf "## Validation result\n\n"
-            printf "**Outcome:** %s\n\n" "$OUTCOME"
-            printf "| Validation area | Selected |\n"
-            printf "| --- | --- |\n"
-            printf "| Application | \`%s\` |\n" "$APP"
-            printf "| Deployment contracts | \`%s\` |\n" "$DEPLOYMENT"
-            printf "| Terraform | \`%s\` |\n" "$TERRAFORM"
-            printf "| Workflow syntax | \`%s\` |\n" "$WORKFLOW"
-            printf "| Shell deployment | \`%s\` |\n" "$SHELL"
-          } >> "$GITHUB_STEP_SUMMARY"
+          CI_OUTCOME: ${{ job.status }}
+        run: node scripts/ci/validate.mjs summary
