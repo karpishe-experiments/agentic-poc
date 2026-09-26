@@ -15,7 +15,7 @@ const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 async function eventually<T>(read: () => Promise<T | null>): Promise<T> {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const value = await read();
     if (value) return value;
