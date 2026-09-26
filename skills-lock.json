@@ -1,6 +1,13 @@
 {
   "version": 1,
   "skills": {
+    "dify-operations": {
+      "source": "karpishe-experiments/agentic-poc",
+      "sourceType": "local",
+      "version": "1.0.0",
+      "skillPath": ".agents/skills/dify-operations/SKILL.md",
+      "computedHash": "22ff29f9441cb4d40d8e8d2c5baf33b68747bfbfdcf19f57fc04369c0afd67da"
+    },
     "difyctl": {
       "source": "langgenius/dify",
       "sourceType": "github",

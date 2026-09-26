@@ -23,6 +23,10 @@ Project-local skills are copied under `.agents/skills` and pinned in `skills-loc
   uncertainty, conditions, or scope.
 - `difyctl` for the official Dify CLI's command discovery and inspected command
   descriptors. Use it for Dify CLI operations, not Booklet runtime development.
+- `dify-operations` for Dify Cloud configuration, testing, publication, traces and
+  recovery. Read its capability matrix first; prefer local-stdio MCP, then the
+  official CLI where supported, then verified Codex browser automation. These
+  skills do not grant spending, deletion, deployment or broader access authority.
 
 Codex also provides maintained system skills that must not be copied into this repository:
 
