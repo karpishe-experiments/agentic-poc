@@ -1,6 +1,6 @@
 # Dify illustration rollout
 
-For the current project, generation has already used attempts `2/2`. Deploy the validation update and proceed to checkpoint 9 to recover the existing file. Do not repeat checkpoint 8 or reset the experiment.
+The current project is complete at revision 1 and attempts `2/2`. The validation update is deployed, and recovery of the existing file passed; see [verification.md](verification.md). Preserve that result. Do not repeat checkpoint 8, upload a replacement, or reset the experiment. The checkpoints below remain operating guidance, not authorization for another paid test.
 
 For a fresh authorized rollout, use these checkpoints in order. Stop at the first unexpected result. This rollout does not rotate host secrets, run Infrastructure, reset data, or change Terraform, Compose, or Cloudflare.
 

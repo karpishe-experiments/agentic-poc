@@ -68,6 +68,6 @@
 - **Context:** A generated image exists, but a strict preferred-size check prevents the experiment from completing.
 - **Observation:** Focused tests can preserve original PNG/JPEG/WebP bytes and complete recovery with warnings while retaining approval, attempt caps, digest identity, and concurrent-write protection.
 - **Guidance:** Enforce required structure and safety limits. Report quality deviations separately. Validate decoded bytes rather than a filename or MIME label, and provide recovery without another paid call.
-- **Evidence:** `tests/integration/dify-experiment.test.ts` and the shared Dify completion validator.
+- **Evidence:** `tests/integration/dify-experiment.test.ts`, the shared Dify completion validator, and the live recovery recorded in [verification.md](verification.md). The retained 1254 × 1254 PNG completed the existing attempt at `2/2`; reload preserved completion and Resume called only the context tool.
 - **Promotion target:** Experiment-design documentation, not a change to normal Booklet validation.
-- **Status:** Candidate; local tests pass. Live recovery remains a separate checkpoint.
+- **Status:** Candidate; local tests and live recovery pass. A fresh generation-to-upload run through the updated workflow remains unverified.
