@@ -15,7 +15,8 @@ const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 async function eventually<T>(read: () => Promise<T | null>): Promise<T> {
-  for (let attempt = 0; attempt < 150; attempt += 1) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
     const value = await read();
     if (value) return value;
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -111,16 +112,15 @@ describe("reference generation", () => {
     // The replacement pool has one compatible agent, so restart starts it without another card response.
     const replacementBatch = await eventually(async () => {
       const batch = await database.collections.execution_batches.find({ cardId: restartCard.cardId }).next();
-      return batch?.status === "completed" || batch?.status === "results" ? batch : null;
+      const card = await repositories.conversation.getCard(booklet.id, restartCard.cardId);
+      return batch && card?.family === "agent_run" &&
+        (card.payload.state === "completed" || (card.payload.state === "results" && card.allowedActions.includes("select_agent_result")))
+        ? { ...batch, needsSelection: card.payload.state === "results" } : null;
     });
 
-    if (replacementBatch.status === "results") {
+    if (replacementBatch.needsSelection) {
       const selected = (await repositories.execution.getItems(replacementBatch._id)).find((item) => item.status === "succeeded");
       if (!selected) throw new Error("Expected a successful restart candidate.");
-      await eventually(async () => {
-        const current = await repositories.conversation.getCard(booklet.id, restartCard.cardId);
-        return current?.family === "agent_run" && current.payload.state === "results" ? current : null;
-      });
       await imageRuns.select(booklet.id, restartCard.cardId, { cardId: restartCard.cardId, responseId: "00000000-0000-4000-8000-000000000745", action: "select_agent_result", value: selected.id });
     }
     await eventually(async () => (await database.collections.execution_batches.findOne({ _id: replacementBatch._id }))?.status === "completed" ? true : null);
@@ -153,9 +153,17 @@ describe("reference generation", () => {
     const composed = await repositories.assets.get(completed.assetId!);
     expect(composed).toMatchObject({ kind: "page_composed", sourceAssetId: result.sourceAssetId });
     expect(await assets.exists(composed!.uri)).toBe(true);
+    // Job-item success precedes batch completion and its callback. Let the original
+    // materialization finish before simulating interruption, or it can overwrite
+    // the injected state and leave nothing for recovery to claim.
+    await eventually(async () => {
+      const batch = await repositories.execution.getBatch(result.executionBatchId);
+      return batch?.status === "completed" && resumedJobId === jobId ? true : null;
+    });
+    resumedJobId = null;
     await database.collections.execution_batches.updateOne({ _id: result.executionBatchId }, { $set: { status: "materializing", materializationStatus: "running", selectedItemId: (await repositories.execution.getItems(result.executionBatchId))[0]!.id } });
     expect(await agentRuns.recoverInterrupted()).toContain(result.executionBatchId);
-    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" ? true : null);
+    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" && resumedJobId === jobId ? true : null);
     expect((await repositories.jobs.getItems(jobId))[0]?.assetId).toBe(completed.assetId);
     expect(resumedJobId).toBe(jobId);
   });});

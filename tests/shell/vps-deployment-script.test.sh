@@ -16,7 +16,7 @@ test "$(grep -Fc -- '--retry 4 --retry-all-errors --retry-delay 2' "$vps_access"
 grep -Fq 'GH_TOKEN: ${{ github.token }}' "$vps_access"
 grep -Fq -- '--header "Authorization: Bearer $GH_TOKEN"' "$vps_access"
 grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
-for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml .github/workflows/validate.yml; do
+for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
 done
 grep -Fq 'test "$GITHUB_REF_NAME" = master' .github/workflows/dify-tool-key.yml
@@ -49,6 +49,8 @@ grep -q 'updated: rotation invoked' <<< "$protected_rotation_output"
 ! grep -q 'app-test-secret' <<< "$protected_rotation_output"
 rm -rf "$protected_rotation_root"
 done
+grep -Fq 'node scripts/ci/validate.mjs summary' .github/workflows/validate.yml
+grep -q 'GITHUB_STEP_SUMMARY' scripts/ci/validate.mjs
 grep -Fq 'test "$GITHUB_REF_NAME" = "_$TARGET"' .github/workflows/deploy.yml
 test "$(grep -Fc 'commits/$GITHUB_REF_NAME' .github/workflows/deploy.yml)" = 2
 ! grep -q 'actions/workflows/infrastructure.yml/runs' .github/workflows/deploy.yml

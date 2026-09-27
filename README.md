@@ -51,6 +51,14 @@ For MongoDB connection failures, check the Atlas IP access list, database-user c
 
 For an Atlas `mongodb+srv://` URI, `MONGODB_DATABASE` is a logical database name such as `kids_booklet`, not the Atlas hostname. If Node times out resolving the Atlas SRV record while the individual cluster hosts resolve, use the standard `mongodb://` driver connection string supplied by Atlas.
 
+## Codex and Dify developer setup
+
+Follow [Set up Codex access to Dify](docs/dify-getting-started.md) for pinned local
+tools, official CLI device login, separate MCP authentication, safe read-only
+checks, and troubleshooting. The project skills are already checked in.
+CLI access is verified; authenticated MCP access and live administration probes
+remain incomplete. This setup does not require Booklet database or provider keys.
+
 ## Reset the local POC baseline
 
 `db:reset` is the only initialization workflow. It drops every collection in the configured application database, deletes generated contents below the configured `DATA_ROOT`, recreates current indexes, seeds ten current agents and bundled visual assets, then verifies the result. It is deliberately destructive.

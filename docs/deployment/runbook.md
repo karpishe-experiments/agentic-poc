@@ -2,6 +2,13 @@
 
 This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
+PR Validate runs [selected non-build checks](../../scripts/ci/README.md). For a manual
+run, choose `full`, or choose `affected` and supply a resolvable `base_ref`.
+Production and container builds occur only in Deploy, before VPS mutation. A green
+Validate result does not prove the release build or browser smoke test succeeded.
+Missing operational configuration fails before tool installation or image building;
+the error names the missing setting without printing its value.
+
 ## Current deployment status
 
 Live acceptance completed on 2026-09-15.
