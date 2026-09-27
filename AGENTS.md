@@ -75,6 +75,11 @@ leave the upstream unset rather than tracking a differently named branch.
 
 ## Computer and browser control authorization
 
+For developer Dify onboarding, follow `docs/dify-getting-started.md` and the linked
+capability runbook. Keep CLI and MCP authentication separate. Credential entry is
+a private user handoff; verify each interface with read-only workspace checks.
+Do not infer authenticated MCP access from CLI login or tool discovery.
+
 Before using any computer-use or Chrome/browser-control plugin, obtain explicit
 user authorization at least once per usage topic per chat session. This includes read-only inspection,
 tab discovery, screenshots, and interactive control. An explicit request to use

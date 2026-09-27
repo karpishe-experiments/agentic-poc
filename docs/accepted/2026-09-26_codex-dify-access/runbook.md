@@ -73,6 +73,11 @@ and current `npm audit` records; do not upgrade silently.
 
 ## Connection and recovery checkpoints
 
+For a fresh developer machine, start with the canonical
+[getting-started guide](../../dify-getting-started.md). It covers installation,
+Codex registration, separate CLI/MCP logins, and expected read-only results.
+The cookie-import path below remains source-inspected, not live-verified.
+
 1. Inspect the registered `mcp_servers.dify` command, wrapper and allowlisted
    environment fields without dumping the full Codex config. Confirm the pin and
    dedicated `DIFYWF_HOME`; no secret belongs in repository configuration.
