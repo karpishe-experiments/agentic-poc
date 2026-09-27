@@ -153,9 +153,17 @@ describe("reference generation", () => {
     const composed = await repositories.assets.get(completed.assetId!);
     expect(composed).toMatchObject({ kind: "page_composed", sourceAssetId: result.sourceAssetId });
     expect(await assets.exists(composed!.uri)).toBe(true);
+    // Job-item success precedes batch completion and its callback. Let the original
+    // materialization finish before simulating interruption, or it can overwrite
+    // the injected state and leave nothing for recovery to claim.
+    await eventually(async () => {
+      const batch = await repositories.execution.getBatch(result.executionBatchId);
+      return batch?.status === "completed" && resumedJobId === jobId ? true : null;
+    });
+    resumedJobId = null;
     await database.collections.execution_batches.updateOne({ _id: result.executionBatchId }, { $set: { status: "materializing", materializationStatus: "running", selectedItemId: (await repositories.execution.getItems(result.executionBatchId))[0]!.id } });
     expect(await agentRuns.recoverInterrupted()).toContain(result.executionBatchId);
-    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" ? true : null);
+    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" && resumedJobId === jobId ? true : null);
     expect((await repositories.jobs.getItems(jobId))[0]?.assetId).toBe(completed.assetId);
     expect(resumedJobId).toBe(jobId);
   });});
