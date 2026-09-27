@@ -4,6 +4,42 @@
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
+## Milestone execution plans
+
+Read [the shared execution procedure](EXECUTION.md) before starting a milestone.
+These detailed plans are preparation, not evidence that access, spending or a
+release has been authorized. Each starts by reconciling the previous milestone.
+Their proposed implementation details do not override the PRD. Finalize a slice's
+technical choices using predecessor evidence before changing its runtime contracts.
+
+| Milestone | Detailed plan |
+| --- | --- |
+| 0 | [Access, configuration and control proof](M0-readiness.md) |
+| 1 | [Persistent runner and narrative slice](M1-runner.md) |
+| 2 | [Narrative and reference production](M2-references.md) |
+| 3 | [Pages, UI and evaluation](M3-completion.md) |
+| 4 | [Simulation and Balanced acceptance](M4-balanced.md) |
+| 5 | [Staging Real acceptance](M5-real.md) |
+| 6 | [Agent improvement and closeout](M6-closeout.md) |
+
+### Requirement-to-delivery check
+
+| Agreed requirement | Implementation and evidence |
+| --- | --- |
+| Codex operates the whole cycle; no routine operator clicks | M0 control proof; EXECUTION entry handoff, two clean reviews and authorized release loop |
+| Simple experimental implementation, not production perfection | PRD development standard; focused checks in each milestone; warnings never become quality gates |
+| Dify owns the complete modular creative suite | M0 packaging decision; M1 J01–J02, M2 J03–J10, M3 J11–J13, testers and judge |
+| Persona-adaptive journey with recorded delegation | M1 approval/grant contracts; M2 grouped reviews; M4 low-interaction and detailed-control cases |
+| Normal saved booklets and all run evidence | M1 persistence; M2/M3 assets and lineage; M5 retained failures and successors |
+| Unlimited separate simulated development runs, bounded individual runs | M1 loop/accounting rules; M4 deployed simulation campaign; no real calls in simulation |
+| Balanced first, then Real 3 → 5 → 8 pages plus cover | M4 all-persona Balanced acceptance; M5 ordered Real campaign within approved limits |
+| Whole-flow tester and independent advisory judge feedback | M3 reports and separate generation/evaluation status; M6 evidence-led agent improvements |
+| Pause/Resume, no manual acceptance-run repair or PDF | M1 controls; M3 completion/UI; M5 uninterrupted retained runs |
+| Clean local/staging baseline, no production or existing Dify deletion | M1 setup and M5 exact-target reset procedure; no later reset of experiment evidence |
+
+This table maps requirements, not completed results. Keep verification in the
+owning milestone's exit record; do not add a separate acceptance bureaucracy.
+
 ## Baseline and execution boundaries
 
 Use `agent/issue-65-dify-booklet-runner`, created from freshly fetched `origin/master`; publish against `master` and track only its same-named origin branch. Keep all issue work and review corrections here. Reuse prior Dify work selectively; do not merge `_staging` or PR #64 wholesale.
@@ -33,6 +69,9 @@ Keep existing authentication, secret handling, production isolation, verified re
 - Prove a simulation branch through Dify that invokes no real provider, including manager/tester/judge behavior.
 - Audit internal agent calls and plugin retries. Establish a practical reservation boundary for every potentially paid request. If an opaque agent loop cannot obey limits, resolve its execution design before paid tests; do not count one agent run as one LLM request.
 - Produce the detailed-plan inputs below before implementing their dependent slice. Preserve thirteen identifiable specialist responsibilities even if workspace capacity affects packaging.
+- Codex selects and records a verified independent-module layout, with small
+  focused groups only where necessary. An all-role workflow remains excluded.
+  Return only scope, cost, workspace-plan or preservation changes to the operator.
 
 **Exit:** verified unattended control and simulation paths, tested capability matrix, and an implementation-ready first-slice contract. Unverified capabilities remain explicit blockers for their affected work, not claimed successes.
 

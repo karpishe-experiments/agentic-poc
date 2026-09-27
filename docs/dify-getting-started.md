@@ -141,36 +141,66 @@ Restart Codex in the interface you will actually use, open this repository, and 
 Our fresh-session check exposed 172 bridge tools. Tool discovery proves connection,
 not authentication or compatibility of every operation.
 
-## 5. Authenticate MCP separately — live verification pending
+## 5. Authenticate MCP separately — verified cookie path
 
-This is the pinned bridge's supported procedure, inspected in its source and
-[README](https://github.com/alexjiaguo/dify-mcp/tree/f2e6c7590a44e5b5dbeab358bf8f14b5b9cfef2a).
-It has **not** yet passed authenticated workspace verification in this project.
-Do not present it as equivalent to the verified CLI login.
+On 2026-09-27, cookie import passed live MCP `app.list`, `workspace.list` and
+`snippet.list` checks. The pinned bridge's device login returned `unsupported_client`
+on Cloud; do not confuse it with the working official CLI device login.
+Check current MCP access first. Do not repeat login when it already works.
 
-Log in to `https://cloud.dify.ai` yourself. Export only that site's authentication
-cookies through a trusted, administrator-approved local method as browser
-cookie-export JSON. Do not install an arbitrary cookie-export extension. Save the
-export directly to the protected `DifyWf-Codex\cookies.json`, never the repository,
-Downloads/shared storage, or chat. The bridge recognizes access/console, CSRF and
-refresh cookies; the current Cloud session must supply what its server requires.
+Log in to `https://cloud.dify.ai` yourself. Open browser Developer Tools, then
+Application → Storage → Cookies → `https://cloud.dify.ai`. Keep values private.
+The observed names are `__Host-access_token`, `__Host-csrf_token` and
+`__Host-refresh_token`; preserve the names. No cookie-export extension is needed.
 
-Run the import privately, without putting cookie values in arguments:
+Run this in your private PowerShell terminal. At each prompt, copy that cookie's
+**Value** in DevTools, return to the terminal and press Enter. Do not paste it
+into the prompt, chat, shell command text or repository. Avoid clipboard-history
+or cross-device clipboard retention while handling credentials.
 
 ```powershell
-$env:DIFYWF_HOME = $difyState
-node "$difyBridge\bin\difywf.js" auth import-cookies --base-url https://cloud.dify.ai --file "$difyState\cookies.json"
+$env:DIFYWF_HOME = Join-Path $env:LOCALAPPDATA 'DifyWf-Codex'
+$difyBridge = Join-Path $env:LOCALAPPDATA 'CodexTools\dify-mcp\v0.3.0-f2e6c7590a44e5b5dbeab358bf8f14b5b9cfef2a'
+$difyCookies = @{}
+try {
+    foreach ($cookieName in @('__Host-access_token', '__Host-csrf_token', '__Host-refresh_token')) {
+        Read-Host "Copy the VALUE of $cookieName in DevTools, then press Enter here" | Out-Null
+        $cookieValue = (Get-Clipboard -Raw).Trim()
+        if ($cookieValue.Length -lt 16 -or $cookieValue -match '[^\x21-\x7E]' -or
+            $cookieValue.StartsWith('__Host-')) {
+            throw "Invalid clipboard value for $cookieName. Import stopped."
+        }
+        $difyCookies[$cookieName] = $cookieValue
+        Set-Clipboard -Value ' '
+    }
+    $difyCookies | ConvertTo-Json -Compress |
+        node "$difyBridge\bin\difywf.js" auth import-cookies --base-url https://cloud.dify.ai
+    if ($LASTEXITCODE -ne 0) { throw 'Cookie import failed.' }
+}
+finally {
+    $difyCookies.Clear()
+    Remove-Variable difyCookies, cookieValue -ErrorAction SilentlyContinue
+    Set-Clipboard -Value ' '
+}
 ```
 
-The bridge persists plaintext credentials in `hosts.json`. Verify that file's ACL
-as well as the directory ACL. After a successful import, remove only your redundant
-cookie export locally; deleting it does not revoke the stored session. Never dump
-`hosts.json`, copy CLI tokens into it, or use secret-bearing MCP auth arguments.
+Expected import output is `stored: true` and cookie names only. The bridge stores
+plaintext credentials in protected `hosts.json`; verify its Windows ACL as well
+as the directory ACL. Never dump that file or copy CLI tokens into it. This import
+needs no temporary cookie export. Clipboard replacement does not erase clipboard
+history or revoke the session.
 
-Restart Codex and ask it to inspect the schemas and call `workspace.list` and
-`app.list` read-only. Tool-name prefixes depend on the host. Confirm the intended
-workspace and permissions. `AUTH_REQUIRED` means MCP login is still incomplete,
-even if the CLI works. Do not run generation to test authentication.
+Ask Codex to inspect the schemas and call `workspace.list` and `app.list` read-only.
+The current session picked up imported credentials without a restart. User-level
+registration and saved credentials support later sessions, subject to expiry or
+revocation; check access in each new session. Verify permissions through the CLI
+where the MCP response omits them. `workspace.get` returned HTTP 404 while listing
+worked; this is not a reason to reauthenticate. Do not generate to test login.
+
+The earlier hidden-prompt paste stored one non-ASCII character per cookie and
+produced `fetch failed`. The clipboard procedure above passed. If import succeeds
+but access fails, inspect safe format metadata/network errors without displaying
+values. An import success alone does not prove authentication or write capability.
 
 ## 6. Troubleshooting and handoff
 
@@ -179,6 +209,8 @@ even if the CLI works. Do not run generation to test authentication.
 | CLI executable not found | Use its full verified path; restart Codex after PATH changes. |
 | PowerShell blocks npm.ps1 | Use `npm.cmd`; do not weaken machine execution policy. |
 | CLI works, MCP returns AUTH_REQUIRED | Complete the separate private bridge login; do not rotate Booklet/provider keys. |
+| Bridge device login returns unsupported_client | Use the verified private cookie path; do not repeat CLI login. |
+| MCP workspace.get returns 404 but app/workspace listing works | Use workspace.list; record the endpoint gap, not an authentication failure. |
 | No Dify MCP tools after restart | Check registration command, wrapper path, Node version and the Codex interface's MCP configuration. A standalone handshake is insufficient. |
 | Wrong workspace or permission denied | Stop writes; ask the administrator to confirm membership and intended role. |
 | Session expired | Reauthenticate that interface privately, then repeat read-only identity/workspace checks. |

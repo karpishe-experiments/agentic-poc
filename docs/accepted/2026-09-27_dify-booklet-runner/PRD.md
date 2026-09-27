@@ -42,6 +42,14 @@ Milestones are short working checkpoints, not approval ceremonies. Within grante
 
 Provide one Dify manager, thirteen separately identifiable specialist tasks, image workflows, three external persona testers, and an independent Dify judge. Deliver complete instructions, input/output contracts, bindings, and fixtures rather than prompt placeholders. A task is a distinct responsibility; the technical plan must verify how Dify hosts it without assuming unlimited app capacity.
 
+Prefer independently editable/testable modules; use small, focused groups only
+where necessary. Never put the entire suite into one large workflow. Verify
+reusable-module capabilities and capacity; thirteen responsibilities do not
+require thirteen separate apps. Codex selects and records the simplest verified
+layout within these boundaries. Ask again only if the choice changes scope, cost,
+workspace plan or preservation requirements. This decision grants no paid-call,
+reset, deployment or browser authority.
+
 | ID | Artifact / specialist responsibility | Required production meaning |
 | --- | --- | --- |
 | J01 | Book Concept Brief | Audience, premise, theme, emotional promise, constraints, deferred decisions; no premature plot or visual design. |
@@ -212,5 +220,7 @@ This register makes the interview decisions discoverable without requiring the c
 | Fast experimental implementation, targeted verification and basic safeguards only | Experiment development standard |
 | Persona-adaptive visible journey, grouped reviews and traceable delegated approval | Section 2, AC11–AC12 |
 | Verify logins, keys, integrations and execution authority before dependent work | Section 3, AC13; roadmap access-readiness matrix |
+| Prefer MCP, then inspected CLI, with authorized Chrome control last | Roadmap M0 and detailed M0 plan |
+| Prefer maintainable modules; the single giant workflow is not accepted | Section 2; M0 packaging decision |
 
 Product decisions above are accepted. Exact Dify packaging, model IDs/token bounds, per-request accounting, API schemas and local/staging setup are technical work in milestone 0 and the affected slices, not evidence of completed capability. If a verified limitation requires changing an accepted product decision, return that specific tradeoff to the user rather than silently reducing the journey or increasing limits.
