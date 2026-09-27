@@ -1,13 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { select, parseDiff, difyTests, documentTest } from './selection.mjs';
+import { select, parseDiff, difyTests, documentTest, adaptAvailableSuites } from './selection.mjs';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const pick = (...paths) => select(paths.map(path => ({ path })));
+test('docs-only branches skip absent Dify contracts but implementations require them', () => {
+  const paths = ['docs/accepted/2026-09-16_agent-platform-decision/tools.openapi.json'];
+  const absent = pick(...paths);
+  adaptAvailableSuites(absent, () => false);
+  assert.deepEqual(absent.tests, []);
+  assert.equal(absent.flags.node, false);
+  const fixture = pick('docs/accepted/2026-09-16_agent-platform-decision/fixtures.json');
+  adaptAvailableSuites(fixture, () => false);
+  assert.deepEqual(fixture.tests, []);
+  assert.equal(fixture.flags.node, false);
+  const mixed = pick('docs/accepted/2026-09-16_agent-platform-decision/fixtures.json', 'tests/unit/other.test.ts');
+  adaptAvailableSuites(mixed, () => false);
+  assert.deepEqual(mixed.tests, ['tests/unit/other.test.ts']);
+  assert.equal(mixed.flags.static, true);
+  for (const present of [documentTest, 'lib/dify-experiment']) {
+    const available = pick(...paths);
+    adaptAvailableSuites(available, p => p === present);
+    assert.deepEqual(available.tests, [documentTest]);
+    assert.equal(available.flags.node, true);
+  }
+});
 test('documentation does not install dependencies', () => {
   assert.equal(pick('README.md', 'docs/deployment/runbook.md', '.agents/skills/example/SKILL.md').flags.node, false);
 });
@@ -74,6 +95,8 @@ test('CLI rejects missing/invalid refs and supports full and affected modes', ()
     assert.equal(JSON.parse(readFileSync(file)).flags.node, false);
     assert.equal(invoke({ CI_MODE: 'full' }).status, 0);
     assert.equal(JSON.parse(readFileSync(file)).flags.app, true);
+    const mockupPresent = ['vitest.mockup.config.ts', 'tests/mockups', 'lib/mockups/specialty-management', 'components/mockups/specialty-management', 'app/mockups/specialty-management'].some(p => existsSync(p));
+    assert.equal(JSON.parse(readFileSync(file)).flags.mockup, mockupPresent);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

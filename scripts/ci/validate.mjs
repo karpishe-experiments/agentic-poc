@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { select, parseDiff, deploymentTests, documentTest } from './selection.mjs';
+import { select, parseDiff, deploymentTests, documentTest, adaptAvailableSuites } from './selection.mjs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -24,6 +24,14 @@ if (command === 'select') {
   }
   const changes = base ? parseDiff(execFileSync('git', ['diff', '--name-status', '-z', '--find-renames', base, head, '--'], { encoding: 'utf8' })) : [];
   const selection = { mode, head, base, ...select(changes, mode === 'full') };
+  adaptAvailableSuites(selection, existsSync);
+  // Older release lines do not contain the optional specialty mockup suite.
+  // Existing mockup sources still require their configuration and must fail if it is missing.
+  if (selection.flags.mockup && !existsSync('vitest.mockup.config.ts') &&
+      !['tests/mockups', 'lib/mockups/specialty-management', 'components/mockups/specialty-management', 'app/mockups/specialty-management'].some(p => existsSync(p))) {
+    selection.flags.mockup = false;
+    selection.reasons.push({ path: 'vitest.mockup.config.ts', category: 'mockup suite absent on this branch' });
+  }
   writeFileSync(file, JSON.stringify(selection, null, 2));
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(selection.flags).map(([k,v]) => `${k}=${v}\n`).join(''));
   console.log(JSON.stringify(selection, null, 2));

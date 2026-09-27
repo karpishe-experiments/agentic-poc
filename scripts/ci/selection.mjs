@@ -2,6 +2,16 @@ export const difyTests = ['tests/integration/dify-experiment.test.ts', ...['adap
 export const deploymentTests = ['tests/unit/deployment-contracts.test.ts', 'tests/unit/recovery-storage.test.ts', 'tests/unit/config/env.test.ts'];
 export const documentTest = 'tests/unit/dify-experiment-openapi.test.ts';
 
+export function adaptAvailableSuites(selection, exists) {
+  const difyRuntime = ['lib/dify-experiment', 'lib/contracts/dify-experiment.ts', 'app/api/experiments/dify', 'app/experiments/dify', 'components/dify-experiment'].some(exists);
+  if (!difyRuntime && !difyTests.some(exists) && selection.tests.some(p => difyTests.includes(p))) {
+    selection.tests = selection.tests.filter(p => !difyTests.includes(p));
+    if (selection.reasons.every(r => ['documentation', 'Dify', 'Dify documents'].includes(r.category))) selection.flags.static = false;
+    selection.reasons.push({ path: documentTest, category: 'Dify document contract absent on this docs-only branch' });
+    selection.flags.node = selection.flags.static || selection.flags.app || selection.flags.mockup || selection.flags.agent || selection.tests.length > 0 || selection.mockupTests.length > 0 || selection.browserTests.length > 0;
+  }
+}
+
 export function parseDiff(text) {
   const tokens = text.split('\0');
   const changes = [];

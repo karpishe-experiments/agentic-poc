@@ -35,3 +35,10 @@ Run selector checks with `node --test scripts/ci/selection.test.mjs`.
 The workflow stores selection and reasons in runner temporary storage and prints
 them before running checks. Superseded PR validation is cancelled; host operations
 retain their non-cancelling concurrency group.
+
+Full validation skips the optional mockup suite on branches where neither its
+configuration nor its test/source directories exist. Existing mockup sources
+without their configuration remain a validation error.
+Dify document changes use summary-only validation on docs-only branches where
+both the runtime and Dify test suite are absent. When the runtime exists,
+a missing expected contract test still fails.
