@@ -67,6 +67,36 @@ A later readiness state is not a prerequisite for independent earlier work.
    the exit without routine operator clicks. Reopen the gate only for changed
    scope, revoked/expired access or a newly discovered external blocker.
 
+## Sol Low execution packages
+
+Use GPT-6 Astra/high to resolve consequential unknowns and prepare the next
+bounded slice. Use GPT-6 Sol/low for implementation and straightforward fixes.
+Prepare each package inside its existing milestone file after the required
+predecessor evidence is available; do not create another plan hierarchy.
+
+Each runnable slice uses this compact format:
+
+| Field | Required content |
+| --- | --- |
+| Goal and components | One observable result, exact affected components and existing services to reuse |
+| Contract and examples | Concrete input/output fixtures, persisted before/after states and relevant error outcomes |
+| Ordered edits | Implementation order with a runnable verification point; resolve consequential choices before handoff |
+| Verification | Exact focused commands, required setup and expected results |
+| Completion and escalation | Evidence needed to finish; unresolved dependencies and conditions requiring design review |
+
+Link shared requirements instead of copying the PRD. Mark an unverified binding
+or capability pending; do not invent it to make a package appear complete.
+Prepare detailed M1 slices from M0 results. Independent local slices can proceed
+with explicit fixtures while their staging bindings remain pending.
+
+Sol/low runs the focused checks and corrects straightforward failures. Escalate
+to Sol/medium when diagnosis remains unclear after a focused reproduction and
+one evidence-based correction. Use Astra/high when a fix changes a contract or
+architecture, or a required Dify capability is unavailable. Record the resolved
+decision in the same package before dependent implementation continues.
+Use Astra/high for the two independent reviews required by section C. Model
+selection does not change operation authority, request limits or acceptance.
+
 ## B. Authorization register
 
 Technical access is not authority. The current request asks for advance approvals;

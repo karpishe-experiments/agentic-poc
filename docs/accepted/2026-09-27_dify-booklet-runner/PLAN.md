@@ -11,6 +11,8 @@ These detailed plans are preparation, not evidence that access, spending or a
 release has been authorized. Each starts by reconciling the previous milestone.
 Their proposed implementation details do not override the PRD. Finalize a slice's
 technical choices using predecessor evidence before changing its runtime contracts.
+Use M0's four-checkpoint checklist first, then prepare each runnable slice with
+the [Sol/Low handoff format](EXECUTION.md#sol-low-execution-packages).
 
 | Milestone | Detailed plan |
 | --- | --- |

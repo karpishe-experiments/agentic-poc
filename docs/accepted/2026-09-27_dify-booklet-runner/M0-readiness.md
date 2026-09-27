@@ -6,6 +6,25 @@ Configuration/publication/recovery probes remain unverified.
 **Read first:** [EXECUTION.md](EXECUTION.md), [PRD.md](PRD.md),
 [Dify access runbook](../2026-09-26_codex-dify-access/runbook.md).
 
+## Execution checklist
+
+Run these checkpoints in order. The sections below supply the constraints and
+probe details; do not maintain a second checklist. Keep provider calls disabled.
+Record each result in this table with a dated evidence reference and the exact
+dependent operation blocked by any unresolved item. All four remain pending.
+
+| Action | Expected result | Evidence | Unresolved blocker |
+| --- | --- | --- | --- |
+| 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | Pending; prior inventory is recorded below | Live quota and module capabilities |
+| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Pending | Callable module behavior and complete-suite capacity |
+| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Pending | Publication/restoration proof and runtime credential recovery |
+| 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Pending | Predecessor evidence and any private binding/setup handoff |
+
+Use MCP first, inspected official CLI second, and authorized browser control last.
+An unresolved staging dependency does not block independent local preparation.
+For checkpoint 4, use the handoff format in [EXECUTION.md](EXECUTION.md#sol-low-execution-packages).
+Defer the actual Booklet callback round trip until M1 supplies its routes.
+
 ## Entry and consolidated handoff
 
 Apply EXECUTION A. Recheck branch, workspace and current suite capacity. Bounded

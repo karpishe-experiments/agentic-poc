@@ -5,6 +5,11 @@
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
 
+Before handing a slice to Sol/low, fill the compact
+[execution package](EXECUTION.md#sol-low-execution-packages) in this file using
+M0 evidence. The contracts below remain proposed until that reconciliation;
+do not treat them as a completed implementation package.
+
 ## Entry and manual setup
 
 Reconcile M0's selected verified packaging, actual workflow schema/bindings and code
