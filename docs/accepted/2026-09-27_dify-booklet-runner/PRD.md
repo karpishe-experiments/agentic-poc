@@ -25,6 +25,19 @@ For this experiment, explicit adaptations in this PRD take precedence over the s
 
 These decisions supersede issue #65's earlier preservation requirement and the earlier trial's two-attempt preservation requirement for the planned local/staging reset. They do not authorize an unverified reset now. Preserve a sanitized summary of the prior trial before deletion.
 
+### Experiment development standard
+
+Optimize for fast learning and an observable end-to-end result, not production readiness. Use the smallest implementation that demonstrates the agreed journey. Reuse existing services, deployment, credentials and Dify capabilities; avoid new infrastructure, generic frameworks and duplicate control systems without a demonstrated need.
+
+- **Build the experience:** Codex iterates through implementation, focused tests, authorized deployment, automated feedback and repairs. Catch application defects primarily through repeated Simulated runs, then Balanced runs, before Real acceptance.
+- **Run and improve:** Once the runner works, prioritize changes to agents, prompts, delegation and workflows. Record necessary application repairs separately.
+- **Quality:** Completion and useful evidence come first. Minimize warnings over time, but require no top-quality score, perfect image/text fidelity, polished UI or zero-warning result. Report inconsistencies during the flow and in tester/judge assessments.
+- **Engineering:** Use targeted tests for the named acceptance and recovery cases. No exhaustive edge-case coverage, benchmark program, high availability, distributed execution, enterprise observability or elaborate configuration/version bureaucracy is required. Preserve enough evidence to explain and reproduce a run.
+- **Security:** This is a trusted developer/operator experiment, not a public multi-tenant product. Reuse the existing access gate and callback authentication. Do not add a new account/RBAC system, compliance program, penetration-test gate or production threat-modeling project merely for this experiment.
+- **Minimum safeguards:** Keep secrets out of committed files and evidence, protect production/unrelated resources, verify destructive targets, enforce operation identity/approval and request limits, and do not automatically repeat uncertain paid calls. These practical protections are not waived by the relaxed development standard.
+
+Milestones are short working checkpoints, not approval ceremonies. Within granted authority, Codex can continue routine edit/test/diagnose cycles without asking about each node or prompt change. Obtain authorization for actions outside that scope; no standing deployment, paid-call or browser-control permission is created by this PRD.
+
 ## 2. Journey and suite
 
 Provide one Dify manager, thirteen separately identifiable specialist tasks, image workflows, three external persona testers, and an independent Dify judge. Deliver complete instructions, input/output contracts, bindings, and fixtures rather than prompt placeholders. A task is a distinct responsibility; the technical plan must verify how Dify hosts it without assuming unlimited app capacity.
@@ -129,6 +142,8 @@ Pause prevents new work; in-flight work may finish and save. Resume uses persist
 
 Missing required artifacts/assets, corrupt images, failed storage, invalid authorization, stale identity/dependencies and exhausted limits are technical blockers. Visual inconsistency, imperfect lettering/rendering and other quality shortcomings remain reported warnings. Do not label missing or unsaved output as completion.
 
+Treat preferred story lengths, image dimensions/aspect ratios and rendering details as guidance, not rejection gates when the result remains usable. Report deviations with the saved artifact. Do not reject an otherwise valid result solely for harmless extra content fields or an inaccurate image MIME label; canonicalize supported content and inspect actual image bytes. Required content, valid references and decodable supported images remain necessary. Define concrete storage/decoder bounds in the affected slice rather than building a generic validation framework.
+
 ## 6. Runner UI and evaluation
 
 Provide mode/persona selection (one or all), progress/current task, warnings/limits, Pause/Resume, conversation/decision history, failures, saved-booklet links and tester/judge reports. Reuse existing viewers, extending them for the new artifacts. No manual mid-run takeover or new agent-authoring UI.
@@ -153,3 +168,26 @@ Distinguish booklet generation completion from evaluation status. A failed judge
 | AC10 | Failures and linked successors remain inspectable; code repairs are distinguished from agent improvements. |
 
 No production adoption, PDF, unrelated infrastructure, sensitive child data, unlimited paid loops or competing custom Agent Studio is required.
+
+## 8. Decision coverage and remaining technical work
+
+This register makes the interview decisions discoverable without requiring the chat history.
+
+| Agreed decision | Requirement location |
+| --- | --- |
+| Adopt Ali's complete pre-export journey and specialist responsibilities, not the old eight-stage journey | Sections 1–2, J01–J13 |
+| Replace local agent management with Dify; retain Booklet authority and reuse/improve its schema | Section 3 |
+| Clean local/staging reset; production and existing Dify resources untouched | Section 1, AC09 |
+| Codex operates build/verification and then primarily agent improvement | Experiment development standard, AC08/AC10 |
+| Unattended persona-driven testing; only Pause/Resume intervention controls | Sections 4–6 |
+| Three fixed persona briefs; 3/5/8 story pages plus cover; persona-specific layouts and bounded revisions | Section 4 |
+| Two style samples, small fixed cast/locations, all required reference sheets | Sections 2 and 4 |
+| Actual Dify Simulated paths, then all Balanced cases, then Real 3 → 5 → 8 | Section 5, AC02–AC04 |
+| Reuse verified models; request ceilings include testers/judge/retries; no exact monetary cap | Section 5 |
+| Bounded safe recovery; inspect unknown paid outcomes before repeating | Section 5, AC06 |
+| Advisory tester and judge feedback; warning-based completion; no quality perfection gate | Sections 1, 5–6, AC05/AC07 |
+| Simple runner plus existing viewers; no PDF, front/back matter or new agent editor | Sections 1 and 6 |
+| Retain failures, configuration/run evidence and linked repaired successors | Section 3, AC10 |
+| Fast experimental implementation, targeted verification and basic safeguards only | Experiment development standard |
+
+Product decisions above are accepted. Exact Dify packaging, model IDs/token bounds, per-request accounting, API schemas and local/staging setup are technical work in milestone 0 and the affected slices, not evidence of completed capability. If a verified limitation requires changing an accepted product decision, return that specific tradeoff to the user rather than silently reducing the journey or increasing limits.

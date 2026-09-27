@@ -14,6 +14,14 @@ Current application services and persistence are reusable starting points, not t
 
 Issue #66 was closed without full live-control acceptance. Carry its unresolved checks into milestone 0 using the [access runbook](../2026-09-26_codex-dify-access/runbook.md) and [getting-started guide](../../dify-getting-started.md). Installation, CLI authentication or tool discovery alone do not satisfy AC08.
 
+### Fast experimental delivery
+
+Follow the PRD's [experiment development standard](PRD.md#experiment-development-standard). Milestones 0–5 build and verify the experience; milestone 6 primarily improves the agent suite. Deliver small runnable slices and use automated feedback to correct them. Do not wait for polished UI, perfect creative output, exhaustive tests or production security infrastructure.
+
+Resolve technical details just before their dependent slice, not through a complete up-front platform design. Milestone 0 proves the essential control/simulation path and first-slice contracts; it need not perfect every later specialist. Block only work that actually depends on an unresolved capability, and continue independent simulated development where possible.
+
+Keep existing authentication, secret handling, production isolation, verified reset targets and paid-request safeguards. Reuse the current infrastructure and credential bindings. Use targeted verification for the agreed paths and failure cases; quality warnings and optional polish do not prevent milestone progress. A real technical failure, missing required output or unverified spending boundary still does.
+
 ## Milestone 0 — Baseline and executable Dify control
 
 **Coverage:** AC08; prerequisites for AC01–AC06.
@@ -68,6 +76,8 @@ Issue #66 was closed without full live-control acceptance. Carry its unresolved 
 - Extend existing viewers and provide the simple runner controls/history/evidence UI; no manual takeover or agent editor.
 
 **Tests:** exact prompt text propagation, relevant references only, one physical-page image, missing/corrupt outputs, duplicate/conflicting/concurrent completion, stale results, exhausted limits and saved-success preservation after judge failure.
+
+Also verify that usable image geometry/format-label differences, preferred-length overruns and harmless extra content fields do not fail the flow. Keep required content, decoding, storage and identity checks, and retain warnings instead of silently discarding deviations.
 
 **Exit:** all Simulated booklets finish, including multi-panel layouts and failure/recovery scenarios.
 
