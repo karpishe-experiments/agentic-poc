@@ -24,7 +24,7 @@ Keep existing authentication, secret handling, production isolation, verified re
 
 ## Milestone 0 — Baseline and executable Dify control
 
-**Coverage:** AC08; prerequisites for AC01–AC06.
+**Coverage:** AC08, AC13; prerequisites for AC01–AC06 and AC11–AC12.
 
 - Pin Ali's source and inspect reusable Booklet services, schemas, jobs, asset storage and prior Dify contracts.
 - Verify workspace identity/capacity, usable model bindings, reference-image inputs, output retrieval and configuration snapshots.
@@ -32,22 +32,49 @@ Keep existing authentication, secret handling, production isolation, verified re
 - Run a deterministic disposable configuration → test → controlled failure → diagnosis → repair → publish → Workflow Tool synchronization → read-back → recovery cycle.
 - Prove a simulation branch through Dify that invokes no real provider, including manager/tester/judge behavior.
 - Audit internal agent calls and plugin retries. Establish a practical reservation boundary for every potentially paid request. If an opaque agent loop cannot obey limits, resolve its execution design before paid tests; do not count one agent run as one LLM request.
-- Record exact routes/contracts, persisted run fields, Dify suite layout, node bindings, loop/deadline/retry bounds, model IDs and token bounds before implementing their dependent slice. Preserve thirteen identifiable specialist responsibilities even if workspace capacity affects packaging.
+- Produce the detailed-plan inputs below before implementing their dependent slice. Preserve thirteen identifiable specialist responsibilities even if workspace capacity affects packaging.
 
 **Exit:** verified unattended control and simulation paths, tested capability matrix, and an implementation-ready first-slice contract. Unverified capabilities remain explicit blockers for their affected work, not claimed successes.
 
+### Access-readiness matrix
+
+For each row, record the exact environment/target, credential or session reference (never its value), check performed, dated result/evidence, and unresolved handoff/owner. Start as **unverified** until checked; earlier runbook evidence is context, not proof of current readiness. Expand rows by environment where bindings differ. Use non-billable checks first and reuse existing credentials rather than rotating them merely for this checklist.
+
+| Dependency / purpose | Environment and reference to identify | Verification and unresolved handoff |
+| --- | --- | --- |
+| Codex → Dify administration | Local MCP/CLI session, intended Cloud workspace; authorized browser fallback if needed | Verify identity, permissions, capacity and needed configuration/publication operations. Private login handoff only for the failing interface. |
+| Booklet → Dify execution | Local/staging Dify app API credential references, app IDs and published workflow/tool bindings | Exercise a deterministic non-provider path and read back the selected publication. Record any missing app credential/binding. |
+| Dify → Booklet callbacks | Local test/staging origin, callback-key reference and workflow environment binding | Verify reachability and authenticated non-mutating or disposable callback behavior. Identify any access-gate/routing gap. |
+| Dify → text/image providers | Workspace provider/plugin credential IDs and selected model bindings | Verify metadata, required capabilities and reference-image support; defer a paid capability test until its execution scope is authorized. Login or plugin authorization alone does not prove model access. |
+| Booklet → database/assets | Local/staging database identity, storage target and credential references | Read-only connectivity/target checks first; disposable write/read checks within authorized test scope. Record missing access without revealing connection strings. |
+| Repository and staging delivery | GitHub session/workflow permissions and existing deployment credential references (including VPS/SSH/Access where consumed) | Verify repository access and sanitized existing deployment preflight; identify missing bindings before deployment. Do not initiate host mutation to test login. |
+| Operator execution authority | Current-session browser topic, exact reset targets, deployment environment and paid-test scope/limits | Record existing authorization and remaining handoffs separately from technical connectivity. Honor existing grants; obtain only missing scope before its action. |
+
+Missing access blocks only the dependent operation. Continue independent documentation, local code and simulated tests where possible. Credential entry remains private. Browser/computer-control authorization is valid only for its approved topic in the current chat session; a saved matrix entry does not carry that permission into a later session. This matrix is an operating checklist, not a new account/permission system, and does not grant deployment, reset or paid-call authority.
+
+### Outputs for the detailed implementation plan
+
+- **Dify suite:** app/workflow packaging, invocation paths, specialist bindings, publication/tool synchronization and recovery path.
+- **Creator interaction:** persona defaults, grouped review, delegation creation/change/revocation, escalation and exact-version acceptance behavior.
+- **Application/data:** concrete interfaces, run/artifact/approval/delegation records, source lineage and persistence changes; retire old agent-management dependencies.
+- **Execution:** simulation branches, provider reservations/accounting, internal step bounds and uncertain-outcome recovery.
+- **Models:** verified model IDs, token limits, plugin retry behavior and configured retry/deadline bounds.
+- **Environment:** completed access matrix for the next slice, local/staging setup, verified reset targets and deployment sequence with outstanding handoffs.
+
+Record these in the detailed plan as they are resolved, with evidence or explicit unresolved dependencies. Document preparation does not establish readiness. Later-slice details may be completed before that slice; they need not delay a runnable first slice.
+
 ## Milestone 1 — Persistent runner and narrative foundation
 
-**Coverage:** J01–J02; AC01, AC05, AC06, AC09.
+**Coverage:** J01–J02; AC01, AC05, AC06, AC09, AC11–AC12.
 
 - Add experiment-run identity, mode, persona, brief, configuration evidence, operation reservations and predecessor linkage.
 - Adapt existing booklet/artifact/version/approval records to the new graph; keep Dify configuration snapshots observational.
 - Implement run creation, inspection, Pause/Resume, tester responses, saved context and validated specialist proposals through application-owned services.
 - Implement Concept Brief and Story Outline Dify tasks with complete instructions and deterministic fixtures.
-- Separate tester approvals from manager mutations; approvals target exact saved versions.
+- Separate tester review/delegation grants from manager mutations. Record exact-version approvals through explicit review or application-validated delegation, including grouped review provenance.
 - Retire old runtime dependencies as replacement paths become usable; do not build a compatibility platform.
 
-**Tests:** contract/materializer validation, wrong role/revision, duplicate response, restart, pause with in-flight work, and persisted evidence.
+**Tests:** contract/materializer validation, wrong role/revision, duplicate response, restart, pause with in-flight work, explicit/delegated approval evidence, narrowed/revoked delegation and escalation outside scope or against the brief.
 
 **Exit:** a complete inspectable Simulated narrative slice, including creator clarification and approval.
 
@@ -58,6 +85,7 @@ Keep existing authentication, secret handling, production isolation, verified re
 - Implement draft lists, manuscript, final lists, style samples and character/location sheet packages.
 - Preserve Ali's content boundaries, required views/expressions and unchanged shared style module.
 - Add the fixed persona briefs and adaptive, persona-specific revision instructions from the PRD.
+- Group creator-facing questions/reviews according to persona involvement while completing every internal task. A grant can cover routine list/sheet decisions; each accepted version still records its provenance.
 - Implement sibling approval gates and targeted dependency invalidation, including stable-fact feedback from sheets to Final Lists.
 - Persist image authorization, outputs, source/reference roles and warning evidence using shared asset services.
 
@@ -70,7 +98,7 @@ Keep existing authentication, secret handling, production isolation, verified re
 **Coverage:** J11–J13; AC01, AC02, AC05–AC07, AC10.
 
 - Implement pagination, Page Bible and final images, including native text and persona-specific multi-panel cases.
-- Support page-by-page and ordered selected batches while retaining per-page review and approval.
+- Support page-by-page and ordered selected batches while retaining per-page inspection and explicit/delegated approval records; grouped acceptance does not erase individual page identity.
 - Add bounded safe recovery, uncertain-outcome inspection, request-limit enforcement and warning-bearing completion.
 - Add tester feedback and independent judge reporting; keep evaluation status separate from generation success.
 - Extend existing viewers and provide the simple runner controls/history/evidence UI; no manual takeover or agent editor.
@@ -83,9 +111,10 @@ Also verify that usable image geometry/format-label differences, preferred-lengt
 
 ## Milestone 4 — Simulation hardening, then Balanced acceptance
 
-**Coverage:** AC01–AC03, AC05–AC08, AC10.
+**Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
 - Complete all three simulated acceptance cases and failure scenarios before enabling real LLMs.
+- Exercise low-interaction kid/parent flows and detailed creator control, grouped reviews, changed delegation and material-conflict escalation. Assert that quality warnings cannot force an unbounded approval/revision loop.
 - Run focused unit/integration contracts, typecheck, lint, routing fixtures and fake browser checks.
 - Verify zero provider execution in simulation and zero real image execution in Balanced mode, including failure branches.
 - Obtain paid-test authorization separately. Complete all three Balanced cases within the PRD's limits, including testers and judge.
@@ -96,7 +125,7 @@ Also verify that usable image geometry/format-label differences, preferred-lengt
 
 ## Milestone 5 — Clean staging transition and Real acceptance
 
-**Coverage:** AC04–AC10.
+**Coverage:** AC04–AC13.
 
 - Confirm exact local/staging database names, asset roots and storage prefixes. Verify they cannot target production or unrelated files. Preserve a sanitized summary of the previous trial.
 - Perform required clean-baseline setup only at the verified, explicitly authorized checkpoint. If local reset is needed earlier for implementation, apply the same checkpoint then; do not delay basic local setup until Real testing.
@@ -125,7 +154,9 @@ Also verify that usable image geometry/format-label differences, preferred-lengt
 | Surface | Required proof |
 | --- | --- |
 | Specialist suite | Complete prompts/contracts/fixtures; clarification, draft and revision routing for all thirteen responsibilities. |
-| State | Exact-version approvals, sibling gates, targeted invalidation, durable lineage and restart-safe saved outputs. |
+| State | Exact-version explicit/delegated approvals, grant/change provenance, sibling gates, targeted invalidation, durable lineage and restart-safe saved outputs. |
+| Adaptive journey | All internal tasks execute while persona involvement controls visible steps; grouped reviews, delegation changes and out-of-scope escalation work. |
+| Access readiness | Environment-specific credential/session references, verified paths, authorization scope and unresolved handoffs recorded without secrets before dependent execution. |
 | Provider boundary | Reservations before calls, bounded internal steps/retries, no accidental paid branches, separate actual/estimated/unavailable usage. |
 | Recovery | Safe idempotent retries, concurrent completion, interrupted upload/storage, unknown outcome inspection and no automatic duplicate paid work. |
 | UI | Mode/persona launch, progress, warnings, Pause/Resume, artifacts/images and failure/report inspection in browser tests. |
