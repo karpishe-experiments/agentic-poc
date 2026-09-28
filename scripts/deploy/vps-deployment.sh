@@ -401,6 +401,14 @@ dify_service_records() {
     if length == 1 and (.[0] | type) == "array" then .[0] else . end
   '
 }
+dify_service_records_are_ready() {
+  jq -e '
+    length > 0 and all(.[];
+      (.Service == "init_permissions" and .State == "exited" and .ExitCode == 0) or
+      (.Service != "init_permissions" and .State == "running" and ((.Health // "") == "" or .Health == "healthy"))
+    )
+  ' >/dev/null
+}
 dify_install_preflight() {
   local cpu_count memory_mib available_mib free_gib expected_host
   for name in docker curl tar sha256sum jq python3 awk df nproc flock ss stat readlink install hostname uname sort; do need_command "$name"; done
@@ -543,15 +551,25 @@ dify_validate_compose() {
   ' "$resolved" >/dev/null || die 'Resolved Dify Compose configuration has unpinned images or exposed internal ports'
 }
 dify_verify_services() {
-  local expected_services actual_services
+  local expected_services actual_services records deadline
   [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]] || die 'Dify configuration or release files are missing'
   dify_validate_compose
   expected_services="$(dify_compose config --services | sort)"
-  actual_services="$(dify_service_records | jq -r '.[].Service' | sort)"
-  [[ -n "$expected_services" && "$actual_services" == "$expected_services" ]] || die 'Dify service set is incomplete or contains unexpected containers'
-  dify_service_records | jq -e 'length > 0 and all(.[]; ((.State == "running" and .Health != "unhealthy") or (.Service == "init_permissions" and .State == "exited" and .ExitCode == 0)))' >/dev/null || die 'Dify has an unhealthy or stopped service'
-  curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/ || die 'Dify loopback HTTP check failed'
-  printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running\n'
+  [[ -n "$expected_services" ]] || die 'Resolved Dify service set is empty'
+  deadline=$((SECONDS + 180))
+  while ((SECONDS < deadline)); do
+    records="$(dify_service_records)"
+    actual_services="$(jq -r '.[].Service' <<< "$records" | sort)"
+    if [[ "$actual_services" == "$expected_services" ]] &&
+      dify_service_records_are_ready <<< "$records" &&
+      curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/; then
+      printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running\n'
+      return
+    fi
+    sleep 3
+  done
+  printf 'failed: Dify readiness state %s\n' "$(jq -c '[.[] | {service:.Service,state:.State,health:(.Health // ""),exitCode:(.ExitCode // null)}]' <<< "$records")" >&2
+  die 'Dify did not become ready within 180 seconds'
 }
 dify_check_host() {
   [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Dify 1.17.1 is not recorded as installed'
@@ -592,7 +610,7 @@ dify_install_host() {
   set_step pulling
   jq -r '.images[]' "$ROOT/dify/release.json" | sort -u | while IFS= read -r image; do docker pull "$image" >/dev/null; done
   set_step starting
-  dify_compose up -d --wait --wait-timeout 180 >/dev/null
+  dify_compose up -d >/dev/null
   dify_verify_services
   printf '%s\n' 1.17.1 > "$DIFY_DATA/current.next"
   mv "$DIFY_DATA/current.next" "$DIFY_DATA/current"

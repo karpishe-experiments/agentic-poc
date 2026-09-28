@@ -14,6 +14,15 @@ dify_compose() { printf '\''[{"Service":"api"},{"Service":"web"}]\n'\''; }
 [[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
 dify_compose() { printf '\''{"Service":"api"}\n{"Service":"web"}\n'\''; }
 [[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
+printf '\''[{"Service":"init_permissions","State":"exited","ExitCode":0},{"Service":"worker_beat","State":"running","Health":""}]\n'\'' | dify_service_records_are_ready
+if printf '\''[{"Service":"worker_beat","State":"running","Health":"starting"}]\n'\'' | dify_service_records_are_ready; then
+  echo "accepted a service whose healthcheck is still starting" >&2
+  exit 1
+fi
+if printf '\''[{"Service":"worker_beat","State":"exited","ExitCode":1,"Health":""}]\n'\'' | dify_service_records_are_ready; then
+  echo "accepted a stopped long-running service" >&2
+  exit 1
+fi
 ' _ "$script"
 persistent_fixture="$(mktemp -d)"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '

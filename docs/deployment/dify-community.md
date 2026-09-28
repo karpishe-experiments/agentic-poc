@@ -112,6 +112,11 @@ and workspace to its pinned image user (`1000:1000`). It preserves an existing
 regular sandbox configuration file. A symlink or non-file at that path blocks
 startup.
 
+Startup uses a bounded application readiness check after Compose starts the
+services. Running services without an upstream healthcheck, such as
+`worker_beat`, are accepted; configured healthchecks must report healthy, and
+the `init_permissions` one-shot service must exit successfully.
+
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,
 or credential-bearing logs in Actions summaries. Do not replace generated
