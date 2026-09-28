@@ -39,7 +39,7 @@ run "deployment_contract" {
     error_message = "Preserve current assets and expire recovery archives after 30 days."
   }
 }
-run "dify_public_after_private_setup" {
+run "dify_public_route_enabled" {
   command = plan
   variables { dify_public_enabled = true }
   assert {

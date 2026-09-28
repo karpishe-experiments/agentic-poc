@@ -15,8 +15,10 @@ a destructive restore. Booklet staging and production remain independent.
   `/opt/kids-booklet/dify/releases/1.17.1`; private configuration
   `/etc/kids-booklet/dify`; persistent data `/var/lib/kids-booklet/dify`.
 - Only nginx may publish a host port: `127.0.0.1:3300`. The Cloudflare Tunnel
-  route is initially a 503 maintenance response. The public origin is
-  `https://dify.uniwares.co.uk` only after private administrator setup.
+  route starts as a 503 maintenance response. For this installation, the
+  operator accepted the short first-administrator exposure window and enabled
+  `https://dify.uniwares.co.uk` before setup. Complete setup immediately after
+  the route becomes live.
 - Existing host observation is in [`infra/config/vps.json`](../../infra/config/vps.json):
   Ubuntu 24.04 x86_64, 16 vCPU, 15,611 MiB RAM, 13,608 MiB available,
   140 GiB free disk, Docker 27.0.3, Compose 2.28.1, no listener on 3300
@@ -61,9 +63,9 @@ Terraform; VPS through the restricted dispatcher for installation. A push to
 `master` runs an infrastructure preview only; select the manual Infrastructure
 `apply` input at this checkpoint. Verify the Terraform plan is additive: one
 Dify Tunnel hostname and one dedicated backup R2 bucket, with no Booklet
-resource replacement. Leave
-`dify_public_enabled=false` during initial setup. The backup bucket needs
-separately scoped credentials before backups can be enabled.
+resource replacement. Keep `dify_public_enabled=false` until the operator
+approves either private setup or the bounded public setup window. The backup
+bucket needs separately scoped credentials before backups can be enabled.
 
 Infrastructure reads the Dify hostname, backup bucket, and public-route switch
 from the reviewed `infra/config/vps.json` before Terraform runs. Host
@@ -136,24 +138,27 @@ internal keys on update: encrypted data depends on them.
 Reuse the existing deploy SSH and Cloudflare access credentials. Do not reuse
 Booklet database, asset-bucket, or Cloud experiment credentials.
 
-## Checkpoint 3 — private administrator setup
+## Checkpoint 3 — administrator setup
 
-Execution machine: operator browser over an existing administrator SSH
-connection that permits a private localhost port forward; the public Tunnel
-still returns maintenance. The restricted `kids-booklet-deploy` key has
-`restrict` and cannot forward ports. Verify a separate administrator path
-before installation; do not weaken the deployment key or expose Dify setup
-publicly to work around this handoff. Create the owner and one second
+The default is an operator browser over an existing administrator SSH
+connection that permits a private localhost port forward while the public
+Tunnel returns maintenance. Because Dify's frontend uses its configured public
+API origin, localhost browser setup requires a matching temporary origin or a
+direct localhost API bootstrap. For this installation, the operator instead
+accepted the low-risk public setup window. Terraform routes the final HTTPS
+origin to Dify, and the operator must create the first administrator
+immediately. The restricted `kids-booklet-deploy` key remains unchanged.
+
+Create the owner and one second
 developer in a single workspace, with separate accounts. Disable public
 registration and extra workspace creation. Deliver invitation links privately;
 SMTP is deferred. Verify login/logout, roles, file upload/download, workflow
 editor, plugin catalogue, and New Agent configuration without a model call.
 Set up password recovery privately and record the administrative command used
-for this pinned release without putting a password in shell history. Only then
-review the Terraform switch that enables the HTTPS Tunnel route. Check secure
+for this pinned release without putting a password in shell history. Check secure
 cookies, streaming, WebSockets, upload/download, and no caching of dynamic
-responses. If initial setup or routing fails, keep the 503 route and inspect
-localhost health and Tunnel logs; do not expose setup to the public internet.
+responses. If initial setup or routing fails before an administrator exists,
+restore the 503 route and inspect localhost health and Tunnel logs.
 
 ## Checkpoint 4 — developer control
 

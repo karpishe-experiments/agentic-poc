@@ -32,7 +32,7 @@ This table records the accepted baseline. Use current workflow summaries and hos
 | Staging hostname | `booklet-staging.uniwares.co.uk` |
 | Production hostname | `booklet.uniwares.co.uk` |
 | Deployment hostname | `srv1-deploy.uniwares.co.uk` |
-| Planned Dify hostname | `dify.uniwares.co.uk` (maintenance route until private setup) |
+| Dify hostname | `dify.uniwares.co.uk` (public bootstrap explicitly approved; create the first administrator immediately after activation) |
 | Atlas project | `6a869d84e65675f845fa22eb` |
 | Atlas cluster | `kids-booklet`, Ireland (`eu-west-1`) |
 | Staging database | `kids_booklet` |
