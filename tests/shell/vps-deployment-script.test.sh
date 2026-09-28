@@ -47,6 +47,7 @@ printf "{\"images\":{}}" > "$ROOT/dify/release.json"
 dify_install_preflight() { :; }
 dify_prepare_directories() { :; }
 dify_prepare_release() { :; }
+dify_prepare_persistent_files() { :; }
 dify_prepare_environment() { :; }
 dify_validate_compose() { :; }
 set_step() { :; }
