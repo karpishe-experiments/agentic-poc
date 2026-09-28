@@ -10,4 +10,4 @@ output "deployment_client_secret" {
   sensitive = true
 }
 output "access_application_id" { value = cloudflare_zero_trust_access_application.deployment.id }
-output "hostnames" { value = { staging = var.staging_hostname, prod = var.prod_hostname, deploy = var.deploy_hostname } }
+output "hostnames" { value = { staging = var.staging_hostname, prod = var.prod_hostname, deploy = var.deploy_hostname, dify = var.dify_hostname } }

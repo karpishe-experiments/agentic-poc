@@ -8,6 +8,34 @@ if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null;
   exit 1
 fi
 bash "$script" --help >/dev/null
+installation_root="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_DATA="$2"; ROOT="$2"
+mkdir -p "$ROOT/dify"
+printf "{\"images\":{}}" > "$ROOT/dify/release.json"
+dify_install_preflight() { :; }
+dify_prepare_directories() { :; }
+dify_prepare_release() { :; }
+dify_prepare_environment() { :; }
+dify_validate_compose() { :; }
+set_step() { :; }
+save_success() { :; }
+dify_compose() { printf "started\n" >> "$DIFY_DATA/starts"; }
+dify_verify_services() { die "simulated readiness failure"; }
+set +e
+(set -e; dify_install_host) 2>/dev/null
+result=$?
+set -e
+[[ "$result" != 0 && ! -f "$DIFY_DATA/current" ]]
+dify_verify_services() { :; }
+dify_install_host
+[[ "$(cat "$DIFY_DATA/current")" == 1.17.1 ]]
+[[ "$(wc -l < "$DIFY_DATA/starts")" == 2 ]]
+dify_install_host
+[[ "$(wc -l < "$DIFY_DATA/starts")" == 2 ]]
+' _ "$script" "$installation_root"
+rm -rf "$installation_root"
 ! grep -q 'gh pr create' "$script"
 grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
 grep -q 'grep -E' "$workflow"
@@ -60,6 +88,19 @@ test "$(grep -Fc 'commits/$GITHUB_REF_NAME' .github/workflows/deploy.yml)" = 2
 ! grep -q 'compare/.*master_sha' .github/workflows/deploy.yml
 grep -q 'REQUEST_ID:.*github.run_id' .github/workflows/infrastructure.yml
 grep -q 'retained infrastructure journal' .github/workflows/infrastructure.yml
+grep -Fq "inputs.apply && '--apply' || ''" .github/workflows/infrastructure.yml
+! grep -Fq "github.event_name == 'push' || inputs.apply" .github/workflows/infrastructure.yml
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+fixture="$(jq -n '\''{services:{app:{environment:{OPENAI_API_KEY:"test",MONGODB_URI:"mongodb://example",ACCESS_GATE_PASSWORD:"sixteen-characters",AWS_ACCESS_KEY_ID:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",AWS_SECRET_ACCESS_KEY:("a"*64),DIFY_COMMUNITY_PROBE_ENABLED:"true",DIFY_COMMUNITY_BASE_URL:"https://dify.uniwares.co.uk",DIFY_COMMUNITY_WORKFLOW_API_KEY:"test-runtime-key",DIFY_COMMUNITY_CALLBACK_KEY:("b"*32)}}}}'\'')"
+fixture_file="$(mktemp)"; trap '\''rm -f "$fixture_file"'\'' EXIT
+printf "%s" "$fixture" > "$fixture_file"
+application_secret_override_is_valid "$fixture_file"
+printf "%s" "$fixture" | jq '\''.services.app.environment.DIFY_COMMUNITY_CALLBACK_KEY="short"'\'' > "$fixture_file"
+if application_secret_override_is_valid "$fixture_file"; then
+  printf "accepted a short Community callback key\n" >&2; exit 1
+fi
+' _ "$script"
 for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
   grep -q 'uses: ./.github/workflows/vps-operation.yml' "$reusable_caller"
 done
@@ -85,6 +126,117 @@ reject --action github-login
 reject --action credential-session --apply
 reject --action clear-credential-session --apply
 reject --action access-check --apply
+reject --action dify-discover --apply
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; ACTION=dify-discover; VPS_USER=kids-booklet-deploy; APPLY=false; validate_arguments' _ "$script"
+reject --action dify-install --environment staging
+reject --action backup --environment dify
+reject --action dify-check --environment dify --apply
+reject --action dify-idle --environment dify --apply
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+CONFIG_FILE="$REPO_ROOT/infra/config/vps.json"
+load_config
+unset TF_VAR_dify_hostname TF_VAR_dify_backup_bucket TF_VAR_dify_public_enabled
+load_terraform_configuration
+test "$TF_VAR_dify_hostname" = dify.uniwares.co.uk
+test "$TF_VAR_dify_backup_bucket" = kids-booklet-dify-backups
+test "$TF_VAR_dify_public_enabled" = "$(jq -r .dify_public_enabled "$CONFIG_FILE")"
+bash -c '\''test "$TF_VAR_dify_hostname" = dify.uniwares.co.uk && [[ "$TF_VAR_dify_public_enabled" =~ ^(true|false)$ ]]'\''
+private_temp
+jq '\''.dify_public_enabled=true'\'' "$CONFIG_FILE" > "$TEMP_DIR/public-config.json"
+CONFIG_FILE="$TEMP_DIR/public-config.json"
+load_terraform_configuration
+bash -c '\''test "$TF_VAR_dify_public_enabled" = true'\''
+' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$(mktemp -d)"
+fixture="$TEMP_DIR/host"; mkdir -p "$fixture/deploy" "$fixture/state"
+cp "$REPO_ROOT/infra/config/vps.json" "$fixture/config.json"
+printf "{\"requestId\":\"issue69-upgrade\",\"action\":\"infrastructure\"}" > "$fixture/state/operation.json"
+REQUEST_ID=issue69-upgrade; VPS_HOST=example.invalid; VPS_USER=kids-booklet-deploy
+configure_ssh() { :; }
+ssh() {
+  local received="$TEMP_DIR/received.tar"
+  cat > "$received"
+  if [[ ! -f "$fixture/vps-deployment.sh" ]]; then
+    # The previous dispatcher admits exactly these five paths before replacing itself.
+    printf "%s\n" deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/legacy-expected"
+    tar -tf "$received" | sort > "$TEMP_DIR/received-paths"
+    cmp "$TEMP_DIR/legacy-expected" "$TEMP_DIR/received-paths" || return 1
+    tar -xOf "$received" scripts/deploy/vps-deployment.sh > "$fixture/vps-deployment.sh"
+  else
+    VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '\''
+      source "$1/vps-deployment.sh"
+      ROOT="$1"; STATE="$1/state"; TEMP_DIR=""
+      require_root() { :; }
+      SSH_ORIGINAL_COMMAND="--action sync-host --request-id issue69-upgrade --apply"
+      host_dispatch
+    '\'' _ "$fixture" < "$received" || return $?
+  fi
+}
+sync_host_configuration
+cmp "$REPO_ROOT/deploy/dify/release.json" "$fixture/dify/release.json"
+cmp "$REPO_ROOT/deploy/dify/compose.override.yml" "$fixture/dify/compose.override.yml"
+test -f "$fixture/state/operation.json"
+# Repeating the upgrade also works with the new dispatcher already installed.
+sync_host_configuration
+calls=0
+ssh() { calls=$((calls + 1)); return 42; }
+if sync_host_configuration; then exit 1; else test "$?" = 42; fi
+test "$calls" = 1
+' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; ACTION=dify-install; ENVIRONMENT=dify; VPS_USER=kids-booklet-deploy; APPLY=true; validate_arguments' _ "$script"
+idle_result="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"
+printf "DIFY_AGENT_REDIS_PREFIX=dify-agent\n" > "$DIFY_ENV"; touch "$DIFY_DATA/current"
+dify_compose() {
+  case "$*" in
+    *db_postgres*) printf "0\n" ;;
+    *"--scan"*) printf "dify-agent:runs:00000000-0000-4000-8000-000000000069:record\n" ;;
+    *" GET "*) printf "{\"status\":\"succeeded\"}\n" ;;
+    *) return 1 ;;
+  esac
+}
+dify_idle_host
+' _ "$script")"
+grep -Fq 'verified: no active Dify workflow or New Agent records' <<< "$idle_result"
+if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"
+printf "DIFY_AGENT_REDIS_PREFIX=dify-agent\n" > "$DIFY_ENV"; touch "$DIFY_DATA/current"
+dify_compose() {
+  case "$*" in
+    *db_postgres*) printf "1\n" ;;
+    *"--scan"*) : ;;
+    *) return 1 ;;
+  esac
+}
+dify_idle_host
+' _ "$script" >/dev/null 2>&1; then
+  echo 'Dify idle check accepted an active workflow' >&2
+  exit 1
+fi
+for agent_record in '{"status":"running"}' '{"status":"unexpected"}' 'not-json'; do
+  if DIFY_AGENT_RECORD="$agent_record" VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+  source "$1"
+  TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"
+  printf "DIFY_AGENT_REDIS_PREFIX=dify-agent\n" > "$DIFY_ENV"; touch "$DIFY_DATA/current"
+  dify_compose() {
+    case "$*" in
+      *db_postgres*) printf "0\n" ;;
+      *"--scan"*) printf "dify-agent:runs:00000000-0000-4000-8000-000000000069:record\n" ;;
+      *" GET "*) printf "%s\n" "$DIFY_AGENT_RECORD" ;;
+      *) return 1 ;;
+    esac
+  }
+  dify_idle_host
+  ' _ "$script" >/dev/null 2>&1; then
+    echo 'Dify idle check accepted an active or malformed New Agent record' >&2
+    exit 1
+  fi
+done
 source_option_check="$(bash -c 'set +e +u +o pipefail; VPS_DEPLOYMENT_LIBRARY_ONLY=true source "$1"; [[ $(set -o | awk "\$1==\"errexit\" {print \$2}") == off && $(set -o | awk "\$1==\"nounset\" {print \$2}") == off && $(set -o | awk "\$1==\"pipefail\" {print \$2}") == off ]]' _ "$script"; printf %s "$?")"
 test "$source_option_check" = 0
 credential_session_check="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef AWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; main --action credential-session; test "$CLOUDFLARE_API_TOKEN" = temporary-cloudflare-token; test "$TF_VAR_cloudflare_api_token" = temporary-cloudflare-token; clear_credential_session; test -z "${CLOUDFLARE_API_TOKEN:-}"' _ "$script")"
@@ -237,15 +389,16 @@ test "$r2_error_status" -ne 0
 grep -q 'R2 Terraform state credential check failed (HTTP 400; InvalidAccessKeyId: Access key is invalid)' <<< "$r2_error_output"
 if grep -q '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' <<< "$r2_error_output"; then echo 'R2 secret leaked through access-check error' >&2; exit 1; fi
 adoption_preview="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
-APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TF_VAR_dify_backup_bucket=kids-booklet-dify-backups
 terraform() { [[ "$*" == *"state list"* ]] && return 0; }
 cloudflare_get() { CF_STATUS=200; }
 adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
-test "$(grep -c "would update: adopt existing R2 bucket" <<< "$adoption_preview")" = 6
+test "$(grep -c "would update: adopt existing R2 bucket" <<< "$adoption_preview")" = 7
 grep -q 'kids-booklet-staging-assets' <<< "$adoption_preview"
 grep -q 'kids-booklet-prod-recovery' <<< "$adoption_preview"
+grep -q 'kids-booklet-dify-backups' <<< "$adoption_preview"
 adoption_apply="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
-APPLY=true; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+APPLY=true; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TF_VAR_dify_backup_bucket=kids-booklet-dify-backups
 r2_state_snapshot() { printf "snapshot\\n"; }
 terraform() {
   if [[ "$2" == state && ( "$3" == list || "$3" == show ) ]]; then return 0; fi
@@ -254,14 +407,15 @@ terraform() {
 }
 cloudflare_get() { CF_STATUS=200; }
 adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
-test "$(grep -c '^updated: adopted existing R2 bucket' <<< "$adoption_apply")" = 6
+test "$(grep -c '^updated: adopted existing R2 bucket' <<< "$adoption_apply")" = 7
 test "$(grep -c '^snapshot$' <<< "$adoption_apply")" = 1
-test "$(grep -c '^import:' <<< "$adoption_apply")" = 6
+test "$(grep -c '^import:' <<< "$adoption_apply")" = 7
 grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-staging-assets"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-staging-assets/default' <<< "$adoption_apply"
 grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-prod-recovery"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-prod-recovery/default' <<< "$adoption_apply"
+grep -Fq 'cloudflare_r2_bucket.dify_backup aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-dify-backups/default' <<< "$adoption_apply"
 set +e
 adoption_drift_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
-APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TF_VAR_dify_backup_bucket=kids-booklet-dify-backups
 terraform() { [[ "$2" == state && "$3" == list ]] && printf "%s\\n" "cloudflare_r2_bucket.bucket[\"kids-booklet-staging-assets\"]"; }
 cloudflare_get() { CF_STATUS=404; }
 adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script" 2>&1)"
@@ -327,6 +481,7 @@ reject --action status --vps-host 'host;id'
 terraform_apply_path="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"
 REPO_ROOT="$2"
+CONFIG_FILE="$REPO_ROOT/infra/config/vps.json"
 APPLY=true
 GITHUB_ACTIONS=true
 GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -342,6 +497,7 @@ sync_host_configuration() { printf "host:sync\n"; }
 r2_state_snapshot() { [[ -x "$1" ]]; printf "snapshot:%s\n" "$2"; }
 terraform() {
   local directory="${1#-chdir=}" output argument
+  [[ "$TF_VAR_dify_hostname" == dify.uniwares.co.uk && "$TF_VAR_dify_backup_bucket" == kids-booklet-dify-backups && "$TF_VAR_dify_public_enabled" =~ ^(true|false)$ ]] || return 92
   shift
   [[ -d "$directory" && -x "$directory" ]] || { printf "workspace is not traversable\n" >&2; return 90; }
   case "$1" in

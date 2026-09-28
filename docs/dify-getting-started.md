@@ -194,3 +194,16 @@ tool discovery, and each interface's authentication outcome. For revocation, ins
 only the intended session with authorization. Local logout/file deletion alone is
 not proof of server-side revocation. Continue with the runbook's disposable probes
 only after access succeeds; onboarding alone does not satisfy all of issue #66.
+
+## Community instance (issue #69)
+
+The steps above target Dify Cloud. The candidate Community instance has a
+different host, workspace, and credentials; it is **not live-verified yet**.
+Follow the [Community deployment runbook](deployment/dify-community.md) after
+its private administrator-setup checkpoint. Keep a separate `difyctl` profile
+and separate `DIFYWF_HOME` state directory for `https://dify.uniwares.co.uk`.
+Verify the intended Community workspace with read-only CLI and MCP inventory
+after a fresh Codex restart. Do not copy Cloud cookies, CLI tokens, Booklet
+callback keys, or provider credentials into the Community profile. The CLI
+device login and MCP bridge login are independent. A successful login to one
+host does not prove access to the other or authorize a provider call.
