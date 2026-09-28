@@ -29,7 +29,7 @@ variable "dify_backup_bucket" {
 variable "dify_public_enabled" {
   type        = bool
   default     = false
-  description = "Keep Dify public routing in maintenance until private administrator setup is complete."
+  description = "Route the Dify hostname to localhost:3300 when the reviewed configuration enables public access."
 }
 variable "deploy_hostname" {
   type = string

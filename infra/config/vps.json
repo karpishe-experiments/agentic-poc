@@ -5,7 +5,7 @@
   "cloudflare_zone_id": "68aa89fafe2e8f40c6cf028ff83dd6d0",
   "deploy_hostname": "srv1-deploy.uniwares.co.uk",
   "dify_hostname": "dify.uniwares.co.uk",
-  "dify_public_enabled": false,
+  "dify_public_enabled": true,
   "dify_backup_bucket": "kids-booklet-dify-backups",
   "host_observation": {
     "observed_on": "2026-09-28",

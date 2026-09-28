@@ -22,7 +22,15 @@ Compose merges base, environment overlay, root-only secret JSON, and image overr
 
 Tunnel and Access tokens are sensitive Terraform outputs and are present in protected remote state. Before and after each apply, the script writes a separately keyed state snapshot, verifies its bytes, and protects the `snapshots/` prefix with a 30-day R2 lock. If an interrupted apply created one of the six exact Booklet R2 buckets or the dedicated Dify backup bucket but did not record it in application state, preview reports it and apply snapshots then adopts only that exact bucket before creating a new plan. It never adopts another resource. The Dify backup bucket has no object-age lifecycle rule: restic retention and pruning must own its objects. Do not publish Terraform state, full outputs, saved plans, or snapshots. Application secrets never enter Terraform.
 
-The Dify hostname is a separate Tunnel and DNS target. Its route stays on `http_status:503` until `dify_public_enabled` is explicitly changed after private administrator setup; when enabled, it points only to `localhost:3300`. Dify responses bypass caching. The Booklet API rate rule remains scoped to the Booklet hostnames. The `host_observation` in `infra/config/vps.json` is a dated, non-secret capacity snapshot, not a live installation pass.
+The Dify hostname is a separate Tunnel and DNS target. Its route stays on
+`http_status:503` through installation readiness. After that checkpoint,
+`dify_public_enabled` can change only through reviewed configuration and an
+explicit operator decision. The operator can enable a bounded public
+first-administrator window or wait until private setup is complete. When
+enabled, the route points only to `localhost:3300`. Dify responses bypass
+caching. The Booklet API rate rule remains scoped to the Booklet hostnames.
+The `host_observation` in `infra/config/vps.json` is a dated, non-secret
+capacity snapshot, not a live installation pass.
 
 The pinned Community release and override are in `deploy/dify/`. They are a
 candidate until resolved Compose, image pulls, startup, and restoration pass
