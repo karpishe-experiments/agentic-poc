@@ -106,6 +106,12 @@ journal and containers before `resume`; a missing response is not proof of
 failure. Do not delete release/data directories to retry. Docker upgrades or
 host restarts require a separate shared-host checkpoint.
 
+Before startup, the installer copies the pinned sandbox `config.yaml` into an
+empty persistent configuration directory and assigns the Agent sandbox home
+and workspace to its pinned image user (`1000:1000`). It preserves an existing
+regular sandbox configuration file. A symlink or non-file at that path blocks
+startup.
+
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,
 or credential-bearing logs in Actions summaries. Do not replace generated

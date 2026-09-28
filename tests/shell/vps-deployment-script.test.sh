@@ -15,6 +15,29 @@ dify_compose() { printf '\''[{"Service":"api"},{"Service":"web"}]\n'\''; }
 dify_compose() { printf '\''{"Service":"api"}\n{"Service":"web"}\n'\''; }
 [[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
 ' _ "$script"
+persistent_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+fixture="$2"
+DIFY_DATA="$fixture/data"; DIFY_RELEASE="$fixture/release"
+mkdir -p "$DIFY_DATA/sandbox/conf" "$DIFY_DATA/agent/home" "$DIFY_DATA/agent/workspace" "$DIFY_RELEASE/docker/volumes/sandbox/conf"
+printf "pinned sandbox config\n" > "$DIFY_RELEASE/docker/volumes/sandbox/conf/config.yaml"
+chown() { printf "%s\n" "$*" >> "$fixture/chown-args"; }
+dify_prepare_persistent_files
+grep -Fxq "pinned sandbox config" "$DIFY_DATA/sandbox/conf/config.yaml"
+grep -Fxq -- "-R 1000:1000 $DIFY_DATA/agent/home $DIFY_DATA/agent/workspace" "$fixture/chown-args"
+printf "operator-preserved config\n" > "$DIFY_DATA/sandbox/conf/config.yaml"
+dify_prepare_persistent_files
+grep -Fxq "operator-preserved config" "$DIFY_DATA/sandbox/conf/config.yaml"
+rm "$DIFY_DATA/sandbox/conf/config.yaml"
+ln -s "$fixture/outside-config" "$DIFY_DATA/sandbox/conf/config.yaml"
+if (dify_prepare_persistent_files >/dev/null 2>&1); then
+  echo "accepted dangling persistent sandbox configuration symlink" >&2
+  exit 1
+fi
+test ! -e "$fixture/outside-config"
+' _ "$script" "$persistent_fixture"
+rm -rf "$persistent_fixture"
 installation_root="$(mktemp -d)"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"
