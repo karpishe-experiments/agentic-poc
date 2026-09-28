@@ -434,6 +434,16 @@ dify_prepare_directories() {
     install -d -m 755 "$DIFY_DATA/$path"
   done
 }
+dify_prepare_persistent_files() {
+  local sandbox_config="$DIFY_RELEASE/docker/volumes/sandbox/conf/config.yaml"
+  [[ -f "$sandbox_config" && ! -L "$sandbox_config" ]] || die 'Pinned Dify sandbox configuration is missing'
+  if [[ ! -e "$DIFY_DATA/sandbox/conf/config.yaml" && ! -L "$DIFY_DATA/sandbox/conf/config.yaml" ]]; then
+    install -m 644 "$sandbox_config" "$DIFY_DATA/sandbox/conf/config.yaml"
+    printf 'created: pinned Dify sandbox configuration\n'
+  fi
+  [[ -f "$DIFY_DATA/sandbox/conf/config.yaml" && ! -L "$DIFY_DATA/sandbox/conf/config.yaml" ]] || die 'Persistent Dify sandbox configuration is not a regular file'
+  chown -R 1000:1000 "$DIFY_DATA/agent/home" "$DIFY_DATA/agent/workspace"
+}
 dify_prepare_release() {
   local source_url source_hash archive prepared
   source_url="$(jq -er .source_archive "$ROOT/dify/release.json")"
@@ -576,6 +586,7 @@ dify_install_host() {
   set_step preparing
   dify_prepare_directories
   dify_prepare_release
+  dify_prepare_persistent_files
   dify_prepare_environment
   dify_validate_compose
   set_step pulling
