@@ -24,6 +24,7 @@ describe("deployment contracts", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("options: [check, idle, install, status, resume]");
     expect(workflow).toContain('[[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"');
+    expect(workflow).toContain('args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")');
     expect(workflow).toContain("Resume requires apply.");
     expect(workflow).toContain("request_display='retained host journal'");
     expect(workflow).toContain("kids-booklet-vps-operation");

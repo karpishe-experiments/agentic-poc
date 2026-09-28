@@ -61,8 +61,7 @@ jobs:
           [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'master advanced before host contact.\n' >&2; exit 1; }
           operation="dify-$ACTION"
           [[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"
-          args=(--action "$operation" --vps-host "$VPS_HOST")
-          [[ "$ACTION" == status ]] || args+=(--environment dify)
+          args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")
           if [[ "$ACTION" == install && "$APPLY" == true ]]; then
             args+=(--request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --apply)
           elif [[ "$ACTION" == resume ]]; then

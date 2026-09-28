@@ -8,6 +8,13 @@ if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null;
   exit 1
 fi
 bash "$script" --help >/dev/null
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+dify_compose() { printf '\''[{"Service":"api"},{"Service":"web"}]\n'\''; }
+[[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
+dify_compose() { printf '\''{"Service":"api"}\n{"Service":"web"}\n'\''; }
+[[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
+' _ "$script"
 installation_root="$(mktemp -d)"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"

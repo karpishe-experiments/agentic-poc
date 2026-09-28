@@ -81,7 +81,7 @@ checkpoint:
 bash scripts/deploy/vps-deployment.sh --action dify-install --environment dify --vps-host "$VPS_HOST"
 bash scripts/deploy/vps-deployment.sh --action dify-install --environment dify --vps-host "$VPS_HOST" --request-id "$REQUEST_ID" --apply
 bash scripts/deploy/vps-deployment.sh --action dify-check --environment dify --vps-host "$VPS_HOST"
-bash scripts/deploy/vps-deployment.sh --action status --vps-host "$VPS_HOST"
+bash scripts/deploy/vps-deployment.sh --action status --environment dify --vps-host "$VPS_HOST"
 bash scripts/deploy/vps-deployment.sh --action resume --environment dify --vps-host "$VPS_HOST" --apply
 ```
 
@@ -90,6 +90,10 @@ offers the same read-only check, status, preview/apply installation, and
 explicit resume paths. It shares
 the Booklet host-operation concurrency group and rechecks the remote `master`
 commit before host contact. Do not run it from this issue branch.
+
+For a retained Dify operation, status also reports the systemd unit state and
+only the Compose service name, state, health, and exit code. It does not return
+container logs, resolved configuration, environment values, or credentials.
 
 The installer checks the reviewed source hash and enabled image digests,
 generates private internal secrets once, validates resolved Compose without
