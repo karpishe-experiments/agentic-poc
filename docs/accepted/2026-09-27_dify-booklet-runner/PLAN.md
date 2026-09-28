@@ -215,6 +215,12 @@ Maintain concise milestone evidence here as work completes: reviewed identity, c
 - A simulated path verifies contracts/orchestration, not model reasoning or visual quality. Balanced and Real remain required.
 - Fixed cast/location scope controls baseline image counts, but revisions can invalidate several images. All replacement calls still consume the same run allowance.
 - Dify/plugin hidden calls can defeat nominal call limits; unresolved enforcement blocks paid readiness.
+- Codex owns follow-up on New Agent request limits: inspect supported controls,
+  reconcile reported requests after each authorized run, and report missing usage
+  or overruns before starting a successor. Track this in M0 and recheck before
+  Balanced/Real execution. Monitoring is not a hard cap and does not silently
+  replace the PRD's reservation/enforcement requirements. Any change to that
+  contract requires an explicit decision before paid execution.
 - Exact model/token/retry settings remain a milestone-0 technical output, not invented defaults. Record and test them before paid execution.
 - The clean reset removes the need for legacy migration but does not permit broad filesystem deletion or production data changes.
 - Application and Dify changes must be verified together; publishing a workflow alone does not prove its attached tool uses that version.

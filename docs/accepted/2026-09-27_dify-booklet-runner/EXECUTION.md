@@ -24,8 +24,9 @@ Inspected baseline on 2026-09-27:
   `app.list` succeeded and returned `booklet_illustrator` and `story_writer`.
   MCP `workspace.list` also verified the intended Sandbox workspace; `snippet.list`
   succeeded with no existing snippets. `workspace.get` returned HTTP 404; use the
-  working list operation. No live write probe was performed for this package. Authentication
-  does not prove publication, recovery, capacity or provider access.
+  working list operation. This was the planning baseline; subsequent deterministic
+  write/publication/restoration results are recorded in [M0](M0-readiness.md).
+  Authentication does not prove capacity, runtime recovery or provider access.
 - Current code has eight artifact types, local runtime-agent seeds, and a
   sequential in-process job runner. These are transition work, not new-suite proof.
 - The staging reset script deletes the entire configured staging asset bucket,
@@ -106,7 +107,7 @@ and scope before marking a row granted.
 | Grant | Exact bounded scope | Current state |
 | --- | --- | --- |
 | Repository/release | Same issue branch; reviewed PRs to master and staging; wait for required CI; merge without admin bypass; staging Deploy and Check deployment; fix in-scope failures | Requested; no answer recorded |
-| Browser control | Dify administration and Booklet staging verification in the current chat only | Requested; no answer recorded |
+| Browser control | Dify administration and Booklet staging verification in the current chat only | Only read-only Dify capacity/New Agent inspection granted in this chat; edits and Booklet browser verification remain ungranted |
 | Dify writes | Create, edit, test without provider calls, publish and restore new `issue65-` probe/suite resources; existing Booklet Dify resources, credentials and workspace plan unchanged | Granted by the operator in this chat on 2026-09-27 |
 | Private setup | Login for the interface that fails; provision required suite execution keys and callback bindings privately; any direct-provider secret stays inside Dify | CLI and MCP inventory authenticated; new-suite bindings remain unverified |
 | Reset | Exact local database and resolved asset directory; exact staging database `kids_booklet` and full asset bucket after inventory/backup | Not granted for concrete targets |
