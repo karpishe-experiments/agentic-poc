@@ -22,7 +22,10 @@ describe("deployment contracts", () => {
   it("keeps Community host operations manual, serialized, and branch-fresh", () => {
     const workflow = readFileSync(".github/workflows/dify-operations.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("options: [check, idle, install]");
+    expect(workflow).toContain("options: [check, idle, install, status, resume]");
+    expect(workflow).toContain('[[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"');
+    expect(workflow).toContain("Resume requires apply.");
+    expect(workflow).toContain("request_display='retained host journal'");
     expect(workflow).toContain("kids-booklet-vps-operation");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain('"$remote_sha" == "$GITHUB_SHA"');
