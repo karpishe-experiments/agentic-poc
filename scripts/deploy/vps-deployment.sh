@@ -103,7 +103,7 @@ validate_arguments() {
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
-  elif [[ "$ENVIRONMENT" == dify && "$ACTION" != host-run && "$ACTION" != resume ]]; then
+  elif [[ "$ENVIRONMENT" == dify && "$ACTION" != host-run && "$ACTION" != resume && "$ACTION" != status ]]; then
     die 'Booklet operation cannot target Dify'
   fi
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
@@ -220,6 +220,23 @@ set_step() {
 show_operation_status() {
   if [[ -f "$STATE/operation.json" ]]; then
     jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"
+    if [[ "$(jq -r '.environment // ""' "$STATE/operation.json")" == dify ]]; then
+      local request_id active_state unit_result exit_status
+      request_id="$(jq -er .requestId "$STATE/operation.json")"
+      active_state="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$request_id.service")"
+      unit_result="$(systemctl show --property=Result --value "kids-booklet-operation-$request_id.service")"
+      exit_status="$(systemctl show --property=ExecMainStatus --value "kids-booklet-operation-$request_id.service")"
+      [[ "$active_state" =~ ^(active|activating|deactivating|reloading|failed|inactive)$ ]] || die 'Dify operation unit returned an unknown active state'
+      [[ "$unit_result" =~ ^(success|exit-code|timeout|signal|core-dump|watchdog|start-limit-hit|resources|oom-kill|protocol|)$ ]] || die 'Dify operation unit returned an unknown result'
+      [[ "$exit_status" =~ ^[0-9]+$ ]] || die 'Dify operation unit returned an invalid exit status'
+      printf 'result: Dify operation unit active=%s result=%s exit=%s\n' "$active_state" "${unit_result:-unset}" "$exit_status"
+      if [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]]; then
+        dify_service_records | jq -c -r '
+          [.[] | {service:.Service,state:.State,health:(.Health // ""),exitCode:(.ExitCode // null)}]
+          | "result: Dify services " + tojson
+        '
+      fi
+    fi
   else
     printf '{"step":"idle"}\n'
   fi
@@ -379,6 +396,11 @@ run_lifecycle() {
 dify_compose() {
   docker compose --project-name booklet-dify --env-file "$DIFY_ENV" -f "$DIFY_RELEASE/docker/docker-compose.yaml" -f "$ROOT/dify/compose.override.yml" "$@"
 }
+dify_service_records() {
+  dify_compose ps --all --format json | jq -sc '
+    if length == 1 and (.[0] | type) == "array" then .[0] else . end
+  '
+}
 dify_install_preflight() {
   local cpu_count memory_mib available_mib free_gib expected_host
   for name in docker curl tar sha256sum jq python3 awk df nproc flock ss stat readlink install hostname uname sort; do need_command "$name"; done
@@ -515,9 +537,9 @@ dify_verify_services() {
   [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]] || die 'Dify configuration or release files are missing'
   dify_validate_compose
   expected_services="$(dify_compose config --services | sort)"
-  actual_services="$(dify_compose ps --all --format json | jq -sr '.[].Service' | sort)"
+  actual_services="$(dify_service_records | jq -r '.[].Service' | sort)"
   [[ -n "$expected_services" && "$actual_services" == "$expected_services" ]] || die 'Dify service set is incomplete or contains unexpected containers'
-  dify_compose ps --all --format json | jq -s -e 'length > 0 and all(.[]; ((.State == "running" and .Health != "unhealthy") or (.Service == "init_permissions" and .State == "exited" and .ExitCode == 0)))' >/dev/null || die 'Dify has an unhealthy or stopped service'
+  dify_service_records | jq -e 'length > 0 and all(.[]; ((.State == "running" and .Health != "unhealthy") or (.Service == "init_permissions" and .State == "exited" and .ExitCode == 0)))' >/dev/null || die 'Dify has an unhealthy or stopped service'
   curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/ || die 'Dify loopback HTTP check failed'
   printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running\n'
 }
