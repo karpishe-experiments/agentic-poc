@@ -73,7 +73,8 @@ jobs:
             printf '## Dify Community operation\n\n'
             printf '| Action | Mode | Commit | Request ID | Outcome |\n| --- | --- | --- | --- | --- |\n'
             mode=preview; if [[ "$ACTION" == check || "$ACTION" == idle ]]; then mode=read-only; elif [[ "$APPLY" == true ]]; then mode=apply; fi
-            # shellcheck disable=SC2016 -- Markdown backticks are literal delimiters.
+            # Markdown backticks are literal delimiters.
+            # shellcheck disable=SC2016
             printf '| `%s` | `%s` | `%s` | `%s` | **%s** |\n\n' "$ACTION" "$mode" "$GITHUB_SHA" "$REQUEST_ID" "$OUTCOME"
             if [[ -s "$RUNNER_TEMP/dify-operation-output.txt" ]]; then
               printf '```text\n'
@@ -83,7 +84,8 @@ jobs:
               printf 'No sanitized result was produced; inspect the failed step.\n'
             fi
             if [[ "$OUTCOME" != success && "$ACTION" == install && "$APPLY" == true ]]; then
-              # shellcheck disable=SC2016 -- Markdown backticks are literal delimiters.
+              # Markdown backticks are literal delimiters.
+              # shellcheck disable=SC2016
               printf '\nInspect the host operation journal for request `%s` before resuming or retrying.\n' "$REQUEST_ID"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
