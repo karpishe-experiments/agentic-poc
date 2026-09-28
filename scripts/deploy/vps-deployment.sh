@@ -19,6 +19,9 @@ ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTP
 ROOT=/opt/kids-booklet
 STATE=/var/lib/kids-booklet
 SECRETS=/etc/kids-booklet
+DIFY_RELEASE="$ROOT/dify/releases/1.17.1"
+DIFY_DATA="$STATE/dify"
+DIFY_ENV="$SECRETS/dify/runtime.env"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEMP_DIR='' ATLAS_PLAN_FILE=''
@@ -37,7 +40,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -47,7 +50,7 @@ Options:
   --prod-hostname HOSTNAME           defaults to booklet.<zone> for discover-config
   --deploy-hostname HOSTNAME         defaults to deploy.<zone> for discover-config
   --write-config PATH                required output for discover-config; must be infra/config/vps.json
-  --environment staging|prod        target for application operations
+  --environment staging|prod|dify   target for application or Dify operations
   --image-digest ghcr.io/name@sha256:HEX  required for deploy
   --commit FULL_SHA                 required for deploy
   --backup-id ID --confirmation DB   required for restore
@@ -96,8 +99,13 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
-  [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
+  if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
+    [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
+  elif [[ "$ENVIRONMENT" == dify && "$ACTION" != host-run && "$ACTION" != resume ]]; then
+    die 'Booklet operation cannot target Dify'
+  fi
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
   [[ -z "$COMMIT" || "$COMMIT" =~ ^[a-f0-9]{40}$ ]] || die 'Commit must be a full SHA'
@@ -105,7 +113,7 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
-  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY)$ ]] || die 'Invalid application secret name'
+  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY)$ ]] || die 'Invalid application secret name'
   [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
   if [[ "$GENERATE_PASSWORD" == true ]]; then
     [[ "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets)$ ]] || die '--generate-password is only valid for application secret repair or rotation'
@@ -128,7 +136,7 @@ validate_arguments() {
   if [[ "$ACTION" == reset-staging ]]; then
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
   fi
-  case "$ACTION" in status|check|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  case "$ACTION" in status|check|dify-check|dify-idle|dify-discover|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
     [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
     [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
@@ -152,8 +160,11 @@ load_terraform_configuration() {
   TF_VAR_staging_hostname="$(jq -r .environments.staging.APP_HOSTNAME "$CONFIG_FILE")"
   TF_VAR_prod_hostname="$(jq -r .environments.prod.APP_HOSTNAME "$CONFIG_FILE")"
   TF_VAR_deploy_hostname="$(jq -r .deploy_hostname "$CONFIG_FILE")"
+  TF_VAR_dify_hostname="$(jq -er .dify_hostname "$CONFIG_FILE")"
+  TF_VAR_dify_backup_bucket="$(jq -er .dify_backup_bucket "$CONFIG_FILE")"
+  TF_VAR_dify_public_enabled="$(jq -er '.dify_public_enabled | if type == "boolean" then tostring else error("invalid Dify public switch") end' "$CONFIG_FILE")"
   R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
-  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname R2_STATE_BUCKET
+  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname TF_VAR_dify_hostname TF_VAR_dify_backup_bucket TF_VAR_dify_public_enabled R2_STATE_BUCKET
   export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
   export TF_VAR_state_bucket="$R2_STATE_BUCKET"
 }
@@ -365,6 +376,195 @@ run_lifecycle() {
     *) die 'Unsupported host lifecycle operation';;
   esac
 }
+dify_compose() {
+  docker compose --project-name booklet-dify --env-file "$DIFY_ENV" -f "$DIFY_RELEASE/docker/docker-compose.yaml" -f "$ROOT/dify/compose.override.yml" "$@"
+}
+dify_install_preflight() {
+  local cpu_count memory_mib available_mib free_gib expected_host
+  for name in docker curl tar sha256sum jq python3 awk df nproc flock ss stat readlink install hostname uname sort; do need_command "$name"; done
+  [[ -f "$ROOT/dify/release.json" && -f "$ROOT/dify/compose.override.yml" ]] || die 'Reviewed Dify release artifacts have not been synchronized to the host'
+  jq -e '.release == "1.17.1" and (.source_commit | test("^[a-f0-9]{40}$")) and (.source_archive_sha256 | test("^[a-f0-9]{64}$"))' "$ROOT/dify/release.json" >/dev/null || die 'Invalid Dify release manifest'
+  expected_host="$(jq -er '.host_observation.hostname | select(type == "string" and length > 0)' "$CONFIG_FILE")"
+  [[ "$(hostname -f)" == "$expected_host" && "$(uname -m)" == x86_64 ]] || die 'Dify target host or architecture differs from the recorded capacity observation'
+  if [[ ! -f "$DIFY_DATA/current" ]]; then
+    jq -e '.dify_public_enabled == false' "$CONFIG_FILE" >/dev/null || die 'Initial Dify installation requires the public Tunnel route to remain in maintenance'
+  fi
+  cpu_count="$(nproc)"
+  memory_mib="$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)"
+  available_mib="$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)"
+  free_gib="$(df -Pk "$STATE" | awk 'NR==2 {print int($4 / 1048576)}')"
+  [[ "$cpu_count" -ge 4 && "$memory_mib" -ge 15000 ]] || die 'Shared-host CPU or RAM is below the measured Dify installation checkpoint'
+  if [[ ! -f "$DIFY_DATA/current" ]]; then
+    [[ "$available_mib" -ge 8192 && "$free_gib" -ge 60 ]] || die 'Shared-host available RAM or disk is below the initial Dify installation checkpoint'
+  else
+    [[ "$available_mib" -ge 4096 && "$free_gib" -ge 20 ]] || die 'Insufficient headroom to resume or verify Dify installation'
+  fi
+  docker compose version --short | awk -F. '{exit !($1 > 2 || ($1 == 2 && $2 >= 28))}' || die 'Docker Compose 2.28 or newer is required for port overrides'
+  if [[ ! -f "$DIFY_DATA/current" && "$(ss -lnt '( sport = :3300 )' | wc -l)" -gt 1 ]]; then
+    [[ -n "$(docker ps -q --filter 'label=com.docker.compose.project=booklet-dify' --filter 'label=com.docker.compose.service=nginx')" ]] || die 'Port 3300 is already listening outside the Dify installation'
+  fi
+}
+dify_prepare_directories() {
+  local path
+  install -d -m 755 "$ROOT/dify/releases" "$DIFY_DATA"
+  install -d -m 700 "$SECRETS/dify"
+  for path in app/storage postgres redis sandbox/dependencies sandbox/conf agent/home agent/workspace plugin_daemon nginx/ssl nginx/certbot/live nginx/certbot/conf nginx/certbot/www weaviate; do
+    install -d -m 755 "$DIFY_DATA/$path"
+  done
+}
+dify_prepare_release() {
+  local source_url source_hash archive prepared
+  source_url="$(jq -er .source_archive "$ROOT/dify/release.json")"
+  source_hash="$(jq -er .source_archive_sha256 "$ROOT/dify/release.json")"
+  [[ "$source_url" == 'https://github.com/langgenius/dify/archive/8387590ace4a094de812b7847fc6a4c3a27cd52b.tar.gz' ]] || die 'Dify source URL differs from the reviewed release'
+  if [[ -d "$DIFY_RELEASE" ]]; then
+    [[ -f "$DIFY_RELEASE/docker/docker-compose.yaml" && -f "$DIFY_RELEASE/source-archive.sha256" && "$(<"$DIFY_RELEASE/source-archive.sha256")" == "$source_hash" ]] || die 'Existing Dify release directory has unverified or incomplete contents'
+    return
+  fi
+  private_temp
+  archive="$TEMP_DIR/dify.tar.gz"
+  curl -fsSL --retry 4 --retry-all-errors --retry-delay 2 --max-time 180 "$source_url" --output "$archive"
+  printf '%s  %s\n' "$source_hash" "$archive" | sha256sum --check --status || die 'Dify source archive checksum mismatch'
+  prepared="$TEMP_DIR/release"
+  mkdir -m 700 "$prepared"
+  tar -xzf "$archive" --strip-components=1 -C "$prepared"
+  [[ -f "$prepared/docker/docker-compose.yaml" && -f "$prepared/docker/.env.example" ]] || die 'Pinned Dify source is missing its Compose or environment template'
+  printf '%s\n' "$source_hash" > "$prepared/source-archive.sha256"
+  mv "$prepared" "$DIFY_RELEASE"
+  printf 'created: verified Dify 1.17.1 release files\n'
+}
+dify_prepare_environment() {
+  local candidate
+  [[ -f "$DIFY_ENV" ]] || {
+    private_temp
+    candidate="$TEMP_DIR/dify-runtime.env"
+    python3 - "$DIFY_RELEASE/docker/.env.example" "$candidate" "$(jq -er .dify_hostname "$CONFIG_FILE")" <<'PY'
+from pathlib import Path
+import base64
+import os
+import re
+import secrets
+import sys
+
+source, destination, hostname = sys.argv[1:]
+text = Path(source).read_text()
+origin = f"https://{hostname}"
+values = {
+    "SECRET_KEY": secrets.token_urlsafe(48),
+    "DB_PASSWORD": secrets.token_hex(32),
+    "REDIS_PASSWORD": secrets.token_hex(32),
+    "WEAVIATE_API_KEY": secrets.token_hex(32),
+    "CODE_EXECUTION_API_KEY": secrets.token_hex(32),
+    "PLUGIN_DAEMON_KEY": secrets.token_hex(32),
+    "PLUGIN_DIFY_INNER_API_KEY": secrets.token_hex(32),
+    "DIFY_AGENT_API_TOKEN": secrets.token_hex(32),
+    "DIFY_AGENT_LOCAL_SANDBOX_AUTH_TOKEN": secrets.token_hex(32),
+    "DIFY_AGENT_SERVER_SECRET_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("="),
+    "CONSOLE_API_URL": origin,
+    "CONSOLE_WEB_URL": origin,
+    "SERVICE_API_URL": origin,
+    "TRIGGER_URL": origin,
+    "APP_API_URL": origin,
+    "APP_WEB_URL": origin,
+    "FILES_URL": origin,
+    "NEXT_PUBLIC_SOCKET_URL": f"wss://{hostname}",
+    "CELERY_WORKER_AMOUNT": "1",
+    "WEAVIATE_AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED": "false",
+    "WEAVIATE_AUTHENTICATION_APIKEY_USERS": "booklet-dify",
+    "WEAVIATE_AUTHORIZATION_ADMINLIST_USERS": "booklet-dify",
+    "COMPOSE_PROFILES": "weaviate,postgresql,collaboration",
+    "FORCE_VERIFYING_SIGNATURE": "true",
+}
+values["SANDBOX_API_KEY"] = values["CODE_EXECUTION_API_KEY"]
+values["WEAVIATE_AUTHENTICATION_APIKEY_ALLOWED_KEYS"] = values["WEAVIATE_API_KEY"]
+for key, value in values.items():
+    pattern = rf"(?m)^{re.escape(key)}=.*$"
+    text, count = re.subn(pattern, lambda _: f"{key}={value}", text)
+    if count != 1:
+        raise SystemExit(f"Dify environment template is missing or duplicates {key}")
+text += "\nOPENAPI_ENABLED=true\nENABLE_OAUTH_BEARER=true\nOPENAPI_KNOWN_CLIENT_IDS=difyctl,difywf\nDIFY_AGENT_REDIS_PREFIX=dify-agent\n"
+Path(destination).write_text(text)
+PY
+    install -m 600 "$candidate" "$DIFY_ENV"
+    printf 'created: protected Dify runtime configuration\n'
+  }
+  [[ -f "$DIFY_ENV" && ! -L "$DIFY_ENV" && "$(stat -c %a "$DIFY_ENV")" == 600 && "$(stat -c %u "$DIFY_ENV")" == 0 ]] || die 'Dify runtime configuration must be a root-owned mode-600 file'
+  if [[ -L "$DIFY_RELEASE/docker/.env" ]]; then
+    [[ "$(readlink "$DIFY_RELEASE/docker/.env")" == "$DIFY_ENV" ]] || die 'Dify release environment link targets another file'
+  elif [[ ! -e "$DIFY_RELEASE/docker/.env" ]]; then
+    ln -s "$DIFY_ENV" "$DIFY_RELEASE/docker/.env"
+  else
+    die 'Dify release contains an unexpected environment file'
+  fi
+}
+dify_validate_compose() {
+  local resolved
+  private_temp
+  resolved="$TEMP_DIR/dify-compose.json"
+  dify_compose config --format json > "$resolved"
+  chmod 600 "$resolved"
+  jq -e --slurpfile release "$ROOT/dify/release.json" '
+    ([.services | to_entries[] | {key, value: .value.image}] | from_entries) == $release[0].images and
+    (.services.plugin_daemon.ports // [] | length == 0) and
+    (.services.nginx.ports | length == 1 and .[0].host_ip == "127.0.0.1" and (.[0].published | tostring) == "3300" and .[0].target == 80) and
+    ([.services | to_entries[] | select(.key != "nginx") | .value.ports[]?] | length == 0)
+  ' "$resolved" >/dev/null || die 'Resolved Dify Compose configuration has unpinned images or exposed internal ports'
+}
+dify_verify_services() {
+  local expected_services actual_services
+  [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]] || die 'Dify configuration or release files are missing'
+  dify_validate_compose
+  expected_services="$(dify_compose config --services | sort)"
+  actual_services="$(dify_compose ps --all --format json | jq -sr '.[].Service' | sort)"
+  [[ -n "$expected_services" && "$actual_services" == "$expected_services" ]] || die 'Dify service set is incomplete or contains unexpected containers'
+  dify_compose ps --all --format json | jq -s -e 'length > 0 and all(.[]; ((.State == "running" and .Health != "unhealthy") or (.Service == "init_permissions" and .State == "exited" and .ExitCode == 0)))' >/dev/null || die 'Dify has an unhealthy or stopped service'
+  curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/ || die 'Dify loopback HTTP check failed'
+  printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running\n'
+}
+dify_check_host() {
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Dify 1.17.1 is not recorded as installed'
+  dify_verify_services
+}
+dify_idle_host() {
+  local workflow_count agent_count=0 key record status
+  [[ -f "$DIFY_ENV" && -f "$DIFY_DATA/current" ]] || die 'Dify is not installed or configured'
+  grep -Fxq 'DIFY_AGENT_REDIS_PREFIX=dify-agent' "$DIFY_ENV" || die 'Dify Agent Redis prefix differs from the reviewed idle contract'
+  need_command jq
+  workflow_count="$(dify_compose exec -T db_postgres sh -c 'psql -X -A -t -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh "SELECT count(*) FROM workflow_runs WHERE status = 'running'")" || die 'Cannot inspect Dify workflow activity'
+  [[ "$workflow_count" =~ ^[0-9]+$ ]] || die 'Dify workflow activity returned an invalid count'
+  private_temp
+  dify_compose exec -T redis redis-cli -n 2 --raw --scan --pattern 'dify-agent:runs:*:record' > "$TEMP_DIR/dify-agent-keys" || die 'Cannot enumerate Dify Agent run records'
+  while IFS= read -r key; do
+    [[ "$key" =~ ^dify-agent:runs:[a-f0-9-]+:record$ ]] || die 'Dify Agent run key differs from the reviewed contract'
+    record="$(dify_compose exec -T redis redis-cli -n 2 --raw GET "$key")" || die 'Cannot inspect a Dify Agent run record'
+    status="$(jq -er '.status | select(. == "running" or . == "succeeded" or . == "failed" or . == "cancelled")' <<< "$record")" || die 'Dify Agent run record has an unknown status'
+    [[ "$status" != running ]] || agent_count=$((agent_count + 1))
+  done < "$TEMP_DIR/dify-agent-keys"
+  printf 'exists: Dify active workflows=%s active New Agent runs=%s\n' "$workflow_count" "$agent_count"
+  [[ "$workflow_count" == 0 && "$agent_count" == 0 ]] || die 'Dify still has active work; defer maintenance'
+  printf 'verified: no active Dify workflow or New Agent records at the observation point\n'
+}
+dify_install_host() {
+  dify_install_preflight
+  if [[ -f "$DIFY_DATA/current" ]]; then
+    dify_check_host
+    save_success ''
+    return
+  fi
+  set_step preparing
+  dify_prepare_directories
+  dify_prepare_release
+  dify_prepare_environment
+  dify_validate_compose
+  set_step pulling
+  jq -r '.images[]' "$ROOT/dify/release.json" | sort -u | while IFS= read -r image; do docker pull "$image" >/dev/null; done
+  set_step starting
+  dify_compose up -d --wait --wait-timeout 180 >/dev/null
+  dify_verify_services
+  printf '%s\n' 1.17.1 > "$DIFY_DATA/current.next"
+  mv "$DIFY_DATA/current.next" "$DIFY_DATA/current"
+  save_success ''
+}
 host_run() {
   require_root; need_command flock; need_command docker; need_command jq
   exec 9>"$STATE/operation.lock"
@@ -380,7 +580,32 @@ host_run() {
   recover_interrupted_rotation
   if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then BACKUP_ID=''; fi
   validate_arguments
+  if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
   run_lifecycle
+}
+dify_discover_host() {
+  for name in docker ss df nproc awk wc hostname uname paste; do need_command "$name"; done
+  local os_name memory_mib available_mib swap_mib free_gib free_inodes
+  # shellcheck disable=SC1091
+  os_name="$(. /etc/os-release; printf '%s' "${PRETTY_NAME:-unknown}")"
+  memory_mib="$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)"
+  available_mib="$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)"
+  swap_mib="$(awk '/^SwapTotal:/ {print int($2 / 1024)}' /proc/meminfo)"
+  free_gib="$(df -Pk "$STATE" | awk 'NR==2 {print int($4 / 1048576)}')"
+  free_inodes="$(df -Pi "$STATE" | awk 'NR==2 {print $4}')"
+  printf 'exists: Dify candidate host %s (%s, %s, %s CPU, %s MiB RAM, %s MiB available, %s MiB swap, %s GiB free and %s inodes free at state root)\n' "$(hostname -f)" "$os_name" "$(uname -m)" "$(nproc)" "$memory_mib" "$available_mib" "$swap_mib" "$free_gib" "$free_inodes"
+  printf 'exists: Docker %s; Compose %s\n' "$(docker --version)" "$(docker compose version --short)"
+  if [[ "$(ss -lnt '( sport = :3300 )' | wc -l)" -gt 1 ]]; then
+    printf 'failed: Dify loopback port 3300 is already listening\n'
+    return 1
+  fi
+  printf 'available: Dify loopback port 3300\n'
+  printf 'exists: running container names: '
+  docker ps --format '{{.Names}}' | paste -sd, -
+  printf 'exists: container resource observations (name, memory, restart count, OOM flag):\n'
+  docker ps -q | while IFS= read -r container_id; do
+    docker inspect --format '{{.Name}} memory_limit={{.HostConfig.Memory}} restart_count={{.RestartCount}} oom_killed={{.State.OOMKilled}}' "$container_id"
+  done
 }
 host_dispatch() {
   require_root
@@ -391,8 +616,16 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
+  if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
+  if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
+  if [[ "$ACTION" == dify-idle ]]; then dify_idle_host; exit 0; fi
+  if [[ "$ACTION" == dify-install && "$APPLY" == false ]]; then
+    dify_install_preflight
+    if [[ -f "$DIFY_DATA/current" ]]; then printf 'exists: pinned Dify 1.17.1 installation\n'; else printf 'would create: pinned Dify 1.17.1 installation\n'; fi
+    exit 0
+  fi
   if [[ "$ACTION" == status ]]; then
     show_operation_status
     exit 0
@@ -451,16 +684,27 @@ host_dispatch() {
     dd of="$TEMP_DIR/host-bundle.tar" bs=1M count=5 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Host configuration bundle exceeds 5 MiB'; fi
     tar -tf "$TEMP_DIR/host-bundle.tar" | sort > "$TEMP_DIR/contents"
-    printf '%s\n' deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/expected"
-    cmp -s "$TEMP_DIR/contents" "$TEMP_DIR/expected" || die 'Host configuration bundle has unexpected contents'
+    local includes_dify=false
+    printf '%s\n' deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/legacy-expected"
+    printf '%s\n' deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml deploy/dify/compose.override.yml deploy/dify/release.json infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/expected"
+    if cmp -s "$TEMP_DIR/contents" "$TEMP_DIR/expected"; then includes_dify=true
+    else cmp -s "$TEMP_DIR/contents" "$TEMP_DIR/legacy-expected" || die 'Host configuration bundle has unexpected contents'; fi
     tar -xf "$TEMP_DIR/host-bundle.tar" -C "$TEMP_DIR"
     bash -n "$TEMP_DIR/scripts/deploy/vps-deployment.sh"
+    if [[ "$includes_dify" == true ]]; then
+      jq -e '.release == "1.17.1" and (.source_commit | test("^[a-f0-9]{40}$")) and (.source_archive_sha256 | test("^[a-f0-9]{64}$")) and (.images | all(.[]; test("@sha256:[a-f0-9]{64}$")))' "$TEMP_DIR/deploy/dify/release.json" >/dev/null || die 'Invalid pinned Dify release manifest'
+    fi
     local staged_config="$TEMP_DIR/infra/config/vps.json" original_config="$CONFIG_FILE"
     CONFIG_FILE="$staged_config"; load_config; CONFIG_FILE="$original_config"
     install -m 755 "$TEMP_DIR/scripts/deploy/vps-deployment.sh" "$ROOT/vps-deployment.sh.next"
     mv "$ROOT/vps-deployment.sh.next" "$ROOT/vps-deployment.sh"
     local compose_file
     for compose_file in "$TEMP_DIR/deploy/"*.yml; do install -m 644 "$compose_file" "$ROOT/deploy/$(basename "$compose_file").next"; mv "$ROOT/deploy/$(basename "$compose_file").next" "$ROOT/deploy/$(basename "$compose_file")"; done
+    if [[ "$includes_dify" == true ]]; then
+      install -d -m 755 "$ROOT/dify"
+      install -m 644 "$TEMP_DIR/deploy/dify/release.json" "$ROOT/dify/release.json.next"; mv "$ROOT/dify/release.json.next" "$ROOT/dify/release.json"
+      install -m 644 "$TEMP_DIR/deploy/dify/compose.override.yml" "$ROOT/dify/compose.override.yml.next"; mv "$ROOT/dify/compose.override.yml.next" "$ROOT/dify/compose.override.yml"
+    fi
     install -m 600 "$staged_config" "$ROOT/config.json.next"; mv "$ROOT/config.json.next" "$ROOT/config.json"
     printf 'updated: reviewed host configuration installed\n'; exit 0
   fi
@@ -491,7 +735,9 @@ host_dispatch() {
     old_id="$(jq -r .requestId "$STATE/operation.json")"
     if systemctl is-active --quiet "kids-booklet-operation-$old_id.service"; then die 'Previous service remains active'; fi
     [[ "$(jq -r .environment "$STATE/operation.json")" == "$ENVIRONMENT" ]] || die 'Interrupted operation belongs to another environment'
-    [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.oneoff=True')" ]] || die 'Maintenance containers remain active'
+    local compose_project="kids-booklet-$ENVIRONMENT"
+    [[ "$ENVIRONMENT" != dify ]] || compose_project=booklet-dify
+    [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=$compose_project" --filter 'label=com.docker.compose.oneoff=True')" ]] || die 'Maintenance containers remain active'
     # Retry the exact recorded operation. In particular, never clear maintenance
     # over a partially restored database merely because the old image starts.
     REQUEST_ID="$old_id"
@@ -553,7 +799,7 @@ validate_plan() {
   local json="$1"
   jq -e '[.resource_changes[]? | select(.change.actions | index("delete"))] | length == 0' "$json" >/dev/null || die 'Plan deletes or replaces resources; administrator review required'
   jq -e '[.resource_changes[]? | select(.type | startswith("cloudflare_zero_trust_access")) | select(.change.actions | index("update"))] | length == 0' "$json" >/dev/null || die 'Access boundary updates require separate administrator review'
-  jq -e '[.resource_changes[]? | select(.type=="cloudflare_ruleset") | .change.before.rules[]? | select(.ref != "application_bypass" and .ref != "next_static" and .ref != "application_api_rate")] | length == 0' "$json" >/dev/null || die 'Ruleset contains unrelated rules; preserve them through an administrator-reviewed change'
+  jq -e '[.resource_changes[]? | select(.type=="cloudflare_ruleset") | .change.before.rules[]? | select(.ref != "application_bypass" and .ref != "next_static" and .ref != "dify_bypass" and .ref != "application_api_rate")] | length == 0' "$json" >/dev/null || die 'Ruleset contains unrelated rules; preserve them through an administrator-reviewed change'
 }
 secret_value_is_valid() {
   local value="$1"
@@ -918,9 +1164,9 @@ discover_configuration() {
   atlas_request GET "groups/$project/clusters?itemsPerPage=100"; cp "$ATLAS_RESPONSE" "$TEMP_DIR/atlas-clusters.json"
   cluster="$(select_atlas_cluster)"
   candidate="$TEMP_DIR/vps.json"
-  jq -n --arg account "$TF_VAR_cloudflare_account_id" --arg zone "$TF_VAR_cloudflare_zone_id" --arg deploy "$DEPLOY_HOSTNAME" --arg project "$project" --arg cluster "$cluster" --arg staging "$STAGING_HOSTNAME" --arg prod "$PROD_HOSTNAME" '{repository:"karpishe-experiments/agentic-poc",image:"ghcr.io/karpishe-experiments/agentic-poc",cloudflare_account_id:$account,cloudflare_zone_id:$zone,deploy_hostname:$deploy,state_bucket:"kids-booklet-terraform-state",atlas_project_id:$project,atlas_cluster_name:$cluster,environments:{staging:{APP_HOSTNAME:$staging,ASSETS_BUCKET:"kids-booklet-staging-assets",DIAGNOSTICS_BUCKET:"kids-booklet-staging-diagnostics",RECOVERY_BUCKET:"kids-booklet-staging-recovery"},prod:{APP_HOSTNAME:$prod,ASSETS_BUCKET:"kids-booklet-prod-assets",DIAGNOSTICS_BUCKET:"kids-booklet-prod-diagnostics",RECOVERY_BUCKET:"kids-booklet-prod-recovery"}}}' > "$candidate"
+  jq -n --arg account "$TF_VAR_cloudflare_account_id" --arg zone "$TF_VAR_cloudflare_zone_id" --arg deploy "$DEPLOY_HOSTNAME" --arg project "$project" --arg cluster "$cluster" --arg staging "$STAGING_HOSTNAME" --arg prod "$PROD_HOSTNAME" --arg dify "dify.$ZONE_NAME" '{repository:"karpishe-experiments/agentic-poc",image:"ghcr.io/karpishe-experiments/agentic-poc",cloudflare_account_id:$account,cloudflare_zone_id:$zone,deploy_hostname:$deploy,dify_hostname:$dify,dify_public_enabled:false,dify_backup_bucket:"kids-booklet-dify-backups",state_bucket:"kids-booklet-terraform-state",atlas_project_id:$project,atlas_cluster_name:$cluster,environments:{staging:{APP_HOSTNAME:$staging,ASSETS_BUCKET:"kids-booklet-staging-assets",DIAGNOSTICS_BUCKET:"kids-booklet-staging-diagnostics",RECOVERY_BUCKET:"kids-booklet-staging-recovery"},prod:{APP_HOSTNAME:$prod,ASSETS_BUCKET:"kids-booklet-prod-assets",DIAGNOSTICS_BUCKET:"kids-booklet-prod-diagnostics",RECOVERY_BUCKET:"kids-booklet-prod-recovery"}}}' > "$candidate"
   if [[ -e "$CONFIG_OUTPUT" ]]; then
-    cmp -s "$candidate" "$CONFIG_OUTPUT" && { printf 'exists: non-secret deployment configuration\n'; return; }
+    [[ "$(jq -Sc 'del(.host_observation)' "$candidate")" == "$(jq -Sc 'del(.host_observation)' "$CONFIG_OUTPUT")" ]] && { printf 'exists: non-secret deployment configuration (host observation is informational)\n'; return; }
     die 'Existing infra/config/vps.json differs; inspect it and resolve the configuration drift'
   fi
   if [[ "$APPLY" == false ]]; then
@@ -1049,10 +1295,12 @@ assert_no_unmanaged_cloudflare_resources() {
         [[ "$CF_STATUS" == 404 ]] || die "R2 bucket $name exists without Terraform state; import or choose a clean project"
       done
     done
+    cloudflare_get "accounts/$account/r2/buckets/$TF_VAR_dify_backup_bucket"
+    [[ "$CF_STATUS" == 404 ]] || die 'Dify backup bucket exists without Terraform state; verify ownership before installation'
   fi
   cloudflare_get "accounts/$account/cfd_tunnel?name=kids-booklet-vps&is_deleted=false"
   [[ "$CF_STATUS" == 200 && "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || die 'A kids-booklet Tunnel exists without Terraform state; verify ownership and import it'
-  for hostname in "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname"; do
+  for hostname in "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname" "$TF_VAR_dify_hostname"; do
     cloudflare_get "zones/$zone/dns_records?name=$hostname"
     [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || die "DNS record $hostname already exists without Terraform state"
   done
@@ -1100,6 +1348,25 @@ adopt_existing_r2_buckets() {
       fi
     done
   done
+  name="$TF_VAR_dify_backup_bucket"
+  address='cloudflare_r2_bucket.dify_backup'
+  cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$name"
+  if grep -Fqx "$address" <<< "$state"; then
+    [[ "$CF_STATUS" == 200 ]] || die "Terraform tracks missing Dify backup bucket $name"
+  elif [[ "$CF_STATUS" == 404 ]]; then
+    :
+  elif [[ "$CF_STATUS" == 200 ]]; then
+    if [[ "$APPLY" == false ]]; then
+      printf 'would update: adopt existing R2 bucket %s into Terraform state\n' "$name"
+    else
+      if [[ "$imported" == false ]]; then r2_state_snapshot "$directory" infrastructure-before-r2-adoption; imported=true; fi
+      terraform -chdir="$directory" import -input=false "$address" "$TF_VAR_cloudflare_account_id/$name/default"
+      terraform -chdir="$directory" state show "$address" >/dev/null || die "Terraform did not adopt R2 bucket $name"
+      printf 'updated: adopted existing R2 bucket %s into Terraform state\n' "$name"
+    fi
+  else
+    die "Cloudflare returned HTTP $CF_STATUS while checking R2 bucket $name"
+  fi
 }
 verify_cloudflare_ownership() {
   local directory="$1" state phase address expected environment kind name hostname key present
@@ -1112,13 +1379,16 @@ verify_cloudflare_ownership() {
       if grep -Fqx "$address" <<< "$state"; then [[ "$present" == true ]] || die "Terraform tracks missing R2 bucket $name"; else [[ "$present" == false ]] || die "R2 bucket $name exists outside Terraform state"; fi
     done
   done
+  name="$TF_VAR_dify_backup_bucket"; address='cloudflare_r2_bucket.dify_backup'
+  cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$name"; present=false; [[ "$CF_STATUS" == 404 ]] || present=true
+  if grep -Fqx "$address" <<< "$state"; then [[ "$present" == true ]] || die "Terraform tracks missing R2 bucket $name"; else [[ "$present" == false ]] || die "R2 bucket $name exists outside Terraform state"; fi
   cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/cfd_tunnel?name=kids-booklet-vps&is_deleted=false"; present=false; [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || present=true
   if grep -qx 'cloudflare_zero_trust_tunnel_cloudflared.vps' <<< "$state"; then [[ "$present" == true ]] || die 'Terraform tracks a missing Tunnel'; else [[ "$present" == false ]] || die 'The project Tunnel exists outside Terraform state'; fi
   cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/access/apps"; present=false
   [[ "$(jq --arg hostname "$TF_VAR_deploy_hostname" '[.result[]? | select(.domain==$hostname)] | length' "$CF_RESPONSE")" == 0 ]] || present=true
   if grep -qx 'cloudflare_zero_trust_access_application.deployment' <<< "$state"; then [[ "$present" == true ]] || die 'Terraform tracks a missing deployment Access application'; else [[ "$present" == false ]] || die 'The deployment Access application exists outside Terraform state'; fi
-  for key in staging prod deploy; do
-    case "$key" in staging) hostname="$TF_VAR_staging_hostname";; prod) hostname="$TF_VAR_prod_hostname";; deploy) hostname="$TF_VAR_deploy_hostname";; esac
+  for key in staging prod deploy dify; do
+    case "$key" in staging) hostname="$TF_VAR_staging_hostname";; prod) hostname="$TF_VAR_prod_hostname";; deploy) hostname="$TF_VAR_deploy_hostname";; dify) hostname="$TF_VAR_dify_hostname";; esac
     address="cloudflare_dns_record.application[\"$key\"]"
     cloudflare_get "zones/$TF_VAR_cloudflare_zone_id/dns_records?name=$hostname"; present=false; [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || present=true
     if grep -Fqx "$address" <<< "$state"; then [[ "$present" == true ]] || die "Terraform tracks missing DNS record $hostname"; else [[ "$present" == false ]] || die "DNS record $hostname exists outside Terraform state"; fi
@@ -1129,7 +1399,11 @@ verify_cloudflare_ownership() {
     cloudflare_get "zones/$TF_VAR_cloudflare_zone_id/rulesets/phases/$phase/entrypoint"
     if grep -qx "$address" <<< "$state"; then
       [[ "$CF_STATUS" == 200 ]] || die "Terraform tracks $phase but its Cloudflare entrypoint is missing"
-      jq -e --argjson expected "$expected" '([.result.rules[]?.ref] | sort) == ($expected | sort)' "$CF_RESPONSE" >/dev/null || die "The $phase entrypoint contains rules outside this project"
+      if [[ "$phase" == http_request_cache_settings ]]; then
+        jq -e '([.result.rules[]?.ref] | sort) as $refs | $refs == (["application_bypass","next_static"] | sort) or $refs == (["application_bypass","next_static","dify_bypass"] | sort)' "$CF_RESPONSE" >/dev/null || die "The $phase entrypoint contains rules outside this project"
+      else
+        jq -e --argjson expected "$expected" '([.result.rules[]?.ref] | sort) == ($expected | sort)' "$CF_RESPONSE" >/dev/null || die "The $phase entrypoint contains rules outside this project"
+      fi
     else
       [[ "$CF_STATUS" == 404 ]] || die "The $phase entrypoint exists outside Terraform state; verify ownership and import it"
     fi
@@ -1234,16 +1508,25 @@ verify_infrastructure_head() {
 sync_host_configuration() {
   private_temp
   [[ -f "$REPO_ROOT/infra/config/vps.json" ]] || die 'Reviewed infra/config/vps.json is required for host synchronization'
-  tar -C "$REPO_ROOT" -cf "$TEMP_DIR/host-bundle.tar" scripts/deploy/vps-deployment.sh deploy/compose.yml deploy/compose.staging.yml deploy/compose.prod.yml infra/config/vps.json
   configure_ssh
   local remote_command
   local -a remote=(--action sync-host --request-id "$REQUEST_ID" --apply)
   printf -v remote_command ' %s' "${remote[@]}"
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar"
+  # The installed dispatcher must accept the first bundle before it can upgrade
+  # itself. Both transfers retain the same infrastructure journal and lock.
+  local phase
+  local -a files=(scripts/deploy/vps-deployment.sh deploy/compose.yml deploy/compose.staging.yml deploy/compose.prod.yml infra/config/vps.json)
+  for phase in dispatcher artifacts; do
+    if [[ "$phase" == artifacts ]]; then files+=(deploy/dify/compose.override.yml deploy/dify/release.json); fi
+    tar -C "$REPO_ROOT" -cf "$TEMP_DIR/host-bundle.tar" "${files[@]}"
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar" || return $?
+  done
 }
 terraform_operation() {
   local directory
   need_command terraform; need_command jq
+  load_config
+  load_terraform_configuration
   verify_infrastructure_head
   private_temp
   directory="$TEMP_DIR/infrastructure"
@@ -1319,7 +1602,7 @@ build_secret_override() {
     [[ "$GENERATE_PASSWORD" == false ]] || die '--generate-password cannot be combined with DEPLOYMENT_SECRETS_DIR'
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
-    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
+    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_WORKFLOW_API_KEY","DIFY_COMMUNITY_CALLBACK_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_PROBE_ENABLED")|not) or (.DIFY_COMMUNITY_PROBE_ENABLED == "true" or .DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((has("DIFY_COMMUNITY_BASE_URL")|not) or .DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((has("DIFY_COMMUNITY_WORKFLOW_API_KEY")|not) or (.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_CALLBACK_KEY")|not) or (.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and ((.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (has("DIFY_COMMUNITY_BASE_URL") and has("DIFY_COMMUNITY_WORKFLOW_API_KEY") and has("DIFY_COMMUNITY_CALLBACK_KEY")))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi
     chmod 600 "$destination"
@@ -1350,7 +1633,8 @@ application_secret_value_is_valid() {
     AWS_ACCESS_KEY_ID) [[ "$value" =~ ^[A-Za-z0-9]{32}$ ]];;
     AWS_SECRET_ACCESS_KEY) [[ "$value" =~ ^[A-Fa-f0-9]{64}$ ]];;
     DIFY_API_KEY|DIFY_IMAGE_OPENAI_API_KEY) [[ -n "$value" ]];;
-    DIFY_TOOL_KEY) [[ "$(printf %s "$value" | LC_ALL=C wc -c)" -ge 32 ]];;
+    DIFY_TOOL_KEY|DIFY_COMMUNITY_CALLBACK_KEY) [[ "$(printf %s "$value" | LC_ALL=C wc -c)" -ge 32 ]];;
+    DIFY_COMMUNITY_WORKFLOW_API_KEY) [[ -n "$value" ]];;
     *) return 1;;
   esac
 }
@@ -1362,7 +1646,8 @@ application_secret_requirement() {
     AWS_ACCESS_KEY_ID) printf 'must be a 32-character R2 access key ID';;
     AWS_SECRET_ACCESS_KEY) printf 'must be a 64-character hexadecimal R2 secret key';;
     DIFY_API_KEY|DIFY_IMAGE_OPENAI_API_KEY) printf 'must not be empty';;
-    DIFY_TOOL_KEY) printf 'must contain at least 32 bytes';;
+    DIFY_TOOL_KEY|DIFY_COMMUNITY_CALLBACK_KEY) printf 'must contain at least 32 bytes';;
+    DIFY_COMMUNITY_WORKFLOW_API_KEY) printf 'must not be empty';;
   esac
 }
 display_generated_password() {
@@ -1391,7 +1676,7 @@ prompt_application_secret() {
   done
 }
 application_secret_override_is_valid() {
-  jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$")) and ((($e|has("DIFY_API_KEY"))|not) or ($e.DIFY_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_TOOL_KEY"))|not) or ($e.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((($e|has("DIFY_IMAGE_OPENAI_API_KEY"))|not) or ($e.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0))' "$1" >/dev/null
+  jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$")) and ((($e|has("DIFY_API_KEY"))|not) or ($e.DIFY_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_TOOL_KEY"))|not) or ($e.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((($e|has("DIFY_IMAGE_OPENAI_API_KEY"))|not) or ($e.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_PROBE_ENABLED"))|not) or ($e.DIFY_COMMUNITY_PROBE_ENABLED == "true" or $e.DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((($e|has("DIFY_COMMUNITY_BASE_URL"))|not) or $e.DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY"))|not) or ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))|not) or ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and (($e.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (($e|has("DIFY_COMMUNITY_BASE_URL")) and ($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY")) and ($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))))' "$1" >/dev/null
 }
 build_secret_patch() {
   local environment="$1" name="$2" destination="$3" value
@@ -1750,7 +2035,7 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != check && "$ACTION" != status ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac

@@ -178,6 +178,18 @@ The VPS topology and operational sequence are documented in [the deployment runb
 
 The temporary Dify trial adds optional host secrets and selects real mode only in staging. The application branch owns experiment availability, tool authorization, and approval checks. The host support is removed if Dify is rejected after the trial or replaced by the accepted long-term design if Dify is adopted. See the [experiment configuration](accepted/2026-09-16_agent-platform-decision/configuration.md).
 
+Issue #69 prepares a separate Dify Community stack on the same VPS. The pinned
+upstream Compose release and repository override keep its databases, networks,
+and data separate from Booklet; nginx binds only localhost port 3300 behind a
+maintenance-gated Tunnel route. The candidate staging-only probe has no model
+or image node. Booklet starts it with an application API key, receives an
+authenticated callback on one exact route, and retrieves the saved Dify result
+by workflow run ID with the same runtime key. Probe records are isolated in
+`dify_community_probes` and do not mutate booklet/artifact/approval state.
+Production and disabled staging deployments reject all probe routes. See the
+[Community runbook](deployment/dify-community.md); this is a local candidate,
+not evidence that the VPS install or public integration has succeeded.
+
 ### Consolidated VPS deployment boundary
 
 VPS deployment is owned by `scripts/deploy/vps-deployment.sh`. Setup discovers Cloudflare and host ownership and configures database-scoped Atlas users and the exact VPS allowlist. Finalize creates absent environment branches from the reviewed commit containing `infra/config/vps.json`. Terraform owns Cloudflare R2, Tunnel, DNS and cache/rate-limit resources. `_staging` and `_prod` are independent reviewed release lines and may diverge from `master`. GitHub Actions verify the current environment-branch commit, build public GHCR environment-tagged images, and deploy only their immutable digests through the restricted VPS command interface. Compose overlays hold non-secret configuration; root-only final overrides hold secrets, including staged rotation files. Preview is the default and mutations require `--apply`. TypeScript owns application initialization, readiness, drain, backup/restore, and staging-reset behavior.

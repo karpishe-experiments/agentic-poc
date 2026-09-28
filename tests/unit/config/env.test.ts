@@ -14,4 +14,13 @@ describe("runtime environment", () => {
     expect(resolveComicCopyMode({})).toBe("creative");
     expect(resolveComicCopyMode({ COMIC_COPY_MODE: "exact" })).toBe("exact");
   });
+
+  it("keeps the Community probe disabled outside configured staging", () => {
+    const base = { NODE_ENV: "test" as const, OPENAI_API_KEY: "test-key", ASSET_STORAGE: "s3", OBJECT_STORE_ENDPOINT: "https://storage.example", ASSETS_BUCKET: "assets", DIAGNOSTICS_BUCKET: "diagnostics", RECOVERY_BUCKET: "recovery", ACCESS_GATE_PASSWORD: "sixteen-characters", MONGODB_DATABASE: "kids_booklet" };
+    const configured = { ...base, DEPLOYMENT_ENV: "_staging", DIFY_COMMUNITY_PROBE_ENABLED: "true", DIFY_COMMUNITY_BASE_URL: "https://dify.uniwares.co.uk", DIFY_COMMUNITY_WORKFLOW_API_KEY: "workflow-key", DIFY_COMMUNITY_CALLBACK_KEY: "a".repeat(32) };
+    expect(getServerEnv(configured).DIFY_COMMUNITY_PROBE_ENABLED).toBe(true);
+    expect(() => getServerEnv({ ...configured, DIFY_COMMUNITY_CALLBACK_KEY: undefined })).toThrow(/DIFY_COMMUNITY_CALLBACK_KEY/);
+    expect(() => getServerEnv({ ...configured, DIFY_COMMUNITY_BASE_URL: "http://dify.uniwares.co.uk" })).toThrow(/HTTPS origin/);
+    expect(() => getServerEnv({ ...configured, DEPLOYMENT_ENV: "_prod", MONGODB_DATABASE: "kids_booklet_prod" })).toThrow(/staging-only/);
+  });
 });

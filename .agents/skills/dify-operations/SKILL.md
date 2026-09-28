@@ -1,6 +1,6 @@
 ---
 name: dify-operations
-description: Configure, test, publish, inspect, or recover Dify Cloud agents, workflows, and tools for this repository. Use for workspace operations, not Dify source development or Booklet runtime implementation.
+description: Configure, test, publish, inspect, or recover this repository's Dify Cloud or Community agents, workflows, and tools. Use for workspace operations, not Dify source development or Booklet runtime implementation.
 ---
 
 # Dify operations
@@ -8,6 +8,11 @@ description: Configure, test, publish, inspect, or recover Dify Cloud agents, wo
 Read the [issue #66 runbook](../../../docs/accepted/2026-09-26_codex-dify-access/runbook.md)
 before operating a workspace. Its capability matrix distinguishes verified paths
 from pending probes. Installation or an advertised command is not live evidence.
+For the Community host, also read the
+[issue #69 operating runbook](../../../docs/deployment/dify-community.md).
+Cloud and Community sessions, state directories, workspaces, and credentials
+are separate. Select and verify the intended host before each mutation; do not
+carry a Cloud capability result over to Community without a live check.
 
 Use the registered local-stdio Dify MCP first. Read current tool schemas before
 calling them. When a required operation is unavailable, use the official

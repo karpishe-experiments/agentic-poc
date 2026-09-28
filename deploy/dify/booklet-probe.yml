@@ -1,0 +1,129 @@
+app:
+  description: Deterministic Community-to-Booklet staging callback probe; no model or image nodes.
+  icon: 🔁
+  icon_background: '#E8F4FF'
+  icon_type: emoji
+  mode: workflow
+  name: issue69_booklet_round_trip
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - description: Booklet staging HTTPS origin without a trailing slash.
+    id: 00000000-0000-4000-8000-000000000069
+    name: BOOKLET_PROBE_BASE_URL
+    selector: [env, BOOKLET_PROBE_BASE_URL]
+    value: https://booklet-staging.uniwares.co.uk
+    value_type: string
+  - description: Dedicated issue-69 callback key; enter privately after import.
+    id: 00000000-0000-4000-8000-000000000070
+    name: BOOKLET_PROBE_CALLBACK_KEY
+    selector: [env, BOOKLET_PROBE_CALLBACK_KEY]
+    value: ''
+    value_type: secret
+  features:
+    file_upload: {enabled: false}
+    opening_statement: ''
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions: []
+    suggested_questions_after_answer: {enabled: false}
+    text_to_speech: {enabled: false}
+  graph:
+    edges:
+    - {id: start-payload, source: start, sourceHandle: source, target: payload, targetHandle: target, type: custom, data: {sourceType: start, targetType: code}}
+    - {id: payload-callback, source: payload, sourceHandle: source, target: callback, targetHandle: target, type: custom, data: {sourceType: code, targetType: http-request}}
+    - {id: callback-verify, source: callback, sourceHandle: source, target: verify, targetHandle: target, type: custom, data: {sourceType: http-request, targetType: code}}
+    - {id: verify-finish, source: verify, sourceHandle: source, target: finish, targetHandle: target, type: custom, data: {sourceType: code, targetType: end}}
+    nodes:
+    - id: start
+      type: custom
+      position: {x: 80, y: 280}
+      positionAbsolute: {x: 80, y: 280}
+      data:
+        title: Probe input
+        type: start
+        variables:
+        - {label: correlation_id, variable: correlation_id, type: text-input, required: true, default: '', options: []}
+        - {label: marker, variable: marker, type: text-input, required: true, default: '', options: []}
+    - id: payload
+      type: custom
+      position: {x: 380, y: 280}
+      positionAbsolute: {x: 380, y: 280}
+      data:
+        title: Build callback JSON
+        type: code
+        code_language: python3
+        code: |
+          import json
+          def main(correlation_id, marker, workflow_run_id):
+              return {"body": json.dumps({"correlation_id": correlation_id, "marker": marker, "workflow_run_id": workflow_run_id})}
+        variables:
+        - {variable: correlation_id, value_selector: [start, correlation_id]}
+        - {variable: marker, value_selector: [start, marker]}
+        - {variable: workflow_run_id, value_selector: [sys, workflow_run_id]}
+        outputs:
+          body: {type: string, children: null}
+    - id: callback
+      type: custom
+      position: {x: 680, y: 280}
+      positionAbsolute: {x: 680, y: 280}
+      data:
+        title: Call Booklet staging
+        type: http-request
+        method: post
+        url: '{{#env.BOOKLET_PROBE_BASE_URL#}}/api/integrations/dify-community/callback'
+        headers: "Content-Type: application/json\nX-Booklet-Dify-Probe-Key: {{#env.BOOKLET_PROBE_CALLBACK_KEY#}}"
+        params: ''
+        authorization: {type: no-auth, config: null}
+        body:
+          type: raw-text
+          data:
+          - {id: callback-json, type: text, value: '{{#payload.body#}}'}
+        retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 100}
+        timeout: {connect: 10, read: 30, write: 10}
+    - id: verify
+      type: custom
+      position: {x: 980, y: 280}
+      positionAbsolute: {x: 980, y: 280}
+      data:
+        title: Verify callback acknowledgement
+        type: code
+        code_language: python3
+        code: |
+          import json
+          def main(status_code, body, correlation_id, marker, workflow_run_id):
+              if int(status_code) != 200:
+                  raise ValueError("Booklet callback did not acknowledge the probe")
+              data = json.loads(body)
+              if data.get("acknowledged") is not True or data.get("correlation_id") != correlation_id or data.get("marker") != marker or data.get("workflow_run_id") != workflow_run_id:
+                  raise ValueError("Booklet callback acknowledgement did not match the probe")
+              return {"correlation_id": correlation_id, "marker": marker, "workflow_run_id": workflow_run_id, "acknowledged": True}
+        variables:
+        - {variable: status_code, value_selector: [callback, status_code]}
+        - {variable: body, value_selector: [callback, body]}
+        - {variable: correlation_id, value_selector: [start, correlation_id]}
+        - {variable: marker, value_selector: [start, marker]}
+        - {variable: workflow_run_id, value_selector: [sys, workflow_run_id]}
+        outputs:
+          correlation_id: {type: string, children: null}
+          marker: {type: string, children: null}
+          workflow_run_id: {type: string, children: null}
+          acknowledged: {type: boolean, children: null}
+    - id: finish
+      type: custom
+      position: {x: 1280, y: 280}
+      positionAbsolute: {x: 1280, y: 280}
+      data:
+        title: Probe result
+        type: end
+        outputs:
+        - {variable: correlation_id, value_type: string, value_selector: [verify, correlation_id]}
+        - {variable: marker, value_type: string, value_selector: [verify, marker]}
+        - {variable: workflow_run_id, value_type: string, value_selector: [verify, workflow_run_id]}
+        - {variable: acknowledged, value_type: boolean, value_selector: [verify, acknowledged]}
+    viewport: {x: 0, y: 0, zoom: 0.65}

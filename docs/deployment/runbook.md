@@ -32,6 +32,7 @@ This table records the accepted baseline. Use current workflow summaries and hos
 | Staging hostname | `booklet-staging.uniwares.co.uk` |
 | Production hostname | `booklet.uniwares.co.uk` |
 | Deployment hostname | `srv1-deploy.uniwares.co.uk` |
+| Planned Dify hostname | `dify.uniwares.co.uk` (maintenance route until private setup) |
 | Atlas project | `6a869d84e65675f845fa22eb` |
 | Atlas cluster | `kids-booklet`, Ireland (`eu-west-1`) |
 | Staging database | `kids_booklet` |
@@ -50,7 +51,7 @@ The VPS is a read-only Git consumer. Do not commit, create or switch branches, r
 
 `_staging` and `_prod` are independent reviewed release lines and may diverge from `master` and from each other. Deploy verifies that the selected environment matches the target branch and that the remote branch still points to the workflow commit. It does not require `master` ancestry or a successful Infrastructure run. It publishes `staging-<full-sha>` or `prod-<full-sha>`, verifies anonymous GHCR access, and deploys the immutable digest. The short environment tag advances only after success.
 
-Infrastructure remains master-owned. Merge Cloudflare, Terraform, installed host configuration, or deployment-bootstrap changes into `master` and require Infrastructure to pass before relying on those infrastructure changes. An Infrastructure result does not control whether an environment branch can deploy its own application release.
+Infrastructure remains master-owned. Merge Cloudflare, Terraform, installed host configuration, or deployment-bootstrap changes into `master`. A push runs Infrastructure in preview mode; after reviewing the plan, run it manually with `apply=true` and require that apply to pass before relying on those infrastructure changes. An Infrastructure result does not control whether an environment branch can deploy its own application release.
 
 After the independent-deployment workflow first merges to `master`, promote that reviewed commit once to `_staging` and `_prod`. Each environment uses the workflow stored on its own branch, so this one-time promotion activates the new behavior there. Later releases do not need to contain the current `master` commit.
 
@@ -61,7 +62,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Need | Action |
 | --- | --- |
 | Verify an environment | Run **Check deployment** on its environment branch |
-| Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; require **Infrastructure** to pass; then release each affected environment |
+| Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; inspect the Infrastructure preview; explicitly run **Infrastructure** with `apply=true`; then release each affected environment |
 | Create a backup | Run **Maintenance** with `action=backup`; retain the exact `backupId` from the summary |
 | Restore | Run **Maintenance** with `action=restore`, the exact `backup_id`, and confirmation `kids_booklet` or `kids_booklet_prod` |
 | Roll back application code | Run **Maintenance** with `action=rollback`; this restores the prior digest and matching non-secret configuration, not the database |
