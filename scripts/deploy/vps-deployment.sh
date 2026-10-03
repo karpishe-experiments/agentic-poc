@@ -40,7 +40,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -99,7 +99,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
@@ -517,6 +517,7 @@ values = {
 }
 values["SANDBOX_API_KEY"] = values["CODE_EXECUTION_API_KEY"]
 values["WEAVIATE_AUTHENTICATION_APIKEY_ALLOWED_KEYS"] = values["WEAVIATE_API_KEY"]
+values["CELERY_BROKER_URL"] = f"redis://:{values['REDIS_PASSWORD']}@redis:6379/1"
 for key, value in values.items():
     pattern = rf"(?m)^{re.escape(key)}=.*$"
     text, count = re.subn(pattern, lambda _: f"{key}={value}", text)
@@ -616,6 +617,74 @@ dify_install_host() {
   mv "$DIFY_DATA/current.next" "$DIFY_DATA/current"
   save_success ''
 }
+dify_broker_environment() {
+  local mode="$1"
+  python3 - "$DIFY_ENV" "$mode" <<'PY'
+from pathlib import Path
+import os
+import re
+import sys
+
+path, mode = Path(sys.argv[1]), sys.argv[2]
+if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o777 != 0o600 or path.stat().st_uid != os.geteuid():
+    raise SystemExit("Dify runtime configuration is not a protected owner-only file")
+text = path.read_text()
+def value(name):
+    matches = re.findall(rf"(?m)^{re.escape(name)}=(.*)$", text)
+    if len(matches) != 1:
+        raise SystemExit(f"Dify runtime configuration has missing or duplicate {name}")
+    return matches[0]
+password = value("REDIS_PASSWORD")
+if not re.fullmatch(r"[a-f0-9]{64}", password):
+    raise SystemExit("Dify Redis password differs from the generated format")
+current = value("CELERY_BROKER_URL")
+expected = f"redis://:{password}@redis:6379/1"
+if current == expected:
+    print("exists: Dify Celery broker credential matches Redis")
+elif current != "redis://:difyai123456@redis:6379/1":
+    raise SystemExit("Dify Celery broker differs from the known first-install mismatch; inspect privately")
+elif mode == "preview":
+    print("would update: Dify Celery broker credential")
+elif mode == "apply":
+    backup = path.with_name("runtime.env.broker-before-repair")
+    candidate = path.with_name("runtime.env.broker-next")
+    if backup.exists() or backup.is_symlink():
+        raise SystemExit("Protected Dify broker backup already exists; inspect before retry")
+    if candidate.exists() or candidate.is_symlink():
+        raise SystemExit("Protected Dify broker candidate already exists; inspect before retry")
+    backup.write_text(text)
+    backup.chmod(0o600)
+    corrected, count = re.subn(r"(?m)^CELERY_BROKER_URL=.*$", lambda _: f"CELERY_BROKER_URL={expected}", text)
+    if count != 1:
+        raise SystemExit("Dify runtime configuration has an ambiguous broker setting")
+    candidate.write_text(corrected)
+    candidate.chmod(0o600)
+    os.replace(candidate, path)
+    print("updated: Dify Celery broker credential")
+else:
+    raise SystemExit("Invalid Dify broker operation mode")
+PY
+}
+dify_api_broker_authenticates() {
+  dify_compose exec -T api python -c 'import os, redis; assert redis.Redis.from_url(os.environ["CELERY_BROKER_URL"]).ping()' >/dev/null 2>&1
+}
+dify_repair_broker_host() {
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Pinned Dify installation is not recorded'
+  dify_idle_host
+  if [[ "$(dify_broker_environment preview)" == 'exists: Dify Celery broker credential matches Redis' ]] && dify_api_broker_authenticates; then
+    printf 'exists: Dify API Celery broker authentication already succeeds\n'
+    save_success ''
+    return
+  fi
+  set_step repairing
+  dify_broker_environment apply
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate api worker worker_beat >/dev/null
+  dify_verify_services
+  dify_api_broker_authenticates || die 'Dify API cannot authenticate to its Celery broker'
+  printf 'verified: Dify API broker authentication succeeds after service recreation\n'
+  save_success ''
+}
 host_run() {
   require_root; need_command flock; need_command docker; need_command jq
   exec 9>"$STATE/operation.lock"
@@ -632,6 +701,7 @@ host_run() {
   if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then BACKUP_ID=''; fi
   validate_arguments
   if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
+  if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
   run_lifecycle
 }
 dify_discover_host() {
@@ -667,7 +737,7 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
   if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
@@ -675,6 +745,10 @@ host_dispatch() {
   if [[ "$ACTION" == dify-install && "$APPLY" == false ]]; then
     dify_install_preflight
     if [[ -f "$DIFY_DATA/current" ]]; then printf 'exists: pinned Dify 1.17.1 installation\n'; else printf 'would create: pinned Dify 1.17.1 installation\n'; fi
+    exit 0
+  fi
+  if [[ "$ACTION" == dify-repair-broker && "$APPLY" == false ]]; then
+    dify_broker_environment preview
     exit 0
   fi
   if [[ "$ACTION" == status ]]; then

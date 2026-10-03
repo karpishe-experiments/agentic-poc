@@ -154,6 +154,17 @@ developer in a single workspace, with separate accounts. Disable public
 registration and extra workspace creation. Deliver invitation links privately;
 SMTP is deferred. Verify login/logout, roles, file upload/download, workflow
 editor, plugin catalogue, and New Agent configuration without a model call.
+If an invitation reports `invalid username-password pair or user is disabled`,
+check Celery broker authentication against the configured Redis password before
+retrying. The account may already have been created before queueing failed;
+inspect membership first. Repair only the broker URL in the protected runtime
+configuration, then recreate the API and workers so they load it. Use the
+reviewed Dify operations workflow: preview `repair-broker`, apply it after the
+idle check, then run `check`. The operation changes only the known default
+broker URL, keeps a protected pre-repair copy, and verifies API-to-Redis
+authentication. It does not resend the invitation. Do not print the URL or
+password in logs or workflow summaries. An SMTP failure is a separate delivery
+problem after queueing succeeds.
 Set up password recovery privately and record the administrative command used
 for this pinned release without putting a password in shell history. Check secure
 cookies, streaming, WebSockets, upload/download, and no caching of dynamic

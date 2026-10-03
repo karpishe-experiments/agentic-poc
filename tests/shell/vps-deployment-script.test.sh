@@ -1,6 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+grep -Fq 'values["CELERY_BROKER_URL"] = f"redis://:{values['"'"'REDIS_PASSWORD'"'"']}@redis:6379/1"' "$script"
+broker_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_ENV="$2/runtime.env"
+password="$(printf "%064d" 0)"
+printf "REDIS_PASSWORD=%s\nCELERY_BROKER_URL=redis://:difyai123456@redis:6379/1\n" "$password" > "$DIFY_ENV"
+chmod 600 "$DIFY_ENV"
+[[ "$(dify_broker_environment preview)" == "would update: Dify Celery broker credential" ]]
+grep -Fxq "CELERY_BROKER_URL=redis://:difyai123456@redis:6379/1" "$DIFY_ENV"
+dify_broker_environment apply >/dev/null
+grep -Fxq "CELERY_BROKER_URL=redis://:$password@redis:6379/1" "$DIFY_ENV"
+[[ "$(dify_broker_environment apply)" == "exists: Dify Celery broker credential matches Redis" ]]
+printf "REDIS_PASSWORD=%s\nCELERY_BROKER_URL=redis://:other@redis:6379/1\n" "$password" > "$2/unknown.env"
+chmod 600 "$2/unknown.env"
+DIFY_ENV="$2/unknown.env"
+if dify_broker_environment apply >/dev/null 2>&1; then
+  echo "accepted an unknown broker credential" >&2
+  exit 1
+fi
+' _ "$script" "$broker_fixture"
+rm -rf "$broker_fixture"
+broker_operation_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_DATA="$2"; mkdir -p "$DIFY_DATA"; printf "1.17.1\n" > "$DIFY_DATA/current"
+dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
+dify_broker_environment() {
+  if [[ "$1" == preview ]]; then printf "would update: Dify Celery broker credential\n";
+  else printf "repaired\n" >> "$DIFY_DATA/events"; fi
+}
+set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
+dify_compose() { printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; }
+dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }
+dify_api_broker_authenticates() { printf "authenticated\n" >> "$DIFY_DATA/events"; }
+save_success() { printf "complete\n" >> "$DIFY_DATA/events"; }
+dify_repair_broker_host >/dev/null
+grep -Fxq "compose:up -d --no-deps --force-recreate api worker worker_beat" "$DIFY_DATA/events"
+grep -Fxq authenticated "$DIFY_DATA/events"
+grep -Fxq complete "$DIFY_DATA/events"
+' _ "$script" "$broker_operation_fixture"
+rm -rf "$broker_operation_fixture"
 workflow=.github/workflows/vps-operation.yml
 vps_access=.github/actions/vps-access/action.yml
 if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
