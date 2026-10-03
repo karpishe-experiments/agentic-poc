@@ -190,6 +190,12 @@ Production and disabled staging deployments reject all probe routes. See the
 [Community runbook](deployment/dify-community.md); this is a local candidate,
 not evidence that the VPS install or public integration has succeeded.
 
+The protected staging key workflow can provision the Community probe as one
+four-setting patch. The master-owned host dispatcher limits it to staging,
+validates the exact field set, merges it without replacing unrelated secrets,
+and uses the existing serialized secret rotation. Dify's callback variable and
+application API key remain private operator bindings; no provider call is needed.
+
 ### Consolidated VPS deployment boundary
 
 VPS deployment is owned by `scripts/deploy/vps-deployment.sh`. Setup discovers Cloudflare and host ownership and configures database-scoped Atlas users and the exact VPS allowlist. Finalize creates absent environment branches from the reviewed commit containing `infra/config/vps.json`. Terraform owns Cloudflare R2, Tunnel, DNS and cache/rate-limit resources. `_staging` and `_prod` are independent reviewed release lines and may diverge from `master`. GitHub Actions verify the current environment-branch commit, build public GHCR environment-tagged images, and deploy only their immutable digests through the restricted VPS command interface. Compose overlays hold non-secret configuration; root-only final overrides hold secrets, including staged rotation files. Preview is the default and mutations require `--apply`. TypeScript owns application initialization, readiness, drain, backup/restore, and staging-reset behavior.

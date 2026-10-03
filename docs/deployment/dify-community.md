@@ -277,6 +277,28 @@ the staging probe, and complete the reviewed staging release checkpoint.
 The default Compose configuration keeps the probe disabled. Imported secret
 metadata is not proof that the callback key has been entered correctly.
 
+The candidate setup path is **Dify staging key**, run from `master` with
+`secret_name=DIFY_COMMUNITY_PROBE`. Before using it, install the reviewed host
+dispatcher through the Infrastructure checkpoint and release the additive probe
+routes to staging. Privately store repository secrets
+`DIFY_COMMUNITY_WORKFLOW_API_KEY` for `issue69_booklet_round_trip` (not the M0
+manager) and `DIFY_COMMUNITY_CALLBACK_KEY`. Set the same callback value in the
+Dify workflow's `BOOKLET_PROBE_CALLBACK_KEY` variable, publish, and read back its
+configuration before execution. Never supply either key in workflow text inputs.
+
+The bundle stages only these keys, the fixed Community origin and the enable
+flag. It preserves Cloud keys and all unrelated application secrets, then uses
+the existing serialized rotation and readiness checks. An interactive operator
+can instead use the canonical `rotate-secrets` action with
+`--environment staging --secret-name DIFY_COMMUNITY_PROBE`; it silently prompts
+for only the two Community keys. Preview does not prompt or stage them. Retain
+the keys in the team's password manager, and remove temporary repository copies
+after successful rotation. A failed rotation requires journal inspection and
+Maintenance resume; do not dispatch a second rotation blindly.
+
+This setup implementation still requires reviewed publication, host synchronization
+and live staging verification. It is not evidence that credentials are installed.
+
 From an authenticated Booklet staging client, `POST
 /api/integrations/dify-community/runs`. Save the returned correlation ID even
 when the result is `unknown`. The workflow sends it with the fixed marker and

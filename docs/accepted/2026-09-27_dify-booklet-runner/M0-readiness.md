@@ -128,13 +128,25 @@ obtain this probe: its staging comparison includes unrelated infrastructure,
 documentation and other master changes. Prepare and verify the reviewed probe's
 release compatibility before deployment.
 
+The selective runtime port needs the three Community route handlers,
+`lib/dify-community/probe.ts`, additive Community env/proxy contracts and tests,
+and the disabled-by-default Compose flag. Preserve all existing Cloud env fields
+and callback exceptions; do not copy master's staging Compose settings, which
+would change Cloud execution defaults. A PR from this master-based issue branch
+would include unrelated changes and remove Cloud trial files. A short-lived
+staging-based delivery branch therefore requires an explicit exception to the
+one-issue-branch rule; implementation ownership remains on this issue branch.
+That release decision, merge/deployment authorization and private bindings are
+pending. Local setup preparation does not clear them.
+
 Required private bindings are an application API key for the exact model-free
 target and the separate callback key for `issue69_booklet_round_trip`
-(`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`). The existing protected key workflow accepts
-only the two Cloud key names; it is not yet a verified Community provisioning
-path. Interactive named-secret rotation accepts the Community API/callback keys,
-but does not configure the enable flag and origin as a single bounded setup.
-Resolve that setup path without re-entering unrelated secrets. Codex has not
+(`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`). The candidate staging-only
+`DIFY_COMMUNITY_PROBE` bundle configures the two keys, fixed origin and enable flag
+through the existing protected key workflow or interactive rotation. It needs
+reviewed publication, host synchronization and live verification; see
+[Community checkpoint 5](../../deployment/dify-community.md#checkpoint-5--deterministic-booklet-round-trip).
+Codex has not
 retrieved Community key values or installed them in staging. The private
 application-key smoke test above does not replace live Booklet callback/recovery
 acceptance.

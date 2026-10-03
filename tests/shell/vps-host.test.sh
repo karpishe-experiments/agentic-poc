@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -167,6 +167,18 @@ CHILD
     if (DEPLOYMENT_SECRETS_DIR="$TEMP_DIR/secret-input" build_secret_override staging "$TEMP_DIR/rejected-optional.json") >/dev/null 2>&1; then echo 'accepted a short Dify tool key in flat input'; exit 1; fi
     printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"short","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}' > "$SECRETS/staging/secrets.json"
     if (write_secret_override staging) >/dev/null 2>&1; then echo 'accepted existing invalid host secret override'; exit 1; fi;;
+  community-probe-staging)
+    require_root() { :; }; load_config() { :; }; flock() { :; }
+    rm "$STATE/operation.json"
+    jq -n '{services:{app:{environment:{OPENAI_API_KEY:"existing-provider",MONGODB_URI:"mongodb://db",ACCESS_GATE_PASSWORD:"sixteen-chars-ok!",AWS_ACCESS_KEY_ID:("a"*32),AWS_SECRET_ACCESS_KEY:("a"*64),DIFY_API_KEY:"existing-cloud",DIFY_TOOL_KEY:("c"*32)}}}}' > "$SECRETS/staging/secrets.json"
+    export SSH_ORIGINAL_COMMAND='--action stage-secrets --environment staging --secret-name DIFY_COMMUNITY_PROBE --apply'
+    payload="$(jq -n '{services:{app:{environment:{DIFY_COMMUNITY_PROBE_ENABLED:"true",DIFY_COMMUNITY_BASE_URL:"https://dify.uniwares.co.uk",DIFY_COMMUNITY_WORKFLOW_API_KEY:"community-key",DIFY_COMMUNITY_CALLBACK_KEY:("b"*32)}}}}')"
+    invalid="$(jq '.services.app.environment.DIFY_API_KEY="replacement-cloud"' <<< "$payload")"
+    if (host_dispatch) <<< "$invalid" >/dev/null 2>&1; then echo 'accepted unrelated Community bundle field'; exit 1; fi
+    test ! -f "$SECRETS/staging/secrets.pending.json"
+    (host_dispatch) <<< "$payload" >/dev/null
+    jq -e '.services.app.environment | .DIFY_COMMUNITY_PROBE_ENABLED=="true" and .DIFY_COMMUNITY_BASE_URL=="https://dify.uniwares.co.uk" and .DIFY_COMMUNITY_WORKFLOW_API_KEY=="community-key" and .DIFY_API_KEY=="existing-cloud" and .DIFY_TOOL_KEY==("c"*32) and .OPENAI_API_KEY=="existing-provider"' "$SECRETS/staging/secrets.pending.json" >/dev/null
+    jq -e '.services.app.environment | .DIFY_API_KEY=="existing-cloud" and (has("DIFY_COMMUNITY_PROBE_ENABLED")|not)' "$SECRETS/staging/secrets.json" >/dev/null;;
   first-activation-secret-repair)
     require_root() { :; }; load_config() { :; }; flock() { :; }
     systemctl() { return 1; }

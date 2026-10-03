@@ -160,6 +160,31 @@ grep -q 'updated: rotation invoked' <<< "$protected_rotation_output"
 ! grep -q 'app-test-secret' <<< "$protected_rotation_output"
 rm -rf "$protected_rotation_root"
 done
+community_rotation_root="$(mktemp -d)"
+community_rotation_output="$(GITHUB_ACTIONS=true DIFY_COMMUNITY_WORKFLOW_API_KEY='community$app-key' DIFY_COMMUNITY_CALLBACK_KEY='0123456789abcdef0123456789abcdef' VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+set -euo pipefail
+source "$1"
+TEMP_DIR="$2"; ACTION=rotate-protected-dify-key; SECRET_NAME=DIFY_COMMUNITY_PROBE; ENVIRONMENT=staging; APPLY=true; REQUEST_ID=123-1; VPS_HOST=deploy.example; VPS_USER=kids-booklet-deploy
+validate_arguments
+load_config() { :; }; need_command() { :; }; private_temp() { :; }; configure_ssh() { :; }
+ssh() { [[ "$*" == *"--secret-name DIFY_COMMUNITY_PROBE"* ]]; cat > "$TEMP_DIR/staged.json"; }
+host_call() { [[ "$ACTION" == rotate-secrets && -z "$SECRET_NAME" && -z "${DIFY_COMMUNITY_WORKFLOW_API_KEY:-}" && -z "${DIFY_COMMUNITY_CALLBACK_KEY:-}" ]]; printf "updated: Community rotation invoked\n"; }
+rotate_protected_dify_key
+community_probe_patch_is_valid "$TEMP_DIR/staged.json"
+jq -e '\''.services.app.environment.DIFY_COMMUNITY_WORKFLOW_API_KEY=="community$$app-key"'\'' "$TEMP_DIR/staged.json" >/dev/null
+' _ "$script" "$community_rotation_root")"
+grep -q 'updated: Community rotation invoked' <<< "$community_rotation_output"
+! grep -q 'community\$app-key' <<< "$community_rotation_output"
+! grep -q '0123456789abcdef' <<< "$community_rotation_output"
+GITHUB_ACTIONS=true VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+set -euo pipefail
+source "$1"
+TEMP_DIR="$2"
+if (build_community_probe_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo "accepted missing Community credentials"; exit 1; fi
+ENVIRONMENT=prod; SECRET_NAME=DIFY_COMMUNITY_PROBE; ACTION=stage-secrets; VPS_USER=kids-booklet-deploy
+if (validate_arguments) >/dev/null 2>&1; then echo "accepted production Community bundle"; exit 1; fi
+' _ "$script" "$community_rotation_root"
+rm -rf "$community_rotation_root"
 grep -Fq 'node scripts/ci/validate.mjs summary' .github/workflows/validate.yml
 grep -q 'GITHUB_STEP_SUMMARY' scripts/ci/validate.mjs
 grep -Fq 'test "$GITHUB_REF_NAME" = "_$TARGET"' .github/workflows/deploy.yml

@@ -57,7 +57,7 @@ Options:
   --confirmation kids_booklet       required for reset-staging
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
-  --secret-name NAME                repair or rotate only one application secret
+  --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE bundle
   --generate-password               generate and display ACCESS_GATE_PASSWORD once
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
@@ -113,8 +113,11 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
-  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY)$ ]] || die 'Invalid application secret name'
+  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY|DIFY_COMMUNITY_PROBE)$ ]] || die 'Invalid application secret name'
   [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
+  if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
+    [[ "$ENVIRONMENT" == staging && "$ACTION" =~ ^(rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die 'Community probe bundle is limited to staging rotation'
+  fi
   if [[ "$GENERATE_PASSWORD" == true ]]; then
     [[ "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets)$ ]] || die '--generate-password is only valid for application secret repair or rotation'
     [[ -z "$SECRET_NAME" || "$SECRET_NAME" == ACCESS_GATE_PASSWORD ]] || die '--generate-password conflicts with the selected secret name'
@@ -763,7 +766,11 @@ host_dispatch() {
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Staged secret override exceeds 64 KiB'; fi
     if [[ -n "$SECRET_NAME" ]]; then
-      jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
+        community_probe_patch_is_valid "$TEMP_DIR/secrets.json" || die 'Community probe bundle is invalid'
+      else
+        jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      fi
       jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
     else
       cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
@@ -1803,8 +1810,35 @@ prompt_application_secret() {
 application_secret_override_is_valid() {
   jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$")) and ((($e|has("DIFY_API_KEY"))|not) or ($e.DIFY_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_TOOL_KEY"))|not) or ($e.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((($e|has("DIFY_IMAGE_OPENAI_API_KEY"))|not) or ($e.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_PROBE_ENABLED"))|not) or ($e.DIFY_COMMUNITY_PROBE_ENABLED == "true" or $e.DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((($e|has("DIFY_COMMUNITY_BASE_URL"))|not) or $e.DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY"))|not) or ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))|not) or ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and (($e.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (($e|has("DIFY_COMMUNITY_BASE_URL")) and ($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY")) and ($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))))' "$1" >/dev/null
 }
+community_probe_patch_is_valid() {
+  jq -e 'keys==["services"] and (.services|keys)==["app"] and (.services.app|keys)==["environment"] and (.services.app.environment as $e | ($e|keys)==["DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_CALLBACK_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_WORKFLOW_API_KEY"] and $e.DIFY_COMMUNITY_PROBE_ENABLED=="true" and $e.DIFY_COMMUNITY_BASE_URL=="https://dify.uniwares.co.uk" and ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0) and ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32))' "$1" >/dev/null
+}
+build_community_probe_patch() {
+  local environment="$1" destination="$2" workflow_value='' callback_value=''
+  [[ "$environment" == staging ]] || die 'Community probe bundle is staging-only'
+  if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    workflow_value="${DIFY_COMMUNITY_WORKFLOW_API_KEY:-}"
+    callback_value="${DIFY_COMMUNITY_CALLBACK_KEY:-}"
+    application_secret_value_is_valid DIFY_COMMUNITY_WORKFLOW_API_KEY "$workflow_value" || die 'Protected Community workflow key is invalid'
+    application_secret_value_is_valid DIFY_COMMUNITY_CALLBACK_KEY "$callback_value" || die 'Protected Community callback key is invalid'
+  else
+    prompt_application_secret "$environment" DIFY_COMMUNITY_WORKFLOW_API_KEY workflow_value
+    prompt_application_secret "$environment" DIFY_COMMUNITY_CALLBACK_KEY callback_value
+  fi
+  printf '%s' "$workflow_value" > "$TEMP_DIR/workflow-key"
+  printf '%s' "$callback_value" > "$TEMP_DIR/callback-key"
+  chmod 600 "$TEMP_DIR/workflow-key" "$TEMP_DIR/callback-key"
+  jq -n --rawfile workflow "$TEMP_DIR/workflow-key" --rawfile callback "$TEMP_DIR/callback-key" '{services:{app:{environment:{DIFY_COMMUNITY_PROBE_ENABLED:"true",DIFY_COMMUNITY_BASE_URL:"https://dify.uniwares.co.uk",DIFY_COMMUNITY_WORKFLOW_API_KEY:($workflow|gsub("\\$";"$$")),DIFY_COMMUNITY_CALLBACK_KEY:($callback|gsub("\\$";"$$"))}}}}' > "$destination"
+  chmod 600 "$destination"
+  community_probe_patch_is_valid "$destination" || die 'Community probe bundle is invalid'
+  unset workflow_value callback_value
+}
 build_secret_patch() {
   local environment="$1" name="$2" destination="$3" value
+  if [[ "$name" == DIFY_COMMUNITY_PROBE ]]; then
+    build_community_probe_patch "$environment" "$destination"
+    return
+  fi
   printf '{"services":{"app":{"environment":{}}}}\n' > "$destination"
   prompt_application_secret "$environment" "$name" value
   printf '%s' "$value" > "$TEMP_DIR/value"
@@ -1870,19 +1904,23 @@ stage_and_trigger_rotation() {
 rotate_protected_dify_key() {
   [[ "${GITHUB_ACTIONS:-}" == true ]] || die 'rotate-protected-dify-key is available only through GitHub Actions'
   [[ "$ENVIRONMENT" == staging && "$APPLY" == true && -n "$REQUEST_ID" ]] || die 'rotate-protected-dify-key requires staging, --apply, and a request ID'
-  [[ "$SECRET_NAME" =~ ^(DIFY_TOOL_KEY|DIFY_API_KEY)$ ]] || die 'rotate-protected-dify-key accepts only DIFY_TOOL_KEY or DIFY_API_KEY'
+  [[ "$SECRET_NAME" =~ ^(DIFY_TOOL_KEY|DIFY_API_KEY|DIFY_COMMUNITY_PROBE)$ ]] || die 'rotate-protected-dify-key accepts only Cloud keys or the Community probe bundle'
   load_config
   need_command jq; private_temp
   local value="${!SECRET_NAME:-}" payload="$TEMP_DIR/rotation.json" remote_command
-  application_secret_value_is_valid "$SECRET_NAME" "$value" || die "Protected $SECRET_NAME is invalid"
-  printf '%s' "$value" > "$TEMP_DIR/value"
-  chmod 600 "$TEMP_DIR/value"
-  jq -n --arg name "$SECRET_NAME" --rawfile value "$TEMP_DIR/value" '{services:{app:{environment:{($name):($value | gsub("\\$";"$$"))}}}}' > "$payload"
+  if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
+    build_community_probe_patch staging "$payload"
+  else
+    application_secret_value_is_valid "$SECRET_NAME" "$value" || die "Protected $SECRET_NAME is invalid"
+    printf '%s' "$value" > "$TEMP_DIR/value"
+    chmod 600 "$TEMP_DIR/value"
+    jq -n --arg name "$SECRET_NAME" --rawfile value "$TEMP_DIR/value" '{services:{app:{environment:{($name):($value | gsub("\\$";"$$"))}}}}' > "$payload"
+  fi
   chmod 600 "$payload"
   configure_ssh
   printf -v remote_command ' %s' --action stage-secrets --environment staging --secret-name "$SECRET_NAME" --apply
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$payload"
-  value=''; unset value DIFY_TOOL_KEY DIFY_API_KEY
+  value=''; unset value DIFY_TOOL_KEY DIFY_API_KEY DIFY_COMMUNITY_WORKFLOW_API_KEY DIFY_COMMUNITY_CALLBACK_KEY
   ACTION=rotate-secrets; SECRET_NAME=''
   host_call
 }
