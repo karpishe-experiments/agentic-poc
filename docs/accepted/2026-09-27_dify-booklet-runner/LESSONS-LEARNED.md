@@ -4,6 +4,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Carry explicit lineage when inspected tool traces omit child run IDs
+
+- **Context:** Community 1.17.1 workflow-tool calls.
+- **Observation:** Inspected native manager nodes report provider IDs, not child
+  run IDs. A deterministic caller can pass its system run ID and correlation into
+  the child; the child can return its own system run ID. Independent saved-run
+  reads confirm the exact relationship without timestamp matching.
+- **Guidance:** Retain and validate that explicit envelope with the application
+  operation. Use distinct operation IDs for revisions and retries. Do not claim
+  native trace linkage or application persistence from a transport probe.
+- **Evidence:** [M0 lineage proof](M0-readiness.md#explicit-parentchild-lineage-proof--2026-10-03),
+  parent `fbff27e2-634f-45fa-8558-e8ea981e99a5` and its independently read children.
+- **Promotion target:** Integration documentation; runner contract guidance.
+
 ### Verify runtime access separately from administrative access
 
 - **Context:** A Booklet runtime calls a Dify workflow with an application API key.

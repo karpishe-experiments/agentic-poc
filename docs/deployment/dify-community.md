@@ -345,6 +345,31 @@ and inspect both Dify traces before any further operation.
 
 ## Maintenance and recovery gates
 
+### Candidate interrupted-response probe
+
+The reviewed source adds `X-Booklet-Probe-Fault: discard-start-response` to the
+authenticated staging start endpoint. It drops a successful Dify response before
+parsing or saving its IDs; the callback can still persist the run ID. No header
+means normal behavior. An unsupported value returns 400 before dispatch;
+production and disabled deployments return 404. This is not deployed evidence.
+
+After the selective staging release is authorized and deployed:
+
+1. Confirm the bound workflow remains model-free and published, and the callback
+   and runtime keys remain the existing diagnostic bindings.
+2. Send exactly one authenticated start request with the fault header. Save the
+   returned correlation ID; expect 202, `status=unknown` and
+   `response_discarded=true`.
+3. Use the existing result GET for that correlation. Expect `succeeded`, a saved
+   callback and the same Dify run ID. Inspect that run and confirm zero tokens.
+4. Verify only one start execution occurred. Do not issue another POST to recover.
+
+This tests loss between Dify and Booklet, not loss of the Booklet response to the
+operator or a process crash. If no callback ID was saved, retain `unknown` and
+inspect the execution rather than replaying. The local no-ID regression verifies
+that lookup does not dispatch another run. Remove this temporary fault switch
+when the diagnostic probe is retired; do not copy it into paid runner routes.
+
 Routine operations are serialized with Booklet under
 `kids-booklet-vps-operation`, with cancellation disabled. A daily encrypted
 off-host backup is required before readiness is claimed: pin and checksum

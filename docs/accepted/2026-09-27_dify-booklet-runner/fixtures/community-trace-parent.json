@@ -1,0 +1,380 @@
+{
+  "app": {
+    "name": "issue65_trace_parent_20261003",
+    "description": "Model-free explicit parent/child linkage verification, not production orchestration.",
+    "mode": "workflow",
+    "icon": "P",
+    "icon_type": "emoji",
+    "icon_background": "#E8F4FF",
+    "use_icon_as_answer_icon": false
+  },
+  "dependencies": [],
+  "kind": "app",
+  "version": "0.7.0",
+  "workflow": {
+    "conversation_variables": [],
+    "environment_variables": [],
+    "features": {},
+    "graph": {
+      "nodes": [
+        {
+          "id": "start",
+          "type": "custom",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "title": "Correlation",
+            "type": "start",
+            "variables": [
+              {
+                "label": "correlation_id",
+                "variable": "correlation_id",
+                "type": "text-input",
+                "required": true,
+                "default": "",
+                "options": []
+              }
+            ]
+          }
+        },
+        {
+          "id": "roles",
+          "type": "custom",
+          "position": {
+            "x": 250,
+            "y": 0
+          },
+          "data": {
+            "title": "Probe roles",
+            "type": "code",
+            "code_language": "python3",
+            "code": "def main():\n    return {\"concept\": \"concept\", \"tester\": \"tester\"}\n",
+            "variables": [],
+            "outputs": {
+              "concept": {
+                "type": "string",
+                "children": null
+              },
+              "tester": {
+                "type": "string",
+                "children": null
+              }
+            }
+          }
+        },
+        {
+          "id": "concept",
+          "type": "custom",
+          "position": {
+            "x": 500,
+            "y": 0
+          },
+          "data": {
+            "title": "Trace concept",
+            "type": "tool",
+            "provider_type": "workflow",
+            "provider_id": "8baf2c44-0b27-4b8f-bd47-ef427c72f755",
+            "provider_name": "issue65_trace_child_20261003",
+            "tool_name": "issue65_trace_child_20261003",
+            "tool_label": "Trace child",
+            "tool_node_version": "2",
+            "tool_configurations": {},
+            "tool_parameters": {
+              "correlation_id": {
+                "type": "variable",
+                "value": [
+                  "start",
+                  "correlation_id"
+                ]
+              },
+              "parent_run_id": {
+                "type": "variable",
+                "value": [
+                  "sys",
+                  "workflow_run_id"
+                ]
+              },
+              "role": {
+                "type": "variable",
+                "value": [
+                  "roles",
+                  "concept"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "tester",
+          "type": "custom",
+          "position": {
+            "x": 750,
+            "y": 0
+          },
+          "data": {
+            "title": "Trace tester",
+            "type": "tool",
+            "provider_type": "workflow",
+            "provider_id": "8baf2c44-0b27-4b8f-bd47-ef427c72f755",
+            "provider_name": "issue65_trace_child_20261003",
+            "tool_name": "issue65_trace_child_20261003",
+            "tool_label": "Trace child",
+            "tool_node_version": "2",
+            "tool_configurations": {},
+            "tool_parameters": {
+              "correlation_id": {
+                "type": "variable",
+                "value": [
+                  "start",
+                  "correlation_id"
+                ]
+              },
+              "parent_run_id": {
+                "type": "variable",
+                "value": [
+                  "sys",
+                  "workflow_run_id"
+                ]
+              },
+              "role": {
+                "type": "variable",
+                "value": [
+                  "roles",
+                  "tester"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "verify",
+          "type": "custom",
+          "position": {
+            "x": 1000,
+            "y": 0
+          },
+          "data": {
+            "title": "Verify exact lineage",
+            "type": "code",
+            "code_language": "python3",
+            "code": "def main(correlation_id, parent_run_id, c_correlation, c_parent, c_role, c_run, c_operation, t_correlation, t_parent, t_role, t_run, t_operation):\n    if c_correlation != correlation_id or t_correlation != correlation_id or c_parent != parent_run_id or t_parent != parent_run_id:\n        raise ValueError(\"Lineage mismatch\")\n    if c_role != \"concept\" or t_role != \"tester\" or c_operation != correlation_id + \":concept\" or t_operation != correlation_id + \":tester\":\n        raise ValueError(\"Operation mismatch\")\n    if not c_run or not t_run or c_run == t_run or c_run == parent_run_id or t_run == parent_run_id:\n        raise ValueError(\"Run identity mismatch\")\n    return {\"correlation_id\": correlation_id, \"parent_run_id\": parent_run_id, \"concept_run_id\": c_run, \"tester_run_id\": t_run}\n",
+            "variables": [
+              {
+                "variable": "correlation_id",
+                "value_selector": [
+                  "start",
+                  "correlation_id"
+                ]
+              },
+              {
+                "variable": "parent_run_id",
+                "value_selector": [
+                  "sys",
+                  "workflow_run_id"
+                ]
+              },
+              {
+                "variable": "c_correlation",
+                "value_selector": [
+                  "concept",
+                  "correlation_id"
+                ]
+              },
+              {
+                "variable": "c_parent",
+                "value_selector": [
+                  "concept",
+                  "parent_run_id"
+                ]
+              },
+              {
+                "variable": "c_role",
+                "value_selector": [
+                  "concept",
+                  "role"
+                ]
+              },
+              {
+                "variable": "c_run",
+                "value_selector": [
+                  "concept",
+                  "child_run_id"
+                ]
+              },
+              {
+                "variable": "c_operation",
+                "value_selector": [
+                  "concept",
+                  "operation_id"
+                ]
+              },
+              {
+                "variable": "t_correlation",
+                "value_selector": [
+                  "tester",
+                  "correlation_id"
+                ]
+              },
+              {
+                "variable": "t_parent",
+                "value_selector": [
+                  "tester",
+                  "parent_run_id"
+                ]
+              },
+              {
+                "variable": "t_role",
+                "value_selector": [
+                  "tester",
+                  "role"
+                ]
+              },
+              {
+                "variable": "t_run",
+                "value_selector": [
+                  "tester",
+                  "child_run_id"
+                ]
+              },
+              {
+                "variable": "t_operation",
+                "value_selector": [
+                  "tester",
+                  "operation_id"
+                ]
+              }
+            ],
+            "outputs": {
+              "correlation_id": {
+                "type": "string",
+                "children": null
+              },
+              "parent_run_id": {
+                "type": "string",
+                "children": null
+              },
+              "concept_run_id": {
+                "type": "string",
+                "children": null
+              },
+              "tester_run_id": {
+                "type": "string",
+                "children": null
+              }
+            }
+          }
+        },
+        {
+          "id": "finish",
+          "type": "custom",
+          "position": {
+            "x": 1250,
+            "y": 0
+          },
+          "data": {
+            "title": "Linked runs",
+            "type": "end",
+            "outputs": [
+              {
+                "variable": "correlation_id",
+                "value_type": "string",
+                "value_selector": [
+                  "verify",
+                  "correlation_id"
+                ]
+              },
+              {
+                "variable": "parent_run_id",
+                "value_type": "string",
+                "value_selector": [
+                  "verify",
+                  "parent_run_id"
+                ]
+              },
+              {
+                "variable": "concept_run_id",
+                "value_type": "string",
+                "value_selector": [
+                  "verify",
+                  "concept_run_id"
+                ]
+              },
+              {
+                "variable": "tester_run_id",
+                "value_type": "string",
+                "value_selector": [
+                  "verify",
+                  "tester_run_id"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "start-roles",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "roles",
+          "targetHandle": "target",
+          "type": "custom",
+          "data": {
+            "sourceType": "start",
+            "targetType": "code"
+          }
+        },
+        {
+          "id": "roles-concept",
+          "source": "roles",
+          "sourceHandle": "source",
+          "target": "concept",
+          "targetHandle": "target",
+          "type": "custom",
+          "data": {
+            "sourceType": "code",
+            "targetType": "tool"
+          }
+        },
+        {
+          "id": "concept-tester",
+          "source": "concept",
+          "sourceHandle": "source",
+          "target": "tester",
+          "targetHandle": "target",
+          "type": "custom",
+          "data": {
+            "sourceType": "tool",
+            "targetType": "tool"
+          }
+        },
+        {
+          "id": "tester-verify",
+          "source": "tester",
+          "sourceHandle": "source",
+          "target": "verify",
+          "targetHandle": "target",
+          "type": "custom",
+          "data": {
+            "sourceType": "tool",
+            "targetType": "code"
+          }
+        },
+        {
+          "id": "verify-finish",
+          "source": "verify",
+          "sourceHandle": "source",
+          "target": "finish",
+          "targetHandle": "target",
+          "type": "custom",
+          "data": {
+            "sourceType": "code",
+            "targetType": "end"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -85,11 +85,12 @@ export async function acknowledgeProbe(value: unknown, receivedKey: string | nul
   return { status: 200 as const, body: { acknowledged: true, correlation_id: input.correlation_id, marker: input.marker, workflow_run_id: input.workflow_run_id } };
 }
 
-export async function startProbe() {
+export async function startProbe(options: { discardStartResponse?: boolean } = {}) {
   runtimeConfig();
   const correlationId = randomUUID();
   const now = Date.now();
   await collection().insertOne({ _id: correlationId, marker: PROBE_MARKER, status: "started", workflowRunId: null, workflowId: null, errorCategory: null, callbackAtMs: null, createdAtMs: now, updatedAtMs: now });
+  let responseDiscarded = false;
   try {
     const response = await difyRequest("/workflows/run", { method: "POST", body: JSON.stringify({ inputs: { correlation_id: correlationId, marker: PROBE_MARKER }, response_mode: "blocking", user: `booklet-issue69-${correlationId}` }) });
     if (!response.ok) {
@@ -101,6 +102,13 @@ export async function startProbe() {
         return { correlation_id: correlationId, status: "failed" as const, error_category: errorCategory };
       }
       throw new Error(`Dify returned HTTP ${response.status}`);
+    }
+    // Staging diagnostic only: retain callback state, but lose the start result
+    // before parsing or saving any identity from the response. Never replay.
+    if (options.discardStartResponse) {
+      responseDiscarded = true;
+      await response.body?.cancel();
+      throw new Error("Probe start response deliberately discarded");
     }
     const payload = await response.json() as { workflow_run_id?: unknown; data?: { id?: unknown; workflow_id?: unknown; status?: unknown; outputs?: Record<string, unknown> } };
     const runId = idSchema.safeParse(payload.workflow_run_id ?? payload.data?.id);
@@ -115,7 +123,7 @@ export async function startProbe() {
     return { correlation_id: correlationId, workflow_run_id: runId.data, status: matched ? "succeeded" as const : "failed" as const };
   } catch {
     await collection().updateOne({ _id: correlationId, status: { $ne: "succeeded" } }, { $set: { status: "unknown", updatedAtMs: Date.now() } });
-    return { correlation_id: correlationId, status: "unknown" as const };
+    return { correlation_id: correlationId, status: "unknown" as const, ...(responseDiscarded ? { response_discarded: true } : {}) };
   }
 }
 

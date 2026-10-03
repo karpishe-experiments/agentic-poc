@@ -78,6 +78,12 @@ unique indexes as appropriate. No general event-sourcing framework.
 | `experiment_delegations` | Run, tester decision/event, allowed tasks/subjects/actions, effective sequence, revoked/superseded link; no budget-changing capability |
 | Existing messages/model calls/jobs/assets | Run/operation IDs and Dify IDs; retain conversations, actual/estimated/unknown usage, job ordering and asset lineage; local agent-version IDs nullable for this profile |
 
+Use M0's verified explicit lineage envelope for nested calls: correlation ID,
+parent Dify run ID, child Dify run ID, role and application-owned operation ID.
+Validate against the dispatched operation; retain it with the operation record.
+The probe's `correlation:role` operation IDs suffice only for its single call per
+role. Real runner revisions/retries need distinct application operation IDs.
+
 Replace the old `artifacts_booklet_type_unique` constraint for the clean v2
 baseline: it prevents multiple subjects of the same task. Implement the named
 subject-key index above and verify it in setup/readiness/tests. Do not silently
