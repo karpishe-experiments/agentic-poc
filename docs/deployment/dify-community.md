@@ -154,6 +154,11 @@ developer in a single workspace, with separate accounts. Disable public
 registration and extra workspace creation. Deliver invitation links privately;
 SMTP is deferred. Verify login/logout, roles, file upload/download, workflow
 editor, plugin catalogue, and New Agent configuration without a model call.
+On 3 October 2026, the operator's Members screenshot showed two active
+accounts in the Community workspace: the owner and the invited developer with
+the `admin` role. The developer was no longer marked Pending. This verifies
+invitation acceptance and visible membership, not the remaining editor,
+plugin, or recovery checks.
 If an invitation reports `invalid username-password pair or user is disabled`,
 check Celery broker authentication against the configured Redis password before
 retrying. The account may already have been created before queueing failed;
@@ -184,6 +189,26 @@ inventory, and workflow editing. Follow the
 [Codex Dify access guide](../accepted/2026-09-26_codex-dify-access/runbook.md)
 for credential handling; do not assume CLI login authenticates MCP.
 
+On 3 October 2026, `difyctl` 1.17.1 and a freshly restarted Codex session
+both authenticated to `https://dify.uniwares.co.uk` and read back the owner
+account's workspace `ffac910f-2786-490e-90d8-07243d49741b`. Codex
+discovered the separate `dify-community` local-stdio connection and its 172
+tools; a live MCP `workspace_list` call succeeded. Cloud sessions stayed
+separate. The Community credential file ACL permits only the current user,
+SYSTEM, and Administrators. The bridge's device-login parser required a local
+compatibility correction: Dify 1.17.1 returns `token`, while the pinned bridge
+accepted only `access_token`. The local correction accepts either and fails
+closed if neither exists; typecheck and 114 tests passed. Preserve or upstream
+it before reinstalling the bridge. MCP `app_list` still returns 404
+`workspace not found`; the official CLI lists apps in the same workspace and
+is the verified inventory fallback. Community cookie import also passed live
+MCP `workspace_list` and `workflow_get_draft` checks on 3 October 2026. Use the
+[clipboard prompts](../dify-getting-started.md#community-instance-issue-69) for
+private cookie entry. The terminal's masked paste accepted control characters;
+the bridge stored them without validating their contents. Cookie-name discovery
+and import success alone therefore do not prove authenticated console access.
+Cookie refresh/expiry behavior remains unverified.
+
 On uniquely named disposable resources, perform a model-free configuration →
 draft test → controlled failure → diagnosis → repair → publish → Workflow Tool
 synchronization → restore cycle. Read back the published version and execute
@@ -191,6 +216,40 @@ its published behavior. Verify New Agent create/configure/publish separately;
 model execution remains untested. Before an uncertain retry, inspect the
 existing run/version. Preserve evidence, then clean up only named probes with
 the required deletion confirmation.
+
+The first disposable control workflow is `issue69_control_probe`
+(`8aea979d-fdbf-4145-b7a9-f62f27b850dd`). Its reviewed, model-free source
+and input fixture are [`control-probe.yml`](../../deploy/dify/control-probe.yml)
+and [`control-probe-input.json`](../../deploy/dify/control-probe-input.json).
+The deterministic control cycle passed on 3 October 2026. MCP validated the
+graph, ran the draft, retrieved the failed trace, published versions, created
+and refreshed its Workflow Tool, and restored the original published version.
+The official CLI updated the existing app from DSL and executed published
+versions. All observed runs reported zero tokens; the graph contains no model,
+image, or HTTP nodes. The original private draft backup is retained in the
+protected Community state directory outside Git. The app and tool remain
+available for subsequent integration checks; no probe was deleted.
+
+| Check | Verified evidence |
+| --- | --- |
+| Draft baseline | Run `ccc20e55-49a8-4c0e-86ec-3a61949cb3e6`; `issue69-original`, succeeded |
+| Controlled failure and trace retrieval | Run `22b73731-cbe0-473b-a0bf-1c348a3aebb2`; code node `echo` reported `issue69-controlled-failure` |
+| Repaired draft | Run `1b55b452-c0bb-4069-a742-b5b0fd7fc979`; original output, succeeded |
+| Original publication | Version `11377436-a9b6-40db-a8f4-8f6567fe0514`; run `9435f1b6-7205-4d75-a8f4-771d4ca85ab1` succeeded |
+| Changed publication | Version `7503d63c-d8f2-4b0f-8528-2737062ebb5f`; run `b0e93b03-d713-4f22-bf9d-9ceba06dc96b` returned `issue69-original-changed` |
+| Restored publication | Version `e07f1077-a6f7-485d-8dcd-c1ba69e4e568`; run `64b6a051-6f0e-40e9-9f06-2d6c62adac35` returned `issue69-original` |
+| Workflow Tool synchronization | Tool `f78ac7f2-7cba-4fd5-89c2-7fdb9b804415`; refresh detected `synced=false` after change, then verified `synced=true`; final restoration refreshed successfully |
+
+The pinned bridge has two additional Community compatibility gaps: draft sync
+sends `environment_variables`, which 1.17.1 rejects as an extra field; published
+execution through console cookies returns HTTP 405. Use the inspected official
+CLI `import studio-app --app-id` and `run app --inputs-file` fallbacks. Keep
+`--http-retry 0` during probes and inspect uncertain results before retrying.
+CLI import preserved the app ID; MCP restore preserved both the app ID and the
+original graph hash. Tool synchronization and published app execution were
+verified separately; a caller invoking the Workflow Tool remains untested.
+Booklet runtime-key recovery, New Agent configuration, and backup/restore
+rehearsal are still separate readiness checks.
 
 ## Checkpoint 5 — deterministic Booklet round trip
 
@@ -203,6 +262,20 @@ HTTPS origin, `DIFY_COMMUNITY_WORKFLOW_API_KEY` to that workflow application's
 runtime key, and `DIFY_COMMUNITY_CALLBACK_KEY` to a separate 32-byte-or-longer
 key. Do not overwrite Cloud experiment credentials. Production keeps the flag
 false. The Dify secret variable must contain the same dedicated callback key.
+
+The Community draft `issue69_booklet_round_trip`
+(`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`) was imported and read back on
+3 October 2026. Server-default graph validation passed with zero issues. It
+was published as version `ed5bc347-611d-4e0c-9a82-1a0f26445e2e`, but has not
+been executed. The deployed staging revision
+`612297bcbb695b7189ad2824d98493a8c4bcf333` does not contain the Community
+probe routes. Promote only the reviewed probe changes; preserve the existing
+Cloud callback authentication exceptions when adapting `proxy.ts` because the
+staging and master versions differ. Next, privately bind its dedicated callback
+key and application runtime key to staging's protected configuration, enable
+the staging probe, and complete the reviewed staging release checkpoint.
+The default Compose configuration keeps the probe disabled. Imported secret
+metadata is not proof that the callback key has been entered correctly.
 
 From an authenticated Booklet staging client, `POST
 /api/integrations/dify-community/runs`. Save the returned correlation ID even
