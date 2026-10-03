@@ -82,7 +82,7 @@ use `POST /image-json` with the unmodified provider JSON response as the HTTP bo
 and operation identifiers in query fields. Stream-limit JSON to 28 MiB; require
 exactly one `data` entry with valid `b64_json`, decode to at most 20 MiB, then use
 the same validator and original-byte digest. Persist only allowlisted usage and
-asset metadata, never the raw response. Test Cloud forwarding limits first. Do not pass a 20 MiB
+asset metadata, never the raw response. Test Community forwarding limits first. Do not pass a 20 MiB
 image through an unverified Code-node size limit or pretend base64 is a file.
 
 ## Implementation order

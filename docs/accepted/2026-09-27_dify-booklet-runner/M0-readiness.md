@@ -2,7 +2,8 @@
 
 **State:** In progress. Authenticated inventory and the deterministic workflow
 failure/repair/publication/tool-synchronization/restoration cycle passed.
-Modular packaging, full-suite capacity and Booklet runtime-key recovery remain unverified.
+Community workflow-to-workflow invocation passed in draft and published callers.
+Full-suite capacity, binding-change isolation and Booklet runtime-key recovery remain unverified.
 **Coverage:** AC08, AC13 and first-slice readiness.
 **Read first:** [EXECUTION.md](EXECUTION.md), [PRD.md](PRD.md),
 [Dify access runbook](../2026-09-26_codex-dify-access/runbook.md).
@@ -16,15 +17,62 @@ dependent operation blocked by any unresolved item. None is fully complete yet.
 
 | Action | Expected result | Evidence | Unresolved blocker |
 | --- | --- | --- | --- |
-| 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-09-27: CLI owner inventory, MCP workspace/snippet listing and session renewal pass; read-only Cloud billing shows Build Apps 3/5 | New Agent quota and complete-suite capacity |
-| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Pending | Callable module behavior and complete-suite capacity |
+| 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-03: Community MCP workspace check and CLI inventory pass; three new probe workflows imported | Complete-suite capacity; host workload measurements |
+| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Community draft and published callers invoke separate published Concept and tester tools; see current evidence below | Configuration-change isolation and trace linkage |
 | 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic workflow cycle passed; see recovery proof below | Runtime credential recovery; modular binding behavior |
 | 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Pending | Predecessor evidence and any private binding/setup handoff |
 
 Use MCP first, inspected official CLI second, and authorized browser control last.
 An unresolved staging dependency does not block independent local preparation.
 For checkpoint 4, use the handoff format in [EXECUTION.md](EXECUTION.md#sol-low-execution-packages).
-Defer the actual Booklet callback round trip until M1 supplies its routes.
+The Community callback routes now exist on master through #69, but staging
+deployment and private runtime/callback bindings remain pending.
+
+### Current target and Community probe — 2026-10-03
+
+Use the Community instance at `https://dify.uniwares.co.uk`, workspace
+`ffac910f-2786-490e-90d8-07243d49741b`. Issue #69 delivered this target;
+keep the Cloud experiment unchanged. The Cloud sections below are historical
+evidence, not the current host selection or a Community capacity limit.
+The [Community runbook](../../deployment/dify-community.md) owns access
+compatibility and remaining platform readiness checks. PR #78 merged at
+`2b41ebf7c8a3d1461140ff049db1c319dc5153ec`; this issue branch includes it.
+
+| Probe role | App ID | Tool provider / state |
+| --- | --- | --- |
+| Concept | `648ee9ff-45db-4655-9b7c-6f003a6e0b7a` | `b6faa1b1-cd69-4021-b363-38442ae3b39c`; published and synchronized |
+| External tester | `2a0cf2e8-26d3-4b04-9567-e04ab7c4152f` | `aba697cd-29ff-4612-8348-6b83e5e59689`; published and synchronized |
+| Manager transport caller | `ec1ab490-1abe-4672-ac7f-090719c41dfd` | `899c1dee-e893-41c8-b42b-bd9214eff4d6`; published and synchronized |
+
+The retained fixtures are [Concept](fixtures/community-concept.yml),
+[tester](fixtures/community-tester.yml), and [caller](fixtures/community-manager.yml).
+Input `{"marker":"issue65"}` to the caller returned
+`{"result":"issue65|manager|concept|tester"}` in run
+`7c70636a-bae9-4401-b894-0456d8880b9f`. Tool nodes invoke separate workflows;
+their graphs are not embedded in the caller. Child runs are independently
+retrievable: Concept `0fb19acb-20fb-4b1c-abd0-3de858e6a4a8`, tester
+`9f2aa004-82c8-4fcc-93a8-2bc2310d850c`. Their parent linkage still needs
+verification; matching timestamps alone are not proof of linkage.
+
+All three graph validations returned zero errors/warnings. Standalone draft
+runs passed, and tester run `3306b2bc-9cf8-4fa9-8bd7-6ed6db5148d5` rejected
+an input without the Concept marker. All observed runs reported zero tokens.
+Two independent clean reviews preceded each configuration publication. The caller
+is a transport-only probe: it does not grant the production manager tester
+authority, fabricate approvals, or implement creative responsibilities.
+
+Prefer separate role workflows for the suite, subject to remaining capacity,
+accounting and recovery checks. Published caller version
+`dae1aabe-3fa3-4cf5-8507-3f91fe1d5757` was read back and executed through the
+inspected CLI fallback with HTTP retries disabled. Run
+`e42f79d0-bd29-4000-92af-17de5b5e2fac` returned the same expected result and zero
+tokens using [the retained input](fixtures/community-probe-input.json).
+Do not infer a five-app Cloud quota from the
+Community workspace response's `sandbox` label. Three successful imports prove
+capacity for this probe only, not the full suite. Next verify binding-change
+behavior, then Booklet runtime-key recovery. Private
+staging keys and deployment are required only for that runtime round trip;
+independent local M1 contract preparation can proceed without them.
 
 ### Current execution evidence
 
@@ -220,7 +268,7 @@ A copy/paste template alone fails properties 2–3; do not label it an independe
 callable module. If independent modules cannot fit, test small focused groups
 with separate specialist instructions/tests and record their shared publication
 boundary. If neither arrangement fits, ask for a bounded scope/capacity decision.
-Do not upgrade, self-host, delete existing apps or hide an all-role router in a
+Do not upgrade the workspace, provision another host, delete existing apps or hide an all-role router in a
 prompt dictionary.
 
 ## Non-billable control proof
@@ -243,9 +291,9 @@ prompt dictionary.
    M0's initial proof can use a disposable deterministic endpoint; it must not
    claim the later Booklet callback has already passed.
    Test binary and base64-response forwarding with fixture bytes up to the planned
-   limit. Record Dify Cloud's actual request/response/file limits. Do not assume
+   limit. Record the selected Community target's actual request/response/file limits. Do not assume
    Code-node outputs or HTTP responses can carry 20 MiB just because Booklet can.
-   An insufficient Cloud limit needs a verified transfer alternative before M2;
+   An insufficient transport limit needs a verified transfer alternative before M2;
    it is not permission to silently reduce the supported output or run a paid test.
 8. Using the proposed Booklet runtime credentials, prove read-only retrieval of
    a deterministic run's status and saved result. Test recovery after a lost
@@ -272,8 +320,8 @@ Complete the roadmap access matrix with dates/results, including these decisions
   Do not require an OpenAI host key for the new execution path.
 - Non-secret binding metadata belongs in a small configuration manifest; it is
   evidence/deployment configuration, not an editable agent registry.
-- Use staging for Cloud callbacks. Local unit tests use transport fixtures; local
-  app-to-Cloud calls can run, but Cloud cannot reach localhost without separately
+- Use staging for Community callbacks. Local unit tests use transport fixtures; local
+  app-to-Community calls can run, but Community cannot reach localhost without separately
   approved connectivity. Do not add a tunnel to make local smoke look live.
 - Verify GitHub required checks/reviews, merge rights, deployment secret presence,
   and staging Basic Auth access without retrieving unrelated secrets.

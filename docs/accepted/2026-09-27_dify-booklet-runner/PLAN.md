@@ -83,7 +83,7 @@ For each row, record the exact environment/target, credential or session referen
 
 | Dependency / purpose | Environment and reference to identify | Verification and unresolved handoff |
 | --- | --- | --- |
-| Codex → Dify administration | Local MCP/CLI session, intended Cloud workspace; authorized browser fallback if needed | Verify identity, permissions, capacity and needed configuration/publication operations. Private login handoff only for the failing interface. |
+| Codex → Dify administration | Separate Community MCP/CLI session at `https://dify.uniwares.co.uk`; authorized browser fallback if needed | Verify identity, permissions, capacity and needed configuration/publication operations. Preserve Cloud resources; see M0 for current evidence. Private login handoff only for the failing interface. |
 | Booklet → Dify execution | Local/staging Dify app API credential references, app IDs and published workflow/tool bindings | Exercise a deterministic non-provider path and read back the selected publication. Record any missing app credential/binding. |
 | Dify → Booklet callbacks | Local test/staging origin, callback-key reference and workflow environment binding | Verify reachability and authenticated non-mutating or disposable callback behavior. Identify any access-gate/routing gap. |
 | Dify → text/image providers | Workspace provider/plugin credential IDs and selected model bindings | Verify metadata, required capabilities and reference-image support; defer a paid capability test until its execution scope is authorized. Login or plugin authorization alone does not prove model access. |

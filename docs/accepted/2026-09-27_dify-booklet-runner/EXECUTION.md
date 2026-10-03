@@ -34,6 +34,13 @@ Inspected baseline on 2026-09-27:
 
 Recheck these facts at entry. Never copy credential values into this file.
 
+Current target after issue #69: Community at `https://dify.uniwares.co.uk`,
+workspace `ffac910f-2786-490e-90d8-07243d49741b`, with separate MCP/CLI sessions.
+The Cloud facts above remain historical. Use [M0](M0-readiness.md) for current
+probe identifiers and the [Community runbook](../../deployment/dify-community.md)
+for access limitations and platform readiness. Community adoption does not grant
+paid execution, staging deployment, resets or deletion of Cloud resources.
+
 ## A. Entry gate — revise before implementing
 
 Track three readiness states separately:
