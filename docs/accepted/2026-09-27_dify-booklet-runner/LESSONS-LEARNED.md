@@ -4,6 +4,22 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### VPS releases snapshot master-owned Compose files
+
+- **Context:** Independent `master` and `_staging` release lines on the shared VPS.
+- **Observation:** Infrastructure sync transfers master's Compose files. The host's
+  `prepare_release` copies those installed files into immutable per-commit releases;
+  it does not obtain configuration from the application branch. A selective app port
+  can therefore preserve its source defaults but still inherit different host defaults.
+- **Guidance:** Compare both configuration sources before release. Correct and
+  synchronize reviewed host defaults first, then create a new release snapshot.
+  Do not expect redeploying an existing commit to replace its saved configuration.
+- **Evidence:** `sync_host_configuration` and `prepare_release` in
+  [the dispatcher](../../../scripts/deploy/vps-deployment.sh);
+  `preserves Cloud staging defaults in master-owned host configuration` in
+  [deployment contracts](../../../tests/unit/deployment-contracts.test.ts).
+- **Promotion target:** Deployment documentation; reflected in the canonical runbook.
+
 ### Published callers do not pin child Workflow Tool bindings
 
 - **Context:** Dify Community 1.17.1; a published caller invokes separate workflows
