@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+grep -Fq '"$ACTION" != dify-repair-broker ]]; then' "$script"
 grep -Fq 'values["CELERY_BROKER_URL"] = f"redis://:{values['"'"'REDIS_PASSWORD'"'"']}@redis:6379/1"' "$script"
 broker_fixture="$(mktemp -d)"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
