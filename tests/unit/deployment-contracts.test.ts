@@ -22,7 +22,8 @@ describe("deployment contracts", () => {
   it("keeps Community host operations manual, serialized, and branch-fresh", () => {
     const workflow = readFileSync(".github/workflows/dify-operations.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("options: [check, idle, install, status, resume]");
+    expect(workflow).toContain("options: [check, idle, install, repair-broker, status, resume]");
+    expect(workflow).toContain('[[ "$ACTION" =~ ^(install|repair-broker)$ && "$APPLY" == true ]]');
     expect(workflow).toContain('[[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"');
     expect(workflow).toContain('args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")');
     expect(workflow).toContain("Resume requires apply.");
