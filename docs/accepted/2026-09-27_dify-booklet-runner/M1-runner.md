@@ -21,7 +21,8 @@ and AssetStore access and release permissions. Bundle any
 missing login/key installation and deployment grant into one handoff. No paid
 authority is needed. Run the entire milestone in Simulated mode.
 
-The new callback routes do not exist at entry. Verify the origin/access path now;
+The experiment-runner callback routes do not exist at entry. The deployed Community
+diagnostic callback proves the origin/access path, not these new contracts;
 verify the exact new routes after deployment and before the first Dify smoke.
 Perform the one authorized clean staging reset before the first durable runner
 case, using M5's target/backup procedure. Include that exact-target approval in

@@ -4,6 +4,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Verify runtime access separately from administrative access
+
+- **Context:** A Booklet runtime calls a Dify workflow with an application API key.
+- **Observation:** The deployed diagnostic probe completed through an authenticated
+  callback and a separate Booklet result lookup using runtime credentials.
+  Administrative MCP discovery alone did not establish that path.
+- **Guidance:** Verify application execution, persisted callback identity and
+  runtime-key lookup together. Retain correlation and run IDs. Test lost-response
+  recovery separately; a successful ordinary lookup does not prove interruption
+  handling, and an unknown outcome is not permission to replay.
+- **Evidence:** [M0 runtime integration handoff](M0-readiness.md#runtime-integration-handoff),
+  operator result dated 2026-10-03, run `18381193-b811-4809-a673-4784bf2d572f`.
+- **Promotion target:** Integration documentation.
+
 ### VPS releases snapshot master-owned Compose files
 
 - **Context:** Independent `master` and `_staging` release lines on the shared VPS.

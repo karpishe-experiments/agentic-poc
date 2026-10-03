@@ -184,13 +184,13 @@ the same pinned published caller. Freeze and record the effective child bindings
 as well as the caller configuration; drain before their synchronization. See
 [M0 binding evidence](M0-readiness.md#binding-change-and-restoration-evidence).
 
-### Outstanding execution dependencies
+### Execution readiness dependencies
 
 | Dependency | Required proof/handoff | Blocks |
 | --- | --- | --- |
-| Modular capacity/invocation | Non-billable module/caller probe, quota and publication behavior | Full-suite packaging |
-| Publication/sync/restoration | Deterministic failure, repair, publish and restore cycle | Unattended Dify operation |
-| Runtime credentials/callbacks | Private bindings, authenticated fixture round trip and runtime result recovery | Deployed end-to-end simulation |
+| Modular capacity/invocation | Separate workflow invocation passed; full-suite capacity and parent linkage pending | Full-suite packaging |
+| Publication/sync/restoration | Deterministic cycle and binding restoration passed in M0; verify each later candidate | Publication of later suite configurations |
+| Runtime credentials/callbacks | Diagnostic Booklet round trip and runtime lookup passed on 2026-10-03; interrupted-response recovery and full-runner bindings pending | Dependent runner integration and uncertain-outcome recovery |
 | Image transport/accounting | Reference inputs, output transfer, retries and reservations | Real image execution; fixture transfer also precedes simulated image work |
 | GitHub/staging delivery | Checks/reviews, merge/deploy access and compatible release path | Unattended release |
 | Reset | Exact-target inventory, backup/summary and authorization | Clean-baseline transition |
