@@ -8,6 +8,10 @@ Compose merges base, environment overlay, root-only secret JSON, and image overr
 
 ## Variables and secrets
 
+The Community probe uses independent `DIFY_COMMUNITY_PROBE_ENABLED`, `DIFY_COMMUNITY_BASE_URL`, `DIFY_COMMUNITY_WORKFLOW_API_KEY`, and `DIFY_COMMUNITY_CALLBACK_KEY` bindings. Default enablement is false; enabled configuration requires staging, an HTTPS origin, the exact probe application's key, and a dedicated callback key of at least 32 characters. Master owns the protected staging bundle rotation. The port does not replace Cloud credentials or change generation defaults.
+
+The start/result routes retain Basic authentication. The exact callback exception requires staging and enablement; the callback verifies its dedicated key and bounded body. Correlation and run IDs must match stored evidence. Unknown outcomes require result inspection, not automatic execution retries. Tests cover disabled/production routes, wrong keys, malformed callbacks, duplicate/conflicting IDs, and saved-result recovery.
+
 | Names | Storage and purpose |
 | --- | --- |
 | `APP_HOSTNAME`, `ASSETS_BUCKET`, `DIAGNOSTICS_BUCKET`, `RECOVERY_BUCKET` | Reviewed JSON, selected per environment, passed through Compose |

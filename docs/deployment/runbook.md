@@ -1,5 +1,13 @@
 # VPS deployment runbook
 
+## Community connectivity probe
+
+This staging release adds a model-free Community probe. It preserves the Cloud trial and its settings. The probe is disabled by default. The canonical Community setup and protected-key procedure is maintained on [master](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md).
+
+After deploying this reviewed release, bind the probe application's API key and dedicated callback key privately. Use master’s `dify-tool-key.yml` workflow with `DIFY_COMMUNITY_PROBE` for staging; it preserves existing protected fields. The same callback key must be bound to the published `issue69_booklet_round_trip` workflow. Do not use the manager application's key.
+
+An authenticated `POST /api/integrations/dify-community/runs` starts one deterministic round trip. An authenticated `GET /api/integrations/dify-community/runs/<correlationId>` retrieves its saved result. Only the exact enabled staging callback uses machine authentication. Retain correlation and run IDs. If the original response is lost, inspect the saved result; do not submit another start request automatically. Live callback acceptance remains pending until private bindings and the round trip are verified. No model or image call is part of this check.
+
 This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
 PR Validate runs [selected non-build checks](../../scripts/ci/README.md). For a manual

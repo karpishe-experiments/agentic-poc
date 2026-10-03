@@ -25,12 +25,23 @@ export const serverEnvSchema = z.object({
   DIFY_API_KEY: z.string().min(1).optional(),
   DIFY_TOOL_KEY: z.string().refine((value) => Buffer.byteLength(value, "utf8") >= 32, "DIFY_TOOL_KEY must contain at least 32 bytes.").optional(),
   DIFY_IMAGE_OPENAI_API_KEY: z.string().min(1).optional(),
+  DIFY_COMMUNITY_PROBE_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  DIFY_COMMUNITY_BASE_URL: z.string().url().optional(),
+  DIFY_COMMUNITY_WORKFLOW_API_KEY: z.string().min(1).optional(),
+  DIFY_COMMUNITY_CALLBACK_KEY: z.string().min(32).optional(),
   MONGODB_URI: z.string().min(1).default("mongodb://127.0.0.1:27017/?replicaSet=rs0"),
   MONGODB_DATABASE: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/).default("kids_booklet"),
   DATA_ROOT: z.string().min(1).default("./data/assets"),
   COMIC_COPY_MODE: z.enum(["creative", "exact"]).default("creative"),
   OPENAI_TRACE_INCLUDE_SENSITIVE_DATA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 }).superRefine((env, context) => {
+  if (env.DIFY_COMMUNITY_PROBE_ENABLED) {
+    if (env.DEPLOYMENT_ENV !== "_staging") context.addIssue({ code: "custom", path: ["DIFY_COMMUNITY_PROBE_ENABLED"], message: "Community probe is staging-only." });
+    for (const key of ["DIFY_COMMUNITY_BASE_URL", "DIFY_COMMUNITY_WORKFLOW_API_KEY", "DIFY_COMMUNITY_CALLBACK_KEY"] as const) {
+      if (!env[key]) context.addIssue({ code: "custom", path: [key], message: "Required when the Community probe is enabled." });
+    }
+    if (env.DIFY_COMMUNITY_BASE_URL && (new URL(env.DIFY_COMMUNITY_BASE_URL).protocol !== "https:" || new URL(env.DIFY_COMMUNITY_BASE_URL).pathname !== "/")) context.addIssue({ code: "custom", path: ["DIFY_COMMUNITY_BASE_URL"], message: "Use an HTTPS origin without a path." });
+  }
   if (env.ASSET_STORAGE === "s3" && !env.ASSETS_BUCKET) context.addIssue({ code: "custom", path: ["ASSETS_BUCKET"], message: "S3 storage requires ASSETS_BUCKET." });
   if (env.DEPLOYMENT_ENV !== "local") {
     for (const key of ["ASSETS_BUCKET", "DIAGNOSTICS_BUCKET", "RECOVERY_BUCKET", "ACCESS_GATE_PASSWORD"] as const) {

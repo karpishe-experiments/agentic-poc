@@ -36,11 +36,15 @@ describe("deployment contracts", () => {
     expect(hasValidBasicAuthorization(`Basic ${btoa(`other:${password}`)}`, password)).toBe(false);
   });
 
-  it("keeps the Dify tool-auth exception scoped to four staging routes", () => {
+  it("preserves all seven Cloud tool paths and isolates the Community callback exception", () => {
     const proxy = readFileSync("proxy.ts", "utf8");
     expect(proxy).toContain('process.env.DEPLOYMENT_ENV === "_staging"');
     expect(proxy).not.toContain("DIFY_EXPERIMENT_ENABLED");
-    for (const path of ["context", "draft", "review", "image"]) expect(proxy).toContain(`/api/experiments/dify/tools/${path}`);
+    for (const path of ["context", "draft", "review", "image", "image/authorize", "image/complete", "image/failure"]) expect(proxy).toContain(`/api/experiments/dify/tools/${path}`);
+    expect(proxy).toContain('process.env.DIFY_COMMUNITY_PROBE_ENABLED === "true" && request.nextUrl.pathname === "/api/integrations/dify-community/callback"');
+    const compose = readFileSync("deploy/compose.yml", "utf8");
+    expect(compose).toContain('DIFY_COMMUNITY_PROBE_ENABLED: "false"');
+    expect(compose).toContain("DIFY_BASE_URL: https://api.dify.ai/v1");
   });
 
   it("requires deployed secrets, S3 buckets, and the fixed database", () => {

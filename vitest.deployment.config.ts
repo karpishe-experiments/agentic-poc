@@ -6,6 +6,6 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(process.cwd()) } },
   test: {
     environment: "node",
-    include: ["tests/unit/deployment-contracts.test.ts", "tests/unit/recovery-storage.test.ts", "tests/unit/config/env.test.ts"],
+    include: ["tests/unit/deployment-contracts.test.ts", "tests/unit/recovery-storage.test.ts", "tests/unit/config/env.test.ts", "tests/unit/dify-community-probe.test.ts"],
   },
 });
