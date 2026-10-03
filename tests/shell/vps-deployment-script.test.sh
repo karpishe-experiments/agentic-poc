@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
-grep -Fq '"$ACTION" != dify-repair-broker ]]; then' "$script"
+grep -Fq '"$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then' "$script"
 grep -Fq 'values["CELERY_BROKER_URL"] = f"redis://:{values['"'"'REDIS_PASSWORD'"'"']}@redis:6379/1"' "$script"
 broker_fixture="$(mktemp -d)"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
@@ -44,6 +44,37 @@ grep -Fxq authenticated "$DIFY_DATA/events"
 grep -Fxq complete "$DIFY_DATA/events"
 ' _ "$script" "$broker_operation_fixture"
 rm -rf "$broker_operation_fixture"
+collaboration_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_DATA="$2"; printf "1.17.1\n" > "$DIFY_DATA/current"
+dify_install_preflight() { printf "preflight\n" >> "$DIFY_DATA/events"; }
+dify_validate_compose() { printf "validated\n" >> "$DIFY_DATA/events"; }
+dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
+dify_collaboration_is_ready() { [[ -f "$DIFY_DATA/recreated" ]]; }
+set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
+dify_compose() { printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; touch "$DIFY_DATA/recreated"; }
+dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }
+save_success() { printf "complete\n" >> "$DIFY_DATA/events"; }
+dify_repair_collaboration_host >/dev/null
+grep -Fxq "compose:up -d --no-deps --force-recreate api_websocket" "$DIFY_DATA/events"
+[[ "$(head -n 3 "$DIFY_DATA/events" | paste -sd,)" == preflight,validated,idle ]]
+dify_repair_collaboration_host >/dev/null
+[[ "$(grep -c "^compose:" "$DIFY_DATA/events")" == 1 ]]
+rm "$DIFY_DATA/recreated"
+dify_idle_host() { return 1; }
+if (set -e; dify_repair_collaboration_host >/dev/null); then exit 1; fi
+[[ "$(grep -c "^compose:" "$DIFY_DATA/events")" == 1 ]]
+curl() { printf "0{\"sid\":\"test-session\"}"; }
+dify_socket_responds
+curl() { printf "<html>not a socket</html>"; }
+if dify_socket_responds; then exit 1; fi
+curl() { printf "0{}"; }
+if dify_socket_responds; then exit 1; fi
+curl() { return 28; }
+if dify_socket_responds; then exit 1; fi
+' _ "$script" "$collaboration_fixture"
+rm -rf "$collaboration_fixture"
 workflow=.github/workflows/vps-operation.yml
 vps_access=.github/actions/vps-access/action.yml
 if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then

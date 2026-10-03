@@ -32,6 +32,12 @@ caching. The Booklet API rate rule remains scoped to the Booklet hostnames.
 The `host_observation` in `infra/config/vps.json` is a dated, non-secret
 capacity snapshot, not a live installation pass.
 
+The collaboration service has a 1536 MiB limit and HTTP healthcheck. Community
+readiness requires an Engine.IO open packet through the local proxy, not just
+running containers. `dify-repair-collaboration` is preview-by-default; apply checks
+headroom and idle records, uses the shared lock/journal, and recreates only
+`api_websocket`. It preserves credentials, data and Booklet releases.
+
 The pinned Community release and override are in `deploy/dify/`. They are a
 candidate until resolved Compose, image pulls, startup, and restoration pass
 on the host. The deterministic staging probe uses only the exact

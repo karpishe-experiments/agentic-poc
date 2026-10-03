@@ -6,9 +6,9 @@ on:
         description: Pinned Community operation
         type: choice
         required: true
-        options: [check, idle, install, repair-broker, status, resume]
+        options: [check, idle, install, repair-broker, repair-collaboration, status, resume]
       apply:
-        description: Apply installation or resume (otherwise preview/read-only)
+        description: Apply installation, repair or resume (otherwise preview/read-only)
         type: boolean
         default: false
 permissions: {contents: read}
@@ -31,7 +31,7 @@ jobs:
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|install|repair-broker|status|resume)$ ]]
+          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|install|repair-broker|repair-collaboration|status|resume)$ ]]
           if [[ "$ACTION" =~ ^(check|idle|status)$ ]]; then
             [[ "$APPLY" != true ]] || { printf 'Check, idle and status are read-only; clear apply.\n' >&2; exit 1; }
           elif [[ "$ACTION" == resume ]]; then
@@ -62,7 +62,7 @@ jobs:
           operation="dify-$ACTION"
           [[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"
           args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")
-          if [[ "$ACTION" =~ ^(install|repair-broker)$ && "$APPLY" == true ]]; then
+          if [[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration)$ && "$APPLY" == true ]]; then
             args+=(--request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --apply)
           elif [[ "$ACTION" == resume ]]; then
             args+=(--apply)
@@ -93,7 +93,7 @@ jobs:
             else
               printf 'No sanitized result was produced; inspect the failed step.\n'
             fi
-            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker)$ && "$APPLY" == true ]]; then
+            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker|repair-collaboration)$ && "$APPLY" == true ]]; then
               # Markdown backticks are literal delimiters.
               # shellcheck disable=SC2016
               printf '\nInspect the host operation journal for request `%s` before resuming or retrying.\n' "$REQUEST_ID"

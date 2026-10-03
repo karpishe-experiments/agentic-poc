@@ -178,6 +178,11 @@ The VPS topology and operational sequence are documented in [the deployment runb
 
 The temporary Dify trial adds optional host secrets and selects real mode only in staging. The application branch owns experiment availability, tool authorization, and approval checks. The host support is removed if Dify is rejected after the trial or replaced by the accepted long-term design if Dify is adopted. See the [experiment configuration](accepted/2026-09-16_agent-platform-decision/configuration.md).
 
+The Dify collaboration service uses the API runtime's 1536 MiB memory limit,
+a bounded healthcheck, and local Engine.IO readiness verification. Its targeted
+repair uses the shared operation lock and journal and recreates only that service
+after an idle check; it does not change Booklet release state or Dify data.
+
 Issue #69 prepares a separate Dify Community stack on the same VPS. The pinned
 upstream Compose release and repository override keep its databases, networks,
 and data separate from Booklet; nginx binds only localhost port 3300 behind a
