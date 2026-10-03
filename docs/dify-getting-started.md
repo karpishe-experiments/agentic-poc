@@ -229,8 +229,9 @@ only after access succeeds; onboarding alone does not satisfy all of issue #66.
 
 ## Community instance (issue #69)
 
-The steps above target Dify Cloud. The candidate Community instance has a
-different host, workspace, and credentials; it is **not live-verified yet**.
+The steps above target Dify Cloud. The Community instance has a different host,
+workspace, and credentials. CLI inventory and MCP workspace/draft reads were
+live-verified on 3 October 2026; remaining readiness checks are in its runbook.
 Follow the [Community deployment runbook](deployment/dify-community.md) after
 its private administrator-setup checkpoint. Keep a separate `difyctl` profile
 and separate `DIFYWF_HOME` state directory for `https://dify.uniwares.co.uk`.
@@ -239,3 +240,60 @@ after a fresh Codex restart. Do not copy Cloud cookies, CLI tokens, Booklet
 callback keys, or provider credentials into the Community profile. The CLI
 device login and MCP bridge login are independent. A successful login to one
 host does not prove access to the other or authorize a provider call.
+
+For Community console operations, cookie import is the verified authentication
+path. In Chrome DevTools, select Application → Cookies →
+`https://dify.uniwares.co.uk`. Copy each named cookie's **Value**, then press Enter
+at the matching prompt below. Do not paste into the PowerShell prompt or chat.
+On the verified Windows terminal, pasted input in `Read-Host -AsSecureString`
+became a control character. The clipboard method validates values before import.
+
+```powershell
+$env:DIFYWF_HOME = Join-Path $env:LOCALAPPDATA 'DifyWf-Community-Codex'
+$difyBridge = Join-Path $env:LOCALAPPDATA 'CodexTools\dify-mcp\v0.3.0-f2e6c7590a44e5b5dbeab358bf8f14b5b9cfef2a\bin\difywf.js'
+
+if (-not (Test-Path -LiteralPath $difyBridge -PathType Leaf)) {
+    throw 'The pinned Dify bridge was not found.'
+}
+
+function Read-DifyCookieFromClipboard {
+    param([string]$CookieName)
+
+    while ($true) {
+        Read-Host "Copy the VALUE of $CookieName in DevTools, then press Enter here" | Out-Null
+        $cookieValue = Get-Clipboard -Raw
+        if ($null -ne $cookieValue) {
+            $cookieValue = $cookieValue.Trim()
+        }
+        if (
+            -not [string]::IsNullOrWhiteSpace($cookieValue) -and
+            $cookieValue.Length -ge 20 -and
+            $cookieValue -cmatch '^[A-Za-z0-9._~+/=%-]+$'
+        ) {
+            return $cookieValue
+        }
+        Write-Host 'Clipboard does not contain a valid cookie value. Copy only the Value cell and try again.'
+    }
+}
+
+$difyCookies = @{}
+try {
+    $difyCookies['__Host-access_token'] = Read-DifyCookieFromClipboard '__Host-access_token'
+    $difyCookies['__Host-csrf_token'] = Read-DifyCookieFromClipboard '__Host-csrf_token'
+    $difyCookies['__Host-refresh_token'] = Read-DifyCookieFromClipboard '__Host-refresh_token'
+
+    $difyCookies | ConvertTo-Json -Compress |
+        & node $difyBridge auth import-cookies --base-url https://dify.uniwares.co.uk
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Cookie import failed.'
+    }
+} finally {
+    $difyCookies.Clear()
+    Set-Clipboard -Value ' '
+    Remove-Item Function:Read-DifyCookieFromClipboard -ErrorAction SilentlyContinue
+}
+```
+
+Import success means the bridge stored the values. Verify a live
+`workflow_get_draft` call before claiming console access. Reauthentication and
+refresh remain separate from durable or permanent authentication.
