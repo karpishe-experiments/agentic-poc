@@ -2,6 +2,8 @@
 
 ## Community connectivity probe
 
+The host dispatcher snapshots master-owned Compose files, not this branch's checkout. Before release, synchronize the reviewed master defaults that match this branch: Cloud trial enabled in staging, fake mode, images disabled, two attempts, and the Cloud API origin. Protected explicit overrides remain unchanged. The Community flag remains false until its dedicated key bundle is installed. Use a new release commit after changing host configuration; redeploying an existing commit keeps its immutable configuration snapshot.
+
 This staging release adds a model-free Community probe. It preserves the Cloud trial and its settings. The probe is disabled by default. The canonical Community setup and protected-key procedure is maintained on [master](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md).
 
 After deploying this reviewed release, bind the probe application's API key and dedicated callback key privately. Use master’s `dify-tool-key.yml` workflow with `DIFY_COMMUNITY_PROBE` for staging; it preserves existing protected fields. The same callback key must be bound to the published `issue69_booklet_round_trip` workflow. Do not use the manager application's key.
@@ -79,7 +81,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |
 
-The temporary Dify host overlay selects real mode and enables the image path in staging. The application release enables the staging page. The current experiment needs the existing host secrets `DIFY_API_KEY` and `DIFY_TOOL_KEY`. Dify holds the image-provider credential and runs the illustration Workflow, so do not install or rotate `DIFY_IMAGE_OPENAI_API_KEY` for this rollout; legacy optional-secret support remains inert. Obtain spending approval before the one live image call. Production keeps the experiment disabled. Do not put host secrets in Compose files, Dify prompts, or logs. The illustration Workflow may hold the existing callback key only in Dify's secret environment-variable store.
+The Cloud trial remains enabled in staging with fake mode and images disabled by default. Preserve its existing `DIFY_API_KEY` and `DIFY_TOOL_KEY` values and any explicit protected overrides. Dify holds its image-provider credential; do not install or rotate `DIFY_IMAGE_OPENAI_API_KEY` for this Community probe rollout. Enabling real Cloud execution or image calls requires separate authorization. Production keeps the experiment disabled. Do not put host secrets in Compose files, Dify prompts, or logs. The illustration Workflow may hold the existing callback key only in Dify's secret environment-variable store.
 
 Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
 
