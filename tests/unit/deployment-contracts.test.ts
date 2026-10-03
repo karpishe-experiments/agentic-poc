@@ -13,6 +13,62 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
+  it("does not apply new infrastructure merely because master was updated", () => {
+    const workflow = readFileSync(".github/workflows/infrastructure.yml", "utf8");
+    expect(workflow).toContain("inputs.apply && '--apply' || ''");
+    expect(workflow).not.toContain("github.event_name == 'push' || inputs.apply");
+  });
+
+  it("keeps Community host operations manual, serialized, and branch-fresh", () => {
+    const workflow = readFileSync(".github/workflows/dify-operations.yml", "utf8");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("options: [check, idle, install, repair-broker, status, resume]");
+    expect(workflow).toContain('[[ "$ACTION" =~ ^(install|repair-broker)$ && "$APPLY" == true ]]');
+    expect(workflow).toContain('[[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"');
+    expect(workflow).toContain('args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")');
+    expect(workflow).toContain("Resume requires apply.");
+    expect(workflow).toContain("request_display='retained host journal'");
+    expect(workflow).toContain("kids-booklet-vps-operation");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain('"$remote_sha" == "$GITHUB_SHA"');
+    expect(workflow).toContain("GITHUB_STEP_SUMMARY");
+  });
+
+  it("pins the selected Dify services and removes upstream public ports", () => {
+    const release = JSON.parse(readFileSync("deploy/dify/release.json", "utf8")) as {
+      release: string;
+      source_commit: string;
+      source_archive_sha256: string;
+      images: Record<string, string>;
+    };
+    const override = readFileSync("deploy/dify/compose.override.yml", "utf8");
+    expect(release.release).toBe("1.17.1");
+    expect(release.source_commit).toMatch(/^[a-f0-9]{40}$/);
+    expect(release.source_archive_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(Object.keys(release.images)).toHaveLength(16);
+    for (const [service, image] of Object.entries(release.images)) {
+      expect(image).toMatch(/^[\w./-]+@sha256:[a-f0-9]{64}$/);
+      expect(override).toContain(`  ${service}:\n    image: ${image}`);
+    }
+    expect(override).toContain("ports: !override []");
+    expect(override).toContain('"127.0.0.1:3300:80"');
+    expect(override).not.toContain("0.0.0.0:");
+  });
+
+  it("pins the planned restic backup binary without enabling an unverified drain", () => {
+    const restic = JSON.parse(readFileSync("deploy/dify/restic.json", "utf8")) as {
+      version: string;
+      platform: string;
+      archive: string;
+      archive_sha256: string;
+    };
+    expect(restic.version).toBe("0.19.1");
+    expect(restic.platform).toBe("linux/amd64");
+    expect(restic.archive).toBe("https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2");
+    expect(restic.archive_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(readFileSync(".github/workflows/dify-operations.yml", "utf8")).not.toContain("dify-backup");
+  });
+
   it("links GHCR to the repository and accepts only an anonymously readable image", () => {
     const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
     expect(workflow).toContain("org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY");
@@ -34,6 +90,10 @@ describe("deployment contracts", () => {
     expect(hasValidBasicAuthorization(null, password)).toBe(false);
     expect(hasValidBasicAuthorization(`Basic ${btoa(`booklet:${password}`)}`, password)).toBe(true);
     expect(hasValidBasicAuthorization(`Basic ${btoa(`other:${password}`)}`, password)).toBe(false);
+    const proxy = readFileSync("proxy.ts", "utf8");
+    expect(proxy).toContain('request.nextUrl.pathname === "/api/integrations/dify-community/callback"');
+    expect(proxy).toContain('process.env.DEPLOYMENT_ENV === "_staging"');
+    expect(proxy).toContain('process.env.DIFY_COMMUNITY_PROBE_ENABLED === "true"');
   });
 
   it("requires deployed secrets, S3 buckets, and the fixed database", () => {

@@ -4,9 +4,9 @@
     "dify-operations": {
       "source": "karpishe-experiments/agentic-poc",
       "sourceType": "local",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "skillPath": ".agents/skills/dify-operations/SKILL.md",
-      "computedHash": "22ff29f9441cb4d40d8e8d2c5baf33b68747bfbfdcf19f57fc04369c0afd67da"
+      "computedHash": "5e58069d0a322a8cbdf0d28f2ec59bb094dc59ecb75fc8012c180cf1ab1a195f"
     },
     "difyctl": {
       "source": "langgenius/dify",

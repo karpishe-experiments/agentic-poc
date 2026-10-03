@@ -15,11 +15,30 @@ Compose merges base, environment overlay, root-only secret JSON, and image overr
 | `MODEL_RUNTIME`, `IMAGE_PROVIDER_MODE` | Compose sets both to `real` |
 | `OPENAI_API_KEY`, `MONGODB_URI`, `ACCESS_GATE_PASSWORD`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Root-only `/etc/kids-booklet/<environment>/secrets.json` |
 | Optional `DIFY_API_KEY`, `DIFY_TOOL_KEY`, `DIFY_IMAGE_OPENAI_API_KEY` for the temporary staging trial | Same root-only secret override; absent values remain valid |
+| `DIFY_COMMUNITY_PROBE_ENABLED`, `DIFY_COMMUNITY_BASE_URL`, `DIFY_COMMUNITY_WORKFLOW_API_KEY`, `DIFY_COMMUNITY_CALLBACK_KEY` | Separate staging-only model-free probe switch, HTTPS origin, runtime workflow key and callback key; protected app override when enabled; production stays disabled |
 | `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_HOST_KEY` | GitHub repository secrets for restricted, pinned SSH |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | GitHub repository secrets for noninteractive Tunnel SSH |
 | `CLOUDFLARE_API_TOKEN`, `R2_TERRAFORM_ACCESS_KEY_ID`, `R2_TERRAFORM_SECRET_ACCESS_KEY` | GitHub infrastructure credentials, never application container credentials |
 
-Tunnel and Access tokens are sensitive Terraform outputs and are present in protected remote state. Before and after each apply, the script writes a separately keyed state snapshot, verifies its bytes, and protects the `snapshots/` prefix with a 30-day R2 lock. If an interrupted first apply created one of the six exact application R2 buckets but did not record it in application state, preview reports it and apply snapshots then adopts that exact bucket before creating a new plan. It never adopts any other resource. Do not publish Terraform state, full outputs, saved plans, or snapshots. Application secrets never enter Terraform.
+Tunnel and Access tokens are sensitive Terraform outputs and are present in protected remote state. Before and after each apply, the script writes a separately keyed state snapshot, verifies its bytes, and protects the `snapshots/` prefix with a 30-day R2 lock. If an interrupted apply created one of the six exact Booklet R2 buckets or the dedicated Dify backup bucket but did not record it in application state, preview reports it and apply snapshots then adopts only that exact bucket before creating a new plan. It never adopts another resource. The Dify backup bucket has no object-age lifecycle rule: restic retention and pruning must own its objects. Do not publish Terraform state, full outputs, saved plans, or snapshots. Application secrets never enter Terraform.
+
+The Dify hostname is a separate Tunnel and DNS target. Its route stays on
+`http_status:503` through installation readiness. After that checkpoint,
+`dify_public_enabled` can change only through reviewed configuration and an
+explicit operator decision. The operator can enable a bounded public
+first-administrator window or wait until private setup is complete. When
+enabled, the route points only to `localhost:3300`. Dify responses bypass
+caching. The Booklet API rate rule remains scoped to the Booklet hostnames.
+The `host_observation` in `infra/config/vps.json` is a dated, non-secret
+capacity snapshot, not a live installation pass.
+
+The pinned Community release and override are in `deploy/dify/`. They are a
+candidate until resolved Compose, image pulls, startup, and restoration pass
+on the host. The deterministic staging probe uses only the exact
+`/api/integrations/dify-community/callback` Basic-gate exception, authenticated
+with its dedicated key. Start and result routes retain the ordinary Booklet
+gate. It records correlation/run IDs and callback status without creating or
+approving a booklet. Disabled staging and all production routes reject it.
 
 ## Lifecycle
 
@@ -28,6 +47,15 @@ Build and anonymous digest pull precede maintenance. Existing writers drain for 
 Backups reserve an ID before writes, upload objects conditionally, verify downloaded checksums, and publish a completion marker last. The operation journal records the backup ID, release digest, non-secret configuration hash, and prior release. Restore validates the marker, manifest, archive, and every asset before target writes. Partial backup IDs stay reserved and a resumed failed backup receives a new ID. Recovery credentials must permit reads from source assets and create-only writes to recovery; restore additionally requires asset writes.
 
 The project-wide Actions concurrency group serializes workflows. Host operations use flock plus a non-expiring journal. Terraform applies from Actions acquire the same host journal. Setup takes the host flock. Infra-unlock is an administrator recovery command used only after confirming the prior workflow stopped and the exact request ID matches the retained infrastructure journal. Infrastructure summaries expose that request ID. `_staging` and `_prod` are independent reviewed release lines. Deployment requires the selected environment to match its target branch and requires the remote branch to remain at the workflow commit before build and release. Deployment does not require `master` ancestry or a successful Infrastructure run.
+
+Infrastructure pushes to `master` now preview only. An operator reviews the
+plan and explicitly dispatches `apply=true`; a passing preview does not mean
+the Dify hostname or backup bucket exists yet.
+
+Infrastructure loads the Dify Terraform variables from the reviewed JSON.
+Host synchronization first uses the original five-file protocol to upgrade
+the dispatcher, then sends the Dify artifacts. Both transfers use the same
+infrastructure request; a failed transfer retains its recovery journal.
 
 ## Verification and accepted baseline
 
