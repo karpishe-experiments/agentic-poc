@@ -5,9 +5,14 @@ Canonical operating guide and evidence register for
 [#65](https://github.com/karpishe-experiments/agentic-poc/issues/65).
 
 **Verification incomplete; issue closure requested by the operator.** MCP discovery
-now exposes 172 callable tools, but workspace/app listing returns `AUTH_REQUIRED`.
-The official CLI successfully verified owner access and listed both Studio workflows.
-Live probe repair/publication/recovery remains unverified. Closing #66 does not
+exposes 172 callable tools. On 2026-09-27, private cookie import enabled MCP
+app/workspace/snippet listing. Workspace listing identifies the intended Sandbox
+workspace; app listing returns both existing workflows, and snippet listing is empty.
+The official CLI also verified owner access. MCP `workspace.get` returns HTTP 404;
+use `workspace.list`. Bridge device login returned `unsupported_client` on Cloud.
+The issue #65 deterministic workflow repair/publication/restoration probe now
+passes, using an isolated compatibility patch and CLI execution fallback; see the
+capability matrix. Runtime-key recovery and full-suite modularity remain pending. Closing #66 does not
 establish that #65's automated-control prerequisite is satisfied.
 
 ## Scope
@@ -76,21 +81,24 @@ and current `npm audit` records; do not upgrade silently.
 For a fresh developer machine, start with the canonical
 [getting-started guide](../../dify-getting-started.md). It covers installation,
 Codex registration, separate CLI/MCP logins, and expected read-only results.
-The cookie-import path below remains source-inspected, not live-verified.
+The guide's private clipboard-to-stdin cookie import passed live inventory checks
+on 2026-09-27. After reimport, explicit refresh rotated and persisted cookies and
+subsequent MCP listing succeeded. This does not prove long-term session independence
+or concurrent refresh safety. See the matrix for bounded write/recovery evidence.
 
 1. Inspect the registered `mcp_servers.dify` command, wrapper and allowlisted
    environment fields without dumping the full Codex config. Confirm the pin and
    dedicated `DIFYWF_HOME`; no secret belongs in repository configuration.
-2. Operator handoff: save an auth-cookie export privately at
-   `%LOCALAPPDATA%\DifyWf-Codex\cookies.json`. Check its ACL without displaying it.
-   Inspect the pinned wrapper's auth command, then use `auth import-cookies` with
-   `--base-url https://cloud.dify.ai` and `--file` pointing to that file. No cookies
-   in chat or argument values. Remove the input export only with appropriate authority.
+2. Check current access before asking for login. If needed, use the guide's private
+   clipboard-to-stdin `auth import-cookies` procedure. It preserves the three
+   `__Host-` cookie names and needs no temporary export. Check `hosts.json` ACL
+   without displaying its contents. No cookies in chat or argument values.
 3. Verify account, exact workspace ID, permissions and capacity read-only before
    mutations. Browser login does not establish MCP authentication.
-4. Restart Codex in the interface for #65. Verify both skills and callable Dify MCP
-   tools, then authenticated inventory. Record evidence here. A subprocess stdio
-   handshake does not satisfy fresh-session discovery.
+4. Verify authenticated inventory in the current Codex interface. Cookie import
+   became available without restart. New registration may require restart; verify
+   discovery and access in a fresh session rather than treating a subprocess
+   handshake as that proof. Stored sessions can expire or be revoked.
 5. For CLI fallback, read `difyctl help -o json --compact` and the selected
    `difyctl help <path> -o json`. Use the documented browser device login with an
    operator handoff. Prove Cloud compatibility read-only before mutations; do not
@@ -111,16 +119,18 @@ interfaces only. Cloud server version is unknown.
 
 | Operation / target | Interface / version | Outcome and evidence | Fallback / next check |
 | --- | --- | --- | --- |
-| Local schema validation / tool discovery | MCP stdio 0.3.0 | Local checks passed; current Codex session exposes 172 tools; workspace/app calls return `AUTH_REQUIRED` | Separate bridge authentication required |
+| Local schema validation / tool discovery | MCP stdio 0.3.0 | Local checks passed; current session exposes 172 tools; cookie-authenticated listing succeeds | Recheck access on expiry or in a fresh session |
 | CLI discovery / authenticated inventory | difyctl 1.17.1 | Identity and workspace calls passed; owner in workspace `98c18fae-e555-47f7-9869-5d602a3dca04`; app listing returned `booklet_illustrator` and `story_writer` | Cloud version and write compatibility remain unverified |
 | Existing illustration workflow | Codex Chrome | Read-only `booklet_illustrator` page showed published state and existing provider binding | Exact workspace/permissions/capacity inventory pending |
-| Workspace / apps / integrations | MCP workspace/app/plugin/provider operations | Pending authentication | Browser inventory; metadata only |
-| Deterministic draft / defaults / validate / run | MCP workflow operations | Pending | Browser graph and test controls |
-| Publish / Workflow as Tool | MCP publish / refresh | Pending; source tests cover creation and refresh, not Cloud proof | Browser Publish plus Workflow as Tool Save |
-| Trace / output / files | MCP runs / workflow results | Pending | Browser Logs/tracing/download |
+| Workspace / apps / snippets | MCP stdio 0.3.0 | 2026-09-27: workspace.list returns intended Sandbox workspace; app.list returns Story Writer/illustrator; snippet.list is empty | workspace.get returns 404; listing does not prove module invocation or quota |
+| Integrations | MCP plugin/provider operations | Live capability pending | Verified CLI, then authorized browser; metadata only |
+| Deterministic draft / defaults / validate / run | MCP 0.3.0 plus isolated issue65 patch | Existing draft update, deliberate failure, diagnosis and repair pass; patch omits inherited legacy environment fields and supports snippet roots | Original registered installation unchanged; [patch and probe evidence](../2026-09-27_dify-booklet-runner/M0-readiness.md#compatibility-correction-and-recovery-proof) |
+| Publish / Workflow as Tool | MCP publish / refresh | Original, changed and restored versions published; same provider read back synced=true after each refresh | Verified for deterministic workflow only; modular bindings pending |
+| Published deterministic execution | MCP 0.3.0; difyctl 1.17.1 fallback | MCP returns 405; CLI run pinned to published workflow ID returns original marker, zero tokens | CLI verified for this probe; not proof of Booklet runtime credential recovery |
+| Trace / output / files | MCP runs / workflow results | Deterministic run outputs and failure node inspected; files remain pending | Snippet run returns null after execution through its envelope workaround; inspect saved run, never blindly retry |
 | New Agent configuration/publication | Browser | Pending; bridge agent operations do not prove full support | CLI descriptors lack full New Agent administration |
 | OpenAPI / environment bindings | Browser custom tools / MCP workflow variables | Pending | Non-secret probe only |
-| Workflow restoration | MCP restore or saved draft sync | Pending | Browser restore/import; check identity |
+| Workflow restoration | MCP restore, publish and refresh; CLI execution | Same issue65 app restored to original output; run/version IDs in M0 | Does not prove Booklet runtime-key result recovery or New Agent recovery |
 | New Agent recovery, files/skills | Browser reconstruction if no native restore | Pending | Record changed IDs and rebind dependants |
 | Expiry / permissions / capacity / interruption | Interface errors and read-back | Pending live evidence | Do not alter existing permissions to create failures |
 | Simulated / balanced / real control | Probe configuration | Pending | #65 budgets remain separate |
@@ -164,7 +174,8 @@ Required PR CI applies; no extra application build or deployment is required.
 Update #66/#65 with reviewed SHA, PR, verified results and remaining gaps. The
 operator requested closure before all acceptance criteria passed. Record this as
 an incomplete closure, not verified readiness. Before unattended #65 implementation,
-reopen #66 or explicitly track its unresolved authentication and live-probe checks.
+reopen #66 or explicitly track its unresolved live-probe checks. Authentication
+has passed inventory checks; it is no longer the recorded blocker.
 
 ## Sources
 

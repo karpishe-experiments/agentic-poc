@@ -1,0 +1,77 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "custom",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "type": "start",
+        "title": "Input",
+        "variables": []
+      }
+    },
+    {
+      "id": "code",
+      "type": "custom",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "type": "code",
+        "title": "Concept marker",
+        "variables": [],
+        "code_language": "python3",
+        "code": "def main():\n    return {\"result\": \"issue65-original\"}",
+        "outputs": {
+          "result": {
+            "type": "string",
+            "children": null
+          }
+        }
+      }
+    },
+    {
+      "id": "end",
+      "type": "custom",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "type": "end",
+        "title": "Output",
+        "outputs": [
+          {
+            "variable": "result",
+            "value_selector": [
+              "code",
+              "result"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-code",
+      "source": "start",
+      "target": "code",
+      "sourceHandle": "source",
+      "targetHandle": "target",
+      "type": "custom"
+    },
+    {
+      "id": "code-end",
+      "source": "code",
+      "target": "end",
+      "sourceHandle": "source",
+      "targetHandle": "target",
+      "type": "custom"
+    }
+  ]
+}

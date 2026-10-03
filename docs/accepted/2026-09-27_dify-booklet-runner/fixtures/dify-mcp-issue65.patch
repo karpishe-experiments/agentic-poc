@@ -1,0 +1,91 @@
+diff --git a/src/graph/validate.ts b/src/graph/validate.ts
+index fe60ffe..e501ad9 100644
+--- a/src/graph/validate.ts
++++ b/src/graph/validate.ts
+@@ -96,7 +96,7 @@ const DECORATIVE_TYPES = new Set(["custom-note"]);
+ 
+ export function validateGraph(
+   graph: Graph,
+-  opts?: { defaults?: Record<string, unknown> },
++  opts?: { defaults?: Record<string, unknown>; snippet?: boolean },
+ ): Issue[] {
+   const issues: Issue[] = [];
+   const nodes = graph.nodes ?? [];
+@@ -126,10 +126,21 @@ export function validateGraph(
+ 
+   const roots = nodes.filter((n) => {
+     const t = nodeType(n);
++    if (opts?.snippet) {
++      return !n.parentId && !n.data?.iteration_id && !n.data?.loop_id &&
++        !DECORATIVE_TYPES.has(t ?? "") && !edges.some((e) => e.target === n.id);
++    }
+     return t === "start" || (t !== undefined && t.startsWith("trigger"));
+   });
++  if (opts?.snippet) {
++    for (const n of nodes) {
++      if (["start", "human-input", "knowledge-retrieval"].includes(nodeType(n) ?? "")) {
++        issues.push({ level: "error", code: "SNIPPET_FORBIDDEN_NODE", message: `node '${n.id}' is not allowed in a snippet`, nodeId: n.id });
++      }
++    }
++  }
+   if (roots.length === 0) {
+-    issues.push({ level: "error", code: "MISSING_START", message: "graph has no start/trigger node" });
++    issues.push({ level: "error", code: "MISSING_START", message: opts?.snippet ? "snippet has no executable root node" : "graph has no start/trigger node" });
+   }
+   if (roots.filter((n) => nodeType(n) === "start").length > 1) {
+     issues.push({ level: "error", code: "MULTIPLE_START", message: "graph has more than one start node" });
+diff --git a/src/tools/registry.ts b/src/tools/registry.ts
+index 5696865..88b8c68 100644
+--- a/src/tools/registry.ts
++++ b/src/tools/registry.ts
+@@ -422,15 +422,14 @@ export const tools: Tool[] = [
+       const current = await client.getDraft(req(args, "app_id"));
+       if (dryRun) return dryRunBaseline(current, graph, issues);
+       const fields = current.ok ? draftFields(current.data) : {};
+-      // Cloud SyncDraftWorkflowPayload requires graph+features. Env/conversation
+-      // variables are optional there and rejected as extra_forbidden when sent as
+-      // [] on an uninitialized draft — only include them when the caller or the
+-      // current draft actually has them.
++      // Cloud rejects the legacy environment_variables field, even when empty.
++      // Do not replay stored variables (including masked secrets) during graph edits.
++      // Explicit legacy callers retain their existing server-validated behavior.
+       const body: Record<string, unknown> = {
+         graph,
+         features: args.features ?? fields.features ?? {},
+       };
+-      const envVars = args.environment_variables ?? fields.environment_variables;
++      const envVars = args.environment_variables;
+       const convVars = args.conversation_variables ?? fields.conversation_variables;
+       const hash = str(args.hash) ?? fields.hash;
+       if (envVars !== undefined) body.environment_variables = envVars;
+@@ -1781,7 +1780,7 @@ export const tools: Tool[] = [
+     run: async (a, ctx) => {
+       const client = needClient(ctx, "console") as ConsoleClient;
+       const graph = parseGraphArg(a);
+-      const issues = validateGraph(graph);
++      const issues = validateGraph(graph, { snippet: true });
+       const errors = issues.filter((i) => i.level === "error");
+       if (errors.length > 0) return err("VALIDATION_FAILED", `${errors.length} error-level issue(s)`, { details: issues });
+       const dryRun = a.dry_run === true;
+diff --git a/test/gaps.test.ts b/test/gaps.test.ts
+index 285fd42..cd83058 100644
+--- a/test/gaps.test.ts
++++ b/test/gaps.test.ts
+@@ -72,7 +72,7 @@ test("resolveConfig reads DIFY_CONSOLE_COOKIE when DIFYWF_HOME is set", async ()
+   });
+ });
+ 
+-test("workflow.sync_draft preserves env vars when omitted", async () => {
++test("workflow.sync_draft leaves env vars untouched when omitted", async () => {
+   let captured: Record<string, unknown> = {};
+   const fake = {
+     getDraft: async (): Promise<Result<unknown>> => ({
+@@ -95,7 +95,7 @@ test("workflow.sync_draft preserves env vars when omitted", async () => {
+     fakeCtx({ console: fake as never }),
+   );
+   assert.ok(r.ok);
+-  assert.deepEqual(captured.environment_variables, [{ name: "SECRET", value: "x" }]);
++  assert.equal(Object.hasOwn(captured, "environment_variables"), false);
+   assert.deepEqual(captured.conversation_variables, [{ name: "c", value: "y" }]);
+   assert.deepEqual(captured.features, { file_upload: true });
+   assert.equal(captured.hash, "h1");

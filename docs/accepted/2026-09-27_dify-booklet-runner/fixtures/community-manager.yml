@@ -1,0 +1,82 @@
+app:
+  name: issue65_probe_manager_20261003
+  description: Model-free caller transport probe, not the production manager or tester orchestration.
+  mode: workflow
+  icon: M
+  icon_type: emoji
+  icon_background: '#E8F4FF'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features: {}
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      position: {x: 0, y: 0}
+      data:
+        title: Input
+        type: start
+        variables:
+        - {label: marker, variable: marker, type: text-input, required: true, default: '', options: []}
+    - id: manager
+      type: custom
+      position: {x: 300, y: 0}
+      data:
+        title: Simulated manager
+        type: code
+        code_language: python3
+        code: |
+          def main(marker):
+              return {"result": marker + "|manager"}
+        variables:
+        - {variable: marker, value_selector: [start, marker]}
+        outputs: {result: {type: string, children: null}}
+    - id: concept
+      type: custom
+      position: {x: 600, y: 0}
+      data:
+        title: Invoke separate Concept workflow
+        type: tool
+        provider_type: workflow
+        provider_id: b6faa1b1-cd69-4021-b363-38442ae3b39c
+        provider_name: issue65_probe_concept_20261003
+        tool_name: issue65_probe_concept_20261003
+        tool_label: Concept transport probe
+        tool_node_version: '2'
+        tool_configurations: {}
+        tool_parameters:
+          marker: {type: variable, value: [manager, result]}
+    - id: tester
+      type: custom
+      position: {x: 900, y: 0}
+      data:
+        title: Invoke separate tester workflow
+        type: tool
+        provider_type: workflow
+        provider_id: aba697cd-29ff-4612-8348-6b83e5e59689
+        provider_name: issue65_probe_tester_20261003
+        tool_name: issue65_probe_tester_20261003
+        tool_label: Tester transport probe
+        tool_node_version: '2'
+        tool_configurations: {}
+        tool_parameters:
+          marker: {type: variable, value: [concept, result]}
+    - id: finish
+      type: custom
+      position: {x: 1200, y: 0}
+      data:
+        title: Result
+        type: end
+        outputs:
+        - {variable: result, value_type: string, value_selector: [tester, result]}
+    edges:
+    - {id: start-manager, source: start, sourceHandle: source, target: manager, targetHandle: target, type: custom, data: {sourceType: start, targetType: code}}
+    - {id: manager-concept, source: manager, sourceHandle: source, target: concept, targetHandle: target, type: custom, data: {sourceType: code, targetType: tool}}
+    - {id: concept-tester, source: concept, sourceHandle: source, target: tester, targetHandle: target, type: custom, data: {sourceType: tool, targetType: tool}}
+    - {id: tester-finish, source: tester, sourceHandle: source, target: finish, targetHandle: target, type: custom, data: {sourceType: tool, targetType: end}}
+    viewport: {x: 0, y: 0, zoom: 0.6}

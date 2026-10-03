@@ -69,6 +69,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Resume an interrupted operation | Inspect host status, then run **Maintenance** with `action=resume` for the recorded environment |
 | Rotate one host secret | Run `bash scripts/deploy/vps-deployment.sh --action rotate-secrets --environment <target> --secret-name <name> --config infra/config/vps.json --apply` |
 | Install a temporary staging Dify key without local Cloudflare credentials | Store `DIFY_TOOL_KEY` or `DIFY_API_KEY` as a protected repository secret, then run **Dify staging key** on `master` and select that key; remove the repository secret after success |
+| Configure the Community staging probe | Follow [Community checkpoint 5](dify-community.md#checkpoint-5--deterministic-booklet-round-trip); select `DIFY_COMMUNITY_PROBE` in **Dify staging key** after the reviewed host dispatcher and staging routes are installed |
 | Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |

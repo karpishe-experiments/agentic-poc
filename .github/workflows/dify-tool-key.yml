@@ -9,6 +9,7 @@ on:
         options:
           - DIFY_TOOL_KEY
           - DIFY_API_KEY
+          - DIFY_COMMUNITY_PROBE
 permissions: {contents: read}
 concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
@@ -17,7 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify master-owned staging request
-        run: test "$GITHUB_REF_NAME" = master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = master
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$GITHUB_SHA"
       - uses: ./.github/actions/vps-access
         with:
           ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -30,9 +36,13 @@ jobs:
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           DIFY_TOOL_KEY: ${{ secrets.DIFY_TOOL_KEY }}
           DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}
+          DIFY_COMMUNITY_WORKFLOW_API_KEY: ${{ secrets.DIFY_COMMUNITY_WORKFLOW_API_KEY }}
+          DIFY_COMMUNITY_CALLBACK_KEY: ${{ secrets.DIFY_COMMUNITY_CALLBACK_KEY }}
+          GH_TOKEN: ${{ github.token }}
           SECRET_NAME: ${{ inputs.secret_name }}
         run: |
           set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$GITHUB_SHA"
           bash scripts/deploy/vps-deployment.sh --action rotate-protected-dify-key --environment staging --secret-name "$SECRET_NAME" --vps-host "$VPS_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --config infra/config/vps.json --apply 2>&1 | tee "$RUNNER_TEMP/dify-key-output.txt"
       - name: Publish rotation summary
         if: always()

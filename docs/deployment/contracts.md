@@ -40,6 +40,15 @@ with its dedicated key. Start and result routes retain the ordinary Booklet
 gate. It records correlation/run IDs and callback status without creating or
 approving a booklet. Disabled staging and all production routes reject it.
 
+The protected Dify-key workflow also accepts the staging-only
+`DIFY_COMMUNITY_PROBE` bundle. It stages exactly the two Community keys, the fixed
+`https://dify.uniwares.co.uk` origin and `DIFY_COMMUNITY_PROBE_ENABLED=true`.
+The host rejects extra fields and merges these four settings into the existing
+protected override, preserving Cloud and other application secrets. The existing
+serialized rotation performs drain and readiness checks. Missing credentials,
+production targets and superseded master workflow commits fail before mutation.
+The workflow does not create Dify keys or configure its callback variable.
+
 ## Lifecycle
 
 Build and anonymous digest pull precede maintenance. Existing writers drain for up to 15 minutes before service stop and backup. Initialization runs with the runner disabled. Readiness failure stops the candidate before starting the previous version. Resume checks the recorded service and maintenance containers, then retries the exact operation; it does not clear a failed data restore automatically.

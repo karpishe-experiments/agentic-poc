@@ -1,0 +1,52 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { tools, type ToolCtx } from "../src/tools/registry.ts";
+import { validateGraph } from "../src/graph/validate.ts";
+
+const snippet = {
+  nodes: [
+    { id: "c", data: { type: "code", code_language: "python3", code: "def main(): return {'result': 'ok'}", outputs: { result: { type: "string" } } } },
+    { id: "e", data: { type: "end", outputs: [{ variable: "result", value_selector: ["c", "result"] }] } },
+  ],
+  edges: [{ source: "c", target: "e" }],
+};
+test("snippet roots work while ordinary workflows still require Start", () => {
+  assert.equal(validateGraph(snippet, { snippet: true }).filter(x => x.level === "error").length, 0);
+  assert.ok(validateGraph(snippet).some(x => x.code === "MISSING_START"));
+  assert.ok(validateGraph({ ...snippet, edges: [...snippet.edges, { source: "e", target: "c" }] }, { snippet: true }).some(x => x.code === "CYCLE"));
+  assert.ok(validateGraph({ ...snippet, edges: [{ source: "missing", target: "e" }] }, { snippet: true }).some(x => x.code === "DANGLING_EDGE"));
+  assert.ok(validateGraph({ nodes: [], edges: [] }, { snippet: true }).some(x => x.level === "error"));
+});
+test("snippet forbidden nodes remain rejected", () => {
+  for (const type of ["start", "human-input", "knowledge-retrieval"]) {
+    assert.ok(validateGraph({ nodes: [{ id: "x", data: { type } }], edges: [] }, { snippet: true }).some(x => x.code === "SNIPPET_FORBIDDEN_NODE"));
+  }
+});
+test("graph sync omits inherited environment variables and preserves hash/conversation", async () => {
+  const graph = { nodes: [{ id: "s", data: { type: "start", variables: [] } }], edges: [] };
+  for (const environment_variables of [[], [{ id: "secret", value: "masked" }]]) {
+    let sent: Record<string, unknown> = {};
+    const ctx = { cfg: { baseUrl: "https://example.invalid" }, openapi: null, console: {
+      getDraft: async () => ({ ok: true, data: { graph, features: {}, hash: "h", environment_variables, conversation_variables: [{ name: "keep" }] } }),
+      syncDraft: async (_id: string, body: Record<string, unknown>) => { sent = body; return { ok: true, data: {} }; },
+    } } as unknown as ToolCtx;
+    const result = await tools.find(t => t.name === "workflow.sync_draft")!.run({ app_id: "probe", graph }, ctx);
+    assert.ok(result.ok);
+    assert.equal(Object.hasOwn(sent, "environment_variables"), false);
+    assert.equal(sent.hash, "h");
+    assert.deepEqual(sent.conversation_variables, [{ name: "keep" }]);
+  }
+});
+test("snippet sync uses snippet validation and retains code confirmation", async () => {
+  let writes = 0;
+  const ctx = { cfg: { baseUrl: "https://example.invalid" }, openapi: null, console: {
+    getSnippetDraft: async () => ({ ok: true, data: { graph: snippet, hash: "h" } }),
+    syncSnippetDraft: async () => { writes++; return { ok: true, data: {} }; },
+  } } as unknown as ToolCtx;
+  const tool = tools.find(t => t.name === "snippet.sync_draft")!;
+  const denied = await tool.run({ snippet_id: "probe", graph: snippet }, ctx);
+  assert.equal(denied.ok, false);
+  assert.equal(writes, 0);
+  assert.ok((await tool.run({ snippet_id: "probe", graph: snippet, confirm: true }, ctx)).ok);
+  assert.equal(writes, 1);
+});
