@@ -118,6 +118,20 @@ Startup uses a bounded application readiness check after Compose starts the
 services. Running services without an upstream healthcheck, such as
 `worker_beat`, are accepted; configured healthchecks must report healthy, and
 the `init_permissions` one-shot service must exit successfully.
+Readiness also requires a valid Engine.IO open packet from the local proxy.
+The collaboration API has a 1536 MiB limit and a bounded healthcheck; a running
+container alone does not establish editor synchronization readiness.
+
+If the editor remains at `Syncing data`, inspect collaboration health before
+changing workflow content or credentials. A verified 384 MiB OOM kill required
+the targeted `repair-collaboration` action in the reviewed Dify operations
+workflow. Synchronize the reviewed dispatcher/override through Infrastructure
+first, preview the repair, then apply at the authorized checkpoint. Apply checks
+host headroom and idle workflow/Agent records, recreates only `api_websocket`,
+and verifies health and the local socket. It preserves databases, keys,
+Booklet containers and workflow content. Inspect the retained operation journal
+before resume after an interruption. Verify the public WebSocket and editor
+afterward; local socket readiness alone does not prove the Tunnel path.
 
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,

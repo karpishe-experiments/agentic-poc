@@ -40,7 +40,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, dify-repair-collaboration, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -99,7 +99,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
@@ -554,6 +554,11 @@ dify_validate_compose() {
     ([.services | to_entries[] | select(.key != "nginx") | .value.ports[]?] | length == 0)
   ' "$resolved" >/dev/null || die 'Resolved Dify Compose configuration has unpinned images or exposed internal ports'
 }
+dify_socket_responds() {
+  # Validate the Engine.IO open packet without printing its session identifier.
+  curl -fsS --max-time 8 'http://127.0.0.1:3300/socket.io/?EIO=4&transport=polling' 2>/dev/null |
+    python3 -c 'import json, sys; body = sys.stdin.read(4097); assert len(body) <= 4096 and body.startswith("0"); assert json.loads(body[1:]).get("sid")' >/dev/null 2>&1
+}
 dify_verify_services() {
   local expected_services actual_services records deadline
   [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]] || die 'Dify configuration or release files are missing'
@@ -566,14 +571,38 @@ dify_verify_services() {
     actual_services="$(jq -r '.[].Service' <<< "$records" | sort)"
     if [[ "$actual_services" == "$expected_services" ]] &&
       dify_service_records_are_ready <<< "$records" &&
-      curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/; then
-      printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running\n'
+      curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/ && dify_socket_responds; then
+      printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running and collaboration socket ready\n'
       return
     fi
     sleep 3
   done
   printf 'failed: Dify readiness state %s\n' "$(jq -c '[.[] | {service:.Service,state:.State,health:(.Health // ""),exitCode:(.ExitCode // null)}]' <<< "$records")" >&2
   die 'Dify did not become ready within 180 seconds'
+}
+dify_collaboration_is_ready() {
+  local container
+  container="$(dify_compose ps -q api_websocket)" || return 1
+  [[ -n "$container" ]] || return 1
+  docker inspect "$container" | jq -e 'length == 1 and .[0].HostConfig.Memory == 1610612736 and .[0].State.Health.Status == "healthy"' >/dev/null || return 1
+  dify_socket_responds
+}
+dify_repair_collaboration_host() {
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Pinned Dify installation is not recorded'
+  dify_install_preflight || return 1
+  dify_validate_compose || return 1
+  dify_idle_host || return 1
+  if dify_collaboration_is_ready; then
+    printf 'exists: Dify collaboration has the reviewed memory limit and responds\n'
+    save_success ''
+    return
+  fi
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate api_websocket >/dev/null || return 1
+  dify_verify_services || return 1
+  dify_collaboration_is_ready || die 'Dify collaboration memory, health or socket check failed'
+  printf 'verified: Dify collaboration repaired with 1536 MiB and a responsive socket\n'
+  save_success ''
 }
 dify_check_host() {
   [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Dify 1.17.1 is not recorded as installed'
@@ -705,6 +734,7 @@ host_run() {
   validate_arguments
   if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
   if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
+  if [[ "$ACTION" == dify-repair-collaboration ]]; then dify_repair_collaboration_host; return; fi
   run_lifecycle
 }
 dify_discover_host() {
@@ -740,7 +770,7 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
   if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
@@ -752,6 +782,12 @@ host_dispatch() {
   fi
   if [[ "$ACTION" == dify-repair-broker && "$APPLY" == false ]]; then
     dify_broker_environment preview
+    exit 0
+  fi
+  if [[ "$ACTION" == dify-repair-collaboration && "$APPLY" == false ]]; then
+    dify_install_preflight
+    dify_validate_compose
+    printf 'would update: Dify collaboration only, 1536 MiB and healthcheck; apply requires idle work\n'
     exit 0
   fi
   if [[ "$ACTION" == status ]]; then
@@ -2198,7 +2234,7 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac
