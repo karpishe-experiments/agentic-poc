@@ -3,7 +3,8 @@
 **State:** In progress. Authenticated inventory and the deterministic workflow
 failure/repair/publication/tool-synchronization/restoration cycle passed.
 Community workflow-to-workflow invocation passed in draft and published callers.
-Full-suite capacity, binding-change isolation and Booklet runtime-key recovery remain unverified.
+Draft isolation and synchronized binding restoration also passed. Full-suite
+capacity, parent trace linkage and Booklet runtime-key recovery remain unverified.
 **Coverage:** AC08, AC13 and first-slice readiness.
 **Read first:** [EXECUTION.md](EXECUTION.md), [PRD.md](PRD.md),
 [Dify access runbook](../2026-09-26_codex-dify-access/runbook.md).
@@ -18,8 +19,8 @@ dependent operation blocked by any unresolved item. None is fully complete yet.
 | Action | Expected result | Evidence | Unresolved blocker |
 | --- | --- | --- | --- |
 | 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-03: Community MCP workspace check and CLI inventory pass; three new probe workflows imported | Complete-suite capacity; host workload measurements |
-| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Community draft and published callers invoke separate published Concept and tester tools; see current evidence below | Configuration-change isolation and trace linkage |
-| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic workflow cycle passed; see recovery proof below | Runtime credential recovery; modular binding behavior |
+| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Separate workflow invocation, unpublished-draft isolation, tool-binding propagation and same-app restoration passed; see current evidence below | Parent trace linkage; full-suite capacity |
+| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic workflow cycle and modular binding restoration passed; see recovery proof below | Runtime credential recovery |
 | 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Pending | Predecessor evidence and any private binding/setup handoff |
 
 Use MCP first, inspected official CLI second, and authorized browser control last.
@@ -69,10 +70,67 @@ inspected CLI fallback with HTTP retries disabled. Run
 tokens using [the retained input](fixtures/community-probe-input.json).
 Do not infer a five-app Cloud quota from the
 Community workspace response's `sandbox` label. Three successful imports prove
-capacity for this probe only, not the full suite. Next verify binding-change
-behavior, then Booklet runtime-key recovery. Private
+capacity for this probe only, not the full suite. Next verify Booklet runtime-key
+recovery and parent trace linkage. Private
 staging keys and deployment are required only for that runtime round trip;
 independent local M1 contract preparation can proceed without them.
+
+#### Binding change and restoration evidence
+
+The [changed Concept fixture](fixtures/community-concept-changed.yml) changes only
+the Code output to `marker + "|changed|concept"`. Its graph validation and MCP
+dry-run passed. Actual MCP draft synchronization still returns HTTP 400 because
+it includes the unsupported `environment_variables` field; the inspected CLI
+same-app import is the verified fallback. A private original-version DSL backup
+was retained outside Git before the change. Two clean reviews preceded publication.
+Read-only running-run queries for the owned Concept/caller probes returned no runs
+before changing the published binding; this is not a workspace-wide drain proof.
+
+| Check | Run / version | Observed result |
+| --- | --- | --- |
+| Changed draft | `7b364f9e-d44d-4bb4-908c-fc06fe60d61c` | `issue65|changed|concept` |
+| Caller while only draft changed | `203a417e-4b9c-43d4-9cc3-85b6695628dc` | Original caller result |
+| Changed Concept published, tool not refreshed | Version `de99b1d4-68f5-4368-b381-8b5d305cad37`; caller `3af92ffc-85d4-412f-9e81-7aca192caa51` | Tool reports `synced=false`; caller still returns original |
+| Changed tool synchronized | Caller `a383fb0b-160a-4f9c-b94d-31b8a5f54787` | `issue65|manager|changed|concept|tester` |
+| Original restored, republished and synchronized | Version `fb00aa3b-9a26-4046-a191-54db0c793ada`; caller `1ffa1a98-2674-4c79-96db-2bb693c7b62f` | Original caller result; original draft hash matched |
+
+All runs reported zero tokens. The caller version
+`dae1aabe-3fa3-4cf5-8507-3f91fe1d5757` and Concept provider ID stayed unchanged.
+The first refresh attempt did not confirm success; read-back still showed
+`synced=false`, and the subsequent refresh verified `synced=true`. Do not count
+caller run `055cfccd-a073-43cf-8c13-08dcf5fc224a`, which returned the original
+result after that unsuccessful attempt, as evidence of the changed binding.
+
+Pinning the caller does **not** transitively pin its Workflow Tools: synchronizing
+a child changes later runs of the same published caller. The unchanged caller
+did not need rebuilding after restoration. Keep dispatch stopped and reconcile
+active operations before refreshing child bindings; record effective child
+publication evidence with each successor configuration. See the
+[reusable lesson](LESSONS-LEARNED.md#published-callers-do-not-pin-child-workflow-tool-bindings).
+
+#### Runtime integration handoff
+
+Staging still lacks `app/api/integrations/dify-community` and the Community env
+schema. It retains the Cloud tool-auth exceptions; preserve them when preparing
+the selective release. The issue branch cannot be promoted wholesale just to
+obtain this probe: its staging comparison includes unrelated infrastructure,
+documentation and other master changes. Prepare and verify the reviewed probe's
+release compatibility before deployment.
+
+Required private bindings are an application API key for the exact model-free
+target and the separate callback key for `issue69_booklet_round_trip`
+(`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`). The existing protected key workflow accepts
+only the two Cloud key names; it is not yet a verified Community provisioning
+path. Interactive named-secret rotation accepts the Community API/callback keys,
+but does not configure the enable flag and origin as a single bounded setup.
+Resolve that setup path without re-entering unrelated secrets. No Community key
+values have been retrieved or installed, and no runtime-key or live callback
+success is claimed. A private application-key smoke test can precede deployment;
+it does not replace the live Booklet callback/recovery acceptance.
+
+CI for commit `56adbe96a6783040cc2ed147cf2d1978112729c2` passed in run
+`37118227169`, including selected application, agent, shell and Terraform checks.
+That result does not establish live staging readiness.
 
 ### Current execution evidence
 

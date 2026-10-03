@@ -178,6 +178,12 @@ the paid call. Publish, synchronize applicable Workflow Tools and read back thei
 bindings. Successor runs record the new configuration. Claim version isolation
 only when the selected Dify interface has demonstrated it.
 
+Community M0 proved unpublished-child-draft isolation but **not** transitive
+version pinning: refreshing a child Workflow Tool changed later executions of
+the same pinned published caller. Freeze and record the effective child bindings
+as well as the caller configuration; drain before their synchronization. See
+[M0 binding evidence](M0-readiness.md#binding-change-and-restoration-evidence).
+
 ### Outstanding execution dependencies
 
 | Dependency | Required proof/handoff | Blocks |
