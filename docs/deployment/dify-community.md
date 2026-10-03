@@ -293,17 +293,17 @@ the keys in the team's password manager, and remove temporary repository copies
 after successful rotation. A failed rotation requires journal inspection and
 Maintenance resume; do not dispatch a second rotation blindly.
 
-Setup PR #68 merged at `9d1fdd6a02d1c4b5ae248c25a6aa8f78d2465d3a`.
-Infrastructure run `37129311382` synchronized the host dispatcher and confirmed
-zero Terraform resource changes. Selective staging PR #79 passed CI
-`37129997901` and merged at `6b54dfc533c1e858fddbb2f78a32062b29250188`; its
-Deploy run `37130264852` and staging Check deployment `37130673585` passed.
-Infrastructure synchronization copies master-owned Compose files into the host,
-so the staging defaults must also preserve the Cloud trial: enabled, fake mode,
-images disabled, and two attempts. This configuration correction requires host
-synchronization and a new release snapshot; an existing commit's release files
-are immutable. Private credentials and live
-callback/recovery remain pending. Publication is not evidence that keys are installed.
+The reviewed host setup is on master at
+`63fb83e29a72dce60437d280f6c5cff0d3355ff2` (PRs #68 and #80).
+Infrastructure run `37131368907` synchronized it with zero Terraform resource
+changes. Selective staging PRs #79 and #81 preserve the Cloud trial defaults:
+enabled in staging, fake mode, images disabled, and two attempts.
+Final staging commit `c909a8ce0d487d1dbe4f1aecbf6e3dc90e2013e1` passed CI
+`37131423028` and deployed in `37131641941`, using image digest
+`sha256:f9c1f4a61adf03841c39e5afa4436b819c240035f37290f9cf5f0b1826835a19`.
+Final Check deployment `37132062489` passed. The Community probe is
+disabled by default; private credentials and live callback/recovery remain pending.
+Publication is not evidence that keys are installed.
 
 From an authenticated Booklet staging client, `POST
 /api/integrations/dify-community/runs`. Save the returned correlation ID even

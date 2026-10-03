@@ -27,8 +27,8 @@ dependent operation blocked by any unresolved item. None is fully complete yet.
 Use MCP first, inspected official CLI second, and authorized browser control last.
 An unresolved staging dependency does not block independent local preparation.
 For checkpoint 4, use the handoff format in [EXECUTION.md](EXECUTION.md#sol-low-execution-packages).
-The Community callback routes now exist on master through #69, but staging
-deployment and private runtime/callback bindings remain pending.
+The Community callback routes are deployed in staging with the probe disabled
+by default. Private runtime/callback bindings and live acceptance remain pending.
 
 ### Current target and Community probe — 2026-10-03
 
@@ -129,8 +129,8 @@ comparison includes unrelated infrastructure, documentation and other master cha
 The selective runtime port contains the three Community route handlers,
 `lib/dify-community/probe.ts`, additive Community env/proxy contracts and tests,
 and the disabled-by-default Compose flag. Preserve all existing Cloud env fields
-and callback exceptions; do not copy master's staging Compose settings, which
-would change Cloud execution defaults. A PR from this master-based issue branch
+and callback exceptions; compare both host and environment-branch settings instead
+of replacing staging overlays wholesale. A PR from this master-based issue branch
 would include unrelated changes and remove Cloud trial files. A short-lived
 staging-based delivery branch therefore requires an explicit exception to the
 one-issue-branch rule; implementation ownership remains on this issue branch.
@@ -144,9 +144,15 @@ the host dispatcher. PR #79 contains the isolated port from
 Two independent reviews, typecheck, lint, 32 focused deployment/probe tests,
 31 existing Cloud unit tests, and CI `37129997901` passed. The staging merge is
 `6b54dfc533c1e858fddbb2f78a32062b29250188`. Deploy run `37130264852` and staging
-Check deployment `37130673585` passed. The master-owned host Compose defaults
-must match staging's preserved Cloud settings; correcting them requires another
-host sync and release snapshot. Private bindings and live callback acceptance remain pending.
+Check deployment `37130673585` passed. PR #80 corrected the master-owned host
+Compose defaults to match staging's preserved Cloud settings; CI `37131141600`
+passed and host sync `37131368907` succeeded with zero Terraform resource changes.
+PR #81 added the default regression and corrected runbook guidance. CI
+`37131423028` passed, and its new immutable staging snapshot
+`c909a8ce0d487d1dbe4f1aecbf6e3dc90e2013e1` deployed successfully in
+`37131641941`. Final staging Check deployment `37132062489` passed.
+No provider calls, key replacement or reset occurred. Private bindings and live
+callback acceptance remain pending.
 
 Required private bindings are an application API key for the exact model-free
 target and the separate callback key for `issue69_booklet_round_trip`
