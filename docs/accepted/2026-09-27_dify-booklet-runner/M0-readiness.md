@@ -4,7 +4,8 @@
 failure/repair/publication/tool-synchronization/restoration cycle passed.
 Community workflow-to-workflow invocation passed in draft and published callers.
 Draft isolation and synchronized binding restoration also passed. Full-suite
-capacity, parent trace linkage and Booklet runtime-key recovery remain unverified.
+capacity, parent trace linkage and deployed Booklet callback/recovery remain
+unverified. The operator's application-key execution/result-retrieval smoke test passed.
 **Coverage:** AC08, AC13 and first-slice readiness.
 **Read first:** [EXECUTION.md](EXECUTION.md), [PRD.md](PRD.md),
 [Dify access runbook](../2026-09-26_codex-dify-access/runbook.md).
@@ -20,7 +21,7 @@ dependent operation blocked by any unresolved item. None is fully complete yet.
 | --- | --- | --- | --- |
 | 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-03: Community MCP workspace check and CLI inventory pass; three new probe workflows imported | Complete-suite capacity; host workload measurements |
 | 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Separate workflow invocation, unpublished-draft isolation, tool-binding propagation and same-app restoration passed; see current evidence below | Parent trace linkage; full-suite capacity |
-| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic workflow cycle and modular binding restoration passed; see recovery proof below | Runtime credential recovery |
+| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic workflow cycle, modular binding restoration and operator application-key retrieval smoke test passed | Deployed Booklet callback and runtime recovery |
 | 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Pending | Predecessor evidence and any private binding/setup handoff |
 
 Use MCP first, inspected official CLI second, and authorized browser control last.
@@ -70,8 +71,8 @@ inspected CLI fallback with HTTP retries disabled. Run
 tokens using [the retained input](fixtures/community-probe-input.json).
 Do not infer a five-app Cloud quota from the
 Community workspace response's `sandbox` label. Three successful imports prove
-capacity for this probe only, not the full suite. Next verify Booklet runtime-key
-recovery and parent trace linkage. Private
+capacity for this probe only, not the full suite. Next verify deployed Booklet
+callback/recovery and parent trace linkage. Private
 staging keys and deployment are required only for that runtime round trip;
 independent local M1 contract preparation can proceed without them.
 
@@ -110,6 +111,16 @@ publication evidence with each successor configuration. See the
 
 #### Runtime integration handoff
 
+On 2026-10-03, the operator ran the private application-key smoke test against
+`issue65_probe_manager_20261003`. The script verified the application name,
+executed once, retained run ID `dca57c92-bc08-4cb1-aa6e-ab21abe89b90`, discarded
+the initial output and retrieved the expected saved result with the same
+application key. The operator reported `PASS` and zero tokens. This verifies
+direct service-API execution and result retrieval after discarding the output;
+it does not simulate loss before receiving a run ID or exercise Booklet's
+deployed callback/persistence path. The key was handled privately, not supplied
+to Codex or installed in staging.
+
 Staging still lacks `app/api/integrations/dify-community` and the Community env
 schema. It retains the Cloud tool-auth exceptions; preserve them when preparing
 the selective release. The issue branch cannot be promoted wholesale just to
@@ -123,14 +134,16 @@ target and the separate callback key for `issue69_booklet_round_trip`
 only the two Cloud key names; it is not yet a verified Community provisioning
 path. Interactive named-secret rotation accepts the Community API/callback keys,
 but does not configure the enable flag and origin as a single bounded setup.
-Resolve that setup path without re-entering unrelated secrets. No Community key
-values have been retrieved or installed, and no runtime-key or live callback
-success is claimed. A private application-key smoke test can precede deployment;
-it does not replace the live Booklet callback/recovery acceptance.
+Resolve that setup path without re-entering unrelated secrets. Codex has not
+retrieved Community key values or installed them in staging. The private
+application-key smoke test above does not replace live Booklet callback/recovery
+acceptance.
 
 CI for commit `56adbe96a6783040cc2ed147cf2d1978112729c2` passed in run
 `37118227169`, including selected application, agent, shell and Terraform checks.
 That result does not establish live staging readiness.
+CI for the binding-recovery evidence commit
+`b56e10ee156336c6d9f70c507028d14adb332205` also passed in run `37119401426`.
 
 ### Current execution evidence
 
