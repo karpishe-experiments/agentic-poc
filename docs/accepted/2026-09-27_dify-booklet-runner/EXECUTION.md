@@ -113,7 +113,7 @@ and scope before marking a row granted.
 
 | Grant | Exact bounded scope | Current state |
 | --- | --- | --- |
-| Repository/release | Same issue branch; reviewed PRs to master and staging; wait for required CI; merge without admin bypass; staging Deploy and Check deployment; fix in-scope failures | Requested; no answer recorded |
+| Repository/release | Community probe setup only: reviewed master setup, dispatcher synchronization, an isolated staging-based delivery branch, merge after CI, staging Deploy and Check deployment; preserve Cloud trial | Granted by the operator on 2026-10-03. This does not authorize later runner releases, production changes, resets, or paid calls. Main implementation ownership stays on the issue branch. |
 | Browser control | Dify administration and Booklet staging verification in the current chat only | Only read-only Dify capacity/New Agent inspection granted in this chat; edits and Booklet browser verification remain ungranted |
 | Dify writes | Create, edit, test without provider calls, publish and restore new `issue65-` probe/suite resources; existing Booklet Dify resources, credentials and workspace plan unchanged | Granted by the operator in this chat on 2026-09-27 |
 | Private setup | Login for the interface that fails; provision required suite execution keys and callback bindings privately; any direct-provider secret stays inside Dify | CLI and MCP inventory authenticated; new-suite bindings remain unverified |

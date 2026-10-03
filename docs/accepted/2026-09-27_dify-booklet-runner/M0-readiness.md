@@ -121,14 +121,12 @@ it does not simulate loss before receiving a run ID or exercise Booklet's
 deployed callback/persistence path. The key was handled privately, not supplied
 to Codex or installed in staging.
 
-Staging still lacks `app/api/integrations/dify-community` and the Community env
-schema. It retains the Cloud tool-auth exceptions; preserve them when preparing
-the selective release. The issue branch cannot be promoted wholesale just to
-obtain this probe: its staging comparison includes unrelated infrastructure,
-documentation and other master changes. Prepare and verify the reviewed probe's
-release compatibility before deployment.
+The selective staging port adds `app/api/integrations/dify-community` and the
+Community env schema while retaining the Cloud tool-auth exceptions. The issue
+branch cannot be promoted wholesale just to obtain this probe: its staging
+comparison includes unrelated infrastructure, documentation and other master changes.
 
-The selective runtime port needs the three Community route handlers,
+The selective runtime port contains the three Community route handlers,
 `lib/dify-community/probe.ts`, additive Community env/proxy contracts and tests,
 and the disabled-by-default Compose flag. Preserve all existing Cloud env fields
 and callback exceptions; do not copy master's staging Compose settings, which
@@ -136,15 +134,27 @@ would change Cloud execution defaults. A PR from this master-based issue branch
 would include unrelated changes and remove Cloud trial files. A short-lived
 staging-based delivery branch therefore requires an explicit exception to the
 one-issue-branch rule; implementation ownership remains on this issue branch.
-That release decision, merge/deployment authorization and private bindings are
-pending. Local setup preparation does not clear them.
+
+On 2026-10-03, the operator authorized that delivery exception, reviewed master
+setup, dispatcher synchronization, and staging deployment after CI. PR #68 merged
+the setup at `9d1fdd6a02d1c4b5ae248c25a6aa8f78d2465d3a`; Infrastructure run
+`37129311382` succeeded with zero Terraform resource changes and synchronized
+the host dispatcher. PR #79 contains the isolated port from
+`agent/issue-65-community-probe-staging`, tracking its same-named origin branch.
+Two independent reviews, typecheck, lint, 32 focused deployment/probe tests,
+31 existing Cloud unit tests, and CI `37129997901` passed. The staging merge is
+`6b54dfc533c1e858fddbb2f78a32062b29250188`. Deploy run `37130264852` and staging
+Check deployment `37130673585` passed. The master-owned host Compose defaults
+must match staging's preserved Cloud settings; correcting them requires another
+host sync and release snapshot. Private bindings and live callback acceptance remain pending.
 
 Required private bindings are an application API key for the exact model-free
 target and the separate callback key for `issue69_booklet_round_trip`
 (`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`). The candidate staging-only
 `DIFY_COMMUNITY_PROBE` bundle configures the two keys, fixed origin and enable flag
-through the existing protected key workflow or interactive rotation. It needs
-reviewed publication, host synchronization and live verification; see
+through the existing protected key workflow or interactive rotation. Reviewed
+publication and host synchronization passed; it still needs private bindings and
+live verification. See
 [Community checkpoint 5](../../deployment/dify-community.md#checkpoint-5--deterministic-booklet-round-trip).
 Codex has not
 retrieved Community key values or installed them in staging. The private

@@ -13,6 +13,17 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
+  it("preserves Cloud staging defaults in master-owned host configuration", () => {
+    const base = readFileSync("deploy/compose.yml", "utf8");
+    const staging = readFileSync("deploy/compose.staging.yml", "utf8");
+    expect(base).toContain('DIFY_EXPERIMENT_ENABLED: "false"');
+    expect(base).toContain('DIFY_IMAGE_MAX_ATTEMPTS: "2"');
+    expect(base).toContain("DIFY_BASE_URL: https://api.dify.ai/v1");
+    expect(staging).toContain('DIFY_EXPERIMENT_ENABLED: "true"');
+    expect(staging).toContain("DIFY_EXPERIMENT_MODE: fake");
+    expect(staging).toContain('DIFY_IMAGE_ENABLED: "false"');
+    expect(staging).not.toContain("DIFY_COMMUNITY_PROBE_ENABLED");
+  });
   it("does not apply new infrastructure merely because master was updated", () => {
     const workflow = readFileSync(".github/workflows/infrastructure.yml", "utf8");
     expect(workflow).toContain("inputs.apply && '--apply' || ''");

@@ -267,17 +267,14 @@ The Community draft `issue69_booklet_round_trip`
 (`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`) was imported and read back on
 3 October 2026. Server-default graph validation passed with zero issues. It
 was published as version `ed5bc347-611d-4e0c-9a82-1a0f26445e2e`, but has not
-been executed. The deployed staging revision
-`612297bcbb695b7189ad2824d98493a8c4bcf333` does not contain the Community
-probe routes. Promote only the reviewed probe changes; preserve the existing
-Cloud callback authentication exceptions when adapting `proxy.ts` because the
-staging and master versions differ. Next, privately bind its dedicated callback
-key and application runtime key to staging's protected configuration, enable
-the staging probe, and complete the reviewed staging release checkpoint.
+been executed. The selective staging port preserves the existing Cloud
+callback authentication exceptions and settings. Next, verify the staging
+release, privately bind its dedicated callback key and application runtime key
+to staging's protected configuration, and enable the probe.
 The default Compose configuration keeps the probe disabled. Imported secret
 metadata is not proof that the callback key has been entered correctly.
 
-The candidate setup path is **Dify staging key**, run from `master` with
+The setup path is **Dify staging key**, run from `master` with
 `secret_name=DIFY_COMMUNITY_PROBE`. Before using it, install the reviewed host
 dispatcher through the Infrastructure checkpoint and release the additive probe
 routes to staging. Privately store repository secrets
@@ -296,8 +293,17 @@ the keys in the team's password manager, and remove temporary repository copies
 after successful rotation. A failed rotation requires journal inspection and
 Maintenance resume; do not dispatch a second rotation blindly.
 
-This setup implementation still requires reviewed publication, host synchronization
-and live staging verification. It is not evidence that credentials are installed.
+Setup PR #68 merged at `9d1fdd6a02d1c4b5ae248c25a6aa8f78d2465d3a`.
+Infrastructure run `37129311382` synchronized the host dispatcher and confirmed
+zero Terraform resource changes. Selective staging PR #79 passed CI
+`37129997901` and merged at `6b54dfc533c1e858fddbb2f78a32062b29250188`; its
+Deploy run `37130264852` and staging Check deployment `37130673585` passed.
+Infrastructure synchronization copies master-owned Compose files into the host,
+so the staging defaults must also preserve the Cloud trial: enabled, fake mode,
+images disabled, and two attempts. This configuration correction requires host
+synchronization and a new release snapshot; an existing commit's release files
+are immutable. Private credentials and live
+callback/recovery remain pending. Publication is not evidence that keys are installed.
 
 From an authenticated Booklet staging client, `POST
 /api/integrations/dify-community/runs`. Save the returned correlation ID even
