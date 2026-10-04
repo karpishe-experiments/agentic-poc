@@ -87,3 +87,24 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   caller run `1ffa1a98-2674-4c79-96db-2bb693c7b62f`; zero reported tokens.
 - **Promotion target:** Documentation and the Dify operations skill.
 - **Status:** Candidate; behavior was verified on this pinned release only.
+
+### Unit checks do not prove server package initialization
+
+- **Context:** Next.js 16.2.12, Zod 4.4.3 and the runner configuration imported
+  by the root layout.
+- **Observation:** Typecheck, lint and runtime tests passed, but the release build
+  failed at `/_not-found` when Zod's bundled ISO/schema cycle accessed
+  `ZodISODateTime` before initialization. A clean debug build reproduced the
+  failure at `lib/contracts/common.ts:7`; native Node imports passed. The same
+  checkout completed the ordinary build with only Zod added to
+  `serverExternalPackages`. No dependency or validation rule changed.
+- **Guidance:** Diagnose generated server initialization with a clean checkout
+  and source-mapped failure. For this verified package cycle, retain native
+  server loading rather than weakening schemas or changing the whole bundler.
+  PR validation stays non-build; the deployment build remains a separate gate.
+- **Evidence:** [server configuration](../../../next.config.ts),
+  [configuration regression](../../../tests/unit/next-config.test.ts), and
+  [Next.js external-package contract](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages).
+- **Promotion target:** Documentation; reverify before removing the workaround
+  or changing Next.js/Zod versions. Linux container deployment remains the live
+  release checkpoint.
