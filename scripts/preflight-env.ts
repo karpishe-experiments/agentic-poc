@@ -6,6 +6,7 @@ import { verifyMongoStructure } from "@/db/setup";
 import { createRepositories } from "@/db/repositories";
 import { AgentResolver } from "@/lib/application/agent-resolver";
 import { getServerEnv } from "@/lib/config/env";
+import { verifyExperimentData } from "@/db/verify";
 
 config({ path: ".env.local" });
 await access(".env.local").catch(() => { throw new Error(".env.local is missing or unreadable."); });
@@ -13,10 +14,14 @@ try { execFileSync("git", ["check-ignore", "--quiet", "--", ".env.local"], { cwd
 catch { throw new Error(".env.local must exist and be ignored by Git."); }
 
 const env = getServerEnv();
-if (["replace-me", "your-api-key", "sk-..."].includes(env.OPENAI_API_KEY.trim())) throw new Error("OPENAI_API_KEY is a placeholder.");
+if (env.DIFY_BOOKLET_RUNNER_ENABLED !== "true" && ["replace-me", "your-api-key", "sk-..."].includes(env.OPENAI_API_KEY.trim())) throw new Error("OPENAI_API_KEY is a placeholder.");
 const database = createMongoDatabase({ uri: env.MONGODB_URI, databaseName: env.MONGODB_DATABASE });
 try {
   await verifyMongoStructure(database);
+  if (env.DIFY_BOOKLET_RUNNER_ENABLED === "true") {
+    await verifyExperimentData(database);
+    console.log("PREFLIGHT_PASS: experiment bindings and MongoDB references are valid; no provider request was sent.");
+  } else {
   const repositories = createRepositories(database);
   await new AgentResolver({ database, repositories }).prepareCompleteActiveSet("real");
   const snapshot = await repositories.agents.getAdminSnapshot();
@@ -28,4 +33,5 @@ try {
   } catch { unavailable.push(`${model}:network-or-client-error`); }
   if (unavailable.length) throw new Error(`Unavailable model aliases: ${unavailable.join(", ")}.`);
   console.log("PREFLIGHT_PASS: ignored environment, MongoDB structure/coverage, and configured model access are valid.");
+  }
 } finally { await database.close(); }

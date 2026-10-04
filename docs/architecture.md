@@ -64,9 +64,26 @@ Legacy booklet projections exclude this profile because their eight-stage
 parsers cannot read J01/J02. The existing artifact-type index is retained; a later
 authorized clean reset is required before multi-subject artifacts replace it.
 `verifyExperimentData` checks experiment references without legacy agent seeds.
-The existing initialization path still requires those seeds. Runner routes,
-dispatch, enabled-profile initialization and live Dify acceptance remain pending;
-these local contracts do not change production or the existing diagnostic probe.
+The enabled, non-production runner profile initializes experiment structure
+without local-agent seeds or a host OpenAI key. It retains seed assets for health
+checks and leaves existing legacy seeds unchanged. Disabled settings retain
+legacy initialization and execution.
+
+`lib/experiment-runner/` now supplies strict six-module configuration, browser
+run APIs, four exact machine callbacks, a sequential dispatcher and bounded
+application-key transport. A transactional dispatch marker precedes each single
+POST. Callback authorization reserves once. A retained workflow-run ID permits
+GET-only recovery; unknown work without an ID blocks instead of replaying.
+Published workflow identities and the saved configuration snapshot must match.
+Three unchanged progress observations block the run. Pause prevents admission
+but does not cancel in-flight work; an authorized result can still be stored.
+
+With the runner enabled, `/experiments/booklet-runs` shows saved J01/J02 work,
+warnings, exact version approvals, limits and Pause/Resume. Only Simulated runs
+can be created. The approved J02/J03 boundary remains a queued partial booklet,
+not completion. The legacy home and agent navigation remain when disabled.
+Live module bindings, staging simulation and browser acceptance remain pending;
+local checks do not change production, Cloud or the diagnostic probe.
 
 Every legacy-profile booklet has eight ordered artifact records:
 

@@ -36,6 +36,7 @@ export type ExperimentRunDocument = BaseDocument & {
   safeFailure: "limit_exhausted" | "unknown_outcome" | "definite_failure" | null;
   activeDelegationId: string | null; decisionSequence: number; pendingDecisionJson: string | null;
   textRevisions: number; imageRevisions: number;
+  progressFingerprint?: string | null; progressOperationId?: string | null; noProgressCount?: number;
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
@@ -45,6 +46,8 @@ export type ExperimentOperationDocument = BaseDocument & {
   mode: ExperimentMode; providerKind: "text" | "image";
   state: "prepared" | "started" | "succeeded" | "failed" | "unknown";
   workflowRunId: string | null; parentWorkflowRunId: string | null;
+  dispatchStartedAtMs?: number | null;
+  verifiedWorkflowId?: string | null;
   reservationCount: number; deadlineAtMs: number | null;
   resultJson: string | null; resultDigest: string | null; warningsJson: string;
   expectedTargetVersionId: string | null; dependencyVersionIds: string[]; materializationJson: string | null;
