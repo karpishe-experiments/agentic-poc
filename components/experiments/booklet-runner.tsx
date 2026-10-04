@@ -22,12 +22,14 @@ type Run = {
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
 type PendingCreate = { persona: Persona; key: string; predecessorRunId?: string };
-class RunnerRequestError extends Error {}
+class RunnerRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
+}
 function safeMessage(error: unknown, fallback: string) { return error instanceof RunnerRequestError ? error.message : fallback; }
 
 async function read<T>(response: Response): Promise<T> {
   const envelope = await response.json() as Envelope<T>;
-  if (!response.ok || envelope.data === undefined) throw new RunnerRequestError(envelope.error?.message ?? "The runner request could not be completed.");
+  if (!response.ok || envelope.data === undefined) throw new RunnerRequestError(envelope.error?.message ?? "The runner request could not be completed.", response.status, envelope.error?.code);
   return envelope.data;
 }
 const format = (value: unknown) => typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -85,7 +87,17 @@ export function BookletRunner() {
   async function control(run: Run, action: "pause" | "resume") {
     setBusy(true); setActionError(null);
     try {
-      await read<Run>(await fetch(`/api/experiments/booklet-runs/${run.runId}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expectedRevision: run.revision }) }));
+      const send = async (current: Run) => read<Run>(await fetch(`/api/experiments/booklet-runs/${current.runId}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expectedRevision: current.revision }) }));
+      try { await send(run); }
+      catch (caught) {
+        // Only a definite CAS rejection permits a retry; uncertain writes are never replayed.
+        if (!(caught instanceof RunnerRequestError) || caught.status !== 409 || caught.code !== "conflict") throw caught;
+        const current = await read<Run>(await fetch(`/api/experiments/booklet-runs/${run.runId}`, { cache: "no-store" }));
+        if (alive.current) setRuns((saved) => saved.map((item) => item.runId === current.runId ? current : item));
+        if (current.status === "failed" || current.status === "completed" || (action === "resume" && current.status === "blocked")) throw new RunnerRequestError("The run changed state. Inspect its saved status before trying again.", 409);
+        const alreadyApplied = action === "pause" ? current.pauseRequested || current.status === "paused" : !current.pauseRequested && current.status !== "paused";
+        if (!alreadyApplied) await send(current);
+      }
       await refresh();
     } catch (caught) { setActionError(safeMessage(caught, "The run could not be updated.")); }
     finally { setBusy(false); }
