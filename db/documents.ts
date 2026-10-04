@@ -54,6 +54,10 @@ export type ExperimentOperationDocument = BaseDocument & {
   workflowRunId: string | null; parentWorkflowRunId: string | null;
   dispatchStartedAtMs?: number | null;
   verifiedWorkflowId?: string | null;
+  imageRequestJson?: string | null;
+  imageCompletionDigest?: string | null;
+  imageCompletionClaim?: { id: string; digest: string; expiresAtMs: number } | null;
+  imageFailureHistory?: { category: "unknown_outcome" | "definite_failure"; recordedAtMs: number }[];
   reservationCount: number; deadlineAtMs: number | null;
   resultJson: string | null; resultDigest: string | null; warningsJson: string;
   expectedTargetVersionId: string | null; dependencyVersionIds: string[]; materializationJson: string | null;

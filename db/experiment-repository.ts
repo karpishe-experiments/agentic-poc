@@ -5,14 +5,16 @@ import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/do
 import { CASES, EXPERIMENT_PROFILE, MAX_NARRATIVE_CONTENT_BYTES, experimentModeSchema, experimentRoleSchema, experimentTaskSchema, parseNarrativeTaskProposal, personaSchema, resultEnvelopeSchema, validateRoleResult, type RoleResult } from "@/lib/contracts/experiment-runner";
 import { isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import { opaqueIdSchema } from "@/lib/contracts/common";
+import { experimentImageRequestSchema, imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { materializeNarrativeResult, prepareNarrativeContext } from "@/db/experiment-narrative";
+import { assertCurrentImageSources } from "@/db/experiment-images";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
 const configurationItem = z.strictObject({ role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), appId: opaqueIdSchema, publishedWorkflowId: opaqueIdSchema, toolProviderId: opaqueIdSchema.nullable() });
 const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: z.array(configurationItem).max(100), nowMs: time });
 const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: time });
-const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), nowMs: time });
+const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const dispatchInput = claimInput.omit({ workflowRunId: true });
 const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema });
@@ -115,6 +117,7 @@ export function createExperimentRepository(database: Database) {
   async function prepareOperation(raw: unknown): Promise<ExperimentOperationDocument> {
     const input = parse(prepareInput, raw);
     if ((input.role === "image") !== (input.providerKind === "image") || (input.role === "specialist" && !isNarrativeTask(input.taskId)) || (input.role !== "specialist" && input.role !== "image" && input.taskId)) throw new ExperimentRepositoryError("invalid_input", "Role, task and provider kind do not match.");
+    if (input.imageRequest && (input.role !== "image" || imageRequestFingerprint(input.imageRequest) !== input.inputFingerprint)) throw new ExperimentRepositoryError("invalid_input", "Image request must match its operation fingerprint.");
     const idempotencyKey = digest(canonical([input.runId, input.role, input.taskId, input.subjectKind, input.subjectId, input.inputFingerprint, input.attempt]));
     const existing = await operations.findOne({ idempotencyKey });
     if (existing) return existing;
@@ -125,8 +128,13 @@ export function createExperimentRepository(database: Database) {
         if (run.status !== "queued" && run.status !== "running" || run.pauseRequested || run.activeOperationId) throw new ExperimentRepositoryError("invalid_state", "Run cannot prepare another operation.");
         if (input.subjectKind === "book" && input.subjectId !== run.bookletId) throw new ExperimentRepositoryError("invalid_input", "Book subject must match booklet ID.");
         if (input.role === "specialist" && input.subjectKind !== "book") throw new ExperimentRepositoryError("invalid_input", "Narrative tasks require the book subject.");
+        if (input.imageRequest) await assertCurrentImageSources(database, session, run, input.imageRequest);
         const narrative = input.role === "specialist" && isNarrativeTask(input.taskId) ? await prepareNarrativeContext(database, session, run, input.taskId) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
         const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
+        if (input.imageRequest) {
+          operation.imageRequestJson = JSON.stringify(input.imageRequest);
+          operation.dependencyVersionIds = [...input.imageRequest.sourceVersionIds];
+        }
         await operations.insertOne(operation, { session });
         const changed = await runs.updateOne({ _id: input.runId, revision: input.expectedRevision, activeOperationId: null }, { $set: { activeOperationId: input.operationId, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
         if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
@@ -173,6 +181,11 @@ export function createExperimentRepository(database: Database) {
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
       if (run.pauseRequested || run.status === "paused") return { started: false, reason: "paused", operation };
       if (run.status !== "queued" && run.status !== "running") return { started: false, reason: "blocked", operation };
+      if (operation.imageRequestJson) {
+        const imageRequest = experimentImageRequestSchema.parse(JSON.parse(operation.imageRequestJson) as unknown);
+        if (operation.role !== "image" || imageRequestFingerprint(imageRequest) !== operation.inputFingerprint) throw new ExperimentRepositoryError("invalid_state", "Saved image request differs from its operation.");
+        await assertCurrentImageSources(database, session, run, imageRequest);
+      }
       const logical = operation.providerKind === "text" ? "logicalText" : "logicalImage";
       const payable = operation.providerKind === "text" ? "payableText" : "payableImage";
       const limit = operation.providerKind === "text" ? run.limits.text : run.limits.image;
@@ -240,7 +253,8 @@ export function createExperimentRepository(database: Database) {
       const state = input.category === "unknown_outcome" ? "unknown" : "failed";
       const safeFailure = input.category === "paused" ? null : input.category;
       if (operation.state === state && operation.safeFailure === safeFailure) return operation;
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const imageFailureHistory = operation.role === "image" && safeFailure ? { imageFailureHistory: [...(operation.imageFailureHistory ?? []), { category: safeFailure, recordedAtMs: input.nowMs }] } : {};
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure, ...imageFailureHistory, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Outcome changed concurrently.");
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { status: input.category === "paused" ? run.pauseRequested ? "paused" : "queued" : "blocked", safeFailure, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed before outcome.");
@@ -336,7 +350,8 @@ export function createExperimentRepository(database: Database) {
       if (operation.state !== "started" && operation.state !== "unknown") throw new ExperimentRepositoryError("invalid_state", "Operation has no active claim.");
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
       const state = input.category === "unknown_outcome" ? "unknown" : "failed";
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure: input.category, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const imageFailureHistory = operation.role === "image" ? { imageFailureHistory: [...(operation.imageFailureHistory ?? []), { category: input.category, recordedAtMs: input.nowMs }] } : {};
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure: input.category, ...imageFailureHistory, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation failure changed concurrently.");
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
