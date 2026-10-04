@@ -79,6 +79,15 @@ export function createExperimentDispatcher(deps: {
     return mutate(async () => {
       let run = await repository.getRun(runId);
       if (!run || run.mode !== "simulated" || run.status === "completed" || run.status === "failed") return "blocked";
+      // Completed slice evidence remains complete after a newer suite is bound.
+      // This is a saved-state read, not permission to execute an old publication.
+      if (!run.activeOperationId && run.status !== "blocked") {
+        const savedView = await context.getRunView(runId);
+        if (savedView?.nextNarrativeTask === "slice_complete") {
+          const last = (await repository.listOperations(runId)).at(-1);
+          if (last?.state === "succeeded" && last.verifiedWorkflowId && run.progressOperationId === last._id) return "boundary";
+        }
+      }
       const expected = configurationSnapshot(deps.config, run.persona);
       if (canonical(expected) !== run.configurationJson) {
         await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });

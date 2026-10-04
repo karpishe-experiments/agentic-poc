@@ -176,6 +176,15 @@ CHILD
     export DIFY_BOOKLET_RUNNER_SETTINGS_JSON
     build_booklet_runner_patch staging "$TEMP_DIR/runner.json"
     booklet_runner_patch_is_valid "$TEMP_DIR/runner.json"
+    expanded_bindings="$(jq -c '. + (["J03","J04","J05","J06","J07"]|to_entries|map({role:"specialist",taskId:.value,persona:null,appId:("00000000-0000-4000-8000-0000000000"+(.key+10|tostring)),publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"}))' <<< "$bindings")"
+    expanded_settings="$(jq -c --arg bindings "$expanded_bindings" '.DIFY_BOOKLET_BINDINGS_JSON=$bindings' <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+    (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$expanded_settings" build_booklet_runner_patch staging "$TEMP_DIR/expanded-runner.json")
+    booklet_runner_patch_is_valid "$TEMP_DIR/expanded-runner.json"
+    jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==11' "$TEMP_DIR/expanded-runner.json" >/dev/null
+    for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0:10]|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[10].taskId="J03"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[10].appId=.[0].appId|tojson)'; do
+      invalid="$(jq -c "$mutation" <<< "$expanded_settings")"
+      if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid expanded runner settings'; exit 1; fi
+    done
     jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|all(.apiKey=="private$$fixture")' "$TEMP_DIR/runner.json" >/dev/null
     for mutation in '.DIFY_BOOKLET_TOOL_KEY="short"' '.DIFY_BOOKLET_TOOL_KEY=("$"*16)' '.DIFY_BOOKLET_BINDINGS_JSON="bad"' '.DIFY_BOOKLET_RUNNER_ENABLED="maybe"' '.DIFY_BOOKLET_BASE_URL="https://other.example"' '.DIFY_BOOKLET_PUBLIC_ORIGIN="http://localhost"' '.DIFY_BOOKLET_UNKNOWN="extra"' 'del(.DIFY_BOOKLET_TOOL_KEY)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[1].appId=.[0].appId|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].role="tester"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].appId="not-a-uuid"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].extra=true|tojson)'; do
       invalid="$(jq -c "$mutation" <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"

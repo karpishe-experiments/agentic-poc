@@ -1,14 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Persona } from "@/lib/contracts/experiment-runner";
+import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
-export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: "J01" | "J02" | null; persona: Persona | null };
+export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | null; persona: Persona | null };
 export const M1_SIMULATION_MODULES: SimulationModule[] = [
   { role: "manager", taskId: null, persona: null },
   { role: "specialist", taskId: "J01", persona: null }, { role: "specialist", taskId: "J02", persona: null },
   ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
 ];
-export function simulationModuleName(module: SimulationModule) { return `issue65_m1_${module.taskId ?? module.persona ?? module.role}`; }
+export const M2_SIMULATION_MODULES: SimulationModule[] = [
+  ...M1_SIMULATION_MODULES,
+  ...(["J03", "J04", "J05", "J06", "J07"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
+];
+export function simulationModuleName(module: SimulationModule) {
+  const milestone = module.taskId && !["J01", "J02"].includes(module.taskId) ? "m2" : "m1";
+  return `issue65_${milestone}_${module.taskId ?? module.persona ?? module.role}`;
+}
 
 type Node = { id: string; type: "custom"; position: { x: number; y: number }; data: Record<string, unknown> };
 const output = { type: "string", children: null };
@@ -26,9 +34,10 @@ function http(id: string, title: string, path: string, selector: string[], x: nu
 }
 
 /** Model-free candidate graphs. Live graph validation and publication remain separate. */
-export async function createSimulationGraph(module: SimulationModule) {
-  if (!M1_SIMULATION_MODULES.some((item) => JSON.stringify(item) === JSON.stringify(module))) throw new Error("Unsupported simulation module");
-  const fixture = await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m1-simulation.py"), "utf8");
+export async function createSimulationGraph(module: SimulationModule, profile: "m1" | "m2" = "m1") {
+  const modules = profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
+  if (!modules.some((item) => JSON.stringify(item) === JSON.stringify(module))) throw new Error("Unsupported simulation module");
+  const fixture = await readFile(resolve(`docs/accepted/2026-09-27_dify-booklet-runner/dify/${profile}-simulation.py`), "utf8");
   const wrapper = `\n\ndef main(authorization_body, run_id, operation_id, workflow_run_id, parent_workflow_run_id):\n    data = json.loads(authorization_body)["data"]\n    if data.get("started") is True:\n        ctx = data["context"]\n        if ctx.get("role") != ${JSON.stringify(module.role)}:\n            raise ValueError("Wrong module role")\n${module.taskId ? `        if ctx.get("taskId") != ${JSON.stringify(module.taskId)}:\n            raise ValueError("Wrong specialist task")\n` : ""}${module.persona ? `        if ctx.get("persona") != ${JSON.stringify(module.persona)}:\n            raise ValueError("Wrong tester persona")\n` : ""}    return simulation_main(authorization_body, run_id, operation_id, workflow_run_id, parent_workflow_run_id)\n`;
   const nodes: Node[] = [
     { id: "start", type: "custom", position: { x: 0, y: 0 }, data: { title: "Simulated input only", type: "start", variables: ["run_id", "operation_id", "parent_workflow_run_id", "mode"].map((variable) => ({ variable, label: variable, type: "text-input", required: variable !== "parent_workflow_run_id", default: "", options: [] })) } },
