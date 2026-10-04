@@ -5,6 +5,8 @@ export type MongoCollections = { [Name in keyof MongoDocumentMap]: Collection<Mo
 
 export function createCollectionHandles(database: Db): MongoCollections {
   return {
+    experiment_runs: database.collection("experiment_runs"), experiment_operations: database.collection("experiment_operations"),
+    experiment_delegations: database.collection("experiment_delegations"),
     booklets: database.collection("booklets"), artifacts: database.collection("artifacts"), artifact_versions: database.collection("artifact_versions"),
     artifact_dependencies: database.collection("artifact_dependencies"), messages: database.collection("messages"), cards: database.collection("cards"),
     card_responses: database.collection("card_responses"), assets: database.collection("assets"), style_catalog: database.collection("style_catalog"),

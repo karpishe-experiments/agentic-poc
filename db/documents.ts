@@ -1,10 +1,12 @@
+import type { ExperimentMode, ExperimentRole, ExperimentTask, Persona } from "@/lib/contracts/experiment-runner";
+
 export type BaseDocument = { _id: string };
 
-export type BookletDocument = BaseDocument & { schemaVersion: string; workingTitle: string; lifecycle: string; currentStage: string; coverAssetId: string | null; createdAtMs: number; updatedAtMs: number };
-export type ArtifactDocument = BaseDocument & { bookletId: string; artifactType: string; state: string; currentVersionId: string | null; createdAtMs: number; updatedAtMs: number };
-export type ArtifactVersionDocument = BaseDocument & { artifactId: string; versionNumber: number; schemaVersion: string; contentJson: string; dependencyVersionIdsJson: string; createdBy: string; sourceVersionId: string | null; sourceExecutionBatchId: string | null; createdAtMs: number };
+export type BookletDocument = BaseDocument & { schemaVersion: string; workingTitle: string; lifecycle: string; currentStage: string; coverAssetId: string | null; createdAtMs: number; updatedAtMs: number; executionProfile?: "dify_booklet_v1"; experimentRunId?: string };
+export type ArtifactDocument = BaseDocument & { bookletId: string; artifactType: string; state: string; currentVersionId: string | null; createdAtMs: number; updatedAtMs: number; taskId?: ExperimentTask; subjectKind?: "book" | "character" | "location" | "page"; subjectId?: string; experimentRunId?: string };
+export type ArtifactVersionDocument = BaseDocument & { artifactId: string; versionNumber: number; schemaVersion: string; contentJson: string; dependencyVersionIdsJson: string; createdBy: string; sourceVersionId: string | null; sourceExecutionBatchId: string | null; createdAtMs: number; sourceOperationId?: string; warningsJson?: string };
 export type ArtifactDependencyDocument = BaseDocument & { downstreamVersionId: string; upstreamVersionId: string; createdAtMs: number };
-export type MessageDocument = BaseDocument & { bookletId: string; sequence: number; role: string; schemaVersion: string; uiMessageJson: string; createdAtMs: number };
+export type MessageDocument = BaseDocument & { bookletId: string; sequence: number; role: string; schemaVersion: string; uiMessageJson: string; createdAtMs: number; experimentRunId?: string; operationId?: string };
 export type CardDocument = BaseDocument & { bookletId: string; messageId: string | null; artifactId: string | null; family: string; variant: string; status: string; schemaVersion: string; cardJson: string; readyInputJson: string | null; readyInputSchemaVersion: string | null; readyWorkflowFingerprintJson: string | null; readyPreviousBatchId: string | null; createdAtMs: number; updatedAtMs: number };
 export type CardResponseDocument = BaseDocument & { cardId: string; action: string; valueJson: string | null; revisionInstruction: string | null; followupStatus: string; followupMessageId: string | null; createdAtMs: number };
 export type AssetDocument = BaseDocument & { bookletId: string | null; kind: string; uri: string; mimeType: string; width: number | null; height: number | null; sourceAssetId: string | null; metadataJson: string | null; createdAtMs: number };
@@ -16,7 +18,7 @@ export type AgentDefinitionDocument = BaseDocument & { createdAtMs: number; crea
 export type AgentVersionDocument = BaseDocument & { agentId: string; versionNumber: number; parentVersionId: string | null; displayName: string; purpose: string; role: string; skillId: string | null; imageTarget: string | null; instructions: string | null; provider: string; modelId: string; reasoningEffort: string | null; maxTurns: number | null; profileId: string | null; profileVersion: number | null; imageQuality: string | null; imageResolution: string | null; status: string; isActive: boolean; revision: number; createdAtMs: number; updatedAtMs: number; createdBy: string; updatedBy: string };
 export type AgentVersionEventDocument = BaseDocument & { agentId: string; agentVersionId: string; action: string; actor: string; metadataJson: string | null; createdAtMs: number };
 export type QualityReviewDocument = BaseDocument & { bookletId: string; gate: string; attempt: number; status: string; artifactVersionIdsJson: string; issuesJson: string; repairVersionIdsJson: string | null; sourceExecutionBatchId: string | null; acceptedAtMs: number | null; createdAtMs: number };
-export type ApprovalDocument = BaseDocument & { bookletId: string; artifactVersionId: string; scope: string; subjectKey: string | null; action: string; origin: string; sourceApprovalId: string | null; cardResponseId: string | null; qualityReviewId: string | null; createdAtMs: number };
+export type ApprovalDocument = BaseDocument & { bookletId: string; artifactVersionId: string; scope: string; subjectKey: string | null; action: string; origin: string; sourceApprovalId: string | null; cardResponseId: string | null; qualityReviewId: string | null; createdAtMs: number; experimentRunId?: string; testerDecisionId?: string; delegationId?: string | null; reviewGroupId?: string | null };
 export type ExportDocument = BaseDocument & { bookletId: string; artifactVersionId: string; status: string; assetId: string | null; pageAssetIdsJson: string; preflightJson: string | null; errorJson: string | null; createdAtMs: number; updatedAtMs: number };
 
 export type ExecutionPreferenceDocument = BaseDocument & { bookletId: string; targetKey: string; selectedAgentIdsJson: string; revision: number; createdAtMs: number; updatedAtMs: number };
@@ -29,7 +31,44 @@ export type DifyExperimentDocument = BaseDocument & {
   currentRevision: number; reviewRevision: number | null; approvedRevision: number | null; image: import("@/lib/contracts/dify-experiment").DifyExperimentImage | null;
   imageAttemptCount: number; runs: import("@/lib/contracts/dify-experiment").DifyExperimentRun[]; activeRunId: string | null; createdAtMs: number; updatedAtMs: number;
 };
+export type ExperimentCounters = { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
+export type ExperimentRunDocument = BaseDocument & {
+  schemaVersion: "2"; bookletId: string; persona: Persona; mode: ExperimentMode; brief: string;
+  predecessorRunId: string | null; configurationJson: string; configurationHash: string;
+  status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
+  evaluationStatus: "pending" | "running" | "complete" | "failed";
+  revision: number; pauseRequested: boolean; activeOperationId: string | null;
+  counters: ExperimentCounters; limits: { text: number; image: number; steps: number };
+  safeFailure: "limit_exhausted" | "unknown_outcome" | "definite_failure" | null;
+  activeDelegationId: string | null; decisionSequence: number; pendingDecisionJson: string | null;
+  textRevisions: number; imageRevisions: number;
+  progressFingerprint?: string | null; progressOperationId?: string | null; noProgressCount?: number;
+  createdAtMs: number; updatedAtMs: number;
+};
+export type ExperimentOperationDocument = BaseDocument & {
+  runId: string; role: ExperimentRole; taskId: ExperimentTask | null;
+  subjectKind: "book" | "character" | "location" | "page"; subjectId: string;
+  idempotencyKey: string; inputFingerprint: string; attempt: number;
+  mode: ExperimentMode; providerKind: "text" | "image";
+  state: "prepared" | "started" | "succeeded" | "failed" | "unknown";
+  workflowRunId: string | null; parentWorkflowRunId: string | null;
+  dispatchStartedAtMs?: number | null;
+  verifiedWorkflowId?: string | null;
+  reservationCount: number; deadlineAtMs: number | null;
+  resultJson: string | null; resultDigest: string | null; warningsJson: string;
+  expectedTargetVersionId: string | null; dependencyVersionIds: string[]; materializationJson: string | null;
+  safeFailure: "unknown_outcome" | "definite_failure" | null;
+  createdAtMs: number; updatedAtMs: number;
+};
+export type ExperimentDelegationDocument = BaseDocument & {
+  runId: string; testerDecisionId: string; taskIds: ExperimentTask[];
+  subjectKind: "book"; subjectId: string; action: "approve";
+  effectiveSequence: number; supersededById: string | null; revokedAtMs: number | null; createdAtMs: number;
+};
 export type MongoDocumentMap = {
+  experiment_runs: ExperimentRunDocument;
+  experiment_operations: ExperimentOperationDocument;
+  experiment_delegations: ExperimentDelegationDocument;
   booklets: BookletDocument;
   artifacts: ArtifactDocument;
   artifact_versions: ArtifactVersionDocument;
@@ -56,4 +95,4 @@ export type MongoDocumentMap = {
 };
 
 export type CollectionName = keyof MongoDocumentMap;
-export const COLLECTION_NAMES = ["booklets", "artifacts", "artifact_versions", "artifact_dependencies", "messages", "cards", "card_responses", "assets", "style_catalog", "generation_jobs", "generation_items", "model_calls", "agent_definitions", "agent_versions", "agent_version_events", "quality_reviews", "approvals", "exports", "execution_preferences", "execution_batches", "execution_items", "deployment_control", "dify_experiment_projects"] as const satisfies readonly CollectionName[];
+export const COLLECTION_NAMES = ["booklets", "artifacts", "artifact_versions", "artifact_dependencies", "messages", "cards", "card_responses", "assets", "style_catalog", "generation_jobs", "generation_items", "model_calls", "agent_definitions", "agent_versions", "agent_version_events", "quality_reviews", "approvals", "exports", "execution_preferences", "execution_batches", "execution_items", "deployment_control", "dify_experiment_projects", "experiment_runs", "experiment_operations", "experiment_delegations"] as const satisfies readonly CollectionName[];

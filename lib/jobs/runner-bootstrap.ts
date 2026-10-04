@@ -5,6 +5,8 @@ import { ImageAgentRunService } from "@/lib/application/image-agent-run-service"
 import { GenerationService } from "@/lib/application/generation-service";
 import { describeGenerationError, createGenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
 import { readDeploymentControl } from "@/lib/application/deployment-control";
+import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
+import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 
 const RUNNER_STATE = Symbol.for("kids-booklet-poc.job-runner");
 
@@ -16,6 +18,27 @@ function delay(milliseconds: number): Promise<void> {
 
 async function runLoop(): Promise<void> {
   const database = getDatabase();
+  const profile = readBookletRunnerConfig();
+  if (!profile.enabled && profile.reason === "invalid") throw new Error("Booklet runner configuration is invalid.");
+  if (profile.enabled) {
+    const dispatcher = createExperimentDispatcher({ database, config: profile.config });
+    const runner = (globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState })[RUNNER_STATE];
+    if (runner) { runner.initialized = true; runner.recovered = true; }
+    for (;;) {
+      if (runner) runner.heartbeatAtMs = Date.now();
+      const heartbeat = setInterval(() => { if (runner) runner.heartbeatAtMs = Date.now(); }, 5_000);
+      try {
+        if (!(await readDeploymentControl()).maintenance) await dispatcher.cycle();
+      }
+      catch {
+        // A failed control read or cycle is inspected on the next pass.
+        // Never print credentials, runtime bodies or an uncertain result.
+        console.error("Booklet experiment cycle did not finish; saved state will be inspected.");
+      }
+      finally { clearInterval(heartbeat); }
+      await delay(500);
+    }
+  }
   const repositories = createRepositories(database);
   const diagnostics = createGenerationDiagnostics();
   await diagnostics.record({ event: "runner_started" });
@@ -68,11 +91,16 @@ export function ensureRunnerStarted(): boolean {
     return true;
   }
   const runner: RunnerState = { promise: Promise.resolve(), started: true, initialized: false, recovered: false, heartbeatAtMs: Date.now(), fatalError: null };
-  runner.promise = runLoop().catch((error) => {
-    runner.fatalError = describeGenerationError(error).message;
-    console.error("Kids Booklet job runner stopped:", error);
-  });
   state[RUNNER_STATE] = runner;
+  runner.promise = runLoop().catch((error) => {
+    if (process.env.DIFY_BOOKLET_RUNNER_ENABLED === "true") {
+      runner.fatalError = "Booklet experiment runner stopped; check configuration and saved state.";
+      console.error(runner.fatalError);
+    } else {
+      runner.fatalError = describeGenerationError(error).message;
+      console.error("Kids Booklet job runner stopped:", error);
+    }
+  });
   return true;
 }
 
