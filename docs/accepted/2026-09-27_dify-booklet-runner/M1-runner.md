@@ -1,6 +1,6 @@
 # M1 — Durable runner, Concept Brief and Outline
 
-**State:** Disabled runner deployed, protected bindings installed and six modules published; approved reset and live acceptance remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
+**State:** Staging reset and Simulated-only activation passed; protected bindings installed and six modules published. Live persona and UI acceptance remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
 **Predecessor:** [M0](M0-readiness.md). Follow [EXECUTION](EXECUTION.md) at entry,
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
@@ -11,6 +11,36 @@ M0 evidence. The contracts below remain proposed until that reconciliation;
 do not treat them as a completed implementation package.
 
 ## Bounded local execution packages — 2026-10-04
+
+### Current staging transition evidence
+
+Reviewed reset source `59e954f5a03101ec9240e94dd4e64813cde32edd` merged through
+PR #94 to master `403ee5d9b6c55a656db07c646dc92c1f668bbf0f`. Two independent
+reviews and Validate `37214780043` passed, including both Linux shell suites.
+Infrastructure `37215111698` synchronized the reviewed host dispatcher.
+Selective staging PR #95 passed two release reviews and Validate `37215287229`.
+Release `80d62c4615f901e2f548877ede79c45029e75b05` passed Deploy `37215558501`
+and Check `37215933838`; its image is
+`sha256:5dfaf055485b54fd52ecb4c7554f9d0291c0846796ee870d470df081070dcd09`.
+
+Inventory `37215969214` verified the exact staging targets before deletion:
+one booklet, four asset records, four model-call records, ten agent definitions,
+eleven agent versions, eight artifacts and seven messages; no experiment runs,
+operations or delegations. The whole asset bucket contained six objects totaling
+12,901,577 bytes. Reset `37216104737` retained complete backup
+`staging-20261004T161608Z-54752b58ec7bc071`, reset the approved database/bucket,
+initialized the Dify profile without legacy agent seeds and activated the
+Simulated-only runner. Post-reset Check `37216248316` passed. Production,
+existing Dify resources and diagnostic/recovery buckets were not reset.
+
+The existing private preparation was uploaded with the enabled flag after reset
+to keep the GitHub settings bundle aligned with the host. No new key, workflow
+execution or provider call was made. Runtime key matching, all three persona
+flows, Pause/Resume and browser inspection remain unverified. Chrome tab control
+timed out twice at `Emulation.setFocusEmulationEnabled`; a working browser
+connection or private staging authentication is the next handoff. The earlier
+slice records below describe their publication-time evidence, not current reset
+status. M1 is not complete.
 
 M0 proves separate workflow invocation, publication/tool synchronization,
 restoration, explicit lineage transport and diagnostic runtime-key recovery.
