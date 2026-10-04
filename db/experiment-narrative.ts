@@ -4,6 +4,7 @@ import type { Database } from "@/db/client";
 import type { ArtifactDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, type RoleResult, type NarrativeWarning } from "@/lib/contracts/experiment-runner";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
+import { currentApprovedSourceIds, NARRATIVE_DEPENDENCIES } from "@/lib/experiment-runner/narrative-tasks";
 
 type RunPatch = Partial<Pick<ExperimentRunDocument, "activeDelegationId" | "decisionSequence" | "pendingDecisionJson" | "textRevisions">>;
 export type Materialized = { summary: Record<string, unknown>; runPatch: RunPatch };
@@ -14,18 +15,22 @@ function canonical(value: unknown) { return JSON.stringify(value, (_key, item: u
 function pending(run: ExperimentRunDocument): Record<string, unknown> | null { return run.pendingDecisionJson ? JSON.parse(run.pendingDecisionJson) as Record<string, unknown> : null; }
 function targetQuery(run: ExperimentRunDocument, taskId: "J01" | "J02") { return { bookletId: run.bookletId, experimentRunId: run._id, taskId, subjectKind: "book" as const, subjectId: run.bookletId }; }
 
+async function approvedSourceIds(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: "J01" | "J02") {
+  const sources = await database.collections.artifacts.find({
+    bookletId: run.bookletId, experimentRunId: run._id, subjectKind: "book", subjectId: run.bookletId,
+    taskId: { $in: [...NARRATIVE_DEPENDENCIES[taskId]] },
+  }, { session }).toArray();
+  return currentApprovedSourceIds(taskId, sources);
+}
+
 export async function prepareNarrativeContext(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: "J01" | "J02") {
   const target = await database.collections.artifacts.findOne(targetQuery(run, taskId), { session });
   const pendingDecision = pending(run);
   if (pendingDecision?.kind === "question") conflict("A creator answer is pending.");
   if (pendingDecision?.kind === "revision" && (pendingDecision.taskId !== taskId || pendingDecision.artifactVersionId !== target?.currentVersionId)) conflict("Pending revision belongs to another current artifact.");
   if (target?.currentVersionId && target.state !== "needs_review" && pendingDecision?.kind !== "revision") conflict("A new version requires a recorded creator revision.");
-  const dependencyVersionIds: string[] = [];
-  if (taskId === "J02") {
-    const concept = await database.collections.artifacts.findOne(targetQuery(run, "J01"), { session });
-    if (!concept || concept.state !== "approved" || !concept.currentVersionId) conflict("J02 requires a current approved J01 version.");
-    dependencyVersionIds.push(concept.currentVersionId);
-  }
+  const dependencyVersionIds = await approvedSourceIds(database, session, run, taskId);
+  if (dependencyVersionIds === null) conflict(`${taskId} requires current approved source versions.`);
   return { expectedTargetVersionId: target?.currentVersionId ?? null, dependencyVersionIds };
 }
 
@@ -33,9 +38,8 @@ async function assertDependencies(database: Database, session: ClientSession, ru
   if (operation.taskId !== "J01" && operation.taskId !== "J02") invalid("Unsupported narrative task.");
   const current = await database.collections.artifacts.findOne(targetQuery(run, operation.taskId), { session });
   if ((current?.currentVersionId ?? null) !== operation.expectedTargetVersionId) conflict("Narrative target changed after preparation.");
-  const concept = operation.taskId === "J02" ? await database.collections.artifacts.findOne(targetQuery(run, "J01"), { session }) : null;
-  const expected = concept?.state === "approved" && concept.currentVersionId ? [concept.currentVersionId] : [];
-  if (canonical(expected) !== canonical(operation.dependencyVersionIds)) conflict("Approved upstream version changed after preparation.");
+  const expected = await approvedSourceIds(database, session, run, operation.taskId);
+  if (expected === null || canonical(expected) !== canonical(operation.dependencyVersionIds)) conflict("Approved upstream version changed after preparation.");
   return current;
 }
 
@@ -45,9 +49,9 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
   if (!artifact || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId || artifact.subjectKind !== "book" || artifact.subjectId !== run.bookletId || artifact.currentVersionId !== versionId) invalid("Approval target is not the current run artifact.");
   if (artifact.taskId === "J02") {
-    const concept = await database.collections.artifacts.findOne(targetQuery(run, "J01"), { session });
+    const expected = await approvedSourceIds(database, session, run, "J02");
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as string[];
-    if (!concept || concept.state !== "approved" || !concept.currentVersionId || canonical(dependencies) !== canonical([concept.currentVersionId])) invalid("Approval dependencies are not current.");
+    if (expected === null || canonical(dependencies) !== canonical(expected)) invalid("Approval dependencies are not current.");
   }
   if (artifact.taskId === "J01") {
     const content = JSON.parse(version.contentJson) as { audience?: { ageBand?: string } };
