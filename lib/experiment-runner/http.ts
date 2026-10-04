@@ -2,14 +2,21 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
+import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
+import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
+import { ExperimentImageValidationError, MAX_EXPERIMENT_IMAGE_BYTES } from "@/lib/experiment-runner/image-validation";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
+import type { AssetStore } from "@/lib/assets/asset-store";
+import sharp from "sharp";
 import { configurationSnapshot, readBookletRunnerConfig, validToolKey, type ConfigState } from "@/lib/experiment-runner/config";
 import { createRunInputSchema, narrativeTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
-import { runTrackedMutation } from "@/lib/application/deployment-control";
+import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/deployment-control";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
+const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
 const control = z.strictObject({ expectedRevision: z.number().int().nonnegative() });
 const failure = identity.extend({ category: z.enum(["definite_failure", "unknown_outcome"]) });
 const result = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/), result: resultEnvelopeSchema.shape.result });
@@ -19,10 +26,12 @@ const errorMessages: Record<string, string> = {
   conflict: "Saved state conflicts with the request.", unavailable: "Runner is temporarily unavailable.",
   runner_unavailable: "Runner configuration is unavailable.", unauthorized: "Authentication is required.",
   invalid_origin: "Request origin is not allowed.", mode_unavailable: "This run mode is unavailable.",
+  invalid_image: "Image content is invalid.", image_too_large: "Image content exceeds the size limit.",
 };
 function reply(status: number, code: string) { return Response.json({ error: { code, message: errorMessages[code] ?? "Request failed." } }, { status, headers }); }
 function data(value: unknown, status = 200) { return Response.json({ data: value }, { status, headers }); }
 function safeError(error: unknown): Response {
+  if (error instanceof ExperimentImageValidationError) return reply(error.code === "too_large" ? 413 : 422, error.code === "too_large" ? "image_too_large" : "invalid_image");
   if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof RangeError) return reply(400, "invalid_request");
   if (error instanceof ExperimentRepositoryError) {
     if (error.code === "not_found") return reply(404, "not_found");
@@ -65,6 +74,34 @@ async function boundedJson(request: Request, maxBytes: number): Promise<unknown>
   catch { throw new SyntaxError("Invalid UTF-8"); }
   return JSON.parse(decoded) as unknown;
 }
+async function boundedBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
+  const length = request.headers.get("content-length");
+  if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) throw new ExperimentImageValidationError("too_large");
+  if (!request.body) throw new ExperimentImageValidationError("empty");
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) { await reader.cancel(); throw new ExperimentImageValidationError("too_large"); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
+}
+function imageQuery(request: Request): z.infer<typeof imageIdentity> {
+  const query = new URL(request.url).searchParams;
+  const allowed = new Set(["runId", "operationId", "workflowRunId", "parentWorkflowRunId", "inputFingerprint"]);
+  for (const key of query.keys()) if (!allowed.has(key) || query.getAll(key).length !== 1) throw new SyntaxError("Invalid image identity query.");
+  return imageIdentity.parse({
+    runId: query.get("runId"), operationId: query.get("operationId"), workflowRunId: query.get("workflowRunId"),
+    parentWorkflowRunId: query.get("parentWorkflowRunId") || null, inputFingerprint: query.get("inputFingerprint"),
+  });
+}
 function stableUuid(key: string, namespace: string): string {
   const hex = createHash("sha256").update(namespace).update(":").update(key).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -83,13 +120,31 @@ function toolAuth(request: Request, state: ConfigState): Response | null {
   if (state.enabled && !validToolKey(request.headers.get("x-booklet-tool-key"), state.config.callbackKey)) return reply(401, "unauthorized");
   return null;
 }
-export function createBookletRunnerHttp(deps: { database?: () => Database; config?: () => ConfigState; mutate?: typeof runTrackedMutation } = {}) {
+export function createBookletRunnerHttp(deps: { database?: () => Database; config?: () => ConfigState; mutate?: typeof runTrackedMutation; store?: () => AssetStore; admit?: typeof assertMutationsAllowed } = {}) {
   const database = deps.database ?? getDatabase;
   const config = deps.config ?? readBookletRunnerConfig;
   const mutate = deps.mutate ?? runTrackedMutation;
+  const store = deps.store ?? createAssetStore;
+  const admit = deps.admit ?? assertMutationsAllowed;
   function services() { const db = database(); return { repository: createExperimentRepository(db), context: createExperimentContextService(db) }; }
   async function run(operation: () => Promise<Response>) { try { return await operation(); } catch (error) { return safeError(error); } }
   return {
+    imageFixture(request: Request) { return run(async () => {
+      const denied = toolAuth(request, config()); if (denied) return denied;
+      const input = imageQuery(request);
+      await admit();
+      await createExperimentImageRepository(database()).authorizeFixture(input);
+      const rgb = Buffer.from(input.inputFingerprint.slice(0, 6), "hex");
+      const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: rgb[0], g: rgb[1], b: rgb[2] } } }).png().toBuffer();
+      return new Response(new Uint8Array(bytes), { headers: { ...headers, "Content-Type": "image/png", "X-Content-Type-Options": "nosniff" } });
+    }); },
+    imageComplete(request: Request) { return run(async () => {
+      const denied = toolAuth(request, config()); if (denied) return denied;
+      const input = imageQuery(request);
+      const content = await boundedBytes(request, MAX_EXPERIMENT_IMAGE_BYTES);
+      const completed = await mutate(() => createExperimentImageStorage({ database: database(), store: store() }).complete({ identity: input, content }));
+      return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
+    }); },
     list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
     detail(request: Request, runId: string) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const view = await services().context.getRunView(opaqueIdSchema.parse(runId)); return view ? data(view) : reply(404, "not_found"); }); },
     create(request: Request) { return run(async () => {

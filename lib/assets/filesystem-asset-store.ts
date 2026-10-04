@@ -1,5 +1,6 @@
 import path from "node:path";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 
@@ -23,7 +24,17 @@ export class FilesystemAssetStore implements AssetStore {
   public async put(uri: string, content: Uint8Array, mimeType: string): Promise<StoredAsset> {
     const target = this.resolve(uri);
     await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, content, { flag: "wx" });
+    // Publish only complete bytes. A hard link is atomic and cannot replace an
+    // existing asset; a failed/interrupted write never occupies the final URI.
+    const temporary = `${target}.pending-${randomUUID()}`;
+    try {
+      await writeFile(temporary, content, { flag: "wx" });
+      await link(temporary, target);
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
     return { uri: normalizeUri(uri), mimeType, byteLength: content.byteLength };
   }
 

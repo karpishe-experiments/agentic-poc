@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Database } from "@/db/client";
 import type { ArtifactDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
+import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { configuredNarrativeTasks, currentApprovedSourceIds, NARRATIVE_DEPENDENCIES, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
@@ -98,6 +99,10 @@ export function createExperimentContextService(database: Database) {
     const run = await runs.findOne({ _id: identity.runId });
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
+    if (operation.role === "image") {
+      const imageRequest = await createExperimentImageRepository(database).authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
+      return { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest };
+    }
     const view = await getRunView(run._id);
     if (!view) deny("Run view is unavailable.");
     if (operation.role === "manager") return { role: "manager" as const, run: view, eligibleRoute: chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts) };
