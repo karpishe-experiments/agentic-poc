@@ -345,15 +345,25 @@ and inspect both Dify traces before any further operation.
 
 ## Maintenance and recovery gates
 
-### Candidate interrupted-response probe
+### Deployed interrupted-response probe
 
 The reviewed source adds `X-Booklet-Probe-Fault: discard-start-response` to the
 authenticated staging start endpoint. It drops a successful Dify response before
 parsing or saving its IDs; the callback can still persist the run ID. No header
 means normal behavior. An unsupported value returns 400 before dispatch;
-production and disabled deployments return 404. This is not deployed evidence.
+production and disabled deployments return 404.
 
-After the selective staging release is authorized and deployed:
+The selective staging release passed on 2026-10-04: [PR #85](https://github.com/karpishe-experiments/agentic-poc/pull/85),
+commit `0be0edf889c3657953d9fec4e65bf6d730ec2254`,
+[Validate](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37184262878),
+[Deploy](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37184450953)
+and [Check deployment](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37184782644).
+The deployed image is `ghcr.io/karpishe-experiments/agentic-poc@sha256:ec660696c2d82c7c3e5b2e2698abc41ef7fd403251e1220a6d79bc16da6766fe`.
+The three-file port preserved existing Community keys, Cloud settings and production.
+The bound published workflow was read back as model-free. The live fault test
+still requires private staging authentication; deployment success is not recovery proof.
+
+To complete the pending live recovery check:
 
 1. Confirm the bound workflow remains model-free and published, and the callback
    and runtime keys remain the existing diagnostic bindings.

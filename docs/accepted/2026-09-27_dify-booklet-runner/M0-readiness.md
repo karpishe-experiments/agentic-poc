@@ -224,13 +224,18 @@ authorization remain separate gates for the work that needs them. Platform backu
 and restore readiness remains owned by the Community runbook. M0 is not complete;
 do not start paid acceptance or claim an unattended full booklet on this evidence.
 
-The candidate [staging fault procedure](../../deployment/dify-community.md#candidate-interrupted-response-probe)
+The deployed [staging fault procedure](../../deployment/dify-community.md#deployed-interrupted-response-probe)
 discards the start response before parsing its IDs. Ten focused probe tests pass,
 including callback-ID recovery and the no-ID/no-replay case. Typecheck and lint
 pass in an isolated source snapshot; 38 deployment contracts pass after normalizing
 only that snapshot's Compose line endings to LF. The normal Windows checkout has
 stale generated files and a CRLF-sensitive baseline assertion; those were not
-changed. Live fault verification awaits a reviewed selective staging release.
+changed. The selective release passed on 2026-10-04: PR #85, staging commit
+`0be0edf889c3657953d9fec4e65bf6d730ec2254`, Validate `37184262878`,
+Deploy `37184450953` and Check deployment `37184782644`. The staging candidate
+also passed all ten probe tests, typecheck, lint and two independent reviews.
+Live fault verification now awaits private staging authentication for one POST
+and saved-result GET; no new Dify keys or configuration changes are required.
 
 CI for commit `56adbe96a6783040cc2ed147cf2d1978112729c2` passed in run
 `37118227169`, including selected application, agent, shell and Terraform checks.
