@@ -9,6 +9,60 @@ beforeEach(() => { fetchMock = vi.fn().mockResolvedValue(new Response(JSON.strin
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("reads current state and retries a definite control conflict once", async () => {
+    let writes = 0;
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        writes += 1;
+        return writes === 1
+          ? new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 })
+          : new Response(JSON.stringify({ data: { ...run, revision: 5, pauseRequested: true, status: "paused" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...run, revision: 4 } : [run] }), { status: 200 });
+    });
+    render(<BookletRunner />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(writes).toBe(2));
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(options.body).expectedRevision)).toEqual([2, 4]);
+    expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith(run.runId) && options?.cache === "no-store")).toBe(true);
+  });
+  it("does not repeat a control already applied in the read-back state", async () => {
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => options?.method === "POST"
+      ? new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 })
+      : new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...run, revision: 4, pauseRequested: true, status: "paused" } : [run] }), { status: 200 }));
+    render(<BookletRunner />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith(run.runId))).toBe(true));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start selected" }).hasAttribute("disabled")).toBe(false));
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
+  it.each(["lost response", "repeat conflict"])("bounds control retry after %s", async (failure) => {
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        if (failure === "lost response") throw new Error("Response lost");
+        return new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 });
+      }
+      return new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...run, revision: 4 } : [run] }), { status: 200 });
+    });
+    render(<BookletRunner />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await screen.findByRole("alert");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(failure === "lost response" ? 1 : 2);
+  });
+  it("does not resume a run that became blocked during read-back", async () => {
+    const paused = { ...run, status: "paused", pauseRequested: true };
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => options?.method === "POST"
+      ? new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 })
+      : new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...paused, revision: 4, status: "blocked" } : [paused] }), { status: 200 }));
+    render(<BookletRunner />);
+    await screen.findByRole("button", { name: "Resume" });
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Inspect its saved status");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
   it("creates a linked simulated successor and retains its identity on explicit retry", async () => {
     const failed = { ...run, status: "blocked", predecessorRunId: "prior-run", activeOperationId: null };
     fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => options?.method === "POST" ? Promise.reject(new Error("Response lost")) : new Response(JSON.stringify({ data: [failed] }), { status: 200 }));

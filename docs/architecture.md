@@ -82,8 +82,13 @@ With the runner enabled, `/experiments/booklet-runs` shows saved J01/J02 work,
 warnings, exact version approvals, limits and Pause/Resume. Only Simulated runs
 can be created. The approved J02/J03 boundary remains a queued partial booklet,
 not completion. The legacy home and agent navigation remain when disabled.
-Live module bindings, staging simulation and browser acceptance remain pending;
-local checks do not change production, Cloud or the diagnostic probe.
+The six M1 Community bindings and all three live Simulated J01/J02 cases are
+verified; [M1 evidence](accepted/2026-09-27_dify-booklet-runner/M1-runner.md)
+records their release and run identifiers. Reload and idle Pause/Resume preserve
+saved results without duplicate execution. The candidate UI recovers a definite
+control revision conflict with a current-state read and at most one control retry;
+it does not retry an uncertain write. Active-progress verification of this
+correction remains pending. Production, Cloud and the diagnostic probe are unchanged.
 
 Every legacy-profile booklet has eight ordered artifact records:
 
