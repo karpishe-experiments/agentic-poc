@@ -9,6 +9,19 @@ beforeEach(() => { fetchMock = vi.fn().mockResolvedValue(new Response(JSON.strin
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("creates a linked simulated successor and retains its identity on explicit retry", async () => {
+    const failed = { ...run, status: "blocked", predecessorRunId: "prior-run", activeOperationId: null };
+    fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => options?.method === "POST" ? Promise.reject(new Error("Response lost")) : new Response(JSON.stringify({ data: [failed] }), { status: 200 }));
+    render(<BookletRunner />);
+    expect(await screen.findByText("Predecessor run: prior-run")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start linked successor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry pending creation" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(2));
+    for (const [, options] of fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")) {
+      expect(options.headers["Idempotency-Key"]).toBe("00000000-0000-4000-8000-000000000010");
+      expect(JSON.parse(options.body)).toEqual({ persona: "playful_kid", mode: "simulated", predecessorRunId: run.runId });
+    }
+  });
   it("shows saved artifacts, decisions, limits and the J03 boundary", async () => {
     render(<BookletRunner />);
     expect(await screen.findByText("Kite Rescue", { exact: false })).toBeTruthy();

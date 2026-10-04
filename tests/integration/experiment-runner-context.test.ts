@@ -28,6 +28,14 @@ const proposal = (taskId: "J01" | "J02", content: unknown) => ({ kind: "proposal
 const decision = (decision: unknown) => ({ kind: "decision", payload: { decision } });
 
 describe("saved experiment context", () => {
+  it("projects the persisted predecessor of a repaired successor", async () => {
+    const { repository, context, start } = await setup();
+    const failed = await start(490, "manager");
+    await repository.failOperation({ ...failed.identity, category: "definite_failure", nowMs: 492 });
+    await repository.createRun({ runId: id(493), bookletId: id(494), predecessorRunId: runId, persona: "playful_kid", mode: "simulated", configuration: [{ role: "manager", taskId: null, appId: id(900), publishedWorkflowId: id(901), toolProviderId: null }], nowMs: 493 });
+    expect(await context.getRunView(id(493))).toMatchObject({ predecessorRunId: runId, status: "queued" });
+    expect(await context.getRunView(runId)).toMatchObject({ status: "blocked" });
+  });
   it("projects only allowlisted run data and advances the two narrative tasks", async () => {
     const { context, start } = await setup();
     expect(await context.getRunView(id(999))).toBeNull();
