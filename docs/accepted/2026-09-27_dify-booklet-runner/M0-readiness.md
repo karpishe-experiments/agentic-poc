@@ -4,7 +4,8 @@
 failure/repair/publication/tool-synchronization/restoration cycle passed.
 Community workflow-to-workflow invocation passed in draft and published callers.
 Draft isolation and synchronized binding restoration also passed. Full-suite
-capacity and live interrupted-response recovery remain unverified. Explicit
+capacity remains unverified. Callback-based interrupted-response recovery passed
+on 2026-10-04; the no-ID outcome remains unknown and must not be replayed. Explicit
 parent/child envelopes passed in the model-free lineage probe below; full-runner
 persistence is still M1 work. The operator's deployed Booklet round trip, authenticated callback and
 runtime-key saved-result lookup passed on 2026-10-03.
@@ -17,13 +18,14 @@ runtime-key saved-result lookup passed on 2026-10-03.
 Run these checkpoints in order. The sections below supply the constraints and
 probe details; do not maintain a second checklist. Keep provider calls disabled.
 Record each result in this table with a dated evidence reference and the exact
-dependent operation blocked by any unresolved item. None is fully complete yet.
+dependent operation blocked by any unresolved item. Checkpoint 3 passed for the
+bounded deterministic probe; other checkpoints remain open.
 
 | Action | Expected result | Evidence | Unresolved blocker |
 | --- | --- | --- | --- |
 | 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-03: Community MCP workspace check and CLI inventory pass; three new probe workflows imported | Complete-suite capacity; host workload measurements |
 | 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Separate invocation, binding restoration and explicit lineage-envelope probe passed; see below | Full-suite capacity; M1 persistence of role lineage |
-| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic cycle and binding restoration passed; deployed callback and runtime lookup passed on 2026-10-03, below | Deliberately interrupted response; unknown outcome before a run ID is saved |
+| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic cycle and binding restoration passed; deployed callback/runtime lookup passed on 2026-10-03; callback-based interrupted-response recovery passed on 2026-10-04, below | No blocker for this diagnostic; no-ID outcomes remain unknown, not replayable |
 | 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Local contract preparation can proceed; diagnostic probe bindings verified | First-slice role/key map, persisted contracts and bounded execution package |
 
 Use MCP first, inspected official CLI second, and authorized browser control last.
@@ -76,7 +78,7 @@ tokens using [the retained input](fixtures/community-probe-input.json).
 Do not infer a five-app Cloud quota from the
 Community workspace response's `sandbox` label. Three successful imports prove
 capacity for this probe only, not the full suite. The deployed Booklet round trip
-now passes. Next verify live interrupted-response recovery and retain explicit lineage;
+and callback-based interrupted-response recovery now pass. Next persist explicit lineage;
 independent local M1 contract preparation can proceed.
 
 #### Binding change and restoration evidence
@@ -210,14 +212,13 @@ Booklet start request and a separate saved-result lookup on 2026-10-03:
 
 This proves the public Booklet → Dify → Booklet callback and runtime-key result
 lookup. The workflow has no model, agent or image-provider nodes. The operator
-did not deliberately interrupt the initial response; that recovery scenario and
-the no-saved-ID unknown-outcome scenario remain pending. Do not replay an uncertain
-execution automatically.
+did not deliberately interrupt that initial response. The separate 2026-10-04
+fault check below now proves callback-based recovery. A live outcome without a
+saved ID remains unresolved. Do not replay an uncertain execution automatically.
 
 #### Next bounded M0 work and M1 handoff
 
-Verify live interrupted-response lookup without starting a replacement run, then
-record the first slice's role-to-runtime-key map and persist its explicit lineage.
+Record the first slice's role-to-runtime-key map and persist its explicit lineage.
 Prepare the Concept/Outline persistence contracts and fixtures locally in parallel
 with those checks. Full-suite capacity, image transport/accounting and campaign
 authorization remain separate gates for the work that needs them. Platform backup
@@ -234,8 +235,15 @@ changed. The selective release passed on 2026-10-04: PR #85, staging commit
 `0be0edf889c3657953d9fec4e65bf6d730ec2254`, Validate `37184262878`,
 Deploy `37184450953` and Check deployment `37184782644`. The staging candidate
 also passed all ten probe tests, typecheck, lint and two independent reviews.
-Live fault verification now awaits private staging authentication for one POST
-and saved-result GET; no new Dify keys or configuration changes are required.
+The operator's single fault POST and saved-result GET passed on 2026-10-04:
+correlation `3d5bcc06-dab0-4bd3-93c1-105f54b499ad`, run
+`eb586ddf-243d-40a5-8a45-27935cf9d653`, publication
+`35acdf94-5bb4-47ac-a1b8-20f0f57a37cd`. The discarded start returned `unknown`;
+GET recovered `succeeded` with a stored callback. Independent MCP retrieval
+confirmed matching inputs/outputs, acknowledgement and zero tokens. No new keys,
+configuration changes or replacement execution were requested. See the runbook
+for the scope and run-list limitation; this does not prove process-crash recovery
+or recovery before any run ID is retained.
 
 CI for commit `56adbe96a6783040cc2ed147cf2d1978112729c2` passed in run
 `37118227169`, including selected application, agent, shell and Terraform checks.
@@ -348,7 +356,8 @@ full manuscripts through truncated task variables.
 
 This Cloud inspection left layout and runtime bindings unresolved. The Community
 evidence above supersedes that target: its diagnostic runtime lookup now passes.
-Full-suite capacity/accounting and interrupted-response recovery remain pending.
+Callback-based interrupted-response recovery also passes. Full-suite
+capacity/accounting and full-runner bindings remain pending.
 M0 is not complete.
 
 ## Entry and consolidated handoff

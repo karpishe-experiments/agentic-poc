@@ -23,13 +23,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Context:** A Booklet runtime calls a Dify workflow with an application API key.
 - **Observation:** The deployed diagnostic probe completed through an authenticated
   callback and a separate Booklet result lookup using runtime credentials.
-  Administrative MCP discovery alone did not establish that path.
+  Administrative MCP discovery alone did not establish that path. A separate
+  staging fault discarded the successful start response before parsing its IDs;
+  the callback retained the ID and GET recovered the saved result without a
+  replacement POST. This does not establish recovery without a retained ID.
 - **Guidance:** Verify application execution, persisted callback identity and
   runtime-key lookup together. Retain correlation and run IDs. Test lost-response
   recovery separately; a successful ordinary lookup does not prove interruption
   handling, and an unknown outcome is not permission to replay.
 - **Evidence:** [M0 runtime integration handoff](M0-readiness.md#runtime-integration-handoff),
-  operator result dated 2026-10-03, run `18381193-b811-4809-a673-4784bf2d572f`.
+  ordinary run `18381193-b811-4809-a673-4784bf2d572f` (2026-10-03) and fault
+  recovery run `eb586ddf-243d-40a5-8a45-27935cf9d653` (2026-10-04), independently
+  retrieved with matching identifiers and zero tokens.
 - **Promotion target:** Integration documentation.
 
 ### VPS releases snapshot master-owned Compose files

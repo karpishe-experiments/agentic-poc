@@ -190,7 +190,7 @@ as well as the caller configuration; drain before their synchronization. See
 | --- | --- | --- |
 | Modular capacity/invocation | Separate invocation and explicit lineage transport passed; full-suite capacity and Booklet lineage persistence pending | Full-suite packaging and M1 persistence |
 | Publication/sync/restoration | Deterministic cycle and binding restoration passed in M0; verify each later candidate | Publication of later suite configurations |
-| Runtime credentials/callbacks | Diagnostic Booklet round trip and runtime lookup passed on 2026-10-03; interrupted-response recovery and full-runner bindings pending | Dependent runner integration and uncertain-outcome recovery |
+| Runtime credentials/callbacks | Diagnostic round trip/runtime lookup passed on 2026-10-03; callback-based interrupted-response recovery passed on 2026-10-04; full-runner bindings and no-ID recovery remain unresolved | Dependent runner integration; unknown outcomes without retained IDs |
 | Image transport/accounting | Reference inputs, output transfer, retries and reservations | Real image execution; fixture transfer also precedes simulated image work |
 | GitHub/staging delivery | Checks/reviews, merge/deploy access and compatible release path | Unattended release |
 | Reset | Exact-target inventory, backup/summary and authorization | Clean-baseline transition |

@@ -263,8 +263,9 @@ CLI `import studio-app --app-id` and `run app --inputs-file` fallbacks. Keep
 CLI import preserved the app ID; MCP restore preserved both the app ID and the
 original graph hash. Tool synchronization and published app execution were
 verified separately; a caller invoking the Workflow Tool remains untested.
-Booklet runtime-key lookup passed in checkpoint 5. Interrupted-response recovery,
-New Agent configuration, and backup/restore rehearsal remain separate checks.
+Booklet runtime-key lookup and callback-based interrupted-response recovery passed
+in checkpoint 5. New Agent configuration and backup/restore rehearsal remain
+separate checks.
 
 ## Checkpoint 5 — deterministic Booklet round trip
 
@@ -284,7 +285,7 @@ The Community draft `issue69_booklet_round_trip`
 is currently published as version `35acdf94-5bb4-47ac-a1b8-20f0f57a37cd`.
 The selective staging port preserves the existing Cloud callback authentication
 exceptions and settings. Private staging bindings and the happy-path round trip
-are verified; interrupted-response recovery remains pending.
+and callback-based interrupted-response recovery are verified.
 The default Compose configuration keeps the probe disabled. Imported secret
 metadata is not proof that the callback key has been entered correctly.
 
@@ -360,10 +361,17 @@ commit `0be0edf889c3657953d9fec4e65bf6d730ec2254`,
 and [Check deployment](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37184782644).
 The deployed image is `ghcr.io/karpishe-experiments/agentic-poc@sha256:ec660696c2d82c7c3e5b2e2698abc41ef7fd403251e1220a6d79bc16da6766fe`.
 The three-file port preserved existing Community keys, Cloud settings and production.
-The bound published workflow was read back as model-free. The live fault test
-still requires private staging authentication; deployment success is not recovery proof.
+The bound published workflow was read back as model-free. On 2026-10-04, the
+operator's one-POST/GET-only fault check passed with correlation
+`3d5bcc06-dab0-4bd3-93c1-105f54b499ad` and saved Dify run
+`eb586ddf-243d-40a5-8a45-27935cf9d653`. The start reported `unknown` and
+`response_discarded=true`; lookup returned `succeeded` and `callback_received=True`.
+Independent MCP retrieval confirmed the exact correlation, marker, publication
+`35acdf94-5bb4-47ac-a1b8-20f0f57a37cd`, acknowledgement and zero tokens.
+The operator reported no replay. The administrative run-list operation returned
+no entries, so it does not independently establish a complete execution count.
 
-To complete the pending live recovery check:
+For a separately authorized repeat check:
 
 1. Confirm the bound workflow remains model-free and published, and the callback
    and runtime keys remain the existing diagnostic bindings.
