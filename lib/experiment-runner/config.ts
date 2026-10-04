@@ -1,11 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
-import { personaSchema, type Persona } from "@/lib/contracts/experiment-runner";
+import { narrativeTaskSchema, personaSchema, type Persona } from "@/lib/contracts/experiment-runner";
+import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 const binding = z.strictObject({
   role: z.enum(["manager", "specialist", "tester"]),
-  taskId: z.enum(["J01", "J02"]).nullable(),
+  taskId: narrativeTaskSchema.nullable(),
   persona: personaSchema.nullable(),
   appId: opaqueIdSchema,
   publishedWorkflowId: opaqueIdSchema,
@@ -47,8 +48,10 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   return { enabled: true, config: { enabled: true, baseUrl, publicOrigin, callbackKey, bindings } };
 }
 
-export function selectBinding(config: BookletRunnerConfig, role: "manager" | "specialist" | "tester", taskId: "J01" | "J02" | null, persona: Persona) {
-  return config.bindings.find((item) => item.role === role && item.taskId === taskId && item.persona === (role === "tester" ? persona : null))!;
+export function selectBinding(config: BookletRunnerConfig, role: "manager" | "specialist" | "tester", taskId: NarrativeTask | null, persona: Persona) {
+  const selected = config.bindings.find((item) => item.role === role && item.taskId === taskId && item.persona === (role === "tester" ? persona : null));
+  if (!selected) throw new Error("No configured binding for this role and task.");
+  return selected;
 }
 
 export function configurationSnapshot(config: BookletRunnerConfig, persona: Persona) {
@@ -62,6 +65,6 @@ export function validToolKey(candidate: string | null, expected: string): boolea
 }
 export const getRunnerConfig = readBookletRunnerConfig;
 export const configurationForPersona = configurationSnapshot;
-export function bindingFor(config: RunnerConfig, input: { role: "manager" | "specialist" | "tester"; taskId: "J01" | "J02" | null; persona: Persona }) {
+export function bindingFor(config: RunnerConfig, input: { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | null; persona: Persona }) {
   return selectBinding(config, input.role, input.taskId, input.persona);
 }

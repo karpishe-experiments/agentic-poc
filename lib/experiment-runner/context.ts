@@ -3,11 +3,10 @@ import type { Database } from "@/db/client";
 import type { ArtifactDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { opaqueIdSchema } from "@/lib/contracts/common";
-import { currentApprovedSourceIds } from "@/lib/experiment-runner/narrative-tasks";
+import { configuredNarrativeTasks, currentApprovedSourceIds, NARRATIVE_DEPENDENCIES, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
-type Task = "J01" | "J02";
-type NextTask = Task | "tester" | "slice_complete" | null;
+type NextTask = NarrativeTask | "tester" | "slice_complete" | null;
 function parseJson(value: string | null): unknown { return value === null ? null : JSON.parse(value) as unknown; }
 function deny(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
 
@@ -19,7 +18,7 @@ export function createExperimentContextService(database: Database) {
     const approvalRows = await approvals.find({ experimentRunId: artifact.experimentRunId, artifactVersionId: { $in: rows.map((row) => row._id) } }).toArray();
     const approvalByVersion = new Map(approvalRows.map((row) => [row.artifactVersionId, row]));
     return {
-      id: artifact._id, taskId: artifact.taskId as Task, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId,
+      id: artifact._id, taskId: artifact.taskId as NarrativeTask, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId,
       state: artifact.state, currentVersionId: artifact.currentVersionId,
       versions: rows.map((row) => {
         const approval = approvalByVersion.get(row._id);
@@ -35,17 +34,16 @@ export function createExperimentContextService(database: Database) {
 
   function chooseNext(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[]): NextTask {
     if (run.pauseRequested || run.status === "paused" || run.status === "blocked" || run.status === "failed" || run.status === "completed" || run.activeOperationId) return null;
-    const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: Task } | null;
+    const enabled = configuredNarrativeTasks(run.configurationJson);
+    const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: NarrativeTask } | null;
     if (pending?.kind === "question") return "tester";
-    if (pending?.kind === "revision") return pending.taskId === "J01" || pending.taskId === "J02" ? pending.taskId : null;
-    const concept = projected.find((item) => item.taskId === "J01");
-    if (!concept) return "J01";
-    if (concept.state === "needs_review") return "J01";
-    if (concept.state !== "approved") return "tester";
-    const outline = projected.find((item) => item.taskId === "J02");
-    if (!outline || outline.state === "needs_review") return "J02";
-    if (outline.state !== "approved") return "tester";
-    return "slice_complete";
+    if (pending?.kind === "revision") return pending.taskId && enabled.includes(pending.taskId) && currentApprovedSourceIds(pending.taskId, projected) !== null ? pending.taskId : null;
+    for (const task of enabled) {
+      const current = projected.find((item) => item.taskId === task);
+      if ((!current || current.state === "needs_review") && currentApprovedSourceIds(task, projected) !== null) return task;
+    }
+    if (projected.some((item) => enabled.includes(item.taskId) && item.state === "draft")) return "tester";
+    return enabled.every((task) => projected.some((item) => item.taskId === task && item.state === "approved" && item.currentVersionId)) ? "slice_complete" : null;
   }
 
   async function getRunView(runId: string) {
@@ -54,7 +52,9 @@ export function createExperimentContextService(database: Database) {
     if (!run) return null;
     const booklet = await booklets.findOne({ _id: run.bookletId });
     if (!booklet || booklet.experimentRunId !== run._id) deny("Run booklet is missing or mismatched.");
-    const artifactRows = await artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId, taskId: { $in: ["J01", "J02"] } }).sort({ taskId: 1 }).toArray();
+    const enabled = configuredNarrativeTasks(run.configurationJson);
+    const artifactRows = await artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId, subjectKind: "book", subjectId: run.bookletId, taskId: { $in: [...enabled] } }).sort({ taskId: 1 }).toArray();
+    if (new Set(artifactRows.map((row) => row.taskId)).size !== artifactRows.length) deny("Run has duplicate narrative task artifacts.");
     const currentArtifacts = await Promise.all(artifactRows.map(projectArtifact));
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" }).sort({ sequence: 1 }).toArray();
@@ -78,7 +78,7 @@ export function createExperimentContextService(database: Database) {
     };
   }
 
-  async function getQuestionAnswers(runId: string, taskId: Task) {
+  async function getQuestionAnswers(runId: string, taskId: NarrativeTask) {
     const questionRows = await operations.find({ runId, state: "succeeded", taskId: { $in: [null, taskId] } }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const creatorRows = await messages.find({ experimentRunId: runId, role: "user" }).sort({ sequence: 1 }).toArray();
     const answers = new Map<string, string>();
@@ -101,17 +101,24 @@ export function createExperimentContextService(database: Database) {
     const view = await getRunView(run._id);
     if (!view) deny("Run view is unavailable.");
     if (operation.role === "manager") return { role: "manager" as const, run: view, eligibleRoute: chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts) };
-    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages };
+    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson)] };
     if (operation.role === "specialist") {
-      if (operation.taskId !== "J01" && operation.taskId !== "J02" || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId) deny("Specialist task is outside this slice.");
-      const currentTarget = view.currentArtifacts.find((item) => item.taskId === operation.taskId) ?? null;
+      const enabled = configuredNarrativeTasks(run.configurationJson);
+      if (!operation.taskId || !enabled.includes(operation.taskId as NarrativeTask) || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId) deny("Specialist task is outside this slice.");
+      const taskId = operation.taskId as NarrativeTask;
+      const currentTarget = view.currentArtifacts.find((item) => item.taskId === taskId) ?? null;
       if ((currentTarget?.currentVersionId ?? null) !== operation.expectedTargetVersionId) deny("Specialist target version changed.");
-      const approvedConcept = view.currentArtifacts.find((item) => item.taskId === "J01");
-      const expectedSources = currentApprovedSourceIds(operation.taskId, view.currentArtifacts);
+      const expectedSources = currentApprovedSourceIds(taskId, view.currentArtifacts);
       if (expectedSources === null || JSON.stringify(expectedSources) !== JSON.stringify(operation.dependencyVersionIds)) deny("Specialist source version changed.");
-      const pending = view.pendingDecision as { kind?: string; taskId?: Task; artifactVersionId?: string } | null;
-      const matchingRevision = pending?.kind === "revision" && pending.taskId === operation.taskId && pending.artifactVersionId === operation.expectedTargetVersionId ? pending : null;
-      return { role: "specialist" as const, taskId: operation.taskId, brief: view.brief, persona: view.persona, currentTarget, approvedUpstream: operation.taskId === "J02" ? approvedConcept?.versions.find((item) => item.id === operation.dependencyVersionIds[0]) ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, operation.taskId) };
+      const approvedSources = NARRATIVE_DEPENDENCIES[taskId].map((dependency, index) => {
+        const artifact = view.currentArtifacts.find((item) => item.taskId === dependency);
+        const version = artifact?.versions.find((item) => item.id === expectedSources[index]);
+        if (!version) deny("Specialist approved source version is unavailable.");
+        return { taskId: dependency, ...version };
+      });
+      const pending = view.pendingDecision as { kind?: string; taskId?: NarrativeTask; artifactVersionId?: string } | null;
+      const matchingRevision = pending?.kind === "revision" && pending.taskId === taskId && pending.artifactVersionId === operation.expectedTargetVersionId ? pending : null;
+      return { role: "specialist" as const, taskId, brief: view.brief, persona: view.persona, currentTarget, approvedSources, approvedUpstream: taskId === "J02" ? approvedSources[0] ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, taskId) };
     }
     deny("Role context is not supported in this slice.");
   }
