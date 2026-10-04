@@ -19,7 +19,7 @@ function http(id: string, title: string, path: string, selector: string[], x: nu
   return { id, type: "custom", position: { x, y: 0 }, data: {
     type: "http-request", title, method: "post", url: `{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/${path}`,
     authorization: { type: "no-auth" }, headers: "Content-Type:application/json\nx-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}",
-    params: "", body: { type: "raw-text", data: [{ type: "text", text: `{{#${selector.join(".")}#}}` }] },
+    params: "", body: { type: "raw-text", data: [{ type: "text", value: `{{#${selector.join(".")}#}}` }] },
     timeout: { connect: 10, read: 30, write: 30 }, ssl_verify: true,
     retry_config: { retry_enabled: false, max_retries: 0, retry_interval: 0 },
   } };

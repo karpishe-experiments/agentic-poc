@@ -36,9 +36,14 @@ existing Dify resources and diagnostic/recovery buckets were not reset.
 The existing private preparation was uploaded with the enabled flag after reset
 to keep the GitHub settings bundle aligned with the host. No new key, workflow
 execution or provider call was made. Runtime key matching, all three persona
-flows, Pause/Resume and browser inspection remain unverified. Chrome tab control
-timed out twice at `Emulation.setFocusEmulationEnabled`; a working browser
-connection or private staging authentication is the next handoff. The earlier
+flows and Pause/Resume remain unverified. Chrome control now works. The first
+Playful Kid Simulated run `b42c808f-7d5d-43d4-8486-8f6a0a1fb658` remains saved
+as blocked; Dify run `54f72080-9a7d-4316-b7a0-068f195dbc93` sent an empty
+authorization body and received HTTP 400, with zero provider calls. The graph
+builder used `text` instead of Dify's raw-text item `value` field. The correction
+covers both authorization and result callbacks in all six modules; regression
+tests check their exact selectors. Publication and live retest remain pending.
+Preserve the failed run and link its repaired successor. The earlier
 slice records below describe their publication-time evidence, not current reset
 status. M1 is not complete.
 

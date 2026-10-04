@@ -4,6 +4,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Validate HTTP body fields against a live callback
+
+- **Context:** Generated HTTP nodes in Dify Community 1.17.1.
+- **Observation:** A raw-text body item with `text` passed graph preparation but
+  sent an empty HTTP body. The first live tester callback returned HTTP 400.
+- **Guidance:** Use the supported `value` field and check both authorization and
+  result selectors. A successful HTTP node can still contain an error response;
+  inspect the HTTP status and saved callback outcome.
+- **Evidence:** Dify run `54f72080-9a7d-4316-b7a0-068f195dbc93` and
+  [graph regression](../../../tests/unit/experiment-runner-workflow-graph.test.ts).
+- **Promotion target:** Integration documentation; verified on this pinned release.
+
 ### Preserve answered questions and interrupted revisions in saved context
 
 - **Context:** Local J01/J02 specialists run as separate operations, with an
