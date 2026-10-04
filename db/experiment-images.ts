@@ -66,6 +66,20 @@ export function createExperimentImageRepository(database: Database) {
     invalid("Image operation is no longer recoverable.");
   }
 
+  async function authorizeFixture(raw: unknown): Promise<ExperimentImageRequest> {
+    const input = identitySchema.parse(raw);
+    return withMongoTransaction(database, async (session) => {
+      const { operation, run, request } = await checked(input, session);
+      // Download is read-only: reservation and the active operation must already
+      // have been established by the ordinary provider authorization callback.
+      if (operation.state !== "started" && operation.state !== "unknown") invalid("Image fixture operation has not started.");
+      if (run.activeOperationId !== operation._id ||
+          !(["queued", "running", "paused"].includes(run.status) || operation.state === "unknown" && run.status === "blocked" && run.safeFailure === "unknown_outcome")) invalid("Image fixture operation is no longer active.");
+      await assertCurrentImageSources(database, session, run, request);
+      return request;
+    });
+  }
+
   async function claim(raw: unknown): Promise<{ reused: boolean; operation: ExperimentOperationDocument; asset?: AssetDocument }> {
     const input = claimSchema.parse(raw);
     return withMongoTransaction(database, async (session) => {
@@ -118,5 +132,5 @@ export function createExperimentImageRepository(database: Database) {
     const input = releaseSchema.parse(raw);
     await operations.updateOne({ _id: input.operationId, runId: input.runId, workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId, inputFingerprint: input.inputFingerprint, "imageCompletionClaim.id": input.claimId, state: { $in: ["started", "unknown", "failed"] } }, { $set: { imageCompletionClaim: null, updatedAtMs: input.nowMs } });
   }
-  return { claim, finalize, release };
+  return { authorizeFixture, claim, finalize, release };
 }

@@ -1,6 +1,6 @@
 # M2 — Narrative completion and reference packages
 
-**State:** S1/S2 local narrative implementation merged; S3 local binding preparation in verification. Live M2 remains pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** S1–S3 narrative code deployed; live M2 bindings pending. S4 storage foundation merged; image callback routes in local verification. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Entry gate
@@ -127,6 +127,17 @@ successfully. No live M2 publication, provider execution or staging release is
 proved by these checks.
 
 ### S2 persistent narrative contract
+
+Current staging release: [PR #107](https://github.com/karpishe-experiments/agentic-poc/pull/107)
+merged as `68333047d0ca98af260b99bd18e0df69fc2b7f72`; Validate `37241965875`,
+Deploy `37242253508` and Check `37242573398` succeeded. Immutable image digest:
+`sha256:fee1a737443ad53b0e3784648fa1cdb21eaacfc21410716b739621a52cd3a052`.
+Chrome reload showed eight saved runs and fourteen approved J01/J02 artifacts,
+with zero payable calls. The active six bindings still select the M1 boundary;
+this is release/read-back evidence, not live J03–J07 or booklet completion.
+The S4 storage foundation merged in [PR #106](https://github.com/karpishe-experiments/agentic-poc/pull/106)
+after its two clean reviews and Validate `37241762887`. It was not included in
+this staging release.
 
 Extend the existing contracts, narrative materializer, repository, context,
 dispatcher types and local fixtures through J07. Keep the protected configuration
@@ -316,6 +327,36 @@ image route and operation-bound reference download. Original decoded PNG/JPEG/We
 bytes are accepted up to 20 MiB, 64 megapixels, positive dimensions and one frame.
 Actually decode pixels with Sharp; metadata/signature alone is insufficient.
 Derive MIME/extension from decoded content. Do not resize, convert, or overlay text.
+
+The next bounded route slice adds `image-fixture` GET and `image` POST under
+`/api/experiments/booklet-tools`, through the existing HTTP factory and two thin
+Node route handlers. Both require the existing callback key before database/body
+work and remain closed in production or disabled configurations. Query identity
+contains `runId`, `operationId`, `workflowRunId`, nullable `parentWorkflowRunId`
+and the saved `inputFingerprint`; reject unknown or duplicate fields. The fixture
+GET checks a reserved Simulated image operation, exact identity and current
+sources without another claim or debit, then returns a small deterministic PNG.
+Already admitted paused work may retrieve its fixture; unclaimed or foreign work
+cannot. Maintenance closes the route through the existing admission check.
+POST streams at most 20 MiB, derives format from bytes rather than the supplied
+Content-Type, and calls the storage service inside `runTrackedMutation`. Its
+response contains only asset ID, digest, completion state and reuse status.
+Neither endpoint accepts an arbitrary URI or URL. Extend only these two exact
+proxy exceptions, HTTP auth/body/query tests and Mongo HTTP integration tests.
+Local route tests are not live transfer proof; the next synthetic Dify probe must
+verify HTTP file output to binary POST and authentication headers without a model.
+The ordinary `authorize` callback supplies the saved image request context after
+one reservation. Test that callback, fixture download and exact-byte completion
+together. Set proxy transport headroom to 32 MiB so the handler can enforce its
+20 MiB bound; test the installed Next.js body clone for allowed and oversized
+chunked requests. This does not establish live Tunnel or Dify transfer limits.
+Local route candidate verification on 2026-10-05 passed clean-checkout typecheck,
+full lint and 40 tests across eight files without retries. The standard Next.js
+build passed after a lockfile install replaced the temporary dependency junction;
+the first build failed because Turbopack rejects a junction outside its root.
+The main checkout's typecheck remains contaminated by old generated Cloud-route
+validators and ignored nested worktrees; it is not counted as a pass. No live
+image transfer or provider call occurred during these checks.
 
 Store under an application-derived booklet/operation/attempt path. Hash original
 bytes for completion identity. Claim completion atomically for 60 seconds before

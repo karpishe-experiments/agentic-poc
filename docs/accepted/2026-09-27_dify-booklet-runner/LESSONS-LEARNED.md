@@ -164,3 +164,16 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [graph regression](../../../tests/unit/experiment-runner-workflow-graph.test.ts)
   and [M1 draft repair](M1-runner.md#entry-and-manual-setup).
 - **Promotion target:** Documentation; reverify for other Dify releases.
+
+### Handler upload limits need proxy transport headroom
+
+- **Context:** Image callbacks behind Next.js 16.2.12 proxy body cloning.
+- **Observation:** The installed clone defaults to 10 MiB and truncates larger
+  bodies before the handler's 20 MiB validator. A 32 MiB transport setting
+  preserves an allowed 20 MiB upload and lets the handler reject a chunked
+  20 MiB-plus-one-byte body with HTTP 413.
+- **Guidance:** Test the framework transport as well as the route factory.
+  Keep a bounded transport allowance above the application's content limit.
+- **Evidence:** [transport regression](../../../tests/unit/experiment-image-proxy-body.test.ts)
+  and [Next.js proxy limit](https://nextjs.org/docs/app/api-reference/config/next-config-js/proxyClientMaxBodySize).
+- **Promotion target:** Documentation; reverify when Next.js or limits change.
