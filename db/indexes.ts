@@ -4,6 +4,13 @@ import type { CollectionName } from "@/db/documents";
 export type RequiredIndex = { collection: CollectionName; name: string; key: IndexSpecification; options?: Omit<CreateIndexesOptions, "name"> };
 
 export const REQUIRED_INDEXES: RequiredIndex[] = [
+  { collection: "experiment_runs", name: "experiment_runs_booklet_unique", key: { bookletId: 1 }, options: { unique: true } },
+  { collection: "experiment_runs", name: "experiment_runs_status_created_idx", key: { status: 1, createdAtMs: 1 } },
+  { collection: "experiment_operations", name: "experiment_operations_idempotency_unique", key: { idempotencyKey: 1 }, options: { unique: true } },
+  { collection: "experiment_operations", name: "experiment_operations_run_created_idx", key: { runId: 1, createdAtMs: 1 } },
+  { collection: "experiment_delegations", name: "experiment_delegations_run_sequence_unique", key: { runId: 1, effectiveSequence: 1 }, options: { unique: true } },
+  { collection: "artifact_versions", name: "artifact_versions_source_operation_unique", key: { sourceOperationId: 1 }, options: { unique: true, partialFilterExpression: { sourceOperationId: { $type: "string" } } } },
+  { collection: "approvals", name: "approvals_experiment_version_unique", key: { experimentRunId: 1, artifactVersionId: 1 }, options: { unique: true, partialFilterExpression: { experimentRunId: { $type: "string" } } } },
   { collection: "deployment_control", name: "deployment_control_environment_unique", key: { environment: 1 }, options: { unique: true } },
   { collection: "booklets", name: "booklets_updated_at_idx", key: { updatedAtMs: -1 } },
   { collection: "artifacts", name: "artifacts_booklet_type_unique", key: { bookletId: 1, artifactType: 1 }, options: { unique: true } },

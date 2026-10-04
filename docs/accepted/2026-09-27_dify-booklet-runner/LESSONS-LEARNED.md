@@ -4,6 +4,22 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Preserve answered questions and interrupted revisions in saved context
+
+- **Context:** Local J01/J02 specialists run as separate operations, with an
+  external tester answering clarification questions.
+- **Observation:** Saving an answer is insufficient if the next specialist sees
+  only the original brief. A revision also needs its target and instruction
+  retained while clarification waits for an answer.
+- **Guidance:** Reconstruct relevant question/answer pairs from saved operations
+  and decisions. Suspend and restore the same revision after the exact answer;
+  do not debit the revision allowance again.
+- **Evidence:** Restarted specialist context and revision/clarification tests in
+  [context tests](../../../tests/integration/experiment-runner-context.test.ts)
+  and [narrative tests](../../../tests/integration/experiment-runner-narrative.test.ts).
+- **Promotion target:** Integration documentation. Live Dify behavior remains
+  unverified for this slice.
+
 ### Carry explicit lineage when inspected tool traces omit child run IDs
 
 - **Context:** Community 1.17.1 workflow-tool calls.

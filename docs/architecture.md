@@ -38,7 +38,37 @@ The root responsibilities are:
 
 ## Artifact and decision flow
 
-Every booklet has eight ordered artifact records:
+### Issue #65 local foundation
+
+The [Dify booklet experiment](accepted/2026-09-27_dify-booklet-runner/PRD.md)
+has a separate `dify_booklet_v1` booklet profile. Its current local foundation
+uses `lib/contracts/experiment-runner.ts` and `db/experiment-repository.ts`.
+Experiment runs, single-operation claims and delegation grants use additive
+Mongo collections. Normal artifacts, immutable versions, dependencies, approvals
+and messages retain the created content and decision provenance.
+
+The implemented narrative slice covers J01 Concept Brief and J02 Story Outline.
+J02 captures the current approved J01 version. Completion atomically saves the
+proposal and operation result. Explicit tester review or a current scoped grant
+accepts an exact version; manager and judge results cannot approve it. Revisions
+retain history and mark dependent current work for review. Preferred-length
+warnings do not reject valid content.
+
+Specialist context includes saved task-specific answers and global manager
+answers. During a revision, clarification preserves the original target and
+instruction. The matching tester answer restores that revision without another
+revision debit. Restart reads reconstruct this context from saved operations and
+tester messages.
+
+Legacy booklet projections exclude this profile because their eight-stage
+parsers cannot read J01/J02. The existing artifact-type index is retained; a later
+authorized clean reset is required before multi-subject artifacts replace it.
+`verifyExperimentData` checks experiment references without legacy agent seeds.
+The existing initialization path still requires those seeds. Runner routes,
+dispatch, enabled-profile initialization and live Dify acceptance remain pending;
+these local contracts do not change production or the existing diagnostic probe.
+
+Every legacy-profile booklet has eight ordered artifact records:
 
 ```text
 Audience Profile → Story Plan → Visual Style → Visual Bible
