@@ -21,7 +21,8 @@ and AssetStore access and release permissions. Bundle any
 missing login/key installation and deployment grant into one handoff. No paid
 authority is needed. Run the entire milestone in Simulated mode.
 
-The new callback routes do not exist at entry. Verify the origin/access path now;
+The experiment-runner callback routes do not exist at entry. The deployed Community
+diagnostic callback proves the origin/access path, not these new contracts;
 verify the exact new routes after deployment and before the first Dify smoke.
 Perform the one authorized clean staging reset before the first durable runner
 case, using M5's target/backup procedure. Include that exact-target approval in
@@ -76,6 +77,12 @@ unique indexes as appropriate. No general event-sourcing framework.
 | `experiment_operations` | Run/role/task/subject, unique idempotency key, expected input-version fingerprint, mode, provider kind, state, Dify execution/node IDs, reservation count, deadline, result/digest/asset references, bounded error, timestamps |
 | `experiment_delegations` | Run, tester decision/event, allowed tasks/subjects/actions, effective sequence, revoked/superseded link; no budget-changing capability |
 | Existing messages/model calls/jobs/assets | Run/operation IDs and Dify IDs; retain conversations, actual/estimated/unknown usage, job ordering and asset lineage; local agent-version IDs nullable for this profile |
+
+Use M0's verified explicit lineage envelope for nested calls: correlation ID,
+parent Dify run ID, child Dify run ID, role and application-owned operation ID.
+Validate against the dispatched operation; retain it with the operation record.
+The probe's `correlation:role` operation IDs suffice only for its single call per
+role. Real runner revisions/retries need distinct application operation IDs.
 
 Replace the old `artifacts_booklet_type_unique` constraint for the clean v2
 baseline: it prevents multiple subjects of the same task. Implement the named

@@ -192,8 +192,12 @@ authenticated callback on one exact route, and retrieves the saved Dify result
 by workflow run ID with the same runtime key. Probe records are isolated in
 `dify_community_probes` and do not mutate booklet/artifact/approval state.
 Production and disabled staging deployments reject all probe routes. See the
-[Community runbook](deployment/dify-community.md); this is a local candidate,
-not evidence that the VPS install or public integration has succeeded.
+[Community runbook](deployment/dify-community.md). The operator verified the
+public deterministic round trip and runtime lookup on 2026-10-03; interrupted
+response and platform backup/restore readiness remain separate checks.
+The candidate authenticated staging fault header discards the Dify start response
+before reading its identity. Recovery uses the callback's persisted ID and a GET,
+never a replacement execution. Production and disabled profiles remain closed.
 
 The protected staging key workflow can provision the Community probe as one
 four-setting patch. The master-owned host dispatcher limits it to staging,

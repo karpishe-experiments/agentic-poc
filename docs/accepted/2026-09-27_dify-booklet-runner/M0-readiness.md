@@ -4,8 +4,10 @@
 failure/repair/publication/tool-synchronization/restoration cycle passed.
 Community workflow-to-workflow invocation passed in draft and published callers.
 Draft isolation and synchronized binding restoration also passed. Full-suite
-capacity, parent trace linkage and deployed Booklet callback/recovery remain
-unverified. The operator's application-key execution/result-retrieval smoke test passed.
+capacity and live interrupted-response recovery remain unverified. Explicit
+parent/child envelopes passed in the model-free lineage probe below; full-runner
+persistence is still M1 work. The operator's deployed Booklet round trip, authenticated callback and
+runtime-key saved-result lookup passed on 2026-10-03.
 **Coverage:** AC08, AC13 and first-slice readiness.
 **Read first:** [EXECUTION.md](EXECUTION.md), [PRD.md](PRD.md),
 [Dify access runbook](../2026-09-26_codex-dify-access/runbook.md).
@@ -20,15 +22,16 @@ dependent operation blocked by any unresolved item. None is fully complete yet.
 | Action | Expected result | Evidence | Unresolved blocker |
 | --- | --- | --- | --- |
 | 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-03: Community MCP workspace check and CLI inventory pass; three new probe workflows imported | Complete-suite capacity; host workload measurements |
-| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Separate workflow invocation, unpublished-draft isolation, tool-binding propagation and same-app restoration passed; see current evidence below | Parent trace linkage; full-suite capacity |
-| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic workflow cycle, modular binding restoration and operator application-key retrieval smoke test passed | Deployed Booklet callback and runtime recovery |
-| 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Pending | Predecessor evidence and any private binding/setup handoff |
+| 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Separate invocation, binding restoration and explicit lineage-envelope probe passed; see below | Full-suite capacity; M1 persistence of role lineage |
+| 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic cycle and binding restoration passed; deployed callback and runtime lookup passed on 2026-10-03, below | Deliberately interrupted response; unknown outcome before a run ID is saved |
+| 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Local contract preparation can proceed; diagnostic probe bindings verified | First-slice role/key map, persisted contracts and bounded execution package |
 
 Use MCP first, inspected official CLI second, and authorized browser control last.
 An unresolved staging dependency does not block independent local preparation.
 For checkpoint 4, use the handoff format in [EXECUTION.md](EXECUTION.md#sol-low-execution-packages).
-The Community callback routes are deployed in staging with the probe disabled
-by default. Private runtime/callback bindings and live acceptance remain pending.
+The Community callback routes are deployed. Compose defaults keep the probe off;
+protected staging configuration enables it with verified private bindings.
+The successful diagnostic round trip does not establish full-runner readiness.
 
 ### Current target and Community probe — 2026-10-03
 
@@ -53,8 +56,9 @@ Input `{"marker":"issue65"}` to the caller returned
 `7c70636a-bae9-4401-b894-0456d8880b9f`. Tool nodes invoke separate workflows;
 their graphs are not embedded in the caller. Child runs are independently
 retrievable: Concept `0fb19acb-20fb-4b1c-abd0-3de858e6a4a8`, tester
-`9f2aa004-82c8-4fcc-93a8-2bc2310d850c`. Their parent linkage still needs
-verification; matching timestamps alone are not proof of linkage.
+`9f2aa004-82c8-4fcc-93a8-2bc2310d850c`. These original traces do not establish
+parent linkage; matching timestamps alone are not proof. The separate
+explicit-envelope probe below verifies a usable path.
 
 All three graph validations returned zero errors/warnings. Standalone draft
 runs passed, and tester run `3306b2bc-9cf8-4fa9-8bd7-6ed6db5148d5` rejected
@@ -71,10 +75,9 @@ inspected CLI fallback with HTTP retries disabled. Run
 tokens using [the retained input](fixtures/community-probe-input.json).
 Do not infer a five-app Cloud quota from the
 Community workspace response's `sandbox` label. Three successful imports prove
-capacity for this probe only, not the full suite. Next verify deployed Booklet
-callback/recovery and parent trace linkage. Private
-staging keys and deployment are required only for that runtime round trip;
-independent local M1 contract preparation can proceed without them.
+capacity for this probe only, not the full suite. The deployed Booklet round trip
+now passes. Next verify live interrupted-response recovery and retain explicit lineage;
+independent local M1 contract preparation can proceed.
 
 #### Binding change and restoration evidence
 
@@ -109,7 +112,39 @@ active operations before refreshing child bindings; record effective child
 publication evidence with each successor configuration. See the
 [reusable lesson](LESSONS-LEARNED.md#published-callers-do-not-pin-child-workflow-tool-bindings).
 
-#### Runtime integration handoff
+### Runtime integration handoff
+
+#### Explicit parent/child lineage proof — 2026-10-03
+
+MCP read the original manager/child records and manager node executions. The
+inspected fields expose workflow-tool provider IDs but no child run ID or parent
+run link; `runs.export` returns 404. This is a limitation of the inspected paths,
+not a claim that all Dify trace interfaces lack linkage.
+
+Two new disposable model-free fixtures prove the explicit alternative:
+[child](fixtures/community-trace-child.json) app
+`91412556-7898-4028-bc3f-b6cda247fb4a` and
+[parent](fixtures/community-trace-parent.json) app
+`d5936f3e-1036-4547-8179-d5ff3e75bd6b`. The child was independently reviewed twice
+before publication; Workflow Tool `8baf2c44-0b27-4b8f-bd47-ef427c72f755` was read
+back synchronized with published workflow `bd796ef9-032e-4818-8961-f6a3d095568e`.
+The parent draft invokes that published child twice, for
+Concept and tester transport roles; this does not replace their creative modules.
+
+Parent run `fbff27e2-634f-45fa-8558-e8ea981e99a5` returned Concept child
+`c4646525-5917-40ee-8ca2-5232ae45d444` and tester child
+`a7f17e83-7525-4c96-9807-7e0f908b808d`. Independent MCP reads of both children
+confirmed `correlation_id=issue65-lineage-20261003-v1`, the exact parent ID,
+correct role, distinct own `sys.workflow_run_id` and operation IDs ending
+`:concept` / `:tester`. All three saved runs succeeded and reported zero tokens.
+The parent verifies these identities before returning its result.
+
+This proves explicit lineage transport and retained Dify records, not native
+parent tracing or Booklet runner persistence. M1 must retain the envelope with
+the application-owned operation and validate it against the dispatched role.
+The parent is a draft probe, not a published-suite acceptance run.
+
+#### Booklet runtime evidence
 
 On 2026-10-03, the operator ran the private application-key smoke test against
 `issue65_probe_manager_20261003`. The script verified the application name,
@@ -151,21 +186,51 @@ PR #81 added the default regression and corrected runbook guidance. CI
 `37131423028` passed, and its new immutable staging snapshot
 `c909a8ce0d487d1dbe4f1aecbf6e3dc90e2013e1` deployed successfully in
 `37131641941`. Final staging Check deployment `37132062489` passed.
-No provider calls, key replacement or reset occurred. Private bindings and live
-callback acceptance remain pending.
+That release phase made no provider calls, key replacement or reset. The following
+private binding step enabled live callback acceptance without another app release.
 
 Required private bindings are an application API key for the exact model-free
 target and the separate callback key for `issue69_booklet_round_trip`
-(`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`). The candidate staging-only
+(`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`). The staging-only
 `DIFY_COMMUNITY_PROBE` bundle configures the two keys, fixed origin and enable flag
 through the existing protected key workflow or interactive rotation. Reviewed
-publication and host synchronization passed; it still needs private bindings and
-live verification. See
+publication and host synchronization passed. Protected key rotation
+`37138234168` installed the operator-supplied bindings and enabled staging without
+changing its immutable application image. See
 [Community checkpoint 5](../../deployment/dify-community.md#checkpoint-5--deterministic-booklet-round-trip).
-Codex has not
-retrieved Community key values or installed them in staging. The private
-application-key smoke test above does not replace live Booklet callback/recovery
-acceptance.
+Codex did not retrieve the key values. The operator then executed one deterministic
+Booklet start request and a separate saved-result lookup on 2026-10-03:
+
+| Field | Verified operator result |
+| --- | --- |
+| Correlation | `d3b7d5b0-04f3-4bca-8e90-37c2432f7316` |
+| Dify run | `18381193-b811-4809-a673-4784bf2d572f` |
+| Published workflow | `35acdf94-5bb4-47ac-a1b8-20f0f57a37cd` |
+| Outcome | `succeeded`; callback received; no error category |
+
+This proves the public Booklet → Dify → Booklet callback and runtime-key result
+lookup. The workflow has no model, agent or image-provider nodes. The operator
+did not deliberately interrupt the initial response; that recovery scenario and
+the no-saved-ID unknown-outcome scenario remain pending. Do not replay an uncertain
+execution automatically.
+
+#### Next bounded M0 work and M1 handoff
+
+Verify live interrupted-response lookup without starting a replacement run, then
+record the first slice's role-to-runtime-key map and persist its explicit lineage.
+Prepare the Concept/Outline persistence contracts and fixtures locally in parallel
+with those checks. Full-suite capacity, image transport/accounting and campaign
+authorization remain separate gates for the work that needs them. Platform backup
+and restore readiness remains owned by the Community runbook. M0 is not complete;
+do not start paid acceptance or claim an unattended full booklet on this evidence.
+
+The candidate [staging fault procedure](../../deployment/dify-community.md#candidate-interrupted-response-probe)
+discards the start response before parsing its IDs. Ten focused probe tests pass,
+including callback-ID recovery and the no-ID/no-replay case. Typecheck and lint
+pass in an isolated source snapshot; 38 deployment contracts pass after normalizing
+only that snapshot's Compose line endings to LF. The normal Windows checkout has
+stale generated files and a CRLF-sensitive baseline assertion; those were not
+changed. Live fault verification awaits a reviewed selective staging release.
 
 CI for commit `56adbe96a6783040cc2ed147cf2d1978112729c2` passed in run
 `37118227169`, including selected application, agent, shell and Terraform checks.
@@ -276,9 +341,10 @@ text is truncated at 2,000 characters. Longer context needs file transport. Pres
 the drain-before-publication rule; do not claim pinned-version isolation or pass
 full manuscripts through truncated task variables.
 
-Next: resolve a layout that fits capacity and request accounting. No full-suite
-layout is selected. Booklet runtime-key recovery remains pending private binding
-setup. Administrative retrieval does not prove that runtime path. M0 is not complete.
+This Cloud inspection left layout and runtime bindings unresolved. The Community
+evidence above supersedes that target: its diagnostic runtime lookup now passes.
+Full-suite capacity/accounting and interrupted-response recovery remain pending.
+M0 is not complete.
 
 ## Entry and consolidated handoff
 
@@ -387,8 +453,8 @@ prompt dictionary.
    restoration under the same ID from reconstruction under a new ID.
 7. Verify a harmless HTTP callback, non-secret environment binding and a file
    transfer on the intended staging path once M1 makes that path available.
-   M0's initial proof can use a disposable deterministic endpoint; it must not
-   claim the later Booklet callback has already passed.
+   The deployed diagnostic Booklet callback now passes. It does not prove the
+   later experiment-runner callback, non-secret environment edits or file transfer.
    Test binary and base64-response forwarding with fixture bytes up to the planned
    limit. Record the selected Community target's actual request/response/file limits. Do not assume
    Code-node outputs or HTTP responses can carry 20 MiB just because Booklet can.
@@ -415,7 +481,8 @@ Complete the roadmap access matrix with dates/results, including these decisions
   private setup action, not authorized by the new-resource Dify grant. Preserve
   existing credential values and bindings.
 - Add optional suite configuration to `lib/config/env.ts`; require it only for an
-  enabled local/staging runner. Existing master has no Dify runtime env schema.
+  enabled local/staging runner. Master has the additive Community diagnostic-probe
+  env schema; it does not yet define the full runner's role bindings.
   Do not require an OpenAI host key for the new execution path.
 - Non-secret binding metadata belongs in a small configuration manifest; it is
   evidence/deployment configuration, not an editable agent registry.

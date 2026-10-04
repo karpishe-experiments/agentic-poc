@@ -1,7 +1,8 @@
 # Dify Community on the shared VPS
 
-This is the issue #69 operating runbook. It is a candidate procedure until the
-live installation, integration probe, and restore rehearsal are recorded here.
+This is the issue #69 operating runbook. Live installation and the deterministic
+integration round trip are recorded. Backup and restore readiness remains pending;
+the procedure is not yet a completed platform-readiness baseline.
 It does not authorize a VPS install, public exposure, a paid provider call, or
 a destructive restore. Booklet staging and production remain independent.
 
@@ -262,15 +263,15 @@ CLI `import studio-app --app-id` and `run app --inputs-file` fallbacks. Keep
 CLI import preserved the app ID; MCP restore preserved both the app ID and the
 original graph hash. Tool synchronization and published app execution were
 verified separately; a caller invoking the Workflow Tool remains untested.
-Booklet runtime-key recovery, New Agent configuration, and backup/restore
-rehearsal are still separate readiness checks.
+Booklet runtime-key lookup passed in checkpoint 5. Interrupted-response recovery,
+New Agent configuration, and backup/restore rehearsal remain separate checks.
 
 ## Checkpoint 5 — deterministic Booklet round trip
 
 Execution machine: staging Booklet and published Community workflow. Import
 [`deploy/dify/booklet-probe.yml`](../../deploy/dify/booklet-probe.yml), set its
 callback URL and secret variable privately, test, and publish. The local
-routes and DSL are implemented but not yet live-verified. Set protected staging
+routes and DSL passed the live happy-path check below. For a new setup, set protected staging
 `DIFY_COMMUNITY_PROBE_ENABLED=true`, `DIFY_COMMUNITY_BASE_URL` to the Community
 HTTPS origin, `DIFY_COMMUNITY_WORKFLOW_API_KEY` to that workflow application's
 runtime key, and `DIFY_COMMUNITY_CALLBACK_KEY` to a separate 32-byte-or-longer
@@ -280,11 +281,10 @@ false. The Dify secret variable must contain the same dedicated callback key.
 The Community draft `issue69_booklet_round_trip`
 (`5e79d21c-d80c-46e6-ba52-a3632f5c30fe`) was imported and read back on
 3 October 2026. Server-default graph validation passed with zero issues. It
-was published as version `ed5bc347-611d-4e0c-9a82-1a0f26445e2e`, but has not
-been executed. The selective staging port preserves the existing Cloud
-callback authentication exceptions and settings. Next, verify the staging
-release, privately bind its dedicated callback key and application runtime key
-to staging's protected configuration, and enable the probe.
+is currently published as version `35acdf94-5bb4-47ac-a1b8-20f0f57a37cd`.
+The selective staging port preserves the existing Cloud callback authentication
+exceptions and settings. Private staging bindings and the happy-path round trip
+are verified; interrupted-response recovery remains pending.
 The default Compose configuration keeps the probe disabled. Imported secret
 metadata is not proof that the callback key has been entered correctly.
 
@@ -308,16 +308,26 @@ after successful rotation. A failed rotation requires journal inspection and
 Maintenance resume; do not dispatch a second rotation blindly.
 
 The reviewed host setup is on master at
-`63fb83e29a72dce60437d280f6c5cff0d3355ff2` (PRs #68 and #80).
-Infrastructure run `37131368907` synchronized it with zero Terraform resource
+`f64b0e8eb341877f743edfaac276c1b5d79ea282` (including PR #83).
+Infrastructure run `37137559467` synchronized it with zero Terraform resource
 changes. Selective staging PRs #79 and #81 preserve the Cloud trial defaults:
 enabled in staging, fake mode, images disabled, and two attempts.
 Final staging commit `c909a8ce0d487d1dbe4f1aecbf6e3dc90e2013e1` passed CI
 `37131423028` and deployed in `37131641941`, using image digest
 `sha256:f9c1f4a61adf03841c39e5afa4436b819c240035f37290f9cf5f0b1826835a19`.
-Final Check deployment `37132062489` passed. The Community probe is
-disabled by default; private credentials and live callback/recovery remain pending.
-Publication is not evidence that keys are installed.
+Final Check deployment `37132062489` passed. Protected key rotation
+`37138234168` then installed the private probe bindings and enabled the probe in
+staging, without replacing the application image. Compose defaults remain off;
+production remains disabled. Publication alone is not evidence of installed keys.
+
+On 2026-10-03, the operator's single start request and subsequent result lookup
+reported `succeeded`, `callback_received=True` and no error category. Correlation
+ID: `d3b7d5b0-04f3-4bca-8e90-37c2432f7316`; Dify run:
+`18381193-b811-4809-a673-4784bf2d572f`; published workflow:
+`35acdf94-5bb4-47ac-a1b8-20f0f57a37cd`. This verifies the public round trip and
+saved-result retrieval through Booklet's runtime credentials, not administrative
+MCP. The deterministic graph contains no provider nodes. It does not prove a
+deliberately lost response, timeout, or live negative authentication cases.
 
 From an authenticated Booklet staging client, `POST
 /api/integrations/dify-community/runs`. Save the returned correlation ID even
@@ -334,6 +344,31 @@ response name different run IDs, retain the callback's ID, report failure,
 and inspect both Dify traces before any further operation.
 
 ## Maintenance and recovery gates
+
+### Candidate interrupted-response probe
+
+The reviewed source adds `X-Booklet-Probe-Fault: discard-start-response` to the
+authenticated staging start endpoint. It drops a successful Dify response before
+parsing or saving its IDs; the callback can still persist the run ID. No header
+means normal behavior. An unsupported value returns 400 before dispatch;
+production and disabled deployments return 404. This is not deployed evidence.
+
+After the selective staging release is authorized and deployed:
+
+1. Confirm the bound workflow remains model-free and published, and the callback
+   and runtime keys remain the existing diagnostic bindings.
+2. Send exactly one authenticated start request with the fault header. Save the
+   returned correlation ID; expect 202, `status=unknown` and
+   `response_discarded=true`.
+3. Use the existing result GET for that correlation. Expect `succeeded`, a saved
+   callback and the same Dify run ID. Inspect that run and confirm zero tokens.
+4. Verify only one start execution occurred. Do not issue another POST to recover.
+
+This tests loss between Dify and Booklet, not loss of the Booklet response to the
+operator or a process crash. If no callback ID was saved, retain `unknown` and
+inspect the execution rather than replaying. The local no-ID regression verifies
+that lookup does not dispatch another run. Remove this temporary fault switch
+when the diagnostic probe is retired; do not copy it into paid runner routes.
 
 Routine operations are serialized with Booklet under
 `kids-booklet-vps-operation`, with cancellation disabled. A daily encrypted
