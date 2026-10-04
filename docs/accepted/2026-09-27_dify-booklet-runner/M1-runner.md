@@ -42,10 +42,25 @@ as blocked; Dify run `54f72080-9a7d-4316-b7a0-068f195dbc93` sent an empty
 authorization body and received HTTP 400, with zero provider calls. The graph
 builder used `text` instead of Dify's raw-text item `value` field. The correction
 covers both authorization and result callbacks in all six modules; regression
-tests check their exact selectors. Publication and live retest remain pending.
-Preserve the failed run and link its repaired successor. The earlier
+tests check their exact selectors. PR #97 passed Validate `37225604910` and
+merged to master `38e9a6ff12f257868acdbea74f705369d36b24cc`. CLI import preserved
+the private bindings; MCP published and read back all six corrected versions.
+Protected staging settings rotation `37225932334` passed. Live retest remains
+pending. The UI correction adds an explicit `Start linked successor` control for
+blocked/failed Simulated runs, retains its creation key on response loss, and
+shows the saved predecessor. It does not retry the failed operation. Its staging
+release remains pending. The earlier
 slice records below describe their publication-time evidence, not current reset
 status. M1 is not complete.
+
+| Module | Corrected published workflow ID |
+| --- | --- |
+| Manager | `7fdf6889-cc91-4ecd-abbe-8d23e09738f5` |
+| J01 | `dc48fa97-f6ba-49d9-9785-ab4e67855ef7` |
+| J02 | `a633aa82-bfdd-4b91-8462-de8837e18113` |
+| Kid tester | `9ae4c560-91b9-4e92-9ff7-a65d312c0477` |
+| Parent tester | `4a080bd6-2ed7-4791-96ba-7e48d671ae80` |
+| Creator tester | `8dda908c-24f1-4108-9e64-3fa16c99022a` |
 
 M0 proves separate workflow invocation, publication/tool synchronization,
 restoration, explicit lineage transport and diagnostic runtime-key recovery.
@@ -231,7 +246,7 @@ HTTP, conditional and end nodes, with controllable retries off. Server-backed
 validation returned zero errors/warnings. Imported node data matched the reviewed
 candidate; published graph hashes matched their drafts on read-back.
 
-| Module | App ID | Latest published workflow ID after private preparation |
+| Module | App ID | Initial published workflow ID after private preparation |
 | --- | --- | --- |
 | Manager | `eca554a2-34bd-489c-b05d-713a6876b448` | `e501763a-a2c5-4f97-a641-68c3acea9555` |
 | Concept J01 | `7c186b42-a069-4059-aac6-5589e870951f` | `09f5449e-50f9-4fd3-93d2-c4eec7e890dc` |
