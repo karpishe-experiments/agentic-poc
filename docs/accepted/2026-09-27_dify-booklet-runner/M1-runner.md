@@ -1,6 +1,6 @@
 # M1 — Durable runner, Concept Brief and Outline
 
-**State:** Planned. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
+**State:** Local foundation in progress; staging bindings/release/reset remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
 **Predecessor:** [M0](M0-readiness.md). Follow [EXECUTION](EXECUTION.md) at entry,
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
@@ -9,6 +9,92 @@ Before handing a slice to Sol/low, fill the compact
 [execution package](EXECUTION.md#sol-low-execution-packages) in this file using
 M0 evidence. The contracts below remain proposed until that reconciliation;
 do not treat them as a completed implementation package.
+
+## Bounded local execution packages — 2026-10-04
+
+M0 proves separate workflow invocation, publication/tool synchronization,
+restoration, explicit lineage transport and diagnostic runtime-key recovery.
+The selected layout is nineteen independent workflows. Production, Cloud,
+existing probes and private keys remain unchanged. Paid calls and staging reset
+remain ungranted. Runner publication authority is recorded in EXECUTION.
+
+| Field | S1: typed contracts and fixtures |
+| --- | --- |
+| Goal and components | Add `lib/contracts/experiment-runner.ts` and focused contract tests. Reuse UUID/timestamp helpers; keep legacy artifact enums/schema version unchanged. |
+| Contract and examples | Closed task IDs J01–J13, roles, personas, modes, statuses, fixed case ceilings and strict mutation/lineage envelopes. J01 audience/premise/theme/emotional promise/tone/constraints/deferred decisions; J02 causal arc, character/place shortlists and deferred decisions. Content strips extra fields; preferred lengths warn. Hard bounds: title 1,000 characters, each other text field 16,000 characters, 100 entries per list, canonical UTF-8 content 2 MiB. |
+| Ordered edits | Define types and J01/J02 content parsers; add fixed-case data and warnings; test role/result separation, required fields, overlength warnings, unknown content stripping and strict envelope rejection. No Mongo writes or Dify calls. |
+| Verification | Focused Vitest contract tests with `--bail=1 --retry=0`, typecheck and lint. |
+| Completion and escalation | Passing local contracts. Escalate a required field/role change; do not invent a live binding or weaken authorization. |
+
+| Field | S2: durable run and single-operation claims |
+| --- | --- |
+| Goal and components | Add experiment documents/handles/indexes and `db/experiment-repository.ts`; reuse `withMongoTransaction`. Atomically create a v2 booklet/run; do not create v2 artifacts until S3. |
+| Contract and examples | `queued → running`; Pause prevents new claims, permits an authorized late result; Resume reads stored unfinished work. A prepared operation claims once and atomically reserves logical/payable counters. A repeated claim returns no permission. Unknown outcomes remain stored, not requeued. |
+| Ordered edits | Add additive collections/indexes; implement run creation/read, CAS controls, operation preparation/claim/identity recording and terminal persistence. Filter v2 booklets from legacy parsers. Keep the old artifact index intact until exact-target reset; no startup index drop. |
+| Verification | Isolated replica-set tests without seeded agents: creation rollback, concurrent claims, duplicate keys, pause-in-flight, stale revisions, limits, identity conflicts and restart reads. Run typecheck/lint and affected legacy repository tests. |
+| Completion and escalation | Local storage proof only. No dispatch/bootstrap/routes yet; no live app writes. Escalate incompatible indexes, unknown provider outcomes or changes to paid scope. |
+
+| Field | S3: atomic narrative materialization and tester provenance |
+| --- | --- |
+| Goal and components | Extend the experiment repository with a narrowly scoped narrative materializer and an `experiment_delegations` collection. Reuse normal artifacts, immutable versions, dependencies, approvals and messages. |
+| Contract and examples | J01 proposals have no upstream source; J02 requires the current approved J01 version. Capture target/source versions at preparation and reject changed sources at completion. Proposal, version, warnings and terminal operation commit together. Tester decisions are explicit approval, scoped delegation replacement/revocation, answer or revision. The application assigns decision/delegation/version IDs; manager/judge results never approve. |
+| Ordered edits | Define strict tester decision and question payloads; add additive provenance fields/partial indexes; capture narrative source identity; implement atomic version writes, current-version approvals and latest-grant validation. A revised J01 marks only J02 for review. Persist each accepted version separately, including grouped approvals. No image/page materialization in this slice. |
+| Verification | Isolated Mongo tests for J01/J02 dependencies, current/source mismatch, duplicate callbacks, approval provenance, grouped review, grant narrowing/revocation, revision ceilings, question matching and warning-bearing delegated progress. Verify no local agent registry is required. |
+| Completion and escalation | Local narrative storage proof, not a Dify/staging acceptance run. Do not interpret opaque payloads as approvals. Escalate a creative contract change; leave paid and deployment prerequisites pending. |
+
+| Field | S4a: saved context and narrative routing |
+| --- | --- |
+| Goal and components | Add a small `lib/experiment-runner/context.ts` service and focused Mongo tests. Read the experiment repository and normal artifact/version/approval/message rows; do not write or dispatch. |
+| Contract and examples | Return saved run progress and J01/J02 artifacts with warnings and exact source versions. A manager can inspect eligibility and pending creator decisions. A tester sees creator-facing content and current decisions, not configuration credentials or mutation authority. Specialists receive the fixed brief, their current target, exact approved inputs, saved relevant question/answer pairs and a matching revision instruction. Clarification can suspend that revision; the exact answer restores it without another revision debit. |
+| Ordered edits | Build canonical saved projections; identify pending question/revision, current approval and the next narrative task. Do not route while paused, blocked or active; J03 is an explicit slice boundary, not booklet completion. Verify owned operation/run identities for role context. |
+| Verification | Focused read-only context tests after grant, proposal, approval, revision, Pause and unknown outcome. Check that credentials/configuration snapshots do not enter tester or specialist context. |
+| Completion and escalation | Local read projections only. Do not claim deployed simulation or provider readiness. Escalate missing persisted input or an ambiguous role contract. |
+
+| Field | S4b: deterministic narrative fixtures |
+| --- | --- |
+| Goal and components | Add `lib/experiment-runner/fixtures.ts` and focused tests for all three fixed persona cases. These pure fixtures supplement local contract tests and become inputs to explicit Dify simulation branches; they do not replace deployed-flow proof. |
+| Contract and examples | Manager routes an eligible J01/J02 task. Kid and Parent record scoped J01/J02 delegation; Creator reviews exact current versions. Specialists produce complete Concept Brief and Story Outline content from the fixed case. Questions receive deterministic answers and revisions use the current target rather than recreating unrelated content. |
+| Ordered edits | Define canonical case fixtures and role result selection from saved role context. Validate every result with the owning role/content schema. Reject unsupported tasks, modes and slice completion rather than inventing progress. No provider SDK or transport. |
+| Verification | Unit tests for all personas, complete required fields, different involvement defaults, exact pending-question answer, revisions and role separation. |
+| Completion and escalation | Supplemental local fixtures only. Do not claim Dify execution, approvals or storage from a pure function result. |
+
+S4c adds runner routes,
+bounded dispatch, independently published model-free Dify modules and the small UI.
+Finalize those packages before their dependent edits. New module application keys,
+callback bindings, exact reset targets and runner release authority are a
+consolidated private/operator checkpoint before staging acceptance, not a blocker
+for S1/S2 or isolated local S3 tests. Local tests do not mark M1 complete.
+
+### Local foundation evidence
+
+S1–S4b now have source and focused tests. On 2026-10-04, the combined local
+candidate passed typecheck and lint in a clean detached verification checkout,
+66 tests across ten focused/legacy files, twelve deterministic agent fixtures,
+thirteen CI selector tests, local documentation links and whitespace checks.
+The normal worktree's stale `.next` files and nested `output` worktrees were not
+changed to obtain that result. The Mongo test process required forced shutdown
+after reporting passing tests; the test command returned zero.
+
+All three local persona cases save accepted J01/J02 versions, exact tester
+provenance and parent/child operation identities, and read them after repository
+reconstruction. Their payable counters remain zero. These tests use local
+transport fixtures, not the deployed Dify interfaces. The run remains `queued`
+at the J03 slice boundary, not `completed`.
+
+The Creator regression also revises J01, approves only its new draft, refreshes
+J02 against that approved version and approves J02. Previous versions and
+approval records remain saved; a stale downstream version is not grouped into
+the revised J01 review.
+Its refreshed content uses the newly approved Concept Brief's title, premise,
+tone, theme, emotional promise and constraints while retaining the Outline's
+unrelated cast, locations, story arc and open decisions.
+
+Current pending work is S4c: runner availability/configuration, dispatch and
+callbacks, the small UI, independent Dify simulation modules, and staging
+acceptance. New private suite keys and exact-target reset authorization remain
+handoffs. Runner PR merge, staging release and UI browser verification are now
+authorized as recorded in [EXECUTION](EXECUTION.md#b-authorization-register).
+Production, paid calls and existing Dify-resource changes remain excluded.
 
 ## Entry and manual setup
 

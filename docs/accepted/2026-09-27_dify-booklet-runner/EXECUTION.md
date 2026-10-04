@@ -113,8 +113,9 @@ and scope before marking a row granted.
 
 | Grant | Exact bounded scope | Current state |
 | --- | --- | --- |
-| Repository/release | Community probe setup only: reviewed master setup, dispatcher synchronization, an isolated staging-based delivery branch, merge after CI, staging Deploy and Check deployment; preserve Cloud trial | Granted by the operator on 2026-10-03. This does not authorize later runner releases, production changes, resets, or paid calls. Main implementation ownership stays on the issue branch. |
-| Browser control | Dify administration and Booklet staging verification in the current chat only | Only read-only Dify capacity/New Agent inspection granted in this chat; edits and Booklet browser verification remain ungranted |
+| Repository/release | Reviewed issue #65 runner PRs may merge after required CI and deploy through the existing staging release process; preserve Cloud and production | Runner scope granted by the operator on 2026-10-04 in this chat. Resets, paid calls, credential entry and existing Dify-resource changes are excluded. Main implementation ownership stays on the issue branch. |
+| Staging delivery exception | Reuse `agent/issue-65-community-probe-staging` to selectively carry reviewed runner commits; preserve Cloud and require release review/CI | Granted on 2026-10-04. Implementation and corrections stay on the main issue branch; this delivery branch does not authorize unrelated imports or changes. |
+| Browser control | Read-only Dify capacity/New Agent inspection and issue #65 runner UI verification in this chat | Runner UI verification granted on 2026-10-04. Dify edits and credential entry remain private or require separate authorization |
 | Dify writes | Create, edit, test without provider calls, publish and restore new `issue65-` probe/suite resources; existing Booklet Dify resources, credentials and workspace plan unchanged | Granted by the operator in this chat on 2026-09-27 |
 | Private setup | Login for the interface that fails; provision required suite execution keys and callback bindings privately; any direct-provider secret stays inside Dify | CLI and MCP inventory authenticated; new-suite bindings remain unverified |
 | Reset | Exact local database and resolved asset directory; exact staging database `kids_booklet` and full asset bucket after inventory/backup | Not granted for concrete targets |
@@ -188,9 +189,9 @@ as well as the caller configuration; drain before their synchronization. See
 
 | Dependency | Required proof/handoff | Blocks |
 | --- | --- | --- |
-| Modular capacity/invocation | Separate invocation and explicit lineage transport passed; full-suite capacity and Booklet lineage persistence pending | Full-suite packaging and M1 persistence |
+| Modular capacity/invocation | Separate invocation and explicit lineage transport passed. Community app-quota behavior and installed-host preflight checked on 2026-10-04; see M0. Actual suite bindings, workload measurements and Booklet lineage persistence remain pending | Full-workload readiness and dependent M1 integration; not independent local or deterministic slices |
 | Publication/sync/restoration | Deterministic cycle and binding restoration passed in M0; verify each later candidate | Publication of later suite configurations |
-| Runtime credentials/callbacks | Diagnostic Booklet round trip and runtime lookup passed on 2026-10-03; interrupted-response recovery and full-runner bindings pending | Dependent runner integration and uncertain-outcome recovery |
+| Runtime credentials/callbacks | Diagnostic round trip/runtime lookup passed on 2026-10-03; callback-based interrupted-response recovery passed on 2026-10-04; full-runner bindings and no-ID recovery remain unresolved | Dependent runner integration; unknown outcomes without retained IDs |
 | Image transport/accounting | Reference inputs, output transfer, retries and reservations | Real image execution; fixture transfer also precedes simulated image work |
 | GitHub/staging delivery | Checks/reviews, merge/deploy access and compatible release path | Unattended release |
 | Reset | Exact-target inventory, backup/summary and authorization | Clean-baseline transition |
