@@ -28,4 +28,18 @@ describe("booklet runner configuration", () => {
     expect(JSON.stringify(snapshot)).not.toContain("private-");
     expect(JSON.stringify(snapshot)).not.toContain("persona");
   });
+  it("accepts exactly eleven distinct narrative bindings and rejects partial profiles", () => {
+    const later = ["J03", "J04", "J05", "J06", "J07"].map((taskId, index) => ({
+      role: "specialist", taskId, persona: null, appId: ids[index + 6],
+      publishedWorkflowId: ids[index + 11], toolProviderId: null, apiKey: `later-${index}`,
+    }));
+    const expanded = [...bindings, ...later];
+    const state = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(expanded) });
+    if (!state.enabled) throw new Error("Expected eleven-slot profile");
+    expect(configurationForPersona(state.config, "playful_kid")).toHaveLength(9);
+    expect(bindingFor(state.config, { role: "specialist", taskId: "J07", persona: "playful_kid" }).apiKey).toBe("later-4");
+    for (const bad of [expanded.slice(0, 10), [...expanded.slice(0, 10), later[0]], expanded.map((item, index) => index === 10 ? { ...item, appId: expanded[0].appId } : item)]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
+    }
+  });
 });
