@@ -82,8 +82,11 @@ original bytes, and claims a 60-second completion lease before using AssetStore.
 It reads stored bytes back before atomically saving the normal asset and operation
 result. Same-byte recovery preserves request counters; conflicting bytes or stale
 sources cannot replace a saved result. Missing or corrupt stored bytes remain a
-technical blocker even after database completion. This foundation is local only:
-image routes, Dify binary transfer and automatic image dispatch remain unverified.
+technical blocker even after database completion. The local image callback routes
+use the normal authorization claim and return the saved image request context.
+The authenticated fixture GET does not reserve again; binary POST validates and
+saves original bytes. The proxy transport limit has headroom above the handler's
+20 MiB limit. Dify binary transfer and automatic image dispatch remain unverified.
 Filesystem AssetStore publishes complete temporary-file bytes through an atomic
 no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;
@@ -105,7 +108,7 @@ checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
 `lib/experiment-runner/` supplies strict six- or eleven-module configuration, browser
-run APIs, four exact machine callbacks, a sequential dispatcher and bounded
+run APIs, six exact machine callback routes, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits
 GET-only recovery; unknown work without an ID blocks instead of replaying.
