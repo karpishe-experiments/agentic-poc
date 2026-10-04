@@ -1,6 +1,6 @@
 # M1 — Durable runner, Concept Brief and Outline
 
-**State:** Local foundation in progress; staging bindings/release/reset remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
+**State:** Disabled runner deployed and six modules published; private bindings, reset and live acceptance remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
 **Predecessor:** [M0](M0-readiness.md). Follow [EXECUTION](EXECUTION.md) at entry,
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
@@ -117,8 +117,8 @@ Its refreshed content uses the newly approved Concept Brief's title, premise,
 tone, theme, emotional promise and constraints while retaining the Outline's
 unrelated cast, locations, story arc and open decisions.
 
-The S4c application and module candidates follow below. Live bindings, module
-publication, runner release and staging acceptance remain pending.
+The S4c application and module evidence follows below. Live bindings, runner
+enablement and staging acceptance remain pending.
 New private suite keys and exact-target reset authorization remain
 handoffs. Runner PR merge, staging release and UI browser verification are now
 authorized as recorded in [EXECUTION](EXECUTION.md#b-authorization-register).
@@ -133,7 +133,8 @@ module graphs are prepared by
 Use `--help` for the six exact names and `--graph` for offline validation.
 The source fixture is [dify/m1-simulation.py](dify/m1-simulation.py). Python and
 TypeScript fixture parity tests cover all personas, questions and revisions.
-These are candidate configurations, not published or live-accepted modules.
+The six model-free modules are now published as recorded below. They are not
+live-accepted; private bindings and runner enablement remain pending.
 
 The current Community MCP still verifies the intended workspace. Its current
 code/HTTP defaults and the pinned 1.17.1
@@ -148,10 +149,10 @@ and nullable tool-provider identifiers. Set `DIFY_BOOKLET_BASE_URL` to the
 Community origin and `DIFY_BOOKLET_PUBLIC_ORIGIN` to the exact Booklet origin.
 Do not reuse diagnostic or Cloud keys. Keep `DIFY_BOOKLET_RUNNER_ENABLED=false`
 until setup, release verification and exact-target reset approval are complete.
-The S4d candidate below adds protected runner settings. Required Linux CI and
-host synchronization remain pending; local tests do not prove that the live
-dispatcher accepts them. Verify that path before asking the operator to install
-the new keys or enable the runner.
+The S4d change below adds protected runner settings and passed required Linux CI.
+Host synchronization remains pending; repository tests do not prove that the
+live dispatcher accepts them. Verify that path before asking the operator to
+install the new keys or enable the runner.
 
 With valid local/staging bindings, enabled initialization verifies experiment
 references without local-agent seeds or a host provider key. It retains seed
@@ -165,6 +166,48 @@ result, but block progress if that identity cannot be verified.
 
 This checkpoint remains pending: new private bindings and exact reset targets
 are not supplied by application code, offline validation or the release grant.
+
+### Staging and module readiness — 2026-10-04
+
+S4c and its narrow server-build correction reached staging through PRs #88/#90.
+Release `ed4927da72c313ff5a06ef2ba7661917ab81f2f9` passed
+[Deploy 37203706818](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37203706818)
+and [Check deployment 37204107325](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37204107325).
+The image digest is `sha256:4edd1ad1e9bf8aded0428211dcc440ff427597d92dc1300b45ab3e494f676d8c`.
+Cloud and the Community diagnostic probe were preserved. The runner remains off;
+this is deployment readiness, not M1 acceptance. Browser verification could not
+start because the browser plugin could not load its request-header policy.
+
+S4d source `12eeb3da7926bc91ec79dc226ee0303726138017` merged through PR #91.
+[Validate 37204097124](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37204097124)
+passed, including both complete Linux shell suites, ShellCheck, Actionlint,
+typecheck, lint and selected deployment contracts. Two consecutive independent
+reviews passed. Live dispatcher synchronization and private settings installation
+are separate pending checkpoints; no rotation or runner enablement was performed.
+
+Community MCP reverified workspace `ffac910f-2786-490e-90d8-07243d49741b`.
+The seven retained apps stayed unchanged. Each new graph has only start, code,
+HTTP, conditional and end nodes, with controllable retries off. Server-backed
+validation returned zero errors/warnings. Imported node data matched the reviewed
+candidate; published graph hashes matched their drafts on read-back.
+
+| Module | App ID | Initial published workflow ID |
+| --- | --- | --- |
+| Manager | `eca554a2-34bd-489c-b05d-713a6876b448` | `2d8acbea-3144-426e-83aa-d813a0e60e55` |
+| Concept J01 | `7c186b42-a069-4059-aac6-5589e870951f` | `07755e8f-539d-4e04-ab6e-36035b803c93` |
+| Outline J02 | `4b49ed43-218d-4892-981f-acfe7181c60c` | `1ef3c7da-f548-484c-8412-af547b921ab8` |
+| Playful Kid tester | `973d697b-68dd-4b05-bd57-ededfa383a14` | `ed453cd6-a238-4b46-b033-fbae89c09a3f` |
+| Enthusiast Parent tester | `33d47b5c-77c0-4ab5-86d0-6ee7da8fca1d` | `0fdbbd4d-cd82-41aa-b553-7e4008e80987` |
+| Professional Creator tester | `99e1740f-52f2-467e-9553-81104564c3ae` | `8d91ea44-6669-4e8d-a3d0-0c598d5ace18` |
+
+These modules use direct application-key invocation, not Workflow Tools; their
+tool-provider identifiers are null. No workflow was executed. Secret masks do
+not prove callback-key binding. Private binding requires another publication;
+read back the resulting workflow IDs before installing Booklet settings.
+The next operator handoff is one dedicated callback key in all six new modules,
+six private application keys, and exact-target reset approval after inventory.
+Do not use diagnostic or Cloud keys, run a test, reset data or enable the runner
+as part of credential preparation.
 
 ## Entry and manual setup
 
