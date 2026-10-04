@@ -79,17 +79,47 @@ occurred in S1.
 
 ## Schema and dependency work
 
+S2 starts with one shared source resolver in
+`lib/experiment-runner/narrative-tasks.ts`. It defines J01–J07's ordered direct
+dependencies and accepts only current approved versions. Preparation, completion,
+approval and specialist context reuse it. For this first increment, runtime task
+admission remains J01/J02; declaring the later graph does not enable dispatch.
+J03/J04 capture both approved Concept and Outline versions, including the Concept
+source required by Ali's guidelines. J05 captures all four narrative sources;
+J06 captures J02/J03/J05 and J07 captures J02/J04/J05, preserving the Outline
+input required by Ali's final-list guidelines. Sibling source order in database
+results does not change the canonical dependency order.
+
+Verify this increment with `tests/unit/experiment-runner-narrative-tasks.test.ts`
+and the existing narrative/context integration tests, plus typecheck and lint.
+Missing, draft, stale-review or ambiguous duplicate sources return no eligible
+source set. Two clean reviews precede publication. Later S2 work adds durable
+subject IDs, manuscript/final-list contracts and their normal persistence paths;
+those remain pending, as do live bindings. No settings, Dify publication,
+provider call or staging release is needed for this resolver increment.
+
+Resolver verification on 2026-10-04: the exact five source/test inputs in a clean
+checkout at `9353940` passed typecheck, full lint, 33 focused tests across the new
+source-map unit suite and existing narrative/context integration suites
+(`--bail=1 --retry=0`), and twelve agent fixtures. An earlier attempt failed before
+test collection when the local Mongo test process exceeded its startup timeout;
+an independent startup check succeeded before the final run. Local checks do not
+prove J03–J07 persistence or live dispatch. The latest browser run
+`4442cb62-1871-46cc-8ff0-e0d3edab941c` still proves only the deployed J01/J02
+slice: saved Pause/Resume, unchanged Concept version, exact Outline source,
+reload persistence, five logical text calls and zero payable calls/images.
+
 Extend the M1 task-schema map and ArtifactService, not the old Visual Bible gate.
 Read Ali's pinned task guidelines 03–10 in full before writing prompts/fixtures.
 Keep the source commit and explicit PRD adaptations in each prompt's provenance.
 
 | Task | Required canonical content | Exact approved sources |
 | --- | --- | --- |
-| J03 | Character IDs/names, narrative role, known facts, open questions | J02 |
-| J04 | Location IDs/names, narrative purpose, likely scenes, known facts/open questions | J02 |
+| J03 | Character IDs/names, narrative role, known facts, open questions | J01, J02 |
+| J04 | Location IDs/names, narrative purpose, likely scenes, known facts/open questions | J01, J02 |
 | J05 | Ordered narrative units with prose, action, narration/dialogue and character/location IDs; expansion notes | J01, J02, both J03/J04 |
-| J06 | Final character IDs, stable physical facts, recurrence, attire/accessories, expressions, sheet requirement | J05 and J03 |
-| J07 | Final location IDs, anchors/features, continuity and sheet requirement | J05 and J04 |
+| J06 | Final character IDs, stable physical facts, recurrence, attire/accessories, expressions, sheet requirement | J02, J03, J05 |
+| J07 | Final location IDs, anchors/features, continuity and sheet requirement | J02, J04, J05 |
 | J08 | Style definition, typography/bubbles, exact shared module plus hash, two sample build/asset records | J01/J05 and both J06/J07 |
 | J09 | One artifact per recurring character; view/expression requirements, assembled prompt, source IDs, build and asset record | That J06 subject and accepted J08 |
 | J10 | One artifact per final location; anchors/view requirements, prompt/source/build/asset record | That J07 subject and accepted J08 |

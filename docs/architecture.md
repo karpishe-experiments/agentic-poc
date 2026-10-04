@@ -54,6 +54,12 @@ accepts an exact version; manager and judge results cannot approve it. Revisions
 retain history and mark dependent current work for review. Preferred-length
 warnings do not reject valid content.
 
+Narrative source checks share `lib/experiment-runner/narrative-tasks.ts` across
+preparation, completion, approval and specialist context. Its ordered J01–J07
+graph requires both draft lists before manuscript work. Only current approved,
+unambiguous source versions are eligible. Runtime admission still covers
+J01/J02; the later graph is preparation for M2, not live task support.
+
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
 instruction. The matching tester answer restores that revision without another
