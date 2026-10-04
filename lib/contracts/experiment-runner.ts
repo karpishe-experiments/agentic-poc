@@ -69,6 +69,46 @@ export type ConceptBriefContent = z.infer<typeof conceptBriefSchema>;
 export type StoryOutlineContent = z.infer<typeof storyOutlineSchema>;
 export type NarrativeContent = ConceptBriefContent | StoryOutlineContent;
 export type NarrativeWarning = { field: string; message: string };
+const characterEntryKey = z.enum(["character_1", "character_2"]);
+const locationEntryKey = z.enum(["location_1", "location_2"]);
+
+export const draftCharacterListSchema = z.object({
+  schemaVersion: contentVersion,
+  title,
+  characters: z.array(z.object({
+    entryKey: characterEntryKey,
+    nameOrRole: text,
+    narrativeFunction: text,
+    role: z.enum(["main", "supporting", "incidental"]),
+    knownRelationship: text,
+    knownFacts: textList,
+    openQuestions: textList,
+  })).length(2).refine((entries) => new Set(entries.map((entry) => entry.entryKey)).size === entries.length, "Character entry keys must be unique."),
+  castNotes: textList,
+  representationAndSafety: textList,
+  manuscriptQuestions: textList,
+  approvalQuestions: textList,
+});
+
+export const draftLocationListSchema = z.object({
+  schemaVersion: contentVersion,
+  title,
+  locations: z.array(z.object({
+    entryKey: locationEntryKey,
+    title,
+    storyPurpose: text,
+    knownFacts: textList,
+    likelyScenes: textList,
+    openQuestions: textList,
+  })).min(1).max(2).refine((entries) => new Set(entries.map((entry) => entry.entryKey)).size === entries.length, "Location entry keys must be unique."),
+  worldAndSafetyNotes: textList,
+  manuscriptQuestions: textList,
+  approvalQuestions: textList,
+});
+
+export type DraftCharacterListContent = z.infer<typeof draftCharacterListSchema>;
+export type DraftLocationListContent = z.infer<typeof draftLocationListSchema>;
+export const MAX_DRAFT_LIST_CONTENT_BYTES = 512 * 1024;
 // Leave room in a Mongo document for version metadata, dependencies and provenance.
 export const MAX_NARRATIVE_CONTENT_BYTES = 2 * 1024 * 1024;
 
@@ -94,6 +134,20 @@ export function parseNarrativeProposal(task: "J01" | "J02", content: unknown): {
   const parsed = task === "J01" ? conceptBriefSchema.parse(content) : storyOutlineSchema.parse(content);
   if (new TextEncoder().encode(JSON.stringify(parsed)).byteLength > MAX_NARRATIVE_CONTENT_BYTES) {
     throw new Error("Narrative content exceeds the 2 MiB storage limit. Shorten the proposal before submitting it.");
+  }
+  return { content: parsed, warnings: collectWarnings(parsed) };
+}
+
+export function parseDraftListProposal(task: "J03", persona: Persona, content: unknown): { content: DraftCharacterListContent; warnings: NarrativeWarning[] };
+export function parseDraftListProposal(task: "J04", persona: Persona, content: unknown): { content: DraftLocationListContent; warnings: NarrativeWarning[] };
+export function parseDraftListProposal(task: "J03" | "J04", persona: Persona, content: unknown): { content: DraftCharacterListContent | DraftLocationListContent; warnings: NarrativeWarning[] };
+export function parseDraftListProposal(task: "J03" | "J04", persona: Persona, content: unknown): { content: DraftCharacterListContent | DraftLocationListContent; warnings: NarrativeWarning[] } {
+  const parsed = task === "J03" ? draftCharacterListSchema.parse(content) : draftLocationListSchema.parse(content);
+  if (task === "J04" && "locations" in parsed && parsed.locations.length !== (persona === "professional_creator" ? 2 : 1)) {
+    throw new Error(`J04 requires ${persona === "professional_creator" ? 2 : 1} locations for ${persona}.`);
+  }
+  if (new TextEncoder().encode(JSON.stringify(parsed)).byteLength > MAX_DRAFT_LIST_CONTENT_BYTES) {
+    throw new Error("Draft list content exceeds the 512 KiB storage limit. Shorten the proposal before submitting it.");
   }
   return { content: parsed, warnings: collectWarnings(parsed) };
 }

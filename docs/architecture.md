@@ -85,10 +85,12 @@ not completion. The legacy home and agent navigation remain when disabled.
 The six M1 Community bindings and all three live Simulated J01/J02 cases are
 verified; [M1 evidence](accepted/2026-09-27_dify-booklet-runner/M1-runner.md)
 records their release and run identifiers. Reload and idle Pause/Resume preserve
-saved results without duplicate execution. The candidate UI recovers a definite
+saved results without duplicate execution. The deployed UI recovers a definite
 control revision conflict with a current-state read and at most one control retry;
-it does not retry an uncertain write. Active-progress verification of this
-correction remains pending. Production, Cloud and the diagnostic probe are unchanged.
+it does not retry an uncertain write. Live active-operation Pause persisted after
+reload and Resume did not duplicate work. Rapid progression can exhaust the
+single retry and require another Pause click. Production, Cloud and the diagnostic
+probe are unchanged.
 
 Every legacy-profile booklet has eight ordered artifact records:
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CASES, conceptBriefSchema, storyOutlineSchema } from "@/lib/contracts/experiment-runner";
-import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
+import { simulateDraftListResult, simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 
 type Context = Parameters<typeof simulateNarrativeResult>[0];
 const asContext = (value: unknown) => value as Context;
@@ -90,5 +90,83 @@ describe("simulated narrative fixtures", () => {
     expect(content.deferredDecisions).toContain("Approved concept constraint: Keep the repair grounded.");
     expect(content.deferredDecisions).toContain("Keep a creator choice open.");
     expect(content.deferredDecisions).not.toContain("Approved concept constraint: Keep the named cast and locations consistent.");
+  });
+});
+
+describe("local draft-list fixtures", () => {
+  function sources(persona: keyof typeof CASES) {
+    const concept = simulateNarrativeResult(specialist(persona, "J01"), "simulated");
+    const outline = simulateNarrativeResult(specialist(persona, "J02"), "simulated");
+    if (concept.kind !== "proposal" || outline.kind !== "proposal") throw new Error("Expected source proposals.");
+    return { mode: "simulated" as const, persona, brief: CASES[persona].brief, approvedConcept: concept.payload.content, approvedOutline: outline.payload.content };
+  }
+
+  for (const persona of Object.keys(CASES) as (keyof typeof CASES)[]) {
+    it(`derives fixed J03/J04 rows from approved ${persona} outline`, () => {
+      const input = sources(persona);
+      const outline = storyOutlineSchema.parse(input.approvedOutline);
+      const cast = simulateDraftListResult("J03", input);
+      const places = simulateDraftListResult("J04", input);
+      expect(cast.kind).toBe("proposal");
+      expect(places.kind).toBe("proposal");
+      if (cast.kind !== "proposal" || places.kind !== "proposal") return;
+      expect(cast.content.characters.map((item) => item.entryKey)).toEqual(["character_1", "character_2"]);
+      expect(cast.content.characters.map((item) => item.nameOrRole)).toEqual(outline.characters.map((item) => item.nameOrRole));
+      expect(cast.content.characters.map((item) => item.narrativeFunction)).toEqual(outline.characters.map((item) => item.narrativeRole));
+      expect(places.content.locations.map((item) => item.title)).toEqual(outline.locations.map((item) => item.name));
+      expect(places.content.locations).toHaveLength(persona === "professional_creator" ? 2 : 1);
+      expect(JSON.stringify([cast.content, places.content])).not.toMatch(/clothing|camera|physicalFeatures/);
+    });
+  }
+
+  it("clarifies one unanswered material question and does not repeat its saved answer", () => {
+    const input = sources("playful_kid");
+    const question = "Should the robot speak?";
+    expect(simulateDraftListResult("J03", { ...input, materialQuestion: question })).toEqual({ kind: "clarification", question });
+    const answered = simulateDraftListResult("J03", { ...input, materialQuestion: question, answers: [{ question, answer: "Only a beep." }] });
+    expect(answered.kind).toBe("proposal");
+    if (answered.kind === "proposal") expect(answered.content.castNotes).toContain(`${question}: Only a beep.`);
+  });
+
+  it("preserves renamed entries and symbolic keys while applying scoped revision notes", () => {
+    const input = sources("professional_creator");
+    const cast = simulateDraftListResult("J03", input);
+    const places = simulateDraftListResult("J04", input);
+    if (cast.kind !== "proposal" || places.kind !== "proposal") throw new Error("Expected proposals.");
+    const currentCast = { ...cast.content, characters: [{ ...cast.content.characters[0], nameOrRole: "Mira", narrativeFunction: "Invites the friend to listen", knownRelationship: "Longtime astronomy club friends", knownFacts: ["Repairs equipment together"], openQuestions: ["What helps them reconcile?"] }, cast.content.characters[1]] };
+    const currentPlaces = { ...places.content, locations: [{ ...places.content.locations[0], title: "Hill observatory", storyPurpose: "Hosts the neighbors' first star party", knownFacts: ["A shared community meeting place"], likelyScenes: ["Welcoming the neighbors"], openQuestions: ["Who opens the star party?"] }, places.content.locations[1]] };
+    const revisedCast = simulateDraftListResult("J03", { ...input, currentContent: currentCast, revision: "Keep the reconciliation central." });
+    const revisedPlaces = simulateDraftListResult("J04", { ...input, currentContent: currentPlaces, revision: "Keep the workshop secondary." });
+    if (revisedCast.kind !== "proposal" || revisedPlaces.kind !== "proposal") throw new Error("Expected revised proposals.");
+    expect(revisedCast.content.characters[0]).toMatchObject({ entryKey: "character_1", nameOrRole: "Mira" });
+    expect(revisedPlaces.content.locations[0]).toMatchObject({ entryKey: "location_1", title: "Hill observatory" });
+    expect(revisedCast.content.characters).toEqual(currentCast.characters);
+    expect(revisedPlaces.content.locations).toEqual(currentPlaces.locations);
+    expect(revisedCast.content.castNotes).toContain("Revision request: Keep the reconciliation central.");
+    expect(revisedPlaces.content.worldAndSafetyNotes).toContain("Revision request: Keep the workshop secondary.");
+  });
+
+  it("rejects unsupported mode, mismatched brief, and invalid source counts", () => {
+    const input = sources("playful_kid");
+    expect(() => simulateDraftListResult("J03", { ...input, mode: "balanced" })).toThrow();
+    expect(() => simulateDraftListResult("J03", { ...input, brief: "Different story" })).toThrow();
+    const outline = storyOutlineSchema.parse(input.approvedOutline);
+    expect(() => simulateDraftListResult("J03", { ...input, approvedOutline: { ...outline, characters: outline.characters.slice(0, 1) } })).toThrow();
+    expect(() => simulateDraftListResult("J04", { ...input, approvedOutline: { ...outline, locations: [...outline.locations, outline.locations[0]] } })).toThrow();
+  });
+
+  it("retains a valid single location key and current entry order on notes-only revision", () => {
+    const input = sources("playful_kid");
+    const places = simulateDraftListResult("J04", input);
+    const cast = simulateDraftListResult("J03", input);
+    if (places.kind !== "proposal" || cast.kind !== "proposal") throw new Error("Expected proposals.");
+    const currentPlaces = { ...places.content, locations: [{ ...places.content.locations[0], entryKey: "location_2", title: "Renamed park", storyPurpose: "Retained purpose", knownFacts: ["Existing narrative fact"], openQuestions: ["Existing question"] }] };
+    const revised = simulateDraftListResult("J04", { ...input, currentContent: currentPlaces, revision: "Keep the safety note concise." });
+    if (revised.kind !== "proposal") throw new Error("Expected proposal.");
+    expect(revised.content.locations).toEqual(currentPlaces.locations);
+    const currentCast = { ...cast.content, characters: [...cast.content.characters].reverse() };
+    const revisedCast = simulateDraftListResult("J03", { ...input, currentContent: currentCast, revision: "Keep the safety note concise." });
+    if (revisedCast.kind !== "proposal") throw new Error("Expected proposal.");
+    expect(revisedCast.content.characters).toEqual(currentCast.characters);
   });
 });
