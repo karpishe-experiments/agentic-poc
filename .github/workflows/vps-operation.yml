@@ -6,6 +6,7 @@ on:
       action: {type: string, required: true}
       backup_id: {type: string, default: ''}
       confirmation: {type: string, default: ''}
+      apply: {type: boolean, default: true}
 permissions: {contents: read}
 defaults: {run: {shell: bash}}
 jobs:
@@ -52,13 +53,14 @@ jobs:
           OPERATION: ${{ inputs.action }}
           BACKUP: ${{ inputs.backup_id }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          APPLY: ${{ inputs.apply }}
           VPS_HOST: ${{ vars.VPS_HOST }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           args=(--action "$OPERATION" --environment "$TARGET" --vps-host "$VPS_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
-          if [[ "$OPERATION" != check ]]; then args+=(--apply); fi
+          if [[ "$OPERATION" != check && "$APPLY" == true ]]; then args+=(--apply); fi
           if [[ -n "$BACKUP" ]]; then args+=(--backup-id "$BACKUP"); fi
           if [[ -n "$CONFIRMATION" ]]; then args+=(--confirmation "$CONFIRMATION"); fi
           bash scripts/deploy/vps-deployment.sh "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/vps-operation-output.txt"

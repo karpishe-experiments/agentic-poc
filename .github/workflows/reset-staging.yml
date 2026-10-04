@@ -3,10 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       confirmation: {description: Type kids_booklet, required: true}
+      apply: {description: Reset and activate prepared runner settings, type: boolean, default: false}
 permissions: {contents: read}
 concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
   reset:
     uses: ./.github/workflows/vps-operation.yml
-    with: {environment: staging, action: reset-staging, confirmation: '${{ inputs.confirmation }}'}
+    with: {environment: staging, action: reset-staging, confirmation: '${{ inputs.confirmation }}', apply: '${{ inputs.apply }}'}
     secrets: inherit
