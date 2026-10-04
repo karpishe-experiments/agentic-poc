@@ -4,6 +4,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Preserve subject identity independently of names and array order
+
+- **Context:** Draft cast/location lists become manuscript sources and final lists.
+- **Observation:** A cast rename and reordered proposal retain Booklet-owned IDs
+  when versions match entries by stable `entryKey`. Rebuilding the manuscript
+  retains unit IDs by `unitKey`; dependency edges invalidate the final lists
+  without changing the unrelated location draft.
+- **Guidance:** Assign IDs during transactional materialization, not in model
+  proposals. Match stable keys, validate references against current approved
+  sources, and preserve earlier versions instead of replacing evidence.
+- **Evidence:** [M2 narrative tests](../../../tests/integration/experiment-runner-m2-narrative.test.ts).
+- **Promotion target:** Persistence and artifact-contract documentation. This is
+  local fixture proof; live M2 execution remains a separate checkpoint.
+
 ### Validate HTTP body fields against a live callback
 
 - **Context:** Generated HTTP nodes in Dify Community 1.17.1.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CASES, conceptBriefSchema, storyOutlineSchema } from "@/lib/contracts/experiment-runner";
+import { CASES, conceptBriefSchema, finalCharacterListSchema, finalLocationListSchema, manuscriptSchema, storyOutlineSchema } from "@/lib/contracts/experiment-runner";
 import { simulateDraftListResult, simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 
 type Context = Parameters<typeof simulateNarrativeResult>[0];
@@ -56,9 +56,9 @@ describe("simulated narrative fixtures", () => {
   it("rejects mode, role, and route boundaries", () => {
     expect(() => simulateNarrativeResult(specialist("playful_kid", "J01"), "balanced")).toThrow();
     expect(() => simulateNarrativeResult(asContext({ role: "judge" }), "simulated")).toThrow();
-    expect(() => simulateNarrativeResult(asContext({ role: "manager", eligibleRoute: "J03", run: { nextNarrativeTask: "J03", bookletId: "book-1" } }), "simulated")).toThrow();
+    expect(simulateNarrativeResult(asContext({ role: "manager", eligibleRoute: "J03", run: { nextNarrativeTask: "J03", bookletId: bookId } }), "simulated")).toMatchObject({ payload: { taskId: "J03" } });
     expect(simulateNarrativeResult(asContext({ role: "manager", eligibleRoute: "J01", run: { nextNarrativeTask: null, bookletId: bookId } }), "simulated")).toMatchObject({ payload: { taskId: "J01", subjectId: bookId } });
-    expect(() => simulateNarrativeResult(asContext({ ...specialist("playful_kid", "J01"), taskId: "J03" }), "simulated")).toThrow();
+    expect(() => simulateNarrativeResult(asContext({ ...specialist("playful_kid", "J01"), taskId: "J08" }), "simulated")).toThrow();
   });
 
   it("revises the current target while retaining unrelated fields and saved answers", () => {
@@ -168,5 +168,87 @@ describe("local draft-list fixtures", () => {
     const revisedCast = simulateDraftListResult("J03", { ...input, currentContent: currentCast, revision: "Keep the safety note concise." });
     if (revisedCast.kind !== "proposal") throw new Error("Expected proposal.");
     expect(revisedCast.content.characters).toEqual(currentCast.characters);
+  });
+});
+
+describe("simulated J03-J07 narrative path", () => {
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  function proposal(context: Context) {
+    const result = simulateNarrativeResult(context, "simulated");
+    if (result.kind !== "proposal") throw new Error("Expected proposal.");
+    return result.payload.content;
+  }
+  function chain(persona: keyof typeof CASES) {
+    const concept = proposal(specialist(persona, "J01"));
+    const outline = proposal(specialist(persona, "J02"));
+    const sources: { taskId: string; id: string; content: unknown }[] = [
+      { taskId: "J01", id: id(1), content: concept }, { taskId: "J02", id: id(2), content: outline },
+    ];
+    const run = (taskId: string, extra: Record<string, unknown> = {}) => proposal(asContext({
+      role: "specialist", taskId, persona, brief: CASES[persona].brief,
+      currentTarget: null, approvedSources: sources, matchingRevision: null, questionAnswers: [], ...extra,
+    }));
+    const cast = run("J03") as { characters: { entryKey: string }[] };
+    const places = run("J04") as { locations: { entryKey: string }[] };
+    sources.push({ taskId: "J03", id: id(3), content: { ...cast, characters: cast.characters.map((row, index) => ({ ...row, characterId: id(10 + index) })) } });
+    sources.push({ taskId: "J04", id: id(4), content: { ...places, locations: places.locations.map((row, index) => ({ ...row, locationId: id(20 + index) })) } });
+    const manuscript = manuscriptSchema.parse(run("J05"));
+    sources.push({ taskId: "J05", id: id(5), content: { ...manuscript, units: manuscript.units.map((unit, index) => ({ ...unit, unitId: id(30 + index) })) } });
+    return { run, sources, cast, places, manuscript };
+  }
+
+  for (const persona of Object.keys(CASES) as (keyof typeof CASES)[]) {
+    it(`produces source-linked complete story and final lists for ${persona}`, () => {
+      const { run, manuscript, sources } = chain(persona);
+      expect(manuscript.units.map((unit) => unit.unitKey)).toEqual(["beat_1", "beat_2", "beat_3", "beat_4", "beat_5"]);
+      expect(manuscript.units.every((unit) => unit.prose.length > 30 && unit.charactersPresent.length === 2 && unit.dialogue.length > 0)).toBe(true);
+      const finalCast = finalCharacterListSchema.parse(run("J06"));
+      const finalPlaces = finalLocationListSchema.parse(run("J07"));
+      expect(finalCast.characters.map((row) => row.characterId)).toEqual([id(10), id(11)]);
+      expect(finalCast.characters.every((row) => row.unitIds.length === 5 && row.recurrence === "recurring" && row.sheetRequired)).toBe(true);
+      expect(finalPlaces.locations.map((row) => row.locationId)).toEqual((sources[3].content as { locations: { locationId: string }[] }).locations.map((row) => row.locationId));
+      expect(finalPlaces.locations.every((row) => row.unitIds.length > 0 && row.sheetRequired)).toBe(true);
+      if (persona === "professional_creator") {
+        expect(manuscript.units.map((unit) => unit.locationId)).toEqual([id(20), id(20), id(20), id(21), id(20)]);
+        expect(finalPlaces.locations.find((row) => row.locationId === id(20))!.unitIds).toContain(id(34));
+        expect(finalPlaces.locations.find((row) => row.locationId === id(21))!.unitIds).not.toContain(id(34));
+      }
+    });
+  }
+
+  it("routes professional scenes by stable location keys after draft-list reordering", () => {
+    const { run, sources } = chain("professional_creator");
+    const places = sources[3].content as { locations: unknown[] };
+    sources[3].content = { ...places, locations: [...places.locations].reverse() };
+    const regenerated = manuscriptSchema.parse(run("J05"));
+    expect(regenerated.units.map((unit) => unit.locationId)).toEqual([id(20), id(20), id(20), id(21), id(20)]);
+  });
+
+  it("retains current units and profile facts on notes-only revisions", () => {
+    const { run, manuscript } = chain("professional_creator");
+    const custom = { ...manuscript, units: manuscript.units.map((unit, index) => ({ ...unit, unitId: id(30 + index), ...(index === 0 ? { prose: "A creator's complete opening scene." } : {}) })) };
+    const revised = manuscriptSchema.parse(run("J05", { currentTarget: { currentVersionId: id(50), versions: [{ id: id(50), content: custom }] }, matchingRevision: { instruction: "Keep the opening intimate." } }));
+    expect(revised.units.map((unit) => unit.unitKey)).toEqual(custom.units.map((unit) => unit.unitKey));
+    expect(revised.units[0].prose).toBe(custom.units[0].prose);
+    expect(revised.continuityNotes).toContain("Revision request: Keep the opening intimate.");
+    const final = finalCharacterListSchema.parse(run("J06"));
+    const changed = { ...final, characters: [{ ...final.characters[0], nameOrRole: "Mira", physicalDescription: "Short curly hair and a steady smile." }, final.characters[1]] };
+    const again = finalCharacterListSchema.parse(run("J06", { currentTarget: { currentVersionId: id(51), versions: [{ id: id(51), content: changed }] }, matchingRevision: { instruction: "Keep Mira's smile." } }));
+    expect(again.characters).toEqual(changed.characters);
+    expect(again.profileGuidance).toContain("Revision request: Keep Mira's smile.");
+  });
+
+  it("refreshes source-derived manuscript facts after upstream review", () => {
+    const { run, manuscript } = chain("playful_kid");
+    const stale = { ...manuscript, units: manuscript.units.map((unit) => ({ ...unit, prose: "Old story." })) };
+    const refreshed = manuscriptSchema.parse(run("J05", { currentTarget: { state: "needs_review", currentVersionId: id(60), versions: [{ id: id(60), content: stale }] } }));
+    expect(refreshed.units.map((unit) => unit.unitKey)).toEqual(stale.units.map((unit) => unit.unitKey));
+    expect(refreshed.units[0].prose).not.toBe("Old story.");
+  });
+
+  it("uses the tester's exact eligible grant scope and refuses absent sources", () => {
+    const result = simulateNarrativeResult(asContext({ role: "tester", bookletId: bookId, persona: "playful_kid", currentArtifacts: [], pendingDecision: null, activeDelegation: null, creatorMessages: [], eligibleTaskIds: ["J03", "J04"] }), "simulated");
+    expect(result).toMatchObject({ payload: { decision: { action: "delegate", taskIds: ["J03", "J04"] } } });
+    expect(() => proposal(asContext({ role: "specialist", taskId: "J05", persona: "playful_kid", brief: CASES.playful_kid.brief, approvedSources: [], currentTarget: null, matchingRevision: null, questionAnswers: [] }))).toThrow("approved J02");
   });
 });

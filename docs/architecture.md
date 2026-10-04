@@ -47,8 +47,9 @@ Experiment runs, single-operation claims and delegation grants use additive
 Mongo collections. Normal artifacts, immutable versions, dependencies, approvals
 and messages retain the created content and decision provenance.
 
-The implemented narrative slice covers J01 Concept Brief and J02 Story Outline.
-J02 captures the current approved J01 version. Completion atomically saves the
+The local narrative implementation covers J01–J07, through the final character
+and location lists. Live configuration remains restricted to M1's six bindings
+and J01/J02 boundary until M2 bindings are verified. Completion atomically saves the
 proposal and operation result. Explicit tester review or a current scoped grant
 accepts an exact version; manager and judge results cannot approve it. Revisions
 retain history and mark dependent current work for review. Preferred-length
@@ -57,8 +58,16 @@ warnings do not reject valid content.
 Narrative source checks share `lib/experiment-runner/narrative-tasks.ts` across
 preparation, completion, approval and specialist context. Its ordered J01–J07
 graph requires both draft lists before manuscript work. Only current approved,
-unambiguous source versions are eligible. Runtime admission still covers
-J01/J02; the later graph is preparation for M2, not live task support.
+unambiguous source versions are eligible. Saved configurations enable J03–J07
+only with all seven distinct specialist bindings; old snapshots retain J01/J02.
+Booklet adds stable character/location IDs by draft `entryKey` and manuscript
+unit IDs by `unitKey`. Final lists validate exact subject/occurrence references.
+Revisions invalidate current descendants through saved dependency edges, retain
+unrelated siblings, and preserve versions and approvals. Grouped approval uses
+dependency order; invalidated content needs a new proposal before acceptance.
+The content materializer uses the same completion transaction and collections,
+not a second subject registry or workflow service. Local M2 fixtures exercise
+all three cases through J07; actual Dify M2 execution remains unverified.
 
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and

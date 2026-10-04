@@ -1,6 +1,6 @@
 # M2 — Narrative completion and reference packages
 
-**State:** S1 local contracts and fixtures implemented. Live M2 remains pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** S1 and S2 local narrative implementation validated; independent S2 review in progress. Live M2 remains pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Entry gate
@@ -61,11 +61,12 @@ revision instruction and material question. It returns a typed draft proposal
 with warnings or one unanswered clarification. The owning runtime must prove
 approval/source identity before using these contents; this fixture does not
 perform database authorization. Revision instructions become scoped package
-notes in simulation, not evidence of real-model interpretation. The existing
-J01/J02 role-result whitelist and live execution remain unchanged.
+notes in simulation, not evidence of real-model interpretation. The S1 increment
+kept the J01/J02 role-result whitelist. S2 extends local role contracts through
+J07; live execution remains restricted to M1 until S3.
 Notes-only revisions retain complete existing entries, including their narrative
-functions, relationships and story purposes. Refresh after an upstream source
-change is separate S2 work; do not infer that behavior from this local fixture.
+functions, relationships and story purposes. S2 refreshes content from current
+approved sources after invalidation and retains saved IDs by their entry/unit keys.
 
 S1 verification on 2026-10-04: clean checkout at `b84227a` with the exact modified
 contracts/fixtures/tests passed typecheck, full lint, 27 focused tests across
@@ -79,11 +80,52 @@ occurred in S1.
 
 ## Schema and dependency work
 
-S2 starts with one shared source resolver in
+### S2 persistent narrative contract
+
+Extend the existing contracts, narrative materializer, repository, context,
+dispatcher types and local fixtures through J07. Keep the protected configuration
+reader restricted to the six M1 slots until S3. A saved run exposes J03–J07 only
+when its immutable configuration contains all five distinct specialist slots;
+partial or legacy snapshots keep the J02 boundary. Local integration fixtures
+use eleven dummy bindings, not live credentials or a second runner.
+
+Booklet adds `characterId`/`locationId` to accepted draft-entry content. It assigns
+each ID once, matches later versions by `entryKey`, and ignores proposal-supplied
+IDs. J05 proposes ordered `unitKey` entries with complete prose, action, narration,
+dialogue/speaker IDs, characters present and location ID. Booklet similarly adds
+`unitId`; units are not physical pages. Final lists reference these saved subject
+and unit IDs. They must cover exactly the approved manuscript's subjects and
+occurrences; unknown IDs or contradictory recurrence/sheet flags fail technical
+validation. Required character facts include background, life stage, physical
+description, acting/personality, attire, accessories and expressions. Locations
+include description, stable anchors, required features and continuity. All final
+locations require sheets; recurring characters require sheets. Artistic style
+and physical-page layout remain later responsibilities.
+
+Use the shared ordered source map at preparation, context, completion and
+approval. Save immutable source edges, validate sources again before mutation,
+and invalidate current descendants through those edges after a revision. Preserve
+unrelated siblings and previous versions/approvals. Grouped approvals use task
+dependency order. Context may prepare both eligible siblings before asking the
+tester for grouped review. Delegation remains an explicit tester decision, not
+an automatic consequence of persona defaults. Fixed cast/location counts and
+request/revision ceilings are unchanged.
+
+Add `tests/unit/experiment-runner-manuscript.test.ts` and
+`tests/integration/experiment-runner-m2-narrative.test.ts`; extend the existing
+fixture, contract, context and dispatch suites where needed. Prove all three local
+cases through current approved J06/J07, both sibling arrival orders, stable IDs
+after rename/retry, rejected unknown references, stale/duplicate completion,
+grouped/delegated acceptance, scoped invalidation and restart reads. Run focused
+tests without retries, typecheck, lint and agent fixtures. Two clean reviews
+precede publication. S2 local proof does not establish live Dify execution;
+S3 must prepare/publish modules and verify actual bindings before staging runs.
+
+S2's first increment introduced one shared source resolver in
 `lib/experiment-runner/narrative-tasks.ts`. It defines J01–J07's ordered direct
 dependencies and accepts only current approved versions. Preparation, completion,
-approval and specialist context reuse it. For this first increment, runtime task
-admission remains J01/J02; declaring the later graph does not enable dispatch.
+approval and specialist context reuse it. In that first increment, runtime task
+admission remained J01/J02; declaring the later graph did not enable dispatch.
 J03/J04 capture both approved Concept and Outline versions, including the Concept
 source required by Ali's guidelines. J05 captures all four narrative sources;
 J06 captures J02/J03/J05 and J07 captures J02/J04/J05, preserving the Outline
@@ -95,7 +137,7 @@ and the existing narrative/context integration tests, plus typecheck and lint.
 Missing, draft, stale-review or ambiguous duplicate sources return no eligible
 source set. Two clean reviews precede publication. Later S2 work adds durable
 subject IDs, manuscript/final-list contracts and their normal persistence paths;
-those remain pending, as do live bindings. No settings, Dify publication,
+those are now implemented locally as described above. Live bindings remain pending. No settings, Dify publication,
 provider call or staging release is needed for this resolver increment.
 
 Resolver verification on 2026-10-04: the exact five source/test inputs in a clean
@@ -108,6 +150,23 @@ prove J03–J07 persistence or live dispatch. The latest browser run
 `4442cb62-1871-46cc-8ff0-e0d3edab941c` still proves only the deployed J01/J02
 slice: saved Pause/Resume, unchanged Concept version, exact Outline source,
 reload persistence, five logical text calls and zero payable calls/images.
+
+The complete S2 local candidate at baseline `3e79f01` passed typecheck, full
+lint, all twelve agent fixtures and 148 runner tests across 22 files without
+retries. The local Mongo test process required forced termination after its
+shutdown grace period; the test command exited successfully. The final rerun
+includes the stable-ID assertions and corrected professional-scene location
+routing, including reordered draft locations and final-list occurrences. Normal
+dispatch also proves a manager's J04-before-J03 and J07-before-J06 choices,
+preserving parent trace IDs rather than forcing the display's task order.
+No live M2 bindings or provider execution are claimed by these checks.
+
+Chrome verification on 2026-10-05 created Parent run
+`a04d6f31-0b84-4df5-8c71-8cafa5dd27b1`. Pause persisted across reload and
+Resume reached the deployed M1 `slice_complete` boundary with J01/J02 approved,
+five logical text calls and zero payable text/image calls. Booklet
+`1f3b2af0-ec90-4adf-8f73-1781aaf02fdd` retains the results. This verifies M1
+controls, not full booklet completion or live M2.
 
 Extend the M1 task-schema map and ArtifactService, not the old Visual Bible gate.
 Read Ali's pinned task guidelines 03–10 in full before writing prompts/fixtures.

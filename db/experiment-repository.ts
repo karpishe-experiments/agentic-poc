@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { withMongoTransaction, type Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
-import { CASES, EXPERIMENT_PROFILE, MAX_NARRATIVE_CONTENT_BYTES, experimentModeSchema, experimentRoleSchema, experimentTaskSchema, parseNarrativeProposal, personaSchema, resultEnvelopeSchema, validateRoleResult, type RoleResult } from "@/lib/contracts/experiment-runner";
+import { CASES, EXPERIMENT_PROFILE, MAX_NARRATIVE_CONTENT_BYTES, experimentModeSchema, experimentRoleSchema, experimentTaskSchema, parseNarrativeTaskProposal, personaSchema, resultEnvelopeSchema, validateRoleResult, type RoleResult } from "@/lib/contracts/experiment-runner";
+import { isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { materializeNarrativeResult, prepareNarrativeContext } from "@/db/experiment-narrative";
 
@@ -113,7 +114,7 @@ export function createExperimentRepository(database: Database) {
 
   async function prepareOperation(raw: unknown): Promise<ExperimentOperationDocument> {
     const input = parse(prepareInput, raw);
-    if ((input.role === "image") !== (input.providerKind === "image") || (input.role === "specialist" && input.taskId !== "J01" && input.taskId !== "J02") || (input.role !== "specialist" && input.role !== "image" && input.taskId)) throw new ExperimentRepositoryError("invalid_input", "Role, task and provider kind do not match.");
+    if ((input.role === "image") !== (input.providerKind === "image") || (input.role === "specialist" && !isNarrativeTask(input.taskId)) || (input.role !== "specialist" && input.role !== "image" && input.taskId)) throw new ExperimentRepositoryError("invalid_input", "Role, task and provider kind do not match.");
     const idempotencyKey = digest(canonical([input.runId, input.role, input.taskId, input.subjectKind, input.subjectId, input.inputFingerprint, input.attempt]));
     const existing = await operations.findOne({ idempotencyKey });
     if (existing) return existing;
@@ -123,8 +124,8 @@ export function createExperimentRepository(database: Database) {
         if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
         if (run.status !== "queued" && run.status !== "running" || run.pauseRequested || run.activeOperationId) throw new ExperimentRepositoryError("invalid_state", "Run cannot prepare another operation.");
         if (input.subjectKind === "book" && input.subjectId !== run.bookletId) throw new ExperimentRepositoryError("invalid_input", "Book subject must match booklet ID.");
-        if (input.role === "specialist" && input.subjectKind !== "book") throw new ExperimentRepositoryError("invalid_input", "J01 and J02 require the book subject.");
-        const narrative = input.role === "specialist" && (input.taskId === "J01" || input.taskId === "J02") ? await prepareNarrativeContext(database, session, run, input.taskId) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
+        if (input.role === "specialist" && input.subjectKind !== "book") throw new ExperimentRepositoryError("invalid_input", "Narrative tasks require the book subject.");
+        const narrative = input.role === "specialist" && isNarrativeTask(input.taskId) ? await prepareNarrativeContext(database, session, run, input.taskId) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
         const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
         await operations.insertOne(operation, { session });
         const changed = await runs.updateOne({ _id: input.runId, revision: input.expectedRevision, activeOperationId: null }, { $set: { activeOperationId: input.operationId, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
@@ -299,7 +300,7 @@ export function createExperimentRepository(database: Database) {
       if (result.kind === "proposal") {
         if (result.payload.taskId !== operation.taskId) throw new ExperimentRepositoryError("invalid_result", "Proposal task differs from the operation.");
         try {
-          const parsed = parseNarrativeProposal(result.payload.taskId, result.payload.content);
+          const parsed = parseNarrativeTaskProposal(result.payload.taskId, run.persona, result.payload.content);
           result = { kind: "proposal", payload: { taskId: result.payload.taskId, content: parsed.content } };
           warnings = parsed.warnings;
         } catch { throw new ExperimentRepositoryError("invalid_result", "Narrative proposal is invalid or exceeds the storage limit."); }
