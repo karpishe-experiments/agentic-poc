@@ -150,9 +150,10 @@ Community origin and `DIFY_BOOKLET_PUBLIC_ORIGIN` to the exact Booklet origin.
 Do not reuse diagnostic or Cloud keys. Keep `DIFY_BOOKLET_RUNNER_ENABLED=false`
 until setup, release verification and exact-target reset approval are complete.
 The S4d change below adds protected runner settings and passed required Linux CI.
-Host synchronization remains pending; repository tests do not prove that the
-live dispatcher accepts them. Verify that path before asking the operator to
-install the new keys or enable the runner.
+Host synchronization passed through Infrastructure `37207147716` on reviewed
+master `e3b8695e57c46cc4b6c7cec0537597d28f08543d`, with zero Terraform changes.
+Private disabled-settings installation remains pending; synchronization does not
+prove the live runner bindings or authorize enablement.
 
 With valid local/staging bindings, enabled initialization verifies experiment
 references without local-agent seeds or a host provider key. It retains seed
@@ -182,8 +183,10 @@ S4d source `12eeb3da7926bc91ec79dc226ee0303726138017` merged through PR #91.
 [Validate 37204097124](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37204097124)
 passed, including both complete Linux shell suites, ShellCheck, Actionlint,
 typecheck, lint and selected deployment contracts. Two consecutive independent
-reviews passed. Live dispatcher synchronization and private settings installation
-are separate pending checkpoints; no rotation or runner enablement was performed.
+reviews passed. Live dispatcher synchronization subsequently passed through
+[Infrastructure 37207147716](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37207147716).
+Private settings installation remains pending; no rotation or runner enablement
+was performed.
 
 Community MCP reverified workspace `ffac910f-2786-490e-90d8-07243d49741b`.
 The seven retained apps stayed unchanged. Each new graph has only start, code,
@@ -191,21 +194,38 @@ HTTP, conditional and end nodes, with controllable retries off. Server-backed
 validation returned zero errors/warnings. Imported node data matched the reviewed
 candidate; published graph hashes matched their drafts on read-back.
 
-| Module | App ID | Initial published workflow ID |
+| Module | App ID | Latest published workflow ID after private preparation |
 | --- | --- | --- |
-| Manager | `eca554a2-34bd-489c-b05d-713a6876b448` | `2d8acbea-3144-426e-83aa-d813a0e60e55` |
-| Concept J01 | `7c186b42-a069-4059-aac6-5589e870951f` | `07755e8f-539d-4e04-ab6e-36035b803c93` |
-| Outline J02 | `4b49ed43-218d-4892-981f-acfe7181c60c` | `1ef3c7da-f548-484c-8412-af547b921ab8` |
-| Playful Kid tester | `973d697b-68dd-4b05-bd57-ededfa383a14` | `ed453cd6-a238-4b46-b033-fbae89c09a3f` |
-| Enthusiast Parent tester | `33d47b5c-77c0-4ab5-86d0-6ee7da8fca1d` | `0fdbbd4d-cd82-41aa-b553-7e4008e80987` |
-| Professional Creator tester | `99e1740f-52f2-467e-9553-81104564c3ae` | `8d91ea44-6669-4e8d-a3d0-0c598d5ace18` |
+| Manager | `eca554a2-34bd-489c-b05d-713a6876b448` | `e501763a-a2c5-4f97-a641-68c3acea9555` |
+| Concept J01 | `7c186b42-a069-4059-aac6-5589e870951f` | `09f5449e-50f9-4fd3-93d2-c4eec7e890dc` |
+| Outline J02 | `4b49ed43-218d-4892-981f-acfe7181c60c` | `0f2c85f4-374b-4496-ba6c-1bc6a2ec3bb2` |
+| Playful Kid tester | `973d697b-68dd-4b05-bd57-ededfa383a14` | `53233260-819d-49e4-901e-36b2596a343c` |
+| Enthusiast Parent tester | `33d47b5c-77c0-4ab5-86d0-6ee7da8fca1d` | `25bd2bf1-b0a2-427f-ac0b-782c5b28df5c` |
+| Professional Creator tester | `99e1740f-52f2-467e-9553-81104564c3ae` | `be28be1b-1a2f-4725-9421-982868ab8de7` |
 
 These modules use direct application-key invocation, not Workflow Tools; their
 tool-provider identifiers are null. No workflow was executed. Secret masks do
-not prove callback-key binding. Private binding requires another publication;
-read back the resulting workflow IDs before installing Booklet settings.
-The next operator handoff is one dedicated callback key in all six new modules,
-six private application keys, and exact-target reset approval after inventory.
+not prove callback-key binding. The operator reported successful private
+preparation of the callback and six application keys in the Windows-account
+encrypted local file. MCP retrieved each latest published version listed above;
+all six retain model-free graphs and the corrected branch outputs. No private
+key value or encrypted file was read during this check. Callback-key agreement
+and runtime-key validity remain unverified until the authorized runtime check.
+Studio rejected the initial graphs because both End nodes exposed the same
+output names, despite successful bridge validation and backend publication.
+All six drafts now expose `booklet_result` only from saved completion and
+`authorization_reason` only from pause. Authorized Chrome editing preserved
+the environment bindings; MCP read-back confirmed that only these two existing
+node fields changed. All six Studio checklists report that all issues are resolved.
+Seven graph/fixture tests and focused lint passed. Two independent code reviews
+passed. A detached clean checkout passed full typecheck and the same seven tests;
+the original checkout's stale generated types and ignored nested checkouts were
+left unchanged. Private preparation and publication
+are now reported/read back, respectively; no workflow execution started during
+this repair or publication verification. The reviewed host dispatcher is now
+synchronized. Next, install the prepared settings with the runner disabled.
+Exact-target reset approval after inventory and runner enablement remain separate
+checkpoints.
 Do not use diagnostic or Cloud keys, run a test, reset data or enable the runner
 as part of credential preparation.
 

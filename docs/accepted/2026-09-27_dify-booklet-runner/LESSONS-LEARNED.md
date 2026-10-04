@@ -108,3 +108,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Promotion target:** Documentation; reverify before removing the workaround
   or changing Next.js/Zod versions. Linux container deployment remains the live
   release checkpoint.
+
+### Studio validates output names across branches
+
+- **Context:** Dify Community 1.17.1 workflows with separate completion and pause End nodes.
+- **Observation:** Bridge validation and backend publication accepted duplicate
+  End output names. Studio blocked publication until those names were unique
+  across the graph. All six M1 checklists passed after each branch exposed only
+  its consumed output.
+- **Guidance:** Check global End output-name uniqueness in graph fixtures and
+  verify the Studio checklist. Backend publication alone does not prove editor
+  acceptance. Preserve the saved-completion acknowledgement gate when repairing
+  branch outputs.
+- **Evidence:** [graph regression](../../../tests/unit/experiment-runner-workflow-graph.test.ts)
+  and [M1 draft repair](M1-runner.md#entry-and-manual-setup).
+- **Promotion target:** Documentation; reverify for other Dify releases.
