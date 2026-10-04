@@ -1,8 +1,10 @@
 # Dify Community on the shared VPS
 
 This is the issue #69 operating runbook. Live installation and the deterministic
-integration round trip are recorded. Backup and restore readiness remains pending;
-the procedure is not yet a completed platform-readiness baseline.
+integration round trip are recorded. The operator deferred backup setup and
+restore/upgrade rehearsal on 2026-10-04 to [Dify setup follow-up](https://github.com/karpishe-experiments/agentic-poc/issues/69#issuecomment-5978334871).
+They are not active experiment-readiness steps and are not completed.
+Host/data loss can lose saved Dify work until that follow-up is verified.
 It does not authorize a VPS install, public exposure, a paid provider call, or
 a destructive restore. Booklet staging and production remain independent.
 
@@ -214,9 +216,9 @@ SYSTEM, and Administrators. The bridge's device-login parser required a local
 compatibility correction: Dify 1.17.1 returns `token`, while the pinned bridge
 accepted only `access_token`. The local correction accepts either and fails
 closed if neither exists; typecheck and 114 tests passed. Preserve or upstream
-it before reinstalling the bridge. MCP `app_list` still returns 404
-`workspace not found`; the official CLI lists apps in the same workspace and
-is the verified inventory fallback. Community cookie import also passed live
+it before reinstalling the bridge. MCP `app_list` previously returned 404
+`workspace not found`; on 2026-10-04 it succeeded and matched the official CLI's
+seven-app inventory. Keep the CLI as the tested inventory fallback. Community cookie import also passed live
 MCP `workspace_list` and `workflow_get_draft` checks on 3 October 2026. Use the
 [clipboard prompts](../dify-getting-started.md#community-instance-issue-69) for
 private cookie entry. The terminal's masked paste accepted control characters;
@@ -264,8 +266,8 @@ CLI import preserved the app ID; MCP restore preserved both the app ID and the
 original graph hash. Tool synchronization and published app execution were
 verified separately; a caller invoking the Workflow Tool remains untested.
 Booklet runtime-key lookup and callback-based interrupted-response recovery passed
-in checkpoint 5. New Agent configuration and backup/restore rehearsal remain
-separate checks.
+in checkpoint 5. New Agent configuration remains a separate capability check;
+backup/restore rehearsal is deferred to the setup follow-up.
 
 ## Checkpoint 5 — deterministic Booklet round trip
 
@@ -388,57 +390,26 @@ inspect the execution rather than replaying. The local no-ID regression verifies
 that lookup does not dispatch another run. Remove this temporary fault switch
 when the diagnostic probe is retired; do not copy it into paid runner routes.
 
-Routine operations are serialized with Booklet under
-`kids-booklet-vps-operation`, with cancellation disabled. A daily encrypted
-off-host backup is required before readiness is claimed: pin and checksum
-restic 0.19.1 using the reviewed [binary manifest](../../deploy/dify/restic.json),
-use the dedicated R2 bucket, retain 14 days and the latest
-successful snapshot, and keep recovery credentials outside the host. A backup
-must first stop new Dify work and verify that workflow and New Agent work is
-idle. Allow 15 minutes for draining; if activity is still present or cannot
-be verified, reopen admission and defer the backup. Stop Dify only after a
-verified drain, capture data/config/release manifest, restart and health-check,
-then prune. Do not use an R2 age-deletion rule for restic objects.
+Routine operations remain serialized with Booklet under
+`kids-booklet-vps-operation`, with cancellation disabled. Check reachability,
+container health, restart/OOM events and disk/memory pressure. Warn at 80% disk
+usage; do not automatically delete assets or reset data. Inspect active work and
+the operation journal before a restart or retry. A zero idle observation alone
+does not authorize shutdown.
 
-The pinned release stores workflow activity in PostgreSQL `workflow_runs` and
-New Agent run records under `dify-agent:runs:*:record` in Redis database 2.
-The Agent server exposes per-run status, not an aggregate idle endpoint. A
-live, model-free probe must confirm both sources and queued-work behavior
-before the automatic drain is enabled. A missing or malformed status result
-means **not idle**; defer the backup instead of stopping Dify. See the pinned
-[workflow model](https://github.com/langgenius/dify/blob/1.17.1/api/models/workflow.py),
-[Agent Redis keys](https://github.com/langgenius/dify/blob/1.17.1/dify-agent/src/dify_agent/storage/redis_keys.py),
-and [Agent run store](https://github.com/langgenius/dify/blob/1.17.1/dify-agent/src/dify_agent/storage/redis_run_store.py).
-
-The restic manifest pins the binary but does not install it or enable backups.
-The automatic drain, timer, restore rehearsal, and backup credentials remain
-pending until a live model-free probe confirms admission and queue behavior.
-
-After installation, run the read-only candidate check with
-`bash scripts/deploy/vps-deployment.sh --action dify-idle --environment dify`.
-It reports active workflow and New Agent record counts. Its zero result is one
-observation, not permission to stop services: admission closure, queue drain,
-and a second check still require live verification.
-
-Restore is a separate destructive checkpoint requiring exact snapshot ID and
-target confirmation. Rehearse into isolated directories and a separate
-localhost-only Compose project, with schedules disabled and provider/callback
-egress blocked. Verify a deterministic workflow, published behavior, saved
-file, and configuration. If the VPS cannot host both stacks, plan Dify-only
-downtime; Booklet remains up. Never downgrade an upgraded database against
-older images alone. Restore the matched pre-upgrade data/configuration set.
-
-Daily checks must report reachability, container health, restart/OOM events,
-disk/memory pressure, and backup age. Warn at 80% disk usage or backup age
-over 26 hours. Do not automatically delete assets or reset data. Investigate
-Tunnel, callback, auth, plugin, disk, and interrupted-upgrade failures from
-the operation journal before restarting or retrying.
+Daily encrypted off-host backups and restore/upgrade rehearsal are removed from
+the active sequence. Their requirements and recovery safeguards are retained in
+the [Dify setup follow-up](https://github.com/karpishe-experiments/agentic-poc/issues/69#issuecomment-5978334871).
+The existing backup bucket and pinned restic manifest remain untouched. No timer,
+verified backup or restore baseline is claimed. This deferral does not relax
+Booklet's existing backups, exact-target reset approval, private configuration
+backups or reconciliation before publication.
 
 ## Completion evidence
 
 Record sanitized host capacity, Terraform plan, release/image pull result,
 loopback and public-route checks, workspace roles, fresh-session MCP/CLI
 results, deterministic published tool cycle, Booklet round trip and lost-run
-recovery, backup ID/age, and restore rehearsal. Provider execution and full
+recovery. Backup/restore evidence belongs to the deferred setup follow-up. Provider execution and full
 #65 workload capacity remain unverified until separately authorized. Do not
 close #69 based only on local tests or an installed container stack.

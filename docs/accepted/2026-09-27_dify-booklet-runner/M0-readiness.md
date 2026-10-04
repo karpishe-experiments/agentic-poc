@@ -3,8 +3,9 @@
 **State:** In progress. Authenticated inventory and the deterministic workflow
 failure/repair/publication/tool-synchronization/restoration cycle passed.
 Community workflow-to-workflow invocation passed in draft and published callers.
-Draft isolation and synchronized binding restoration also passed. Full-suite
-capacity remains unverified. Callback-based interrupted-response recovery passed
+Draft isolation and synchronized binding restoration also passed. The Community
+app-quota check and installed-host preflight passed; full-suite workload capacity
+remains unverified. Callback-based interrupted-response recovery passed
 on 2026-10-04; the no-ID outcome remains unknown and must not be replayed. Explicit
 parent/child envelopes passed in the model-free lineage probe below; full-runner
 persistence is still M1 work. The operator's deployed Booklet round trip, authenticated callback and
@@ -23,7 +24,7 @@ bounded deterministic probe; other checkpoints remain open.
 
 | Action | Expected result | Evidence | Unresolved blocker |
 | --- | --- | --- | --- |
-| 1. Access and capacity: confirm workspace, authenticated interfaces, live quota and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-03: Community MCP workspace check and CLI inventory pass; three new probe workflows imported | Complete-suite capacity; host workload measurements |
+| 1. Access and capacity: confirm workspace, authenticated interfaces, quota behavior and module types | Working control path and enough verified capacity for the candidate probe | 2026-10-04: MCP/CLI inventory agree; pinned Community source bypasses Cloud app quotas; installed-host preflight passes; see capacity table below | Complete-suite workload measurements; provider/plugin setup before paid work |
 | 2. Modular execution: run deterministic manager → Concept specialist → tester | Selected layout, exact invocation examples and stable module/caller IDs; no provider calls | Separate invocation, binding restoration and explicit lineage-envelope probe passed; see below | Full-suite capacity; M1 persistence of role lineage |
 | 3. Publication and recovery: fail, repair, publish, synchronize, change and restore the probe; separately retrieve a lost response using Booklet runtime credentials | Original result restored; published binding read back; saved result recovered without another execution | Deterministic cycle and binding restoration passed; deployed callback/runtime lookup passed on 2026-10-03; callback-based interrupted-response recovery passed on 2026-10-04, below | No blocker for this diagnostic; no-ID outcomes remain unknown, not replayable |
 | 4. M1 handoff: consolidate verified bindings and prepare the first runnable slice | Concrete Sol/Low package; local and staging readiness stated separately | Local contract preparation can proceed; diagnostic probe bindings verified | First-slice role/key map, persisted contracts and bounded execution package |
@@ -34,6 +35,37 @@ For checkpoint 4, use the handoff format in [EXECUTION.md](EXECUTION.md#sol-low-
 The Community callback routes are deployed. Compose defaults keep the probe off;
 protected staging configuration enables it with verified private bindings.
 The successful diagnostic round trip does not establish full-runner readiness.
+
+### Community capacity and capability check — 2026-10-04
+
+These read-only checks support incremental Simulated-mode development. They do
+not prove the complete suite's workload capacity or authorize paid execution.
+
+| Area | Verified result | Remaining dependency |
+| --- | --- | --- |
+| Workspace and access | MCP workspace/app inventory and official CLI inventory succeed for `ffac910f-2786-490e-90d8-07243d49741b`; CLI reports the current account as owner | Session expiry can still require private reauthentication; MCP `workspace.get` remains 404, so use listing |
+| Existing resources | Both inventories report seven workflows: six published, one draft, no further result page | Existing probes stay unchanged; complete-suite provisioning has not occurred |
+| App capacity | The pinned 1.17.1 Community source bypasses Cloud billing app-quota enforcement; the `sandbox` label is not a five-app entitlement | No live numeric quota endpoint was verified; source behavior does not prove unlimited host capacity |
+| Shared-host preflight | Preview-only [operations run `37190693794`](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37190693794) succeeds and reports the pinned installation exists | This proves the installed-host gates: at least four CPUs, 15,000 MiB total RAM, 4,096 MiB available RAM and 20 GiB free state-directory disk. It is not a new exact resource measurement or a full-suite load test |
+| Module invocation and publication | Separate workflows, published Workflow Tool invocation, synchronization and restoration passed in the retained probes below | M1 must bind the actual creative roles and retain their explicit lineage in Booklet |
+| Provider readiness | MCP plugin inventory returns zero installed plugins; provider inventory returns no configured providers. LLM node-default discovery succeeds | Select/install the required plugin and privately bind the approved models before Balanced/Real work; node schemas are not model readiness |
+| Images and request accounting | No new provider execution occurred | Verify reference-image transport, output limits, retries and pre-call reservations before dependent image/paid work |
+| New Agents | No complete Community creation/configuration/publication proof is claimed | Not required by the selected bounded workflow-module layout; reconsider only with a verified need |
+
+The app-quota conclusion is based on the pinned
+[Cloud-only quota wrapper](https://github.com/langgenius/dify/blob/1.17.1/api/controllers/console/wraps.py)
+and [workspace plan implementation](https://github.com/langgenius/dify/blob/1.17.1/api/services/feature_service.py).
+Do not treat a plan label or nullable concurrency metadata as a capacity guarantee.
+
+Select independently editable workflows as the planning layout: one manager,
+thirteen specialists, three separate persona testers, one judge and one image
+workflow. This is a nineteen-module planning envelope, or twenty-six workflows
+if all seven diagnostic probes remain separate. Create modules incrementally;
+record the actual IDs, role/runtime-key map and publication evidence in the M1
+handoff. Do not build an all-role router or delete probes to make space.
+Provider setup and full-workload measurement block only their dependent work,
+not local contracts or deterministic slices. No resources were created, changed
+or executed during this capacity check.
 
 ### Current target and Community probe — 2026-10-03
 
@@ -222,7 +254,8 @@ Record the first slice's role-to-runtime-key map and persist its explicit lineag
 Prepare the Concept/Outline persistence contracts and fixtures locally in parallel
 with those checks. Full-suite capacity, image transport/accounting and campaign
 authorization remain separate gates for the work that needs them. Platform backup
-and restore readiness remains owned by the Community runbook. M0 is not complete;
+and restore work is deferred to the linked Dify setup follow-up, not an M0 gate.
+M0 is not complete;
 do not start paid acceptance or claim an unattended full booklet on this evidence.
 
 The deployed [staging fault procedure](../../deployment/dify-community.md#deployed-interrupted-response-probe)

@@ -188,7 +188,7 @@ as well as the caller configuration; drain before their synchronization. See
 
 | Dependency | Required proof/handoff | Blocks |
 | --- | --- | --- |
-| Modular capacity/invocation | Separate invocation and explicit lineage transport passed; full-suite capacity and Booklet lineage persistence pending | Full-suite packaging and M1 persistence |
+| Modular capacity/invocation | Separate invocation and explicit lineage transport passed. Community app-quota behavior and installed-host preflight checked on 2026-10-04; see M0. Actual suite bindings, workload measurements and Booklet lineage persistence remain pending | Full-workload readiness and dependent M1 integration; not independent local or deterministic slices |
 | Publication/sync/restoration | Deterministic cycle and binding restoration passed in M0; verify each later candidate | Publication of later suite configurations |
 | Runtime credentials/callbacks | Diagnostic round trip/runtime lookup passed on 2026-10-03; callback-based interrupted-response recovery passed on 2026-10-04; full-runner bindings and no-ID recovery remain unresolved | Dependent runner integration; unknown outcomes without retained IDs |
 | Image transport/accounting | Reference inputs, output transfer, retries and reservations | Real image execution; fixture transfer also precedes simulated image work |
