@@ -1,6 +1,6 @@
 # M1 — Durable runner, Concept Brief and Outline
 
-**State:** Staging reset and Simulated-only activation passed; protected bindings installed and six modules published. Live persona and UI acceptance remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
+**State:** All three live Simulated J01–J02 cases passed, including reload persistence and exact approval/lineage evidence. Idle Pause/Resume passed; active-progress control conflict recovery has a local correction pending publication and live verification. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
 **Predecessor:** [M0](M0-readiness.md). Follow [EXECUTION](EXECUTION.md) at entry,
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
@@ -35,8 +35,7 @@ existing Dify resources and diagnostic/recovery buckets were not reset.
 
 The existing private preparation was uploaded with the enabled flag after reset
 to keep the GitHub settings bundle aligned with the host. No new key, workflow
-execution or provider call was made. Runtime key matching, all three persona
-flows and Pause/Resume remain unverified. Chrome control now works. The first
+execution or provider call was made. Chrome control now works. The first
 Playful Kid Simulated run `b42c808f-7d5d-43d4-8486-8f6a0a1fb658` remains saved
 as blocked; Dify run `54f72080-9a7d-4316-b7a0-068f195dbc93` sent an empty
 authorization body and received HTTP 400, with zero provider calls. The graph
@@ -45,13 +44,44 @@ covers both authorization and result callbacks in all six modules; regression
 tests check their exact selectors. PR #97 passed Validate `37225604910` and
 merged to master `38e9a6ff12f257868acdbea74f705369d36b24cc`. CLI import preserved
 the private bindings; MCP published and read back all six corrected versions.
-Protected staging settings rotation `37225932334` passed. Live retest remains
-pending. The UI correction adds an explicit `Start linked successor` control for
+Protected staging settings rotation `37225932334` passed. The UI correction adds an explicit `Start linked successor` control for
 blocked/failed Simulated runs, retains its creation key on response loss, and
-shows the saved predecessor. It does not retry the failed operation. Its staging
-release remains pending. The earlier
+shows the saved predecessor. It does not retry the failed operation. PR #98 merged
+to master `c856c285333c95afcc8105a2ebf236aeb793f61e`; Validate `37226314159`
+passed. Selective release PR #99 passed two independent reviews and Validate
+`37226612877`. Staging `eea06e7b94a375629a25eef818e1eecf98a2fa6d` passed
+Deploy `37226862962` and Check `37227297740`, with immutable image
+`sha256:fef41a6d5d1c7c197fe123ad525ec2a78e37698eeefb32732284bfe753f6bcde`.
+The deployment retained backup `staging-20261004T190850Z-8a099e6e0d4d9fa4`;
+it did not reset data. The earlier
 slice records below describe their publication-time evidence, not current reset
-status. M1 is not complete.
+status.
+
+### Live browser acceptance — 2026-10-04
+
+| Persona | Booklet run | J01 version | J02 version | Logical text / payable text |
+| --- | --- | --- | --- | --- |
+| Kid | `e8406369-4716-4144-8a9c-4d928595aa98` | `2fa3a3cb-8950-4174-bff5-8a41d716a157` | `c19bf4b8-4592-429d-927d-066f129b8f44` | 5 / 0 |
+| Parent | `0529e13a-5d18-4ce9-8a8c-3404300598f2` | `dfde3142-0297-4f31-bf97-d57ac8eef56a` | `d2f71246-aefb-4cd2-95bf-0598a6d3831e` | 5 / 0 |
+| Creator | `5cdba706-8cd1-4bf7-8ed3-6bc94f204acf` | `5bfef8d4-5f87-4a5b-8845-f5a8cb524795` | `e13693af-7767-4c1e-9983-c4c5c784e6c9` | 6 / 0 |
+
+All three reached `slice_complete`, with approved current artifacts and exact J02
+source-version references. Kid and Parent used recorded delegation; Creator used
+two explicit tester reviews. All sixteen Dify executions were read back through
+MCP as `succeeded` with `total_tokens=0`. Image counts were zero. Each specialist
+trace retained its preceding manager workflow-run ID. Reload retained artifacts,
+decisions, limits and traces. The failed Kid predecessor remains recorded and
+linked; no failed operation was replayed.
+
+Kid Pause persisted as revision 26 after reload. Resume reached revision 27 with
+the same five operations and unchanged artifact versions. Pause clicks during
+rapid active progression returned definite revision conflicts instead of pausing;
+they did not bypass CAS or replay work. The candidate UI reads the current run
+after that specific rejection and retries the control once unless already applied
+or no longer permitted. Lost responses and other failures are not retried.
+This correction needs reviewed release and live verification before M1 control
+acceptance is complete. The queued J03 boundary is not a completed booklet, and
+neither images nor Balanced/Real behavior has been tested here.
 
 | Module | Corrected published workflow ID |
 | --- | --- |
