@@ -74,6 +74,21 @@ The content materializer uses the same completion transaction and collections,
 not a second subject registry or workflow service. Local M2 fixtures exercise
 all three cases through J07; actual Dify M2 execution remains unverified.
 
+The local image-storage foundation saves an exact prompt, ordered source versions
+and request fingerprint on the existing operation. Source checks require current
+approved versions and exact approval records; style samples may use their current
+draft J08 style version. Completion decodes PNG/JPEG/WebP pixels, hashes the
+original bytes, and claims a 60-second completion lease before using AssetStore.
+It reads stored bytes back before atomically saving the normal asset and operation
+result. Same-byte recovery preserves request counters; conflicting bytes or stale
+sources cannot replace a saved result. Missing or corrupt stored bytes remain a
+technical blocker even after database completion. This foundation is local only:
+image routes, Dify binary transfer and automatic image dispatch remain unverified.
+Filesystem AssetStore publishes complete temporary-file bytes through an atomic
+no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
+Image failures retain their original category and timestamp when recorded;
+successful recovery clears the current failure, not its evidence history.
+
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
 instruction. The matching tester answer restores that revision without another
