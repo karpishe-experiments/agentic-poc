@@ -6,6 +6,7 @@ import { createExperimentContextService } from "@/lib/experiment-runner/context"
 import { configurationSnapshot, selectBinding, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createWorkflowRuntime, runtimeCompletion, type RuntimeResult, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { runTrackedMutation } from "@/lib/application/deployment-control";
+import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -37,7 +38,7 @@ export function createExperimentDispatcher(deps: {
     const identity = { runId: run._id, operationId: operation._id, parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: now() };
     const current = await repository.getOperation(operation._id);
     if (!current) return;
-    const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as "J01" | "J02" | null, run.persona);
+    const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as NarrativeTask | null, run.persona);
     if (result.kind === "execution") {
       const execution = result.execution;
       if (execution.workflow_id !== binding.publishedWorkflowId || (current.workflowRunId && current.workflowRunId !== execution.id)) {
@@ -78,6 +79,15 @@ export function createExperimentDispatcher(deps: {
     return mutate(async () => {
       let run = await repository.getRun(runId);
       if (!run || run.mode !== "simulated" || run.status === "completed" || run.status === "failed") return "blocked";
+      // Completed slice evidence remains complete after a newer suite is bound.
+      // This is a saved-state read, not permission to execute an old publication.
+      if (!run.activeOperationId && run.status !== "blocked") {
+        const savedView = await context.getRunView(runId);
+        if (savedView?.nextNarrativeTask === "slice_complete") {
+          const last = (await repository.listOperations(runId)).at(-1);
+          if (last?.state === "succeeded" && last.verifiedWorkflowId && run.progressOperationId === last._id) return "boundary";
+        }
+      }
       const expected = configurationSnapshot(deps.config, run.persona);
       if (canonical(expected) !== run.configurationJson) {
         await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
@@ -85,7 +95,7 @@ export function createExperimentDispatcher(deps: {
       }
       let operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
       if (operation?.dispatchStartedAtMs != null) {
-        const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as "J01" | "J02" | null, run.persona);
+        const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as NarrativeTask | null, run.persona);
         // A retained ID is the only read-back path. Never POST after the marker.
         await reconcile(run, operation, operation.workflowRunId ? await runtime.retrieve(binding, operation.workflowRunId) : { kind: "unknown" });
         return "waiting";
@@ -96,7 +106,7 @@ export function createExperimentDispatcher(deps: {
       if (!operation) {
         const latest = (await repository.listOperations(runId)).at(-1);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
-          const binding = selectBinding(deps.config, latest.role as "manager" | "specialist" | "tester", latest.taskId as "J01" | "J02" | null, run.persona);
+          const binding = selectBinding(deps.config, latest.role as "manager" | "specialist" | "tester", latest.taskId as NarrativeTask | null, run.persona);
           await reconcile(run, latest, latest.workflowRunId ? await runtime.retrieve(binding, latest.workflowRunId) : { kind: "unknown" });
           run = (await repository.getRun(runId))!;
           if (run.status === "blocked") return "blocked";
@@ -113,11 +123,19 @@ export function createExperimentDispatcher(deps: {
         const last = history.at(-1);
         const initialDelegation = run.persona !== "professional_creator" && history.length === 0;
         let role: "manager" | "specialist" | "tester" = view.nextNarrativeTask === "tester" || initialDelegation ? "tester" : "manager";
-        let taskId: "J01" | "J02" | null = null;
+        let taskId: NarrativeTask | null = null;
         if (!initialDelegation && view.nextNarrativeTask !== "tester" && last?.state === "succeeded" && last.role === "manager") {
           const result = JSON.parse(last.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string } } | null;
-          if (result?.kind === "delegate" && result.payload?.taskId === view.nextNarrativeTask) {
-            role = "specialist"; taskId = view.nextNarrativeTask; parentWorkflowRunId = last.workflowRunId;
+          const delegated = result?.payload?.taskId;
+          const target = view.currentArtifacts.find((item) => item.taskId === delegated);
+          const pending = view.pendingDecision as { kind?: string; taskId?: string; artifactVersionId?: string } | null;
+          const matchingRevision = pending?.kind === "revision" && pending.taskId === delegated && pending.artifactVersionId === target?.currentVersionId;
+          // Both siblings can be ready. Honor the saved manager choice rather
+          // than forcing the projection's deterministic display order.
+          if (result?.kind === "delegate" && isNarrativeTask(delegated) && configuredNarrativeTasks(run.configurationJson).includes(delegated) &&
+              currentApprovedSourceIds(delegated, view.currentArtifacts) !== null && (!pending || matchingRevision) &&
+              (!target || target.state === "needs_review" || matchingRevision)) {
+            role = "specialist"; taskId = delegated; parentWorkflowRunId = last.workflowRunId;
           }
         }
         operation = await repository.prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind: "book", subjectId: run.bookletId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, view }), attempt: 1, providerKind: "text", nowMs: now() });
@@ -131,7 +149,7 @@ export function createExperimentDispatcher(deps: {
       const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
-      const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as "J01" | "J02" | null, run.persona);
+      const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as NarrativeTask | null, run.persona);
       await reconcile(run, operation, await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated" }));
       return "advanced";
     });

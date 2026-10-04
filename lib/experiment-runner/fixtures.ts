@@ -1,10 +1,74 @@
-import { CASES, conceptBriefSchema, parseNarrativeProposal, roleResultSchema, storyOutlineSchema, validateRoleResult, type ExperimentMode, type RoleResult } from "@/lib/contracts/experiment-runner";
+import { CASES, conceptBriefSchema, parseDraftListProposal, parseNarrativeProposal, parseNarrativeTaskProposal, roleResultSchema, storedDraftCharacterListSchema, storedDraftLocationListSchema, storedManuscriptSchema, storyOutlineSchema, validateRoleResult, type DraftCharacterListContent, type DraftLocationListContent, type ExperimentMode, type Persona, type RoleResult } from "@/lib/contracts/experiment-runner";
 import type { createExperimentContextService } from "@/lib/experiment-runner/context";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
 type Case = keyof typeof CASES;
-type Task = "J01" | "J02";
+type Task = "J01" | "J02" | "J03" | "J04" | "J05" | "J06" | "J07";
 const sourceConstraintPrefix = "Approved concept constraint: ";
+
+type DraftFixtureInput = {
+  mode: ExperimentMode;
+  persona: Persona;
+  brief: string;
+  approvedConcept: unknown;
+  approvedOutline: unknown;
+  currentContent?: unknown;
+  answers?: { question: string; answer: string }[];
+  revision?: string;
+  materialQuestion?: string;
+};
+type DraftFixtureResult<T> = { kind: "clarification"; question: string } | { kind: "proposal"; content: T; warnings: ReturnType<typeof parseDraftListProposal>["warnings"] };
+
+// Pinned Ali J03/J04 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.
+// Adaptations: fixed persona cases, delegated tester approval outside this local
+// fixture, and warning-only preferences. Approved J01/J02 remain the sources.
+export function simulateDraftListResult(task: "J03", input: DraftFixtureInput): DraftFixtureResult<DraftCharacterListContent>;
+export function simulateDraftListResult(task: "J04", input: DraftFixtureInput): DraftFixtureResult<DraftLocationListContent>;
+export function simulateDraftListResult(task: "J03" | "J04", input: DraftFixtureInput): DraftFixtureResult<DraftCharacterListContent | DraftLocationListContent> {
+  if (input.mode !== "simulated") throw new Error("Draft list fixtures require simulated mode.");
+  if (input.brief !== CASES[input.persona].brief) throw new Error("Fixture requires an exact fixed case brief.");
+  const concept = conceptBriefSchema.parse(input.approvedConcept);
+  const outline = storyOutlineSchema.parse(input.approvedOutline);
+  if (concept.sourceInput !== input.brief) throw new Error("Approved concept does not match the fixed case brief.");
+  const expectedLocations = input.persona === "professional_creator" ? 2 : 1;
+  if (outline.characters.length !== 2 || outline.locations.length !== expectedLocations) throw new Error("Approved outline does not match the fixed case counts.");
+  const answers = input.answers ?? [];
+  if (input.materialQuestion && !answers.some((item) => item.question === input.materialQuestion && item.answer.trim())) {
+    return { kind: "clarification", question: input.materialQuestion };
+  }
+  const answerNotes = answers.filter((item) => item.answer.trim()).map((item) => `${item.question}: ${item.answer}`);
+  if (task === "J03") {
+    const current = input.currentContent === undefined ? null : parseDraftListProposal("J03", input.persona, input.currentContent).content;
+    const content = {
+      schemaVersion: "2" as const, title: current?.title ?? outline.title,
+      characters: current?.characters ?? outline.characters.map((item, index) => {
+        const entryKey = (`character_${index + 1}` as "character_1" | "character_2");
+        return { entryKey, nameOrRole: item.nameOrRole, narrativeFunction: item.narrativeRole,
+          role: index === 0 ? "main" as const : "supporting" as const, knownRelationship: item.relationship,
+          knownFacts: [], openQuestions: item.openDetails };
+      }),
+      castNotes: [...(current?.castNotes ?? []), ...answerNotes.filter((note) => !current?.castNotes.includes(note)), ...(input.revision ? [`Revision request: ${input.revision}`] : [])],
+      representationAndSafety: current?.representationAndSafety ?? [], manuscriptQuestions: current?.manuscriptQuestions ?? [],
+      approvalQuestions: current?.approvalQuestions ?? ["Does this cast reflect the approved story outline?"],
+    };
+    const parsed = parseDraftListProposal("J03", input.persona, content);
+    return { kind: "proposal", ...parsed };
+  }
+  const current = input.currentContent === undefined ? null : parseDraftListProposal("J04", input.persona, input.currentContent).content;
+  const content = {
+    schemaVersion: "2" as const, title: current?.title ?? outline.title,
+    locations: current?.locations ?? outline.locations.map((item, index) => {
+      const entryKey = (`location_${index + 1}` as "location_1" | "location_2");
+      return { entryKey, title: item.name, storyPurpose: item.storyPurpose,
+        knownFacts: [], likelyScenes: [item.storyPurpose], openQuestions: item.openDetails };
+    }),
+    worldAndSafetyNotes: [...(current?.worldAndSafetyNotes ?? []), ...answerNotes.filter((note) => !current?.worldAndSafetyNotes.includes(note)), ...(input.revision ? [`Revision request: ${input.revision}`] : [])],
+    manuscriptQuestions: current?.manuscriptQuestions ?? [],
+    approvalQuestions: current?.approvalQuestions ?? ["Do these places serve the approved story outline?"],
+  };
+  const parsed = parseDraftListProposal("J04", input.persona, content);
+  return { kind: "proposal", ...parsed };
+}
 
 const stories = {
   playful_kid: {
@@ -27,15 +91,139 @@ const stories = {
   },
 } as const;
 
+const manuscriptProse: Record<Case, readonly [string, string, string, string, string]> = {
+  playful_kid: [
+    "The young inventor lifted a bright kite into the park breeze. The tiny robot rolled beside them, chirping as the kite climbed. For a while, they watched it dance above the grass together.",
+    "A sudden gust tugged the string from the inventor's hand. The kite caught high in a tree, beyond either friend's reach. The robot spotted it first and gave a worried beep.",
+    "The inventor tried a long stick, but its tip fell short. They stopped before shaking the branch and made a soft hook from the safe things in their bag. Even that tool could not reach from where they stood.",
+    "The robot rolled around the trunk and found a clear path to a lower branch. The inventor listened, moved with the robot, and lifted the hook gently. Together they eased the kite free without hurting the tree.",
+    "Back on the grass, the inventor checked the kite and smiled at the robot. They held the string together as the breeze lifted it again. The rescue had worked because each friend noticed something the other had missed.",
+  ],
+  enthusiast_parent: [
+    "Rain tapped the living room window all afternoon. The child looked at the gray sky, and the grandparent settled beside them. They decided that staying inside could be the start of an adventure.",
+    "The child pointed to the sofa and imagined a boat. The grandparent stepped aboard the rug beside it, and together they named their quiet room a wide sea. The child became the captain.",
+    "They draped a blanket over the sofa to make a sail. When the rain grew louder, they pretended a storm had found their boat. The sail slipped, so they held it steady and waited together.",
+    "The child saw a pile of pillows across the room and called it an island. The grandparent followed the captain's plan as they steered their pretend boat toward it. Soon the blanket sail rested safely beside the pillows.",
+    "On their pillow island, the child and grandparent shared a snack. The rain was still falling, but it sounded gentle now. They sat close, pleased with the world they had made together.",
+  ],
+  professional_creator: [
+    "The two friends opened the community observatory before viewing night. One checked the lantern while the other arranged the tools they would need. They had built this evening together, and both wanted their neighbors to feel welcome.",
+    "When the lantern failed, each friend thought they knew the cause. Their disagreement grew sharper as the room darkened. They turned away from each other, and the observatory remained unready.",
+    "Each friend tried a separate repair, but neither attempt restored the light. The opening hour drew closer. Looking at their unfinished work, they began to understand that the fault needed both of their ideas.",
+    "At the workshop, one friend explained the damaged part while the other described a safer connection. They apologized for talking past each other and tested a replacement together. The lantern glowed steadily in their hands.",
+    "They carried the repaired lantern back to the observatory. As neighbors arrived, the friends welcomed them side by side under the new light. Above them, the first stars appeared, and their shared work felt stronger than either plan alone.",
+  ],
+};
+
 function currentVersion<T extends { id: string; content: unknown }>(artifact: { currentVersionId: string | null; versions: T[] }): T | null {
   return artifact.versions.find((version) => version.id === artifact.currentVersionId) ?? null;
+}
+
+type Source = { taskId: Task; id: string; content: unknown };
+type LaterContext = Context & { approvedSources?: Source[] };
+
+// Pinned Ali J03–J07 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.
+// Fixed-case simulation preserves dependencies and complete canonical content;
+// Booklet owns IDs/acceptance, and preferred quality findings remain warnings.
+function simulateLaterNarrativeTask(
+  context: Context, taskId: Exclude<Task, "J01" | "J02">, persona: Case,
+  previous: { content: unknown } | null,
+  revision: string | undefined, answerDetails: string[],
+): RoleResult {
+  const sources = (context as LaterContext).approvedSources ?? [];
+  const source = (id: Task) => {
+    const row = sources.find((item) => item.taskId === id);
+    if (!row) throw new Error(`${taskId} requires approved ${id}.`);
+    return row.content;
+  };
+  const sourceChanged = context.currentTarget?.state === "needs_review";
+  const keepCurrent = previous && !sourceChanged;
+  const note = [...answerDetails, ...(revision ? [`Revision request: ${revision}`] : [])];
+  const addNotes = (existing: string[], additions: string[]) => [...existing, ...additions.filter((item) => !existing.includes(item))];
+  let content: unknown;
+  if (taskId === "J03" || taskId === "J04") {
+    const concept = conceptBriefSchema.parse(source("J01"));
+    const outline = storyOutlineSchema.parse(source("J02"));
+    const input = {
+      mode: "simulated", persona, brief: context.brief ?? CASES[persona].brief, approvedConcept: concept, approvedOutline: outline,
+      currentContent: keepCurrent ? previous.content : undefined, answers: (context.questionAnswers ?? []).filter((item) => item.answer).map((item) => ({ question: item.question, answer: item.answer! })),
+      revision,
+    } as const;
+    const list = taskId === "J03" ? simulateDraftListResult("J03", input) : simulateDraftListResult("J04", input);
+    if (list.kind !== "proposal") throw new Error("Expected draft list proposal.");
+    content = list.content;
+  } else if (taskId === "J05") {
+    const outline = storyOutlineSchema.parse(source("J02"));
+    const cast = storedDraftCharacterListSchema.parse(source("J03"));
+    const places = storedDraftLocationListSchema.parse(source("J04"));
+    const current = keepCurrent ? storedManuscriptSchema.parse(previous.content) : null;
+    const arc = Object.values(outline.storyArc);
+    const characterIds = cast.characters.map((item) => item.characterId);
+    const firstPlace = (places.locations.find((place) => place.entryKey === "location_1") ?? places.locations[0]).locationId;
+    const workshop = places.locations.find((place) => place.entryKey === "location_2")?.locationId;
+    content = {
+      schemaVersion: "2", title: current?.title ?? outline.title,
+      continuityNotes: addNotes(current?.continuityNotes ?? [`${cast.characters[0].nameOrRole} and ${cast.characters[1].nameOrRole} remain the same two story characters throughout.`], note),
+      units: current?.units ?? arc.map((beat, index) => ({
+        unitKey: `beat_${index + 1}`, beatTitle: ["A shared beginning", "The trouble", "A first attempt", "A better choice", "A shared ending"][index],
+        prose: `${beat} ${manuscriptProse[persona][index]}`,
+        action: beat, narration: beat, charactersPresent: characterIds,
+        locationId: persona === "professional_creator" && index === 3 ? workshop! : firstPlace,
+        dialogue: [{ speakerId: characterIds[index % 2], text: index === 4 ? "We did it together!" : index === 3 ? "Let's listen and try together." : "Let's see what we can do." }],
+      })),
+      expansionNotes: current?.expansionNotes ?? [`The story uses five narrative beats. Physical page count and layout remain later decisions.`],
+      openQuestions: current?.openQuestions ?? [],
+      approvalQuestions: current?.approvalQuestions ?? ["Does this complete story preserve the approved arc and character relationships?"],
+    };
+  } else if (taskId === "J06") {
+    const cast = storedDraftCharacterListSchema.parse(source("J03"));
+    const manuscript = storedManuscriptSchema.parse(source("J05"));
+    const current = keepCurrent ? parseNarrativeTaskProposal("J06", persona, previous.content).content : null;
+    content = {
+      schemaVersion: "2", title: current?.title ?? manuscript.title,
+      characters: current?.characters ?? cast.characters.map((character) => {
+        const unitIds = manuscript.units.filter((unit) => unit.charactersPresent.includes(character.characterId)).map((unit) => unit.unitId);
+        return {
+          characterId: character.characterId, nameOrRole: character.nameOrRole, narrativeFunction: character.narrativeFunction,
+          background: `${character.nameOrRole} is ${character.knownRelationship.toLowerCase()} in this story.`,
+          lifeStage: persona === "enthusiast_parent" && character.entryKey === "character_2" ? "Grandparent" : persona === "playful_kid" && character.entryKey === "character_2" ? "Small companion robot" : persona === "professional_creator" ? "Young community member" : "Child",
+          physicalDescription: persona === "playful_kid" && character.entryKey === "character_2" ? "A small, sturdy robot with a friendly face display." : "A recognizable figure with a consistent silhouette and expressive face.",
+          personalityAndActing: character.narrativeFunction,
+          attireRequirements: [], accessories: [], expressions: ["Curious", "Concerned", "Relieved"],
+          openQuestions: character.openQuestions, unitIds, recurrence: unitIds.length > 1 ? "recurring" : "single_scene", sheetRequired: unitIds.length > 1,
+        };
+      }),
+      profileGuidance: addNotes(current?.profileGuidance ?? ["Keep each character recognizable across manuscript units."], note),
+      representationAndContinuity: current?.representationAndContinuity ?? ["Preserve the saved character identities and relationships."],
+      approvalQuestions: current?.approvalQuestions ?? ["Does this cast cover every manuscript scene?"],
+    };
+  } else {
+    const places = storedDraftLocationListSchema.parse(source("J04"));
+    const manuscript = storedManuscriptSchema.parse(source("J05"));
+    const current = keepCurrent ? parseNarrativeTaskProposal("J07", persona, previous.content).content : null;
+    content = {
+      schemaVersion: "2", title: current?.title ?? manuscript.title,
+      locations: current?.locations ?? places.locations.map((place) => ({
+        locationId: place.locationId, title: place.title, storyPurpose: place.storyPurpose,
+        basicDescription: `${place.title} is a recognizable setting for ${place.storyPurpose.toLowerCase()}.`,
+        stableAnchors: [place.title], requiredFeatures: place.knownFacts,
+        continuityNotes: ["Keep the place recognizable whenever the story returns."], openQuestions: place.openQuestions,
+        unitIds: manuscript.units.filter((unit) => unit.locationId === place.locationId).map((unit) => unit.unitId), sheetRequired: true,
+      })),
+      profileGuidance: addNotes(current?.profileGuidance ?? ["Use stable environmental anchors in every return to a location."], note),
+      worldSafetyAndAccessibility: current?.worldSafetyAndAccessibility ?? ["Keep paths and activity suitable for the intended readers."],
+      approvalQuestions: current?.approvalQuestions ?? ["Does each location support its manuscript scenes?"],
+    };
+  }
+  const parsed = taskId === "J03" || taskId === "J04" ? parseDraftListProposal(taskId, persona, content) : parseNarrativeTaskProposal(taskId, persona, content);
+  return validateRoleResult("specialist", roleResultSchema.parse({ kind: "proposal", payload: { taskId, content: parsed.content } }));
 }
 
 export function simulateNarrativeResult(context: Context, mode: ExperimentMode): RoleResult {
   if (mode !== "simulated") throw new Error("Narrative fixtures require simulated mode.");
   if (context.role === "manager") {
     const taskId = context.eligibleRoute;
-    if (taskId !== "J01" && taskId !== "J02") throw new Error("Manager has no eligible narrative task.");
+    if (!taskId || !["J01", "J02", "J03", "J04", "J05", "J06", "J07"].includes(taskId)) throw new Error("Manager has no eligible narrative task.");
     return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: "book", subjectId: context.run.bookletId } });
   }
   if (context.role === "tester") {
@@ -49,22 +237,22 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
     if (context.persona !== "professional_creator" && !context.activeDelegation && context.creatorMessages.length === 0) {
       const subjectId = context.bookletId;
       if (context.currentArtifacts.some((item) => item.subjectKind !== "book" || item.subjectId !== subjectId)) throw new Error("Book subject is inconsistent.");
-      return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J01", "J02"], subjectId } } });
+      const eligibleTaskIds = "eligibleTaskIds" in context && Array.isArray(context.eligibleTaskIds) ? context.eligibleTaskIds as Task[] : ["J01", "J02"];
+      return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "delegate", taskIds: eligibleTaskIds, subjectId } } });
     }
-    const concept = context.currentArtifacts.find((item) => item.taskId === "J01");
-    const approvedConceptId = concept?.state === "approved" ? concept.currentVersionId : null;
+    const approvedIds = new Set(context.currentArtifacts.filter((item) => item.state === "approved").map((item) => item.currentVersionId));
     const current = context.currentArtifacts.flatMap((item) => {
       if (item.state !== "draft") return [];
       const version = currentVersion(item);
       if (!version) throw new Error("Draft has no current version.");
-      if (item.taskId === "J02" && (!approvedConceptId || JSON.stringify(version.dependencyVersionIds) !== JSON.stringify([approvedConceptId]))) return [];
+      if ((version.dependencyVersionIds as string[]).some((id) => !approvedIds.has(id))) return [];
       return [version.id];
     });
     if (current.length === 0) throw new Error("No current eligible draft version to review.");
     return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "approve", versionIds: current } } });
   }
   if (context.role !== "specialist") throw new Error("Unsupported fixture role.");
-  if (context.taskId !== "J01" && context.taskId !== "J02") throw new Error("Specialist task is outside the narrative slice.");
+  if (!context.taskId || !["J01", "J02", "J03", "J04", "J05", "J06", "J07"].includes(context.taskId)) throw new Error("Specialist task is outside the narrative slice.");
   const persona = context.persona as Case;
   const story = stories[persona];
   if (!story || context.brief !== CASES[persona].brief) throw new Error("Fixture requires an exact fixed case brief.");
@@ -72,6 +260,7 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
   const answerDetails = context.questionAnswers.filter((item) => item.answer && (item.taskId === null || item.taskId === taskId)).map((item) => `${item.question}: ${item.answer}`);
   const previous = context.currentTarget && currentVersion(context.currentTarget);
   const revision = context.matchingRevision as { instruction?: string } | null;
+  if (taskId !== "J01" && taskId !== "J02") return simulateLaterNarrativeTask(context, taskId, persona, previous, revision?.instruction, answerDetails);
   let content: unknown;
   if (taskId === "J01") {
     const base = previous ? conceptBriefSchema.parse(previous.content) : {

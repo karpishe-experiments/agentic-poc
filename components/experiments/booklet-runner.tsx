@@ -104,7 +104,7 @@ export function BookletRunner() {
   }
 
   return <section className="max-w-4xl space-y-8">
-    <header className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Dify booklet experiment</p><h1 className="text-3xl font-semibold">Booklet runs</h1><p className="text-[var(--muted-ink)]">Inspect saved J01 Concept Brief and J02 Story Outline work. The J03 boundary ends this slice; it does not complete a booklet.</p></header>
+    <header className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Dify booklet experiment</p><h1 className="text-3xl font-semibold">Booklet runs</h1><p className="text-[var(--muted-ink)]">Inspect saved narrative artifacts and approvals. Each run stops at its configured slice boundary; this does not complete a booklet.</p></header>
     <section aria-labelledby="new-run-heading" className="space-y-3 rounded-lg border border-[var(--border)] p-5">
       <h2 id="new-run-heading" className="text-xl font-semibold">Start simulated runs</h2>
       <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
