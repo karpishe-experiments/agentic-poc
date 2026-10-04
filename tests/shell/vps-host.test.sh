@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -267,6 +267,39 @@ CHILD
   reset-guard)
     ACTION=reset-staging ENVIRONMENT=prod CONFIRMATION=kids_booklet
     if (validate_arguments) >/dev/null 2>&1; then echo 'accepted production reset'; exit 1; fi;;
+  reset-profile)
+    ACTION=reset-staging
+    jq '.environments.staging.ASSETS_BUCKET="kids-booklet-staging-assets"' "$CONFIG_FILE" > "$TEMP_DIR/config.next"; mv "$TEMP_DIR/config.next" "$CONFIG_FILE"
+    printf '{"services":{"app":{"environment":{"DIFY_BOOKLET_BINDINGS_JSON":"fixture","DIFY_BOOKLET_RUNNER_ENABLED":"false","DIFY_API_KEY":"retained-cloud"}}}}\n' > "$SECRETS/staging/secrets.json"
+    application_secret_override_is_valid() { :; }
+    validate_compose() { [[ "$COMPOSE_SECRET_FILE" == "$SECRETS/staging/secrets.reset.json" ]]; }
+    prepare_staging_reset_profile "$STATE/releases/staging/old"
+    jq -e '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED=="false"' "$SECRETS/staging/secrets.json" >/dev/null
+    maintenance() {
+      printf 'maintenance %s\n' "$*" >> "$CALLS"
+      if [[ "$2" == reset-staging-deployment ]]; then
+        [[ "$COMPOSE_SECRET_FILE" == "$SECRETS/staging/secrets.reset.json" ]]
+        jq -e '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED=="true"' "$COMPOSE_SECRET_FILE" >/dev/null
+        jq -e '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED=="false"' "$SECRETS/staging/secrets.json" >/dev/null
+      fi
+    }
+    run_lifecycle
+    jq -e '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED=="true" and .services.app.environment.DIFY_API_KEY=="retained-cloud"' "$SECRETS/staging/secrets.json" >/dev/null
+    jq -e '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED=="false"' "$SECRETS/staging/secrets.reset.previous.json" >/dev/null
+    calls="$(cat "$CALLS")"
+    [[ "$calls" == *read-staging-reset-readiness*'recovery backup'*reset-staging-deployment*'up -d'* ]]
+    test ! -f "$SECRETS/staging/secrets.reset.json";;
+  reset-recovery)
+    require_root() { :; }; load_config() { :; }; flock() { :; }
+    systemctl() { return 1; }; docker() { :; }; systemd-run() { :; }; wait_operation() { :; }
+    jq -n '{requestId:"failed-reset",action:"reset-staging",environment:"staging",step:"resetting",backupId:"staging-backup"}' > "$STATE/operation.json"
+    export SSH_ORIGINAL_COMMAND='--action restore --environment staging --confirmation kids_booklet --backup-id wrong-backup --request-id recovery --apply'
+    if (host_dispatch) >/dev/null 2>&1; then echo 'accepted wrong reset recovery backup'; exit 1; fi
+    test -f "$STATE/operation.json"
+    export SSH_ORIGINAL_COMMAND='--action restore --environment staging --confirmation kids_booklet --backup-id staging-backup --request-id recovery --apply'
+    host_dispatch >/dev/null
+    jq -e '.requestId=="failed-reset" and .step=="resetting"' "$STATE/operations/failed-reset-failed.json" >/dev/null
+    jq -e '.action=="restore" and .backupId=="staging-backup" and .requestId=="recovery"' "$STATE/operation.json" >/dev/null;;
   plan-guard)
     printf '{"resource_changes":[{"type":"cloudflare_r2_bucket","change":{"actions":["delete","create"]}}]}' > "$TEMP_DIR/plan.json"
     if (validate_plan "$TEMP_DIR/plan.json") >/dev/null 2>&1; then echo 'accepted protected replacement'; exit 1; fi

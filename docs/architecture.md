@@ -259,6 +259,15 @@ Cloud, probe and application secrets during the normal serialized rotation.
 Compose defaults the runner off. Private module keys/publications, exact-target
 reset approval and authorized enablement remain separate readiness checkpoints.
 
+The staging reset can select a fully validated, prepared Dify runner bundle for
+maintenance initialization while the running service retains disabled settings.
+After the reset, it activates that bundle before restarting the app.
+Maintenance containers still set `RUNNER_ENABLED=false`. The reset requires the
+exact staging bucket and completed backup coverage for every bucket object;
+its backup includes unreferenced objects. A reset interrupted during deletion
+or verification cannot be replayed through Resume. Inspect the retained backup
+and database before explicit recovery.
+
 ### Consolidated VPS deployment boundary
 
 VPS deployment is owned by `scripts/deploy/vps-deployment.sh`. Setup discovers Cloudflare and host ownership and configures database-scoped Atlas users and the exact VPS allowlist. Finalize creates absent environment branches from the reviewed commit containing `infra/config/vps.json`. Terraform owns Cloudflare R2, Tunnel, DNS and cache/rate-limit resources. `_staging` and `_prod` are independent reviewed release lines and may diverge from `master`. GitHub Actions verify the current environment-branch commit, build public GHCR environment-tagged images, and deploy only their immutable digests through the restricted VPS command interface. Compose overlays hold non-secret configuration; root-only final overrides hold secrets, including staged rotation files. Preview is the default and mutations require `--apply`. TypeScript owns application initialization, readiness, drain, backup/restore, and staging-reset behavior.

@@ -4,7 +4,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { ListObjectsV2Command, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createObjectStoreClient } from "@/lib/assets/create-object-store-client";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 import { getDatabase } from "@/db/client";
@@ -42,8 +42,18 @@ try {
     const collections = await database.database.listCollections({}, { nameOnly: true }).toArray();
     const inventory = Object.fromEntries(await Promise.all(collections.map(async ({ name }) => [name, await database.database.collection(name).countDocuments()] as const)));
     const documents = await database.collections.assets.find({}, { projection: { uri: 1 } }).toArray();
+    const assetKeys = new Set(documents.map(({ uri }) => normalizeAssetUri(uri)));
+    if (process.env.BACKUP_ALL_ASSETS === "true") {
+      if (env.DEPLOYMENT_ENV !== "_staging" || env.ASSETS_BUCKET !== "kids-booklet-staging-assets") throw new Error("Full-bucket backup is limited to the approved staging target.");
+      let token: string | undefined;
+      do {
+        const page = await s3.send(new ListObjectsV2Command({ Bucket: env.ASSETS_BUCKET, ContinuationToken: token }));
+        for (const { Key } of page.Contents ?? []) if (Key) assetKeys.add(normalizeAssetUri(Key));
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+    }
     const assets = [];
-    for (const uri of new Set(documents.map(({ uri }) => normalizeAssetUri(uri)))) assets.push(await storage.snapshot(backupId, uri, env.ASSETS_BUCKET));
+    for (const uri of assetKeys) assets.push(await storage.snapshot(backupId, uri, env.ASSETS_BUCKET));
     const manifest = { schemaVersion: "1", backupId, database: env.MONGODB_DATABASE, environment: env.DEPLOYMENT_ENV, imageDigest: process.env.RELEASE_IMAGE_DIGEST ?? null, sha256, collections: inventory, assets };
     parseManifest(manifest, backupId, env.MONGODB_DATABASE, env.DEPLOYMENT_ENV);
     const manifestBytes = JSON.stringify(manifest);

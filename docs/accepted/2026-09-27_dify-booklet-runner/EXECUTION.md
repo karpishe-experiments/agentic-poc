@@ -118,7 +118,7 @@ and scope before marking a row granted.
 | Browser control | Read-only Dify capacity/New Agent inspection and issue #65 runner UI verification in this chat | Runner UI verification granted on 2026-10-04. Dify edits and credential entry remain private or require separate authorization |
 | Dify writes | Create, edit, test without provider calls, publish and restore new `issue65-` probe/suite resources; existing Booklet Dify resources, credentials and workspace plan unchanged | Granted by the operator in this chat on 2026-09-27 |
 | Private setup | Login for the interface that fails; provision required suite execution keys and callback bindings privately; any direct-provider secret stays inside Dify | CLI and MCP inventory authenticated; new-suite bindings remain unverified |
-| Reset | Exact local database and resolved asset directory; exact staging database `kids_booklet` and full asset bucket after inventory/backup | Not granted for concrete targets |
+| Reset | Staging database `kids_booklet` and the whole `kids-booklet-staging-assets` bucket, after inventory and verified backup; activate Simulated-only runner after reset | Granted by the operator on 2026-10-04 in this chat. Local reset, production, existing Dify resources and paid calls remain excluded. |
 | Balanced spending | Identified model, token/retry bounds and total campaign run allowance, including failed successors | Not granted |
 | Real spending | Identified image/text bindings and total campaign allowance, including failed successors | Not granted |
 | Probe cleanup | Explicit list of disposable resource IDs; no prefix-wide deletion | Not granted; retaining probes is acceptable |

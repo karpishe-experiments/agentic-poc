@@ -214,7 +214,25 @@ maintenance() {
   local release="$1" command="$2"; shift 2
   local release_image
   release_image="$(jq -er .services.app.image "$release/image.json")"
-  compose "$release" run --rm --no-deps -T -e RUNNER_ENABLED=false -e "RELEASE_IMAGE_DIGEST=$release_image" -e "BACKUP_ID=$BACKUP_ID" -e "CONFIRM_DATABASE=$CONFIRMATION" app node --import tsx "scripts/$command.ts" "$@"
+  local full_asset_backup=false
+  [[ "$ACTION" != reset-staging || "$command" != recovery ]] || full_asset_backup=true
+  compose "$release" run --rm --no-deps -T -e RUNNER_ENABLED=false -e "BACKUP_ALL_ASSETS=$full_asset_backup" -e "RELEASE_IMAGE_DIGEST=$release_image" -e "BACKUP_ID=$BACKUP_ID" -e "CONFIRM_DATABASE=$CONFIRMATION" app node --import tsx "scripts/$command.ts" "$@"
+}
+prepare_staging_reset_profile() {
+  local release="$1"
+  [[ "$ENVIRONMENT" == staging ]] || die 'Reset profile is staging-only'
+  # A prepared runner bundle selects the new initializer without opening admission.
+  if jq -e '.services.app.environment | has("DIFY_BOOKLET_BINDINGS_JSON")' "$SECRETS/staging/secrets.json" >/dev/null; then
+    [[ "$(jq -r .environments.staging.ASSETS_BUCKET "$CONFIG_FILE")" == kids-booklet-staging-assets ]] || die 'Reset asset bucket differs from the authorized target'
+    application_secret_override_is_valid "$SECRETS/staging/secrets.json" || die 'Reset requires valid prepared runner settings'
+    jq '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED="true"' "$SECRETS/staging/secrets.json" > "$SECRETS/staging/secrets.reset.json"
+    chmod 600 "$SECRETS/staging/secrets.reset.json"
+    COMPOSE_SECRET_FILE="$SECRETS/staging/secrets.reset.json"
+    validate_compose "$release"
+    COMPOSE_SECRET_FILE=''
+  else
+    [[ ! -f "$SECRETS/staging/secrets.reset.json" ]] || die 'Retained reset settings require inspection before a legacy reset'
+  fi
 }
 set_step() {
   jq --arg step "$1" '.step=$step' "$STATE/operation.json" > "$STATE/operation.next.json"
@@ -358,6 +376,10 @@ run_lifecycle() {
     backup|restore|reset-staging|rollback|rotate-secrets)
       [[ -n "$current" ]] || die 'Environment has no recorded release'
       record_release_metadata "$current" "$current"
+      if [[ "$ACTION" == reset-staging ]]; then
+        prepare_staging_reset_profile "$current"
+        maintenance "$current" read-staging-reset-readiness
+      fi
       if [[ "$ACTION" == rotate-secrets ]]; then
         [[ -f "$SECRETS/$ENVIRONMENT/secrets.pending.json" ]] || die 'No staged secret rotation found'
         COMPOSE_SECRET_FILE="$SECRETS/$ENVIRONMENT/secrets.pending.json"; validate_compose "$current"; COMPOSE_SECRET_FILE=''
@@ -367,7 +389,16 @@ run_lifecycle() {
       if [[ "$ACTION" != restore ]]; then set_step backup; ensure_backup_id; maintenance "$current" recovery backup; fi
       case "$ACTION" in
         restore) maintenance "$current" recovery restore;;
-        reset-staging) maintenance "$current" reset-staging-deployment; maintenance "$current" deployment-control enable reset;;
+        reset-staging)
+          set_step resetting
+          if [[ -f "$SECRETS/staging/secrets.reset.json" ]]; then COMPOSE_SECRET_FILE="$SECRETS/staging/secrets.reset.json"; fi
+          maintenance "$current" reset-staging-deployment
+          maintenance "$current" deployment-control enable reset
+          if [[ -n "$COMPOSE_SECRET_FILE" ]]; then
+            install -m 600 "$SECRETS/staging/secrets.json" "$SECRETS/staging/secrets.reset.previous.json"
+            install -m 600 "$COMPOSE_SECRET_FILE" "$SECRETS/staging/secrets.json"
+            COMPOSE_SECRET_FILE=''
+          fi;;
         rollback)
           [[ -f "$STATE/releases/$ENVIRONMENT/previous" ]] || die 'No previous release recorded'
           read -r previous < "$STATE/releases/$ENVIRONMENT/previous"
@@ -379,6 +410,7 @@ run_lifecycle() {
           install -m 600 "$SECRETS/$ENVIRONMENT/secrets.pending.json" "$SECRETS/$ENVIRONMENT/secrets.json"
           ;;
       esac
+      if [[ "$ACTION" == reset-staging ]]; then set_step reset-verifying; fi
       compose "$current" up -d --no-deps app
       if ! verify_application "$current"; then
         if [[ "$ACTION" == rotate-secrets && -f "$SECRETS/$ENVIRONMENT/secrets.previous.json" ]]; then
@@ -392,6 +424,7 @@ run_lifecycle() {
       fi
       maintenance "$current" deployment-control disable
       if [[ "$ACTION" == rotate-secrets ]]; then rm -f "$SECRETS/$ENVIRONMENT/secrets.pending.json" "$SECRETS/$ENVIRONMENT/secrets.previous.json"; fi
+      if [[ "$ACTION" == reset-staging ]]; then rm -f "$SECRETS/staging/secrets.reset.json"; fi
       if [[ "$ACTION" == rollback ]]; then save_success "$current" true; else save_success "$current"; fi ;;
     *) die 'Unsupported host lifecycle operation';;
   esac
@@ -729,6 +762,11 @@ host_run() {
   COMMIT="$(jq -r .commit "$STATE/operation.json")"
   BACKUP_ID="$(jq -r .backupId "$STATE/operation.json")"
   CONFIRMATION="$(jq -r .confirmation "$STATE/operation.json")"
+  if [[ "$ACTION" == reset-staging ]]; then
+    case "$(jq -r .step "$STATE/operation.json")" in
+      resetting|reset-verifying) die 'Reset may have changed data; inspect the backup and database before explicit restore. Do not replay reset';;
+    esac
+  fi
   recover_interrupted_rotation
   if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then BACKUP_ID=''; fi
   validate_arguments
@@ -879,6 +917,12 @@ host_dispatch() {
     printf 'updated: reviewed host configuration installed\n'; exit 0
   fi
   local current=''
+  if [[ "$ACTION" == reset-staging && "$APPLY" == false ]]; then
+    [[ -f "$STATE/releases/staging/current" ]] || die 'No staging release recorded'
+    read -r current < "$STATE/releases/staging/current"
+    maintenance "$current" read-staging-reset-readiness
+    exit 0
+  fi
   if [[ "$ACTION" == check ]]; then
     [[ -f "$STATE/releases/$ENVIRONMENT/current" ]] || die 'No release recorded'
     read -r current < "$STATE/releases/$ENVIRONMENT/current"
@@ -920,7 +964,18 @@ host_dispatch() {
     wait_operation
     exit 0
   fi
-  [[ ! -f "$STATE/operation.json" ]] || die 'Unresolved operation exists; use resume'
+  if [[ "$ACTION" == restore && -f "$STATE/operation.json" ]]; then
+    jq -e --arg backup "$BACKUP_ID" '.action=="reset-staging" and .environment=="staging" and (.step=="resetting" or .step=="reset-verifying") and .backupId==$backup' "$STATE/operation.json" >/dev/null || die 'Retained operation does not permit this restore; inspect status'
+    [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset recovery requires the exact staging confirmation'
+    local reset_request
+    reset_request="$(jq -er .requestId "$STATE/operation.json")"
+    ! systemctl is-active --quiet "kids-booklet-operation-$reset_request.service" || die 'Reset service remains active'
+    [[ -z "$(docker ps -q --filter 'label=com.docker.compose.project=kids-booklet-staging' --filter 'label=com.docker.compose.oneoff=True')" ]] || die 'Reset maintenance containers remain active'
+    [[ ! -f "$STATE/operations/$reset_request-failed.json" ]] || die 'Reset recovery journal already exists; inspect status'
+    mv "$STATE/operation.json" "$STATE/operations/$reset_request-failed.json"
+    printf 'updated: retained failed reset journal; explicit matching-backup restore authorized\n'
+  fi
+  [[ ! -f "$STATE/operation.json" ]] || die 'Unresolved operation exists; use resume or the exact failed-reset backup restore'
   [[ "$ACTION" != deploy || "${IMAGE_DIGEST%@*}" == "$(jq -r .image "$CONFIG_FILE")" ]] || die 'Image repository does not match configured project'
   REQUEST_ID="${REQUEST_ID:-$(date +%s)-$$}"
   [[ ! -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Request ID already completed'
@@ -2315,7 +2370,7 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac
