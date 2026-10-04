@@ -11,12 +11,13 @@ the error names the missing setting without printing its value.
 
 ## Current deployment status
 
-Live acceptance completed on 2026-09-15.
+Initial live acceptance completed on 2026-09-15. The latest staging transition
+passed on 2026-10-04; browser/persona acceptance is still pending.
 
 | Checkpoint | Verified state |
 | --- | --- |
 | Infrastructure | Cloudflare infrastructure applied successfully for `master` commit `fc81f4e272a3fba2086a1c24b40d7cc15d291c73` |
-| Staging | Deploy and Check deployment passed; `https://booklet-staging.uniwares.co.uk` is operational |
+| Staging | Release `80d62c4615f901e2f548877ede79c45029e75b05`; Deploy `37215558501` and Check `37216248316` passed. Approved reset `37216104737` enabled the Simulated-only Dify profile; prior data/assets remain in backup `staging-20261004T161608Z-54752b58ec7bc071`. Runtime/UI acceptance is pending. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
