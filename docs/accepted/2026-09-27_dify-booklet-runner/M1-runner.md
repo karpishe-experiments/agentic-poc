@@ -1,6 +1,6 @@
 # M1 — Durable runner, Concept Brief and Outline
 
-**State:** All three live Simulated J01–J02 cases passed, including reload persistence and exact approval/lineage evidence. Idle Pause/Resume passed; active-progress control conflict recovery has a local correction pending publication and live verification. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
+**State:** All three live Simulated J01–J02 cases passed, including reload persistence and exact approval/lineage evidence. Idle and active-operation Pause/Resume passed; rapid progression can still exhaust the single conflict retry and require another Pause click. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
 **Predecessor:** [M0](M0-readiness.md). Follow [EXECUTION](EXECUTION.md) at entry,
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
@@ -79,9 +79,25 @@ rapid active progression returned definite revision conflicts instead of pausing
 they did not bypass CAS or replay work. The candidate UI reads the current run
 after that specific rejection and retries the control once unless already applied
 or no longer permitted. Lost responses and other failures are not retried.
-This correction needs reviewed release and live verification before M1 control
-acceptance is complete. The queued J03 boundary is not a completed booklet, and
-neither images nor Balanced/Real behavior has been tested here.
+The correction merged through PR #100 and selective staging PR #101 after two
+clean reviews for each candidate and successful required CI. Staging release
+`017880ef4af4cf371b93f7985a269be42dbc4f59` passed Deploy `37229005456` and
+Check `37229627452`.
+Its immutable image is
+`sha256:f75a7df2a1587fbc21d1790a8af49da5dba18c701eb7d6b65e42d6e750427878`;
+deployment retained backup `staging-20261004T194237Z-6a8d7f437db80367` without reset.
+
+Chrome run `3caeec43-0313-4533-8efb-ec83a6799335` tested the deployed controls.
+The first Pause attempt exhausted the bounded conflict retry during rapid
+progression. A second click, while J02 was active, saved the pause; the authorized
+J02 result finished. Reload retained paused revision 26. Resume reached revision
+27 and `slice_complete`, with the same five operations, five logical text calls,
+zero payable/image calls, and unchanged versions
+`cc4b8585-7fc0-41b3-b2ec-5cce50c8fe77` (J01) and
+`dca9ba3a-bb88-41ed-b660-3422d5f4f45b` (J02). No completed work was replayed.
+This proves persistence and safe controls, not a guaranteed one-click Pause
+during rapid revision changes. The queued J03 boundary is not a completed
+booklet; neither images nor Balanced/Real behavior has been tested here.
 
 | Module | Corrected published workflow ID |
 | --- | --- |

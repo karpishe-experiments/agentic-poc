@@ -1,6 +1,6 @@
 # M2 — Narrative completion and reference packages
 
-**State:** Planned. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** S1 local contracts and fixtures implemented. Live M2 remains pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Entry gate
@@ -11,6 +11,71 @@ proof. Confirm the three fixed briefs and subject-ID materializer. Verify file
 transfer and storage using synthetic bytes before image-provider work. Bundle
 any missing Dify configuration or staging-login handoff before implementation.
 This milestone uses simulated images and text; no paid approval is required.
+
+## Compact execution packages from M1
+
+The live M1 cases in [M1 evidence](M1-runner.md#live-browser-acceptance--2026-10-04)
+provide current schemas, callbacks, publication identifiers and trace links.
+The deployed active-operation Pause/Resume check passed with persisted results
+and no repeated work. Rapid revision changes can require another Pause click;
+see M1 for that bounded-control limitation. Local schema/fixture work can proceed.
+Ali's pinned guidelines 03–10 have been read; retain their responsibilities and
+the PRD's delegated-approval, fixed-case and warning-only adaptations.
+
+| Package | Contract, edits and reusable components | Verification and finish |
+| --- | --- | --- |
+| S1: draft lists | Extend `lib/contracts/experiment-runner.ts` first, then `lib/experiment-runner/fixtures.ts` with J03/J04. Draft entries separate narrative facts, questions and roles from visual facts. Example: inventor + robot; park; no invented clothing or camera settings. Keep J01/J02 schemas, role whitelist and fixtures valid until S2 adds runtime support. | Add `tests/unit/experiment-runner-draft-lists.test.ts` for all personas and extend the existing fixture tests for clarification and revision. Run these files plus `tests/unit/experiment-runner-contracts.test.ts` with `--bail=1 --retry=0`, typecheck and lint. Finish on local typed output only; no live readiness claim. |
+| S2: durable narrative | Extend `db/experiment-narrative.ts`, `db/experiment-repository.ts`, context and routing for J03–J07. Reuse existing transactional proposal/approval/decision paths and immutable versions. J03/J04 follow approved J01/J02; both precede J05; J05 precedes both final lists. Assign stable character/location IDs in Booklet once, retain them across renames and retries, and reject unknown manuscript references. Add complete prose/action/dialogue units to J05, not physical-page layouts. | Integration tests cover both sibling orders, stale inputs, duplicate callbacks, grouped/delegated acceptance, grant changes and scoped revisions. Finish with all three cases at current approved final lists in local transport fixtures. Do not dispatch unsupported tasks from retained M1 configurations. |
+| S3: live narrative bindings | Extend `config.ts`, `workflow-graph.ts`, module preparation and the existing protected-settings validator for the selected bounded binding set. Prepare independent J03–J07 modules; preserve the six existing app identities. Read back HTTP body `value` fields and published IDs. Keep provider branches disabled. Before configuration changes, stop admission and reconcile active work; retain old-run evidence and use new successor configuration, never rewrite its snapshot. | Verify graph/Python fixtures, configuration and deployment contracts. Two clean reviews and existing staging release procedure precede live all-persona J01–J07 runs. Private app-key setup is a handoff only if no verified existing binding mechanism applies. |
+| S4: image storage seam | Reuse the operation ledger and AssetStore; add exact authenticated fixture-download and image-completion routes. Follow the original-byte decoding/claim/digest contract below. A simulated image operation reserves one logical image and zero payable calls. Store one asset per sample/sheet operation with its source versions and prompt record. | Prove synthetic bytes through actual Dify HTTP file/upload nodes before claiming live transfer. Test corrupt, stale, duplicate/concurrent uploads, claim expiry and storage failure. No image provider is invoked. Escalate an unverified binary binding rather than substituting a local-only mock. |
+| S5: style and sheets | Add J08–J10 schemas, fixtures, subject context/materialization and independently testable modules. J08 proposes a module, generates two samples, then becomes accepted. Accepted J08 and final-list subject versions precede each sheet. Keep the style module byte-for-byte and retain its hash, views/expressions, prompts, asset IDs and exact approvals. Extend the current inspector for stored images. | Complete all three staged Simulated cases with 5/5/6 current reference images, reload persistence and zero provider-node execution. Retain failed predecessors and replacement assets. Two clean reviews and release checks precede publication. Then update M3 from the verified contracts. |
+
+For each package, fill exact new test filenames and input/output examples before
+its editing pass. Do not add a new plan hierarchy. Use the existing repository,
+callbacks and dispatcher, not a second orchestrator or editable agent registry.
+Escalate a changed ownership/creative contract, unknown execution outcome or
+missing capability. Capacity, key entry and binary-transfer gaps block their
+dependent live operation only; paid modes remain unavailable.
+
+S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
+lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
+`knownRelationship`, `knownFacts` and `openQuestions`; package notes are
+`castNotes`, `representationAndSafety`, `manuscriptQuestions` and
+`approvalQuestions`. J04 rows have `entryKey`, title, `storyPurpose`,
+`knownFacts`, `likelyScenes` and `openQuestions`; package notes are
+`worldAndSafetyNotes`, `manuscriptQuestions` and `approvalQuestions`.
+Keys `character_1`/`character_2` and `location_1`/`location_2` identify stable
+proposal entries, not durable application IDs. The later materializer assigns
+durable IDs once and retains the same keys/IDs across renames. Validate two
+character entries and one/one/two location entries for the fixed cases, unique
+keys, required content and the bounds below. Strip unknown visual-design fields.
+Preference-length deviations remain warnings. Example J03 entry: `character_1`,
+`Young inventor`, `Invents a safe kite retrieval plan`, `main`, `Friend and maker
+of the tiny robot`, known facts from the approved outline, and any unresolved
+narrative questions. No storage transition or Dify execution occurs in this
+parser increment.
+
+The local `simulateDraftListResult` input contains mode, persona, exact brief,
+approved Concept/Outline content, and optional current content, saved answers,
+revision instruction and material question. It returns a typed draft proposal
+with warnings or one unanswered clarification. The owning runtime must prove
+approval/source identity before using these contents; this fixture does not
+perform database authorization. Revision instructions become scoped package
+notes in simulation, not evidence of real-model interpretation. The existing
+J01/J02 role-result whitelist and live execution remain unchanged.
+Notes-only revisions retain complete existing entries, including their narrative
+functions, relationships and story purposes. Refresh after an upstream source
+change is separate S2 work; do not infer that behavior from this local fixture.
+
+S1 verification on 2026-10-04: clean checkout at `b84227a` with the exact modified
+contracts/fixtures/tests passed typecheck, full lint, 27 focused tests across
+draft-list contracts, narrative contracts and fixtures (`--bail=1 --retry=0`),
+and all twelve deterministic agent fixtures. The first focused-test attempt was
+blocked by sandbox process launch; the same command passed outside the sandbox.
+This is local output proof only. Next, S2 integrates these contracts through
+normal persistence, dependency gates and role context; S3 verifies actual Dify
+bindings before live narrative dispatch. No provider calls or Dify mutations
+occurred in S1.
 
 ## Schema and dependency work
 

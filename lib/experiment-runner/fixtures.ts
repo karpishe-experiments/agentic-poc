@@ -1,10 +1,74 @@
-import { CASES, conceptBriefSchema, parseNarrativeProposal, roleResultSchema, storyOutlineSchema, validateRoleResult, type ExperimentMode, type RoleResult } from "@/lib/contracts/experiment-runner";
+import { CASES, conceptBriefSchema, parseDraftListProposal, parseNarrativeProposal, roleResultSchema, storyOutlineSchema, validateRoleResult, type DraftCharacterListContent, type DraftLocationListContent, type ExperimentMode, type Persona, type RoleResult } from "@/lib/contracts/experiment-runner";
 import type { createExperimentContextService } from "@/lib/experiment-runner/context";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
 type Case = keyof typeof CASES;
 type Task = "J01" | "J02";
 const sourceConstraintPrefix = "Approved concept constraint: ";
+
+type DraftFixtureInput = {
+  mode: ExperimentMode;
+  persona: Persona;
+  brief: string;
+  approvedConcept: unknown;
+  approvedOutline: unknown;
+  currentContent?: unknown;
+  answers?: { question: string; answer: string }[];
+  revision?: string;
+  materialQuestion?: string;
+};
+type DraftFixtureResult<T> = { kind: "clarification"; question: string } | { kind: "proposal"; content: T; warnings: ReturnType<typeof parseDraftListProposal>["warnings"] };
+
+// Pinned Ali J03/J04 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.
+// Adaptations: fixed persona cases, delegated tester approval outside this local
+// fixture, and warning-only preferences. Approved J01/J02 remain the sources.
+export function simulateDraftListResult(task: "J03", input: DraftFixtureInput): DraftFixtureResult<DraftCharacterListContent>;
+export function simulateDraftListResult(task: "J04", input: DraftFixtureInput): DraftFixtureResult<DraftLocationListContent>;
+export function simulateDraftListResult(task: "J03" | "J04", input: DraftFixtureInput): DraftFixtureResult<DraftCharacterListContent | DraftLocationListContent> {
+  if (input.mode !== "simulated") throw new Error("Draft list fixtures require simulated mode.");
+  if (input.brief !== CASES[input.persona].brief) throw new Error("Fixture requires an exact fixed case brief.");
+  const concept = conceptBriefSchema.parse(input.approvedConcept);
+  const outline = storyOutlineSchema.parse(input.approvedOutline);
+  if (concept.sourceInput !== input.brief) throw new Error("Approved concept does not match the fixed case brief.");
+  const expectedLocations = input.persona === "professional_creator" ? 2 : 1;
+  if (outline.characters.length !== 2 || outline.locations.length !== expectedLocations) throw new Error("Approved outline does not match the fixed case counts.");
+  const answers = input.answers ?? [];
+  if (input.materialQuestion && !answers.some((item) => item.question === input.materialQuestion && item.answer.trim())) {
+    return { kind: "clarification", question: input.materialQuestion };
+  }
+  const answerNotes = answers.filter((item) => item.answer.trim()).map((item) => `${item.question}: ${item.answer}`);
+  if (task === "J03") {
+    const current = input.currentContent === undefined ? null : parseDraftListProposal("J03", input.persona, input.currentContent).content;
+    const content = {
+      schemaVersion: "2" as const, title: current?.title ?? outline.title,
+      characters: current?.characters ?? outline.characters.map((item, index) => {
+        const entryKey = (`character_${index + 1}` as "character_1" | "character_2");
+        return { entryKey, nameOrRole: item.nameOrRole, narrativeFunction: item.narrativeRole,
+          role: index === 0 ? "main" as const : "supporting" as const, knownRelationship: item.relationship,
+          knownFacts: [], openQuestions: item.openDetails };
+      }),
+      castNotes: [...(current?.castNotes ?? []), ...answerNotes.filter((note) => !current?.castNotes.includes(note)), ...(input.revision ? [`Revision request: ${input.revision}`] : [])],
+      representationAndSafety: current?.representationAndSafety ?? [], manuscriptQuestions: current?.manuscriptQuestions ?? [],
+      approvalQuestions: current?.approvalQuestions ?? ["Does this cast reflect the approved story outline?"],
+    };
+    const parsed = parseDraftListProposal("J03", input.persona, content);
+    return { kind: "proposal", ...parsed };
+  }
+  const current = input.currentContent === undefined ? null : parseDraftListProposal("J04", input.persona, input.currentContent).content;
+  const content = {
+    schemaVersion: "2" as const, title: current?.title ?? outline.title,
+    locations: current?.locations ?? outline.locations.map((item, index) => {
+      const entryKey = (`location_${index + 1}` as "location_1" | "location_2");
+      return { entryKey, title: item.name, storyPurpose: item.storyPurpose,
+        knownFacts: [], likelyScenes: [item.storyPurpose], openQuestions: item.openDetails };
+    }),
+    worldAndSafetyNotes: [...(current?.worldAndSafetyNotes ?? []), ...answerNotes.filter((note) => !current?.worldAndSafetyNotes.includes(note)), ...(input.revision ? [`Revision request: ${input.revision}`] : [])],
+    manuscriptQuestions: current?.manuscriptQuestions ?? [],
+    approvalQuestions: current?.approvalQuestions ?? ["Do these places serve the approved story outline?"],
+  };
+  const parsed = parseDraftListProposal("J04", input.persona, content);
+  return { kind: "proposal", ...parsed };
+}
 
 const stories = {
   playful_kid: {
