@@ -10,6 +10,7 @@ on:
           - DIFY_TOOL_KEY
           - DIFY_API_KEY
           - DIFY_COMMUNITY_PROBE
+          - DIFY_BOOKLET_RUNNER
 permissions: {contents: read}
 concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
@@ -38,6 +39,7 @@ jobs:
           DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}
           DIFY_COMMUNITY_WORKFLOW_API_KEY: ${{ secrets.DIFY_COMMUNITY_WORKFLOW_API_KEY }}
           DIFY_COMMUNITY_CALLBACK_KEY: ${{ secrets.DIFY_COMMUNITY_CALLBACK_KEY }}
+          DIFY_BOOKLET_RUNNER_SETTINGS_JSON: ${{ secrets.DIFY_BOOKLET_RUNNER_SETTINGS_JSON }}
           GH_TOKEN: ${{ github.token }}
           SECRET_NAME: ${{ inputs.secret_name }}
         run: |

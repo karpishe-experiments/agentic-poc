@@ -148,9 +148,10 @@ and nullable tool-provider identifiers. Set `DIFY_BOOKLET_BASE_URL` to the
 Community origin and `DIFY_BOOKLET_PUBLIC_ORIGIN` to the exact Booklet origin.
 Do not reuse diagnostic or Cloud keys. Keep `DIFY_BOOKLET_RUNNER_ENABLED=false`
 until setup, release verification and exact-target reset approval are complete.
-The existing deployment secret bundle does not yet accept runner settings.
-Extend that protected staging setup path and test its preservation of Cloud
-settings before asking the operator to bind the new keys or enable the runner.
+The S4d candidate below adds protected runner settings. Required Linux CI and
+host synchronization remain pending; local tests do not prove that the live
+dispatcher accepts them. Verify that path before asking the operator to install
+the new keys or enable the runner.
 
 With valid local/staging bindings, enabled initialization verifies experiment
 references without local-agent seeds or a host provider key. It retains seed
@@ -166,6 +167,20 @@ This checkpoint remains pending: new private bindings and exact reset targets
 are not supplied by application code, offline validation or the release grant.
 
 ## Entry and manual setup
+
+### S4d: protected staging runner bindings
+
+| Field | Bounded execution package |
+| --- | --- |
+| Goal and components | Extend the existing `Dify staging key` workflow, canonical host dispatcher and Compose default for the five runner settings. Reuse private SSH staging, exact-field validation, merge-patch preservation, shared lock/journal, drain, backup and readiness. No live credential entry or enablement in this implementation slice. |
+| Contract and examples | Add the staging-only selector `DIFY_BOOKLET_RUNNER` and protected Actions secret `DIFY_BOOKLET_RUNNER_SETTINGS_JSON`. Its JSON object contains exactly `DIFY_BOOKLET_RUNNER_ENABLED`, `DIFY_BOOKLET_BASE_URL`, `DIFY_BOOKLET_PUBLIC_ORIGIN`, `DIFY_BOOKLET_TOOL_KEY`, `DIFY_BOOKLET_BINDINGS_JSON`. Origins are fixed to Community and Booklet staging. The flag is a string `false` or `true`; initial private setup uses `false`. Binding JSON is a string containing the six strict M1 bindings from `config.ts`, with unique app UUIDs and exact role/task/persona slots. Validate both disabled and enabled bundles; a disabled bundle is not permission to store malformed credentials. Reject production and unknown fields before staging. |
+| Ordered edits | Add bounded bundle parsing/building and host validation. Validate the complete merged override, including existing Cloud/probe fields; preserve all unrelated secrets and the existing host OpenAI key. Extend full protected-file input support without requiring runner fields in legacy setups. Add only a default-off Compose switch. Extend the master-freshness-checked workflow with the selector and protected secret reference; keep summaries allowlisted. Update deployment contracts/runbook and architecture. |
+| Verification | Add shell tests for missing/malformed settings, six-slot/UUID validation, duplicate apps, dollar escaping, false/true flags, extra fields, production rejection and preservation of Cloud/Community/application fields. Run `bash -n`, ShellCheck, both deployment shell suites, Actionlint, isolated deployment contracts and `recovery-storage.test.ts`. Windows limitations require Linux CI, not a local full-suite claim. |
+| Completion and escalation | Reviewed repository plumbing only. Private keys, exact-target reset approval, host synchronization and enablement remain separate checkpoints. Do not rotate credentials, dispatch maintenance, reset data or enable the runner. Escalate incompatible host secret contracts rather than deleting legacy settings. |
+
+An enabled bundle can be applied only after the private-binding and exact-target
+reset checkpoint. Installing a disabled bundle does not verify Dify publication,
+runtime callbacks or live acceptance.
 
 Reconcile M0's selected verified packaging, actual workflow schema/bindings and code
 baseline. Invocation/credential details below must be finalized from that proof,

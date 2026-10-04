@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-guard plan-guard; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -167,6 +167,51 @@ CHILD
     if (DEPLOYMENT_SECRETS_DIR="$TEMP_DIR/secret-input" build_secret_override staging "$TEMP_DIR/rejected-optional.json") >/dev/null 2>&1; then echo 'accepted a short Dify tool key in flat input'; exit 1; fi
     printf '%s\n' '{"services":{"app":{"environment":{"OPENAI_API_KEY":"key","MONGODB_URI":"uri","ACCESS_GATE_PASSWORD":"short","AWS_ACCESS_KEY_ID":"access","AWS_SECRET_ACCESS_KEY":"secret"}}}}' > "$SECRETS/staging/secrets.json"
     if (write_secret_override staging) >/dev/null 2>&1; then echo 'accepted existing invalid host secret override'; exit 1; fi;;
+  booklet-runner-staging)
+    require_root() { :; }; load_config() { :; }; flock() { :; }
+    rm "$STATE/operation.json"
+    bindings="$(jq -cn '[["manager",null,null],["specialist","J01",null],["specialist","J02",null],["tester",null,"playful_kid"],["tester",null,"enthusiast_parent"],["tester",null,"professional_creator"]]|to_entries|map({role:.value[0],taskId:.value[1],persona:.value[2],appId:("00000000-0000-4000-8000-00000000000"+(.key+1|tostring)),publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"})')"
+    export GITHUB_ACTIONS=true
+    DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$(jq -cn --arg bindings "$bindings" '{DIFY_BOOKLET_RUNNER_ENABLED:"false",DIFY_BOOKLET_BASE_URL:"https://dify.uniwares.co.uk",DIFY_BOOKLET_PUBLIC_ORIGIN:"https://booklet-staging.uniwares.co.uk",DIFY_BOOKLET_TOOL_KEY:("x"*32),DIFY_BOOKLET_BINDINGS_JSON:$bindings}')"
+    export DIFY_BOOKLET_RUNNER_SETTINGS_JSON
+    build_booklet_runner_patch staging "$TEMP_DIR/runner.json"
+    booklet_runner_patch_is_valid "$TEMP_DIR/runner.json"
+    jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|all(.apiKey=="private$$fixture")' "$TEMP_DIR/runner.json" >/dev/null
+    for mutation in '.DIFY_BOOKLET_TOOL_KEY="short"' '.DIFY_BOOKLET_TOOL_KEY=("$"*16)' '.DIFY_BOOKLET_BINDINGS_JSON="bad"' '.DIFY_BOOKLET_RUNNER_ENABLED="maybe"' '.DIFY_BOOKLET_BASE_URL="https://other.example"' '.DIFY_BOOKLET_PUBLIC_ORIGIN="http://localhost"' '.DIFY_BOOKLET_UNKNOWN="extra"' 'del(.DIFY_BOOKLET_TOOL_KEY)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[1].appId=.[0].appId|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].role="tester"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].appId="not-a-uuid"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].extra=true|tojson)'; do
+      invalid="$(jq -c "$mutation" <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+      if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid runner settings'; exit 1; fi
+    done
+    if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON='' build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted missing runner settings'; exit 1; fi
+    if (build_booklet_runner_patch prod "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted production runner bundle'; exit 1; fi
+    original="$(jq -cn '{services:{app:{environment:{OPENAI_API_KEY:"existing-provider",MONGODB_URI:"mongodb://db",ACCESS_GATE_PASSWORD:"sixteen-chars-ok!",AWS_ACCESS_KEY_ID:("a"*32),AWS_SECRET_ACCESS_KEY:("a"*64),DIFY_API_KEY:"existing-cloud",DIFY_TOOL_KEY:("c"*32),DIFY_COMMUNITY_PROBE_ENABLED:"true",DIFY_COMMUNITY_BASE_URL:"https://dify.uniwares.co.uk",DIFY_COMMUNITY_WORKFLOW_API_KEY:"community-key",DIFY_COMMUNITY_CALLBACK_KEY:("b"*32)}}}}')"
+    jq '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED="false"' <<< "$original" > "$TEMP_DIR/resolved-default.json"
+    compose() { cat "$TEMP_DIR/resolved-default.json"; }
+    validate_compose unused
+    (ENVIRONMENT=prod; validate_compose unused)
+    if application_secret_override_is_valid "$TEMP_DIR/resolved-default.json"; then echo 'accepted incomplete protected runner settings'; exit 1; fi
+    jq '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED="true"' "$TEMP_DIR/resolved-default.json" > "$TEMP_DIR/invalid-resolved.json"
+    if application_secret_override_is_valid "$TEMP_DIR/invalid-resolved.json" resolved; then echo 'accepted unconfigured enabled runner'; exit 1; fi
+    printf '%s' "$original" > "$SECRETS/staging/secrets.json"
+    export SSH_ORIGINAL_COMMAND='--action stage-secrets --environment staging --secret-name DIFY_BOOKLET_RUNNER --apply'
+    (host_dispatch) < "$TEMP_DIR/runner.json" >/dev/null
+    jq -e --argjson old "$original" '.services.app.environment as $e | all($old.services.app.environment|to_entries[]; $e[.key]==.value)' "$SECRETS/staging/secrets.pending.json" >/dev/null
+    booklet_runner_settings_are_valid "$SECRETS/staging/secrets.pending.json" override
+    [[ "$(cat "$SECRETS/staging/secrets.json")" == "$original" ]]
+    jq '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED="true"' "$TEMP_DIR/runner.json" > "$TEMP_DIR/enabled.json"
+    booklet_runner_patch_is_valid "$TEMP_DIR/enabled.json"
+    jq -s '.[0]*.[1]' "$SECRETS/staging/secrets.json" "$TEMP_DIR/enabled.json" > "$TEMP_DIR/merged.json"
+    application_secret_override_is_valid "$TEMP_DIR/merged.json"
+    application_secret_override_is_valid "$TEMP_DIR/merged.json" resolved
+    if (ENVIRONMENT=prod application_secret_override_is_valid "$TEMP_DIR/merged.json" resolved); then echo 'accepted production resolved runner settings'; exit 1; fi
+    if (ENVIRONMENT=prod application_secret_override_is_valid "$TEMP_DIR/merged.json"); then echo 'accepted production runner override'; exit 1; fi
+    configure_ssh() { :; }
+    ssh() { [[ "$*" == *'--secret-name DIFY_BOOKLET_RUNNER'* ]]; cat > "$TEMP_DIR/outbound.json"; }
+    host_call() { [[ "$ACTION" == rotate-secrets && -z "$SECRET_NAME" && -z "${DIFY_BOOKLET_RUNNER_SETTINGS_JSON:-}" ]]; }
+    ACTION=rotate-protected-dify-key; SECRET_NAME=DIFY_BOOKLET_RUNNER; REQUEST_ID=123-1
+    rotate_protected_dify_key
+    booklet_runner_patch_is_valid "$TEMP_DIR/outbound.json"
+    export SSH_ORIGINAL_COMMAND='--action stage-secrets --environment prod --secret-name DIFY_BOOKLET_RUNNER --apply'
+    if (host_dispatch) < "$TEMP_DIR/runner.json" >/dev/null 2>&1; then echo 'accepted production runner staging'; exit 1; fi;;
   community-probe-staging)
     require_root() { :; }; load_config() { :; }; flock() { :; }
     rm "$STATE/operation.json"

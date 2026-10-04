@@ -16,6 +16,7 @@ Compose merges base, environment overlay, root-only secret JSON, and image overr
 | `OPENAI_API_KEY`, `MONGODB_URI`, `ACCESS_GATE_PASSWORD`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Root-only `/etc/kids-booklet/<environment>/secrets.json` |
 | Optional `DIFY_API_KEY`, `DIFY_TOOL_KEY`, `DIFY_IMAGE_OPENAI_API_KEY` for the temporary staging trial | Same root-only secret override; absent values remain valid |
 | `DIFY_COMMUNITY_PROBE_ENABLED`, `DIFY_COMMUNITY_BASE_URL`, `DIFY_COMMUNITY_WORKFLOW_API_KEY`, `DIFY_COMMUNITY_CALLBACK_KEY` | Separate staging-only model-free probe switch, HTTPS origin, runtime workflow key and callback key; protected app override when enabled; production stays disabled |
+| `DIFY_BOOKLET_RUNNER_ENABLED`, `DIFY_BOOKLET_BASE_URL`, `DIFY_BOOKLET_PUBLIC_ORIGIN`, `DIFY_BOOKLET_TOOL_KEY`, `DIFY_BOOKLET_BINDINGS_JSON` | Optional five-setting staging runner bundle; fixed Community/staging origins, dedicated callback key and six private runtime bindings; default disabled |
 | `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_HOST_KEY` | GitHub repository secrets for restricted, pinned SSH |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | GitHub repository secrets for noninteractive Tunnel SSH |
 | `CLOUDFLARE_API_TOKEN`, `R2_TERRAFORM_ACCESS_KEY_ID`, `R2_TERRAFORM_SECRET_ACCESS_KEY` | GitHub infrastructure credentials, never application container credentials |
@@ -54,6 +55,16 @@ protected override, preserving Cloud and other application secrets. The existing
 serialized rotation performs drain and readiness checks. Missing credentials,
 production targets and superseded master workflow commits fail before mutation.
 The workflow does not create Dify keys or configure its callback variable.
+
+The same workflow accepts `DIFY_BOOKLET_RUNNER` using the protected repository
+secret `DIFY_BOOKLET_RUNNER_SETTINGS_JSON`. Its exact five-field JSON object
+stores the binding array as a JSON string. The host validates all six role slots,
+UUIDs, unique apps, private keys and origins even when the flag is `false`.
+It escapes Compose dollar signs and merges only these fields; existing Cloud,
+Community probe and application secrets stay unchanged. Inputs are limited to
+48 KiB and staged patches to 64 KiB. Production targets reject runner settings.
+Initial setup must use `false`. Applying `true` requires the issue #65 private
+binding and exact reset checkpoint; the selector grants no such authorization.
 
 ## Lifecycle
 

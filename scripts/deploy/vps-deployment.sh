@@ -57,7 +57,7 @@ Options:
   --confirmation kids_booklet       required for reset-staging
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
-  --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE bundle
+  --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE/DIFY_BOOKLET_RUNNER bundle
   --generate-password               generate and display ACCESS_GATE_PASSWORD once
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
@@ -113,10 +113,10 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
-  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY|DIFY_COMMUNITY_PROBE)$ ]] || die 'Invalid application secret name'
+  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY|DIFY_COMMUNITY_PROBE|DIFY_BOOKLET_RUNNER)$ ]] || die 'Invalid application secret name'
   [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
-  if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
-    [[ "$ENVIRONMENT" == staging && "$ACTION" =~ ^(rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die 'Community probe bundle is limited to staging rotation'
+  if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE || "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
+    [[ "$ENVIRONMENT" == staging && "$ACTION" =~ ^(rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die 'Dify bundle is limited to staging rotation'
   fi
   if [[ "$GENERATE_PASSWORD" == true ]]; then
     [[ "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets)$ ]] || die '--generate-password is only valid for application secret repair or rotation'
@@ -278,7 +278,7 @@ validate_compose() {
   resolved="$TEMP_DIR/resolved-compose.json"
   compose "$release" config --format json > "$resolved"
   chmod 600 "$resolved"
-  application_secret_override_is_valid "$resolved" || die 'Resolved Compose secrets do not satisfy the application secret contract'
+  application_secret_override_is_valid "$resolved" resolved || die 'Resolved Compose secrets do not satisfy the application secret contract'
 }
 prepare_release() {
   local release="$STATE/releases/$ENVIRONMENT/$COMMIT"
@@ -804,6 +804,8 @@ host_dispatch() {
     if [[ -n "$SECRET_NAME" ]]; then
       if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
         community_probe_patch_is_valid "$TEMP_DIR/secrets.json" || die 'Community probe bundle is invalid'
+      elif [[ "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
+        booklet_runner_patch_is_valid "$TEMP_DIR/secrets.json" || die 'Booklet runner bundle is invalid'
       else
         jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
       fi
@@ -1764,13 +1766,22 @@ bootstrap_state() {
   chmod 600 "$directory"/*
 }
 build_secret_override() {
-  local environment="$1" destination="$2" name value secret_input=''
+  local environment="$1" destination="$2" name value secret_input='' runner_input=''
   private_temp
   if [[ -n "${DEPLOYMENT_SECRETS_DIR:-}" ]]; then
     [[ "$GENERATE_PASSWORD" == false ]] || die '--generate-password cannot be combined with DEPLOYMENT_SECRETS_DIR'
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
+    if jq -e 'keys|any(startswith("DIFY_BOOKLET_"))' "$secret_input" >/dev/null 2>&1; then
+      [[ "$environment" == staging ]] || die 'Booklet runner settings are staging-only'
+      booklet_runner_settings_are_valid "$secret_input" || die 'Private Booklet runner settings are invalid'
+      runner_input="$secret_input"
+      # Keep the existing legacy schema check; restore the complete input before serialization.
+      jq 'with_entries(select(.key|startswith("DIFY_BOOKLET_")|not))' "$secret_input" > "$TEMP_DIR/legacy-secret-input.json"
+      secret_input="$TEMP_DIR/legacy-secret-input.json"
+    fi
     jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_WORKFLOW_API_KEY","DIFY_COMMUNITY_CALLBACK_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_PROBE_ENABLED")|not) or (.DIFY_COMMUNITY_PROBE_ENABLED == "true" or .DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((has("DIFY_COMMUNITY_BASE_URL")|not) or .DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((has("DIFY_COMMUNITY_WORKFLOW_API_KEY")|not) or (.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_CALLBACK_KEY")|not) or (.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and ((.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (has("DIFY_COMMUNITY_BASE_URL") and has("DIFY_COMMUNITY_WORKFLOW_API_KEY") and has("DIFY_COMMUNITY_CALLBACK_KEY")))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
+    [[ -z "$runner_input" ]] || secret_input="$runner_input"
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi
     chmod 600 "$destination"
@@ -1844,10 +1855,74 @@ prompt_application_secret() {
   done
 }
 application_secret_override_is_valid() {
+  # The public Compose default is not a protected settings bundle. Permit only
+  # that exact disabled default when validating resolved Compose, not secret input.
+  if [[ "${2:-}" == resolved ]] && jq -e '.services.app.environment | with_entries(select(.key|startswith("DIFY_BOOKLET_"))) | .=={"DIFY_BOOKLET_RUNNER_ENABLED":"false"}' "$1" >/dev/null 2>&1; then
+    legacy_application_secret_override_is_valid "$1"
+    return
+  fi
+  if [[ "${ENVIRONMENT:-}" == prod ]] && jq -e '.services.app.environment|keys|any(startswith("DIFY_BOOKLET_"))' "$1" >/dev/null 2>&1; then return 1; fi
+  legacy_application_secret_override_is_valid "$1" && booklet_runner_settings_are_valid "$1" override
+}
+legacy_application_secret_override_is_valid() {
   jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$")) and ((($e|has("DIFY_API_KEY"))|not) or ($e.DIFY_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_TOOL_KEY"))|not) or ($e.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((($e|has("DIFY_IMAGE_OPENAI_API_KEY"))|not) or ($e.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_PROBE_ENABLED"))|not) or ($e.DIFY_COMMUNITY_PROBE_ENABLED == "true" or $e.DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((($e|has("DIFY_COMMUNITY_BASE_URL"))|not) or $e.DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY"))|not) or ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))|not) or ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and (($e.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (($e|has("DIFY_COMMUNITY_BASE_URL")) and ($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY")) and ($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))))' "$1" >/dev/null
 }
 community_probe_patch_is_valid() {
   jq -e 'keys==["services"] and (.services|keys)==["app"] and (.services.app|keys)==["environment"] and (.services.app.environment as $e | ($e|keys)==["DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_CALLBACK_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_WORKFLOW_API_KEY"] and $e.DIFY_COMMUNITY_PROBE_ENABLED=="true" and $e.DIFY_COMMUNITY_BASE_URL=="https://dify.uniwares.co.uk" and ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0) and ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32))' "$1" >/dev/null
+}
+booklet_runner_settings_are_valid() {
+  # Validate stored Compose values as well as the private flat input. No values are printed.
+  jq -e --arg source "${2:-flat}" '
+    def uuid: type=="string" and test("^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$");
+    (if $source=="override" then .services.app.environment else . end) as $all |
+    ($all | with_entries(select(.key|startswith("DIFY_BOOKLET_")))) as $e |
+    if ($e|length)==0 then true else
+      ($e.DIFY_BOOKLET_BINDINGS_JSON|fromjson) as $bindings |
+      ($e|keys)==["DIFY_BOOKLET_BASE_URL","DIFY_BOOKLET_BINDINGS_JSON","DIFY_BOOKLET_PUBLIC_ORIGIN","DIFY_BOOKLET_RUNNER_ENABLED","DIFY_BOOKLET_TOOL_KEY"] and
+      ($e.DIFY_BOOKLET_RUNNER_ENABLED=="false" or $e.DIFY_BOOKLET_RUNNER_ENABLED=="true") and
+      $e.DIFY_BOOKLET_BASE_URL=="https://dify.uniwares.co.uk" and
+      $e.DIFY_BOOKLET_PUBLIC_ORIGIN=="https://booklet-staging.uniwares.co.uk" and
+      ($e.DIFY_BOOKLET_TOOL_KEY|type=="string" and length>=32) and
+      ($e.DIFY_BOOKLET_BINDINGS_JSON|type=="string") and
+      ($bindings|type=="array" and length==6) and
+      all($bindings[];
+        type=="object" and keys==["apiKey","appId","persona","publishedWorkflowId","role","taskId","toolProviderId"] and
+        (.appId|uuid) and (.publishedWorkflowId|uuid) and
+        (.toolProviderId==null or (.toolProviderId|uuid)) and
+        (.apiKey|type=="string" and length>0)) and
+      ([$bindings[].appId]|unique|length)==6 and
+      ([$bindings[] | [.role,.taskId,.persona]] | sort)==
+        ([["manager",null,null],["specialist","J01",null],["specialist","J02",null],["tester",null,"playful_kid"],["tester",null,"enthusiast_parent"],["tester",null,"professional_creator"]]|sort)
+    end' "$1" >/dev/null 2>&1
+}
+booklet_runner_patch_is_valid() {
+  jq -e 'keys==["services"] and (.services|keys)==["app"] and (.services.app|keys)==["environment"] and (.services.app.environment|keys)==["DIFY_BOOKLET_BASE_URL","DIFY_BOOKLET_BINDINGS_JSON","DIFY_BOOKLET_PUBLIC_ORIGIN","DIFY_BOOKLET_RUNNER_ENABLED","DIFY_BOOKLET_TOOL_KEY"]' "$1" >/dev/null 2>&1 &&
+    booklet_runner_settings_are_valid "$1" override
+}
+build_booklet_runner_patch() {
+  local environment="$1" destination="$2" settings=''
+  [[ "$environment" == staging ]] || die 'Booklet runner bundle is staging-only'
+  while true; do
+    if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+      settings="${DIFY_BOOKLET_RUNNER_SETTINGS_JSON:-}"
+    else
+      interactive_terminal || die 'Booklet runner setup requires a private terminal or protected workflow secret'
+      IFS= read -r -s -p 'Paste the private Booklet runner settings JSON: ' settings < /dev/tty
+      printf '\n' > /dev/tty
+    fi
+    printf '%s' "$settings" > "$TEMP_DIR/booklet-runner-settings.json"
+    chmod 600 "$TEMP_DIR/booklet-runner-settings.json"
+    if [[ "$(wc -c < "$TEMP_DIR/booklet-runner-settings.json")" -le 49152 ]] &&
+      jq -e 'type=="object" and keys==["DIFY_BOOKLET_BASE_URL","DIFY_BOOKLET_BINDINGS_JSON","DIFY_BOOKLET_PUBLIC_ORIGIN","DIFY_BOOKLET_RUNNER_ENABLED","DIFY_BOOKLET_TOOL_KEY"]' "$TEMP_DIR/booklet-runner-settings.json" >/dev/null 2>&1 &&
+      booklet_runner_settings_are_valid "$TEMP_DIR/booklet-runner-settings.json"; then break; fi
+    [[ "${GITHUB_ACTIONS:-}" != true ]] || die 'Protected Booklet runner settings are invalid or exceed 48 KiB'
+    printf 'error: invalid runner bundle; re-enter only this bundle, not existing host secrets\n' >&2
+  done
+  jq '{services:{app:{environment:with_entries(.value |= gsub("\\$";"$$"))}}}' "$TEMP_DIR/booklet-runner-settings.json" > "$destination"
+  chmod 600 "$destination"
+  [[ "$(wc -c < "$destination")" -le 65536 ]] || die 'Booklet runner patch exceeds 64 KiB'
+  booklet_runner_patch_is_valid "$destination" || die 'Booklet runner bundle is invalid'
+  unset settings
 }
 build_community_probe_patch() {
   local environment="$1" destination="$2" workflow_value='' callback_value=''
@@ -1871,6 +1946,10 @@ build_community_probe_patch() {
 }
 build_secret_patch() {
   local environment="$1" name="$2" destination="$3" value
+  if [[ "$name" == DIFY_BOOKLET_RUNNER ]]; then
+    build_booklet_runner_patch "$environment" "$destination"
+    return
+  fi
   if [[ "$name" == DIFY_COMMUNITY_PROBE ]]; then
     build_community_probe_patch "$environment" "$destination"
     return
@@ -1940,12 +2019,14 @@ stage_and_trigger_rotation() {
 rotate_protected_dify_key() {
   [[ "${GITHUB_ACTIONS:-}" == true ]] || die 'rotate-protected-dify-key is available only through GitHub Actions'
   [[ "$ENVIRONMENT" == staging && "$APPLY" == true && -n "$REQUEST_ID" ]] || die 'rotate-protected-dify-key requires staging, --apply, and a request ID'
-  [[ "$SECRET_NAME" =~ ^(DIFY_TOOL_KEY|DIFY_API_KEY|DIFY_COMMUNITY_PROBE)$ ]] || die 'rotate-protected-dify-key accepts only Cloud keys or the Community probe bundle'
+  [[ "$SECRET_NAME" =~ ^(DIFY_TOOL_KEY|DIFY_API_KEY|DIFY_COMMUNITY_PROBE|DIFY_BOOKLET_RUNNER)$ ]] || die 'rotate-protected-dify-key accepts only Cloud keys or staging Dify bundles'
   load_config
   need_command jq; private_temp
   local value="${!SECRET_NAME:-}" payload="$TEMP_DIR/rotation.json" remote_command
   if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
     build_community_probe_patch staging "$payload"
+  elif [[ "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
+    build_booklet_runner_patch staging "$payload"
   else
     application_secret_value_is_valid "$SECRET_NAME" "$value" || die "Protected $SECRET_NAME is invalid"
     printf '%s' "$value" > "$TEMP_DIR/value"
@@ -1956,7 +2037,7 @@ rotate_protected_dify_key() {
   configure_ssh
   printf -v remote_command ' %s' --action stage-secrets --environment staging --secret-name "$SECRET_NAME" --apply
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$payload"
-  value=''; unset value DIFY_TOOL_KEY DIFY_API_KEY DIFY_COMMUNITY_WORKFLOW_API_KEY DIFY_COMMUNITY_CALLBACK_KEY
+  value=''; unset value DIFY_TOOL_KEY DIFY_API_KEY DIFY_COMMUNITY_WORKFLOW_API_KEY DIFY_COMMUNITY_CALLBACK_KEY DIFY_BOOKLET_RUNNER_SETTINGS_JSON
   ACTION=rotate-secrets; SECRET_NAME=''
   host_call
 }
