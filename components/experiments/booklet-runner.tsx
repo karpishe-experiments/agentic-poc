@@ -12,7 +12,7 @@ type Version = { id: string; number: number; content: unknown; warnings: { field
 type Artifact = { id: string; taskId: string; state: string; currentVersionId: string | null; versions: Version[] };
 type Operation = { id: string; role: string; taskId: string | null; state: string; workflowRunId: string | null; parentWorkflowRunId: string | null; reservationCount: number; safeFailure: string | null; createdAtMs: number; updatedAtMs: number };
 type Run = {
-  runId: string; persona: Persona; mode: string; brief: string; status: string; revision: number; pauseRequested: boolean;
+  runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; brief: string; status: string; revision: number; pauseRequested: boolean;
   counters: { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
   limits: { text: number; image: number; steps: number }; currentArtifacts: Artifact[];
   pendingDecision: unknown; nextNarrativeTask: string | null; safeFailure?: string | null; activeOperationId?: string | null;
@@ -21,7 +21,7 @@ type Run = {
   operationHistory?: Operation[];
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
-type PendingCreate = { persona: Persona; key: string };
+type PendingCreate = { persona: Persona; key: string; predecessorRunId?: string };
 class RunnerRequestError extends Error {}
 function safeMessage(error: unknown, fallback: string) { return error instanceof RunnerRequestError ? error.message : fallback; }
 
@@ -70,7 +70,7 @@ export function BookletRunner() {
       try {
         await read<Run>(await fetch("/api/experiments/booklet-runs", {
           method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": item.key },
-          body: JSON.stringify({ persona: item.persona, mode: "simulated" }),
+          body: JSON.stringify({ persona: item.persona, mode: "simulated", ...(item.predecessorRunId ? { predecessorRunId: item.predecessorRunId } : {}) }),
         }));
         setPending(queue.slice(index + 1));
       } catch (caught) {
@@ -104,6 +104,8 @@ export function BookletRunner() {
     <section aria-labelledby="saved-runs-heading" className="space-y-4"><h2 id="saved-runs-heading" className="text-xl font-semibold">Saved runs</h2>{loading ? <p role="status">Loading runs…</p> : runs.length === 0 ? <p>No runs yet.</p> : runs.map((run) => <article key={run.runId} className="space-y-4 rounded-lg border border-[var(--border)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">{personas.find((item) => item.id === run.persona)?.label ?? run.persona}</h3><p className="text-sm">{run.mode} · {run.status} · revision {run.revision}</p><p className="break-all text-xs text-[var(--muted-ink)]">Run {run.runId}</p></div><div>{run.pauseRequested || run.status === "paused" ? <button disabled={busy || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button disabled={busy || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}</div></div>
       <p>{run.brief}</p><p className="text-sm">Next: {run.nextNarrativeTask ?? "Awaiting state change"}{run.safeFailure ? ` · ${run.safeFailure}` : ""}</p>
+      {run.predecessorRunId ? <p className="break-all text-xs">Predecessor run: {run.predecessorRunId}</p> : null}
+      {run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={busy || pending !== null} onClick={() => void create([{ persona: run.persona, key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
       <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · Image calls {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>
       {run.activeOperationId ? <p className="break-all text-sm">Active operation: {run.operationHistory?.find((operation) => operation.id === run.activeOperationId)?.role ?? "unknown"} {run.operationHistory?.find((operation) => operation.id === run.activeOperationId)?.taskId ?? ""} ({run.activeOperationId})</p> : null}
       {run.activeDelegation ? <p className="text-sm">Active tester grant: {run.activeDelegation.taskIds.join(", ")} for {run.activeDelegation.subjectKind} {run.activeDelegation.subjectId}</p> : null}
