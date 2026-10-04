@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   currentApprovedSourceIds,
+  configuredNarrativeTasks,
   NARRATIVE_DEPENDENCIES,
   NARRATIVE_TASKS,
   type NarrativeTask,
@@ -13,6 +14,18 @@ const approved = (taskId: NarrativeTask) => ({
 });
 
 describe("narrative task sources", () => {
+  it("admits the additional tasks only for a complete distinct saved binding set", () => {
+    const bindings = NARRATIVE_TASKS.map((taskId, index) => ({ role: "specialist", taskId,
+      appId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      publishedWorkflowId: "00000000-0000-4000-8000-000000000101" }));
+    expect(configuredNarrativeTasks(JSON.stringify(bindings))).toEqual(NARRATIVE_TASKS);
+    for (const input of [[], bindings.slice(0, 2), bindings.slice(1), [...bindings, bindings[2]],
+      bindings.map((item) => ({ ...item, appId: bindings[0].appId })),
+      bindings.map((item) => item.taskId === "J05" ? { ...item, publishedWorkflowId: "bad" } : item)]) {
+      expect(configuredNarrativeTasks(JSON.stringify(input))).toEqual(["J01", "J02"]);
+    }
+    expect(configuredNarrativeTasks("bad JSON")).toEqual(["J01", "J02"]);
+  });
   it("defines every ordered direct dependency", () => {
     expect(NARRATIVE_TASKS).toEqual(["J01", "J02", "J03", "J04", "J05", "J06", "J07"]);
     expect(NARRATIVE_DEPENDENCIES).toEqual({

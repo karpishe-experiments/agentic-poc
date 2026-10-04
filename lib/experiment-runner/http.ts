@@ -4,7 +4,7 @@ import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { configurationSnapshot, readBookletRunnerConfig, validToolKey, type ConfigState } from "@/lib/experiment-runner/config";
-import { createRunInputSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
+import { createRunInputSchema, narrativeTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { runTrackedMutation } from "@/lib/application/deployment-control";
@@ -36,7 +36,7 @@ const materialization = z.object({
   artifactId: opaqueIdSchema.optional(), versionId: opaqueIdSchema.optional(), approvalId: opaqueIdSchema.nullable().optional(),
   questionId: opaqueIdSchema.optional(), delegationId: opaqueIdSchema.optional(), revokedDelegationId: opaqueIdSchema.optional(),
   reviewGroupId: opaqueIdSchema.nullable().optional(), approvalIds: z.array(opaqueIdSchema).optional(),
-  answeredQuestionId: opaqueIdSchema.optional(), delegatedTaskId: z.enum(["J01", "J02"]).optional(),
+  answeredQuestionId: opaqueIdSchema.optional(), delegatedTaskId: narrativeTaskSchema.optional(),
   warnings: z.array(z.object({ field: z.string(), message: z.string() })).optional(),
 }).strip();
 function resultSummary(json: string | null): unknown {
