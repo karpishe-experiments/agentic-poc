@@ -76,14 +76,14 @@ describe("booklet runner inspector", () => {
       expect(JSON.parse(options.body)).toEqual({ persona: "playful_kid", mode: "simulated", predecessorRunId: run.runId });
     }
   });
-  it("shows saved artifacts, decisions, limits and the J03 boundary", async () => {
+  it("shows saved artifacts, decisions, limits and a bounded narrative slice", async () => {
     render(<BookletRunner />);
     expect(await screen.findByText("Kite Rescue", { exact: false })).toBeTruthy();
     expect(screen.getByText("Approved (explicit)", { exact: false })).toBeTruthy();
     expect(screen.getByText("title: Needs review.")).toBeTruthy();
     expect(screen.getByText("Text calls 1/120", { exact: false })).toBeTruthy();
     expect(screen.getByText("Balanced and Real modes are unavailable.")).toBeTruthy();
-    expect(screen.getByText("The J03 boundary ends this slice; it does not complete a booklet.", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Each run stops at its configured slice boundary; this does not complete a booklet.", { exact: false })).toBeTruthy();
     expect(screen.getByText("Pending decision")).toBeTruthy();
     expect(screen.getByText("Active operation: specialist J02", { exact: false })).toBeTruthy();
     expect(screen.getByText("Active tester grant: J01, J02", { exact: false })).toBeTruthy();

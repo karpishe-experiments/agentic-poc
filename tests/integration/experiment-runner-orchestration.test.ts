@@ -47,6 +47,40 @@ async function setup(persona: Persona = "playful_kid") {
 }
 
 describe("sequential simulated dispatch and read-only recovery", () => {
+  const expandedConfig = () => ({ ...config, bindings: [
+    ...config.bindings.map((binding) => ({ ...binding, publishedWorkflowId: randomUUID() })),
+    ...(["J03", "J04", "J05", "J06", "J07"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null, appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null, apiKey: "private-runtime-key" })),
+  ] });
+  it("preserves a verified saved M1 boundary after a new suite is bound", async () => {
+    const env = await setup();
+    for (let count = 0; count < 15; count++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
+    const before = (await env.repository.getRun(env.runId))!;
+    const count = vi.mocked(env.runtime.start).mock.calls.length;
+    const dispatcher = createExperimentDispatcher({ database: env.database, config: expandedConfig(), runtime: env.runtime, mutate: async (fn) => fn() });
+    expect(await dispatcher.advance(env.runId)).toBe("boundary");
+    expect(await env.repository.getRun(env.runId)).toEqual(before);
+    expect(env.runtime.start).toHaveBeenCalledTimes(count);
+    expect(env.runtime.retrieve).not.toHaveBeenCalled();
+  });
+  it("blocks an unfinished M1 run after publication changes without rewriting evidence", async () => {
+    const env = await setup();
+    await env.dispatcher().advance(env.runId);
+    const before = (await env.repository.getRun(env.runId))!;
+    const count = vi.mocked(env.runtime.start).mock.calls.length;
+    const dispatcher = createExperimentDispatcher({ database: env.database, config: expandedConfig(), runtime: env.runtime, mutate: async (fn) => fn() });
+    expect(await dispatcher.advance(env.runId)).toBe("blocked");
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "definite_failure", configurationJson: before.configurationJson, counters: before.counters });
+    expect(env.runtime.start).toHaveBeenCalledTimes(count);
+  });
+  it("does not treat unverified final publication evidence as a retained boundary", async () => {
+    const env = await setup();
+    for (let count = 0; count < 15; count++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
+    const final = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await env.database.collections.experiment_operations.updateOne({ _id: final._id }, { $set: { verifiedWorkflowId: null } });
+    const dispatcher = createExperimentDispatcher({ database: env.database, config: expandedConfig(), runtime: env.runtime, mutate: async (fn) => fn() });
+    expect(await dispatcher.advance(env.runId)).toBe("blocked");
+    expect((await env.repository.getRun(env.runId))?.status).toBe("blocked");
+  });
   for (const persona of ["playful_kid", "enthusiast_parent", "professional_creator"] as const) {
     it(`restarts between steps and reaches only the J03 boundary for ${persona}`, async () => {
       const env = await setup(persona);

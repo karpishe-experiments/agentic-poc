@@ -1,6 +1,6 @@
 # M2 — Narrative completion and reference packages
 
-**State:** S1 and S2 local narrative implementation validated; independent S2 review in progress. Live M2 remains pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** S1/S2 local narrative implementation merged; S3 local binding preparation in verification. Live M2 remains pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Entry gate
@@ -79,6 +79,52 @@ bindings before live narrative dispatch. No provider calls or Dify mutations
 occurred in S1.
 
 ## Schema and dependency work
+
+### S3 binding and publication package
+
+Accept exactly the existing six-slot M1 bundle or the eleven-slot narrative
+bundle: one manager, J01–J07 specialists and three persona testers, all with
+distinct app IDs. Reject partial or duplicate profiles in both the application
+reader and protected host validator. Keep the existing six app names/identities;
+name the five additions `issue65_m2_J03` through `issue65_m2_J07`. Generate each
+as a separate model-free workflow, with the same authorization/save/ack gates.
+Retain the M1 Python fixture and add a self-contained M2 fixture with TypeScript
+parity tests. A preparation profile selects the fixture; it does not enable
+Balanced or Real mode.
+
+The runtime POST invokes the app's latest publication; it does not select the
+recorded publication ID. Do not claim immutable execution of an older version.
+Before changing shared manager/tester publications, close dispatch admission and
+reconcile in-flight operations. Preserve completed M1 boundary evidence without
+reclassifying it after a settings change. An unfinished run whose saved bindings
+differ from the current profile remains blocked and requires a linked successor.
+Never rewrite its configuration snapshot or replay uncertain execution.
+
+Edit configuration and its focused tests, graph/module preparation and graph
+tests, Python/parity tests, the protected validator and shell contracts, then
+boundary-preservation dispatch tests. Run typecheck, lint, all runner tests,
+agent fixtures, isolated deployment contracts, `bash -n`, ShellCheck and both
+deployment shell suites. After two clean reviews and publication, prepare the
+five new Dify apps and private bindings through verified interfaces. Read back
+the published graph/IDs before staging activation. New credential entry remains
+a private handoff only if a verified private mechanism cannot complete it.
+
+S2 merged through [PR #104](https://github.com/karpishe-experiments/agentic-poc/pull/104)
+after Validate `37236356412` passed. Reviewed source `d9668e256bff358b36b9694126355e4c42ecc75a`,
+merge `b2c106d4aefd081985e8cc087252d313bec7adba`; two consecutive independent
+reviews passed. No S2 staging release or live M2 binding is claimed.
+
+S3 local verification on 2026-10-05: the isolated candidate passed typecheck,
+full lint, 161 runner tests across 23 files without retries, twelve agent fixtures,
+46 isolated deployment contracts and nine final UI tests. The Python parity suite
+includes canonical saved-JSON key order and reversed location rows. ShellCheck
+0.10.0 passed at the CI warning threshold after Linux line-ending normalization
+in the disposable checkout. Both full shell suites remain Linux CI gates: local
+Windows execution failed on Python alias, symlink and directory-permission behavior.
+The focused six-/eleven-slot protected-settings scenario passed locally. Mongo
+test teardown required forced termination after its grace period; tests exited
+successfully. No live M2 publication, provider execution or staging release is
+proved by these checks.
 
 ### S2 persistent narrative contract
 

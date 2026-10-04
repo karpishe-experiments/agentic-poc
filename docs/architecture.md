@@ -49,7 +49,12 @@ and messages retain the created content and decision provenance.
 
 The local narrative implementation covers J01–J07, through the final character
 and location lists. Live configuration remains restricted to M1's six bindings
-and J01/J02 boundary until M2 bindings are verified. Completion atomically saves the
+and J01/J02 boundary until M2 bindings are verified. Configuration accepts only
+complete six-slot M1 or eleven-slot J01–J07 bundles, not partial profiles.
+The app API executes the latest publication; saved publication evidence is not
+an execution-version selector. Verified completed slice boundaries remain saved
+after a binding change. Unfinished changed configurations are blocked and need
+linked successors. Completion atomically saves the
 proposal and operation result. Explicit tester review or a current scoped grant
 accepts an exact version; manager and judge results cannot approve it. Revisions
 retain history and mark dependent current work for review. Preferred-length
@@ -84,7 +89,7 @@ without local-agent seeds or a host OpenAI key. It retains seed assets for healt
 checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
-`lib/experiment-runner/` now supplies strict six-module configuration, browser
+`lib/experiment-runner/` supplies strict six- or eleven-module configuration, browser
 run APIs, four exact machine callbacks, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits
@@ -276,7 +281,8 @@ application API key remain private operator bindings; no provider call is needed
 
 The same protected workflow can stage the issue #65 runner's five settings from
 one private JSON bundle. The host validates the fixed staging/Community origins
-and all six M1 bindings, including disabled bundles, then preserves existing
+and the complete six-slot M1 or eleven-slot narrative bindings, including disabled
+bundles, then preserves existing
 Cloud, probe and application secrets during the normal serialized rotation.
 Compose defaults the runner off. Private module keys/publications, exact-target
 reset approval and authorized enablement remain separate readiness checkpoints.

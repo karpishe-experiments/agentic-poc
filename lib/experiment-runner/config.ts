@@ -39,12 +39,13 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   const callbackKey = env.DIFY_BOOKLET_TOOL_KEY;
   let raw: unknown;
   try { raw = JSON.parse(env.DIFY_BOOKLET_BINDINGS_JSON ?? ""); } catch { return { enabled: false, reason: "invalid" }; }
-  const parsed = z.array(binding).length(6).safeParse(raw);
+  const parsed = z.array(binding).refine((items) => items.length === 6 || items.length === 11).safeParse(raw);
   if (!baseUrl || !publicOrigin || !callbackKey || callbackKey.length < 32 || !parsed.success) return { enabled: false, reason: "invalid" };
   const bindings = parsed.data;
   const slots = bindings.map((item) => `${item.role}:${item.taskId ?? ""}:${item.persona ?? ""}`);
   const expected = ["manager::", "specialist:J01:", "specialist:J02:", "tester::playful_kid", "tester::enthusiast_parent", "tester::professional_creator"];
-  if (new Set(slots).size !== 6 || expected.some((slot) => !slots.includes(slot)) || new Set(bindings.map((item) => item.appId)).size !== 6) return { enabled: false, reason: "invalid" };
+  if (bindings.length === 11) expected.push(...["J03", "J04", "J05", "J06", "J07"].map((task) => `specialist:${task}:`));
+  if (new Set(slots).size !== bindings.length || expected.some((slot) => !slots.includes(slot)) || new Set(bindings.map((item) => item.appId)).size !== bindings.length) return { enabled: false, reason: "invalid" };
   return { enabled: true, config: { enabled: true, baseUrl, publicOrigin, callbackKey, bindings } };
 }
 
