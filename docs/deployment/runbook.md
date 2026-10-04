@@ -73,7 +73,8 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Stage issue #65 runner bindings | Follow [M1 private setup](../accepted/2026-09-27_dify-booklet-runner/M1-runner.md#s4d-protected-staging-runner-bindings); store `DIFY_BOOKLET_RUNNER_SETTINGS_JSON` privately, initially disabled, then select `DIFY_BOOKLET_RUNNER` in **Dify staging key** on reviewed `master` |
 | Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
-| Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |
+| Reset staging | Run **Reset staging** on `_staging`, confirm `kids_booklet`, and use default `apply=false` for inventory. Set `apply=true` only after exact-target approval. A valid prepared Dify bundle activates after reset; production reset is rejected |
+| Recover interrupted reset | Do not Resume a `resetting` or `reset-verifying` journal. Inspect status, then obtain restore authorization and run **Maintenance** on `_staging` with `action=restore`, the journal's exact backup ID and confirmation `kids_booklet`. The host requires the prior service/maintenance containers stopped, preserves the failed journal and restores without repeating reset |
 
 The Cloud trial defaults remain enabled in staging, with fake mode and images disabled. Preserve existing `DIFY_API_KEY` and `DIFY_TOOL_KEY` values and explicit protected overrides. Dify holds its image-provider credential; optional `DIFY_IMAGE_OPENAI_API_KEY` host support remains inert. Real turns and image calls require separate authorization. Production keeps the experiment disabled. Community uses independent keys; do not replace the Cloud keys. See the [experiment configuration](../accepted/2026-09-16_agent-platform-decision/configuration.md).
 
@@ -93,7 +94,7 @@ sudo /opt/kids-booklet/vps-deployment.sh --action status
 | --- | --- |
 | `{"step":"idle"}` | No operation is retained; start the intended workflow |
 | Active detached service | Let it finish; do not start a competing workflow |
-| Failed application operation | Read its workflow summary and host service log, correct the cause, then use **Maintenance → resume** for the same environment |
+| Failed application operation | Read its workflow summary and host service log, correct the cause, then use **Maintenance → resume** for the same environment, except a destructive reset: use the exact-backup recovery row above |
 | Drain timeout | The old application remains selected; wait for active work to finish before resume |
 | Failed readiness | Inspect the candidate and prior-release checks; the database was not restored automatically |
 | Infrastructure journal retained after its Actions run stopped | Match its request ID and commit to the workflow summary, inspect Terraform state and the failed phase, then use guarded `infra-unlock` |
@@ -111,7 +112,7 @@ bash scripts/deploy/vps-deployment.sh \
 
 Rerun Infrastructure once and require its summary to report the same commit and success before promotion. Never delete a lock or edit the journal manually.
 
-Backups contain the MongoDB archive, collection inventory, checksums, and referenced assets. Restore accepts only a completed backup marker for the matching environment and database. Partial backup IDs remain reserved. Recovery objects expire after 30 days; current assets do not expire.
+Backups contain the MongoDB archive, collection inventory, checksums, and referenced assets. The staging reset backup also includes every object in the staging asset bucket, including unreferenced objects. Restore accepts only a completed backup marker for the matching environment and database. Partial backup IDs remain reserved. Recovery objects expire after 30 days; current assets do not expire.
 
 ## Provider credential session
 

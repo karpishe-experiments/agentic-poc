@@ -1,6 +1,6 @@
 # M1 — Durable runner, Concept Brief and Outline
 
-**State:** Disabled runner deployed and six modules published; private bindings, reset and live acceptance remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
+**State:** Disabled runner deployed, protected bindings installed and six modules published; approved reset and live acceptance remain pending. **Coverage:** J01–J02; AC01, AC05–AC06, AC09, AC11–AC12.
 **Predecessor:** [M0](M0-readiness.md). Follow [EXECUTION](EXECUTION.md) at entry,
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
@@ -15,8 +15,8 @@ do not treat them as a completed implementation package.
 M0 proves separate workflow invocation, publication/tool synchronization,
 restoration, explicit lineage transport and diagnostic runtime-key recovery.
 The selected layout is nineteen independent workflows. Production, Cloud,
-existing probes and private keys remain unchanged. Paid calls and staging reset
-remain ungranted. Runner publication authority is recorded in EXECUTION.
+existing probes and private keys remain unchanged. Paid calls remain ungranted.
+The later staging-reset grant and runner publication authority are recorded in EXECUTION.
 
 | Field | S1: typed contracts and fixtures |
 | --- | --- |
@@ -119,8 +119,8 @@ unrelated cast, locations, story arc and open decisions.
 
 The S4c application and module evidence follows below. Live bindings, runner
 enablement and staging acceptance remain pending.
-New private suite keys and exact-target reset authorization remain
-handoffs. Runner PR merge, staging release and UI browser verification are now
+Private suite keys are installed and exact-target reset authorization is granted
+as recorded below. Runtime acceptance remains pending. Runner PR merge, staging release and UI browser verification are now
 authorized as recorded in [EXECUTION](EXECUTION.md#b-authorization-register).
 Production, paid calls and existing Dify-resource changes remain excluded.
 
@@ -134,7 +134,7 @@ Use `--help` for the six exact names and `--graph` for offline validation.
 The source fixture is [dify/m1-simulation.py](dify/m1-simulation.py). Python and
 TypeScript fixture parity tests cover all personas, questions and revisions.
 The six model-free modules are now published as recorded below. They are not
-live-accepted; private bindings and runner enablement remain pending.
+live-accepted; runtime binding verification and runner enablement remain pending.
 
 The current Community MCP still verifies the intended workspace. Its current
 code/HTTP defaults and the pinned 1.17.1
@@ -152,8 +152,10 @@ until setup, release verification and exact-target reset approval are complete.
 The S4d change below adds protected runner settings and passed required Linux CI.
 Host synchronization passed through Infrastructure `37207147716` on reviewed
 master `e3b8695e57c46cc4b6c7cec0537597d28f08543d`, with zero Terraform changes.
-Private disabled-settings installation remains pending; synchronization does not
-prove the live runner bindings or authorize enablement.
+Disabled settings installation passed in [37208460526](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37208460526);
+[staging check 37208551295](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37208551295) passed.
+Backup `staging-20261004T141351Z-b3a7865b1ca8e267` is retained.
+This verifies installation and health, not runtime key matching or callbacks.
 
 With valid local/staging bindings, enabled initialization verifies experiment
 references without local-agent seeds or a host provider key. It retains seed
@@ -165,8 +167,8 @@ After a lost response, a saved callback result still requires runtime read-back
 of the published workflow identity before another operation can start. Keep the
 result, but block progress if that identity cannot be verified.
 
-This checkpoint remains pending: new private bindings and exact reset targets
-are not supplied by application code, offline validation or the release grant.
+This checkpoint requires runtime verification: private settings installation and
+reset authority are recorded below, not supplied by application code or offline validation.
 
 ### Staging and module readiness — 2026-10-04
 
@@ -185,8 +187,8 @@ passed, including both complete Linux shell suites, ShellCheck, Actionlint,
 typecheck, lint and selected deployment contracts. Two consecutive independent
 reviews passed. Live dispatcher synchronization subsequently passed through
 [Infrastructure 37207147716](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37207147716).
-Private settings installation remains pending; no rotation or runner enablement
-was performed.
+Private disabled-settings rotation and health verification passed as recorded
+above. Runner enablement and reset have not occurred.
 
 Community MCP reverified workspace `ffac910f-2786-490e-90d8-07243d49741b`.
 The seven retained apps stayed unchanged. Each new graph has only start, code,
@@ -223,9 +225,11 @@ the original checkout's stale generated types and ignored nested checkouts were
 left unchanged. Private preparation and publication
 are now reported/read back, respectively; no workflow execution started during
 this repair or publication verification. The reviewed host dispatcher is now
-synchronized. Next, install the prepared settings with the runner disabled.
-Exact-target reset approval after inventory and runner enablement remain separate
-checkpoints.
+synchronized and the disabled settings are installed. The operator approved
+resetting staging `kids_booklet` and the whole `kids-booklet-staging-assets`
+bucket, followed by Simulated-only activation. Inventory, complete asset backup
+and the initializer transition must pass before deletion. Production, existing
+Dify resources, diagnostic/recovery buckets and paid calls remain excluded.
 Do not use diagnostic or Cloud keys, run a test, reset data or enable the runner
 as part of credential preparation.
 

@@ -2,6 +2,14 @@
 
 ## Ownership
 
+Staging reset previews inventory by default. Apply requires confirmation of
+`kids_booklet`, the exact `kids-booklet-staging-assets` bucket and a completed
+backup covering every bucket object. With prepared runner bindings, the host
+validates an enabled maintenance-only override, initializes without local-agent
+seeds, and activates that override only after reset. Cloud/probe secrets remain
+unchanged. An interrupted destructive phase requires inspection and explicit
+recovery, not another reset through Resume.
+
 Terraform owns Cloudflare resources. `scripts/deploy/vps-deployment.sh` is the only deployment shell entrypoint; the installed copy provides the restricted SSH dispatcher and detached host lifecycle. Root owns `/opt/kids-booklet`, `/etc/kids-booklet`, and `/var/lib/kids-booklet`. The deployment account has no general sudo or Docker-group membership.
 
 Compose merges base, environment overlay, root-only secret JSON, and image override in that order. JSON is valid Compose YAML; secret dollar signs are doubled to suppress interpolation. Resolved Compose output is consumed by validation and never logged. Missing secret values block maintenance admission. Application containers use 1 CPU/2 GiB, localhost-only ports, read-only root filesystems, and temporary scratch space.
