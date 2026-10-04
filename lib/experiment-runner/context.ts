@@ -3,6 +3,7 @@ import type { Database } from "@/db/client";
 import type { ArtifactDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { opaqueIdSchema } from "@/lib/contracts/common";
+import { currentApprovedSourceIds } from "@/lib/experiment-runner/narrative-tasks";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 type Task = "J01" | "J02";
@@ -106,8 +107,8 @@ export function createExperimentContextService(database: Database) {
       const currentTarget = view.currentArtifacts.find((item) => item.taskId === operation.taskId) ?? null;
       if ((currentTarget?.currentVersionId ?? null) !== operation.expectedTargetVersionId) deny("Specialist target version changed.");
       const approvedConcept = view.currentArtifacts.find((item) => item.taskId === "J01");
-      const expectedSources = operation.taskId === "J02" && approvedConcept?.state === "approved" && approvedConcept.currentVersionId ? [approvedConcept.currentVersionId] : [];
-      if (JSON.stringify(expectedSources) !== JSON.stringify(operation.dependencyVersionIds)) deny("Specialist source version changed.");
+      const expectedSources = currentApprovedSourceIds(operation.taskId, view.currentArtifacts);
+      if (expectedSources === null || JSON.stringify(expectedSources) !== JSON.stringify(operation.dependencyVersionIds)) deny("Specialist source version changed.");
       const pending = view.pendingDecision as { kind?: string; taskId?: Task; artifactVersionId?: string } | null;
       const matchingRevision = pending?.kind === "revision" && pending.taskId === operation.taskId && pending.artifactVersionId === operation.expectedTargetVersionId ? pending : null;
       return { role: "specialist" as const, taskId: operation.taskId, brief: view.brief, persona: view.persona, currentTarget, approvedUpstream: operation.taskId === "J02" ? approvedConcept?.versions.find((item) => item.id === operation.dependencyVersionIds[0]) ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, operation.taskId) };

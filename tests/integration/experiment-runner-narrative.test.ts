@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { verifyExperimentData } from "@/db/verify";
+import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -202,7 +203,11 @@ describe("J01/J02 narrative materialization", () => {
     const operationId = id(252), workflowRunId = id(1252);
     await repository.prepareOperation({ operationId, runId, expectedRevision: (await repository.getRun(runId))!.revision, role: "specialist", taskId: "J02", subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 252, providerKind: "text", nowMs: 252 });
     await repository.claimOperation({ runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: 253 });
+    const context = createExperimentContextService(database);
+    const identity = { runId, operationId, workflowRunId, parentWorkflowRunId: null };
+    expect(await context.getOperationContext(identity)).toMatchObject({ approvedUpstream: { id: conceptVersionId } });
     await database.collections.artifacts.updateOne({ taskId: "J01", bookletId }, { $set: { state: "needs_review" } });
+    await expect(context.getOperationContext(identity)).rejects.toMatchObject({ code: "conflict" });
     await expect(repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: "a".repeat(64), result: proposal("J02", outline) }, parentWorkflowRunId: null, nowMs: 254 })).rejects.toMatchObject({ code: "conflict" });
     expect(await database.collections.artifacts.findOne({ taskId: "J02", bookletId })).toBeNull();
     expect((await repository.getOperation(operationId))?.state).toBe("started");
