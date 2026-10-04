@@ -48,6 +48,18 @@ The root responsibilities are:
 
 ## Artifact and decision flow
 
+The issue #65 runner has a separate `dify_booklet_v1` profile and operation ledger.
+Its staged image callbacks authenticate the dedicated tool key and validate the
+saved run, workflow identity and approved source versions. Normal authorization
+reserves once; fixture download adds no debit. Binary completion decodes original
+PNG/JPEG/WebP bytes, enforces 20 MiB and one frame, and reads stored bytes back
+before saving asset/operation success. Same-byte recovery preserves counters.
+The proxy has 32 MiB transport headroom above the content limit. Filesystem assets
+publish atomically without replacing an existing URI. Cloud trial routes remain
+unchanged. Live Dify binary transfer and automatic image dispatch remain pending.
+Canonical experiment plans and evidence remain on `master`, in
+`docs/accepted/2026-09-27_dify-booklet-runner/`.
+
 Every booklet has eight ordered artifact records:
 
 ```text
