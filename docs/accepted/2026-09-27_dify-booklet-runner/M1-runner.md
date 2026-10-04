@@ -65,6 +65,34 @@ callback bindings, exact reset targets and runner release authority are a
 consolidated private/operator checkpoint before staging acceptance, not a blocker
 for S1/S2 or isolated local S3 tests. Local tests do not mark M1 complete.
 
+| Field | S4c1: availability, bindings and application interfaces |
+| --- | --- |
+| Goal and components | Add narrow runner configuration/HTTP services and the browser run routes plus four machine callbacks. Extend the existing proxy only for those exact callbacks. Reuse experiment repositories, saved context, Basic Auth and tracked mutations. |
+| Contract and examples | `DIFY_BOOKLET_RUNNER_ENABLED` defaults off and cannot enable production. Use a Community HTTPS origin, configured Booklet origin, dedicated callback key and protected JSON bindings for six M1 modules: manager, J01, J02 and three testers. Each binding records app/publication/tool identifiers and its private application key. Store only selected-persona non-secret identifiers in run evidence. Only Simulated creation is enabled in this slice. |
+| Ordered edits | Validate bindings without logging values; expose safe setup errors. Add list/create/detail and revision-bound Pause/Resume. Creation uses an opaque idempotency header so a lost browser response does not create another run. Callback envelopes include the required nullable parent workflow ID. Authenticate before body parsing, bound streamed JSON, derive role/mode from saved operations, and keep unknown outcomes distinct from failures. |
+| Verification | Focused HTTP/configuration and isolated Mongo tests: disabled/production, wrong key/Basic Auth/origin, malformed/extra fields, body limits, creation replay, CAS controls, exact callback identity and zero payable reservations. Typecheck/lint and affected proxy/env contracts. |
+| Completion and escalation | Local API proof only. Startup selection, host-key independence, dispatch, live bindings and UI remain S4c2/S4c3. Do not enable staging or invoke Dify without the reviewed transport/configuration and private bindings. Escalate a required interface or credential-scope change. |
+
+| Field | S4c2: dispatch identity and deterministic recovery |
+| --- | --- |
+| Goal and components | Extend experiment operation storage/repository and add a small sequential orchestration/transport service. Use the selected module's runtime key, never administrative MCP or a provider SDK. |
+| Contract and examples | Atomically persist `dispatchStartedAtMs` and parent identity before one runtime POST. A crash after that marker cannot grant another POST. Save a returned workflow ID even before authorization. Only the matching callback claim reserves requests; unclaimed unknown work has no reservation and cannot save a result. |
+| Ordered edits | Add dispatch CAS and sanitized outcome/recovery methods with isolated Mongo tests. Route an initial Kid/Parent delegation, then saved manager delegation, owning specialist and tester reviews. Stop at J03 without marking the booklet complete. Reconcile stored IDs through bounded GET only; no ID means blocked unknown. Count durable progress, not narration, and block after three no-progress steps. |
+| Verification | Fake-transport tests for concurrent dispatch, crash before/after claim, lost POST response with/without ID, paused authorization, wrong publication/identity, duplicate callback, restarted routing and all persona slices. No network/provider calls. Run typecheck/lint and affected repository tests. |
+| Completion and escalation | Local transport proof only. Read back each model-free published module and verify runtime lookup before live execution. Unknown or mismatched outcomes block; never replay or increase limits. A verified paused, unclaimed execution may close without a reservation; Resume prepares new unfinished work, not a completed call. |
+
+S4c3 selects the enabled startup/verification profile, removes the new path's
+local-agent and host-provider requirements, adds the inspection UI and prepares
+the reviewed simulation modules. Preserve disabled legacy/Cloud defaults.
+
+| Field | S4c3: enabled profile and inspection UI |
+| --- | --- |
+| Goal and components | Select the experiment loop in the existing runner bootstrap. Extend environment, initialization and preflight checks; add `/experiments/booklet-runs` and a small client inspector. |
+| Contract and examples | With the valid non-production runner flag enabled, initialize experiment structure without local-agent seeds, use no host provider key and run only the sequential Simulated dispatcher. Keep seed assets for current health checks. Disabled settings preserve legacy behavior. Show all personas, saved artifacts, warnings, decisions, limits and Pause/Resume; Balanced/Real remain unavailable. The J03 boundary is not complete. |
+| Ordered edits | Add profile-aware checks and regression tests. Add safe operation/status projections. Route enabled home/navigation to the runner, keeping unrelated legacy data and Cloud endpoints intact. Prepare six independent model-free modules only after obtaining current node schemas; publication/private binding remain a separate live checkpoint. |
+| Verification | Focused environment/bootstrap/initialization and UI tests, affected legacy checks, typecheck/lint in the clean verification checkout. Test controls with fake HTTP responses; verify live browser behavior after authorized staging release. |
+| Completion and escalation | Local application candidate, not deployed simulation. Private keys and exact reset remain unresolved until consolidated handoff. Do not invoke models, expose configuration, reset data or modify old Dify apps. |
+
 ### Local foundation evidence
 
 S1–S4b now have source and focused tests. On 2026-10-04, the combined local
@@ -89,12 +117,53 @@ Its refreshed content uses the newly approved Concept Brief's title, premise,
 tone, theme, emotional promise and constraints while retaining the Outline's
 unrelated cast, locations, story arc and open decisions.
 
-Current pending work is S4c: runner availability/configuration, dispatch and
-callbacks, the small UI, independent Dify simulation modules, and staging
-acceptance. New private suite keys and exact-target reset authorization remain
+The S4c application and module candidates follow below. Live bindings, module
+publication, runner release and staging acceptance remain pending.
+New private suite keys and exact-target reset authorization remain
 handoffs. Runner PR merge, staging release and UI browser verification are now
 authorized as recorded in [EXECUTION](EXECUTION.md#b-authorization-register).
 Production, paid calls and existing Dify-resource changes remain excluded.
+
+### S4c candidate and private binding checkpoint
+
+The local candidate now includes the enabled profile, strict run/callback APIs,
+durable dispatch/recovery and the inspection UI. Six independent model-free
+module graphs are prepared by
+`npx tsx scripts/prepare-dify-booklet-module.ts --module <name>`.
+Use `--help` for the six exact names and `--graph` for offline validation.
+The source fixture is [dify/m1-simulation.py](dify/m1-simulation.py). Python and
+TypeScript fixture parity tests cover all personas, questions and revisions.
+These are candidate configurations, not published or live-accepted modules.
+
+The current Community MCP still verifies the intended workspace. Its current
+code/HTTP defaults and the pinned 1.17.1
+[conditional-node tests](https://github.com/langgenius/dify/blob/8387590ace4a094de812b7847fc6a4c3a27cd52b/api/tests/unit_tests/core/workflow/nodes/test_if_else.py)
+supplied the node contracts. Offline validation of all six candidates returned
+no errors or warnings. This does not verify callbacks, secret binding or runtime execution.
+
+Before live execution, privately bind one dedicated runner callback key into
+each new module's `BOOKLET_TOOL_KEY`, and each app execution key into Booklet's
+protected `DIFY_BOOKLET_BINDINGS_JSON`. Record app and publication identifiers,
+and nullable tool-provider identifiers. Set `DIFY_BOOKLET_BASE_URL` to the
+Community origin and `DIFY_BOOKLET_PUBLIC_ORIGIN` to the exact Booklet origin.
+Do not reuse diagnostic or Cloud keys. Keep `DIFY_BOOKLET_RUNNER_ENABLED=false`
+until setup, release verification and exact-target reset approval are complete.
+The existing deployment secret bundle does not yet accept runner settings.
+Extend that protected staging setup path and test its preservation of Cloud
+settings before asking the operator to bind the new keys or enable the runner.
+
+With valid local/staging bindings, enabled initialization verifies experiment
+references without local-agent seeds or a host provider key. It retains seed
+assets for the existing health check. Disabled settings preserve the legacy
+path. No paid mode can be created through these APIs. The retained unknown
+operation is inspected through GET only; automatic polling stops at its saved
+deadline. No-ID work remains blocked for inspection.
+After a lost response, a saved callback result still requires runtime read-back
+of the published workflow identity before another operation can start. Keep the
+result, but block progress if that identity cannot be verified.
+
+This checkpoint remains pending: new private bindings and exact reset targets
+are not supplied by application code, offline validation or the release grant.
 
 ## Entry and manual setup
 

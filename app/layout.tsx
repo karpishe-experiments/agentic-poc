@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import localFont from "next/font/local";
 import "./globals.css";
+import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 const nunito = localFont({ src: "../seeds/fonts/nunito/Nunito-Variable.ttf", display: "swap", variable: "--font-nunito" });
 
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const runnerEnabled = readBookletRunnerConfig().enabled;
   return (
     <html className={nunito.variable} lang="en">
       <body>
@@ -20,7 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link className="font-semibold no-underline" href="/">
               Kids Booklet
             </Link>
-            <div className="flex gap-4"><Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link><Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link></div>
+            <div className="flex gap-4">{runnerEnabled ? <Link className="text-sm text-[var(--muted-ink)]" href="/experiments/booklet-runs">Runs</Link> : null}<Link className="text-sm text-[var(--muted-ink)]" href="/help">Help</Link>{!runnerEnabled ? <Link className="text-sm text-[var(--muted-ink)]" href="/admin/agents">Agents</Link> : null}</div>
           </nav>
         </header>
         <main className="mx-auto w-full max-w-6xl px-6 py-10" id="main-content">{children}</main>
