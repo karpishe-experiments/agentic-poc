@@ -13,6 +13,15 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
+  it("keeps runner setup staging-only and disabled by default", () => {
+    const workflow = readFileSync(".github/workflows/dify-tool-key.yml", "utf8");
+    expect(workflow).toContain("- DIFY_BOOKLET_RUNNER");
+    expect(workflow).toContain("secrets.DIFY_BOOKLET_RUNNER_SETTINGS_JSON");
+    expect(workflow).toContain('test "$GITHUB_REF_NAME" = master');
+    expect(workflow).toContain("kids-booklet-vps-operation");
+    expect(readFileSync("deploy/compose.yml", "utf8")).toContain('DIFY_BOOKLET_RUNNER_ENABLED: "false"');
+    expect(readFileSync("deploy/compose.prod.yml", "utf8")).not.toContain("DIFY_BOOKLET_RUNNER_ENABLED");
+  });
   it("preserves Cloud staging defaults in master-owned host configuration", () => {
     const base = readFileSync("deploy/compose.yml", "utf8");
     const staging = readFileSync("deploy/compose.staging.yml", "utf8");
