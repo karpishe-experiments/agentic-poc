@@ -21,6 +21,7 @@ vi.mock("@/lib/config/env", () => ({ getServerEnv: () => ({
 
 import { acknowledgeProbe, parseCallback, PROBE_MARKER, readProbe, startProbe } from "@/lib/dify-community/probe";
 import { POST as callbackRoute } from "@/app/api/integrations/dify-community/callback/route";
+import { POST as startRoute } from "@/app/api/integrations/dify-community/runs/route";
 
 const runId = "123e4567-e89b-42d3-a456-426614174000";
 const originalFetch = globalThis.fetch;
@@ -103,6 +104,44 @@ describe("Dify Community staging probe", () => {
     expect(started).toMatchObject({ status: "failed", workflow_run_id: runId });
     expect(state.rows.get(started.correlation_id)?.workflowRunId).toBe(runId);
     expect((await readProbe(started.correlation_id)).body).toMatchObject({ status: "failed", error_category: "remote_failure" });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards a real-shaped start response before parsing and recovers only by GET", async () => {
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      const correlationId = [...state.rows.keys()][0];
+      if (init?.method === "POST") {
+        await acknowledgeProbe({ correlation_id: correlationId, marker: PROBE_MARKER, workflow_run_id: runId }, "a".repeat(32));
+        // Deliberately invalid JSON proves the fault does not parse the body.
+        return new Response("not JSON", { status: 200 });
+      }
+      expect(init?.method).toBe("GET");
+      expect(String(_url).endsWith(`/workflows/run/${runId}`)).toBe(true);
+      return Response.json({ id: runId, workflow_id: runId, status: "succeeded", outputs: { correlation_id: correlationId, marker: PROBE_MARKER, workflow_run_id: runId, acknowledged: true } });
+    }) as typeof fetch;
+    const response = await startRoute(new Request("https://booklet.example/api/integrations/dify-community/runs", { method: "POST", headers: { "X-Booklet-Probe-Fault": "discard-start-response" } }));
+    expect(response.status).toBe(202);
+    const started = await response.json();
+    expect(started).toMatchObject({ status: "unknown", response_discarded: true });
+    expect(state.rows.get(started.correlation_id)?.workflowId).toBeNull();
+    expect((await readProbe(started.correlation_id)).body).toMatchObject({ status: "succeeded", callback_received: true, workflow_run_id: runId });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not dispatch invalid fault requests or production fault requests", async () => {
+    globalThis.fetch = vi.fn() as typeof fetch;
+    const request = (fault: string) => new Request("https://booklet.example/api/integrations/dify-community/runs", { method: "POST", headers: { "X-Booklet-Probe-Fault": fault } });
+    expect((await startRoute(request("unknown-fault"))).status).toBe(400);
+    process.env.DEPLOYMENT_ENV = "_prod";
+    expect((await startRoute(request("discard-start-response"))).status).toBe(404);
+    expect(state.rows.size).toBe(0);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a lost response without a callback ID unknown and never replays", async () => {
+    globalThis.fetch = vi.fn(async () => { throw new Error("response lost before callback"); }) as typeof fetch;
+    const started = await startProbe();
+    expect((await readProbe(started.correlation_id)).body).toMatchObject({ status: "unknown", callback_received: false, workflow_run_id: null });
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
