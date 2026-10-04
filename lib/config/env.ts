@@ -1,5 +1,6 @@
 import path from "node:path";
 import { z } from "zod";
+import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 export const serverEnvSchema = z.object({
   DEPLOYMENT_ENV: z.enum(["local", "_staging", "_prod"]).default("local"),
@@ -12,7 +13,12 @@ export const serverEnvSchema = z.object({
   RECOVERY_BUCKET: z.string().min(1).optional(),
   ACCESS_GATE_PASSWORD: z.string().min(16).optional(),
   RUNNER_ENABLED: z.enum(["true", "false"]).default("true"),
-  OPENAI_API_KEY: z.string().min(1),
+  OPENAI_API_KEY: z.string().optional().transform((value) => value ?? ""),
+  DIFY_BOOKLET_RUNNER_ENABLED: z.enum(["true", "false"]).default("false"),
+  DIFY_BOOKLET_BASE_URL: z.string().optional(),
+  DIFY_BOOKLET_PUBLIC_ORIGIN: z.string().optional(),
+  DIFY_BOOKLET_TOOL_KEY: z.string().optional(),
+  DIFY_BOOKLET_BINDINGS_JSON: z.string().optional(),
   MODEL_RUNTIME: z.enum(["fake", "real"]).default("fake"),
   IMAGE_PROVIDER_MODE: z.enum(["fake", "real"]).default("fake"),
   GEMINI_API_KEY: z.string().min(1).optional(),
@@ -35,6 +41,16 @@ export const serverEnvSchema = z.object({
   COMIC_COPY_MODE: z.enum(["creative", "exact"]).default("creative"),
   OPENAI_TRACE_INCLUDE_SENSITIVE_DATA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 }).superRefine((env, context) => {
+  if (env.DIFY_BOOKLET_RUNNER_ENABLED === "true") {
+    const state = readBookletRunnerConfig({
+      DEPLOYMENT_ENV: env.DEPLOYMENT_ENV, DIFY_BOOKLET_RUNNER_ENABLED: env.DIFY_BOOKLET_RUNNER_ENABLED,
+      DIFY_BOOKLET_BASE_URL: env.DIFY_BOOKLET_BASE_URL, DIFY_BOOKLET_PUBLIC_ORIGIN: env.DIFY_BOOKLET_PUBLIC_ORIGIN,
+      DIFY_BOOKLET_TOOL_KEY: env.DIFY_BOOKLET_TOOL_KEY, DIFY_BOOKLET_BINDINGS_JSON: env.DIFY_BOOKLET_BINDINGS_JSON,
+    });
+    if (!state.enabled) context.addIssue({ code: "custom", path: ["DIFY_BOOKLET_RUNNER_ENABLED"], message: "Booklet runner requires valid non-production bindings." });
+  } else if (!env.OPENAI_API_KEY) {
+    context.addIssue({ code: "custom", path: ["OPENAI_API_KEY"], message: "Required for the legacy execution profile." });
+  }
   if (env.DIFY_COMMUNITY_PROBE_ENABLED) {
     if (env.DEPLOYMENT_ENV !== "_staging") context.addIssue({ code: "custom", path: ["DIFY_COMMUNITY_PROBE_ENABLED"], message: "Community probe is staging-only." });
     for (const key of ["DIFY_COMMUNITY_BASE_URL", "DIFY_COMMUNITY_WORKFLOW_API_KEY", "DIFY_COMMUNITY_CALLBACK_KEY"] as const) {

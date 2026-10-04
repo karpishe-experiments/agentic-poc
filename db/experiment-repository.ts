@@ -13,8 +13,13 @@ const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdS
 const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: time });
 const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
+const dispatchInput = claimInput.omit({ workflowRunId: true });
+const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema });
 const completeInput = z.strictObject({ envelope: resultEnvelopeSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const failInput = claimInput.extend({ category: z.enum(["unknown_outcome", "definite_failure"]) });
+const outcomeInput = dispatchInput.extend({ category: z.enum(["unknown_outcome", "definite_failure", "paused"]) });
+const progressInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, fingerprint64: fingerprint, nowMs: time });
+const blockInput = z.strictObject({ runId: opaqueIdSchema, category: z.enum(["unknown_outcome", "definite_failure"]), nowMs: time });
 
 export class ExperimentRepositoryError extends Error {
   constructor(public readonly code: "invalid_input" | "not_found" | "conflict" | "stale_revision" | "invalid_state" | "invalid_result", message: string) {
@@ -136,11 +141,32 @@ export function createExperimentRepository(database: Database) {
     }
   }
 
+  async function beginDispatch(raw: unknown): Promise<{ dispatched: boolean; operation: ExperimentOperationDocument }> {
+    const input = parse(dispatchInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      if (operation.dispatchStartedAtMs != null) {
+        if (operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Dispatch parent identity changed.");
+        return { dispatched: false, operation };
+      }
+      if (run.activeOperationId !== operation._id || operation.state !== "prepared") throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting dispatch.");
+      if (run.pauseRequested || run.status === "paused" || (run.status !== "queued" && run.status !== "running")) return { dispatched: false, operation };
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", dispatchStartedAtMs: null }, { $set: { dispatchStartedAtMs: input.nowMs, parentWorkflowRunId: input.parentWorkflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("conflict", "Dispatch was recorded concurrently.");
+      // Touch the run in the same transaction so Pause cannot race admission.
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id, pauseRequested: false }, { $set: { updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+      if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed before dispatch.");
+      return { dispatched: true, operation: updated };
+    });
+  }
+
   async function claimOperation(raw: unknown): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked"; operation: ExperimentOperationDocument }> {
     const input = parse(claimInput, raw);
     return withMongoTransaction(database, async (session) => {
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      if (operation.dispatchStartedAtMs != null && operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Claim parent differs from dispatch.");
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
       if (operation.state !== "prepared") return { started: false, reason: "already_started", operation };
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
@@ -161,6 +187,101 @@ export function createExperimentRepository(database: Database) {
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "running", counters, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       return { started: true, operation: updated };
+    });
+  }
+
+  async function recordDispatchIdentity(raw: unknown): Promise<ExperimentOperationDocument> {
+    const input = parse(claimInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      if (operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Dispatch identity is not established.");
+      if (operation.workflowRunId) {
+        if (operation.workflowRunId !== input.workflowRunId) throw new ExperimentRepositoryError("conflict", "Workflow identity changed.");
+        return operation;
+      }
+      if (operation.state !== "prepared" && operation.state !== "unknown") throw new ExperimentRepositoryError("invalid_state", "Operation cannot save a dispatch identity.");
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: null, state: operation.state }, { $set: { workflowRunId: input.workflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("conflict", "Workflow identity changed concurrently.");
+      return updated;
+    });
+  }
+
+  async function verifyDispatchPublication(raw: unknown): Promise<ExperimentOperationDocument> {
+    const input = parse(publicationInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      if (operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Publication verification identity differs from dispatch.");
+      const configuration = parse(z.array(configurationItem), JSON.parse(run.configurationJson) as unknown);
+      const expected = configuration.find((item) => item.role === operation.role && item.taskId === operation.taskId);
+      if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
+      if (operation.verifiedWorkflowId) return operation;
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: input.workflowRunId, verifiedWorkflowId: null }, { $set: { verifiedWorkflowId: input.workflowId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("conflict", "Publication verification changed concurrently.");
+      return updated;
+    });
+  }
+
+  async function recordDispatchOutcome(raw: unknown): Promise<ExperimentOperationDocument> {
+    const input = parse(outcomeInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      if (operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Dispatch identity differs from outcome.");
+      if (operation.state === "succeeded") return operation;
+      if (input.category === "paused") {
+        if (operation.state !== "prepared" || operation.reservationCount !== 0) throw new ExperimentRepositoryError("invalid_state", "Only a verified unclaimed operation can close.");
+      } else if (operation.state !== "prepared" && operation.state !== "started" && operation.state !== "unknown") {
+        if (operation.state === "failed" && operation.safeFailure === input.category) return operation;
+        throw new ExperimentRepositoryError("invalid_state", "Operation cannot record this outcome.");
+      }
+      if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
+      const state = input.category === "unknown_outcome" ? "unknown" : "failed";
+      const safeFailure = input.category === "paused" ? null : input.category;
+      if (operation.state === state && operation.safeFailure === safeFailure) return operation;
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("conflict", "Outcome changed concurrently.");
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { status: input.category === "paused" ? run.pauseRequested ? "paused" : "queued" : "blocked", safeFailure, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+      if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed before outcome.");
+      return updated;
+    });
+  }
+
+  async function recordProgress(raw: unknown): Promise<ExperimentRunDocument> {
+    const input = parse(progressInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      if (operation.state !== "succeeded") throw new ExperimentRepositoryError("invalid_state", "Progress requires a successful operation.");
+      if (run.progressOperationId === operation._id) {
+        if (run.progressFingerprint !== input.fingerprint64) throw new ExperimentRepositoryError("conflict", "Progress fingerprint changed for the operation.");
+        return run;
+      }
+      if (run.progressOperationId) {
+        const previous = await operations.findOne({ _id: run.progressOperationId }, { session });
+        if (previous && previous.createdAtMs > operation.createdAtMs) throw new ExperimentRepositoryError("conflict", "Progress operation is stale.");
+      }
+      if (run.activeOperationId || run.status === "completed" || run.status === "failed" || run.status === "blocked") throw new ExperimentRepositoryError("invalid_state", "Run cannot record progress.");
+      const noProgressCount = run.progressFingerprint === input.fingerprint64 ? (run.noProgressCount ?? 0) + 1 : 0;
+      const blocked = noProgressCount >= 3;
+      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null }, { $set: { progressFingerprint: input.fingerprint64, progressOperationId: operation._id, noProgressCount, ...(blocked ? { status: "blocked" as const, safeFailure: "definite_failure" as const } : {}), updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run progress changed concurrently.");
+      return updated;
+    });
+  }
+
+  async function blockRun(raw: unknown): Promise<ExperimentRunDocument> {
+    const input = parse(blockInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      if (run.status === "completed" || run.status === "failed") throw new ExperimentRepositoryError("invalid_state", "Terminal run cannot be blocked.");
+      if (run.status === "blocked") {
+        if (run.safeFailure === input.category) return run;
+        throw new ExperimentRepositoryError("conflict", "Run is blocked for another reason.");
+      }
+      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed before block.");
+      return updated;
     });
   }
 
@@ -190,7 +311,8 @@ export function createExperimentRepository(database: Database) {
         if (operation.resultDigest === resultDigest) return { operation, reused: true };
         throw new ExperimentRepositoryError("conflict", "Completed operation has a different result.");
       }
-      if ((operation.state !== "started" && operation.state !== "unknown") || run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting completion.");
+      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
+      if ((operation.state !== "started" && operation.state !== "unknown") || operation.reservationCount !== 1 || run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting authorized completion.");
       const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs);
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state: "succeeded", resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
@@ -221,5 +343,5 @@ export function createExperimentRepository(database: Database) {
     });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, claimOperation, completeOperation, failOperation, getOperation, listOperations };
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, getOperation, listOperations };
 }

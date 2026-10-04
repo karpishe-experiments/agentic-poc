@@ -110,6 +110,21 @@ describe("saved experiment context", () => {
     expect(await context.getOperationContext(specialist.identity)).toMatchObject({ role: "specialist" });
   });
 
+  it("preserves an admitted manager route when pause follows its claim", async () => {
+    const { context, repository, start } = await setup();
+    const tester = await start(470, "tester");
+    await tester.complete(decision({ action: "delegate", taskIds: ["J01"], subjectId: bookletId }));
+    const manager = await start(471, "manager");
+    await repository.pause({ runId, expectedRevision: (await repository.getRun(runId))!.revision, nowMs: 500 });
+
+    expect(await context.getRunView(runId)).toMatchObject({ status: "paused", nextNarrativeTask: null });
+    expect(await context.getOperationContext(manager.identity)).toMatchObject({ role: "manager", eligibleRoute: "J01", run: { status: "paused", nextNarrativeTask: null } });
+    await manager.complete({ kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: bookletId } });
+    expect(await context.getRunView(runId)).toMatchObject({ status: "paused", nextNarrativeTask: null });
+    await repository.resume({ runId, expectedRevision: (await repository.getRun(runId))!.revision, nowMs: 501 });
+    expect(await context.getRunView(runId)).toMatchObject({ status: "queued", nextNarrativeTask: "J01" });
+  });
+
   it("rejects prepared, foreign, unsupported and source-drift contexts", async () => {
     const { context, repository, database } = await setup();
     await repository.prepareOperation({ operationId: id(440), runId, expectedRevision: 0, role: "specialist", taskId: "J01", subjectKind: "book", subjectId: bookletId, inputFingerprint: fingerprint, attempt: 440, providerKind: "text", nowMs: 440 });

@@ -1,11 +1,14 @@
 import { getBookletService } from "@/lib/application/booklet-service";
 import { BookletList } from "@/components/home/booklet-list";
 import { CreateBookletForm } from "@/components/home/create-booklet-form";
+import { redirect } from "next/navigation";
+import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+  if (readBookletRunnerConfig().enabled) redirect("/experiments/booklet-runs");
   const booklets = await getBookletService().list();
 
   return (

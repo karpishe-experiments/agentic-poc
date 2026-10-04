@@ -57,14 +57,22 @@ export function createExperimentContextService(database: Database) {
     const currentArtifacts = await Promise.all(artifactRows.map(projectArtifact));
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" }).sort({ sequence: 1 }).toArray();
+    const operationRows = await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     return {
       runId: run._id, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
+      safeFailure: run.safeFailure, activeOperationId: run.activeOperationId,
+      createdAtMs: run.createdAtMs, updatedAtMs: run.updatedAtMs,
       pendingDecision: parseJson(run.pendingDecisionJson),
       activeDelegation: grant && !grant.revokedAtMs && !grant.supersededById ? { id: grant._id, taskIds: [...grant.taskIds], subjectKind: grant.subjectKind, subjectId: grant.subjectId, testerDecisionId: grant.testerDecisionId, effectiveSequence: grant.effectiveSequence } : null,
       currentArtifacts,
       creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: parseJson(row.uiMessageJson), createdAtMs: row.createdAtMs })),
+      operationHistory: operationRows.map((row) => ({ id: row._id, role: row.role, taskId: row.taskId, state: row.state,
+        workflowRunId: row.workflowRunId, parentWorkflowRunId: row.parentWorkflowRunId,
+        verifiedWorkflowId: row.verifiedWorkflowId ?? null,
+        reservationCount: row.reservationCount, safeFailure: row.safeFailure,
+        createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs })),
       nextNarrativeTask: chooseNext(run, currentArtifacts),
     };
   }
@@ -91,7 +99,7 @@ export function createExperimentContextService(database: Database) {
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     const view = await getRunView(run._id);
     if (!view) deny("Run view is unavailable.");
-    if (operation.role === "manager") return { role: "manager" as const, run: view, eligibleRoute: chooseNext({ ...run, activeOperationId: null }, view.currentArtifacts) };
+    if (operation.role === "manager") return { role: "manager" as const, run: view, eligibleRoute: chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts) };
     if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages };
     if (operation.role === "specialist") {
       if (operation.taskId !== "J01" && operation.taskId !== "J02" || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId) deny("Specialist task is outside this slice.");
