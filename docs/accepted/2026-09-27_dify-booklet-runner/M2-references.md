@@ -249,6 +249,68 @@ arbitrary quality targets. Missing narrative units/required subject IDs still fa
 
 ## Image operation and storage path
 
+S4's first local increment adds `lib/experiment-runner/image-validation.ts`
+and `tests/unit/experiment-runner-image-validation.test.ts`. It copies and hashes
+original bytes, derives format and dimensions, and decodes pixels with Sharp.
+The existing Sharp dependency is reused. On 2026-10-05, a clean isolated checkout
+at `dc8b50e` with these two files passed typecheck, full lint and eight focused
+tests without retries. The tests include readable metadata with corrupt pixel
+data. The main checkout's typecheck encountered stale generated route types and
+nested delivery worktrees; the isolated check excludes those local artifacts.
+The validator increment is not yet published. The subsequent local foundation
+below adds storage claims and asset materialization. Upload routes and live Dify
+file transfer remain S4 work.
+
+The local S4 storage package extends the same operation records with a saved image
+request and a completion lease, not a separate job registry. Its request contains
+`kind` (`style_preview`, `reference` or `page_source`), exact `prompt`, ordered
+unique `sourceVersionIds` and nullable `styleVersionId`. The style version must
+also be a source. Booklet computes the request fingerprint and captures those
+sources at preparation. Callback identity includes run, operation, workflow,
+parent workflow and that fingerprint; the callback cannot select a storage URI.
+For example, an authorized fixture operation can retain its approved J01 source
+and a fixed synthetic prompt without claiming a finished J08 style package.
+
+Source versions must belong to the run's booklet and remain current and approved.
+Only a `style_preview` operation may use its exact current draft J08 style version;
+this preserves sample-before-style-acceptance ordering. The 60-second completion
+lease fixes the original-byte digest. An expired lease or failed storage can be
+recovered with the same bytes, not a second image request. Failed-operation
+recovery requires its own unresolved failure and no newer operation in that run.
+Persist the asset and completed operation atomically only after storage read-back
+and renewed identity/source checks. Preserve counters and prior failure history.
+Tests use the normal Mongo collections and an injected AssetStore. HTTP routes,
+live fixture transfer and automatic image dispatch remain later parts of S4.
+
+Storage-foundation verification on 2026-10-05: the isolated checkout at `dc8b50e`
+with the final source/test candidate passed typecheck, full lint and 22 tests in
+three files without retries. Ten Mongo integration cases cover original-byte
+storage, duplicate/conflicting completion, concurrent claims, lease expiry,
+storage failure, stale/foreign/rejected sources, missing/corrupt saved bytes,
+Pause and unknown/definite-failure recovery. Sources require an exact `approve`
+record, not merely an artifact state or a rejection record. No provider, Dify
+workflow or staging execution occurred in these checks. Independent review and
+publication remain pending; this is not live image-transfer proof.
+
+Independent source review found two recovery defects in that candidate: finalization
+could lose an earlier failure, and direct filesystem writes could leave an unusable
+partial file at the final URI. The correction records each image failure transition
+in the existing failure paths and publishes filesystem assets from complete
+temporary bytes through an atomic no-clobber hard link. Added regressions cover
+unknown-to-definite failure history and interrupted/concurrent filesystem writes.
+The corrected candidate passed typecheck, full lint and 56 focused tests across
+seven files without retries. This includes eleven Mongo image-storage cases,
+existing repository/dispatch regressions, recovery-storage contracts, and atomic
+filesystem tests. An earlier broad attempt was stopped after the candidate
+changed; it is not a passing result. The corrected broader runner scope then
+passed 186 tests across 27 files without retries. Mongo teardown required forced
+termination after its grace period; the command exited successfully. Review B
+subsequently reproduced a two-frame APNG that Sharp treated as a default
+single-frame PNG. A bounded PNG chunk check and the exact APNG regression now
+address that gap. Post-correction typecheck, full lint and all twenty affected
+validator/storage tests passed without retries. Both independent reviews must
+pass again before publication.
+
 Use M1's operation ledger and the existing AssetStore. Implement the callback
 image route and operation-bound reference download. Original decoded PNG/JPEG/WebP
 bytes are accepted up to 20 MiB, 64 megapixels, positive dimensions and one frame.
@@ -272,6 +334,9 @@ small deterministic generated fixtures. The fixture service may supply image
 bytes, but must not bypass workflow callbacks or fabricate live-provider evidence.
 Code nodes do not emit Dify `file` outputs; use HTTP file outputs/file variables.
 Prove the actual binary upload binding with a fixture before publishing.
+The pinned [HTTP editor contract](https://github.com/langgenius/dify/blob/1.17.1/web/app/components/workflow/nodes/http/types.ts)
+defines binary and form-data file payloads. This is preparation evidence only;
+it does not verify server forwarding, transfer limits or the deployed callback.
 
 For later Real mode, keep the requested model/settings from M0. Prefer a tested
 single-request plugin; otherwise Dify HTTP generation/edit nodes with retries off.

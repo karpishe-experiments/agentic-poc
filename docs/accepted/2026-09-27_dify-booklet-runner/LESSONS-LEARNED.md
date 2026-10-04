@@ -4,6 +4,21 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Publish complete asset bytes before recording completion
+
+- **Context:** An image operation stores original bytes at an immutable attempt URI.
+- **Observation:** A direct exclusive filesystem write can leave a partial final
+  file on interruption. Atomic publication from a complete sibling temporary file
+  prevents that failure; competing writes retain one winner without overwriting it.
+- **Guidance:** Publish complete bytes without clobbering an existing asset, then
+  verify their digest before recording database completion. Recovery reuses the
+  original operation and bytes without another provider request. Record each
+  failure when it occurs, not from mutable run timestamps during recovery.
+- **Evidence:** [Atomic filesystem tests](../../../tests/unit/filesystem-asset-store-atomic.test.ts)
+  and [image-storage tests](../../../tests/integration/experiment-runner-image-storage.test.ts).
+- **Promotion target:** Asset and recovery documentation. These are local tests,
+  not live Dify binary-transfer evidence.
+
 ### Preserve subject identity independently of names and array order
 
 - **Context:** Draft cast/location lists become manuscript sources and final lists.
