@@ -9,8 +9,70 @@ const requireIds = (known: Set<string>, ids: Array<string | null | undefined>, l
 
 export type MongoVerification = { counts: Record<string, number>; unresolvedAssetUris: string[] };
 
+/** Verify the Dify profile without requiring the legacy application's agent seeds. */
+export async function verifyExperimentData(context: MongoDatabaseContext): Promise<void> {
+  const c = context.collections;
+  const [runs, operations, delegations, booklets, artifacts, versions, approvals, messages] = await Promise.all([
+    c.experiment_runs.find().toArray(), c.experiment_operations.find().toArray(),
+    c.experiment_delegations.find().toArray(), c.booklets.find().toArray(),
+    c.artifacts.find().toArray(), c.artifact_versions.find().toArray(),
+    c.approvals.find({ experimentRunId: { $exists: true } }).toArray(),
+    c.messages.find({ experimentRunId: { $exists: true } }).toArray(),
+  ]);
+  const runById = new Map(runs.map((row) => [row._id, row]));
+  const operationById = new Map(operations.map((row) => [row._id, row]));
+  const delegationById = new Map(delegations.map((row) => [row._id, row]));
+  const bookletById = new Map(booklets.map((row) => [row._id, row]));
+  const artifactById = new Map(artifacts.map((row) => [row._id, row]));
+  const versionById = new Map(versions.map((row) => [row._id, row]));
+  for (const run of runs) {
+    const booklet = bookletById.get(run.bookletId);
+    if (booklet?.executionProfile !== "dify_booklet_v1" || booklet.experimentRunId !== run._id)
+      throw new Error(`Experiment run ${run._id} has an incompatible booklet.`);
+    if (run.predecessorRunId && !runById.has(run.predecessorRunId))
+      throw new Error(`Experiment run ${run._id} has a missing predecessor.`);
+    if (run.activeOperationId && operationById.get(run.activeOperationId)?.runId !== run._id)
+      throw new Error(`Experiment run ${run._id} has an incompatible active operation.`);
+    if (run.activeDelegationId && delegationById.get(run.activeDelegationId)?.runId !== run._id)
+      throw new Error(`Experiment run ${run._id} has an incompatible active delegation.`);
+  }
+  for (const operation of operations) {
+    if (!runById.has(operation.runId)) throw new Error(`Experiment operation ${operation._id} has a missing run.`);
+    for (const id of [...operation.dependencyVersionIds, ...(operation.expectedTargetVersionId ? [operation.expectedTargetVersionId] : [])]) {
+      const version = versionById.get(id);
+      if (!version || artifactById.get(version.artifactId)?.experimentRunId !== operation.runId)
+        throw new Error(`Experiment operation ${operation._id} has an incompatible artifact version.`);
+    }
+  }
+  for (const delegation of delegations) {
+    if (runById.get(delegation.runId)?.bookletId !== delegation.subjectId || operationById.get(delegation.testerDecisionId)?.runId !== delegation.runId || operationById.get(delegation.testerDecisionId)?.role !== "tester")
+      throw new Error(`Experiment delegation ${delegation._id} has incompatible provenance.`);
+    if (delegation.supersededById && delegationById.get(delegation.supersededById)?.runId !== delegation.runId)
+      throw new Error(`Experiment delegation ${delegation._id} has an incompatible successor.`);
+  }
+  for (const artifact of artifacts.filter((row) => row.experimentRunId)) {
+    if (runById.get(artifact.experimentRunId!)?.bookletId !== artifact.bookletId)
+      throw new Error(`Experiment artifact ${artifact._id} has an incompatible run.`);
+  }
+  for (const version of versions.filter((row) => row.sourceOperationId)) {
+    if (operationById.get(version.sourceOperationId!)?.runId !== artifactById.get(version.artifactId)?.experimentRunId)
+      throw new Error(`Experiment version ${version._id} has incompatible operation provenance.`);
+  }
+  for (const approval of approvals) {
+    const artifact = artifactById.get(versionById.get(approval.artifactVersionId)?.artifactId ?? "");
+    if (!artifact || artifact.experimentRunId !== approval.experimentRunId || artifact.bookletId !== approval.bookletId || operationById.get(approval.testerDecisionId ?? "")?.role !== "tester" || operationById.get(approval.testerDecisionId ?? "")?.runId !== approval.experimentRunId)
+      throw new Error(`Experiment approval ${approval._id} has incompatible provenance.`);
+    if (approval.delegationId && delegationById.get(approval.delegationId)?.runId !== approval.experimentRunId)
+      throw new Error(`Experiment approval ${approval._id} has an incompatible delegation.`);
+  }
+  for (const message of messages) {
+    if (runById.get(message.experimentRunId!)?.bookletId !== message.bookletId || operationById.get(message.operationId ?? "")?.runId !== message.experimentRunId)
+      throw new Error(`Experiment message ${message._id} has incompatible provenance.`);
+  }
+}
+
 export async function verifyMongoData(context: MongoDatabaseContext, dataRoot?: string): Promise<MongoVerification> {
-  await verifyMongoStructure(context); const c = context.collections;
+  await verifyMongoStructure(context); await verifyExperimentData(context); const c = context.collections;
   const [booklets, artifacts, versions, dependencies, messages, cards, responses, assets, styles, jobs, items, calls, definitions, agentVersions, agentEvents, reviews, approvals, exportsRows, executionPreferences, executionBatches, executionItems] = await Promise.all([
     c.booklets.find().toArray(), c.artifacts.find().toArray(), c.artifact_versions.find().toArray(), c.artifact_dependencies.find().toArray(), c.messages.find().toArray(), c.cards.find().toArray(), c.card_responses.find().toArray(), c.assets.find().toArray(), c.style_catalog.find().toArray(), c.generation_jobs.find().toArray(), c.generation_items.find().toArray(), c.model_calls.find().toArray(), c.agent_definitions.find().toArray(), c.agent_versions.find().toArray(), c.agent_version_events.find().toArray(), c.quality_reviews.find().toArray(), c.approvals.find().toArray(), c.exports.find().toArray(), c.execution_preferences.find().toArray(), c.execution_batches.find().toArray(), c.execution_items.find().toArray(),
   ]);

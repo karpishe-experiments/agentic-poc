@@ -96,10 +96,11 @@ export function createRepositories(database: Database): Repositories {
       });
       return toBooklet({ _id: input.booklet.id, schemaVersion: SCHEMA_VERSION, workingTitle: input.booklet.workingTitle, lifecycle: "draft", currentStage: "audience_profile", coverAssetId: null, createdAtMs: input.booklet.createdAtMs, updatedAtMs: input.booklet.createdAtMs });
     },
-    async list() { return (await c.booklets.find().sort({ updatedAtMs: -1 }).toArray()).map(toBooklet); },
-    async get(id) { const row = await c.booklets.findOne({ _id: id }); return row ? toBooklet(row) : null; },
+    // The v2 experiment has its own projections; legacy parsers must not interpret it.
+    async list() { return (await c.booklets.find({ executionProfile: { $ne: "dify_booklet_v1" } }).sort({ updatedAtMs: -1 }).toArray()).map(toBooklet); },
+    async get(id) { const row = await c.booklets.findOne({ _id: id, executionProfile: { $ne: "dify_booklet_v1" } }); return row ? toBooklet(row) : null; },
     async updateDerivedState(input) {
-      const result = await c.booklets.updateOne({ _id: input.id }, { $set: { lifecycle: input.lifecycle, currentStage: input.currentStage, updatedAtMs: input.updatedAtMs } });
+      const result = await c.booklets.updateOne({ _id: input.id, executionProfile: { $ne: "dify_booklet_v1" } }, { $set: { lifecycle: input.lifecycle, currentStage: input.currentStage, updatedAtMs: input.updatedAtMs } });
       if (!result.matchedCount) throw new Error("The booklet was not found.");
     },
   };
