@@ -12,14 +12,15 @@ the error names the missing setting without printing its value.
 ## Current deployment status
 
 Initial live acceptance completed on 2026-09-15. The latest staging transition
-passed on 2026-10-05. M1 browser/persona acceptance passed; fifteen model-free
-reference bindings are active. Live reference acceptance and full booklet
-simulation remain pending.
+passed on 2026-10-05. Sixteen model-free bindings are active through J11.
+All three persona simulations reached approved pagination with zero payable
+calls. J12/J13, final images and full-booklet simulation remain pending; see
+[M3 evidence](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
 
 | Checkpoint | Verified state |
 | --- | --- |
 | Infrastructure | Run `37307131902` synchronized reviewed `master` commit `4a8ad276fdb5ec7fd5701a9f7cf6ec7b1addb6bf`; Terraform reported no changes. |
-| Staging | Release `74f73208393a0f9c69ac6023de1e1f10dd43b6ee`; Deploy `37298690237` and Check `37299391353` passed. Fifteen model-free bindings activated through `37308665258`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
+| Staging | Release `0fb4c3d0d0996b38e7a8c03ffebf81793ddf1fe0`; Deploy `37356864220` and Check `37357833756` passed. Sixteen model-free bindings activated through `37348239296` with backup `staging-20261005T172539Z-9163268c683d14ee`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |

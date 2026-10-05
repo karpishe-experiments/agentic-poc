@@ -487,6 +487,26 @@ style and lettering, selected-only references, source/hash/text-flag rejection,
 distinct assembled/draft style identities, fingerprints and prompt bounds.
 Clean-checkout typecheck and lint also passed. These are local checks only.
 
+### Independent local preparation: runtime file-input serialization
+
+Extend the existing runtime transport with optional ordered uploaded file IDs.
+The pinned [1.17.1 workflow payload schema](https://github.com/langgenius/dify/blob/1.17.1/api/controllers/common/controller_schemas.py#L96-L175)
+defines local descriptors with `type`, `transfer_method` and `upload_file_id`.
+Custom Start variables belong in `inputs`; top-level `files` serves system inputs.
+Serialize the selected IDs into `inputs.reference_files` with image/local-file
+descriptors and the existing `booklet-<runId>` user. Preserve the previous body
+when no files are supplied. Reject empty, duplicate, malformed or over-bound
+lists before network access. Use the probe's fifteen-file bound for this initial
+local path; it is not a universal platform capacity claim.
+
+Keep POST recovery unchanged: a lost response is unknown, not permission to
+repeat execution. This optional transport seam does not wire uploads or page
+dispatch. Runtime ownership, published consumption, original-byte recovery and
+measured image-size capacity still require the model-free live probe.
+The local transport and upload-adapter suites passed 23 tests without retries,
+including the ordered fifteen-file boundary and zero network requests for
+invalid input. This does not prove runtime file ownership or live consumption.
+
 1. Add J11–J13 schemas, prompts, fixtures, source routing and completion predicate.
 2. Connect image operations to page jobs and exact per-page approvals.
 3. Add feedback/judge branches, result validators and separate evaluation status.

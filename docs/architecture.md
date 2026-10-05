@@ -110,6 +110,11 @@ It copies and decodes bytes before one bounded multipart request, retains only
 the returned file ID and verified original metadata, and does not retry unknown
 outcomes. Its initial upload limit is 10 MiB. It is not wired into dispatch;
 published file-list consumption, ownership and live capacity remain pending.
+The runtime transport can serialize an optional ordered list of uploaded image
+IDs into the custom `reference_files` input using the same run user. It rejects
+invalid lists before dispatch and preserves the old request when no files are
+supplied. No runner caller supplies this input yet; live consumption and file
+recovery remain unverified.
 Filesystem AssetStore publishes complete temporary-file bytes through an atomic
 no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;
