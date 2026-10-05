@@ -15,6 +15,42 @@ around them. Bundle any private binding/login handoff and staging grants up fron
 
 Read pinned Ali guidelines 11–13. Manuscript units are not physical pages.
 
+### Independent local preparation: page-contract parser
+
+This package can proceed before live M2 exits. It does not clear the entry gate
+for page dispatch, publication or staging acceptance. Guidelines 11–13 were read
+at pinned commit `631f547ec3f7ce375f740dd6f2b1b9aaebbde940`; retain their
+responsibilities with the PRD's cover/story-only and warning-based adaptations.
+
+| Field | Bounded slice |
+| --- | --- |
+| Goal and components | Add `lib/contracts/experiment-pages.ts` and `tests/unit/experiment-runner-page-contracts.test.ts`. Reuse Zod, opaque IDs and exact style-module hashing. Do not change runtime task admission, persistence or bindings. |
+| Contract and examples | Parse J11 layout proposals and J12 per-page proposals. Kid has cover index 0 plus three single-scene pages; Parent has five story pages with one two-panel page; Creator has eight with at least two multi-panel pages. A proposal uses page indices, not invented durable page IDs. J12 names an application-supplied page ID, exact source-version IDs and approved sheet asset references. Preserve lettering whitespace and explicitly represent text-free panels. |
+| Ordered edits | Define J11 canvas fields for trim/orientation/aspect ratio, working pixels, bleed, binding, live-text safe margins and reading direction. Define typography entries for narration, speech, thought, sound effects, titles, credits and diegetic text, each with font direction, size hierarchy, container/bubble treatment and placement rules. Define ordered page/panel allocations, manuscript-unit IDs, text capacity, page-turn rhythm, routed sheet references and deferred composition decisions. J12 records action/emotional beat and composition per panel; each lettering item retains exact wording, form, speaker (nullable where not applicable), panel assignment, placement and typography/bubble treatment. Define J11/J12 parsers with structural checks and preferred-length warnings; add synthetic cases. Keep subject/source existence and approval checks outside the parser for the later repository slice. |
+| Verification | Run `npx.cmd vitest run tests/unit/experiment-runner-page-contracts.test.ts tests/unit/experiment-runner-reference-contracts.test.ts --bail=1 --retry=0`, `npm.cmd run typecheck` and `npm.cmd run lint` in a clean validation checkout if generated inputs in the main checkout are stale. Tests cover duplicate page/panel identities, exact lettering, explicit no-text, source/reference shape, fixed case counts and multi-panel requirements. |
+| Completion and escalation | Finish on validated local shapes and two independent reviews only. Do not claim saved page identity, reference transport, approval, generation or live completion. Escalate a changed creative contract; leave measured attachment limits pending until the model-free Dify probe. J13 request/build contracts follow verified page identity and transport contracts. |
+
+This parser package is preparation, not a substitute for any J11–J13 specialist
+or the deployed all-persona simulation. Parser checks are local evidence only;
+they do not clear the live entry gate.
+
+Every J12 panel explicitly routes its manuscript-unit IDs and relevant sheet
+subject IDs, artifact-version IDs and asset IDs. Missing required instructions
+fail parsing; imperfect later rendering remains a warning. Tests must omit each
+required canvas/typography/lettering field, reject absent panel source routing,
+and prove that exact wording survives parsing. J11 proposal page indices do not
+create identities; J12 receives Booklet-owned page IDs from its input context.
+
+The local parser candidate passed 18 tests across the page and existing
+reference-contract suites without retries
+on 2026-10-05. The sandboxed test attempt failed before execution with `EPERM`;
+the permitted clean-checkout run passed. No runtime admission, persistence,
+Dify binding or provider execution changed. Independent code reviews and
+publication remain pending; these tests do not establish live M3 readiness.
+Review corrections permit explicitly empty routing for source-free panels,
+require title lettering on the cover and test the aggregate content-size limit.
+Final clean-checkout typecheck and full lint passed after these corrections.
+
 - J11 book artifact: fixed geometry/canvas, typography/bubble system, safe regions,
   ordered physical pages including cover, panels per page, narrative-unit mapping,
   and subject/reference routing. Default square canvas; physical page IDs are
