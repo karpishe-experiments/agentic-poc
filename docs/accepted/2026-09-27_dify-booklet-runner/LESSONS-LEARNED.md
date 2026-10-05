@@ -228,3 +228,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [J12 fixture](../../../lib/experiment-runner/page-bible-fixtures.ts)
   and [exact-lettering tests](../../../tests/unit/experiment-runner-page-bible-fixtures.test.ts).
 - **Promotion target:** Documentation for exact-text artifact transformations.
+
+### Capability flags must survive saved configuration projection
+
+- **Context:** A new capability is optional in a runtime binding while older runs
+  compare saved configuration bytes or hashes.
+- **Observation:** The snapshot producer selects an explicit field list. Adding
+  a flag only to the input schema would omit it from saved evidence. Regression
+  tests prove that true-only projection changes enabled evidence while omission
+  preserves the legacy JSON and SHA-256 value.
+- **Guidance:** Update input validation, saved validation and projection together.
+  Omit absent flags rather than applying a default. Keep saved and public profile
+  shapes separate, and retain the original legacy schema surface.
+- **Evidence:** [snapshot producer](../../../lib/experiment-runner/config.ts) and
+  [configuration regression tests](../../../tests/unit/experiment-runner-config.test.ts).
+- **Promotion target:** Documentation for versioned capability configuration.
