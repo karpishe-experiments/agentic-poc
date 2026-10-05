@@ -68,9 +68,12 @@ async function invalidateDescendants(database: Database, session: ClientSession,
   if (seen.size) await database.collections.artifacts.updateMany({ experimentRunId: run._id, bookletId: run.bookletId, currentVersionId: { $in: [...seen] } }, { $set: { state: "needs_review", updatedAtMs: nowMs } }, { session });
 }
 
-async function approvedSourceIds(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: SpecialistTask, subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId, assetStore: () => AssetStore = createAssetStore) {
+type VerifiedPagination = Awaited<ReturnType<typeof verifyCurrentPaginationSources>>;
+type PaginationVerification = () => Promise<VerifiedPagination>;
+
+async function approvedSourceIds(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: SpecialistTask, subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId, assetStore: () => AssetStore = createAssetStore, verifyPagination?: PaginationVerification) {
   if (taskId === "J11") return subjectKind === "book" && subjectId === run.bookletId ?
-    (await verifyCurrentPaginationSources(database, session, run, assetStore())).versionIds : null;
+    (await (verifyPagination ? verifyPagination() : verifyCurrentPaginationSources(database, session, run, assetStore()))).versionIds : null;
   if (taskId === "J09" || taskId === "J10") {
     const target = (await currentSheetTargets(database, session, run)).find((item) => item.taskId === taskId && item.subjectKind === subjectKind && item.subjectId === subjectId);
     return target?.sourceVersionIds ?? null;
@@ -95,16 +98,16 @@ export async function prepareNarrativeContext(database: Database, session: Clien
   return { expectedTargetVersionId: target?.currentVersionId ?? null, dependencyVersionIds };
 }
 
-async function assertDependencies(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, assetStore: () => AssetStore) {
+async function assertDependencies(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, assetStore: () => AssetStore, verifyPagination?: PaginationVerification) {
   if (!enabled(run, operation.taskId)) invalid("Unsupported narrative task.");
   const current = await database.collections.artifacts.findOne(targetQuery(run, operation.taskId, operation.subjectKind, operation.subjectId), { session });
   if ((current?.currentVersionId ?? null) !== operation.expectedTargetVersionId) conflict("Narrative target changed after preparation.");
-  const expected = await approvedSourceIds(database, session, run, operation.taskId, operation.subjectKind, operation.subjectId, assetStore);
+  const expected = await approvedSourceIds(database, session, run, operation.taskId, operation.subjectKind, operation.subjectId, assetStore, verifyPagination);
   if (expected === null || canonical(expected) !== canonical(operation.dependencyVersionIds)) conflict("Approved upstream version changed after preparation.");
   return current;
 }
 
-async function approveVersion(database: Database, session: ClientSession, run: ExperimentRunDocument, versionId: string, origin: "explicit" | "delegated", testerDecisionId: string, delegationId: string | null, reviewGroupId: string | null, nowMs: number, assetStore: () => AssetStore) {
+async function approveVersion(database: Database, session: ClientSession, run: ExperimentRunDocument, versionId: string, origin: "explicit" | "delegated", testerDecisionId: string, delegationId: string | null, reviewGroupId: string | null, nowMs: number, assetStore: () => AssetStore, verifyPagination?: PaginationVerification) {
   const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
   if (!version) invalid("Approval version does not exist.");
   const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
@@ -112,7 +115,7 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   if (!enabled(run, artifact.taskId)) invalid("Approval task is outside the saved configuration.");
   if (artifact.state === "needs_review") invalid("Stale content requires an updated proposal before approval.");
   {
-    const expected = await approvedSourceIds(database, session, run, artifact.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore);
+    const expected = await approvedSourceIds(database, session, run, artifact.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore, verifyPagination);
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as string[];
     if (artifact.taskId === "J09" || artifact.taskId === "J10") {
       if (expected === null) invalid("Sheet approval target is not eligible.");
@@ -149,7 +152,7 @@ async function approveVersion(database: Database, session: ClientSession, run: E
     } else if (expected === null || canonical(dependencies) !== canonical(expected)) invalid("Approval dependencies are not current.");
     if (artifact.taskId === "J11") {
       const layout = parseStoredPageLayout(run.persona, JSON.parse(version.contentJson));
-      validatePaginationRouting(layout, await verifyCurrentPaginationSources(database, session, run, assetStore()));
+      validatePaginationRouting(layout, await (verifyPagination ? verifyPagination() : verifyCurrentPaginationSources(database, session, run, assetStore())));
     }
   }
   if (artifact.taskId === "J01") {
@@ -169,10 +172,15 @@ async function approveVersion(database: Database, session: ClientSession, run: E
 export async function materializeNarrativeResult(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RoleResult, warnings: NarrativeWarning[], nowMs: number, assetStore: () => AssetStore = createAssetStore): Promise<Materialized> {
   const summary: Record<string, unknown> = {};
   const runPatch: RunPatch = {};
+  // This cache belongs to one transaction attempt. A retry or later request
+  // verifies approvals, assembly lineage and stored bytes again.
+  let verifiedPagination: VerifiedPagination | null = null;
+  const verifyPagination: PaginationVerification = async () =>
+    verifiedPagination ??= await verifyCurrentPaginationSources(database, session, run, assetStore());
   if (result.kind === "proposal") {
     const taskId = result.payload.taskId;
     if (operation.role !== "specialist" || operation.taskId !== taskId) invalid("Proposal does not match the owning specialist operation.");
-    const target = await assertDependencies(database, session, run, operation, assetStore);
+    const target = await assertDependencies(database, session, run, operation, assetStore, verifyPagination);
     const artifactId = target?._id ?? randomUUID();
     const versionId = randomUUID();
     if (!target) await database.collections.artifacts.insertOne({ _id: artifactId, bookletId: run.bookletId, artifactType: names[taskId], state: "draft", currentVersionId: null, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, experimentRunId: run._id, createdAtMs: nowMs, updatedAtMs: nowMs }, { session });
@@ -182,8 +190,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     const content = taskId === "J11" ? materializePageLayout(run.persona, result.payload.content,
       previous ? JSON.parse(previous.contentJson) as unknown : null) :
       await materializeNarrativeContent(database, session, operation, taskId, result.payload.content, previous ? JSON.parse(previous.contentJson) as unknown : null);
-    if (taskId === "J11") validatePaginationRouting(content as ReturnType<typeof materializePageLayout>,
-      await verifyCurrentPaginationSources(database, session, run, assetStore()));
+    if (taskId === "J11") validatePaginationRouting(content as ReturnType<typeof materializePageLayout>, await verifyPagination());
     if (taskId !== "J01" && taskId !== "J02" && new TextEncoder().encode(canonical(content)).byteLength > MAX_DRAFT_LIST_CONTENT_BYTES) invalid("Stored narrative content exceeds the 512 KiB limit.");
     const intentWarnings = [...warnings];
     if (taskId === "J01") {
@@ -203,7 +210,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     let approvalId: string | null = null;
     if ((isNarrativeTask(taskId) && taskId !== "J08" || taskId === "J11") && run.activeDelegationId && !intentWarnings.some((warning) => warning.field === "audience.ageBand")) {
       const grant = await database.collections.experiment_delegations.findOne({ _id: run.activeDelegationId, runId: run._id }, { session });
-      if (grant && !grant.revokedAtMs && !grant.supersededById && grant.subjectId === run.bookletId && grant.taskIds.includes(taskId)) approvalId = await approveVersion(database, session, run, versionId, "delegated", grant.testerDecisionId, grant._id, null, nowMs, assetStore);
+      if (grant && !grant.revokedAtMs && !grant.supersededById && grant.subjectId === run.bookletId && grant.taskIds.includes(taskId)) approvalId = await approveVersion(database, session, run, versionId, "delegated", grant.testerDecisionId, grant._id, null, nowMs, assetStore, verifyPagination);
     }
     summary.artifactId = artifactId; summary.versionId = versionId; summary.approvalId = approvalId; summary.warnings = intentWarnings;
     return { summary, runPatch };
@@ -234,7 +241,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
       for (const artifact of candidates) {
         const taskId = artifact.taskId;
         if (artifact.currentVersionId && artifact.state !== "approved") {
-          try { await approveVersion(database, session, run, artifact.currentVersionId, "delegated", decisionId, grantId, null, nowMs, assetStore); }
+          try { await approveVersion(database, session, run, artifact.currentVersionId, "delegated", decisionId, grantId, null, nowMs, assetStore, verifyPagination); }
           catch (error) {
             if (taskId === "J08" || taskId === "J09" || taskId === "J10") {
               const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId }, { session });
@@ -263,7 +270,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
       const rank = (id: string) => [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson)].findIndex((task) => task === artifactByVersion.get(id)?.taskId);
       const ordered = [...decision.versionIds].sort((a, b) => rank(a) - rank(b));
       const approvalIds: string[] = [];
-      for (const versionId of ordered) approvalIds.push(await approveVersion(database, session, run, versionId, "explicit", decisionId, null, groupId, nowMs, assetStore));
+      for (const versionId of ordered) approvalIds.push(await approveVersion(database, session, run, versionId, "explicit", decisionId, null, groupId, nowMs, assetStore, verifyPagination));
       summary.approvalIds = approvalIds; summary.reviewGroupId = groupId;
     } else if (decision.action === "answer") {
       const current = pending(run);

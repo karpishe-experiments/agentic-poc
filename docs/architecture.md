@@ -98,6 +98,12 @@ exact-source approvals and GET-only recovery. Sixteen bindings enable J11 after
 private configuration and drained activation; existing profiles retain their
 boundaries. Approved J11 stops at J12, not completed booklet generation.
 
+J11 completion reuses source verification within one transaction attempt only;
+retries and later approvals verify current approvals, lineage and bytes again.
+Failed/stopped runtime observations are classified against the persisted claim.
+Claimed uncertain work retains its active operation for late completion and
+GET-only recovery; terminal runtime status alone does not permit replacement.
+
 Every legacy-profile booklet has eight ordered artifact records:
 
 ```text
