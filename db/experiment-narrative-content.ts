@@ -5,6 +5,7 @@ import type { ExperimentOperationDocument } from "@/db/documents";
 import { draftCharacterListSchema, draftLocationListSchema, manuscriptSchema, storedDraftCharacterListSchema, storedDraftLocationListSchema, storedManuscriptSchema, finalCharacterListSchema, finalLocationListSchema } from "@/lib/contracts/experiment-runner";
 import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
+import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 
 function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_result", message); }
 function sameIds(left: string[], right: string[]) {
@@ -15,6 +16,7 @@ function sameIds(left: string[], right: string[]) {
 // never create subjects; Booklet assigns IDs and validates exact saved sources.
 export async function materializeNarrativeContent(database: Database, session: ClientSession, operation: ExperimentOperationDocument, task: NarrativeTask, content: unknown, previous: unknown) {
   try {
+    if (task === "J08") return parseReferenceProposal("J08", "proposal", content).content;
     if (task === "J01" || task === "J02") return content;
     if (task === "J03") {
       const proposal = draftCharacterListSchema.parse(content);

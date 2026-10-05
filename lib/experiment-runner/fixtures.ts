@@ -1,9 +1,12 @@
 import { CASES, conceptBriefSchema, parseDraftListProposal, parseNarrativeProposal, parseNarrativeTaskProposal, roleResultSchema, storedDraftCharacterListSchema, storedDraftLocationListSchema, storedManuscriptSchema, storyOutlineSchema, validateRoleResult, type DraftCharacterListContent, type DraftLocationListContent, type ExperimentMode, type Persona, type RoleResult } from "@/lib/contracts/experiment-runner";
 import type { createExperimentContextService } from "@/lib/experiment-runner/context";
+import { simulateReferenceProposal } from "@/lib/experiment-runner/reference-fixtures";
+import { BOOK_TASKS } from "@/lib/experiment-runner/narrative-tasks";
+import { assembledVisualStyleSchema } from "@/lib/contracts/experiment-references";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
 type Case = keyof typeof CASES;
-type Task = "J01" | "J02" | "J03" | "J04" | "J05" | "J06" | "J07";
+type Task = "J01" | "J02" | "J03" | "J04" | "J05" | "J06" | "J07" | "J08";
 const sourceConstraintPrefix = "Approved concept constraint: ";
 
 type DraftFixtureInput = {
@@ -141,7 +144,23 @@ function simulateLaterNarrativeTask(
   const note = [...answerDetails, ...(revision ? [`Revision request: ${revision}`] : [])];
   const addNotes = (existing: string[], additions: string[]) => [...existing, ...additions.filter((item) => !existing.includes(item))];
   let content: unknown;
-  if (taskId === "J03" || taskId === "J04") {
+  if (taskId === "J08") {
+    const version = (id: Task) => {
+      const row = sources.find((item) => item.taskId === id);
+      if (!row) throw new Error(`J08 requires approved ${id}.`);
+      return { versionId: row.id, content: row.content };
+    };
+    const assembled = keepCurrent ? assembledVisualStyleSchema.safeParse(previous.content) : null;
+    const priorStyle = assembled?.success ? { ...assembled.data, samplePlan: assembled.data.samples.map(({ sampleKey, purpose }) => ({ sampleKey, purpose })) } : keepCurrent ? previous.content : undefined;
+    const result = simulateReferenceProposal("J08", { mode: "simulated", persona,
+      brief: context.brief ?? CASES[persona].brief, concept: version("J01"), outline: version("J02"),
+      manuscript: version("J05"), finalCharacters: version("J06"), finalLocations: version("J07"),
+      currentContent: priorStyle, sourceChanged, revision,
+      answers: (context.questionAnswers ?? []).filter((item) => item.answer).map((item) => ({ question: item.question, answer: item.answer! })),
+    });
+    if (result.kind !== "proposal") throw new Error("Expected style proposal.");
+    content = result.content;
+  } else if (taskId === "J03" || taskId === "J04") {
     const concept = conceptBriefSchema.parse(source("J01"));
     const outline = storyOutlineSchema.parse(source("J02"));
     const input = {
@@ -223,7 +242,7 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
   if (mode !== "simulated") throw new Error("Narrative fixtures require simulated mode.");
   if (context.role === "manager") {
     const taskId = context.eligibleRoute;
-    if (!taskId || !["J01", "J02", "J03", "J04", "J05", "J06", "J07"].includes(taskId)) throw new Error("Manager has no eligible narrative task.");
+    if (!taskId || !(BOOK_TASKS as readonly string[]).includes(taskId)) throw new Error("Manager has no eligible narrative task.");
     return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: "book", subjectId: context.run.bookletId } });
   }
   if (context.role === "tester") {
@@ -245,14 +264,24 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
       if (item.state !== "draft") return [];
       const version = currentVersion(item);
       if (!version) throw new Error("Draft has no current version.");
-      if ((version.dependencyVersionIds as string[]).some((id) => !approvedIds.has(id))) return [];
+      const dependencies = version.dependencyVersionIds as string[];
+      if (item.taskId === "J08") {
+        const style = assembledVisualStyleSchema.safeParse(version.content);
+        if (!style.success || version.sourceVersionId !== style.data.draftStyleVersionId ||
+            dependencies[0] !== style.data.draftStyleVersionId || dependencies.slice(1).some((id) => !approvedIds.has(id))) return [];
+      } else if (dependencies.some((id) => !approvedIds.has(id))) return [];
       return [version.id];
     });
     if (current.length === 0) throw new Error("No current eligible draft version to review.");
+    if (context.persona !== "professional_creator" && context.activeDelegation &&
+        context.currentArtifacts.some((item) => item.taskId === "J08" && current.includes(item.currentVersionId ?? "")) &&
+        context.activeDelegation.taskIds.includes("J08")) {
+      return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "delegate", taskIds: context.activeDelegation.taskIds, subjectId: context.bookletId } } });
+    }
     return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "approve", versionIds: current } } });
   }
   if (context.role !== "specialist") throw new Error("Unsupported fixture role.");
-  if (!context.taskId || !["J01", "J02", "J03", "J04", "J05", "J06", "J07"].includes(context.taskId)) throw new Error("Specialist task is outside the narrative slice.");
+  if (!context.taskId || !(BOOK_TASKS as readonly string[]).includes(context.taskId)) throw new Error("Specialist task is outside the narrative slice.");
   const persona = context.persona as Case;
   const story = stories[persona];
   if (!story || context.brief !== CASES[persona].brief) throw new Error("Fixture requires an exact fixed case brief.");

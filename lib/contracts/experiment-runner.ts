@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
+import { parseReferenceProposal, type VisualStyleProposal } from "@/lib/contracts/experiment-references";
 
 export const EXPERIMENT_PROFILE = "dify_booklet_v1" as const;
 export const experimentTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11", "J12", "J13"]);
@@ -69,7 +70,7 @@ export type ConceptBriefContent = z.infer<typeof conceptBriefSchema>;
 export type StoryOutlineContent = z.infer<typeof storyOutlineSchema>;
 export type NarrativeContent = ConceptBriefContent | StoryOutlineContent;
 export type NarrativeWarning = { field: string; message: string };
-export const narrativeTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07"]);
+export const narrativeTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08"]);
 const characterEntryKey = z.enum(["character_1", "character_2"]);
 const locationEntryKey = z.enum(["location_1", "location_2"]);
 
@@ -235,8 +236,10 @@ export function parseNarrativeTaskProposal(task: "J04", persona: Persona, conten
 export function parseNarrativeTaskProposal(task: "J05", persona: Persona, content: unknown): { content: ManuscriptContent; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: "J06", persona: Persona, content: unknown): { content: FinalCharacterListContent; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: "J07", persona: Persona, content: unknown): { content: FinalLocationListContent; warnings: NarrativeWarning[] };
-export function parseNarrativeTaskProposal(task: z.infer<typeof narrativeTaskSchema>, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent; warnings: NarrativeWarning[] };
+export function parseNarrativeTaskProposal(task: "J08", persona: Persona, content: unknown): { content: VisualStyleProposal; warnings: NarrativeWarning[] };
+export function parseNarrativeTaskProposal(task: z.infer<typeof narrativeTaskSchema>, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: z.infer<typeof narrativeTaskSchema>, persona: Persona, content: unknown) {
+  if (task === "J08") return parseReferenceProposal("J08", "proposal", content);
   if (task === "J01" || task === "J02") return parseNarrativeProposal(task, content);
   if (task === "J03" || task === "J04") return parseDraftListProposal(task, persona, content);
   const parsed = task === "J05" ? manuscriptSchema.parse(content) : task === "J06" ? finalCharacterListSchema.parse(content) : finalLocationListSchema.parse(content);

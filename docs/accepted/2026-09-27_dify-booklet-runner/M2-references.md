@@ -208,8 +208,55 @@ across the new integration suite, existing image-storage integration suite and
 reference-request unit suite on 2026-10-05, without retries. The first run stopped
 on a lint error; the next found an extra field in the test's strict claim input.
 Both were corrected before the passing run. This proves local saved-image
-assembly, not Dify transfer or approved package production. Independent reviews
-and publication remain pending.
+assembly, not Dify transfer or approved package production. Two independent
+reviews passed; [PR #116](https://github.com/karpishe-experiments/agentic-poc/pull/116)
+merged as `57737a48dc5b516998d7c9759dd96a88d9e90a0b`; Validate `37259673370` passed.
+
+### S5 J08 persistence and acceptance wiring
+
+The next local candidate reuses normal operation preparation, specialist context,
+proposal completion and tester decisions for J08. A saved configuration must have
+the seven distinct narrative specialists and a separately identified J08 binding.
+Retained six-slot and eleven-slot snapshots keep their existing boundaries. This
+fixture snapshot is not a new live settings profile: the public reader and host
+validator still reject larger bundles until the image dispatch/publication slice
+defines and verifies the complete profile together.
+
+J08 reads current approved J01/J02/J05/J06/J07, stores a textual version with its
+five dependency edges, and never auto-approves that text. Context returns
+`style_samples`; the dispatcher waits without another manager/tester call. The
+existing saved-sample assembly produces A. Tester review or a recorded delegation
+then accepts A, checks its internal draft identity, six source edges and completed
+sample records, and retains exact explicit/delegated approval provenance. The
+approval path reads both original AssetStore files and verifies their saved
+byte lengths and digests. Lost or corrupt bytes remain technical blockers;
+completed sample operations are retained and no image call is repeated.
+The internal textual parent is not itself approved or required to remain current.
+A style revision produces a new text draft and requires new samples; old assets,
+versions and approvals remain saved. Quality warnings remain advisory.
+
+`tests/integration/experiment-runner-style-journey.test.ts` builds the seven
+narrative artifacts through normal repository/context/fixture completion, not
+seeded source content. It covers all personas through J08 proposal, locally
+stored synthetic samples, assembly and acceptance; it also checks old-profile
+exclusion, textual-draft rejection, missing sample evidence and accepted-style
+revision. This is local persistence proof, not deployed Dify simulation. Live
+image transfer, automatic scheduling, Python/DSL parity, complete settings and
+private bindings remain pending before staging activation.
+
+On 2026-10-05 the final source candidate passed clean-checkout typecheck, full
+lint, twelve agent fixtures and 95 tests across ten runner suites without retries
+(`--bail=1 --retry=0`). The test command exited successfully; disposable Mongo
+teardown required forced termination after its grace period. Earlier attempts
+encountered sandbox process-launch restrictions and a test-helper idempotency
+collision; the helper was corrected before final validation. Main-checkout
+generated-type contamination is not counted as a pass. Independent review found
+that acceptance did not recheck stored bytes after assembly. The correction
+uses the existing AssetStore factory at the repository completion boundary and
+adds missing/corrupt-byte regressions for explicit and delegated acceptance.
+The corrected candidate passed typecheck, full lint, twelve agent fixtures and
+118 tests across thirteen suites without retries. Both independent reviews must
+pass again before publication.
 
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
@@ -409,6 +456,12 @@ Resume reached the deployed M1 `slice_complete` boundary with J01/J02 approved,
 five logical text calls and zero payable text/image calls. Booklet
 `1f3b2af0-ec90-4adf-8f73-1781aaf02fdd` retains the results. This verifies M1
 controls, not full booklet completion or live M2.
+
+The next Chrome check created Professional Creator run
+`e6c595bb-17e4-40e8-83c0-bf5ee2ce6108` through Start selected. It reached the
+same deployed J01/J02 boundary with two explicit approvals, six logical text
+operations and zero payable text/image calls. Balanced and Real controls remain
+unavailable. This is additional M1 UI evidence, not full simulation acceptance.
 
 Extend the M1 task-schema map and ArtifactService, not the old Visual Bible gate.
 Read Ali's pinned task guidelines 03–10 in full before writing prompts/fixtures.
