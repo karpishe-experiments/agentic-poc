@@ -214,7 +214,11 @@ The local `page-image-requests.ts` serializer prepares one J13 `page_source`
 request from the saved J11 layout, selected J12 content and assembled J08 style.
 It retains exact native lettering and the unchanged style module, and returns
 only selected sheet identities in deterministic attachment order. This is pure
-request preparation, not an approval or byte-integrity check. It is not wired
+request preparation, not an approval or byte-integrity check. The separate
+`verifyCurrentPageIllustrationSources` database helper checks current J12 approval,
+exact dependencies, and selected original sheet hashes, sizes and dimensions.
+It returns ordered attachments and advisory MIME-label warnings. Neither helper
+claims an operation or uploads files. The serializer is not wired
 into dispatch; final-page persistence, approvals and completion remain pending.
 
 J11 completion reuses source verification within one transaction attempt only;
