@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createSimulationGraph, M1_SIMULATION_MODULES, M2_SIMULATION_MODULES, simulationModuleName } from "@/lib/experiment-runner/workflow-graph";
 
 describe("independent M1 simulation graph candidates", () => {
-  it("builds eleven separate M2 modules without renaming existing apps", async () => {
-    expect(M2_SIMULATION_MODULES).toHaveLength(11);
+  it("builds twelve separate M2 text modules without renaming existing apps", async () => {
+    expect(M2_SIMULATION_MODULES).toHaveLength(12);
     expect(M2_SIMULATION_MODULES.slice(0, 6).map(simulationModuleName)).toEqual(M1_SIMULATION_MODULES.map(simulationModuleName));
-    expect(new Set(M2_SIMULATION_MODULES.map(simulationModuleName)).size).toBe(11);
+    expect(new Set(M2_SIMULATION_MODULES.map(simulationModuleName)).size).toBe(12);
+    expect(simulationModuleName(M2_SIMULATION_MODULES[11])).toBe("issue65_m2_J08");
     for (const selectedModule of M2_SIMULATION_MODULES) {
       const graph = await createSimulationGraph(selectedModule, "m2");
       expect(graph.nodes.filter((node) => node.data.type === "http-request")).toHaveLength(2);

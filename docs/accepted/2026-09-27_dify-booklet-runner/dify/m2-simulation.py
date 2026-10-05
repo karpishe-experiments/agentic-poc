@@ -1,11 +1,14 @@
-"""Self-contained Dify Code node fixture for simulated J01-J07 text work.
+"""Self-contained Dify Code node fixture for simulated J01-J08 text work.
 
 Pinned Ali J03-J07 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.
 Fixed-case simulation retains narrative dependencies and complete content.
 Booklet owns durable IDs and acceptance; preference deviations remain warnings.
 """
 
+import hashlib
 import json
+import re
+from uuid import UUID
 
 
 CASES = {
@@ -59,7 +62,7 @@ CASES = {
     },
 }
 
-TASKS = ("J01", "J02", "J03", "J04", "J05", "J06", "J07")
+TASKS = ("J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08")
 PREFIX = "Approved concept constraint: "
 
 
@@ -84,12 +87,83 @@ def proposal(task, content):
     return {"kind": "proposal", "payload": {"taskId": task, "content": content}}
 
 
+def assembled_style(content):
+    """Mirror the assembled shape needed by tester eligibility, not stored approval."""
+    def text(value, limit=16000):
+        return isinstance(value, str) and 0 < len(value) <= limit and bool(value.strip())
+
+    def texts(value):
+        return isinstance(value, list) and len(value) <= 100 and all(text(item) for item in value)
+
+    def uuid(value):
+        return isinstance(value, str) and bool(re.fullmatch(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)", value))
+
+    def hash64(value):
+        return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value))
+
+    if not isinstance(content, dict) or content.get("schemaVersion") != "2" or not text(content.get("title"), 1000):
+        return False
+    if not all(text(content.get(key)) for key in ("typographyDirection", "speechAndThoughtBubbleDirection", "stylePromptModule")) or not hash64(content.get("stylePromptModuleHash")):
+        return False
+    definition = content.get("styleDefinition")
+    if not isinstance(definition, dict) or not all(text(definition.get(key)) for key in ("mediumAndLineWork", "shapeLanguageAndProportions", "colourAndContrast", "textureAndRendering", "lightingAndAtmosphere", "emotionalTone", "accessibilityAndReadability")):
+        return False
+    if not texts(content.get("exclusions")) or not texts(content.get("approvalQuestions")) or not uuid(content.get("draftStyleVersionId")):
+        return False
+    samples = content.get("samples")
+    if not isinstance(samples, list) or len(samples) != 2 or any(not isinstance(item, dict) for item in samples) or {item.get("sampleKey") for item in samples} != {"sample_1", "sample_2"}:
+        return False
+    for sample in samples:
+        build = sample.get("build")
+        if not text(sample.get("purpose")) or not isinstance(build, dict) or not text(build.get("prompt")) or not hash64(build.get("stylePromptModuleHash")) or not all(uuid(build.get(key)) for key in ("operationId", "assetId")):
+            return False
+        sources = build.get("sourceVersionIds")
+        if not isinstance(sources, list) or not 1 <= len(sources) <= 10 or not all(uuid(item) for item in sources) or len(set(sources)) != len(sources):
+            return False
+    return True
+
+
+def style_fixture(context, previous, revision):
+    concept, outline, manuscript, characters, locations = [source(context, task) for task in ("J01", "J02", "J05", "J06", "J07")]
+    for task in ("J01", "J02", "J05", "J06", "J07"):
+        UUID(next(item["id"] for item in context["approvedSources"] if item["taskId"] == task))
+    persona = context["persona"]
+    if concept["sourceInput"] != context["brief"] or len(outline["characters"]) != 2 or len(characters["characters"]) != 2 or len(outline["locations"]) != (2 if persona == "professional_creator" else 1) or len(locations["locations"]) != (2 if persona == "professional_creator" else 1):
+        raise ValueError("Reference sources do not match fixed case")
+    current = previous["content"] if previous and (context.get("currentTarget") or {}).get("state") != "needs_review" else None
+    plans = current.get("samplePlan") if current else None
+    if current and assembled_style(current):
+        plans = [{"sampleKey": item["sampleKey"], "purpose": item["purpose"]} for item in current["samples"]]
+    direction = "Playful clear shapes and lively but reassuring movement for developing readers." if persona == "playful_kid" else "Warm rounded shapes, gentle contrast, and calm readable detail for early readers." if persona == "enthusiast_parent" else "Precise environmental detail and restrained light shifts that follow the older readers' emotional arc."
+    module = current["stylePromptModule"] if current else "\n".join([
+        f"Style direction: {direction}",
+        f'Visual tone: {concept["tone"]}. Use clear expressive faces and body language to communicate changing emotions.',
+        "Composition: Show a legible primary action, expressive body language, and enough environmental detail to orient the reader without fixing a scene layout.",
+        "Continuity: Preserve approved character and place facts in each scene-specific prompt.",
+        "Lettering: Leave clean readable space for narration; use clear speech bubbles, distinct thought bubbles, restrained sound effects, and diegetic text only where the story calls for it.",
+    ])
+    if current and (current.get("stylePromptModuleHash") != hashlib.sha256(module.encode("utf-8")).hexdigest() or not isinstance(plans, list) or len(plans) != 2 or {item.get("sampleKey") for item in plans} != {"sample_1", "sample_2"}):
+        raise ValueError("Current style proposal is inconsistent")
+    notes = (["Revision request: " + revision] if revision else []) + [f'{item["question"]}: {item["answer"]}' for item in context.get("questionAnswers", []) if item.get("answer") and item["answer"].strip()]
+    content = {"schemaVersion": "2", "title": current["title"] if current else outline["title"] + " visual style",
+        "styleDefinition": current["styleDefinition"] if current else {"mediumAndLineWork": f"Illustrated storybook with {direction}", "shapeLanguageAndProportions": direction, "colourAndContrast": f'Palette follows {concept["tone"]}; preserve readable contrast.', "textureAndRendering": "Controlled texture keeps faces, actions, and important objects legible.", "lightingAndAtmosphere": f'Light supports {outline["emotionalArc"]}.', "emotionalTone": concept["emotionalPromise"], "accessibilityAndReadability": f'Clear silhouettes and text-safe space suit the {concept["audience"]["ageBand"]} audience.'},
+        "typographyDirection": current["typographyDirection"] if current else "Readable storybook lettering with clear narration hierarchy and generous spacing.",
+        "speechAndThoughtBubbleDirection": current["speechAndThoughtBubbleDirection"] if current else "Separate speech and thought bubbles; keep tails unambiguous and leave room for sound effects and diegetic signs.",
+        "stylePromptModule": module, "stylePromptModuleHash": hashlib.sha256(module.encode("utf-8")).hexdigest(),
+        "exclusions": current["exclusions"] if current else ["Do not change approved character identity or location anchors."],
+        "approvalQuestions": add_notes(current["approvalQuestions"] if current else ["Do both samples express the intended emotion, action, environment, and detail?"], notes),
+        "samplePlan": plans if plans is not None else [{"sampleKey": "sample_1", "purpose": f'Show {" and ".join(item["nameOrRole"] for item in characters["characters"])}: {manuscript["units"][0]["action"]} in {locations["locations"][0]["title"]}; establish emotion, setting, and readable detail.'}, {"sampleKey": "sample_2", "purpose": f'Show {manuscript["units"][-1]["action"]} with the same characters and environmental anchors; test emotional change and action clarity.'}]}
+    return proposal("J08", content)
+
+
 def later_fixture(context, story, previous, revision, details):
     task = context["taskId"]
     persona = context["persona"]
     changed = (context.get("currentTarget") or {}).get("state") == "needs_review"
     current = previous["content"] if previous and not changed else None
     notes = details + (["Revision request: " + revision] if revision else [])
+    if task == "J08":
+        return style_fixture(context, previous, revision)
     if task in ("J03", "J04"):
         concept, outline = source(context, "J01"), source(context, "J02")
         if concept["sourceInput"] != context["brief"] or len(outline["characters"]) != 2 or len(outline["locations"]) != (2 if persona == "professional_creator" else 1):
@@ -154,11 +228,19 @@ def fixture(context):
             version = current_version(artifact)
             if not version:
                 raise ValueError("Draft has no current version")
-            if any(item not in approved_ids for item in version["dependencyVersionIds"]):
+            dependencies = version["dependencyVersionIds"]
+            if artifact["taskId"] == "J08":
+                style = version.get("content")
+                if not assembled_style(style) or version.get("sourceVersionId") != style["draftStyleVersionId"] or not dependencies or dependencies[0] != style["draftStyleVersionId"] or any(item not in approved_ids for item in dependencies[1:]):
+                    continue
+            elif any(item not in approved_ids for item in dependencies):
                 continue
             versions.append(version["id"])
         if not versions:
             raise ValueError("No current eligible draft version")
+        grant = context.get("activeDelegation")
+        if context["persona"] != "professional_creator" and grant and "J08" in grant["taskIds"] and any(item["taskId"] == "J08" and item["currentVersionId"] in versions for item in artifacts):
+            return {"kind": "decision", "payload": {"decision": {"action": "delegate", "taskIds": grant["taskIds"], "subjectId": context["bookletId"]}}}
         return {"kind": "decision", "payload": {"decision": {"action": "approve", "versionIds": versions}}}
     if role != "specialist" or context.get("taskId") not in TASKS:
         raise ValueError("Unsupported role or task")
