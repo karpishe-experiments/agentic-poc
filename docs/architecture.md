@@ -48,6 +48,15 @@ The root responsibilities are:
 
 ## Artifact and decision flow
 
+The compatibility release adds `artifacts_booklet_type_subject_unique` over
+booklet, artifact type, subject kind and subject ID. It retains an exact existing
+`artifacts_booklet_type_unique` index, never removes it, and never recreates it
+when absent. Missing legacy subject fields retain null-identity uniqueness.
+Existing databases still need a later drained, backed-up index transition before
+multiple same-type sheets are stored. Deploy this compatibility image before
+that transition: automatic image rollback does not restore the database. No
+sheet dispatch or reset is enabled by this release.
+
 The issue #65 runner has a separate `dify_booklet_v1` profile and operation ledger.
 Its staged image callbacks authenticate the dedicated tool key and validate the
 saved run, workflow identity and approved source versions. Normal authorization

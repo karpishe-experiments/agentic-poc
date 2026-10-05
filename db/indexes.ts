@@ -3,6 +3,14 @@ import type { CollectionName } from "@/db/documents";
 
 export type RequiredIndex = { collection: CollectionName; name: string; key: IndexSpecification; options?: Omit<CreateIndexesOptions, "name"> };
 
+// Retain this recognized index on existing databases until a later, drained
+// migration. Never recreate it: a compatibility release must remain usable
+// after subject-aware sheet storage removes the old restriction.
+export const LEGACY_ARTIFACT_INDEX: RequiredIndex = {
+  collection: "artifacts", name: "artifacts_booklet_type_unique",
+  key: { bookletId: 1, artifactType: 1 }, options: { unique: true },
+};
+
 export const REQUIRED_INDEXES: RequiredIndex[] = [
   { collection: "experiment_runs", name: "experiment_runs_booklet_unique", key: { bookletId: 1 }, options: { unique: true } },
   { collection: "experiment_runs", name: "experiment_runs_status_created_idx", key: { status: 1, createdAtMs: 1 } },
@@ -14,7 +22,7 @@ export const REQUIRED_INDEXES: RequiredIndex[] = [
   { collection: "deployment_control", name: "deployment_control_environment_unique", key: { environment: 1 }, options: { unique: true } },
   { collection: "dify_experiment_projects", name: "dify_experiment_project_unique", key: { projectId: 1 }, options: { unique: true } },
   { collection: "booklets", name: "booklets_updated_at_idx", key: { updatedAtMs: -1 } },
-  { collection: "artifacts", name: "artifacts_booklet_type_unique", key: { bookletId: 1, artifactType: 1 }, options: { unique: true } },
+  { collection: "artifacts", name: "artifacts_booklet_type_subject_unique", key: { bookletId: 1, artifactType: 1, subjectKind: 1, subjectId: 1 }, options: { unique: true } },
   { collection: "artifact_versions", name: "artifact_versions_artifact_number_unique", key: { artifactId: 1, versionNumber: 1 }, options: { unique: true } },
   { collection: "artifact_dependencies", name: "artifact_dependencies_pair_unique", key: { downstreamVersionId: 1, upstreamVersionId: 1 }, options: { unique: true } },
   { collection: "artifact_dependencies", name: "artifact_dependencies_upstream_idx", key: { upstreamVersionId: 1 } },
