@@ -47,9 +47,10 @@ Experiment runs, single-operation claims and delegation grants use additive
 Mongo collections. Normal artifacts, immutable versions, dependencies, approvals
 and messages retain the created content and decision provenance.
 
-The local narrative implementation covers J01–J07, through the final character
-and location lists, plus the J08 persistence path described below. Staging has
-fifteen model-free bindings through J10; live reference acceptance is pending.
+The narrative implementation covers J01–J07, through the final character
+and location lists, plus J08–J10 persistence described below. Staging has
+fifteen model-free bindings through J10. All three live Simulated cases reached
+the approved reference boundary; final pages and booklet completion remain pending.
 Configuration accepts only
 complete six-slot M1, eleven-slot J01–J07, thirteen-slot J08/image or fifteen-slot
 J09/J10 sheet bundles,
@@ -85,7 +86,8 @@ unrelated siblings, and preserve versions and approvals. Grouped approval uses
 dependency order; invalidated content needs a new proposal before acceptance.
 The content materializer uses the same completion transaction and collections,
 not a second subject registry or workflow service. Local M2 fixtures exercise
-all three cases through J07; actual Dify M2 execution remains unverified.
+all three cases through J07. Live staging cases now reach approved J01–J10 artifacts;
+see the current M2 evidence below.
 
 The local image-storage foundation saves an exact prompt, ordered source versions
 and request fingerprint on the existing operation. Source checks require current
@@ -99,7 +101,9 @@ technical blocker even after database completion. The local image callback route
 use the normal authorization claim and return the saved image request context.
 The authenticated fixture GET does not reserve again; binary POST validates and
 saves original bytes. The proxy transport limit has headroom above the handler's
-20 MiB limit. Live Dify binary transfer and deployed automatic image dispatch remain unverified.
+20 MiB limit. Sixteen live model-free Dify image operations passed binary transfer,
+storage and reference acceptance across the three personas. This does not prove
+provider execution, the full 20 MiB transport limit or reference-image inputs.
 Filesystem AssetStore publishes complete temporary-file bytes through an atomic
 no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;
@@ -127,14 +131,17 @@ files prevent acceptance without repeating image generation. Textual revisions r
 retain old images and approvals. The public configuration reader and candidate host validator
 accept six, eleven, thirteen or fifteen complete bindings. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
-J08 and all reference modules are published; actual Dify binary transfer and
-all-persona reference acceptance remain pending. Staging release
+J08 and all reference modules are published. All-persona reference acceptance and
+model-free binary output transfer passed with 5/5/6 saved images. Staging release
 `74f73208393a0f9c69ac6023de1e1f10dd43b6ee` passed deployment and readiness.
 The manager/tester publications were updated while dispatch was disabled and
 read back against the reviewed M2 source before activation. Configuration
 installation does not establish a complete simulation; see the
-[M2 current staging checkpoint](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-staging-checkpoint)
-for evidence and remaining activation gates.
+[M2 live reference evidence](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-live-reference-evidence--2026-10-05)
+for retained run IDs, trace evidence and remaining M3 gates. The runner's saved-image
+viewer candidate uses only explicit J08 sample and J09/J10 build asset IDs through
+the existing authenticated asset route. It preserves version history and approvals;
+its staging release remains pending.
 
 The local sheet assembler in `db/experiment-sheets.ts` combines a retained
 J09/J10 subject draft with one completed image operation. It verifies current
@@ -151,7 +158,8 @@ workflow as the image's trace parent. Approval reuses transaction-aware assembly
 verification and reads saved bytes; textual drafts cannot receive acceptance.
 Booklet-scoped delegation applies to every eligible subject, with one approval
 record per exact assembled version. Stage J11 requires all derived sheets, not
-one artifact per task. Actual Dify sheet execution remains unverified.
+one artifact per task. Model-free Dify sheet execution and acceptance passed for
+all three personas. Final-page reference inputs and completion remain unverified.
 
 Specialist context includes saved task-and-subject-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
@@ -388,7 +396,7 @@ application API key remain private operator bindings; no provider call is needed
 
 The same protected workflow can stage the issue #65 runner's five settings from
 one private JSON bundle. The host validates the fixed staging/Community origins
-and the complete six-slot M1 or eleven-slot narrative bindings, including disabled
+and complete six-, eleven-, thirteen- or fifteen-slot bindings, including disabled
 bundles, then preserves existing
 Cloud, probe and application secrets during the normal serialized rotation.
 Compose defaults the runner off. Private module keys/publications, exact-target

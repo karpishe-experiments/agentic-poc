@@ -3,6 +3,17 @@
 **State:** Planned. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
 **Predecessor:** [M2](M2-references.md). Apply [EXECUTION](EXECUTION.md).
 
+## Current entry readiness
+
+All three live Simulated M2 cases reached approved reference packages on
+2026-10-05; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).
+The next dependent gate is ordered reference-file transport. The current image
+workflow proves binary output storage, not input attachment or judge image access.
+Use a separate model-free probe to verify file count, order, identities, byte
+digests and measured size limits before final-page dispatch. Administrative MCP
+file access is not proof of Booklet runtime-credential access. No paid call is
+needed for this check.
+
 ## Entry gate
 
 Reconcile M2's subject artifacts, accepted references, image transport and grant
@@ -63,7 +74,7 @@ reference-contract suites without retries
 on 2026-10-05. The sandboxed test attempt failed before execution with `EPERM`;
 the permitted clean-checkout run passed. No runtime admission, persistence,
 Dify binding or provider execution changed. Independent code reviews and
-publication remain pending; these tests do not establish live M3 readiness.
+publication were completed in [PR #130](https://github.com/karpishe-experiments/agentic-poc/pull/130); these tests do not establish live M3 readiness.
 Review corrections permit explicitly empty routing for source-free panels,
 require title lettering on the cover and test the aggregate content-size limit.
 Final clean-checkout typecheck and full lint passed after these corrections.

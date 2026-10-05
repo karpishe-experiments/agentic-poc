@@ -1,7 +1,34 @@
 # M2 — Narrative completion and reference packages
 
-**State:** Fifteen model-free bindings activated on staging on 2026-10-05. The subject-aware index is active and the legacy restriction is removed. Live Dify image transfer and all-persona reference acceptance remain pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** Fifteen model-free bindings activated on staging on 2026-10-05. The subject-aware index is active and the legacy restriction is removed. All three personas reached the J10 reference boundary with approved artifacts and 5/5/6 saved images. Final pages and booklet completion remain pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
+
+## Current live reference evidence — 2026-10-05
+
+The approved dispatcher synchronization, drained index maintenance and expanded
+binding activation are complete. Staging backup
+`staging-20261005T120906Z-4bf0d3b2d7950104` preceded removal of only
+`artifacts_booklet_type_unique`. Saved data, Cloud resources and production were
+preserved. No reset or paid call was performed.
+
+| Persona | Retained run | Saved reference images | Review |
+| --- | --- | --- | --- |
+| Playful Kid | `2b642a00-590f-49f7-822b-321c746a49a7` | 5 | Delegated |
+| Enthusiast Parent | `f3d76cf3-0e53-4ae0-8037-f5fb0c2273bc` | 5 | Delegated |
+| Professional Creator | `cfb8107c-fbdc-4136-840b-0fad094dfb87` | 6 | Explicit |
+
+All current J01–J10 artifacts are approved. All sixteen retained image-workflow
+traces succeeded through model-free HTTP file transfer and storage. Their final
+outputs retain asset IDs and SHA-256 digests. Payable text and image counts are
+zero. Creator Pause, reload and Resume preserved completed work without repeating
+the two style-sample operations. See the sanitized
+[reference evidence](fixtures/m2-reference-evidence.json).
+
+These runs stop at `slice_complete`; they are not completed booklets. The saved-image
+viewer is a local candidate until its reviewed staging release. M3 must still prove
+ordered reference-file input transport and runtime access before final-page dispatch.
+Earlier local checkpoints below describe their evidence at that time; this section
+is the current live reference baseline.
 
 ## Entry gate
 
