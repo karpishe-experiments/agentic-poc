@@ -3,7 +3,8 @@ on:
   workflow_dispatch:
     inputs:
       environment: {description: Target, type: choice, options: [staging, prod], required: true}
-      action: {description: Operation, type: choice, options: [backup, restore, rollback, rotate-secrets, resume], required: true}
+      action: {description: Operation, type: choice, options: [backup, restore, rollback, rotate-secrets, retire-staging-artifact-index, resume], required: true}
+      apply: {description: Apply index retirement (otherwise preview); existing actions retain their behavior, type: boolean, default: false}
       backup_id: {description: Exact backup ID for restore, required: false}
       confirmation: {description: Exact database name for restore, required: false}
 permissions: {contents: read}
@@ -16,4 +17,5 @@ jobs:
       action: ${{ inputs.action }}
       backup_id: ${{ inputs.backup_id }}
       confirmation: ${{ inputs.confirmation }}
+      apply: ${{ inputs.action != 'retire-staging-artifact-index' || inputs.apply }}
     secrets: inherit

@@ -83,6 +83,13 @@ Local Python/TypeScript parity covers all three personas through J10. Actual Dif
 binary transfer, expanded private bindings and staging activation remain pending.
 The master-owned host validator update requires separate infrastructure approval;
 this release does not update the host dispatcher, rotate settings or remove an index.
+The staging maintenance image now includes the exact legacy-index retirement
+command, external-operation idle checks and completed-backup verification.
+Maintenance defaults to preview for this action. The staging shell only transports
+the request; the separately synchronized master dispatcher owns drain, backup,
+rollback compatibility and interruption recovery. Applying the action requires
+exact staging confirmation and separate authorization. Startup never removes the
+legacy index, and this release does not establish live sheet readiness.
 Canonical experiment plans and evidence remain on `master`, in
 `docs/accepted/2026-09-27_dify-booklet-runner/`.
 
