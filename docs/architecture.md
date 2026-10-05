@@ -197,6 +197,13 @@ profiles keep their existing boundaries. This candidate is not yet published or
 active in staging. Its model-free Dify fixture and graph are prepared locally;
 publication and the runtime binding remain pending.
 
+The local `page-image-requests.ts` serializer prepares one J13 `page_source`
+request from the saved J11 layout, selected J12 content and assembled J08 style.
+It retains exact native lettering and the unchanged style module, and returns
+only selected sheet identities in deterministic attachment order. This is pure
+request preparation, not an approval or byte-integrity check. It is not wired
+into dispatch; final-page persistence, approvals and completion remain pending.
+
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
 Failed/stopped runtime observations are classified against the persisted claim.

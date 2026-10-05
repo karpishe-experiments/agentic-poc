@@ -465,6 +465,28 @@ original bytes and run identity, input mutation, bounds, corrupt images,
 canonical metadata, HTTP rejection, uncertain failure and malformed responses.
 No runtime file was uploaded by these tests and dispatch remains unchanged.
 
+### Independent local preparation: final-page request serializer
+
+Use the saved approved J11 layout, one J12 Page Bible version and the assembled
+J08 style package to prepare a deterministic `page_source` request. Reuse the
+existing page and style parsers. Preserve the style module and native lettering
+without trimming or rewriting. Include canvas, typography and the selected
+page's panel allocation, text-safe regions and composition instructions.
+
+Return only the selected sheet identities, deduplicated in first-panel order,
+with page identity and ordered source versions. This pure serializer cannot
+prove database approvals or original asset bytes. Its later repository caller
+must verify them; the assembled style's originating draft ID is not its current
+approved version ID. Keep the existing prompt bound rather than raising limits.
+
+This preparation does not enable J13 dispatch, upload files, reserve requests
+or invoke providers. Runtime reference transport, per-page persistence and
+approval, selected-batch jobs, reports and full-booklet completion remain pending.
+Six focused serializer tests passed for cover and multi-panel requests, exact
+style and lettering, selected-only references, source/hash/text-flag rejection,
+distinct assembled/draft style identities, fingerprints and prompt bounds.
+Clean-checkout typecheck and lint also passed. These are local checks only.
+
 1. Add J11–J13 schemas, prompts, fixtures, source routing and completion predicate.
 2. Connect image operations to page jobs and exact per-page approvals.
 3. Add feedback/judge branches, result validators and separate evaluation status.
