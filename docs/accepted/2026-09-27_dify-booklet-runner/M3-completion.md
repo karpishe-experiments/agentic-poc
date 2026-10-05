@@ -37,6 +37,14 @@ it does not establish a distinct-file or universal platform limit. All five runs
 reported zero tokens. The draft limit permits fifteen files and rejects sixteen.
 Two focused DSL contract tests passed without retries.
 
+The follow-up administrative draft run
+`808c81dd-7ee2-4e2e-aa6a-ce5e943679ce` returned the same fifteen uploaded file
+identities in order, with zero reported tokens. Immediate downloads matched all
+fifteen original SHA-256 digests and byte lengths (95–97 bytes each; 1,445 bytes
+total). This is a new model-free Start/End probe using existing uploads, not
+image regeneration or recovery of the older trace's rejected links. It proves
+immediate transfer of this small fixture set only.
+
 A later download attempt using URLs retained in the nine-file trace was rejected.
 The cause is not yet verified; signed-link expiry is a hypothesis, not a finding.
 Do not retain signed URLs as durable asset locations or replay generation to obtain
