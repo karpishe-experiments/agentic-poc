@@ -12,12 +12,13 @@ the error names the missing setting without printing its value.
 ## Current deployment status
 
 Initial live acceptance completed on 2026-09-15. The latest staging transition
-passed on 2026-10-04; browser/persona acceptance is still pending.
+passed on 2026-10-05. M1 browser/persona acceptance passed; expanded reference
+bindings and full booklet simulation remain pending.
 
 | Checkpoint | Verified state |
 | --- | --- |
 | Infrastructure | Cloudflare infrastructure applied successfully for `master` commit `fc81f4e272a3fba2086a1c24b40d7cc15d291c73` |
-| Staging | Release `80d62c4615f901e2f548877ede79c45029e75b05`; Deploy `37215558501` and Check `37216248316` passed. Approved reset `37216104737` enabled the Simulated-only Dify profile; prior data/assets remain in backup `staging-20261004T161608Z-54752b58ec7bc071`. Runtime/UI acceptance is pending. |
+| Staging | Release `d88dfe308b809e019123f554fa5f43cbcf097c91`; Deploy `37292283170` and Check `37293054441` passed. J01–J10 reference code is installed, but active bindings remain the six M1 bindings. Deployment backup: `staging-20261005T095213Z-94c51b01b84faebf`. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
@@ -75,6 +76,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Expand narrative bindings | Follow [M2 S3](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s3-binding-and-publication-package); use the complete eleven-slot bundle after reviewed dispatcher installation, closed admission, reconciliation and published read-back. Preserve old run evidence; do not repeat the staging reset. |
 | Enable style/image bindings | Follow [M2 scheduling](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s5-automatic-style-sample-dispatch); thirteen slots add J08 and one model-free image workflow. Verify Python/DSL parity, private bindings and live binary transfer before activation. Host dispatcher installation remains a separate authorized checkpoint; no new reset. |
 | Enable sheet bindings | Fifteen slots add independent J09/J10 specialists. Verify complete local reference journeys, private publications and binary transfer first. Sheet admission requires the subject-aware index and absence of the retained old restriction. Index removal and host synchronization require their separate maintenance checkpoints; configuration validation does not authorize them. |
+| Retire the staging artifact restriction | After the reviewed host action and application command are installed, run **Maintenance** on `_staging` with `action=retire-staging-artifact-index`, `environment=staging`, and default `apply=false`. Inspect its real catalog/ledger and rollback preview. After exact-target authorization, use `apply=true`, confirmation `kids_booklet`, and no supplied backup ID. The action creates and verifies its own pre-change backup, removes only `artifacts_booklet_type_unique`, and preserves data/assets and release pointers. This action is not yet live-verified. |
 | Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging`, confirm `kids_booklet`, and use default `apply=false` for inventory. Set `apply=true` only after exact-target approval. A valid prepared Dify bundle activates after reset; production reset is rejected |
@@ -85,6 +87,20 @@ The Cloud trial defaults remain enabled in staging, with fake mode and images di
 Infrastructure sync installs master-owned Compose files on the host; `prepare_release` captures them in each immutable release snapshot. Compare those defaults with the selected environment branch before release. Synchronizing host files does not rewrite an existing release; a configuration correction requires a new release commit. See the [verified lesson](../accepted/2026-09-27_dify-booklet-runner/LESSONS-LEARNED.md#vps-releases-snapshot-master-owned-compose-files).
 
 Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
+
+Index retirement first rejects unresolved experiment work while callbacks remain
+available. It checks again after closing admission and draining, before stopping
+the app. If that check fails, it reopens admission with the original app running;
+reconcile the saved work before Resume. After stop, it verifies the ledger again,
+the complete backup bytes, the selected image and a pinned compatible rollback
+SHA/digest pair. An unknown rollback pair needs a reviewed table update, not an
+older deployment or a rewritten release pointer.
+
+After removal, Resume retains the pre-change backup and verifies an already-absent
+index without making another backup. The `index-finalizing` checkpoint resumes
+readiness and admission reopening without stopping the app or repeating removal.
+Inspect the journal and service state first. Failed verification retains the
+journal; database restore still needs separate exact-backup authorization.
 
 ## Interruption and recovery
 

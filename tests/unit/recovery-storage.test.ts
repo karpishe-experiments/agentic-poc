@@ -56,3 +56,49 @@ describe("restore manifest boundary", () => {
   it("rejects duplicate objects", () => expect(() => parse({ ...manifest, assets: [manifest.assets[0], manifest.assets[0]] })).toThrow("duplicate"));
   it.each(["../id", "bad/id", "", "a.b"])("rejects unsafe backup ID %s", (id) => expect(() => backupIdSchema.parse(id)).toThrow());
 });
+
+describe("completed maintenance backup verification", () => {
+  const imageDigest = `sha256:${"a".repeat(64)}`;
+  function completed() {
+    const state = fixture();
+    const manifest = { schemaVersion: "1", backupId: "b", database: "kids_booklet", environment: "_staging", imageDigest, sha256: digest("archive"), collections: { assets: 1 }, assets: [{ uri: "page.png", recoveryKey: "assets/b/page.png", sha256: digest("asset"), bytes: 5, contentType: "image/png" }] };
+    const raw = JSON.stringify(manifest);
+    state.objects.set("recovery/database/b.manifest.json", Buffer.from(raw));
+    state.objects.set("recovery/database/b.complete", Buffer.from(digest(raw)));
+    state.objects.set("recovery/database/b.archive.gz", Buffer.from("archive"));
+    state.objects.set("recovery/assets/b/page.png", Buffer.from("asset"));
+    return { ...state, manifest };
+  }
+  it("verifies all saved bytes without writes or reservations", async () => {
+    const { storage, writes, manifest } = completed();
+    expect(await storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).toEqual(manifest);
+    expect(writes).toEqual([]);
+  });
+  it("accepts the full immutable GHCR reference stored by host backups", async () => {
+    const { storage, objects, manifest, writes } = completed();
+    const reference = `ghcr.io/example/kids@${imageDigest}`;
+    const raw = JSON.stringify({ ...manifest, imageDigest: reference });
+    objects.set("recovery/database/b.manifest.json", Buffer.from(raw));
+    objects.set("recovery/database/b.complete", Buffer.from(digest(raw)));
+    expect((await storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", reference)).imageDigest).toBe(reference);
+    expect(writes).toEqual([]);
+  });
+  it.each(["database/b.complete", "database/b.archive.gz", "assets/b/page.png"])("rejects corrupt %s", async (key) => {
+    const { storage, objects, writes } = completed();
+    objects.set(`recovery/${key}`, Buffer.from("corrupt"));
+    await expect(storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).rejects.toThrow();
+    expect(writes).toEqual([]);
+  });
+  it("rejects missing completion evidence", async () => {
+    const { storage, objects } = completed();
+    objects.delete("recovery/database/b.complete");
+    await expect(storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).rejects.toThrow("NoSuchKey");
+  });
+  it("rejects the wrong target or selected release", async () => {
+    const { storage } = completed();
+    await expect(storage.verifiedCompletedBackup("b", "kids_booklet_prod", "_staging", imageDigest)).rejects.toThrow("target");
+    await expect(storage.verifiedCompletedBackup("b", "kids_booklet", "_prod", imageDigest)).rejects.toThrow("target");
+    await expect(storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", `sha256:${"b".repeat(64)}`)).rejects.toThrow("selected release");
+    await expect(storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", "latest")).rejects.toThrow("immutable");
+  });
+});

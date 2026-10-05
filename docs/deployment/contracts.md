@@ -86,6 +86,24 @@ Build and anonymous digest pull precede maintenance. Existing writers drain for 
 
 Backups reserve an ID before writes, upload objects conditionally, verify downloaded checksums, and publish a completion marker last. The operation journal records the backup ID, release digest, non-secret configuration hash, and prior release. Restore validates the marker, manifest, archive, and every asset before target writes. Partial backup IDs stay reserved and a resumed failed backup receives a new ID. Recovery credentials must permit reads from source assets and create-only writes to recovery; restore additionally requires asset writes.
 
+The staging-only `retire-staging-artifact-index` action defaults to real read-only
+preview. Apply requires the exact deployed commit and `kids_booklet` confirmation.
+It rejects unresolved experiment run pointers, prepared/started/unknown operations,
+image claims and unverified dispatched successes before maintenance. It repeats
+the ledger check after drain and before stop; failure reopens admission so callbacks
+can reconcile. Post-stop checks require an existing staging maintenance record and
+exactly zero active mutations. Missing or negative counters are not idle evidence.
+
+The action verifies ordered keys and index options, all ordinary required indexes,
+completed backup marker/manifest/archive/assets and the selected immutable image.
+Only the exact legacy index is removed. A pinned reviewed rollback SHA/digest pair,
+manifest and image label must match; unknown pairs fail without pointer changes.
+The journal retains this pair and the backup. Once `backup-verified` is recorded,
+Resume never creates a replacement backup. `index-finalizing` covers both sides of
+admission reopening and does not replay stop/removal. Startup initialization remains
+additive and never drops the legacy index. Live installation and removal remain
+separate authorization checkpoints; focused local tests do not prove live success.
+
 The project-wide Actions concurrency group serializes workflows. Host operations use flock plus a non-expiring journal. Terraform applies from Actions acquire the same host journal. Setup takes the host flock. Infra-unlock is an administrator recovery command used only after confirming the prior workflow stopped and the exact request ID matches the retained infrastructure journal. Infrastructure summaries expose that request ID. `_staging` and `_prod` are independent reviewed release lines. Deployment requires the selected environment to match its target branch and requires the remote branch to remain at the workflow commit before build and release. Deployment does not require `master` ancestry or a successful Infrastructure run.
 
 Infrastructure pushes to `master` now preview only. An operator reviews the

@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           [[ "$TARGET" =~ ^(staging|prod)$ ]]
           test "$GITHUB_REF_NAME" = "_$TARGET"
-          [[ "$OPERATION" =~ ^(check|backup|restore|rollback|rotate-secrets|reset-staging|resume)$ ]]
+          [[ "$OPERATION" =~ ^(check|backup|restore|rollback|rotate-secrets|reset-staging|retire-staging-artifact-index|resume)$ ]]
           for name in VPS_HOST DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_HOST_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
             [[ -n "${!name}" ]] || { printf 'Missing required configuration: %s\n' "$name" >&2; exit 1; }
           done
@@ -41,6 +41,9 @@ jobs:
           fi
           if [[ "$OPERATION" == reset-staging ]]; then
             [[ "$TARGET" == staging && "$CONFIRMATION" == kids_booklet ]]
+          fi
+          if [[ "$OPERATION" == retire-staging-artifact-index ]]; then
+            [[ "$TARGET" == staging && -z "$BACKUP" ]]
           fi
       - uses: ./.github/actions/vps-access
         with:
@@ -60,6 +63,12 @@ jobs:
         run: |
           set -euo pipefail
           args=(--action "$OPERATION" --environment "$TARGET" --vps-host "$VPS_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          if [[ "$OPERATION" == retire-staging-artifact-index ]]; then
+            args+=(--commit "$GITHUB_SHA")
+            if [[ "$APPLY" == true ]]; then [[ "$CONFIRMATION" == kids_booklet ]]; fi
+            remote_sha="$(git ls-remote --heads origin "refs/heads/$GITHUB_REF_NAME" | awk '{print $1}')"
+            [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'Target branch moved; rerun reviewed maintenance.\n' >&2; exit 1; }
+          fi
           if [[ "$OPERATION" != check && "$APPLY" == true ]]; then args+=(--apply); fi
           if [[ -n "$BACKUP" ]]; then args+=(--backup-id "$BACKUP"); fi
           if [[ -n "$CONFIRMATION" ]]; then args+=(--confirmation "$CONFIRMATION"); fi
@@ -77,6 +86,7 @@ jobs:
             printf "| Environment | Operation | Outcome |\n"
             printf "| --- | --- | --- |\n"
             printf "| \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$OPERATION" "$OUTCOME"
+            printf "Request ID: \`%s-%s\`. If interrupted, inspect status before resume.\n\n" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
             if [[ -s "$RUNNER_TEMP/vps-operation-output.txt" ]]; then
               printf "\`\`\`text\n"
               grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/vps-operation-output.txt" || true
