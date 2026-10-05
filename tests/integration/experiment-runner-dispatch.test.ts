@@ -50,6 +50,38 @@ describe("experiment dispatch persistence", () => {
     expect((await repository.recordDispatchOutcome({ ...dispatch, category: "definite_failure" })).state).toBe("succeeded");
   });
 
+  it("resolves an observed failure from the persisted claim and accepts a late callback", async () => {
+    const { repository, dispatch, claim } = await setup();
+    await repository.beginDispatch(dispatch);
+    await repository.recordDispatchIdentity(claim);
+    // The dispatcher may have read the earlier unclaimed state. Outcome
+    // classification must observe this claim inside its own transaction.
+    expect((await repository.claimOperation(claim)).started).toBe(true);
+    expect(await repository.recordDispatchOutcome({ ...dispatch, category: "observed_failure" })).toMatchObject({
+      state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId,
+    });
+    expect(await repository.getRun(runId)).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operationId });
+    const result = { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: bookletId } };
+    expect((await repository.completeOperation({ envelope: { runId, operationId, workflowRunId,
+      inputFingerprint: "a".repeat(64), result }, parentWorkflowRunId: null, nowMs: 6 })).operation.state).toBe("succeeded");
+    expect((await repository.recordDispatchOutcome({ ...dispatch, category: "observed_failure" })).state).toBe("succeeded");
+    expect((await repository.getRun(runId))?.safeFailure).toBeNull();
+  });
+
+  it("closes an observed failure only when the persisted operation is unclaimed", async () => {
+    const { repository, dispatch, claim } = await setup();
+    await repository.beginDispatch(dispatch);
+    await repository.recordDispatchIdentity(claim);
+    expect(await repository.recordDispatchOutcome({ ...dispatch, category: "observed_failure" })).toMatchObject({
+      state: "failed", safeFailure: "definite_failure", reservationCount: 0,
+    });
+    expect(await repository.recordDispatchOutcome({ ...dispatch, category: "observed_failure" })).toMatchObject({
+      state: "failed", safeFailure: "definite_failure", reservationCount: 0,
+    });
+    expect(await repository.getRun(runId)).toMatchObject({ status: "blocked", safeFailure: "definite_failure", activeOperationId: null });
+    expect(await repository.claimOperation(claim)).toMatchObject({ started: false, reason: "already_started" });
+  });
+
   it("closes a verified paused unclaimed operation without reservation", async () => {
     const { repository, dispatch, claim } = await setup();
     await repository.beginDispatch(dispatch);

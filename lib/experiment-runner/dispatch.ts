@@ -135,7 +135,7 @@ export function createExperimentDispatcher(deps: {
           return;
         }
         if ((execution.status === "failed" || execution.status === "stopped") && current.state !== "succeeded") {
-          await repository.recordDispatchOutcome({ ...identity, category: "definite_failure" });
+          await repository.recordDispatchOutcome({ ...identity, category: "observed_failure" });
           return;
         }
         if (!imageCompletion || imageCompletion.runId !== run._id || imageCompletion.operationId !== operation._id ||
@@ -159,13 +159,13 @@ export function createExperimentDispatcher(deps: {
         if (execution.status === "succeeded" && execution.outputs?.authorization_reason === "paused" && current.reservationCount === 0) {
           await repository.recordDispatchOutcome({ ...identity, category: "paused" });
         } else if (execution.status === "failed" || execution.status === "stopped") {
-          await repository.recordDispatchOutcome({ ...identity, category: "definite_failure" });
+          await repository.recordDispatchOutcome({ ...identity, category: "observed_failure" });
         } else if (execution.status !== "running" || now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + 600_000)) {
           await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
         }
       }
     } else if (current.state !== "succeeded") {
-      await repository.recordDispatchOutcome({ ...identity, category: result.kind === "rejected" && current.reservationCount === 0 ? "definite_failure" : "unknown_outcome" });
+      await repository.recordDispatchOutcome({ ...identity, category: result.kind === "rejected" ? "observed_failure" : "unknown_outcome" });
     } else if (!current.verifiedWorkflowId) {
       const recovered = current.workflowRunId ? await runtime.retrieve(binding, current.workflowRunId) : { kind: "unknown" as const };
       if (recovered.kind === "execution") await reconcile(run, current, recovered);
