@@ -845,8 +845,23 @@ current sources, asset lineage and original stored bytes before committing an
 assembled version. This helper is not evidence of live sheet production.
 
 Focused assembly/request tests passed (8 tests, no retries), as did isolated
-typecheck and lint of the two new source/test files. Runtime sheet admission,
-transactional materialization and scheduling remain the next implementation work.
+typecheck and lint of the two new source/test files.
+
+The next local persistence candidate is `db/experiment-sheets.ts`, with
+`tests/integration/experiment-runner-sheet-assembly.test.ts`. Input is
+`{runId, draftSheetVersionId, imageOperationId}`. It combines an existing current
+subject draft and one saved successful image after checking exact approved
+final-list/style sources, request/asset lineage and original bytes. The transaction
+creates one application-owned version with edges to the draft, final list and
+style. Concurrent calls and restart reuse the same result; pause and warnings
+remain saved. It does not approve, dispatch, create subject artifacts or advance
+stages. Tests seed the subject drafts because specialist admission is still pending.
+Runtime sheet admission, per-subject acceptance and scheduling remain next.
+
+The candidate passed isolated typecheck, full lint and 21 sheet/style assembly
+and pure assembly tests without retries. The checked source/test hashes match
+the issue branch. This proves local transaction/recovery behavior with seeded
+subject drafts, not specialist dispatch, approval or actual Dify sheet production.
 
 1. Add schemas/materializers and graph edges; test both sibling orders.
 2. Add Dify J03–J10 named prompts, simulation fixtures and per-node result parsing.
