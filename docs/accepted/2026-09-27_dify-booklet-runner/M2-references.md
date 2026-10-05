@@ -835,6 +835,19 @@ image through an unverified Code-node size limit or pretend base64 is a file.
 
 ## Implementation order
 
+The local sheet-assembly contract in
+`lib/experiment-runner/reference-assembly.ts` combines a J09/J10 proposal with
+saved operation/asset identifiers and an exact image request fingerprint. It
+rejects a changed subject, prompt, ordered sources or fingerprint and preserves
+the shared style bytes. It creates no operation, asset, approval or database
+version. The persistence caller must still verify successful operation state,
+current sources, asset lineage and original stored bytes before committing an
+assembled version. This helper is not evidence of live sheet production.
+
+Focused assembly/request tests passed (8 tests, no retries), as did isolated
+typecheck and lint of the two new source/test files. Runtime sheet admission,
+transactional materialization and scheduling remain the next implementation work.
+
 1. Add schemas/materializers and graph edges; test both sibling orders.
 2. Add Dify J03–J10 named prompts, simulation fixtures and per-node result parsing.
 3. Implement sample/sheet operation scheduling and one-image package materialization.
