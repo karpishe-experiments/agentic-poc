@@ -1,7 +1,7 @@
 import { MongoServerError, type Document, type IndexDescriptionInfo } from "mongodb";
 import type { MongoDatabaseContext } from "@/db/client";
 import { COLLECTION_NAMES } from "@/db/documents";
-import { REQUIRED_INDEXES } from "@/db/indexes";
+import { LEGACY_ARTIFACT_INDEX, REQUIRED_INDEXES } from "@/db/indexes";
 import { AGENT_SEED_ACTOR, AGENT_SEED_TIMESTAMP, agentSeedDefaults } from "@/db/agent-defaults";
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => {
@@ -16,9 +16,17 @@ function indexMatches(actual: IndexDescriptionInfo, key: Document, options: { un
     && canonical(actual.partialFilterExpression ?? null) === canonical(options.partialFilterExpression ?? null);
 }
 
+async function verifyRetainedArtifactIndex(context: MongoDatabaseContext): Promise<void> {
+  const indexes = await context.collections.artifacts.listIndexes().toArray();
+  const retained = indexes.find((index) => index.name === LEGACY_ARTIFACT_INDEX.name);
+  if (retained && !indexMatches(retained, LEGACY_ARTIFACT_INDEX.key as Document, LEGACY_ARTIFACT_INDEX.options))
+    throw new Error(`MongoDB index ${LEGACY_ARTIFACT_INDEX.name} exists with incompatible keys or options.`);
+}
+
 export async function verifyMongoStructure(context: MongoDatabaseContext): Promise<void> {
   const existingCollections = new Set((await context.database.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name));
   for (const name of COLLECTION_NAMES) if (!existingCollections.has(name)) throw new Error(`MongoDB collection ${name} is missing.`);
+  await verifyRetainedArtifactIndex(context);
   for (const required of REQUIRED_INDEXES) {
     const indexes = await context.database.collection(required.collection).listIndexes().toArray();
     const named = indexes.find((index) => index.name === required.name);
@@ -35,6 +43,7 @@ export async function setupMongoStructure(context: MongoDatabaseContext): Promis
       if (!(error instanceof MongoServerError && error.code === 48)) throw error;
     }
   }
+  await verifyRetainedArtifactIndex(context);
   for (const required of REQUIRED_INDEXES) {
     const collection = context.database.collection(required.collection);
     const indexes = await collection.listIndexes().toArray();

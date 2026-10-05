@@ -403,7 +403,7 @@ unique indexes as appropriate. No general event-sourcing framework.
 | Record | Required additions/invariants |
 | --- | --- |
 | Booklet | Execution profile, run ID, schema version 2; ordinary title/cover ID; no PDF prerequisite for completion |
-| Artifact | `taskId` J01–J13, `subjectKind` book/character/location/page and `subjectId`; unique `(bookletId,taskId,subjectKind,subjectId)`; book subject uses booklet ID |
+| Artifact | `taskId` J01–J13, `subjectKind` book/character/location/page and `subjectId`; physical uniqueness `(bookletId,artifactType,subjectKind,subjectId)` with one deterministic artifact type per task; book subject uses booklet ID |
 | Artifact version | Immutable canonical content, exact dependency version IDs, source operation ID and warning list; new version on every revision |
 | Approval | Exact artifact version, run ID, tester decision ID, explicit/delegated origin, nullable delegation ID and review-group ID; never inferred from image existence |
 | `experiment_runs` | Booklet, persona, fixed brief, mode, status, state revision, predecessor run, configuration snapshot/hash, request/revision counters, pending decision, pause flag, timestamps, evaluation status, safe failure |
@@ -417,13 +417,13 @@ Validate against the dispatched operation; retain it with the operation record.
 The probe's `correlation:role` operation IDs suffice only for its single call per
 role. Real runner revisions/retries need distinct application operation IDs.
 
-Replace the old `artifacts_booklet_type_unique` constraint for the clean v2
-baseline: it prevents multiple subjects of the same task. Implement the named
-subject-key index above and verify it in setup/readiness/tests. Do not silently
-drop indexes during an ordinary startup. The authorized clean reset builds the
-new indexes; the initial transition release must remain deployable against the
-old database with the runner disabled until that reset finishes. Test that
-deployment-initialize → reset → readiness order before the staging release.
+The old `artifacts_booklet_type_unique` constraint prevents multiple subjects
+of the same task. The completed M1 reset did not replace that index. Follow
+[M2's subject-index compatibility step](M2-references.md#s5-persistence-prerequisite-subject-aware-index-compatibility)
+before sheet storage: add the replacement, retain the old restriction on existing
+databases, then remove it only in a later controlled maintenance transition with
+a compatible rollback image. Do not silently drop indexes during ordinary startup
+or repeat the reset. Local tests and fresh databases are not live migration proof.
 
 Run statuses: `queued`, `running`, `paused`, `blocked`, `completed`, `failed`.
 Evaluation status is separate: `pending`, `running`, `complete`, `failed`.
