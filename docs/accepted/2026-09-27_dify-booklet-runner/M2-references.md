@@ -37,6 +37,38 @@ Escalate a changed ownership/creative contract, unknown execution outcome or
 missing capability. Capacity, key entry and binary-transfer gaps block their
 dependent live operation only; paid modes remain unavailable.
 
+### S5 persistence prerequisite: subject-aware index compatibility
+
+The existing `artifacts_booklet_type_unique` prevents two J09 character sheets
+or two J10 location sheets in one booklet. A reset recreates this restriction;
+do not use another reset. Add `artifacts_booklet_type_subject_unique` over
+`bookletId`, `artifactType`, `subjectKind`, `subjectId`. Missing legacy subject
+fields retain one null identity. Existing artifact IDs, content, versions and
+approvals are unchanged.
+
+First ship the compatibility step in `db/indexes.ts` and `db/setup.ts`: create
+and verify the replacement, retain an exact old index when present, reject drift,
+and never recreate the old index when absent. Fresh databases use only the new
+index. Keep sheet admission disabled. Test fresh and populated setup, duplicate
+legacy/subject identities, distinct subjects, repeat setup, incompatible indexes,
+and readiness after a simulated old-index removal in a disposable test database.
+Run `tests/integration/mongodb-foundation.test.ts`, experiment initialization,
+M2 narrative and image-storage suites without retries, typecheck and lint.
+
+After that compatibility image is the verified staging baseline, a later slice
+can remove only the exact recognized old index during drained maintenance with
+the normal backup. Prove both replacement readiness and the compatible rollback
+target first: deployment restarts the previous image without restoring its database.
+The later slice must reject sheet readiness while the old restriction remains.
+No live index removal, reset or migration authority is inferred from local tests.
+
+The compatibility candidate passed isolated typecheck, full lint and 31 tests
+across those four integration suites without retries on 2026-10-05. The initial
+sandboxed test command could not spawn the Windows test runner; the permitted
+unsandboxed run completed against disposable MongoDB. This proves local index
+behavior and existing narrative/image regressions, not live sheet readiness.
+Two independent reviews and release verification remain required.
+
 ### S5 first increment: local style/reference contracts
 
 Add `lib/contracts/experiment-references.ts` and

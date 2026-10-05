@@ -99,8 +99,15 @@ revision debit. Restart reads reconstruct this context from saved operations and
 tester messages.
 
 Legacy booklet projections exclude this profile because their eight-stage
-parsers cannot read J01/J02. The existing artifact-type index is retained; a later
-authorized clean reset is required before multi-subject artifacts replace it.
+parsers cannot read J01/J02. Subject-aware artifact uniqueness uses booklet,
+artifact type, subject kind and subject ID. Missing legacy subject fields share
+the same null identity, preserving legacy type uniqueness. Setup adds this index
+and retains an exact existing artifact-type index; it never removes or recreates
+that older restriction. Existing databases therefore still need a controlled
+index transition before multiple same-type sheets can be stored. Deploy the
+compatibility release first so later index removal has a viable rollback image;
+the host's automatic image rollback does not restore the database. No reset or
+sheet-dispatch enablement is part of this compatibility step.
 `verifyExperimentData` checks experiment references without legacy agent seeds.
 The enabled, non-production runner profile initializes experiment structure
 without local-agent seeds or a host OpenAI key. It retains seed assets for health
