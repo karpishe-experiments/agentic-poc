@@ -129,7 +129,7 @@ export function simulateReferenceProposal(task: "J08" | "J09" | "J10", input: St
     schemaVersion: "2" as const, title: current?.title ?? `${target.title} location sheet`,
     finalListVersionId: value.finalList.versionId, styleVersionId: value.styleVersionId,
     stylePromptModule: style.stylePromptModule, stylePromptModuleHash: style.stylePromptModuleHash,
-    sheetPromptModule: current?.sheetPromptModule ?? `One location montage for ${target.title}. Isometric overview plus two supporting views. Preserve stable anchors: ${target.stableAnchors.join("; ")}. Include required features: ${target.requiredFeatures.join("; ")}. Do not add page action or weather unless it is an approved stable fact. No readable labels, watermarks, logos, or unrelated characters.`,
+    sheetPromptModule: current?.sheetPromptModule ?? `One location montage for ${target.title}. Isometric overview plus two supporting views. Preserve stable anchors: ${target.stableAnchors.join("; ")}. Include required features: ${target.requiredFeatures.join("; ") || "none specified"}. Do not add page action or weather unless it is an approved stable fact. No readable labels, watermarks, logos, or unrelated characters.`,
     reviewQuestions: questions(current?.reviewQuestions ?? ["Are the location anchors recognizable in all views?"], input),
     locationId: target.locationId, locationDefinitionProfile: current?.locationDefinitionProfile ?? `${target.basicDescription} ${target.storyPurpose}`,
     stableAnchors: target.stableAnchors, requiredFeatures: target.requiredFeatures, overview: "isometric" as const,
