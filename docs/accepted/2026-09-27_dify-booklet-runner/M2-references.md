@@ -1,6 +1,6 @@
 # M2 — Narrative completion and reference packages
 
-**State:** S1–S3 narrative code and S4 image callback/storage routes deployed; live M2 bindings and Dify image transfer pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** Narrative, image callback/storage and automatic J08 sample-dispatch code deployed; active bindings remain J01/J02. Live M2 bindings and Dify image transfer pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Entry gate
@@ -359,7 +359,41 @@ retained M1 fixture suites without retries. The preceding candidate also passed
 Twelve agent fixtures passed. Preparing `issue65_m2_J08 --profile m2` produced
 nine model-free nodes with an empty callback-key binding. These checks establish
 local configuration parity, not actual Dify execution. Independent reviews and
-live publication remain pending.
+live publication remain pending at that validation checkpoint. Both independent
+reviews subsequently passed; [PR #119](https://github.com/karpishe-experiments/agentic-poc/pull/119)
+merged as `df587035c207825f7a2c6636a04284a9c85b3ad6` after Validate
+`37268464312` passed. Community J08 draft
+`0fc8f253-1ae6-4103-a105-4f737ce995d6` imported and read back nine nodes;
+hash `ad0d286ff3c8f57fdee8fd11df0afd66a544e5a7add38cb56c6696d7dea088bb`.
+MCP graph validation returned zero errors/warnings. It is not published or executed.
+
+### Current staging checkpoint
+
+The reviewed J08 implementation and required reference/image dependencies were
+selectively delivered through [PR #120](https://github.com/karpishe-experiments/agentic-poc/pull/120).
+Reviewed head: `51a6cb208baee0add6145f840942953b74c60e6c`; release:
+`fac55e0730e0a7e297a2fbdf28fb888b87baf57a`. Two consecutive clean independent
+reviews passed. Typecheck/lint, 87 runner/reference tests, 65 retained Cloud/probe
+regressions and twelve agent fixtures passed without retries. Disposable Mongo
+teardown required forced termination after its grace period. Validate
+`37269997010`, Deploy `37270417692` and Check `37270997041` passed.
+Image: `sha256:959dee0035f80890b4851ed27f2652bc5ee9617cb2e692fae2c0069350d7c571`;
+request: `37270417692-1`; backup:
+`staging-20261005T060654Z-6727f4cf0e4dec21`.
+
+Chrome reload retained all three personas' saved J01/J02 work. Creator run
+`944b6e59-129e-451f-847e-840524b8b8c2` paused at revision 35 and resumed at
+revision 36, retaining six operations, both approved versions and zero payable
+calls. It remains at `slice_complete`, not completed booklet generation.
+The temporary HTTP 502 during release cleared after deployment completed.
+
+Live J08 activation still requires authorized host-validator synchronization,
+seven additional privately configured app keys, drained manager/tester publication
+and published-binding read-back. Preserve the existing six bindings and callback
+key. Preview `37268638506` reported no Terraform changes; it did not synchronize
+host files or authorize apply. The old subject-restricting index remains, so
+J09/J10 sheet admission also requires the separately authorized index transition.
+Local sheet implementation can proceed independently of those live checkpoints.
 
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
