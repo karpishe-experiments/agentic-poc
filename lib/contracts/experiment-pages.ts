@@ -101,6 +101,14 @@ export const pageSubjectProposalSchema = z.object({
 });
 
 export type PageLayoutProposal = z.infer<typeof pageLayoutProposalSchema>;
+// Only application materialization supplies page identities. Specialist proposals
+// remain index-based and the proposal parser strips any supplied pageId.
+export const storedPageLayoutSchema = pageLayoutProposalSchema.extend({
+  pages: z.array(pageLayoutProposalSchema.shape.pages.element.extend({ pageId: opaqueIdSchema }))
+    .min(4).max(9).refine((pages) => new Set(pages.map((page) => page.pageId)).size === pages.length,
+      "Stored page identities must be unique."),
+});
+export type StoredPageLayout = z.infer<typeof storedPageLayoutSchema>;
 export type PageSubjectProposal = z.infer<typeof pageSubjectProposalSchema>;
 export type PageWarning = { field: string; message: string };
 
@@ -167,4 +175,13 @@ export function parsePageProposal(task: "J11" | "J12", persona: Persona, input: 
     checkJ12(content as PageSubjectProposal);
   }
   return { content, warnings: warnings(content) };
+}
+
+export function parseStoredPageLayout(persona: Persona, input: unknown): StoredPageLayout {
+  // Apply the same case, geometry, size and depth checks as the proposal before
+  // retaining the application-owned identity map. This does not prove approval.
+  parsePageProposal("J11", persona, input);
+  const content = storedPageLayoutSchema.parse(input);
+  if (new TextEncoder().encode(JSON.stringify(content)).byteLength > 512 * 1024) throw new Error("Stored page content exceeds 512 KiB.");
+  return content;
 }
