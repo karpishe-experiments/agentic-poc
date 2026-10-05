@@ -65,7 +65,22 @@ try {
             $step = 'collect application key for ' + $item.name
             Write-Host 'Open Access API > API Keys for THIS app.'
             [void](Read-Host 'Copy the application API key, then press Enter')
-            $apiKey = Get-Clipboard -Raw
+            $apiKey = $null
+            $clipboardRead = $false
+            # Windows can temporarily deny clipboard access while another app owns it.
+            for ($attempt = 0; $attempt -lt 5; $attempt++) {
+                try {
+                    $apiKey = Get-Clipboard -Raw -ErrorAction Stop
+                    $clipboardRead = $true
+                    break
+                } catch [System.Runtime.InteropServices.ExternalException] {
+                    if ($attempt -lt 4) { Start-Sleep -Milliseconds 200 }
+                }
+            }
+            if (-not $clipboardRead) {
+                Write-Host 'Windows could not read the clipboard. Copy this same app key again, wait a moment, then press Enter. Earlier keys remain collected.'
+                continue
+            }
             if ($null -ne $apiKey) { $apiKey = $apiKey.Trim() }
             if ($apiKey -cnotmatch '^app-[A-Za-z0-9_-]+$') {
                 Write-Host 'Clipboard does not contain an application API key. Copy only the key.'
