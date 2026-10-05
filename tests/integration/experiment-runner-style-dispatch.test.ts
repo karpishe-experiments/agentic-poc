@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+import { MongoServerError } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
@@ -44,6 +45,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
   const saved = new Map<string, RuntimeExecution>();
   let lostImageResponse = false, pauseImage = false, pauseBeforeClaim = false, omitImageUpload = false, wrongImageDigest = false;
   let lostPaginationResponse = false, lostManagerPaginationResponse = false;
+  let paginationTerminal: "failed" | "stopped" | null = null;
   let acknowledgement: "normal" | "missing" | "nonstring" | "running" | "failed" = "normal";
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input) => {
@@ -73,13 +75,14 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
         const envelope = { ...identity, inputFingerprint: operation.inputFingerprint, result };
         const lostManager = binding.role === "manager" && lostManagerPaginationResponse &&
           result.kind === "delegate" && result.payload.taskId === "J11";
-        if (!(binding.taskId === "J11" && lostPaginationResponse) && !lostManager) {
+        if (!(binding.taskId === "J11" && (lostPaginationResponse || paginationTerminal)) && !lostManager) {
           await repository.completeOperation({ envelope: { runId, operationId: operation._id, workflowRunId, inputFingerprint: operation.inputFingerprint, result },
             parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
         }
-        outputs = { booklet_result: JSON.stringify(envelope) };
+        outputs = binding.taskId === "J11" && paginationTerminal ? {} : { booklet_result: JSON.stringify(envelope) };
       }
-      const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "succeeded", outputs };
+      const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId,
+        status: binding.taskId === "J11" && paginationTerminal ? paginationTerminal : "succeeded", outputs };
       saved.set(workflowRunId, execution);
       if (binding.taskId === "J11" && lostPaginationResponse) { lostPaginationResponse = false; return { kind: "unknown" }; }
       if (binding.role === "manager" && lostManagerPaginationResponse && outputs.booklet_result &&
@@ -129,10 +132,11 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     return repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
   }
   return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples, reachSheet, reachPagination, testerDecision,
-    faults: (value: { lost?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+    faults: (value: { lost?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
       lostPaginationResponse = value.lostPagination ?? false;
       lostManagerPaginationResponse = value.lostManagerPagination ?? false;
+      paginationTerminal = value.paginationTerminal ?? null;
       omitImageUpload = value.omitUpload ?? false; wrongImageDigest = value.wrongDigest ?? false;
       pauseBeforeClaim = value.beforeClaim ?? false; acknowledgement = value.acknowledgement ?? "normal";
     }, next: () => clock++ };
@@ -157,6 +161,81 @@ describe("automatic saved J08 sample dispatch", () => {
     await expect(prepare()).rejects.toMatchObject({ code: "invalid_state" });
     expect(await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J11" })).toBe(0);
     expect((await env.repository.getRun(env.runId))?.activeOperationId).toBeNull();
+  });
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("verifies J11 sources once per %s completion and approval attempt", async (persona) => {
+    const env = await setup(persona, 16);
+    await env.reachPagination();
+    const get = vi.spyOn(env.store, "get");
+    await withMongoTransaction(env.database, async (session) => verifyCurrentPaginationSources(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store));
+    const readsPerVerification = get.mock.calls.length;
+    expect(readsPerVerification).toBeGreaterThan(0);
+    const run = (await env.repository.getRun(env.runId))!;
+    const operationId = randomUUID(), workflowRunId = randomUUID(), parentWorkflowRunId = randomUUID();
+    const operation = await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+      role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId, inputFingerprint: "a".repeat(64),
+      attempt: 1, providerKind: "text", nowMs: env.next() });
+    await env.repository.claimOperation({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId, nowMs: env.next() });
+    const result = simulateNarrativeResult(await env.context.getOperationContext({ runId: env.runId, operationId,
+      workflowRunId, parentWorkflowRunId }), "simulated");
+    get.mockClear();
+    await env.repository.completeOperation({ envelope: { runId: env.runId, operationId, workflowRunId,
+      inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId, nowMs: env.next() });
+    expect(get).toHaveBeenCalledTimes(readsPerVerification);
+    const view = (await env.context.getRunView(env.runId))!;
+    const layout = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+    get.mockClear();
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "approve", versionIds: [layout.currentVersionId!] } } });
+    expect(get).toHaveBeenCalledTimes(readsPerVerification);
+    expect((await env.context.getRunView(env.runId))?.currentArtifacts.find((item) => item.taskId === "J11")?.state).toBe("approved");
+    get.mockRestore();
+  });
+  it("reverifies J11 sources on a transaction retry and a later approval request", async () => {
+    const env = await setup("professional_creator", 16);
+    await env.reachPagination();
+    const get = vi.spyOn(env.store, "get");
+    await withMongoTransaction(env.database, async (session) => verifyCurrentPaginationSources(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store));
+    const readsPerVerification = get.mock.calls.length;
+    const run = (await env.repository.getRun(env.runId))!;
+    const operationId = randomUUID(), workflowRunId = randomUUID(), parentWorkflowRunId = randomUUID();
+    const operation = await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+      role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId, inputFingerprint: "a".repeat(64),
+      attempt: 1, providerKind: "text", nowMs: env.next() });
+    await env.repository.claimOperation({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId, nowMs: env.next() });
+    const result = simulateNarrativeResult(await env.context.getOperationContext({ runId: env.runId, operationId,
+      workflowRunId, parentWorkflowRunId }), "simulated");
+    const artifacts = env.database.collections.artifacts;
+    const originalInsert = artifacts.insertOne.bind(artifacts);
+    let retried = false;
+    const insert = vi.spyOn(artifacts, "insertOne").mockImplementation(async (...args) => {
+      if (!retried && args[0].taskId === "J11") {
+        retried = true;
+        const error = new MongoServerError({ ok: 0, errmsg: "synthetic transaction retry", code: 112 });
+        error.addErrorLabel("TransientTransactionError");
+        throw error;
+      }
+      return originalInsert(...args);
+    });
+    get.mockClear();
+    try {
+      await env.repository.completeOperation({ envelope: { runId: env.runId, operationId, workflowRunId,
+        inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId, nowMs: env.next() });
+    } finally { insert.mockRestore(); }
+    expect(retried).toBe(true);
+    expect(get).toHaveBeenCalledTimes(2 * readsPerVerification);
+    const view = (await env.context.getRunView(env.runId))!;
+    const layout = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const reference = view.currentArtifacts.find((item) => item.taskId === "J09")!;
+    const build = reference.versions.find((item) => item.id === reference.currentVersionId)!.content as { build: { assetId: string } };
+    const asset = (await env.database.collections.assets.findOne({ _id: build.build.assetId }))!;
+    env.store.files.set(asset.uri, new Uint8Array([1]));
+    get.mockClear();
+    await expect(env.testerDecision({ kind: "decision", payload: { decision: { action: "approve",
+      versionIds: [layout.currentVersionId!] } } })).rejects.toThrow();
+    expect(get.mock.calls.length).toBeGreaterThan(0);
+    expect((await env.context.getRunView(env.runId))?.currentArtifacts.find((item) => item.taskId === "J11")?.state).toBe("draft");
+    get.mockRestore();
   });
   it("preserves saved page identities across J11 revision and duplicate completion", async () => {
     const env = await setup("professional_creator", 16);
@@ -205,6 +284,31 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(vi.mocked(env.runtime.retrieve).mock.calls.length).toBeGreaterThan(0);
     expect((await env.context.getRunView(env.runId))?.currentArtifacts.find((item) => item.taskId === "J11")).toMatchObject({ state: "approved" });
     expect(await env.dispatcher().advance(env.runId)).toBe("boundary");
+  });
+  it.each(["failed", "stopped"] as const)("retains a claimed J11 %s outcome for late completion without another POST", async (status) => {
+    const env = await setup("playful_kid", 16);
+    await env.reachPagination();
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced"); // manager delegation
+    env.faults({ paginationTerminal: status });
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    const run = (await env.repository.getRun(env.runId))!;
+    const operation = (await env.repository.getOperation(run.activeOperationId!))!;
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
+    expect(operation).toMatchObject({ role: "specialist", taskId: "J11", state: "unknown", reservationCount: 1 });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const result = simulateNarrativeResult(await env.context.getOperationContext({ runId: env.runId,
+      operationId: operation._id, workflowRunId: operation.workflowRunId!, parentWorkflowRunId: operation.parentWorkflowRunId }), "simulated");
+    await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: operation._id,
+      workflowRunId: operation.workflowRunId!, inputFingerprint: operation.inputFingerprint, result },
+      parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: env.next() });
+    expect((await env.repository.getOperation(operation._id))?.state).toBe("succeeded");
+    expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
+    env.faults({});
+    await env.dispatcher().advance(env.runId);
+    expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.taskId === "J11")).toHaveLength(1);
   });
   it("recovers a lost manager delegation to J11 through GET without another POST", async () => {
     const env = await setup("playful_kid", 16);
@@ -488,6 +592,45 @@ describe("automatic saved J08 sample dispatch", () => {
     const calls = vi.mocked(env.runtime.start).mock.calls.length;
     expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
     expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+  });
+  it("retains a claimed failed image execution for a late upload and verified GET acknowledgement", async () => {
+    const env = await setup(); await env.reachSamples();
+    env.faults({ omitUpload: true, acknowledgement: "failed" });
+    await env.dispatcher().advance(env.runId);
+    const run = (await env.repository.getRun(env.runId))!;
+    const operation = (await env.repository.getOperation(run.activeOperationId!))!;
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
+    expect(operation).toMatchObject({ role: "image", state: "unknown", reservationCount: 1 });
+    const originalRetrieve = env.runtime.retrieve;
+    env.runtime.retrieve = vi.fn<WorkflowRuntime["retrieve"]>(async (binding, id) => {
+      const result = await originalRetrieve(binding, id);
+      return result.kind === "execution" ? { kind: "execution", execution: { ...result.execution,
+        status: "failed", outputs: {} } } : result;
+    });
+    const postsBeforeRecovery = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(postsBeforeRecovery);
+    const bytes = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#74aadd" } }).png().toBuffer();
+    const saved = await createExperimentImageStorage({ database: env.database, store: env.store, now: env.next }).complete({
+      identity: { runId: env.runId, operationId: operation._id, workflowRunId: operation.workflowRunId!,
+        parentWorkflowRunId: operation.parentWorkflowRunId, inputFingerprint: operation.inputFingerprint }, content: bytes,
+    });
+    env.runtime.retrieve = vi.fn<WorkflowRuntime["retrieve"]>(async (binding, id) => {
+      const result = await originalRetrieve(binding, id);
+      return result.kind === "execution" ? { kind: "execution", execution: { ...result.execution, status: "succeeded",
+        outputs: { image_result: JSON.stringify({ runId: env.runId, operationId: operation._id,
+          workflowRunId: operation.workflowRunId!, parentWorkflowRunId: operation.parentWorkflowRunId,
+          inputFingerprint: operation.inputFingerprint, assetId: operation._id, sha256: saved.operation.resultDigest }) } } } : result;
+    });
+    expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
+    env.faults({});
+    await env.dispatcher().advance(env.runId);
+    expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
+    expect(await env.repository.getOperation(operation._id)).toMatchObject({ state: "succeeded",
+      verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "image")!.publishedWorkflowId });
+    expect((await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" &&
+      item.inputFingerprint === operation.inputFingerprint)).toHaveLength(1);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
   });
   it("never verifies a missing acknowledgement before an unresolved late upload", async () => {
     const env = await setup(); await env.reachSamples(); env.faults({ omitUpload: true, acknowledgement: "missing" });

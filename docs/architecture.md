@@ -49,7 +49,7 @@ and messages retain the created content and decision provenance.
 
 The narrative implementation covers J01–J07, through the final character
 and location lists, plus J08–J10 persistence described below. Staging has
-fifteen model-free bindings through J10. All three live Simulated cases reached
+sixteen model-free bindings through J11. All three live Simulated M2 cases reached
 the approved reference boundary; final pages and booklet completion remain pending.
 Configuration accepts only
 complete six-slot M1, eleven-slot J01–J07, thirteen-slot J08/image or fifteen-slot
@@ -173,8 +173,15 @@ page index on revision. Story pages must cover all known manuscript units, but
 one unit can span multiple panels or pages. Routed references must identify exact
 current approved sheets. J11 acceptance reaches a saved J12 slice boundary, not
 booklet completion. Old binding profiles retain their original boundaries. This
-profile is local only until reviewed Dify publication, private binding preparation
-and staging activation; the live fifteen-binding profile remains unchanged.
+profile is now published and active in staging after reviewed release, readiness
+and backed-up activation. Live J11 all-persona acceptance remains pending; the
+retained fifteen-binding M2 runs preserve their saved boundaries.
+
+J11 completion reuses source verification within one transaction attempt only;
+retries and later approvals verify current approvals, lineage and bytes again.
+Failed/stopped runtime observations are classified against the persisted claim.
+Claimed uncertain work retains its active operation for late completion and
+GET-only recovery; terminal runtime status alone does not permit replacement.
 
 Specialist context includes saved task-and-subject-specific answers and global manager
 answers. During a revision, clarification preserves the original target and

@@ -22,7 +22,7 @@ const dispatchInput = claimInput.omit({ workflowRunId: true });
 const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema });
 const completeInput = z.strictObject({ envelope: resultEnvelopeSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const failInput = claimInput.extend({ category: z.enum(["unknown_outcome", "definite_failure"]) });
-const outcomeInput = dispatchInput.extend({ category: z.enum(["unknown_outcome", "definite_failure", "paused"]) });
+const outcomeInput = dispatchInput.extend({ category: z.enum(["unknown_outcome", "definite_failure", "observed_failure", "paused"]) });
 const progressInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, fingerprint64: fingerprint, nowMs: time });
 const blockInput = z.strictObject({ runId: opaqueIdSchema, category: z.enum(["unknown_outcome", "definite_failure"]), nowMs: time });
 
@@ -250,20 +250,26 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Dispatch identity differs from outcome.");
       if (operation.state === "succeeded") return operation;
-      if (input.category === "paused") {
+      // The callback may claim between a runtime status read and this write.
+      // Resolve failed/stopped/rejected observations from the persisted claim
+      // in this transaction so a late authorized completion remains possible.
+      const category = input.category === "observed_failure" ?
+        operation.reservationCount === 0 && (operation.state === "prepared" ||
+          operation.state === "failed" && operation.safeFailure === "definite_failure") ? "definite_failure" : "unknown_outcome" : input.category;
+      if (category === "paused") {
         if (operation.state !== "prepared" || operation.reservationCount !== 0) throw new ExperimentRepositoryError("invalid_state", "Only a verified unclaimed operation can close.");
       } else if (operation.state !== "prepared" && operation.state !== "started" && operation.state !== "unknown") {
-        if (operation.state === "failed" && operation.safeFailure === input.category) return operation;
+        if (operation.state === "failed" && operation.safeFailure === category) return operation;
         throw new ExperimentRepositoryError("invalid_state", "Operation cannot record this outcome.");
       }
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
-      const state = input.category === "unknown_outcome" ? "unknown" : "failed";
-      const safeFailure = input.category === "paused" ? null : input.category;
+      const state = category === "unknown_outcome" ? "unknown" : "failed";
+      const safeFailure = category === "paused" ? null : category;
       if (operation.state === state && operation.safeFailure === safeFailure) return operation;
       const imageFailureHistory = operation.role === "image" && safeFailure ? { imageFailureHistory: [...(operation.imageFailureHistory ?? []), { category: safeFailure, recordedAtMs: input.nowMs }] } : {};
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure, ...imageFailureHistory, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Outcome changed concurrently.");
-      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { status: input.category === "paused" ? run.pauseRequested ? "paused" : "queued" : "blocked", safeFailure, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { status: category === "paused" ? run.pauseRequested ? "paused" : "queued" : "blocked", safeFailure, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed before outcome.");
       return updated;
     });
