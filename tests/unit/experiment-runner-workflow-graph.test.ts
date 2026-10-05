@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { createSimulationGraph, M1_SIMULATION_MODULES, M2_SIMULATION_MODULES, simulationModuleName } from "@/lib/experiment-runner/workflow-graph";
+import { createSimulationGraph, M1_SIMULATION_MODULES, M2_SIMULATION_MODULES, M3_SIMULATION_MODULES, m3SimulationModuleName, simulationModuleName } from "@/lib/experiment-runner/workflow-graph";
 
 describe("independent M1 simulation graph candidates", () => {
+  it("prepares five independent M3 modules while retaining the M1/M2 names and graph code", async () => {
+    expect(M3_SIMULATION_MODULES.map(m3SimulationModuleName)).toEqual([
+      "issue65_m3_manager", "issue65_m3_playful_kid", "issue65_m3_enthusiast_parent",
+      "issue65_m3_professional_creator", "issue65_m3_J11",
+    ]);
+    const legacy = await createSimulationGraph(M2_SIMULATION_MODULES[0], "m2");
+    expect(legacy.nodes.find((node) => node.id === "simulate")!.data.code).not.toContain("M3 J11 extension");
+    for (const selectedModule of M3_SIMULATION_MODULES) {
+      const graph = await createSimulationGraph(selectedModule, "m3");
+      expect(graph.nodes).toHaveLength(9);
+      expect(graph.nodes.find((node) => node.id === "simulate")!.data.code).toContain("M3 J11 extension");
+      expect(graph.nodes.filter((node) => node.data.type === "http-request")).toHaveLength(2);
+      expect(graph.nodes.every((node) => node.data.retry_config === undefined ||
+        (node.data.retry_config as { retry_enabled: boolean }).retry_enabled === false)).toBe(true);
+      const outputs = graph.nodes.filter((node) => node.data.type === "end")
+        .flatMap((node) => (node.data.outputs as { variable: string }[]).map((item) => item.variable));
+      expect(new Set(outputs).size).toBe(outputs.length);
+      expect(JSON.stringify(graph)).not.toContain("test-key");
+    }
+    await expect(createSimulationGraph(M2_SIMULATION_MODULES[6], "m3")).rejects.toThrow("Unsupported simulation module");
+  });
   it("builds fourteen separate M2 text modules without renaming existing apps", async () => {
     expect(M2_SIMULATION_MODULES).toHaveLength(14);
     expect(M2_SIMULATION_MODULES.slice(0, 6).map(simulationModuleName)).toEqual(M1_SIMULATION_MODULES.map(simulationModuleName));
