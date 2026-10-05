@@ -119,6 +119,9 @@ export function createExperimentDispatcher(deps: {
         const view = await context.getRunView(runId);
         if (!view || !view.nextNarrativeTask) return "waiting";
         if (view.nextNarrativeTask === "slice_complete") return "boundary";
+        // Image scheduling is a separate path. Do not send a textual style draft
+        // to tester approval, or loop manager calls while samples are pending.
+        if (view.nextNarrativeTask === "style_samples") return "waiting";
         const history = await repository.listOperations(runId);
         const last = history.at(-1);
         const initialDelegation = run.persona !== "professional_creator" && history.length === 0;

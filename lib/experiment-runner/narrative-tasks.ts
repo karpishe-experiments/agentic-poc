@@ -2,10 +2,11 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 
 export const NARRATIVE_TASKS = ["J01", "J02", "J03", "J04", "J05", "J06", "J07"] as const;
 
-export type NarrativeTask = (typeof NARRATIVE_TASKS)[number];
+export type NarrativeTask = (typeof NARRATIVE_TASKS)[number] | "J08";
+export const BOOK_TASKS = [...NARRATIVE_TASKS, "J08"] as const;
 
 export function isNarrativeTask(value: unknown): value is NarrativeTask {
-  return typeof value === "string" && (NARRATIVE_TASKS as readonly string[]).includes(value);
+  return typeof value === "string" && (BOOK_TASKS as readonly string[]).includes(value);
 }
 
 // Old snapshots retain their two-task boundary. A partial M2 binding set is not
@@ -26,7 +27,11 @@ export function configuredNarrativeTasks(configurationJson: string): readonly Na
     if (!appId.success || !opaqueIdSchema.safeParse(binding.publishedWorkflowId).success) return legacy;
     appIds.push(appId.data);
   }
-  return new Set(appIds).size === NARRATIVE_TASKS.length ? NARRATIVE_TASKS : legacy;
+  if (new Set(appIds).size !== NARRATIVE_TASKS.length) return legacy;
+  const style = specialists.filter((item) => item.taskId === "J08");
+  if (style.length === 1 && opaqueIdSchema.safeParse(style[0].appId).success &&
+      opaqueIdSchema.safeParse(style[0].publishedWorkflowId).success && !appIds.includes(style[0].appId as string)) return BOOK_TASKS;
+  return NARRATIVE_TASKS;
 }
 
 export const NARRATIVE_DEPENDENCIES: Readonly<Record<NarrativeTask, readonly NarrativeTask[]>> = {
@@ -37,6 +42,7 @@ export const NARRATIVE_DEPENDENCIES: Readonly<Record<NarrativeTask, readonly Nar
   J05: ["J01", "J02", "J03", "J04"],
   J06: ["J02", "J03", "J05"],
   J07: ["J02", "J04", "J05"],
+  J08: ["J01", "J02", "J05", "J06", "J07"],
 };
 
 export function currentApprovedSourceIds(

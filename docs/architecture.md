@@ -48,7 +48,7 @@ Mongo collections. Normal artifacts, immutable versions, dependencies, approvals
 and messages retain the created content and decision provenance.
 
 The local narrative implementation covers J01–J07, through the final character
-and location lists. Live configuration remains restricted to M1's six bindings
+and location lists, plus the J08 persistence path described below. Live configuration remains restricted to M1's six bindings
 and J01/J02 boundary until M2 bindings are verified. Configuration accepts only
 complete six-slot M1 or eleven-slot J01–J07 bundles, not partial profiles.
 The app API executes the latest publication; saved publication evidence is not
@@ -97,8 +97,19 @@ J08 textual draft with two completed sample operations. It checks their request
 fingerprints, saved lineage and original AssetStore bytes, then creates one
 application-owned immutable version and dependency edges in a transaction.
 Repeated assembly reuses that same version without another image reservation.
-It does not approve the package or dispatch work; J08 runtime admission,
-specialist materialization, acceptance and live Dify transfer remain pending.
+It does not approve the package or dispatch work. The local J08 materialization
+path accepts a normal specialist proposal only when its saved configuration also
+has a distinct J08 binding after all seven narrative bindings. The proposal stays
+unapproved even under delegation. Context returns `style_samples` until the two
+saved samples form an assembled version; dispatch waits without another manager
+or tester call. Only the application-owned assembled version can be accepted by
+explicit tester review or a recorded scoped delegation, with sample and source
+evidence checked again. Acceptance also reads both sample files from AssetStore
+and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
+files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
+retain old images and approvals. The public configuration reader and host still
+accept only six or eleven bindings: live J08 publication, bindings, image
+scheduling and Dify transfer remain pending.
 
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
