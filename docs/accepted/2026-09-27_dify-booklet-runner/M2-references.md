@@ -37,6 +37,37 @@ Escalate a changed ownership/creative contract, unknown execution outcome or
 missing capability. Capacity, key entry and binary-transfer gaps block their
 dependent live operation only; paid modes remain unavailable.
 
+### S5 first increment: local style/reference contracts
+
+Add `lib/contracts/experiment-references.ts` and
+`tests/unit/experiment-runner-reference-contracts.test.ts` before extending
+runtime admission. Reuse Zod, the existing opaque-ID contract and SHA-256; do
+not add another artifact store or agent registry. J08 accepts a textual style
+proposal before its two sample operations. An image-backed package records both
+sample build identities. J09/J10 retain target subject IDs, exact source versions,
+view/expression instructions and one montage build record per subject.
+
+Preserve the shared style module byte-for-byte, including whitespace; compute
+and verify its hash rather than trusting a proposed hash. Parser success does
+not establish stored asset existence, current source approval or creator acceptance.
+Those checks belong to the later persistence/materialization slice. Required
+instructions are technical content; imperfect rendered views remain warnings.
+J08's required narrative inputs include J01, J02, J05, J06 and J07, following the
+pinned guideline. This increment does not expand live bindings or dispatch.
+
+Run the new unit suite without retries, typecheck and lint. Verify complete
+proposal/build fixtures, preserved module bytes, malformed/duplicate identities,
+missing required instructions and the 512 KiB/depth-20 content bounds. Two clean
+independent reviews precede publication. Asset existence, automatic sample/sheet
+scheduling and actual Dify transfer remain pending after this parser increment.
+
+Local verification on 2026-10-05 passed isolated typecheck, full lint and 21 tests
+across the new reference contract suite and existing manuscript, draft-list and
+runner-contract suites, without retries. Source/test hashes matched the checked
+copy. Local links and whitespace passed. The main checkout's stale generated
+types were not counted as a successful check. This proves parser behavior only;
+it does not prove three-persona reference production or any live image transfer.
+
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
 `knownRelationship`, `knownFacts` and `openQuestions`; package notes are
@@ -108,6 +139,12 @@ deployment shell suites. After two clean reviews and publication, prepare the
 five new Dify apps and private bindings through verified interfaces. Read back
 the published graph/IDs before staging activation. New credential entry remains
 a private handoff only if a verified private mechanism cannot complete it.
+
+Infrastructure preview `37246255334` at reviewed master
+`b1375a0ca29f277d305312891de66d0b1d38bce1` passed on 2026-10-05 with no Terraform
+changes. It did not synchronize host files. Applying the reviewed host-dispatcher
+and Compose artifact synchronization remains an explicit authorization checkpoint
+before eleven-slot private settings rotation; private module keys remain separate.
 
 S2 merged through [PR #104](https://github.com/karpishe-experiments/agentic-poc/pull/104)
 after Validate `37236356412` passed. Reviewed source `d9668e256bff358b36b9694126355e4c42ecc75a`,
@@ -241,7 +278,7 @@ Keep the source commit and explicit PRD adaptations in each prompt's provenance.
 | J05 | Ordered narrative units with prose, action, narration/dialogue and character/location IDs; expansion notes | J01, J02, both J03/J04 |
 | J06 | Final character IDs, stable physical facts, recurrence, attire/accessories, expressions, sheet requirement | J02, J03, J05 |
 | J07 | Final location IDs, anchors/features, continuity and sheet requirement | J02, J04, J05 |
-| J08 | Style definition, typography/bubbles, exact shared module plus hash, two sample build/asset records | J01/J05 and both J06/J07 |
+| J08 | Style definition, typography/bubbles, exact shared module plus hash, two sample build/asset records | J01/J02/J05 and both J06/J07 |
 | J09 | One artifact per recurring character; view/expression requirements, assembled prompt, source IDs, build and asset record | That J06 subject and accepted J08 |
 | J10 | One artifact per final location; anchors/view requirements, prompt/source/build/asset record | That J07 subject and accepted J08 |
 
@@ -403,6 +440,16 @@ emitted eleven nodes. MCP validation returned zero errors and one warning:
 the bridge does not recognize `list-operator` and skipped that node's per-type
 checks. The official source supports it; successful Studio import/execution
 remains required before this warning can be treated as a verified bridge-only gap.
+
+The preparation merged through [PR #110](https://github.com/karpishe-experiments/agentic-poc/pull/110)
+after two clean independent reviews and Validate `37245678840` passed. Reviewed
+source: `c277e66305e22c07f73a57e3869fbd7977f2a53a`; merge:
+`b1375a0ca29f277d305312891de66d0b1d38bce1`. Community import and draft read-back
+passed for app `923566e9-c6fd-4936-836f-b21704d39628`, retaining eleven nodes and
+the single-file binary binding; draft hash:
+`e77a528135fb5fffbdf5ce1a5cab588e8c390334b6a64814bc16925477939743`.
+The app has not been published or executed. Private callback binding and saved
+image-operation preparation remain pending; import alone does not verify transfer.
 
 For later Real mode, keep the requested model/settings from M0. Prefer a tested
 single-request plugin; otherwise Dify HTTP generation/edit nodes with retries off.
