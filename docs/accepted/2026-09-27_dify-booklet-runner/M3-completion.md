@@ -15,6 +15,23 @@ around them. Bundle any private binding/login handoff and staging grants up fron
 
 Read pinned Ali guidelines 11–13. Manuscript units are not physical pages.
 
+### Independent local preparation: API driver
+
+`scripts/experiment-runner.ts` uses the same create, list/detail and Pause/Resume
+APIs as the UI. It supports only Simulated mode and the staging or loopback
+origin. Mutations default to preview and require `--apply`; credentials come
+privately from `BOOKLET_RUNNER_PASSWORD`, never a command argument. Create requires
+an explicit retained request ID. Control requires the exact observed revision.
+The driver sends no automatic retry and reports unknown mutation outcomes with
+their identifier. Its allowlisted projection includes operation/workflow IDs,
+artifact versions and zero-payable counters, not prompts or credentials.
+
+This preparation can proceed while browser connectivity or live M2 evidence is
+pending. Observation is not an acceptance assertion: the driver does not yet
+verify saved image bytes, page completion or reports, and does not clear the M3
+entry gate. Full acceptance assertions and the sequential all-persona campaign
+remain later driver work. Focused driver/API unit tests are local evidence only.
+
 ### Independent local preparation: page-contract parser
 
 This package can proceed before live M2 exits. It does not clear the entry gate
