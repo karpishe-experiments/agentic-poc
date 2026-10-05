@@ -2,7 +2,7 @@ import { CASES, conceptBriefSchema, parseDraftListProposal, parseNarrativePropos
 import type { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { simulateReferenceProposal } from "@/lib/experiment-runner/reference-fixtures";
 import { BOOK_TASKS } from "@/lib/experiment-runner/narrative-tasks";
-import { assembledVisualStyleSchema } from "@/lib/contracts/experiment-references";
+import { assembledVisualStyleSchema, parseReferenceProposal } from "@/lib/contracts/experiment-references";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
 type Case = keyof typeof CASES;
@@ -242,21 +242,25 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
   if (mode !== "simulated") throw new Error("Narrative fixtures require simulated mode.");
   if (context.role === "manager") {
     const taskId = context.eligibleRoute;
+    if (taskId === "J09" || taskId === "J10") {
+      if (!context.eligibleTarget || context.eligibleTarget.taskId !== taskId) throw new Error("Manager has no eligible sheet subject.");
+      return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: context.eligibleTarget.subjectKind, subjectId: context.eligibleTarget.subjectId } });
+    }
     if (!taskId || !(BOOK_TASKS as readonly string[]).includes(taskId)) throw new Error("Manager has no eligible narrative task.");
     return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: "book", subjectId: context.run.bookletId } });
   }
   if (context.role === "tester") {
-    const pending = context.pendingDecision as { kind?: string; questionId?: string; taskId?: Task } | null;
+    const pending = context.pendingDecision as { kind?: string; questionId?: string; taskId?: Task | "J09" | "J10" } | null;
     if (pending?.kind === "question") {
       if (!pending.questionId) throw new Error("Pending question has no saved ID.");
-      return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "answer", questionId: pending.questionId, text: "Keep the story age-appropriate, gentle, and faithful to the stated case brief." } } });
+      return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "answer", questionId: pending.questionId, text: pending.taskId === "J09" ? "Use Curious, Concerned, and Relieved expressions. Keep the character faithful to approved facts." : "Keep the story age-appropriate, gentle, and faithful to the stated case brief." } } });
     }
     if (pending?.kind === "revision") throw new Error("A pending revision belongs to its specialist.");
     if (pending) throw new Error("Unsupported pending decision.");
     if (context.persona !== "professional_creator" && !context.activeDelegation && context.creatorMessages.length === 0) {
       const subjectId = context.bookletId;
       if (context.currentArtifacts.some((item) => item.subjectKind !== "book" || item.subjectId !== subjectId)) throw new Error("Book subject is inconsistent.");
-      const eligibleTaskIds = "eligibleTaskIds" in context && Array.isArray(context.eligibleTaskIds) ? context.eligibleTaskIds as Task[] : ["J01", "J02"];
+      const eligibleTaskIds = "eligibleTaskIds" in context && Array.isArray(context.eligibleTaskIds) ? context.eligibleTaskIds : ["J01", "J02"];
       return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "delegate", taskIds: eligibleTaskIds, subjectId } } });
     }
     const approvedIds = new Set(context.currentArtifacts.filter((item) => item.state === "approved").map((item) => item.currentVersionId));
@@ -269,18 +273,44 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
         const style = assembledVisualStyleSchema.safeParse(version.content);
         if (!style.success || version.sourceVersionId !== style.data.draftStyleVersionId ||
             dependencies[0] !== style.data.draftStyleVersionId || dependencies.slice(1).some((id) => !approvedIds.has(id))) return [];
+      } else if (item.taskId === "J09" || item.taskId === "J10") {
+        try {
+          const sheet = parseReferenceProposal(item.taskId, "assembled", version.content).content;
+          if (!("build" in sheet) || !("finalListVersionId" in sheet)) return [];
+          const subjectId = "characterId" in sheet ? sheet.characterId : sheet.locationId;
+          if (subjectId !== item.subjectId || item.subjectKind !== (item.taskId === "J09" ? "character" : "location") ||
+              !version.sourceVersionId || dependencies.length !== 3 || dependencies[0] !== version.sourceVersionId ||
+              dependencies[1] !== sheet.finalListVersionId || dependencies[2] !== sheet.styleVersionId ||
+              dependencies.slice(1).some((id) => !approvedIds.has(id))) return [];
+        } catch { return []; }
       } else if (dependencies.some((id) => !approvedIds.has(id))) return [];
       return [version.id];
     });
     if (current.length === 0) throw new Error("No current eligible draft version to review.");
     if (context.persona !== "professional_creator" && context.activeDelegation &&
-        context.currentArtifacts.some((item) => item.taskId === "J08" && current.includes(item.currentVersionId ?? "")) &&
-        context.activeDelegation.taskIds.includes("J08")) {
+        context.currentArtifacts.some((item) => ["J08", "J09", "J10"].includes(item.taskId) && current.includes(item.currentVersionId ?? "") && context.activeDelegation!.taskIds.includes(item.taskId))) {
       return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "delegate", taskIds: context.activeDelegation.taskIds, subjectId: context.bookletId } } });
     }
     return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "approve", versionIds: current } } });
   }
   if (context.role !== "specialist") throw new Error("Unsupported fixture role.");
+  if (context.taskId === "J09" || context.taskId === "J10") {
+    const source = (taskId: string) => {
+      const value = context.approvedSources.find((item) => item.taskId === taskId);
+      if (!value) throw new Error("Sheet source is missing.");
+      return { versionId: value.id, content: value.content };
+    };
+    const previous = context.currentTarget && currentVersion(context.currentTarget);
+    const sourcesChanged = previous && JSON.stringify((previous.dependencyVersionIds as string[]).slice(-2)) !== JSON.stringify(context.approvedSources.map((item) => item.id));
+    const input = { mode: "simulated" as const, persona: context.persona, brief: context.brief,
+      finalList: source(context.taskId === "J09" ? "J06" : "J07"), style: source("J08"), styleVersionId: source("J08").versionId,
+      targetId: context.subjectId, currentContent: previous?.content, sourceChanged: Boolean(sourcesChanged),
+      revision: (context.matchingRevision as { instruction?: string } | null)?.instruction,
+      answers: context.questionAnswers.filter((item) => item.answer).map((item) => ({ question: item.question, answer: item.answer! })) };
+    const result = context.taskId === "J09" ? simulateReferenceProposal("J09", input) : simulateReferenceProposal("J10", input);
+    return result.kind === "clarification" ? validateRoleResult("specialist", { kind: "clarification", payload: { question: result.question } }) :
+      validateRoleResult("specialist", { kind: "proposal", payload: { taskId: context.taskId, content: result.content } });
+  }
   if (!context.taskId || !(BOOK_TASKS as readonly string[]).includes(context.taskId)) throw new Error("Specialist task is outside the narrative slice.");
   const persona = context.persona as Case;
   const story = stories[persona];

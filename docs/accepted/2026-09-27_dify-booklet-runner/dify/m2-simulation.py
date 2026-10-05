@@ -1,6 +1,6 @@
-"""Self-contained Dify Code node fixture for simulated J01-J08 text work.
+"""Self-contained Dify Code node fixture for simulated J01-J10 proposals.
 
-Pinned Ali J03-J07 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.
+Pinned Ali J03-J10 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.
 Fixed-case simulation retains narrative dependencies and complete content.
 Booklet owns durable IDs and acceptance; preference deviations remain warnings.
 """
@@ -87,16 +87,19 @@ def proposal(task, content):
     return {"kind": "proposal", "payload": {"taskId": task, "content": content}}
 
 
+def text(value, limit=16000):
+    return isinstance(value, str) and 0 < len(value) <= limit and bool(value.strip())
+
+
+def uuid(value):
+    return isinstance(value, str) and bool(re.fullmatch(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)", value))
+
+
 def assembled_style(content):
     """Mirror the assembled shape needed by tester eligibility, not stored approval."""
-    def text(value, limit=16000):
-        return isinstance(value, str) and 0 < len(value) <= limit and bool(value.strip())
 
     def texts(value):
         return isinstance(value, list) and len(value) <= 100 and all(text(item) for item in value)
-
-    def uuid(value):
-        return isinstance(value, str) and bool(re.fullmatch(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)", value))
 
     def hash64(value):
         return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value))
@@ -156,6 +159,72 @@ def style_fixture(context, previous, revision):
     return proposal("J08", content)
 
 
+def sheet_fixture(context, previous, revision):
+    """Proposal only; Booklet must validate source approval and stored assets."""
+    task = context["taskId"]
+    final_task = "J06" if task == "J09" else "J07"
+    rows = context.get("approvedSources", [])
+    def row(task_id):
+        matches = [item for item in rows if item["taskId"] == task_id]
+        if len(matches) != 1:
+            raise ValueError("Sheet requires one final list and one assembled style source")
+        UUID(matches[0]["id"])
+        return matches[0]
+    final, style_row = row(final_task), row("J08")
+    style = style_row["content"]
+    if not assembled_style(style) or style["stylePromptModuleHash"] != hashlib.sha256(style["stylePromptModule"].encode("utf-8")).hexdigest():
+        raise ValueError("Sheet requires an assembled style with its exact module hash")
+    # Match the canonical reference parser's sample-build invariants.
+    builds = [item["build"] for item in style["samples"]]
+    if len({item["operationId"] for item in builds}) != 2 or len({item["assetId"] for item in builds}) != 2:
+        raise ValueError("Style samples must have distinct build identities")
+    for build in builds:
+        if build["stylePromptModuleHash"] != style["stylePromptModuleHash"] or style["stylePromptModule"] not in build["prompt"] or style["draftStyleVersionId"] not in build["sourceVersionIds"]:
+            raise ValueError("Style sample build differs from the approved module")
+    character = task == "J09"
+    id_key = "characterId" if character else "locationId"
+    entries = final["content"]["characters" if character else "locations"]
+    expected_count = 2 if character or context["persona"] == "professional_creator" else 1
+    if len(entries) != expected_count:
+        raise ValueError("Final list differs from fixed case subject count")
+    targets = [item for item in entries if item[id_key] == context.get("subjectId")]
+    if len(targets) != 1 or not targets[0]["sheetRequired"] or (character and targets[0]["recurrence"] != "recurring"):
+        raise ValueError("Sheet requires an eligible final-list subject")
+    target = targets[0]
+    UUID(target[id_key])
+    current = previous["content"] if previous and (context.get("currentTarget") or {}).get("state") != "needs_review" else None
+    if current and current[id_key] != target[id_key]:
+        raise ValueError("Retained sheet belongs to a different subject")
+    answers = [item for item in context.get("questionAnswers", []) if item.get("answer") and item["answer"].strip() and item.get("taskId") in (None, task)]
+    notes = (["Revision request: " + revision] if revision else []) + [f'{item["question"]}: {item["answer"]}' for item in answers]
+    expressions = []
+    if character:
+        for item in target["expressions"]:
+            if item.strip() and item.strip() not in expressions:
+                expressions.append(item.strip())
+        question = f'Which three distinct expressions should {target["nameOrRole"]}\'s sheet show?'
+        if len(expressions) < 3:
+            answer = next((item["answer"] for item in answers if item["question"] == question), "")
+            for item in re.split(r"[,;\n]", answer):
+                if item.strip() and item.strip() not in expressions:
+                    expressions.append(item.strip())
+            if len(expressions) < 3:
+                return {"kind": "clarification", "payload": {"question": question}}
+    content = {"schemaVersion": "2", "title": current["title"] if current else (target["nameOrRole"] + " character sheet" if character else target["title"] + " location sheet"),
+        "finalListVersionId": final["id"], "styleVersionId": style_row["id"],
+        "stylePromptModule": style["stylePromptModule"], "stylePromptModuleHash": style["stylePromptModuleHash"],
+        "reviewQuestions": add_notes(current["reviewQuestions"] if current else ["Is this the same character in every view and expression?" if character else "Are the location anchors recognizable in all views?"], notes), id_key: target[id_key]}
+    if character:
+        content.update(sheetPromptModule=current["sheetPromptModule"] if current else f'One character montage for {target["nameOrRole"]}. Preserve {target["physicalDescription"]}. Show full-body front, full-body back, full-body side, a detailed neutral facial view, and three distinct expressions. Include all attire: {"; ".join(target["attireRequirements"]) or "none specified"}. Include all accessories: {"; ".join(target["accessories"]) or "none specified"}. Add no extra or unapproved attire. No readable labels, watermarks, logos, or unrelated characters.',
+            characterDesignProfile=current["characterDesignProfile"] if current else f'{target["background"]} {target["lifeStage"]}. {target["physicalDescription"]} {target["personalityAndActing"]}',
+            attireRequirements=target["attireRequirements"], accessories=target["accessories"], requiredViews=["front", "back", "side", "neutral_facial"], additionalExpressions=current["additionalExpressions"] if current else expressions[:3])
+    else:
+        content.update(sheetPromptModule=current["sheetPromptModule"] if current else f'One location montage for {target["title"]}. Isometric overview plus two supporting views. Preserve stable anchors: {"; ".join(target["stableAnchors"])}. Include required features: {"; ".join(target["requiredFeatures"]) or "none specified"}. Do not add page action or weather unless it is an approved stable fact. No readable labels, watermarks, logos, or unrelated characters.',
+            locationDefinitionProfile=current["locationDefinitionProfile"] if current else f'{target["basicDescription"]} {target["storyPurpose"]}', stableAnchors=target["stableAnchors"], requiredFeatures=target["requiredFeatures"], overview="isometric",
+            supportingViews=current["supportingViews"] if current else [{"angle": "entry", "shows": f'Entry view showing {target["stableAnchors"][0]}.'}, {"angle": "reverse", "shows": f'Reverse view showing {(target["requiredFeatures"] or target["stableAnchors"])[0]}.'}])
+    return proposal(task, content)
+
+
 def later_fixture(context, story, previous, revision, details):
     task = context["taskId"]
     persona = context["persona"]
@@ -206,6 +275,11 @@ def fixture(context):
     role = context["role"]
     if role == "manager":
         task = context.get("eligibleRoute")
+        if task in ("J09", "J10"):
+            target = context.get("eligibleTarget")
+            if not target or target.get("taskId") != task or target.get("subjectKind") != ("character" if task == "J09" else "location") or not uuid(target.get("subjectId")):
+                raise ValueError("Manager has no eligible sheet subject")
+            return {"kind": "delegate", "payload": {"taskId": task, "subjectKind": target["subjectKind"], "subjectId": target["subjectId"]}}
         if task not in TASKS:
             raise ValueError("Manager has no eligible narrative task")
         return {"kind": "delegate", "payload": {"taskId": task, "subjectKind": "book", "subjectId": context["run"]["bookletId"]}}
@@ -213,7 +287,8 @@ def fixture(context):
         pending = context.get("pendingDecision")
         if pending:
             if pending.get("kind") == "question" and pending.get("questionId"):
-                return {"kind": "decision", "payload": {"decision": {"action": "answer", "questionId": pending["questionId"], "text": "Keep the story age-appropriate, gentle, and faithful to the stated case brief."}}}
+                answer = "Use Curious, Concerned, and Relieved expressions. Keep the character faithful to approved facts." if pending.get("taskId") == "J09" else "Keep the story age-appropriate, gentle, and faithful to the stated case brief."
+                return {"kind": "decision", "payload": {"decision": {"action": "answer", "questionId": pending["questionId"], "text": answer}}}
             raise ValueError("Unsupported pending decision")
         artifacts = context["currentArtifacts"]
         if context["persona"] != "professional_creator" and not context.get("activeDelegation") and not context["creatorMessages"]:
@@ -233,16 +308,25 @@ def fixture(context):
                 style = version.get("content")
                 if not assembled_style(style) or version.get("sourceVersionId") != style["draftStyleVersionId"] or not dependencies or dependencies[0] != style["draftStyleVersionId"] or any(item not in approved_ids for item in dependencies[1:]):
                     continue
+            elif artifact["taskId"] in ("J09", "J10"):
+                sheet = version.get("content") or {}
+                build = sheet.get("build") or {}
+                subject_key = "characterId" if artifact["taskId"] == "J09" else "locationId"
+                kind = "character" if artifact["taskId"] == "J09" else "location"
+                if artifact.get("subjectKind") != kind or sheet.get(subject_key) != artifact.get("subjectId") or not uuid(version.get("sourceVersionId")) or dependencies != [version["sourceVersionId"], sheet.get("finalListVersionId"), sheet.get("styleVersionId")] or any(item not in approved_ids for item in dependencies[1:]):
+                    continue
+                if not all(uuid(build.get(key)) for key in ("operationId", "assetId")) or not text(build.get("prompt")) or build.get("stylePromptModuleHash") != sheet.get("stylePromptModuleHash") or build.get("sourceVersionIds") != dependencies[1:] or not text(sheet.get("stylePromptModule")) or sheet["stylePromptModule"] not in build["prompt"]:
+                    continue
             elif any(item not in approved_ids for item in dependencies):
                 continue
             versions.append(version["id"])
         if not versions:
             raise ValueError("No current eligible draft version")
         grant = context.get("activeDelegation")
-        if context["persona"] != "professional_creator" and grant and "J08" in grant["taskIds"] and any(item["taskId"] == "J08" and item["currentVersionId"] in versions for item in artifacts):
+        if context["persona"] != "professional_creator" and grant and any(item["taskId"] in ("J08", "J09", "J10") and item["taskId"] in grant["taskIds"] and item["currentVersionId"] in versions for item in artifacts):
             return {"kind": "decision", "payload": {"decision": {"action": "delegate", "taskIds": grant["taskIds"], "subjectId": context["bookletId"]}}}
         return {"kind": "decision", "payload": {"decision": {"action": "approve", "versionIds": versions}}}
-    if role != "specialist" or context.get("taskId") not in TASKS:
+    if role != "specialist" or context.get("taskId") not in (*TASKS, "J09", "J10"):
         raise ValueError("Unsupported role or task")
     persona = context["persona"]
     story = CASES.get(persona)
@@ -251,6 +335,8 @@ def fixture(context):
     task = context["taskId"]
     previous = current_version(context.get("currentTarget"))
     revision = (context.get("matchingRevision") or {}).get("instruction")
+    if task in ("J09", "J10"):
+        return sheet_fixture(context, previous, revision)
     details = [f'{item["question"]}: {item["answer"]}' for item in context.get("questionAnswers", []) if item.get("answer") and item.get("taskId") in (None, task)]
     if task not in ("J01", "J02"):
         return later_fixture(context, story, previous, revision, details)

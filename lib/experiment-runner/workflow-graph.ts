@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import type { Persona } from "@/lib/contracts/experiment-runner";
 import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
-export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | null; persona: Persona | null };
+// Preparation can include sheet candidates before runtime admission is enabled.
+export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | "J09" | "J10" | null; persona: Persona | null };
 export const M1_SIMULATION_MODULES: SimulationModule[] = [
   { role: "manager", taskId: null, persona: null },
   { role: "specialist", taskId: "J01", persona: null }, { role: "specialist", taskId: "J02", persona: null },
@@ -11,7 +12,7 @@ export const M1_SIMULATION_MODULES: SimulationModule[] = [
 ];
 export const M2_SIMULATION_MODULES: SimulationModule[] = [
   ...M1_SIMULATION_MODULES,
-  ...(["J03", "J04", "J05", "J06", "J07", "J08"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
+  ...(["J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
 ];
 export function simulationModuleName(module: SimulationModule) {
   const milestone = module.taskId && !["J01", "J02"].includes(module.taskId) ? "m2" : "m1";

@@ -4,7 +4,7 @@ import sharp from "sharp";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
-import type { Persona } from "@/lib/contracts/experiment-runner";
+import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
@@ -22,17 +22,18 @@ class MemoryStore implements AssetStore {
   async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
   async exists(uri: string) { return this.files.has(uri); }
 }
-async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 = 13) {
+async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 = 13) {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const store = new MemoryStore(), repository = createExperimentRepository(database, { store: () => store });
   const context = createExperimentContextService(database);
   const bindings: BookletRunnerConfig["bindings"] = [
     { role: "manager", taskId: null, persona: null },
     ...BOOK_TASKS.map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
+    ...(["J09", "J10"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
     { role: "image", taskId: null, persona: null },
-  ].filter((item) => slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
-    (slots === 11 || item.taskId === null || ["J01", "J02"].includes(item.taskId))))
+  ].filter((item) => slots === 15 || (item.taskId !== "J09" && item.taskId !== "J10" && (slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
+    (slots === 11 || item.taskId === null || ["J01", "J02"].includes(item.taskId))))))
     .map((item) => ({ ...item, appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null, apiKey: "test-key" })) as BookletRunnerConfig["bindings"];
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test", callbackKey: "test-callback", bindings };
   const runId = randomUUID(), bookletId = randomUUID(); let clock = 1;
@@ -90,7 +91,24 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 = 13) 
     }
     throw new Error("No style draft");
   }
-  return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples,
+  async function reachSheet(kind: "image" | "review") {
+    for (let step = 0; step < 100; step++) {
+      const view = await context.getRunView(runId);
+      if (view?.nextSheetWork?.kind === kind) return view;
+      expect(await dispatcher().advance(runId)).not.toBe("blocked");
+    }
+    throw new Error("No pending sheet work");
+  }
+  async function testerDecision(result: RoleResult, recover = false) {
+    const run = (await repository.getRun(runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
+    const operation = await repository.prepareOperation({ runId, operationId, expectedRevision: run.revision, role: "tester", taskId: null,
+      subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1, inputFingerprint: randomUUID().replaceAll("-", "").repeat(2), nowMs: clock++ });
+    if (recover) await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: clock++ });
+    await repository.claimOperation({ runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: clock++ });
+    if (recover) await repository.recordDispatchOutcome({ runId, operationId, parentWorkflowRunId: null, category: "unknown_outcome", nowMs: clock++ });
+    return repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
+  }
+  return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples, reachSheet, testerDecision,
     faults: (value: { lost?: boolean; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
       omitImageUpload = value.omitUpload ?? false; wrongImageDigest = value.wrongDigest ?? false;
@@ -98,6 +116,158 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 = 13) 
     }, next: () => clock++ };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it.each(["explicit", "delegated"] as const)("recovers an unknown tester sheet %s decision without replay", async (origin) => {
+    const env = await setup(origin === "explicit" ? "professional_creator" : "playful_kid", 15), view = await env.reachSheet("review");
+    const versionId = view.nextSheetWork!.currentVersionId!, starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const before = (await env.repository.getRun(env.runId))!.counters;
+    const result: RoleResult = origin === "explicit" ? { kind: "decision", payload: { decision: { action: "approve", versionIds: [versionId] } } } :
+      { kind: "decision", payload: { decision: { action: "delegate", taskIds: view.activeDelegation!.taskIds, subjectId: view.bookletId } } };
+    const completed = await env.testerDecision(result, true);
+    expect(completed.operation.state).toBe("succeeded");
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: versionId })).toBe(1);
+    expect((await env.repository.getRun(env.runId))!).toMatchObject({ status: "queued", activeOperationId: null, counters: { logicalText: before.logicalText + 1, logicalImage: before.logicalImage, payableText: 0, payableImage: 0 } });
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
+  });
+  it("honors a saved location-first manager delegation while characters remain missing", async () => {
+    const env = await setup("playful_kid", 15);
+    for (let step = 0; step < 80; step++) {
+      const view = (await env.context.getRunView(env.runId))!;
+      if (view.nextNarrativeTask === "J09") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    const view = (await env.context.getRunView(env.runId))!, run = (await env.repository.getRun(env.runId))!;
+    const source = view.currentArtifacts.find((item) => item.taskId === "J07")!;
+    const content = source.versions.find((item) => item.id === source.currentVersionId)!.content as { locations: { locationId: string }[] };
+    const subjectId = content.locations[0].locationId, operationId = randomUUID(), workflowRunId = randomUUID();
+    const operation = await env.repository.prepareOperation({ runId: run._id, operationId, expectedRevision: run.revision, role: "manager", taskId: null,
+      subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1, inputFingerprint: "e".repeat(64), nowMs: env.next() });
+    await env.repository.claimOperation({ runId: run._id, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: env.next() });
+    await env.repository.completeOperation({ envelope: { runId: run._id, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint,
+      result: { kind: "delegate", payload: { taskId: "J10", subjectKind: "location", subjectId } } }, parentWorkflowRunId: null, nowMs: env.next() });
+    await env.database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: { verifiedWorkflowId: env.config.bindings.find((item) => item.role === "manager")!.publishedWorkflowId } });
+    await env.dispatcher().advance(run._id);
+    expect((await env.repository.listOperations(run._id)).at(-1)).toMatchObject({ role: "specialist", taskId: "J10", subjectId, parentWorkflowRunId: workflowRunId, state: "succeeded" });
+  });
+  it("keeps revision clarification and saved answers scoped to one character", async () => {
+    const env = await setup("playful_kid", 15), view = await env.reachSheet("image");
+    const target = view.nextSheetWork!.target, versionId = view.nextSheetWork!.currentVersionId!;
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J09", artifactVersionId: versionId, instruction: "Retain the same character; clarify expressions." } } });
+    async function specialist(subjectId: string) {
+      const run = (await env.repository.getRun(env.runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
+      const operation = await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+        role: "specialist", taskId: "J09", subjectKind: "character", subjectId, providerKind: "text", attempt: 1, inputFingerprint: randomUUID().replaceAll("-", "").repeat(2), nowMs: env.next() });
+      const identity = { runId: env.runId, operationId, workflowRunId, parentWorkflowRunId: null };
+      await env.repository.claimOperation({ ...identity, nowMs: env.next() });
+      const savedContext = await env.context.getOperationContext(identity);
+      return { operation, savedContext, complete: (result: RoleResult) => env.repository.completeOperation({
+        envelope: { runId: env.runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: env.next() }) };
+    }
+    const first = await specialist(target.subjectId);
+    await first.complete({ kind: "clarification", payload: { question: "Which expressions should this character show?" } });
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "answer", questionId: first.operation._id, text: "Curious, Concerned, Relieved" } } });
+    const resumed = await specialist(target.subjectId);
+    expect(resumed.savedContext).toMatchObject({ role: "specialist", subjectId: target.subjectId, matchingRevision: { artifactVersionId: versionId },
+      questionAnswers: [{ questionId: first.operation._id, answer: "Curious, Concerned, Relieved" }] });
+    expect((await env.repository.getRun(env.runId))?.textRevisions).toBe(1);
+    await resumed.complete(simulateNarrativeResult(resumed.savedContext, "simulated"));
+    const castVersion = (await env.database.collections.artifact_versions.findOne({ _id: target.sourceVersionIds[0] }))!;
+    const otherId = (JSON.parse(castVersion.contentJson).characters as { characterId: string }[]).find((item) => item.characterId !== target.subjectId)!.characterId;
+    const other = await specialist(otherId);
+    expect(other.savedContext).toMatchObject({ role: "specialist", subjectId: otherId, currentTarget: null, matchingRevision: null, questionAnswers: [] });
+  });
+  it("rejects wrong sheet subjects and changed sources before saving a proposal", async () => {
+    const env = await setup("playful_kid", 15), view = await env.reachSheet("image"), target = view.nextSheetWork!.target;
+    const run = (await env.repository.getRun(env.runId))!;
+    await expect(env.repository.prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
+      role: "specialist", taskId: "J10", subjectKind: "character", subjectId: target.subjectId, providerKind: "text", attempt: 1, inputFingerprint: "c".repeat(64), nowMs: env.next() })).rejects.toMatchObject({ code: "invalid_input" });
+    const cast = view.currentArtifacts.find((item) => item.taskId === "J06")!;
+    await env.database.collections.artifacts.updateOne({ _id: cast.id }, { $set: { state: "needs_review" } });
+    await expect(env.testerDecision({ kind: "decision", payload: { decision: { action: "approve", versionIds: [view.nextSheetWork!.currentVersionId!] } } })).rejects.toMatchObject({ code: "conflict" });
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: view.nextSheetWork!.currentVersionId! })).toBe(0);
+  });
+  it("recovers a discarded sheet response and completes after an in-flight pause without replay", async () => {
+    const env = await setup("enthusiast_parent", 15); await env.reachSheet("image"); env.faults({ lost: true, pause: true });
+    await env.dispatcher().advance(env.runId);
+    expect((await env.repository.getRun(env.runId))?.status).toBe("paused");
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
+    await env.repository.resume({ runId: env.runId, expectedRevision: (await env.repository.getRun(env.runId))!.revision, nowMs: env.next() });
+    env.faults({});
+    for (let step = 0; step < 30; step++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
+    expect((await env.context.getRunView(env.runId))?.nextNarrativeTask).toBe("slice_complete");
+    expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image")).toHaveLength(5);
+    expect((await env.repository.getRun(env.runId))?.counters).toMatchObject({ logicalImage: 5, payableImage: 0, payableText: 0 });
+  });
+  it("rejects retained legacy indexes before preparing or reserving a sheet specialist", async () => {
+    const env = await setup("playful_kid", 15);
+    await env.reachSamples();
+    await env.database.collections.artifacts.createIndex({ bookletId: 1, artifactType: 1 }, { unique: true, name: "artifacts_booklet_type_unique" });
+    for (let step = 0; step < 6; step++) {
+      const view = (await env.context.getRunView(env.runId))!;
+      if (view.nextNarrativeTask === "J09") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    const before = (await env.repository.getRun(env.runId))!;
+    const character = (await env.database.collections.artifact_versions.findOne({ _id: (await env.context.getRunView(env.runId))!.currentArtifacts.find((item) => item.taskId === "J06")!.currentVersionId! }))!;
+    const subjectId = JSON.parse(character.contentJson).characters[0].characterId as string;
+    await expect(env.repository.prepareOperation({ runId: env.runId, operationId: randomUUID(), expectedRevision: before.revision,
+      role: "specialist", taskId: "J09", subjectKind: "character", subjectId, providerKind: "text", attempt: 1, inputFingerprint: "b".repeat(64), nowMs: env.next() })).rejects.toMatchObject({ code: "invalid_state" });
+    expect((await env.repository.getRun(env.runId))?.counters).toEqual(before.counters);
+    expect(await env.database.collections.experiment_operations.countDocuments({ runId: env.runId, taskId: "J09" })).toBe(0);
+  });
+  it("does not explicitly approve an unassembled sheet draft", async () => {
+    const env = await setup("professional_creator", 15), view = await env.reachSheet("image");
+    const versionId = view.nextSheetWork!.currentVersionId!;
+    await expect(env.testerDecision({ kind: "decision", payload: { decision: { action: "approve", versionIds: [versionId] } } })).rejects.toMatchObject({ code: "invalid_result" });
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: versionId })).toBe(0);
+  });
+  it.each(["explicit", "delegated"] as const)("rejects corrupt sheet bytes during %s acceptance", async (origin) => {
+    const env = await setup(origin === "explicit" ? "professional_creator" : "playful_kid", 15), view = await env.reachSheet("review");
+    const versionId = view.nextSheetWork!.currentVersionId!;
+    const sheet = view.currentArtifacts.find((item) => item.currentVersionId === versionId)!;
+    const build = (sheet.versions.find((item) => item.id === versionId)!.content as { build: { assetId: string } }).build;
+    const asset = (await env.database.collections.assets.findOne({ _id: build.assetId }))!;
+    env.store.files.set(asset.uri, new Uint8Array([1]));
+    const decision: RoleResult = origin === "explicit" ? { kind: "decision", payload: { decision: { action: "approve", versionIds: [versionId] } } } :
+      { kind: "decision", payload: { decision: { action: "delegate", taskIds: view.activeDelegation!.taskIds, subjectId: view.bookletId } } };
+    await expect(env.testerDecision(decision)).rejects.toMatchObject({ code: "invalid_state" });
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: versionId })).toBe(0);
+  });
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("runs every reference subject from an empty %s run without seeded approvals", async (persona) => {
+    const env = await setup(persona, 15);
+    let outcome: string = "waiting";
+    for (let step = 0; step < 110; step++) {
+      outcome = await env.dispatcher().advance(env.runId);
+      expect(outcome).not.toBe("blocked");
+      if (outcome === "boundary") break;
+    }
+    expect(outcome).toBe("boundary");
+    const view = (await env.context.getRunView(env.runId))!;
+    const sheets = view.currentArtifacts.filter((item) => item.taskId === "J09" || item.taskId === "J10");
+    const count = persona === "professional_creator" ? 4 : 3;
+    expect(sheets).toHaveLength(count);
+    expect(sheets.filter((item) => item.taskId === "J09")).toHaveLength(2);
+    for (const sheet of sheets) {
+      expect(sheet.state).toBe("approved");
+      const assembled = sheet.versions.find((version) => version.id === sheet.currentVersionId)!;
+      expect(assembled.approval?.origin).toBe(persona === "professional_creator" ? "explicit" : "delegated");
+      const draft = sheet.versions.find((version) => version.id === assembled.sourceVersionId)!;
+      expect(draft.approval).toBeNull();
+      expect(assembled.dependencyVersionIds).toEqual([draft.id, ...(draft.dependencyVersionIds as string[])]);
+      const proposal = await env.repository.getOperation(draft.sourceOperationId!);
+      expect(proposal).toMatchObject({ role: "specialist", subjectKind: sheet.subjectKind, subjectId: sheet.subjectId, reservationCount: 1 });
+      expect(proposal?.parentWorkflowRunId).toBeTruthy();
+    }
+    const images = (await env.repository.listOperations(env.runId)).filter((operation) => operation.role === "image");
+    expect(images).toHaveLength(count + 2);
+    expect(images.every((operation) => operation.state === "succeeded" && operation.verifiedWorkflowId && operation.parentWorkflowRunId)).toBe(true);
+    expect(view.counters).toMatchObject({ logicalImage: count + 2, payableImage: 0, payableText: 0 });
+    expect(env.store.files.size).toBe(count + 2);
+    expect((await env.database.collections.booklets.findOne({ _id: view.bookletId }))?.currentStage).toBe("J11");
+    const postCount = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).toBe("boundary");
+    expect(env.runtime.start).toHaveBeenCalledTimes(postCount);
+  });
   it.each([6, 11] as const)("preserves the retained %s-slot no-progress hash at count two", async (slots) => {
     const env = await setup("professional_creator", slots);
     await env.dispatcher().advance(env.runId);
