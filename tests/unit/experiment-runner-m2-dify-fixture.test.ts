@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CASES, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
-import { styleModuleHash, type VisualStyleProposal } from "@/lib/contracts/experiment-references";
+import { parseReferenceProposal, styleModuleHash, type VisualStyleProposal } from "@/lib/contracts/experiment-references";
+import { simulateReferenceProposal } from "@/lib/experiment-runner/reference-fixtures";
 
 type Context = Parameters<typeof simulateNarrativeResult>[0];
 const context = (value: unknown) => value as Context;
@@ -67,10 +68,98 @@ function styleReview(persona: Persona) {
   const approved = sources.slice(0, 7).map((item) => ({ taskId: item.taskId, state: "approved", currentVersionId: item.id, versions: [] }));
   const tester = { role: "tester", persona, bookletId: id(5), currentArtifacts: [...approved, artifact],
     creatorMessages: [{ id: id(6) }], pendingDecision: null, activeDelegation: { taskIds: sources.map((item) => item.taskId) } };
-  return { content, version, artifact, approved, tester };
+  return { content, version, artifact, approved, tester, sources };
+}
+
+function sheetCase(persona: Persona, task: "J09" | "J10", index = 0) {
+  const { sources, content, version } = styleReview(persona);
+  const list = sources[task === "J09" ? 5 : 6];
+  const subjects = (list.content as Record<string, Record<string, unknown>[]>)[task === "J09" ? "characters" : "locations"];
+  const subjectId = subjects[index][task === "J09" ? "characterId" : "locationId"] as string;
+  const saved: Record<string, unknown> = { role: "specialist", taskId: task, persona, brief: CASES[persona].brief,
+    subjectId, currentTarget: null, matchingRevision: null, questionAnswers: [],
+    approvedSources: [list, { taskId: "J08", id: version.id, content }] };
+  return { saved, list, content, version, subjectId };
+}
+
+function compareSheet(saved: Record<string, unknown>) {
+  const task = saved.taskId as "J09" | "J10";
+  const rows = saved.approvedSources as { taskId: string; id: string; content: unknown }[];
+  const final = rows.find((item) => item.taskId === (task === "J09" ? "J06" : "J07"))!;
+  const style = rows.find((item) => item.taskId === "J08")!;
+  const current = saved.currentTarget as { state: string; currentVersionId: string; versions: { id: string; content: unknown }[] } | null;
+  const revision = saved.matchingRevision as { instruction: string } | null;
+  const common = { mode: "simulated" as const, persona: saved.persona as Persona, brief: saved.brief as string,
+    finalList: { versionId: final.id, content: final.content }, style: { versionId: style.id, content: style.content },
+    styleVersionId: style.id, targetId: saved.subjectId as string,
+    currentContent: current?.versions.find((item) => item.id === current.currentVersionId)?.content,
+    sourceChanged: current?.state === "needs_review", revision: revision?.instruction,
+    answers: saved.questionAnswers as { question: string; answer: string }[] };
+  const expected = task === "J09" ? simulateReferenceProposal("J09", common) : simulateReferenceProposal("J10", common);
+  const output = python({ started: true, mode: "simulated", inputFingerprint: "a".repeat(64), context: saved });
+  const result = JSON.parse(output.booklet_result).result as { kind: string; payload: { content?: unknown; question?: string; taskId?: string } };
+  if (expected.kind === "clarification") expect(result).toEqual({ kind: "clarification", payload: { question: expected.question } });
+  else {
+    expect(result).toEqual({ kind: "proposal", payload: { taskId: task, content: expected.content } });
+    parseReferenceProposal(task, "proposal", result.payload.content);
+  }
+  return result;
 }
 
 describe("Dify M2 Python simulation parity", () => {
+  it.each(Object.keys(CASES) as Persona[])("matches each character/location sheet proposal for %s", (persona) => {
+    for (const task of ["J09", "J10"] as const) {
+      const count = task === "J09" || persona === "professional_creator" ? 2 : 1;
+      for (let index = 0; index < count; index++) {
+        const result = compareSheet(sheetCase(persona, task, index).saved);
+        if (task === "J10") {
+          expect(result.payload.content).toMatchObject({ requiredFeatures: [] });
+          expect((result.payload.content as { sheetPromptModule: string }).sheetPromptModule).toContain("Include required features: none specified.");
+        }
+      }
+    }
+  });
+
+  it.each(["J09", "J10"] as const)("preserves %s revisions and refreshes stale sources", (task) => {
+    const { saved, content } = sheetCase("professional_creator", task);
+    const initial = compareSheet(saved).payload.content as Record<string, unknown>;
+    const retained = { ...initial, title: "Retained sheet", sheetPromptModule: "Retained subject direction", reviewQuestions: ["Existing review"] };
+    const currentTarget = { state: "draft", currentVersionId: id(90), versions: [{ id: id(90), content: retained }] };
+    compareSheet({ ...saved, currentTarget, matchingRevision: { instruction: "Keep the stable anchors" }, questionAnswers: [{ question: "Detail?", answer: "Minimal texture" }] });
+    const styleText = content.stylePromptModule + "\n\tExact café style 雨  ";
+    const changed = { ...content, stylePromptModule: styleText, stylePromptModuleHash: styleModuleHash(styleText),
+      samples: content.samples.map((item) => ({ ...item, build: { ...item.build, prompt: styleText + "\n" + item.purpose, stylePromptModuleHash: styleModuleHash(styleText) } })) };
+    const sources = (saved.approvedSources as Record<string, unknown>[]).map((item) => item.taskId === "J08" ? { ...item, id: id(91), content: changed } : item);
+    const refreshed = compareSheet({ ...saved, currentTarget: { ...currentTarget, state: "needs_review" }, approvedSources: sources });
+    expect(refreshed.payload.content).toMatchObject({ styleVersionId: id(91), stylePromptModule: styleText });
+  });
+
+  it("asks for distinct expressions and consumes the saved answer", () => {
+    const { saved } = sheetCase("enthusiast_parent", "J09");
+    const rows = saved.approvedSources as { taskId: string; id: string; content: { characters?: Record<string, unknown>[] } }[];
+    const sources = rows.map((item) => item.taskId === "J06" ? { ...item, content: { ...item.content,
+      characters: item.content.characters!.map((character) => ({ ...character, expressions: ["Joy", " Joy "] })) } } : item);
+    const first = compareSheet({ ...saved, approvedSources: sources });
+    expect(first.kind).toBe("clarification");
+    compareSheet({ ...saved, approvedSources: sources, questionAnswers: [{ question: first.payload.question, answer: "Concern, Concern; Relief" }] });
+  });
+
+  it("rejects missing, foreign and inconsistent sheet evidence without execution", () => {
+    const { saved, content } = sheetCase("playful_kid", "J09");
+    const run = (context: Record<string, unknown>) => python({ started: true, mode: "simulated", inputFingerprint: "a".repeat(64), context });
+    expect(() => run({ ...saved, subjectId: id(999) })).toThrow();
+    expect(() => run({ ...saved, brief: "Changed fixed brief" })).toThrow();
+    const sources = saved.approvedSources as Record<string, unknown>[];
+    expect(() => run({ ...saved, approvedSources: sources.slice(0, 1) })).toThrow();
+    expect(() => run({ ...saved, approvedSources: [...sources, sources[0]] })).toThrow();
+    for (const invalidStyle of [{ ...content, samples: undefined }, { ...content, stylePromptModuleHash: "0".repeat(64) },
+      { ...content, samples: content.samples.map((item) => ({ ...item, build: { ...item.build, prompt: "Missing exact style" } })) }]) {
+      expect(() => run({ ...saved, approvedSources: [sources[0], { ...sources[1], content: invalidStyle }] })).toThrow();
+    }
+    const initial = compareSheet(saved).payload.content as Record<string, unknown>;
+    expect(() => run({ ...saved, currentTarget: { state: "draft", currentVersionId: id(90), versions: [{ id: id(90), content: { ...initial, characterId: id(999) } }] } })).toThrow();
+  });
+
   for (const persona of Object.keys(CASES) as Persona[]) {
     it(`matches J01-J08 and manager routes for ${persona}`, () => {
       const { sources } = chain(persona);

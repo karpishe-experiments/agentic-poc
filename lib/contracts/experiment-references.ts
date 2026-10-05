@@ -72,7 +72,9 @@ export const locationSheetProposalSchema = sheetBase.extend({
   locationId: opaqueIdSchema,
   locationDefinitionProfile: text,
   stableAnchors: z.array(text).min(1).max(100),
-  requiredFeatures: z.array(text).min(1).max(100),
+  // J07 permits no additional required features. Keep that approved empty list;
+  // the nonempty stable anchors still identify the location.
+  requiredFeatures: list,
   overview: z.literal("isometric"),
   supportingViews: z.array(z.object({ angle: text, shows: text })).min(2).max(10)
     .refine((views) => new Set(views.map((view) => view.angle)).size === views.length),

@@ -395,6 +395,43 @@ host files or authorize apply. The old subject-restricting index remains, so
 J09/J10 sheet admission also requires the separately authorized index transition.
 Local sheet implementation can proceed independently of those live checkpoints.
 
+### S5 sheet-fixture preparation
+
+Extend the existing Python fixture and preparation list with independent J09/J10
+proposal candidates, not live runtime bindings. Candidate specialist context has
+`subjectId`, `approvedSources` containing exactly one J06/J07 final list and one
+assembled J08 source, current target, matching revision and saved question answers.
+Source entries retain `{taskId,id,content}`. Booklet must verify actual approval,
+ownership and saved assets when runtime admission is implemented; the fixture
+does not provide that proof. Preserve both recurring character targets and every
+final location, exact shared style bytes/hash, montage views and distinct
+expressions. A missing expression set asks a question and consumes its saved
+answer rather than inventing expressions or looping on an answered question.
+
+Compare each persona's actual J01–J07 fixture outputs and assembled-style shape
+with the existing TypeScript reference fixtures. J07 can retain an empty
+`requiredFeatures` list. J10 accepts that approved empty list while keeping
+nonempty stable anchors and required supporting views; it must not fabricate
+new required features to satisfy a stricter downstream parser. Quality remains
+warning-based. Text proposals still cannot establish sheet assets or acceptance.
+
+Verify Python/TypeScript parity, all fourteen prepared text modules, existing
+reference contracts/requests and image graphs, typecheck and lint without retries.
+Prepare both candidate DSLs with empty secret bindings. Two clean reviews precede
+publication. Runtime sheet admission/materialization, image scheduling/assembly,
+tester gating, scoped revisions, private keys and live execution remain pending.
+
+Final local verification passed isolated typecheck, full lint, 43 tests across
+six parity/graph/reference suites without retries, and twelve agent fixtures.
+Both J09/J10 preparation commands emitted nine nodes and empty callback bindings.
+The seven executable/test inputs matched the verification checkout. The first
+parity run exposed the empty-feature incompatibility above; a later graph test
+still expected twelve modules and was corrected. A main-checkout typecheck hit
+the already known stale generated types and nested worktrees; it is not counted
+as a pass. Links and whitespace passed. Independent reviews and publication
+remain pending; no Dify import, binding expansion, deployment or provider call
+occurred in this preparation slice.
+
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
 `knownRelationship`, `knownFacts` and `openQuestions`; package notes are

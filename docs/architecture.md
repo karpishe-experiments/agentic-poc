@@ -53,9 +53,13 @@ and J01/J02 boundary until M2 bindings are verified. Configuration accepts only
 complete six-slot M1, eleven-slot J01–J07 or thirteen-slot J08/image bundles,
 not partial profiles. The thirteen-slot profile adds a J08 specialist and one
 generic image binding; actual staging bindings remain pending. The M2 module
-preparation profile includes twelve independent text modules through J08 and the
+preparation profile includes fourteen independent text modules through J10 and the
 separate model-free image workflow. Local Python/TypeScript parity covers J08
-style proposals, revisions and assembled-style tester decisions.
+style proposals, revisions and assembled-style tester decisions. J09/J10 preparation
+uses a supplied final-list subject ID and exact assembled-style source; these
+proposal candidates do not enable runtime sheet admission or acceptance. A valid
+J07 list can have no additional required features; J10 preserves that empty list
+and the nonempty approved anchors instead of inventing a feature.
 The app API executes the latest publication; saved publication evidence is not
 an execution-version selector. Verified completed slice boundaries remain saved
 after a binding change. Unfinished changed configurations are blocked and need
