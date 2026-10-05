@@ -576,6 +576,13 @@ final-page execution; host validation and delivery are subsequent work.
 
 ## Verification and exit
 
+The local J13 source verifier checks the current approved J12 page, exact
+dependency edges, and selected reference bytes against saved hashes, sizes and
+dimensions. It returns decoded MIME types and reports MIME-label differences as
+warnings. It does not upload, dispatch or save a page image. Seventeen focused
+tests passed without retries. The new source-verifier tests mock upstream style
+and sheet assembly checks; they do not prove the complete production pipeline.
+
 Focused tests cover each J11–J13 clarification/draft/revision contract and prove
 multi-panel layouts remain one image, cover completion,
 exact lettering/style propagation, reference attachment membership, selected-batch
