@@ -16,6 +16,37 @@ needed for this check.
 
 ## Entry gate
 
+### Model-free file-input probe evidence — 2026-10-05
+
+The separate draft `issue65_m3_file_input_probe`, app
+`64e99154-2e1d-4d87-a52e-fb43854325fd`, contains only Start and End nodes.
+Its candidate [DSL](dify/m3-file-input-probe.json) passes an ordered custom
+`file-list` input directly to output. Fifteen distinct synthetic 8×8 PNG files
+were uploaded through administrative MCP. No provider or callback was invoked.
+
+| Input count | Retained draft run | Observed result |
+| --- | --- | --- |
+| 4 | `1fa351e8-5685-4e81-a233-12aed59a2155` | Succeeded; order, identities and downloaded byte digests matched |
+| 9 | `aef4c8ca-1f18-4160-8612-19feec697552` | Succeeded; count and order matched; byte verification remains pending |
+| 11 | `fa25a669-b9c4-49de-8d5d-f0a8eba7c9e0` | Succeeded; count and order matched; byte verification remains pending |
+| 15 | `75514ace-326b-4eef-9ef6-95d25976ffed` | Succeeded; count and order matched; byte verification remains pending |
+| 16 | `3003eb1f-0a0f-4a1b-8f29-578c2f70063d` | Failed at the configured 15-file input bound; zero reported tokens |
+
+The sixteen-input check reused one file identity to exceed the configured count;
+it does not establish a distinct-file or universal platform limit. All five runs
+reported zero tokens. The draft limit permits fifteen files and rejects sixteen.
+Two focused DSL contract tests passed without retries.
+
+A later download attempt using URLs retained in the nine-file trace was rejected.
+The cause is not yet verified; signed-link expiry is a hypothesis, not a finding.
+Do not retain signed URLs as durable asset locations or replay generation to obtain
+another URL. Booklet must retain original bytes in its AssetStore and use stable
+file identities for subsequent operations. Verify the recovery path separately.
+
+This is administrative draft evidence only. Publication, application-key upload
+with consistent end-user ownership, measured size limits and judge/provider image
+access remain pending. These results do not clear final-page dispatch readiness.
+
 Reconcile M2's subject artifacts, accepted references, image transport and grant
 rules. Require all three simulated reference-package exits. Verify Dify file
 inputs can carry the relevant reference set and judge image set using fixture
