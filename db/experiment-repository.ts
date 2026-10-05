@@ -119,7 +119,7 @@ export function createExperimentRepository(database: Database, options: { store?
   async function prepareOperation(raw: unknown): Promise<ExperimentOperationDocument> {
     const input = parse(prepareInput, raw);
     const sheetTask = input.taskId === "J09" || input.taskId === "J10";
-    if ((input.role === "image") !== (input.providerKind === "image") || (input.role === "specialist" && !isNarrativeTask(input.taskId) && !sheetTask) || (input.role !== "specialist" && input.role !== "image" && input.taskId)) throw new ExperimentRepositoryError("invalid_input", "Role, task and provider kind do not match.");
+    if ((input.role === "image") !== (input.providerKind === "image") || (input.role === "specialist" && !isNarrativeTask(input.taskId) && !sheetTask && input.taskId !== "J11") || (input.role !== "specialist" && input.role !== "image" && input.taskId)) throw new ExperimentRepositoryError("invalid_input", "Role, task and provider kind do not match.");
     if (input.imageRequest && (input.role !== "image" || imageRequestFingerprint(input.imageRequest) !== input.inputFingerprint)) throw new ExperimentRepositoryError("invalid_input", "Image request must match its operation fingerprint.");
     const idempotencyKey = digest(canonical([input.runId, input.role, input.taskId, input.subjectKind, input.subjectId, input.inputFingerprint, input.attempt]));
     const existing = await operations.findOne({ idempotencyKey });
@@ -136,7 +136,7 @@ export function createExperimentRepository(database: Database, options: { store?
         if (input.subjectKind === "book" && input.subjectId !== run.bookletId) throw new ExperimentRepositoryError("invalid_input", "Book subject must match booklet ID.");
         if (input.role === "specialist" && input.subjectKind !== (input.taskId === "J09" ? "character" : input.taskId === "J10" ? "location" : "book")) throw new ExperimentRepositoryError("invalid_input", "Specialist task requires its matching subject kind.");
         if (input.imageRequest) await assertCurrentImageSources(database, session, run, input.imageRequest);
-        const narrative = input.role === "specialist" && (isNarrativeTask(input.taskId) || input.taskId === "J09" || input.taskId === "J10") ? await prepareNarrativeContext(database, session, run, input.taskId, input.subjectKind, input.subjectId) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
+        const narrative = input.role === "specialist" && (isNarrativeTask(input.taskId) || input.taskId === "J09" || input.taskId === "J10" || input.taskId === "J11") ? await prepareNarrativeContext(database, session, run, input.taskId, input.subjectKind, input.subjectId, options.store) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
         const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
         if (input.imageRequest) {
           operation.imageRequestJson = JSON.stringify(input.imageRequest);

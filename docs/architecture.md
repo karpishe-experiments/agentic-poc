@@ -93,6 +93,11 @@ legacy index, and this release does not establish live sheet readiness.
 Canonical experiment plans and evidence remain on `master`, in
 `docs/accepted/2026-09-27_dify-booklet-runner/`.
 
+The reviewed J11 runner adds saved pagination, stable Booklet-owned page IDs,
+exact-source approvals and GET-only recovery. Sixteen bindings enable J11 after
+private configuration and drained activation; existing profiles retain their
+boundaries. Approved J11 stops at J12, not completed booklet generation.
+
 Every legacy-profile booklet has eight ordered artifact records:
 
 ```text

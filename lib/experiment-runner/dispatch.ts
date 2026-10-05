@@ -15,6 +15,7 @@ import { runTrackedMutation } from "@/lib/application/deployment-control";
 import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks } from "@/lib/experiment-runner/reference-targets";
+import { configuredPaginationTask } from "@/lib/experiment-runner/pagination-tasks";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -253,6 +254,10 @@ export function createExperimentDispatcher(deps: {
               result.payload?.subjectKind === (delegated === "J09" ? "character" : "location") && result.payload.subjectId &&
               (!pending || matchingRevision) && (!target || target.state === "needs_review" || matchingRevision)) {
             role = "specialist"; taskId = delegated; subjectKind = result.payload.subjectKind; subjectId = result.payload.subjectId; parentWorkflowRunId = last.workflowRunId;
+          } else if (result?.kind === "delegate" && delegated === "J11" && configuredPaginationTask(run.configurationJson) &&
+              view.nextNarrativeTask === "J11" && (!pending || matchingRevision) &&
+              (!target || target.state === "needs_review" || matchingRevision)) {
+            role = "specialist"; taskId = delegated; parentWorkflowRunId = last.workflowRunId;
           } else if (result?.kind === "delegate" && isNarrativeTask(delegated) && configuredNarrativeTasks(run.configurationJson).includes(delegated) &&
               currentApprovedSourceIds(delegated, view.currentArtifacts) !== null && (!pending || matchingRevision) &&
               (!target || target.state === "needs_review" || matchingRevision)) {

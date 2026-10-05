@@ -5,9 +5,10 @@ import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { assembledVisualStyleSchema } from "@/lib/contracts/experiment-references";
-import { configuredNarrativeTasks, currentApprovedSourceIds, NARRATIVE_DEPENDENCIES, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
+import { configuredNarrativeTasks, currentApprovedSourceIds, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks, nextReferenceSheetWork, referenceSheetTargets } from "@/lib/experiment-runner/reference-targets";
+import { configuredPaginationTask, currentPaginationSourceIds } from "@/lib/experiment-runner/pagination-tasks";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 type NextTask = SpecialistTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
@@ -58,12 +59,24 @@ export function createExperimentContextService(database: Database) {
     return nextReferenceSheetWork(targets, saved);
   }
 
+  function paginationSources(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[]) {
+    if (!configuredPaginationTask(run.configurationJson)) return null;
+    return currentPaginationSourceIds(run.bookletId, run._id, sheetTargets(run, projected), projected.flatMap((item) => {
+      if (!item.subjectId || (item.subjectKind !== "book" && item.subjectKind !== "character" && item.subjectKind !== "location")) return [];
+      const dependencies = item.versions.find((version) => version.id === item.currentVersionId)?.dependencyVersionIds as string[] | undefined;
+      return [{ bookletId: run.bookletId, runId: run._id, taskId: item.taskId, subjectKind: item.subjectKind, subjectId: item.subjectId,
+        state: item.state, currentVersionId: item.currentVersionId,
+        sourceVersionIds: item.taskId === "J09" || item.taskId === "J10" ? dependencies?.slice(-2) : dependencies }];
+    }));
+  }
+
   function chooseNext(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[]): NextTask {
     if (run.pauseRequested || run.status === "paused" || run.status === "blocked" || run.status === "failed" || run.status === "completed" || run.activeOperationId) return null;
     const enabled = configuredNarrativeTasks(run.configurationJson);
     const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: SpecialistTask; subjectId?: string; subjectKind?: string } | null;
     if (pending?.kind === "question") return "tester";
     if (pending?.kind === "revision") {
+      if (pending.taskId === "J11") return paginationSources(run, projected) !== null ? "J11" : null;
       if (pending.taskId === "J09" || pending.taskId === "J10") return sheetTargets(run, projected).some((target) => target.taskId === pending.taskId && target.subjectKind === pending.subjectKind && target.subjectId === pending.subjectId) ? pending.taskId : null;
       return pending.taskId && enabled.includes(pending.taskId) && currentApprovedSourceIds(pending.taskId, projected) !== null ? pending.taskId : null;
     }
@@ -76,7 +89,14 @@ export function createExperimentContextService(database: Database) {
     if (projected.some((item) => enabled.some((task) => task === item.taskId) && item.state === "draft")) return "tester";
     if (!enabled.every((task) => projected.some((item) => item.taskId === task && item.state === "approved" && item.currentVersionId))) return null;
     const work = sheetWork(run, projected);
-    return work ? work.kind === "proposal" ? work.target.taskId : work.kind === "image" ? "sheet_image" : "tester" : "slice_complete";
+    if (work) return work.kind === "proposal" ? work.target.taskId : work.kind === "image" ? "sheet_image" : "tester";
+    if (configuredPaginationTask(run.configurationJson)) {
+      const layout = projected.find((item) => item.taskId === "J11");
+      if ((!layout || layout.state === "needs_review") && paginationSources(run, projected) !== null) return "J11";
+      if (layout?.state === "draft") return "tester";
+      if (layout?.state !== "approved") return null;
+    }
+    return "slice_complete";
   }
 
   async function getRunView(runId: string) {
@@ -88,7 +108,7 @@ export function createExperimentContextService(database: Database) {
     const enabled = configuredNarrativeTasks(run.configurationJson);
     const sheetsEnabled = configuredReferenceSheetTasks(run.configurationJson).length > 0;
     const artifactRows = await artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId, $or: [
-      { subjectKind: "book", subjectId: run.bookletId, taskId: { $in: [...enabled] } },
+      { subjectKind: "book", subjectId: run.bookletId, taskId: { $in: [...enabled, ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : [])] } },
       ...(sheetsEnabled ? [{ taskId: "J09" as const, subjectKind: "character" as const }, { taskId: "J10" as const, subjectKind: "location" as const }] : []),
     ] }).sort({ taskId: 1, subjectId: 1 }).toArray();
     if (new Set(artifactRows.map((row) => `${row.taskId}:${row.subjectKind}:${row.subjectId}`)).size !== artifactRows.length) deny("Run has duplicate task subject artifacts.");
@@ -149,23 +169,23 @@ export function createExperimentContextService(database: Database) {
         sheetTargets(run, view.currentArtifacts).find((target) => target.taskId === eligibleRoute && (pending?.kind === "revision" ? target.subjectId === pending.subjectId && target.subjectKind === pending.subjectKind : target.subjectId === view.nextSheetWork?.target.subjectId)) ?? null : null;
       return { role: "manager" as const, run: view, eligibleRoute, ...(eligibleTarget ? { eligibleTarget } : {}) };
     }
-    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson)] };
+    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : [])] };
     if (operation.role === "specialist") {
       const enabled = configuredNarrativeTasks(run.configurationJson);
       const isSheet = operation.taskId === "J09" || operation.taskId === "J10";
-      if (!operation.taskId || (!isSheet && (!enabled.includes(operation.taskId as NarrativeTask) || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId))) deny("Specialist task is outside this slice.");
+      const isPagination = operation.taskId === "J11" && configuredPaginationTask(run.configurationJson);
+      if (!operation.taskId || (!isSheet && ((!isPagination && !enabled.includes(operation.taskId as NarrativeTask)) || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId))) deny("Specialist task is outside this slice.");
       const taskId = operation.taskId as SpecialistTask;
       const currentTarget = view.currentArtifacts.find((item) => item.taskId === taskId && item.subjectKind === operation.subjectKind && item.subjectId === operation.subjectId) ?? null;
       if ((currentTarget?.currentVersionId ?? null) !== operation.expectedTargetVersionId) deny("Specialist target version changed.");
       const target = isSheet ? sheetTargets(run, view.currentArtifacts).find((item) => item.taskId === taskId && item.subjectKind === operation.subjectKind && item.subjectId === operation.subjectId) : null;
-      const expectedSources = isSheet ? target?.sourceVersionIds ?? null : currentApprovedSourceIds(taskId as NarrativeTask, view.currentArtifacts);
+      const expectedSources = isPagination ? paginationSources(run, view.currentArtifacts) : isSheet ? target?.sourceVersionIds ?? null : currentApprovedSourceIds(taskId as NarrativeTask, view.currentArtifacts);
       if (expectedSources === null || JSON.stringify(expectedSources) !== JSON.stringify(operation.dependencyVersionIds)) deny("Specialist source version changed.");
-      const sourceTasks = taskId === "J09" ? ["J06", "J08"] : taskId === "J10" ? ["J07", "J08"] : NARRATIVE_DEPENDENCIES[taskId];
-      const approvedSources = sourceTasks.map((dependency, index) => {
-        const artifact = view.currentArtifacts.find((item) => item.taskId === dependency);
-        const version = artifact?.versions.find((item) => item.id === expectedSources[index]);
+      const approvedSources = expectedSources.map((versionId) => {
+        const artifact = view.currentArtifacts.find((item) => item.currentVersionId === versionId);
+        const version = artifact?.versions.find((item) => item.id === versionId);
         if (!version) deny("Specialist approved source version is unavailable.");
-        return { taskId: dependency, ...version };
+        return { taskId: artifact!.taskId, ...(isPagination ? { subjectKind: artifact!.subjectKind, subjectId: artifact!.subjectId } : {}), ...version };
       });
       const pending = view.pendingDecision as { kind?: string; taskId?: SpecialistTask; artifactVersionId?: string } | null;
       const matchingRevision = pending?.kind === "revision" && pending.taskId === taskId && pending.artifactVersionId === operation.expectedTargetVersionId ? pending : null;

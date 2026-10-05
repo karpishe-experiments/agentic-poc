@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import type { Database } from "@/db/client";
+import { withMongoTransaction, type Database } from "@/db/client";
+import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
@@ -11,6 +12,7 @@ import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experimen
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { BOOK_TASKS } from "@/lib/experiment-runner/narrative-tasks";
+import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 import type { RuntimeExecution, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
@@ -22,7 +24,7 @@ class MemoryStore implements AssetStore {
   async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
   async exists(uri: string) { return this.files.has(uri); }
 }
-async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 = 13) {
+async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 = 13) {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const store = new MemoryStore(), repository = createExperimentRepository(database, { store: () => store });
   const context = createExperimentContextService(database);
@@ -30,9 +32,10 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 =
     { role: "manager", taskId: null, persona: null },
     ...BOOK_TASKS.map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(["J09", "J10"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
+    ...(slots === 16 ? [{ role: "specialist" as const, taskId: "J11" as const, persona: null }] : []),
     ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
     { role: "image", taskId: null, persona: null },
-  ].filter((item) => slots === 15 || (item.taskId !== "J09" && item.taskId !== "J10" && (slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
+  ].filter((item) => slots >= 15 || (item.taskId !== "J09" && item.taskId !== "J10" && (slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
     (slots === 11 || item.taskId === null || ["J01", "J02"].includes(item.taskId))))))
     .map((item) => ({ ...item, appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null, apiKey: "test-key" })) as BookletRunnerConfig["bindings"];
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test", callbackKey: "test-callback", bindings };
@@ -40,6 +43,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 =
   await repository.createRun({ runId, bookletId, persona, mode: "simulated", configuration: configurationSnapshot(config, persona), nowMs: clock++ });
   const saved = new Map<string, RuntimeExecution>();
   let lostImageResponse = false, pauseImage = false, pauseBeforeClaim = false, omitImageUpload = false, wrongImageDigest = false;
+  let lostPaginationResponse = false, lostManagerPaginationResponse = false;
   let acknowledgement: "normal" | "missing" | "nonstring" | "running" | "failed" = "normal";
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input) => {
@@ -67,12 +71,21 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 =
       } else {
         const result = simulateNarrativeResult(operationContext, "simulated");
         const envelope = { ...identity, inputFingerprint: operation.inputFingerprint, result };
-        await repository.completeOperation({ envelope: { runId, operationId: operation._id, workflowRunId, inputFingerprint: operation.inputFingerprint, result },
-          parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
+        const lostManager = binding.role === "manager" && lostManagerPaginationResponse &&
+          result.kind === "delegate" && result.payload.taskId === "J11";
+        if (!(binding.taskId === "J11" && lostPaginationResponse) && !lostManager) {
+          await repository.completeOperation({ envelope: { runId, operationId: operation._id, workflowRunId, inputFingerprint: operation.inputFingerprint, result },
+            parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
+        }
         outputs = { booklet_result: JSON.stringify(envelope) };
       }
       const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "succeeded", outputs };
       saved.set(workflowRunId, execution);
+      if (binding.taskId === "J11" && lostPaginationResponse) { lostPaginationResponse = false; return { kind: "unknown" }; }
+      if (binding.role === "manager" && lostManagerPaginationResponse && outputs.booklet_result &&
+          JSON.parse(outputs.booklet_result as string).result?.payload?.taskId === "J11") {
+        lostManagerPaginationResponse = false; return { kind: "unknown" };
+      }
       if (binding.role === "image" && acknowledgement !== "normal") {
         return { kind: "execution", execution: { ...execution,
           status: acknowledgement === "running" ? "running" : acknowledgement === "failed" ? "failed" : "succeeded",
@@ -99,23 +112,143 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 =
     }
     throw new Error("No pending sheet work");
   }
-  async function testerDecision(result: RoleResult, recover = false) {
+  async function reachPagination() {
+    for (let step = 0; step < 100; step++) {
+      if ((await context.getRunView(runId))?.nextNarrativeTask === "J11") return;
+      expect(await dispatcher().advance(runId)).not.toBe("blocked");
+    }
+    throw new Error("No pagination work");
+  }
+  async function testerDecision(result: RoleResult, recover = false, dispatched = false) {
     const run = (await repository.getRun(runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
     const operation = await repository.prepareOperation({ runId, operationId, expectedRevision: run.revision, role: "tester", taskId: null,
       subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1, inputFingerprint: randomUUID().replaceAll("-", "").repeat(2), nowMs: clock++ });
-    if (recover) await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: clock++ });
+    if (recover || dispatched) await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: clock++ });
     await repository.claimOperation({ runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: clock++ });
     if (recover) await repository.recordDispatchOutcome({ runId, operationId, parentWorkflowRunId: null, category: "unknown_outcome", nowMs: clock++ });
     return repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
   }
-  return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples, reachSheet, testerDecision,
-    faults: (value: { lost?: boolean; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+  return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples, reachSheet, reachPagination, testerDecision,
+    faults: (value: { lost?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
+      lostPaginationResponse = value.lostPagination ?? false;
+      lostManagerPaginationResponse = value.lostManagerPagination ?? false;
       omitImageUpload = value.omitUpload ?? false; wrongImageDigest = value.wrongDigest ?? false;
       pauseBeforeClaim = value.beforeClaim ?? false; acknowledgement = value.acknowledgement ?? "normal";
     }, next: () => clock++ };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it("rejects J11 preparation after a required sheet loses approval or saved bytes", async () => {
+    const env = await setup("professional_creator", 16);
+    await env.reachPagination();
+    const view = (await env.context.getRunView(env.runId))!;
+    const sheet = view.currentArtifacts.filter((item) => item.taskId === "J10").at(-1)!;
+    const approval = (await env.database.collections.approvals.findOne({ artifactVersionId: sheet.currentVersionId! }))!;
+    const prepare = async () => env.repository.prepareOperation({ runId: env.runId, operationId: randomUUID(),
+      expectedRevision: (await env.repository.getRun(env.runId))!.revision, role: "specialist", taskId: "J11",
+      subjectKind: "book", subjectId: view.bookletId, inputFingerprint: "b".repeat(64), attempt: 1, providerKind: "text", nowMs: env.next() });
+    await env.database.collections.approvals.deleteOne({ _id: approval._id });
+    await expect(prepare()).rejects.toMatchObject({ code: "invalid_result" });
+    await env.database.collections.approvals.insertOne(approval);
+    const version = sheet.versions.find((item) => item.id === sheet.currentVersionId)!;
+    const content = version.content as { build: { assetId: string } };
+    const asset = (await env.database.collections.assets.findOne({ _id: content.build.assetId }))!;
+    env.store.files.set(asset.uri, new Uint8Array([1]));
+    await expect(prepare()).rejects.toMatchObject({ code: "invalid_state" });
+    expect(await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J11" })).toBe(0);
+    expect((await env.repository.getRun(env.runId))?.activeOperationId).toBeNull();
+  });
+  it("preserves saved page identities across J11 revision and duplicate completion", async () => {
+    const env = await setup("professional_creator", 16);
+    for (let step = 0; step < 100; step++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
+    const before = (await env.context.getRunView(env.runId))!;
+    const artifact = before.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const first = artifact.versions.find((item) => item.id === artifact.currentVersionId)!;
+    const ids = parseStoredPageLayout(before.persona, first.content).pages.map((page) => page.pageId);
+    const specialist = (await env.repository.listOperations(env.runId)).filter((item) => item.role === "specialist" && item.taskId === "J11").at(-1)!;
+    const duplicate = await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: specialist._id,
+      workflowRunId: specialist.workflowRunId!, inputFingerprint: specialist.inputFingerprint, result: JSON.parse(specialist.resultJson!) },
+      parentWorkflowRunId: specialist.parentWorkflowRunId, nowMs: env.next() });
+    expect(duplicate.operation.materializationJson).toBe(specialist.materializationJson);
+    const revision = await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J11", artifactVersionId: first.id, instruction: "Keep the layout and clarify its review notes." } } }, false, true);
+    await env.repository.verifyDispatchPublication({ runId: env.runId, operationId: revision.operation._id,
+      parentWorkflowRunId: revision.operation.parentWorkflowRunId, workflowRunId: revision.operation.workflowRunId!,
+      workflowId: env.config.bindings.find((item) => item.role === "tester" && item.persona === "professional_creator")!.publishedWorkflowId, nowMs: env.next() });
+    for (let step = 0; step < 10; step++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
+    const after = (await createExperimentContextService(env.database).getRunView(env.runId))!;
+    const current = after.currentArtifacts.find((item) => item.taskId === "J11")!;
+    expect(current.currentVersionId).not.toBe(first.id);
+    expect(current.versions).toHaveLength(2);
+    expect(parseStoredPageLayout(after.persona, current.versions.at(-1)!.content).pages.map((page) => page.pageId)).toEqual(ids);
+    expect(current.versions.at(-1)?.approval?.origin).toBe("explicit");
+    expect(after.nextNarrativeTask).toBe("slice_complete");
+    expect((await env.repository.getRun(env.runId))?.textRevisions).toBe(1);
+  });
+  it("recovers a lost J11 result through GET without another specialist execution", async () => {
+    const env = await setup("playful_kid", 16);
+    for (let step = 0; step < 100; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "J11") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    expect((await env.context.getRunView(env.runId))?.nextNarrativeTask).toBe("J11");
+    await withMongoTransaction(env.database, async (session) => verifyCurrentPaginationSources(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store));
+    env.faults({ lostPagination: true });
+    for (let step = 0; step < 3; step++) {
+      await env.dispatcher().advance(env.runId);
+      if ((await env.repository.getRun(env.runId))?.safeFailure === "unknown_outcome") break;
+    }
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
+    const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(posts);
+    expect(vi.mocked(env.runtime.retrieve).mock.calls.length).toBeGreaterThan(0);
+    expect((await env.context.getRunView(env.runId))?.currentArtifacts.find((item) => item.taskId === "J11")).toMatchObject({ state: "approved" });
+    expect(await env.dispatcher().advance(env.runId)).toBe("boundary");
+  });
+  it("recovers a lost manager delegation to J11 through GET without another POST", async () => {
+    const env = await setup("playful_kid", 16);
+    await env.reachPagination();
+    env.faults({ lostManagerPagination: true });
+    await env.dispatcher().advance(env.runId);
+    const blocked = (await env.repository.getRun(env.runId))!;
+    const manager = (await env.repository.getOperation(blocked.activeOperationId!))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
+    expect(manager).toMatchObject({ role: "manager", taskId: null, subjectKind: "book", subjectId: blocked.bookletId,
+      state: "unknown", reservationCount: 1 });
+    const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(posts);
+    expect(vi.mocked(env.runtime.retrieve).mock.calls.length).toBeGreaterThan(0);
+    expect((await env.repository.getOperation(manager._id))?.resultJson).toContain('"taskId":"J11"');
+    expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(posts + 1);
+  });
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("dispatches %s through approved J11 and retains a J12 boundary", async (persona) => {
+    const env = await setup(persona, 16);
+    let reached = false;
+    for (let step = 0; step < 100; step++) {
+      const outcome = await env.dispatcher().advance(env.runId);
+      expect(outcome).not.toBe("blocked");
+      if (outcome === "boundary") { reached = true; break; }
+    }
+    expect(reached).toBe(true);
+    const view = (await env.context.getRunView(env.runId))!;
+    const layout = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const version = layout.versions.find((item) => item.id === layout.currentVersionId)!;
+    const stored = parseStoredPageLayout(persona, version.content);
+    expect(stored.pages).toHaveLength(persona === "playful_kid" ? 4 : persona === "enthusiast_parent" ? 6 : 9);
+    expect(new Set(stored.pages.map((page) => page.pageId)).size).toBe(stored.pages.length);
+    expect(version.approval?.origin).toBe(persona === "professional_creator" ? "explicit" : "delegated");
+    expect(layout.state).toBe("approved");
+    expect(view).toMatchObject({ status: "queued", nextNarrativeTask: "slice_complete", activeOperationId: null, counters: { payableText: 0, payableImage: 0 } });
+    expect(await env.database.collections.booklets.findOne({ _id: view.bookletId })).toMatchObject({ currentStage: "J12" });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).toBe("boundary");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
+    expect((await createExperimentContextService(env.database).getRunView(env.runId))?.currentArtifacts.find((item) => item.taskId === "J11")?.currentVersionId).toBe(version.id);
+  });
   it.each(["explicit", "delegated"] as const)("recovers an unknown tester sheet %s decision without replay", async (origin) => {
     const env = await setup(origin === "explicit" ? "professional_creator" : "playful_kid", 15), view = await env.reachSheet("review");
     const versionId = view.nextSheetWork!.currentVersionId!, starts = vi.mocked(env.runtime.start).mock.calls.length;

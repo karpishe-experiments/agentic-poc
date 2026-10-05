@@ -11,10 +11,13 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { configuredReferenceSheetTasks, referenceSheetTargets } from "@/lib/experiment-runner/reference-targets";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
+import { materializePageLayout, validatePaginationRouting, verifyCurrentPaginationSources } from "@/db/experiment-pages";
+import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
+import { configuredPaginationTask } from "@/lib/experiment-runner/pagination-tasks";
 
 type RunPatch = Partial<Pick<ExperimentRunDocument, "activeDelegationId" | "decisionSequence" | "pendingDecisionJson" | "textRevisions">>;
 export type Materialized = { summary: Record<string, unknown>; runPatch: RunPatch };
-const names = { J01: "book_concept_brief", J02: "story_outline", J03: "draft_character_list", J04: "draft_location_list", J05: "page_by_page_manuscript", J06: "final_character_list", J07: "final_location_list", J08: "visual_style_package", J09: "character_sheet_package", J10: "location_sheet_package" } as const;
+const names = { J01: "book_concept_brief", J02: "story_outline", J03: "draft_character_list", J04: "draft_location_list", J05: "page_by_page_manuscript", J06: "final_character_list", J07: "final_location_list", J08: "visual_style_package", J09: "character_sheet_package", J10: "location_sheet_package", J11: "pagination_layout_plan" } as const;
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
 function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_result", message); }
 function canonical(value: unknown) { return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item); }
@@ -23,6 +26,7 @@ function targetQuery(run: ExperimentRunDocument, taskId: SpecialistTask, subject
 
 function enabled(run: ExperimentRunDocument, task: unknown): task is SpecialistTask {
   return isNarrativeTask(task) ? configuredNarrativeTasks(run.configurationJson).includes(task) :
+    task === "J11" ? configuredPaginationTask(run.configurationJson) :
     (task === "J09" || task === "J10") && configuredReferenceSheetTasks(run.configurationJson).includes(task);
 }
 
@@ -47,6 +51,7 @@ async function updateStage(database: Database, session: ClientSession, run: Expe
     const targets = await currentSheetTargets(database, session, run);
     const sheets = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId, taskId: { $in: ["J09", "J10"] } }, { session }).toArray();
     stage = targets.find((target) => !sheets.some((item) => item.taskId === target.taskId && item.subjectKind === target.subjectKind && item.subjectId === target.subjectId && item.state === "approved"))?.taskId ?? "J11";
+    if (stage === "J11" && configuredPaginationTask(run.configurationJson) && artifacts.some((item) => item.taskId === "J11" && item.state === "approved")) stage = "J12";
   }
   await database.collections.booklets.updateOne({ _id: run.bookletId }, { $set: { currentStage: stage, updatedAtMs: nowMs } }, { session });
 }
@@ -63,7 +68,9 @@ async function invalidateDescendants(database: Database, session: ClientSession,
   if (seen.size) await database.collections.artifacts.updateMany({ experimentRunId: run._id, bookletId: run.bookletId, currentVersionId: { $in: [...seen] } }, { $set: { state: "needs_review", updatedAtMs: nowMs } }, { session });
 }
 
-async function approvedSourceIds(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: SpecialistTask, subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId) {
+async function approvedSourceIds(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: SpecialistTask, subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId, assetStore: () => AssetStore = createAssetStore) {
+  if (taskId === "J11") return subjectKind === "book" && subjectId === run.bookletId ?
+    (await verifyCurrentPaginationSources(database, session, run, assetStore())).versionIds : null;
   if (taskId === "J09" || taskId === "J10") {
     const target = (await currentSheetTargets(database, session, run)).find((item) => item.taskId === taskId && item.subjectKind === subjectKind && item.subjectId === subjectId);
     return target?.sourceVersionIds ?? null;
@@ -76,23 +83,23 @@ async function approvedSourceIds(database: Database, session: ClientSession, run
   return currentApprovedSourceIds(taskId, sources);
 }
 
-export async function prepareNarrativeContext(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: SpecialistTask, subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId) {
+export async function prepareNarrativeContext(database: Database, session: ClientSession, run: ExperimentRunDocument, taskId: SpecialistTask, subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId, assetStore: () => AssetStore = createAssetStore) {
   if (!enabled(run, taskId)) conflict("Narrative task is outside the saved configuration.");
   const target = await database.collections.artifacts.findOne(targetQuery(run, taskId, subjectKind, subjectId), { session });
   const pendingDecision = pending(run);
   if (pendingDecision?.kind === "question") conflict("A creator answer is pending.");
   if (pendingDecision?.kind === "revision" && (pendingDecision.taskId !== taskId || pendingDecision.artifactVersionId !== target?.currentVersionId)) conflict("Pending revision belongs to another current artifact.");
   if (target?.currentVersionId && target.state !== "needs_review" && pendingDecision?.kind !== "revision") conflict("A new version requires a recorded creator revision.");
-  const dependencyVersionIds = await approvedSourceIds(database, session, run, taskId, subjectKind, subjectId);
+  const dependencyVersionIds = await approvedSourceIds(database, session, run, taskId, subjectKind, subjectId, assetStore);
   if (dependencyVersionIds === null) conflict(`${taskId} requires current approved source versions.`);
   return { expectedTargetVersionId: target?.currentVersionId ?? null, dependencyVersionIds };
 }
 
-async function assertDependencies(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument) {
+async function assertDependencies(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, assetStore: () => AssetStore) {
   if (!enabled(run, operation.taskId)) invalid("Unsupported narrative task.");
   const current = await database.collections.artifacts.findOne(targetQuery(run, operation.taskId, operation.subjectKind, operation.subjectId), { session });
   if ((current?.currentVersionId ?? null) !== operation.expectedTargetVersionId) conflict("Narrative target changed after preparation.");
-  const expected = await approvedSourceIds(database, session, run, operation.taskId, operation.subjectKind, operation.subjectId);
+  const expected = await approvedSourceIds(database, session, run, operation.taskId, operation.subjectKind, operation.subjectId, assetStore);
   if (expected === null || canonical(expected) !== canonical(operation.dependencyVersionIds)) conflict("Approved upstream version changed after preparation.");
   return current;
 }
@@ -105,7 +112,7 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   if (!enabled(run, artifact.taskId)) invalid("Approval task is outside the saved configuration.");
   if (artifact.state === "needs_review") invalid("Stale content requires an updated proposal before approval.");
   {
-    const expected = await approvedSourceIds(database, session, run, artifact.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId);
+    const expected = await approvedSourceIds(database, session, run, artifact.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore);
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as string[];
     if (artifact.taskId === "J09" || artifact.taskId === "J10") {
       if (expected === null) invalid("Sheet approval target is not eligible.");
@@ -140,6 +147,10 @@ async function approveVersion(database: Database, session: ClientSession, run: E
         } catch { invalid("Style sample storage verification failed."); }
       }
     } else if (expected === null || canonical(dependencies) !== canonical(expected)) invalid("Approval dependencies are not current.");
+    if (artifact.taskId === "J11") {
+      const layout = parseStoredPageLayout(run.persona, JSON.parse(version.contentJson));
+      validatePaginationRouting(layout, await verifyCurrentPaginationSources(database, session, run, assetStore()));
+    }
   }
   if (artifact.taskId === "J01") {
     const content = JSON.parse(version.contentJson) as { audience?: { ageBand?: string } };
@@ -161,14 +172,18 @@ export async function materializeNarrativeResult(database: Database, session: Cl
   if (result.kind === "proposal") {
     const taskId = result.payload.taskId;
     if (operation.role !== "specialist" || operation.taskId !== taskId) invalid("Proposal does not match the owning specialist operation.");
-    const target = await assertDependencies(database, session, run, operation);
+    const target = await assertDependencies(database, session, run, operation, assetStore);
     const artifactId = target?._id ?? randomUUID();
     const versionId = randomUUID();
     if (!target) await database.collections.artifacts.insertOne({ _id: artifactId, bookletId: run.bookletId, artifactType: names[taskId], state: "draft", currentVersionId: null, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, experimentRunId: run._id, createdAtMs: nowMs, updatedAtMs: nowMs }, { session });
     const previous = target?.currentVersionId ? await database.collections.artifact_versions.findOne({ _id: target.currentVersionId }, { session }) : null;
     if (target?.currentVersionId && !previous) invalid("Current narrative version is missing.");
     const previousNumber = previous?.versionNumber ?? 0;
-    const content = await materializeNarrativeContent(database, session, operation, taskId, result.payload.content, previous ? JSON.parse(previous.contentJson) as unknown : null);
+    const content = taskId === "J11" ? materializePageLayout(run.persona, result.payload.content,
+      previous ? JSON.parse(previous.contentJson) as unknown : null) :
+      await materializeNarrativeContent(database, session, operation, taskId, result.payload.content, previous ? JSON.parse(previous.contentJson) as unknown : null);
+    if (taskId === "J11") validatePaginationRouting(content as ReturnType<typeof materializePageLayout>,
+      await verifyCurrentPaginationSources(database, session, run, assetStore()));
     if (taskId !== "J01" && taskId !== "J02" && new TextEncoder().encode(canonical(content)).byteLength > MAX_DRAFT_LIST_CONTENT_BYTES) invalid("Stored narrative content exceeds the 512 KiB limit.");
     const intentWarnings = [...warnings];
     if (taskId === "J01") {
@@ -186,7 +201,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     const currentPending = pending(run);
     if (currentPending?.kind === "revision" && currentPending.taskId === taskId && currentPending.artifactVersionId === (target?.currentVersionId ?? null)) runPatch.pendingDecisionJson = null;
     let approvalId: string | null = null;
-    if (isNarrativeTask(taskId) && taskId !== "J08" && run.activeDelegationId && !intentWarnings.some((warning) => warning.field === "audience.ageBand")) {
+    if ((isNarrativeTask(taskId) && taskId !== "J08" || taskId === "J11") && run.activeDelegationId && !intentWarnings.some((warning) => warning.field === "audience.ageBand")) {
       const grant = await database.collections.experiment_delegations.findOne({ _id: run.activeDelegationId, runId: run._id }, { session });
       if (grant && !grant.revokedAtMs && !grant.supersededById && grant.subjectId === run.bookletId && grant.taskIds.includes(taskId)) approvalId = await approveVersion(database, session, run, versionId, "delegated", grant.testerDecisionId, grant._id, null, nowMs, assetStore);
     }
@@ -201,7 +216,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     summary.questionId = operation._id;
   } else if (result.kind === "delegate") {
     if (operation.taskId && operation.taskId !== result.payload.taskId) invalid("Manager delegation target is not eligible.");
-    try { await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId); }
+    try { await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore); }
     catch { invalid("Manager delegation target is not currently eligible."); }
     summary.delegatedTaskId = result.payload.taskId;
   } else if (result.kind === "decision") {
@@ -263,7 +278,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
       const artifact = targetVersion ? await database.collections.artifacts.findOne({ _id: targetVersion.artifactId,
         experimentRunId: run._id, bookletId: run.bookletId, taskId: decision.taskId }, { session }) : null;
       if (!artifact || artifact.currentVersionId !== decision.artifactVersionId) invalid("Revision target is not current.");
-      if (artifact.state === "needs_review" || await approvedSourceIds(database, session, run, decision.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId) === null) invalid("Revision requires current approved dependencies.");
+      if (artifact.state === "needs_review" || await approvedSourceIds(database, session, run, decision.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore) === null) invalid("Revision requires current approved dependencies.");
       if (run.textRevisions >= CASES[run.persona].textRevisionLimit) invalid("Text revision allowance is exhausted.");
       runPatch.textRevisions = run.textRevisions + 1;
       runPatch.pendingDecisionJson = canonical({ kind: "revision", taskId: decision.taskId, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId, artifactVersionId: decision.artifactVersionId, instruction: decision.instruction });
