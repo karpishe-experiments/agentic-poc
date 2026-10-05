@@ -50,7 +50,9 @@ and messages retain the created content and decision provenance.
 The local narrative implementation covers J01–J07, through the final character
 and location lists, plus the J08 persistence path described below. Live configuration remains restricted to M1's six bindings
 and J01/J02 boundary until M2 bindings are verified. Configuration accepts only
-complete six-slot M1 or eleven-slot J01–J07 bundles, not partial profiles.
+complete six-slot M1, eleven-slot J01–J07 or thirteen-slot J08/image bundles,
+not partial profiles. The thirteen-slot profile adds a J08 specialist and one
+generic image binding; actual staging bindings and Dify fixture parity remain pending.
 The app API executes the latest publication; saved publication evidence is not
 an execution-version selector. Verified completed slice boundaries remain saved
 after a binding change. Unfinished changed configurations are blocked and need
@@ -86,7 +88,7 @@ technical blocker even after database completion. The local image callback route
 use the normal authorization claim and return the saved image request context.
 The authenticated fixture GET does not reserve again; binary POST validates and
 saves original bytes. The proxy transport limit has headroom above the handler's
-20 MiB limit. Dify binary transfer and automatic image dispatch remain unverified.
+20 MiB limit. Live Dify binary transfer and deployed automatic image dispatch remain unverified.
 Filesystem AssetStore publishes complete temporary-file bytes through an atomic
 no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;
@@ -101,15 +103,21 @@ It does not approve the package or dispatch work. The local J08 materialization
 path accepts a normal specialist proposal only when its saved configuration also
 has a distinct J08 binding after all seven narrative bindings. The proposal stays
 unapproved even under delegation. Context returns `style_samples` until the two
-saved samples form an assembled version; dispatch waits without another manager
-or tester call. Only the application-owned assembled version can be accepted by
+saved samples form an assembled version. The thirteen-slot dispatcher prepares
+one sample at a time, verifies its image publication and saved upload acknowledgement,
+then assembles the two saved samples without another manager or image call.
+Retained workflow IDs recover through GET; unknown outcomes without an ID never
+repeat POST. Image progress counts saved completion IDs; empty image history
+preserves the existing six-/eleven-slot progress hash. Only the application-owned assembled version can be accepted by
 explicit tester review or a recorded scoped delegation, with sample and source
 evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
-retain old images and approvals. The public configuration reader and host still
-accept only six or eleven bindings: live J08 publication, bindings, image
-scheduling and Dify transfer remain pending.
+retain old images and approvals. The public configuration reader and candidate host validator
+accept six, eleven or thirteen complete bindings. The installed host dispatcher still needs
+the reviewed validator update. Live J08 publication, private
+bindings, Python/DSL parity and Dify binary transfer remain pending. Local scheduling
+does not establish a deployed complete simulation.
 
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
@@ -133,7 +141,7 @@ without local-agent seeds or a host OpenAI key. It retains seed assets for healt
 checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
-`lib/experiment-runner/` supplies strict six- or eleven-module configuration, browser
+`lib/experiment-runner/` supplies strict six-, eleven- or thirteen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits

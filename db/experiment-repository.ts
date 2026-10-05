@@ -228,7 +228,7 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Publication verification identity differs from dispatch.");
       const configuration = parse(z.array(configurationItem), JSON.parse(run.configurationJson) as unknown);
-      const expected = configuration.find((item) => item.role === operation.role && item.taskId === operation.taskId);
+      const expected = configuration.find((item) => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
       if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
       if (operation.verifiedWorkflowId) return operation;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: input.workflowRunId, verifiedWorkflowId: null }, { $set: { verifiedWorkflowId: input.workflowId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });

@@ -4,6 +4,10 @@ import { resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import type { BookletBinding, BookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 const savedResult = resultEnvelopeSchema.extend({ parentWorkflowRunId: opaqueIdSchema.nullable() });
+const savedImageResult = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
+  workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(),
+  inputFingerprint: z.string().regex(/^[a-f0-9]{64}$/), assetId: opaqueIdSchema,
+  sha256: z.string().regex(/^[a-f0-9]{64}$/) });
 const execution = z.object({
   id: opaqueIdSchema, workflow_id: opaqueIdSchema,
   status: z.enum(["running", "succeeded", "failed", "stopped"]),
@@ -75,4 +79,11 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
 export function runtimeCompletion(value: RuntimeExecution) {
   if (value.status !== "succeeded" || typeof value.outputs?.booklet_result !== "string") return null;
   try { return savedResult.parse(JSON.parse(value.outputs.booklet_result) as unknown); } catch { return null; }
+}
+
+// Image bytes must already be saved by the authenticated upload callback. This
+// acknowledgement is evidence to reconcile, never a substitute for that upload.
+export function runtimeImageCompletion(value: RuntimeExecution) {
+  if (value.status !== "succeeded" || typeof value.outputs?.image_result !== "string") return null;
+  try { return savedImageResult.parse(JSON.parse(value.outputs.image_result) as unknown); } catch { return null; }
 }
