@@ -53,7 +53,7 @@ fifteen model-free bindings through J10. All three live Simulated cases reached
 the approved reference boundary; final pages and booklet completion remain pending.
 Configuration accepts only
 complete six-slot M1, eleven-slot J01–J07, thirteen-slot J08/image or fifteen-slot
-J09/J10 sheet bundles,
+J09/J10 sheet bundles, or the local sixteen-slot J11 pagination bundle,
 not partial profiles. The thirteen-slot profile adds a J08 specialist and one
 generic image binding. The M2 module
 preparation profile includes fourteen independent text modules through J10 and the
@@ -129,7 +129,7 @@ evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
 retain old images and approvals. The public configuration reader and candidate host validator
-accept six, eleven, thirteen or fifteen complete bindings. The reviewed host
+accept six, eleven, thirteen, fifteen or sixteen complete bindings. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
 J08 and all reference modules are published. All-persona reference acceptance and
 model-free binary output transfer passed with 5/5/6 saved images. Staging release
@@ -211,7 +211,7 @@ without local-agent seeds or a host OpenAI key. It retains seed assets for healt
 checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
-`lib/experiment-runner/` supplies complete six-, eleven-, thirteen- or fifteen-module configuration, browser
+`lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen- or sixteen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits
@@ -411,7 +411,7 @@ application API key remain private operator bindings; no provider call is needed
 
 The same protected workflow can stage the issue #65 runner's five settings from
 one private JSON bundle. The host validates the fixed staging/Community origins
-and complete six-, eleven-, thirteen- or fifteen-slot bindings, including disabled
+and complete six-, eleven-, thirteen-, fifteen- or sixteen-slot bindings, including disabled
 bundles, then preserves existing
 Cloud, probe and application secrets during the normal serialized rotation.
 Compose defaults the runner off. Private module keys/publications, exact-target

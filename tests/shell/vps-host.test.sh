@@ -267,6 +267,15 @@ CHILD
     (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$sheet_settings" build_booklet_runner_patch staging "$TEMP_DIR/sheet-runner.json")
     booklet_runner_patch_is_valid "$TEMP_DIR/sheet-runner.json"
     jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==15' "$TEMP_DIR/sheet-runner.json" >/dev/null
+    layout_bindings="$(jq -c '. + [{role:"specialist",taskId:"J11",persona:null,appId:"00000000-0000-4000-8000-000000000024",publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"}]' <<< "$sheet_bindings")"
+    layout_settings="$(jq -c --arg bindings "$layout_bindings" '.DIFY_BOOKLET_BINDINGS_JSON=$bindings' <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+    (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$layout_settings" build_booklet_runner_patch staging "$TEMP_DIR/layout-runner.json")
+    booklet_runner_patch_is_valid "$TEMP_DIR/layout-runner.json"
+    jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==16' "$TEMP_DIR/layout-runner.json" >/dev/null
+    for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[14].taskId="J11"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].taskId="J10"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].role="tester"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].persona="playful_kid"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].appId=.[0].appId|tojson)'; do
+      invalid="$(jq -c "$mutation" <<< "$layout_settings")"
+      if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid layout runner settings'; exit 1; fi
+    done
     for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0:14]|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[14].taskId="J09"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[14].appId=.[0].appId|tojson)'; do
       invalid="$(jq -c "$mutation" <<< "$sheet_settings")"
       if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid sheet runner settings'; exit 1; fi
