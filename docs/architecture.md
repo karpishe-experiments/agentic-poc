@@ -119,8 +119,14 @@ files prevent acceptance without repeating image generation. Textual revisions r
 retain old images and approvals. The public configuration reader and candidate host validator
 accept six, eleven or thirteen complete bindings. The installed host dispatcher still needs
 the reviewed validator update. Live J08 publication, private
-bindings, actual Dify execution of the prepared DSL and binary transfer remain pending. Local scheduling
-does not establish a deployed complete simulation.
+bindings, actual Dify execution of the prepared DSL and binary transfer remain pending.
+The J08 application code is deployed to staging as `fac55e0730e0a7e297a2fbdf28fb888b87baf57a`;
+Deploy `37270417692` and Check `37270997041` passed. Active runtime settings still
+contain the six M1 bindings, so the live boundary remains J01/J02. The J08 Dify
+draft imported and validated but remains unpublished and unexecuted. Deployment
+of scheduling code does not establish a complete simulation; see the
+[M2 current staging checkpoint](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-staging-checkpoint)
+for evidence and remaining activation gates.
 
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
