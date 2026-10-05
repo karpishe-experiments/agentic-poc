@@ -126,7 +126,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
   const mutate = deps.mutate ?? runTrackedMutation;
   const store = deps.store ?? createAssetStore;
   const admit = deps.admit ?? assertMutationsAllowed;
-  function services() { const db = database(); return { repository: createExperimentRepository(db), context: createExperimentContextService(db) }; }
+  function services() { const db = database(); return { repository: createExperimentRepository(db, { store }), context: createExperimentContextService(db) }; }
   async function run(operation: () => Promise<Response>) { try { return await operation(); } catch (error) { return safeError(error); } }
   return {
     imageFixture(request: Request) { return run(async () => {
