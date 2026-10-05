@@ -5,7 +5,7 @@ import { narrativeTaskSchema, personaSchema, type Persona } from "@/lib/contract
 import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 const binding = z.strictObject({
-  role: z.enum(["manager", "specialist", "tester"]),
+  role: z.enum(["manager", "specialist", "tester", "image"]),
   taskId: narrativeTaskSchema.nullable(),
   persona: personaSchema.nullable(),
   appId: opaqueIdSchema,
@@ -39,18 +39,19 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   const callbackKey = env.DIFY_BOOKLET_TOOL_KEY;
   let raw: unknown;
   try { raw = JSON.parse(env.DIFY_BOOKLET_BINDINGS_JSON ?? ""); } catch { return { enabled: false, reason: "invalid" }; }
-  const parsed = z.array(binding).refine((items) => items.length === 6 || items.length === 11).safeParse(raw);
+  const parsed = z.array(binding).refine((items) => [6, 11, 13].includes(items.length)).safeParse(raw);
   if (!baseUrl || !publicOrigin || !callbackKey || callbackKey.length < 32 || !parsed.success) return { enabled: false, reason: "invalid" };
   const bindings = parsed.data;
   const slots = bindings.map((item) => `${item.role}:${item.taskId ?? ""}:${item.persona ?? ""}`);
   const expected = ["manager::", "specialist:J01:", "specialist:J02:", "tester::playful_kid", "tester::enthusiast_parent", "tester::professional_creator"];
-  if (bindings.length === 11) expected.push(...["J03", "J04", "J05", "J06", "J07"].map((task) => `specialist:${task}:`));
+  if (bindings.length >= 11) expected.push(...["J03", "J04", "J05", "J06", "J07"].map((task) => `specialist:${task}:`));
+  if (bindings.length === 13) expected.push("specialist:J08:", "image::");
   if (new Set(slots).size !== bindings.length || expected.some((slot) => !slots.includes(slot)) || new Set(bindings.map((item) => item.appId)).size !== bindings.length) return { enabled: false, reason: "invalid" };
   return { enabled: true, config: { enabled: true, baseUrl, publicOrigin, callbackKey, bindings } };
 }
 
-export function selectBinding(config: BookletRunnerConfig, role: "manager" | "specialist" | "tester", taskId: NarrativeTask | null, persona: Persona) {
-  const selected = config.bindings.find((item) => item.role === role && item.taskId === taskId && item.persona === (role === "tester" ? persona : null));
+export function selectBinding(config: BookletRunnerConfig, role: "manager" | "specialist" | "tester" | "image", taskId: NarrativeTask | null, persona: Persona) {
+  const selected = config.bindings.find((item) => item.role === role && item.taskId === (role === "image" ? null : taskId) && item.persona === (role === "tester" ? persona : null));
   if (!selected) throw new Error("No configured binding for this role and task.");
   return selected;
 }
@@ -66,6 +67,6 @@ export function validToolKey(candidate: string | null, expected: string): boolea
 }
 export const getRunnerConfig = readBookletRunnerConfig;
 export const configurationForPersona = configurationSnapshot;
-export function bindingFor(config: RunnerConfig, input: { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | null; persona: Persona }) {
+export function bindingFor(config: RunnerConfig, input: { role: "manager" | "specialist" | "tester" | "image"; taskId: NarrativeTask | null; persona: Persona }) {
   return selectBinding(config, input.role, input.taskId, input.persona);
 }

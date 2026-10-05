@@ -255,8 +255,80 @@ that acceptance did not recheck stored bytes after assembly. The correction
 uses the existing AssetStore factory at the repository completion boundary and
 adds missing/corrupt-byte regressions for explicit and delegated acceptance.
 The corrected candidate passed typecheck, full lint, twelve agent fixtures and
-118 tests across thirteen suites without retries. Both independent reviews must
-pass again before publication.
+118 tests across thirteen suites without retries. Both independent reviews passed.
+PR #117 merged as `e5994e113ace2fab78291690b5d45253590474e1` after the
+existing dependency-map test was corrected to cover J08; Validate `37262788715`
+passed. This increment has not been deployed.
+
+### S5 automatic style sample dispatch
+
+The next candidate extends the same dispatcher, runtime transport and protected
+settings validator. A complete thirteen-slot profile adds J08 and one generic
+image workflow (`role: image`, null task/persona) to the eleven narrative slots.
+Old profiles and saved boundaries remain unchanged. No paid-mode path is added.
+Published image evidence resolves the generic binding while the saved operation
+retains its owning task J08.
+
+At `style_samples`, derive the two requests from the current textual style and
+five approved sources. Prepare and dispatch only the first missing slot. A saved
+failed or uncertain attempt is a reconciliation requirement, not regeneration
+permission. The image workflow uses the normal reservation/download/upload
+callbacks. Its `image_result` must match the already saved operation and digest;
+an acknowledgement alone cannot materialize an asset. Each sample records its
+specialist workflow parent and advances the saved progress fingerprint.
+
+After both samples have verified publications, invoke the existing assembly
+service. Restart and discarded-response handling reuse saved samples and GET
+lookups, never another POST after dispatch admission. Pause stops the next sample,
+but an admitted upload can finish. Missing stored files block assembly without
+new image reservations. Definite blockers do not enter the unknown-outcome
+recovery path.
+
+Verify `tests/integration/experiment-runner-style-dispatch.test.ts`, configuration,
+transport, orchestration, style journey/assembly and image callback/storage suites,
+typecheck, lint, twelve agent fixtures, deployment contracts, both deployment
+shell suites and ShellCheck. Two clean independent reviews precede publication.
+Python/DSL parity, private bindings, live binary transfer and staging activation
+remain pending; this package does not claim a completed booklet or live J08 run.
+
+Initial validation on 2026-10-05 passed clean-checkout typecheck, full lint,
+twelve agent fixtures and 91 tests across ten affected suites without retries.
+The tests include all three personas through automatic samples and style approval,
+lost-response recovery, concurrent dispatch, Pause/Resume, no-ID outcomes and
+missing saved bytes. ShellCheck at warning severity, Bash syntax and the focused
+`booklet-runner-staging` host test passed. Full shell suites remain a required
+Linux CI check: local Windows permission, symlink and Python-alias restrictions
+prevented a complete local pass. One deployment-contract attempt failed on CRLF
+fixture text; normalization in the disposable checkout produced the passing run.
+No runtime source was changed for that environment-only correction.
+
+Review identified Pause before reservation and incomplete workflow acknowledgement
+as missing cases. A verified paused attempt with zero reservations remains saved;
+Resume may prepare a new attempt for that never-executed slot. A successful saved
+upload is not enough to advance: a matching successful workflow acknowledgement
+must precede publication verification. Nonterminal workflows recover through GET
+within the saved deadline; missing or inconsistent terminal acknowledgements block
+without replay. The first corrected candidate passed clean-checkout typecheck, full
+lint and 97 tests across the same ten suites without retries. The command exited
+successfully; disposable Mongo teardown required forced termination after its
+grace period. Twelve agent fixtures also passed. Two new clean reviews are
+required before publication. Review B then identified retained progress hashes
+and publication verification before a late upload as missing cases. Empty image
+history now preserves the existing hash shape. Image success always requires
+the acknowledgement before verification; only a verified unclaimed Pause is exempt.
+Retained six-/eleven-slot runs at no-progress count two and an unresolved late
+upload have added regressions. The final correction passed clean-checkout
+typecheck, full lint and 100 tests across ten suites without retries. The command
+exited successfully with the same disposable Mongo teardown limitation. Shell
+inputs and agent fixtures are unchanged from their passing checks. Two consecutive
+clean reviews are still required before publication.
+
+Chrome verification on 2026-10-05 started Professional Creator run
+`944b6e59-129e-451f-847e-840524b8b8c2`. Pause saved revision 11; Resume retained
+the same Concept version and reached the deployed J01/J02 `slice_complete`
+boundary at revision 32. Both artifacts have explicit approvals; six logical
+text operations and zero payable text/image calls were recorded. This verifies
+the deployed M1 controls, not the unpublished style-dispatch candidate.
 
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,

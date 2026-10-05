@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createWorkflowRuntime, runtimeCompletion } from "@/lib/experiment-runner/transport";
+import { createWorkflowRuntime, runtimeCompletion, runtimeImageCompletion } from "@/lib/experiment-runner/transport";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 const id = "00000000-0000-4000-8000-000000000001";
@@ -9,6 +9,17 @@ const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test
 const input = { runId: id, operationId: workflow, parentWorkflowRunId: null, mode: "simulated" as const };
 
 describe("model-free runtime transport", () => {
+  it("parses a strict image acknowledgement without treating it as a narrative result", () => {
+    const result = { runId: id, operationId: workflow, workflowRunId: id, parentWorkflowRunId: null,
+      inputFingerprint: "a".repeat(64), assetId: workflow, sha256: "b".repeat(64) };
+    const execution = { id, workflow_id: workflow, status: "succeeded" as const, outputs: { image_result: JSON.stringify(result) } };
+    expect(runtimeImageCompletion(execution)).toEqual(result);
+    expect(runtimeCompletion(execution)).toBeNull();
+    expect(runtimeImageCompletion({ ...execution, status: "running" })).toBeNull();
+    for (const bad of [{ ...result, sha256: "bad" }, { ...result, secret: "extra" }]) {
+      expect(runtimeImageCompletion({ ...execution, outputs: { image_result: JSON.stringify(bad) } })).toBeNull();
+    }
+  });
   it("sends one blocking POST with explicit simulation and no callback credential", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: { id, workflow_id: workflow, status: "succeeded", outputs: {} } }));
     const result = await createWorkflowRuntime(config, fetcher).start(binding, input);

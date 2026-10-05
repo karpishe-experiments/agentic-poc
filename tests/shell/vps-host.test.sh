@@ -181,6 +181,15 @@ CHILD
     (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$expanded_settings" build_booklet_runner_patch staging "$TEMP_DIR/expanded-runner.json")
     booklet_runner_patch_is_valid "$TEMP_DIR/expanded-runner.json"
     jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==11' "$TEMP_DIR/expanded-runner.json" >/dev/null
+    image_bindings="$(jq -c '. + [{role:"specialist",taskId:"J08",persona:null,appId:"00000000-0000-4000-8000-000000000020",publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"},{role:"image",taskId:null,persona:null,appId:"00000000-0000-4000-8000-000000000021",publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"}]' <<< "$expanded_bindings")"
+    image_settings="$(jq -c --arg bindings "$image_bindings" '.DIFY_BOOKLET_BINDINGS_JSON=$bindings' <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+    (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$image_settings" build_booklet_runner_patch staging "$TEMP_DIR/image-runner.json")
+    booklet_runner_patch_is_valid "$TEMP_DIR/image-runner.json"
+    jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==13' "$TEMP_DIR/image-runner.json" >/dev/null
+    for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0:12]|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[12].taskId="J08"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[12].persona="playful_kid"|tojson)'; do
+      invalid="$(jq -c "$mutation" <<< "$image_settings")"
+      if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid image runner settings'; exit 1; fi
+    done
     for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0:10]|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[10].taskId="J03"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[10].appId=.[0].appId|tojson)'; do
       invalid="$(jq -c "$mutation" <<< "$expanded_settings")"
       if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid expanded runner settings'; exit 1; fi

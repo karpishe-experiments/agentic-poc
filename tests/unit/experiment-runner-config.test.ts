@@ -42,4 +42,21 @@ describe("booklet runner configuration", () => {
       expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
     }
   });
+  it("requires J08 and a separate generic image binding together", () => {
+    const later = ["J03", "J04", "J05", "J06", "J07", "J08"].map((taskId, index) => ({
+      role: "specialist", taskId, persona: null, appId: ids[index + 6],
+      publishedWorkflowId: ids[index + 11], toolProviderId: null, apiKey: `later-${index}`,
+    }));
+    const image = { role: "image", taskId: null, persona: null, appId: ids[12], publishedWorkflowId: ids[13], toolProviderId: null, apiKey: "private-image" };
+    const expanded = [...bindings, ...later, image];
+    const state = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(expanded) });
+    if (!state.enabled) throw new Error("Expected thirteen-slot profile");
+    expect(bindingFor(state.config, { role: "image", taskId: "J08", persona: "playful_kid" })).toEqual(image);
+    expect(configurationForPersona(state.config, "playful_kid")).toHaveLength(11);
+    for (const bad of [expanded.slice(0, 12), [...bindings, ...later.slice(0, 5), image],
+      [...expanded.slice(0, 12), { ...image, taskId: "J08" }],
+      [...expanded.slice(0, 12), { ...image, persona: "playful_kid" }]]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
+    }
+  });
 });
