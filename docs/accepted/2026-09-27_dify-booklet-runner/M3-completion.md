@@ -204,7 +204,41 @@ Local preparation validation passed 66 tests across six focused suites without
 retries. After the final lint correction, typecheck, lint and the three affected
 graph tests passed in a fresh temporary checkout. Generated Code nodes contain
 47,026–47,135 UTF-8 bytes. These measurements do not establish a Studio limit;
-draft compatibility, publication and live J11 execution remain unverified.
+publication and live J11 execution remain unverified. The five new drafts passed
+server-assisted graph validation. A synthetic single-node J11 check succeeded
+(`02c83edc-19a4-4e8c-a6fe-6305df04929c`) without callbacks or providers; this
+verifies the imported Code node, not runtime credentials or full dispatch.
+
+Private setup uses `scripts/prepare-dify-booklet-m3-keys.ps1`: preview by default,
+`-Apply` for the operator-guided five-app secret/publication/key handoff. It reuses
+the eleven M2 specialist/image credentials and creates a separate encrypted
+sixteen-binding file without overwriting M2. Run the file in a child PowerShell
+process instead of pasting a large function into PSReadLine. Preparation does not
+upload keys or activate staging. The host validator must accept the complete
+J11 bundle before activation; existing profiles remain valid. Install the reviewed
+dispatcher, release the reviewed J11 application, verify publication read-back,
+then activate with drained maintenance and a verified backup. No new reset.
+
+| New draft | App identifier |
+| --- | --- |
+| `issue65_m3_manager` | `46572ccb-d954-45e5-b73d-90fd0995cdb6` |
+| `issue65_m3_playful_kid` | `bf57a8ea-1be6-4a97-a5c0-023cfde794f8` |
+| `issue65_m3_enthusiast_parent` | `593fb610-624e-404c-92de-57f54e9a47fb` |
+| `issue65_m3_professional_creator` | `cd284244-63d5-4169-95c3-9790001a5240` |
+| `issue65_m3_J11` | `4f4704ca-de02-4a6d-8051-ba6849fdda56` |
+
+These are draft identities, not publication evidence. Retain the existing M2
+apps and keys. Read back each published configuration before constructing the
+runtime settings bundle; the encrypted handoff contains credentials, not verified
+publication identifiers.
+
+Local host preparation passed Bash syntax checks and the focused
+`tests/shell/vps-host.test.sh booklet-runner-staging` scenario. The complete
+host suite stopped at a Windows directory-permission check; the deployment suite
+stopped at a Windows sandbox-configuration symlink check. Neither is a full-suite
+pass. Require Linux CI, including ShellCheck and both shell suites, before merge
+or dispatcher installation. The private helper passed PowerShell syntax/preview
+checks and two independent reviews, including synthetic collection tests.
 
 Implement both one-page and ordered selected-batch scheduling, using existing
 jobs/items with the M1 operation ledger. Batches run sequentially; every page
