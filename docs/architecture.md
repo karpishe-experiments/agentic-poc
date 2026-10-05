@@ -65,11 +65,20 @@ PNG/JPEG/WebP bytes, enforces 20 MiB and one frame, and reads stored bytes back
 before saving asset/operation success. Same-byte recovery preserves counters.
 The proxy has 32 MiB transport headroom above the content limit. Filesystem assets
 publish atomically without replacing an existing URI. Cloud trial routes remain
-unchanged. Live Dify binary transfer and automatic image dispatch remain pending.
+unchanged. The candidate dispatcher accepts complete six-, eleven- or thirteen-slot
+profiles. Thirteen slots add J08 and a separate model-free image workflow. It saves
+the textual style draft, dispatches two samples, requires matching workflow/upload
+acknowledgements, and assembles a successor without approving the internal draft.
+Only the assembled package receives explicit or scoped delegated acceptance.
+Retained workflow IDs recover through GET; no-ID unknown outcomes never repeat POST.
+Local Python/TypeScript parity covers all three personas through J08. Actual Dify
+binary transfer, expanded private bindings and staging activation remain pending.
+The master-owned host validator update requires separate infrastructure approval;
+this release does not update the host dispatcher, rotate settings or remove an index.
 Canonical experiment plans and evidence remain on `master`, in
 `docs/accepted/2026-09-27_dify-booklet-runner/`.
 
-Every booklet has eight ordered artifact records:
+Every legacy-profile booklet has eight ordered artifact records:
 
 ```text
 Audience Profile → Story Plan → Visual Style → Visual Bible
