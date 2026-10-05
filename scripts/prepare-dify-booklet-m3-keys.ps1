@@ -32,6 +32,7 @@ $bindings = @()
 $callbackKey = $null
 $apiKey = $null
 $json = $null
+$step = 'read encrypted M2 bindings'
 try {
     $sourceSecret = Import-Clixml -LiteralPath $sourcePath
     if ($sourceSecret -isnot [Security.SecureString]) { throw 'Unexpected encrypted M2 file format.' }
@@ -53,6 +54,7 @@ try {
         if ([string]$binding.apiKey -cnotmatch '^app-[A-Za-z0-9_-]+$') { throw 'An existing application key failed validation.' }
     }
     foreach ($item in $modules) {
+        $step = 'bind callback for ' + $item.name
         Set-Clipboard -Value $callbackKey
         Write-Host "`nOpen: https://dify.uniwares.co.uk/app/$($item.appId)/workflow"
         Write-Host 'The EXISTING callback key is now on your clipboard.'
@@ -60,20 +62,23 @@ try {
         Write-Host 'Paste the clipboard value, Save, then Publish. Do not Run or Test.'
         [void](Read-Host 'Press Enter AFTER Save and Publish')
         do {
+            $step = 'collect application key for ' + $item.name
             Write-Host 'Open Access API > API Keys for THIS app.'
             [void](Read-Host 'Copy the application API key, then press Enter')
             $apiKey = Get-Clipboard -Raw
             if ($null -ne $apiKey) { $apiKey = $apiKey.Trim() }
-            $valid = ($apiKey -cmatch '^app-[A-Za-z0-9_-]+$' -and $apiKey -cnotin @($bindings.apiKey))
-            if (-not $valid) { Write-Host 'Invalid or already collected key. Copy this app key again.' }
-        } until ($valid)
-        $bindings += [pscustomobject]@{
+            if ($apiKey -cnotmatch '^app-[A-Za-z0-9_-]+$') {
+                Write-Host 'Clipboard does not contain an application API key. Copy only the key.'
+            }
+        } until ($apiKey -cmatch '^app-[A-Za-z0-9_-]+$')
+        $bindings += @{
             appId=$item.appId; role=$item.role; taskId=$item.taskId; persona=$item.persona; apiKey=$apiKey
         }
         $apiKey = $null
     }
     if ($bindings.Count -ne 16) { throw 'Expected sixteen prepared bindings.' }
     if (Test-Path -LiteralPath $outputPath) { throw 'The destination appeared during preparation; not overwriting it.' }
+    $step = 'save encrypted M3 bindings'
     $json = @{ callbackKey=$callbackKey; bindings=$bindings } | ConvertTo-Json -Depth 10 -Compress
     $outputSecret = ConvertTo-SecureString $json -AsPlainText -Force
     $outputSecret | Export-Clixml -LiteralPath $outputPath -NoClobber
@@ -81,7 +86,10 @@ try {
     Write-Host 'No keys uploaded, staging activation or workflow execution.'
     Write-Host 'Tell Codex: M3 keys prepared. Do not share keys or the encrypted file.'
 } catch {
-    Write-Error 'Private preparation stopped. Check the M2 source and M3 destination locally; do not share their contents.' -ErrorAction Continue
+    # Do not print exception messages, source lines or values: they can contain secrets.
+    $safeType = $_.Exception.GetType().Name
+    $safeLine = $_.InvocationInfo.ScriptLineNumber
+    Write-Error "Private preparation stopped at $step (type=$safeType, line=$safeLine). Share only this status; never keys or file contents." -ErrorAction Continue
     exit 1
 } finally {
     try { Set-Clipboard -Value ' ' } catch {}
