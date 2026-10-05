@@ -321,7 +321,9 @@ upload have added regressions. The final correction passed clean-checkout
 typecheck, full lint and 100 tests across ten suites without retries. The command
 exited successfully with the same disposable Mongo teardown limitation. Shell
 inputs and agent fixtures are unchanged from their passing checks. Two consecutive
-clean reviews are still required before publication.
+clean reviews subsequently passed. [PR #118](https://github.com/karpishe-experiments/agentic-poc/pull/118)
+merged as `6a2d5542cfbc984335ebe94e9d4710b20b327fb4`; Validate `37266685063`
+passed, including both full Linux shell suites. This increment is not deployed.
 
 Chrome verification on 2026-10-05 started Professional Creator run
 `944b6e59-129e-451f-847e-840524b8b8c2`. Pause saved revision 11; Resume retained
@@ -329,6 +331,35 @@ the same Concept version and reached the deployed J01/J02 `slice_complete`
 boundary at revision 32. Both artifacts have explicit approvals; six logical
 text operations and zero payable text/image calls were recorded. This verifies
 the deployed M1 controls, not the unpublished style-dispatch candidate.
+
+### S5 Dify style-fixture preparation
+
+Extend the existing M2 Python fixture through J08 and append its independent
+specialist to the module list: twelve text modules plus the existing image
+workflow. Preserve existing names, callback contracts and model-free branches.
+Reuse the TypeScript/Python equality harness for all three personas, revisions,
+source refresh, exact UTF-8 style hashes and assembled-style tester decisions.
+The internal textual draft is not approved; only its assembled successor can
+receive explicit or scoped delegated acceptance. Kid/Parent retain an applicable
+J08 grant; Professional Creator approves the exact assembled version.
+
+Affected files are `dify/m2-simulation.py`, `workflow-graph.ts`, the existing
+module/Python tests and this evidence. Run typecheck, lint, graph/image-graph and
+Python parity tests without retries, plus the J08 journey/dispatch regressions.
+Prepare `issue65_m2_J08 --profile m2` and inspect its graph without secrets.
+Two clean reviews precede publication. Missing current sources, sample evidence
+or valid delegation must not be hidden with fabricated approvals. This slice
+prepares configuration only: actual Dify import, private bindings, binary transfer
+and staging activation remain dependent live checkpoints.
+
+On 2026-10-05 the final candidate passed isolated typecheck, full lint and
+32 tests across the Python parity, text/image graph, reference fixture and
+retained M1 fixture suites without retries. The preceding candidate also passed
+31 J08 journey/dispatch integration tests; their relevant inputs are unchanged.
+Twelve agent fixtures passed. Preparing `issue65_m2_J08 --profile m2` produced
+nine model-free nodes with an empty callback-key binding. These checks establish
+local configuration parity, not actual Dify execution. Independent reviews and
+live publication remain pending.
 
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,

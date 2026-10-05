@@ -11,7 +11,7 @@ export const M1_SIMULATION_MODULES: SimulationModule[] = [
 ];
 export const M2_SIMULATION_MODULES: SimulationModule[] = [
   ...M1_SIMULATION_MODULES,
-  ...(["J03", "J04", "J05", "J06", "J07"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
+  ...(["J03", "J04", "J05", "J06", "J07", "J08"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
 ];
 export function simulationModuleName(module: SimulationModule) {
   const milestone = module.taskId && !["J01", "J02"].includes(module.taskId) ? "m2" : "m1";
@@ -57,7 +57,7 @@ export async function createSimulationGraph(module: SimulationModule, profile: "
   return { nodes, edges };
 }
 
-/** Isolated, model-free M2 transport candidate. It does not alter the eleven narrative bindings. */
+/** Separate model-free image transport; text modules never generate image bytes. */
 export function createSimulatedImageGraph() {
   const nodes: Node[] = [
     { id: "start", type: "custom", position: { x: 0, y: 0 }, data: { title: "Simulated image probe input", type: "start", variables: ["run_id", "operation_id", "parent_workflow_run_id", "mode"].map((variable) => ({ variable, label: variable, type: "text-input", required: variable !== "parent_workflow_run_id", default: "", options: [] })) } },
