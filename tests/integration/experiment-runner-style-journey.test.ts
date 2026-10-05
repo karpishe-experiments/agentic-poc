@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import sharp from "sharp";
-import type { Database } from "@/db/client";
+import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -149,5 +149,25 @@ describe("persisted style journey", () => {
     expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: assembled.version._id })).toBe(0);
     expect(await env.database.collections.experiment_operations.countDocuments({ runId: env.runId, role: "image", state: "succeeded" })).toBe(2);
     expect((await env.repository.getRun(env.runId))?.counters.logicalImage).toBe(2);
+  });
+  it("rejects changed approved style build evidence and original bytes during read-only J11 verification", async () => {
+    const env = await setup("professional_creator");
+    const saved = await env.execute("specialist", "J08");
+    const assembled = await env.samples(JSON.parse(saved.operation.materializationJson!).versionId as string);
+    await env.approve(assembled.version._id);
+    await env.database.collections.experiment_operations.updateMany({ runId: env.runId, role: "image", taskId: "J08" },
+      { $set: { verifiedWorkflowId: randomUUID() } });
+    const verify = () => withMongoTransaction(env.database, (session) => createExperimentStyleAssembly({ database: env.database,
+      store: env.store }).verifyVersion({ runId: env.runId, versionId: assembled.version._id }, session));
+    await expect(verify()).resolves.toBeUndefined();
+    const original = assembled.version.contentJson;
+    const changed = JSON.parse(original) as { samples: { build: { assetId: string } }[] };
+    changed.samples[0].build.assetId = randomUUID();
+    await env.database.collections.artifact_versions.updateOne({ _id: assembled.version._id }, { $set: { contentJson: JSON.stringify(changed) } });
+    await expect(verify()).rejects.toMatchObject({ code: "conflict" });
+    await env.database.collections.artifact_versions.updateOne({ _id: assembled.version._id }, { $set: { contentJson: original } });
+    const uri = env.store.files.keys().next().value!;
+    env.store.files.get(uri)![0] ^= 1;
+    await expect(verify()).rejects.toMatchObject({ code: "invalid_state" });
   });
 });

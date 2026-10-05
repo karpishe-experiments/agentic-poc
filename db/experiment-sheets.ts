@@ -37,7 +37,15 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     const recoveredApproval = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         role: "tester", state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
-    if (run.mode !== "simulated" || (!recoveredApproval && !["queued", "running", "paused"].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
+    const recoveredPagination = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+        state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
+        workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
+        // The manager has null taskId; this only admits read-only source
+        // verification for its exact active book operation after GET recovery.
+        $or: [{ role: "specialist", taskId: "J11" },
+          { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
+    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !["queued", "running", "paused"].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);

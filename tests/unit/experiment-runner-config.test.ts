@@ -10,6 +10,22 @@ const bindings = entries.map(([role, taskId, persona], index) => ({ role, taskId
 const env = { DEPLOYMENT_ENV: "local", DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: "https://dify.example.test", DIFY_BOOKLET_PUBLIC_ORIGIN: "http://localhost:3000", DIFY_BOOKLET_TOOL_KEY: "x".repeat(32), DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bindings) };
 
 describe("booklet runner configuration", () => {
+  it("requires all sixteen pagination bindings and retains a fourteen-slot private snapshot", () => {
+    const later = ["J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11"].map((taskId, index) => ({
+      role: "specialist", taskId, persona: null, appId: ids[index + 6], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: `pagination-${index}`,
+    }));
+    const image = { role: "image", taskId: null, persona: null, appId: ids[15], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: "image-key" };
+    const expanded = [...bindings, ...later, image];
+    const state = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(expanded) });
+    if (!state.enabled) throw new Error("Expected pagination profile");
+    expect(configurationForPersona(state.config, "professional_creator")).toHaveLength(14);
+    expect(bindingFor(state.config, { role: "specialist", taskId: "J11", persona: "professional_creator" }).apiKey).toBe("pagination-8");
+    for (const bad of [expanded.map((item) => item.taskId === "J11" ? { ...item, taskId: "J10" } : item),
+      expanded.map((item) => item.taskId === "J11" ? { ...item, appId: ids[0] } : item),
+      expanded.map((item) => item.taskId === "J09" ? { ...item, taskId: "J12" } : item)]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
+    }
+  });
   it("requires the complete fifteen-slot sheet profile", () => {
     const later = ["J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10"].map((taskId, index) => ({
       role: "specialist", taskId, persona: null, appId: ids[index + 6], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: `sheet-${index}`,
