@@ -348,6 +348,23 @@ pass. Require Linux CI, including ShellCheck and both shell suites, before merge
 or dispatcher installation. The private helper passed PowerShell syntax/preview
 checks and two independent reviews, including synthetic collection tests.
 
+Reviewed master candidate `489576062d1b5d9b5698d28a9906226f34bb9f25`
+passed [Validate](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37372309760),
+including Linux ShellCheck and both deployment shell suites. [PR #144](https://github.com/karpishe-experiments/agentic-poc/pull/144)
+merged as `69df0fb814b7d0dd315ca52cb7dabfe30f31757d`. Dispatcher installation
+and seventeen-binding activation remain pending.
+
+The selective J12 staging candidate `9bd092aa7abb7a6b12e26c47f97dd433f01e9506`
+in [PR #146](https://github.com/karpishe-experiments/agentic-poc/pull/146)
+preserves Cloud configuration and keeps canonical plans on master. Typecheck,
+lint, 26 focused unit tests, 61 integration tests and twelve retained agent
+fixtures passed without test retries. Windows MongoDB teardown required forced
+shutdown after the integration passes; the command exited zero. Two sequential
+independent reviews passed. Validate `37374204553` passed and the release PR
+merged as `d115d4a83e9b3cd4fa896bac572a594c027a3bb8`. Its automatic Deploy
+`37375140444` is pending. Live J12 acceptance remains pending; this evidence
+does not establish a complete booklet simulation.
+
 ### Independent local preparation: J12 Page Bible slice
 
 This slice uses the existing page parser and artifact/operation services. It does
@@ -533,6 +550,14 @@ bounded image allowance even when no image is generated.
 
 Ordered selected-batch jobs, final generation completion and tester/judge reports
 remain subsequent M3 work. Do not omit them from full-booklet acceptance.
+
+The local configuration prerequisite accepts the optional true flag only on the
+image binding of a complete seventeen-slot runtime profile. Its saved projection
+includes the flag only when true and requires the complete fifteen-row persona
+profile. Legacy saved role/task schemas and absent-flag JSON/hash remain
+unchanged. Focused configuration and repository suites passed 18 tests without
+retries. This does not enable J13 dispatch, update private settings or prove
+final-page execution; host validation and delivery are subsequent work.
 
 1. Add J11–J13 schemas, prompts, fixtures, source routing and completion predicate.
 2. Connect image operations to page jobs and exact per-page approvals.

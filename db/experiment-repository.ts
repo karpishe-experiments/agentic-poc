@@ -10,11 +10,11 @@ import { experimentImageRequestSchema, imageRequestFingerprint } from "@/lib/con
 import { materializeNarrativeResult, prepareNarrativeContext } from "@/db/experiment-narrative";
 import { assertCurrentImageSources } from "@/db/experiment-images";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
-const configurationItem = z.strictObject({ role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), appId: opaqueIdSchema, publishedWorkflowId: opaqueIdSchema, toolProviderId: opaqueIdSchema.nullable() });
-const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: z.array(configurationItem).max(100), nowMs: time });
+const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: savedConfigurationSchema, nowMs: time });
 const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: time });
 const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
@@ -233,7 +233,7 @@ export function createExperimentRepository(database: Database, options: { store?
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Publication verification identity differs from dispatch.");
-      const configuration = parse(z.array(configurationItem), JSON.parse(run.configurationJson) as unknown);
+      const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
       const expected = configuration.find((item) => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
       if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
       if (operation.verifiedWorkflowId) return operation;

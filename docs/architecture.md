@@ -202,6 +202,14 @@ profiles keep their existing boundaries. This candidate is not yet published or
 active in staging. Its model-free Dify fixture and graph are prepared locally;
 publication and the runtime binding remain pending.
 
+The local J13 configuration prerequisite adds optional
+`finalPageIllustration: true` to the image binding of a complete seventeen-slot
+profile. New persona snapshots retain that flag as configuration evidence;
+omitting it preserves older snapshot bytes and hashes. Saved enabled snapshots
+require the complete fifteen-row persona profile. This does not enable J13
+dispatch or change host settings; page admission, uploads and assembly remain
+subsequent work.
+
 The local `page-image-requests.ts` serializer prepares one J13 `page_source`
 request from the saved J11 layout, selected J12 content and assembled J08 style.
 It retains exact native lettering and the unchanged style module, and returns
