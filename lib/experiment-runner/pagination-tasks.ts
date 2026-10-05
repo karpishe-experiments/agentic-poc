@@ -11,20 +11,21 @@ export function configuredPaginationTask(configurationJson: string): boolean {
   if (configuredReferenceSheetTasks(configurationJson).length !== 2) return false;
   let entries: unknown;
   try { entries = JSON.parse(configurationJson); } catch { return false; }
-  if (!Array.isArray(entries) || ![14, 16].includes(entries.length) ||
+  if (!Array.isArray(entries) || ![14, 15, 16, 17].includes(entries.length) ||
       entries.some((item) => !item || typeof item !== "object" || Array.isArray(item))) return false;
   const rows = entries as Record<string, unknown>[];
   const expected = [
     { role: "manager", taskId: null, persona: null },
-    ...[...BOOK_TASKS, "J09", "J10", "J11"].map((taskId) => ({ role: "specialist", taskId, persona: null })),
+    ...[...BOOK_TASKS, "J09", "J10", "J11", ...([15, 17].includes(entries.length) ? ["J12"] : [])].map((taskId) => ({ role: "specialist", taskId, persona: null })),
     { role: "image", taskId: null, persona: null },
   ];
   const testers = rows.filter((row) => row.role === "tester");
-  if (testers.length !== (entries.length === 16 ? 3 : 1) ||
-      testers.some((row) => row.taskId !== null || (entries.length === 16 && !PERSONAS.includes(row.persona as typeof PERSONAS[number])) ||
-        (entries.length === 14 && row.persona !== undefined && !PERSONAS.includes(row.persona as typeof PERSONAS[number]))) ||
+  const publicProfile = entries.length === 16 || entries.length === 17;
+  if (testers.length !== (publicProfile ? 3 : 1) ||
+      testers.some((row) => row.taskId !== null || (publicProfile && !PERSONAS.includes(row.persona as typeof PERSONAS[number])) ||
+        (!publicProfile && row.persona !== undefined && !PERSONAS.includes(row.persona as typeof PERSONAS[number]))) ||
       new Set(testers.map((row) => row.persona)).size !== testers.length) return false;
-  if (entries.length === 16 && PERSONAS.some((persona) => !testers.some((row) => row.persona === persona))) return false;
+  if (publicProfile && PERSONAS.some((persona) => !testers.some((row) => row.persona === persona))) return false;
   if (rows.length !== expected.length + testers.length) return false;
   for (const slot of expected) {
     if (rows.filter((row) => row.role === slot.role && row.taskId === slot.taskId &&

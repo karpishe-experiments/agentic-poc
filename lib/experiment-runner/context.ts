@@ -5,10 +5,12 @@ import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { assembledVisualStyleSchema } from "@/lib/contracts/experiment-references";
-import { configuredNarrativeTasks, currentApprovedSourceIds, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
+import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks, nextReferenceSheetWork, referenceSheetTargets } from "@/lib/experiment-runner/reference-targets";
 import { configuredPaginationTask, currentPaginationSourceIds } from "@/lib/experiment-runner/pagination-tasks";
+import { configuredPageBibleTask, parsePageBibleForLayout } from "@/lib/experiment-runner/page-bible-tasks";
+import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 type NextTask = SpecialistTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
@@ -70,15 +72,62 @@ export function createExperimentContextService(database: Database) {
     }));
   }
 
+  function pageBibleWork(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[]) {
+    if (!configuredPageBibleTask(run.configurationJson)) return null;
+    const source = (taskId: "J11" | "J05" | "J08") => {
+      const matches = projected.filter((item) => item.taskId === taskId && item.subjectKind === "book" && item.subjectId === run.bookletId);
+      const artifact = matches.length === 1 ? matches[0] : null;
+      const version = artifact?.versions.find((item) => item.id === artifact.currentVersionId);
+      return artifact?.state === "approved" && version?.approval ? version : null;
+    };
+    const layoutSource = source("J11"), manuscript = source("J05"), style = source("J08");
+    if (!layoutSource || !manuscript || !style) return null;
+    const layout = parseStoredPageLayout(run.persona, layoutSource.content);
+    const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
+    const selected = pending?.kind === "revision" && pending.taskId === "J12" && pending.subjectKind === "page" ? pending.subjectId : null;
+    if (pending?.kind === "revision" && pending.taskId === "J12" && !selected) return null;
+    for (const page of layout.pages) {
+      if (selected && page.pageId !== selected) continue;
+      const references = page.panels.flatMap((panel) => panel.sheetReferences)
+        .sort((a, b) => (a.subjectKind === "character" ? "J09" : "J10").localeCompare(b.subjectKind === "character" ? "J09" : "J10") || a.subjectId.localeCompare(b.subjectId));
+      if (references.some((reference) => {
+        const matches = projected.filter((item) => item.taskId === (reference.subjectKind === "character" ? "J09" : "J10") &&
+          item.subjectKind === reference.subjectKind && item.subjectId === reference.subjectId);
+        const artifact = matches.length === 1 ? matches[0] : null;
+        return artifact?.state !== "approved" || artifact.currentVersionId !== reference.artifactVersionId ||
+          !artifact.versions.find((version) => version.id === reference.artifactVersionId)?.approval;
+      })) return null;
+      const sourceVersionIds = [...new Set([layoutSource.id, manuscript.id, style.id, ...references.map((reference) => reference.artifactVersionId)])];
+      const matches = projected.filter((item) => item.taskId === "J12" && item.subjectKind === "page" && item.subjectId === page.pageId);
+      if (matches.length > 1) deny("Page has duplicate current artifacts.");
+      const artifact = matches[0];
+      const current = artifact?.versions.find((version) => version.id === artifact.currentVersionId);
+      if (selected) {
+        if (!artifact || artifact.currentVersionId !== pending?.artifactVersionId) return null;
+        return { taskId: "J12" as const, subjectKind: "page" as const, subjectId: page.pageId, pageIndex: page.pageIndex, sourceVersionIds };
+      }
+      if (!artifact || artifact.state === "needs_review") return { taskId: "J12" as const, subjectKind: "page" as const, subjectId: page.pageId, pageIndex: page.pageIndex, sourceVersionIds };
+      if (artifact.state === "draft") return { taskId: "J12" as const, subjectKind: "page" as const, subjectId: page.pageId, pageIndex: page.pageIndex, sourceVersionIds, review: true as const };
+      if (artifact.state !== "approved" || !current?.approval || !current ||
+          JSON.stringify(current.dependencyVersionIds) !== JSON.stringify(sourceVersionIds)) return null;
+      try {
+        parsePageBibleForLayout({ persona: run.persona, pageId: page.pageId, layout, layoutVersionId: layoutSource.id,
+          manuscriptVersionId: manuscript.id, styleVersionId: style.id, proposal: current.content });
+      } catch { return null; }
+    }
+    return selected ? null : { complete: true as const };
+  }
+
   function chooseNext(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[]): NextTask {
     if (run.pauseRequested || run.status === "paused" || run.status === "blocked" || run.status === "failed" || run.status === "completed" || run.activeOperationId) return null;
     const enabled = configuredNarrativeTasks(run.configurationJson);
     const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: SpecialistTask; subjectId?: string; subjectKind?: string } | null;
     if (pending?.kind === "question") return "tester";
     if (pending?.kind === "revision") {
+      if (pending.taskId === "J12") return pageBibleWork(run, projected)?.taskId === "J12" ? "J12" : null;
       if (pending.taskId === "J11") return paginationSources(run, projected) !== null ? "J11" : null;
       if (pending.taskId === "J09" || pending.taskId === "J10") return sheetTargets(run, projected).some((target) => target.taskId === pending.taskId && target.subjectKind === pending.subjectKind && target.subjectId === pending.subjectId) ? pending.taskId : null;
-      return pending.taskId && enabled.includes(pending.taskId) && currentApprovedSourceIds(pending.taskId, projected) !== null ? pending.taskId : null;
+      return isNarrativeTask(pending.taskId) && enabled.includes(pending.taskId) && currentApprovedSourceIds(pending.taskId, projected) !== null ? pending.taskId : null;
     }
     for (const task of enabled) {
       const current = projected.find((item) => item.taskId === task);
@@ -96,6 +145,12 @@ export function createExperimentContextService(database: Database) {
       if (layout?.state === "draft") return "tester";
       if (layout?.state !== "approved") return null;
     }
+    if (configuredPageBibleTask(run.configurationJson)) {
+      const work = pageBibleWork(run, projected);
+      if (!work) return null;
+      if ("complete" in work) return "slice_complete";
+      return "review" in work ? "tester" : "J12";
+    }
     return "slice_complete";
   }
 
@@ -110,6 +165,7 @@ export function createExperimentContextService(database: Database) {
     const artifactRows = await artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId, $or: [
       { subjectKind: "book", subjectId: run.bookletId, taskId: { $in: [...enabled, ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : [])] } },
       ...(sheetsEnabled ? [{ taskId: "J09" as const, subjectKind: "character" as const }, { taskId: "J10" as const, subjectKind: "location" as const }] : []),
+      ...(configuredPageBibleTask(run.configurationJson) ? [{ taskId: "J12" as const, subjectKind: "page" as const }] : []),
     ] }).sort({ taskId: 1, subjectId: 1 }).toArray();
     if (new Set(artifactRows.map((row) => `${row.taskId}:${row.subjectKind}:${row.subjectId}`)).size !== artifactRows.length) deny("Run has duplicate task subject artifacts.");
     const currentArtifacts = await Promise.all(artifactRows.map(projectArtifact));
@@ -133,6 +189,7 @@ export function createExperimentContextService(database: Database) {
         createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs })),
       nextNarrativeTask: chooseNext(run, currentArtifacts),
       ...(sheetsEnabled ? { nextSheetWork: sheetWork(run, currentArtifacts) } : {}),
+      ...(configuredPageBibleTask(run.configurationJson) ? { nextPageBibleWork: pageBibleWork(run, currentArtifacts) } : {}),
     };
   }
 
@@ -165,30 +222,34 @@ export function createExperimentContextService(database: Database) {
     if (operation.role === "manager") {
       const eligibleRoute = chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts);
       const pending = view.pendingDecision as { kind?: string; subjectKind?: string; subjectId?: string; taskId?: string } | null;
-      const eligibleTarget = eligibleRoute === "J09" || eligibleRoute === "J10" ?
+      const eligibleTarget = eligibleRoute === "J12" ? (view.nextPageBibleWork && "taskId" in view.nextPageBibleWork ? view.nextPageBibleWork : null) : eligibleRoute === "J09" || eligibleRoute === "J10" ?
         sheetTargets(run, view.currentArtifacts).find((target) => target.taskId === eligibleRoute && (pending?.kind === "revision" ? target.subjectId === pending.subjectId && target.subjectKind === pending.subjectKind : target.subjectId === view.nextSheetWork?.target.subjectId)) ?? null : null;
       return { role: "manager" as const, run: view, eligibleRoute, ...(eligibleTarget ? { eligibleTarget } : {}) };
     }
-    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : [])] };
+    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : []), ...(configuredPageBibleTask(run.configurationJson) ? ["J12" as const] : [])] };
     if (operation.role === "specialist") {
       const enabled = configuredNarrativeTasks(run.configurationJson);
       const isSheet = operation.taskId === "J09" || operation.taskId === "J10";
       const isPagination = operation.taskId === "J11" && configuredPaginationTask(run.configurationJson);
-      if (!operation.taskId || (!isSheet && ((!isPagination && !enabled.includes(operation.taskId as NarrativeTask)) || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId))) deny("Specialist task is outside this slice.");
+      const isPageBible = operation.taskId === "J12" && configuredPageBibleTask(run.configurationJson);
+      const pageWork = isPageBible ? pageBibleWork(run, view.currentArtifacts) : null;
+      if (!operation.taskId || (isPageBible ? operation.subjectKind !== "page" || operation.subjectId !== pageWork?.subjectId :
+        !isSheet && ((!isPagination && !enabled.includes(operation.taskId as NarrativeTask)) || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId))) deny("Specialist task is outside this slice.");
       const taskId = operation.taskId as SpecialistTask;
       const currentTarget = view.currentArtifacts.find((item) => item.taskId === taskId && item.subjectKind === operation.subjectKind && item.subjectId === operation.subjectId) ?? null;
       if ((currentTarget?.currentVersionId ?? null) !== operation.expectedTargetVersionId) deny("Specialist target version changed.");
       const target = isSheet ? sheetTargets(run, view.currentArtifacts).find((item) => item.taskId === taskId && item.subjectKind === operation.subjectKind && item.subjectId === operation.subjectId) : null;
-      const expectedSources = isPagination ? paginationSources(run, view.currentArtifacts) : isSheet ? target?.sourceVersionIds ?? null : currentApprovedSourceIds(taskId as NarrativeTask, view.currentArtifacts);
-      if (expectedSources === null || JSON.stringify(expectedSources) !== JSON.stringify(operation.dependencyVersionIds)) deny("Specialist source version changed.");
+      const expectedSources = isPageBible && pageWork && "sourceVersionIds" in pageWork ? pageWork.sourceVersionIds : isPagination ? paginationSources(run, view.currentArtifacts) : isSheet ? target?.sourceVersionIds ?? null : currentApprovedSourceIds(taskId as NarrativeTask, view.currentArtifacts);
+      if (!expectedSources || JSON.stringify(expectedSources) !== JSON.stringify(operation.dependencyVersionIds)) deny("Specialist source version changed.");
       const approvedSources = expectedSources.map((versionId) => {
         const artifact = view.currentArtifacts.find((item) => item.currentVersionId === versionId);
         const version = artifact?.versions.find((item) => item.id === versionId);
         if (!version) deny("Specialist approved source version is unavailable.");
-        return { taskId: artifact!.taskId, ...(isPagination ? { subjectKind: artifact!.subjectKind, subjectId: artifact!.subjectId } : {}), ...version };
+        return { taskId: artifact!.taskId, ...((isPagination || isPageBible) ? { subjectKind: artifact!.subjectKind, subjectId: artifact!.subjectId } : {}), ...version };
       });
-      const pending = view.pendingDecision as { kind?: string; taskId?: SpecialistTask; artifactVersionId?: string } | null;
-      const matchingRevision = pending?.kind === "revision" && pending.taskId === taskId && pending.artifactVersionId === operation.expectedTargetVersionId ? pending : null;
+      const pending = view.pendingDecision as { kind?: string; taskId?: SpecialistTask; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
+      const matchingRevision = pending?.kind === "revision" && pending.taskId === taskId && pending.artifactVersionId === operation.expectedTargetVersionId &&
+        (!isPageBible || (pending.subjectKind === "page" && pending.subjectId === operation.subjectId)) ? pending : null;
       return { role: "specialist" as const, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, brief: view.brief, persona: view.persona, currentTarget, approvedSources, approvedUpstream: taskId === "J02" ? approvedSources[0] ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, taskId, operation.subjectId) };
     }
     deny("Role context is not supported in this slice.");

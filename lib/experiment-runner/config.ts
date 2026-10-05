@@ -38,7 +38,7 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   const callbackKey = env.DIFY_BOOKLET_TOOL_KEY;
   let raw: unknown;
   try { raw = JSON.parse(env.DIFY_BOOKLET_BINDINGS_JSON ?? ""); } catch { return { enabled: false, reason: "invalid" }; }
-  const parsed = z.array(binding).refine((items) => [6, 11, 13, 15, 16].includes(items.length)).safeParse(raw);
+  const parsed = z.array(binding).refine((items) => [6, 11, 13, 15, 16, 17].includes(items.length)).safeParse(raw);
   if (!baseUrl || !publicOrigin || !callbackKey || callbackKey.length < 32 || !parsed.success) return { enabled: false, reason: "invalid" };
   const bindings = parsed.data;
   const slots = bindings.map((item) => `${item.role}:${item.taskId ?? ""}:${item.persona ?? ""}`);
@@ -46,7 +46,8 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   if (bindings.length >= 11) expected.push(...["J03", "J04", "J05", "J06", "J07"].map((task) => `specialist:${task}:`));
   if (bindings.length >= 13) expected.push("specialist:J08:", "image::");
   if (bindings.length >= 15) expected.push("specialist:J09:", "specialist:J10:");
-  if (bindings.length === 16) expected.push("specialist:J11:");
+  if (bindings.length >= 16) expected.push("specialist:J11:");
+  if (bindings.length === 17) expected.push("specialist:J12:");
   if (new Set(slots).size !== bindings.length || expected.some((slot) => !slots.includes(slot)) || new Set(bindings.map((item) => item.appId)).size !== bindings.length) return { enabled: false, reason: "invalid" };
   return { enabled: true, config: { enabled: true, baseUrl, publicOrigin, callbackKey, bindings } };
 }
