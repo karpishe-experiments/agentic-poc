@@ -5,6 +5,9 @@ import { CASES, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 import { parseReferenceProposal, styleModuleHash, type VisualStyleProposal } from "@/lib/contracts/experiment-references";
 import { simulateReferenceProposal } from "@/lib/experiment-runner/reference-fixtures";
+import { assembleReferenceSheet } from "@/lib/experiment-runner/reference-assembly";
+import { referenceSheetRequest } from "@/lib/experiment-runner/reference-requests";
+import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 
 type Context = Parameters<typeof simulateNarrativeResult>[0];
 const context = (value: unknown) => value as Context;
@@ -107,6 +110,32 @@ function compareSheet(saved: Record<string, unknown>) {
 }
 
 describe("Dify M2 Python simulation parity", () => {
+  it.each(["J09", "J10"] as const)("routes a saved %s subject and answers its pending question", (taskId) => {
+    compare(context({ role: "manager", eligibleRoute: taskId, eligibleTarget: { taskId, subjectKind: taskId === "J09" ? "character" : "location", subjectId: id(25) }, run: { bookletId: id(5) } }));
+    compare(context({ role: "tester", pendingDecision: { kind: "question", taskId, questionId: id(50) } }));
+  });
+  it.each(Object.keys(CASES) as Persona[])("reviews only assembled sheet versions for %s", (persona) => {
+    for (const task of ["J09", "J10"] as const) {
+      const input = sheetCase(persona, task);
+      const proposal = compareSheet(input.saved).payload.content;
+      const request = referenceSheetRequest(task, proposal);
+      const content = assembleReferenceSheet(task, proposal, { operationId: id(88), assetId: id(89), request, inputFingerprint: imageRequestFingerprint(request) }).content;
+      const version = { id: id(95), sourceVersionId: id(94), dependencyVersionIds: [id(94), input.list.id, input.version.id], content };
+      const artifact = { taskId: task, subjectKind: task === "J09" ? "character" : "location", subjectId: input.subjectId,
+        state: "draft", currentVersionId: version.id, versions: [version] };
+      const saved = context({ role: "tester", persona, bookletId: id(5), pendingDecision: null, creatorMessages: [{}],
+        activeDelegation: { taskIds: ["J08", "J09", "J10"] }, currentArtifacts: [
+          { taskId: input.list.taskId, state: "approved", currentVersionId: input.list.id, versions: [] },
+          { taskId: "J08", state: "approved", currentVersionId: input.version.id, versions: [] }, artifact,
+        ] });
+      compare(saved);
+      if (saved.role !== "tester") throw new Error("Expected tester context");
+      const textual = context({ ...saved, currentArtifacts: [...saved.currentArtifacts.slice(0, 2), { ...artifact,
+        versions: [{ ...version, sourceVersionId: null, dependencyVersionIds: [input.list.id, input.version.id], content: proposal }] }] });
+      expect(() => simulateNarrativeResult(textual, "simulated")).toThrow("No current eligible");
+      expect(() => python({ started: true, mode: "simulated", inputFingerprint: "a".repeat(64), context: textual })).toThrow("No current eligible");
+    }
+  });
   it.each(Object.keys(CASES) as Persona[])("matches each character/location sheet proposal for %s", (persona) => {
     for (const task of ["J09", "J10"] as const) {
       const count = task === "J09" || persona === "professional_creator" ? 2 : 1;

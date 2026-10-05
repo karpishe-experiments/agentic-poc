@@ -30,11 +30,14 @@ function json(raw: string | null | undefined): unknown {
 export function createExperimentSheetAssembly(input: { database: Database; store: AssetStore; now?: () => number }) {
   const { database, store } = input;
   const now = input.now ?? Date.now;
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false) {
     const options = { session };
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Sheet run was not found.");
-    if (run.mode !== "simulated" || !["queued", "running", "paused"].includes(run.status) || run.activeOperationId) invalid("Sheet assembly requires idle simulated work.");
+    const recoveredApproval = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+        role: "tester", state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
+    if (run.mode !== "simulated" || (!recoveredApproval && !["queued", "running", "paused"].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
@@ -74,6 +77,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== task ||
       operation.subjectKind !== subjectKind || operation.subjectId !== subjectId || operation.mode !== "simulated" ||
       operation.state !== "succeeded" || operation.reservationCount !== 1 || !operation.workflowRunId || operation.imageCompletionClaim) invalid("Sheet operation is not a completed authorized image.");
+    if (verificationOnly && !operation.verifiedWorkflowId) invalid("Sheet approval requires verified image publication.");
     const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));
     await assertCurrentImageSources(database, session, run, request);
     if (canonical(operation.dependencyVersionIds) !== canonical(sourceIds)) conflict("Sheet operation dependencies differ.");
@@ -100,14 +104,31 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     return { run, artifact, draft, current, assembled, dependencies,
       bytes: { uri: asset.uri, sha256: metadata.sha256, byteLength: metadata.byteLength } };
   }
+  async function verifyBytes(evidence: { uri: string; sha256: string; byteLength: number }) {
+    try {
+      if (!await store.exists(evidence.uri)) invalid("Saved sheet bytes are missing.");
+      const bytes = await store.get(evidence.uri);
+      if (bytes.byteLength !== evidence.byteLength || createHash("sha256").update(bytes).digest("hex") !== evidence.sha256) invalid("Saved sheet bytes are corrupt.");
+    } catch { invalid("Sheet storage verification failed."); }
+  }
+  // Runs in the caller's approval transaction. No nested transaction, assembly,
+  // reservation or stage change is permitted here.
+  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession) {
+    const runId = opaqueIdSchema.parse(identity.runId), versionId = opaqueIdSchema.parse(identity.versionId);
+    const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
+    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
+    if (!version || !artifact || artifact.currentVersionId !== versionId || version.createdBy !== "application" ||
+        !version.sourceVersionId || (artifact.taskId !== "J09" && artifact.taskId !== "J10")) invalid("Sheet approval requires the current assembled version.");
+    const content = parseReferenceProposal(artifact.taskId, "assembled", json(version.contentJson)).content;
+    if (!("build" in content)) invalid("Sheet assembly has no image evidence.");
+    const checked = await load({ runId, draftSheetVersionId: version.sourceVersionId, imageOperationId: content.build.operationId }, session, true);
+    if (checked.current._id !== versionId) conflict("Sheet approval target changed.");
+    await verifyBytes(checked.bytes);
+  }
   async function assemble(raw: unknown) {
     const value = inputSchema.parse(raw);
     const initial = await withMongoTransaction(database, (session) => load(value, session));
-    try {
-      if (!await store.exists(initial.bytes.uri)) invalid("Saved sheet bytes are missing.");
-      const bytes = await store.get(initial.bytes.uri);
-      if (bytes.byteLength !== initial.bytes.byteLength || createHash("sha256").update(bytes).digest("hex") !== initial.bytes.sha256) invalid("Saved sheet bytes are corrupt.");
-    } catch { invalid("Sheet storage verification failed."); }
+    await verifyBytes(initial.bytes);
     return withMongoTransaction(database, async (session) => {
       const checked = await load(value, session);
       if (canonical(initial.bytes) !== canonical(checked.bytes)) conflict("Sheet storage identity changed during assembly.");
@@ -130,5 +151,5 @@ export function createExperimentSheetAssembly(input: { database: Database; store
       return { reused: false, version };
     });
   }
-  return { assemble };
+  return { assemble, verifyVersion };
 }

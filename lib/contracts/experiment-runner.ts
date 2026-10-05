@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
-import { parseReferenceProposal, type VisualStyleProposal } from "@/lib/contracts/experiment-references";
+import { parseReferenceProposal, type VisualStyleProposal, type CharacterSheetProposal, type LocationSheetProposal } from "@/lib/contracts/experiment-references";
 
 export const EXPERIMENT_PROFILE = "dify_booklet_v1" as const;
 export const experimentTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11", "J12", "J13"]);
@@ -71,6 +71,8 @@ export type StoryOutlineContent = z.infer<typeof storyOutlineSchema>;
 export type NarrativeContent = ConceptBriefContent | StoryOutlineContent;
 export type NarrativeWarning = { field: string; message: string };
 export const narrativeTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08"]);
+export const specialistTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10"]);
+export type SpecialistTask = z.infer<typeof specialistTaskSchema>;
 const characterEntryKey = z.enum(["character_1", "character_2"]);
 const locationEntryKey = z.enum(["location_1", "location_2"]);
 
@@ -238,7 +240,10 @@ export function parseNarrativeTaskProposal(task: "J06", persona: Persona, conten
 export function parseNarrativeTaskProposal(task: "J07", persona: Persona, content: unknown): { content: FinalLocationListContent; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: "J08", persona: Persona, content: unknown): { content: VisualStyleProposal; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: z.infer<typeof narrativeTaskSchema>, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal; warnings: NarrativeWarning[] };
-export function parseNarrativeTaskProposal(task: z.infer<typeof narrativeTaskSchema>, persona: Persona, content: unknown) {
+export function parseNarrativeTaskProposal(task: SpecialistTask, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal | CharacterSheetProposal | LocationSheetProposal; warnings: NarrativeWarning[] };
+export function parseNarrativeTaskProposal(task: SpecialistTask, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal | CharacterSheetProposal | LocationSheetProposal; warnings: NarrativeWarning[] } {
+  if (task === "J09") return parseReferenceProposal("J09", "proposal", content);
+  if (task === "J10") return parseReferenceProposal("J10", "proposal", content);
   if (task === "J08") return parseReferenceProposal("J08", "proposal", content);
   if (task === "J01" || task === "J02") return parseNarrativeProposal(task, content);
   if (task === "J03" || task === "J04") return parseDraftListProposal(task, persona, content);
@@ -260,12 +265,12 @@ export const testerDecisionSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("revoke_delegation"), delegationId: opaqueIdSchema }),
   z.strictObject({ action: z.literal("approve"), versionIds: uniqueIds }),
   z.strictObject({ action: z.literal("answer"), questionId: opaqueIdSchema, text }),
-  z.strictObject({ action: z.literal("revise"), taskId: narrativeTaskSchema, artifactVersionId: opaqueIdSchema, instruction: text }),
+  z.strictObject({ action: z.literal("revise"), taskId: specialistTaskSchema, artifactVersionId: opaqueIdSchema, instruction: text }),
 ]);
 export type TesterDecision = z.infer<typeof testerDecisionSchema>;
-const managerDelegate = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({ taskId: narrativeTaskSchema, subjectKind: z.literal("book"), subjectId: opaqueIdSchema }) });
+const managerDelegate = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({ taskId: specialistTaskSchema, subjectKind: z.enum(["book", "character", "location"]), subjectId: opaqueIdSchema }) });
 const managerAsk = z.strictObject({ kind: z.literal("ask"), payload: questionPayload });
-const specialistProposal = z.strictObject({ kind: z.literal("proposal"), payload: z.strictObject({ taskId: narrativeTaskSchema, content: z.unknown() }) });
+const specialistProposal = z.strictObject({ kind: z.literal("proposal"), payload: z.strictObject({ taskId: specialistTaskSchema, content: z.unknown() }) });
 const specialistClarification = z.strictObject({ kind: z.literal("clarification"), payload: questionPayload });
 const testerDecision = z.strictObject({ kind: z.literal("decision"), payload: z.strictObject({ decision: testerDecisionSchema }) });
 const testerFeedback = z.strictObject({ kind: z.literal("feedback"), payload: z.unknown() });

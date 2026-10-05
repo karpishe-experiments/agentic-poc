@@ -10,6 +10,21 @@ const bindings = entries.map(([role, taskId, persona], index) => ({ role, taskId
 const env = { DEPLOYMENT_ENV: "local", DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: "https://dify.example.test", DIFY_BOOKLET_PUBLIC_ORIGIN: "http://localhost:3000", DIFY_BOOKLET_TOOL_KEY: "x".repeat(32), DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bindings) };
 
 describe("booklet runner configuration", () => {
+  it("requires the complete fifteen-slot sheet profile", () => {
+    const later = ["J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10"].map((taskId, index) => ({
+      role: "specialist", taskId, persona: null, appId: ids[index + 6], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: `sheet-${index}`,
+    }));
+    const image = { role: "image", taskId: null, persona: null, appId: ids[14], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: "image-key" };
+    const expanded = [...bindings, ...later, image];
+    const state = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(expanded) });
+    if (!state.enabled) throw new Error("Expected sheet profile");
+    expect(bindingFor(state.config, { role: "specialist", taskId: "J09", persona: "playful_kid" }).apiKey).toBe("sheet-6");
+    expect(configurationForPersona(state.config, "playful_kid")).toHaveLength(13);
+    for (const bad of [expanded.slice(0, 14), [...expanded.slice(0, 13), later[6], image],
+      expanded.map((item) => item.taskId === "J10" ? { ...item, appId: ids[0] } : item)]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
+    }
+  });
   it("defaults off and cannot enable production", () => {
     expect(getRunnerConfig({}).enabled).toBe(false);
     expect(getRunnerConfig({ ...env, DEPLOYMENT_ENV: "_prod" })).toEqual({ enabled: false, reason: "production" });
