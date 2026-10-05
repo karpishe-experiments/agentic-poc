@@ -1,0 +1,175 @@
+{
+  "observedDate": "2026-10-05",
+  "host": "https://dify.uniwares.co.uk",
+  "workspaceId": "ffac910f-2786-490e-90d8-07243d49741b",
+  "stagingRelease": "74f73208393a0f9c69ac6023de1e1f10dd43b6ee",
+  "imageAppId": "923566e9-c6fd-4936-836f-b21704d39628",
+  "scope": "J01-J10 reference slice only; not complete booklet acceptance",
+  "sources": [
+    "Staging runner DOM current artifacts, approvals and operation history",
+    "Community MCP runs_node_executions for all 16 image workflow run IDs"
+  ],
+  "cases": [
+    {
+      "persona": "playful_kid",
+      "runId": "2b642a00-590f-49f7-822b-321c746a49a7",
+      "revision": 164,
+      "nextTask": "slice_complete",
+      "status": "queued",
+      "logicalText": 27,
+      "logicalImage": 5,
+      "steps": 32,
+      "payableText": 0,
+      "payableImage": 0,
+      "currentArtifactsApproved": true,
+      "approvalOrigin": "delegated",
+      "stylePromptModuleHash": "13efcb597b17c459073028b70000caba81f11fd7f0c5545ce034d602463e9058",
+      "images": [
+        {
+          "workflowRunId": "1440728b-5378-4881-9c5d-dbe797b91e79",
+          "assetId": "3ec04f8e-a770-452f-9997-63fe0769ad73",
+          "sha256": "a121e9cbdfcb822f2093e3dcab1ea864957bdb502c928c79a7a7394ed3f39e84",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "41fcea82-a357-4869-9f0d-79465131b008",
+          "assetId": "55bebb08-a7e5-46d0-8dc1-c73df214f3e3",
+          "sha256": "7b4ef1bce1b11ac9b1b931379e11c57b4c0c4bf82ea3ee7132b962047dbbb807",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "f4ac4bbb-478e-4d8e-8bda-2cfb34cbbc0f",
+          "assetId": "31b9c2da-4938-4c1b-95c3-44c804112b3d",
+          "sha256": "b247104ba2bfeef58e0d1c43603e665a24c9a150c1ece675eabcd1c750fac50d",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "deddff02-2dab-4b82-9329-e75212b176e5",
+          "assetId": "e3e4b278-1552-496d-85d2-2f1641c58c56",
+          "sha256": "f8f62a6a2261b5b73099e03ef1198d919cc3e1f99288fbd2c5887c45c4bf9346",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "3242e52c-7d88-43ee-aeeb-5b2959669276",
+          "assetId": "42d83710-6a50-41ad-8f5a-2ce3e8bc0171",
+          "sha256": "efcf1a6ca982100cd9030f8e24147d3a5187cb7a16f9d9bb812cf9c6da8ed8f1",
+          "allNodesSucceeded": true
+        }
+      ]
+    },
+    {
+      "persona": "enthusiast_parent",
+      "runId": "f3d76cf3-0e53-4ae0-8037-f5fb0c2273bc",
+      "revision": 164,
+      "nextTask": "slice_complete",
+      "status": "queued",
+      "logicalText": 27,
+      "logicalImage": 5,
+      "steps": 32,
+      "payableText": 0,
+      "payableImage": 0,
+      "currentArtifactsApproved": true,
+      "approvalOrigin": "delegated",
+      "stylePromptModuleHash": "e382870019607d680856c580af1e56794cb9e7f5bf18a3a9435012b855011d21",
+      "images": [
+        {
+          "workflowRunId": "96448900-8991-4930-a2a5-eac787c7903d",
+          "assetId": "ce84dab8-518a-4148-8773-bbcb0a4b6edb",
+          "sha256": "b060207efb68cb02bebeea6b6101307e81b5cd7c82e7c8f02f7f341c38798f9c",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "3a6450a9-0721-4f39-8d46-e6c9831cf325",
+          "assetId": "4a959a3f-e72d-4bcf-b798-ea69fc2ee437",
+          "sha256": "811c4faadafc695c47c9bebd02d18b38b232f335b71284312f1c3aec7cdc5f2e",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "b808756e-dd24-457f-9600-baabd24562a2",
+          "assetId": "534dc3e3-d5a8-4ccb-973b-e0b6b5e52caf",
+          "sha256": "b99953e1e721f362d34e2a20db32b4ad90f7d366dcedd0a7a9015f2b2fa0e6cb",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "56005589-e424-4730-a500-64ff9eb91676",
+          "assetId": "e8959a0d-5928-41b6-8147-79c881b27ad6",
+          "sha256": "84bb389bec7c29915a8bcb55bfb2ea66abc6ecedf0b545c6fdf07a8bc1b1a7cf",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "bc41f6e9-881b-4536-b765-20f31a2d0f6f",
+          "assetId": "f7b2d781-66c5-4a71-acf1-48dfea2faad5",
+          "sha256": "f47917578d7e7d98e2cf7b2709e56e7d5327965d5f8eb111825c24713f330491",
+          "allNodesSucceeded": true
+        }
+      ]
+    },
+    {
+      "persona": "professional_creator",
+      "runId": "cfb8107c-fbdc-4136-840b-0fad094dfb87",
+      "revision": 207,
+      "nextTask": "slice_complete",
+      "status": "queued",
+      "logicalText": 34,
+      "logicalImage": 6,
+      "steps": 40,
+      "payableText": 0,
+      "payableImage": 0,
+      "currentArtifactsApproved": true,
+      "approvalOrigin": "explicit",
+      "stylePromptModuleHash": "9bf88bccb8d3577f6ae6d6c45e9b703954c97eaf0dd2c3047c06f7bfa3970582",
+      "images": [
+        {
+          "workflowRunId": "773c6344-92bd-4fcb-9261-ca6f9b448859",
+          "assetId": "c9909691-d206-442a-83ff-ece120173fc1",
+          "sha256": "d769beca753a22b427cd813a36e79043466c36d42277c69b0ee55f38d992bdc7",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "f2b62b5f-bfca-4a02-8382-bbf29c17b4ff",
+          "assetId": "937152dc-f446-48fe-adbf-8fae33ba4217",
+          "sha256": "ca1d1d6ef91514c57c06753bc59b1d0e0000eb5c08c66228347741078ebc6fa9",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "db862ba7-6c1a-468b-a942-872b90052ddf",
+          "assetId": "e24f4f95-dce2-4251-b92a-60d3e982c417",
+          "sha256": "b0524a4561a34d6c5c838e70f217f71e10b1550b9c2ee398ef7f749fd5fabd26",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "67c9810d-c31e-4996-ac69-e5a7f088ec31",
+          "assetId": "ae94f0c0-6705-40a8-baf2-89e23d56033f",
+          "sha256": "175bab40a0b312431fae7c30925187c5eca35a823587b3f3d00783b4ed5ecdf9",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "61b76aa2-fc8f-4d4f-8f77-8e2d664c8966",
+          "assetId": "05054fc7-0f2c-4900-80ff-2ec055c40b62",
+          "sha256": "6f288a60e9d622f860c7330c74f9d8b567a73bf410702a5f53265a3973256f91",
+          "allNodesSucceeded": true
+        },
+        {
+          "workflowRunId": "43531f51-49cd-4fb9-8704-61c07de67004",
+          "assetId": "e35023f7-6f7d-4220-b561-8d6e183251ec",
+          "sha256": "08c5b873b67377f53db74138535624ad9764462df75400beb4cfae021f4fe590",
+          "allNodesSucceeded": true
+        }
+      ]
+    }
+  ],
+  "pauseResume": {
+    "runId": "cfb8107c-fbdc-4136-840b-0fad094dfb87",
+    "pausedRevision": 130,
+    "reloadedPausedRevision": 132,
+    "resumedRevision": 135,
+    "completedStyleImagesRetained": 2,
+    "repeatImageOperationObserved": false
+  },
+  "limitations": [
+    "Deterministic fixtures are simulated pixels, not creative-quality evidence",
+    "No final pages, cover, tester report or judge report yet",
+    "Multi-reference and judge image-set input transport not yet verified",
+    "Runner image viewer is pending release; one saved Kid asset rendered through the authenticated asset route"
+  ]
+}

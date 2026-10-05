@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** Accepted roadmap; documentation delivered, runtime milestones not yet verified.
+**Status:** Accepted roadmap. M1 narrative slice and all-persona M2 reference boundaries have live evidence. M3 final pages, complete booklets and later acceptance remain pending; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
