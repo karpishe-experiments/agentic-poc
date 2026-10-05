@@ -171,8 +171,8 @@ delegation to J11; revision preserved IDs
 and duplicate completion reused the saved result. Missing approval evidence and
 corrupt saved sheets rejected admission. Two independent reviews and Validate
 `37329273541` passed; [PR #136](https://github.com/karpishe-experiments/agentic-poc/pull/136)
-merged the reviewed local implementation. Dify publication, private J11 keys
-and staging activation remain pending. These local tests are not full-booklet or
+merged the reviewed local implementation. Publication and private J11 key
+preparation now passed; staging activation remains pending. These local tests are not full-booklet or
 live Dify acceptance. Manuscript units can span panels/pages; coverage is required
 on story pages, not satisfied by the cover alone.
 
@@ -224,7 +224,7 @@ J11 bundle before activation; existing profiles remain valid. Install the review
 dispatcher, release the reviewed J11 application, verify publication read-back,
 then activate with drained maintenance and a verified backup. No new reset.
 
-| New draft | App identifier |
+| New module | App identifier |
 | --- | --- |
 | `issue65_m3_manager` | `46572ccb-d954-45e5-b73d-90fd0995cdb6` |
 | `issue65_m3_playful_kid` | `bf57a8ea-1be6-4a97-a5c0-023cfde794f8` |
@@ -232,10 +232,37 @@ then activate with drained maintenance and a verified backup. No new reset.
 | `issue65_m3_professional_creator` | `cd284244-63d5-4169-95c3-9790001a5240` |
 | `issue65_m3_J11` | `4f4704ca-de02-4a6d-8051-ba6849fdda56` |
 
-These are draft identities, not publication evidence. Retain the existing M2
+These are application identities, not runtime-key execution evidence. Retain the existing M2
 apps and keys. Read back each published configuration before constructing the
 runtime settings bundle; the encrypted handoff contains credentials, not verified
 publication identifiers.
+
+The operator prepared all sixteen encrypted bindings on 2026-10-05. MCP read-back
+verified the five new publications: manager `5e7ead33-6a33-45fd-8425-62e865cdad4a`,
+Kid `c546bbc1-61c5-4bba-9b8d-f7e6ef4f8f4b`, Parent
+`c2285100-f758-4ba5-8a40-1405c7348c0f`, Creator
+`0c35b628-0908-4eaa-80b4-054fb99ea097`, and J11
+`26b4f146-f4f0-4779-8a83-192cec653bee`. The eleven reused publications also
+passed model-free node inspection. Runtime-key validity and J11 staging acceptance
+remain unverified. Infrastructure `37345579673` installed reviewed master
+`32befad909ffd8be207fb41e2b771ee5985757f9` with no Terraform resource changes;
+it did not activate the sixteen bindings. The J11 staging candidate in
+[PR #140](https://github.com/karpishe-experiments/agentic-poc/pull/140) passed
+207 focused tests across 23 suites, typecheck, lint, twelve legacy fixtures and
+two independent reviews. Validate `37345410931` passed and PR #140 merged as
+staging commit `afe92b6509776058341cf2c4830bfe2633f83f80`. Deploy
+`37346290235` passed for that commit. Readiness check `37347710571`, private
+settings upload and drained activation remain pending.
+
+`scripts/upload-dify-booklet-m3-settings.ps1` accepts a sanitized publication
+manifest through `-PublicationsPath`. Preview validates sixteen distinct app and
+publication identifiers, configuration hashes and model-free node types without
+reading private bindings. `-Apply` joins those identifiers to the encrypted M3
+bindings, validates the exact slots, saves separate encrypted settings and uploads
+`DIFY_BOOKLET_RUNNER_SETTINGS_JSON` through GitHub CLI standard input. It does not
+activate staging or execute Dify. After an interrupted upload, rerunning is allowed
+only when the existing encrypted settings exactly match the computed payload;
+different settings are not overwritten. Re-read publications before activation.
 
 Local host preparation passed Bash syntax checks and the focused
 `tests/shell/vps-host.test.sh booklet-runner-staging` scenario. The complete
