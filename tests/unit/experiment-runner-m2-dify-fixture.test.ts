@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CASES, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
+import { styleModuleHash, type VisualStyleProposal } from "@/lib/contracts/experiment-references";
 
 type Context = Parameters<typeof simulateNarrativeResult>[0];
 const context = (value: unknown) => value as Context;
@@ -23,7 +24,7 @@ function compare(saved: Context) {
   return (envelope.result as { payload: { content: Record<string, unknown> } }).payload.content;
 }
 type Persona = keyof typeof CASES;
-type Task = "J01" | "J02" | "J03" | "J04" | "J05" | "J06" | "J07";
+type Task = "J01" | "J02" | "J03" | "J04" | "J05" | "J06" | "J07" | "J08";
 function sortedKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortedKeys);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, sortedKeys(item)]));
@@ -37,7 +38,7 @@ function chain(persona: Persona) {
     matchingRevision: null, questionAnswers: [], ...extra,
   });
   const run = (taskId: Task, extra: Record<string, unknown> = {}) => compare(make(taskId, extra));
-  for (const task of ["J01", "J02", "J03", "J04", "J05", "J06", "J07"] as const) {
+  for (const task of ["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08"] as const) {
     const content = run(task);
     if (task === "J03") expect((content.characters as Record<string, unknown>[]).every((row) => !("characterId" in row))).toBe(true);
     if (task === "J04") expect((content.locations as Record<string, unknown>[]).every((row) => !("locationId" in row))).toBe(true);
@@ -50,11 +51,30 @@ function chain(persona: Persona) {
   return { make, run, sources };
 }
 
+// Shape fixtures only: no claim of generated or stored image files.
+function styleReview(persona: Persona) {
+  const { sources } = chain(persona);
+  const style = sources[7].content as VisualStyleProposal;
+  const { samplePlan, ...definition } = style;
+  const draftId = sources[7].id, versionId = id(70);
+  const dependencies = sources.filter((item) => ["J01", "J02", "J05", "J06", "J07"].includes(item.taskId)).map((item) => item.id);
+  const content = { ...definition, draftStyleVersionId: draftId, samples: samplePlan.map((sample, index) => ({ ...sample,
+    build: { prompt: `${style.stylePromptModule}\n${sample.purpose}`, stylePromptModuleHash: style.stylePromptModuleHash,
+      operationId: id(80 + index), assetId: id(80 + index), sourceVersionIds: [draftId, ...dependencies] },
+  })) };
+  const version = { id: versionId, sourceVersionId: draftId, dependencyVersionIds: [draftId, ...dependencies], content };
+  const artifact = { taskId: "J08", subjectKind: "book", subjectId: id(5), state: "draft", currentVersionId: versionId, versions: [version] };
+  const approved = sources.slice(0, 7).map((item) => ({ taskId: item.taskId, state: "approved", currentVersionId: item.id, versions: [] }));
+  const tester = { role: "tester", persona, bookletId: id(5), currentArtifacts: [...approved, artifact],
+    creatorMessages: [{ id: id(6) }], pendingDecision: null, activeDelegation: { taskIds: sources.map((item) => item.taskId) } };
+  return { content, version, artifact, approved, tester };
+}
+
 describe("Dify M2 Python simulation parity", () => {
   for (const persona of Object.keys(CASES) as Persona[]) {
-    it(`matches J01-J07 and manager routes for ${persona}`, () => {
+    it(`matches J01-J08 and manager routes for ${persona}`, () => {
       const { sources } = chain(persona);
-      expect(sources).toHaveLength(7);
+      expect(sources).toHaveLength(8);
       for (const taskId of sources.map((source) => source.taskId)) compare(context({ role: "manager", eligibleRoute: taskId, run: { bookletId: id(5) } }));
       const manuscript = sources[4].content as { units: { unitKey: string; unitId: string; locationId: string; charactersPresent: string[] }[] };
       const finalCast = (sources[5].content as { characters: { unitIds: string[]; recurrence: string; sheetRequired: boolean }[] }).characters;
@@ -69,6 +89,50 @@ describe("Dify M2 Python simulation parity", () => {
       }
     });
   }
+
+  it.each(Object.keys(CASES) as Persona[])("matches assembled style review and delegation for %s", (persona) => {
+    const { tester } = styleReview(persona);
+    compare(context(tester));
+    const saved = python({ started: true, mode: "simulated", inputFingerprint: "a".repeat(64), context: tester });
+    expect(JSON.parse(saved.booklet_result).result.payload.decision.action).toBe(persona === "professional_creator" ? "approve" : "delegate");
+    compare(context({ ...tester, activeDelegation: { taskIds: ["J01", "J02"] } }));
+  });
+
+  it("retains exact style bytes through proposal/assembled revisions and refreshes changed sources", () => {
+    const { make, sources } = chain("professional_creator");
+    const style = sources[7].content as VisualStyleProposal;
+    const styleModuleText = `  ${style.stylePromptModule}\nUnicode: café ✓\n\n`;
+    const current = { ...style, stylePromptModule: styleModuleText, stylePromptModuleHash: styleModuleHash(styleModuleText) };
+    const extra = { currentTarget: { currentVersionId: id(90), versions: [{ id: id(90), content: current }] }, matchingRevision: { instruction: "Keep the readable texture." },
+      questionAnswers: [{ taskId: "J08", question: "Contrast?", answer: "Gentle" }, { taskId: null, question: "Palette?", answer: "Warm" }] };
+    const revised = compare(make("J08", extra));
+    expect(revised.stylePromptModule).toBe(styleModuleText);
+    expect(revised.approvalQuestions).toEqual([...style.approvalQuestions, "Revision request: Keep the readable texture.", "Contrast?: Gentle", "Palette?: Warm"]);
+    const { content } = styleReview("professional_creator");
+    const revisedAssembled = compare(make("J08", { ...extra, currentTarget: { currentVersionId: id(91), versions: [{ id: id(91), content }] } }));
+    expect(revisedAssembled).not.toHaveProperty("samples");
+    expect(revisedAssembled.samplePlan).toEqual(style.samplePlan);
+    sources[0].content = { ...(sources[0].content as object), tone: "Soft dusk" };
+    const refreshed = compare(make("J08", { currentTarget: { ...extra.currentTarget, state: "needs_review" } }));
+    expect(refreshed.stylePromptModule).toContain("Soft dusk");
+    expect(refreshed.stylePromptModule).not.toContain("observatory");
+  });
+
+  it("does not review textual, malformed, parent-mismatched or stale style packages", () => {
+    const { tester, artifact, version, content, approved } = styleReview("professional_creator");
+    for (const bad of [
+      { ...version, content: { ...content, samples: undefined } },
+      { ...version, content: { ...content, samples: [content.samples[0], content.samples[0]] } },
+      { ...version, content: { ...content, styleDefinition: {} } },
+      { ...version, content: { ...content, draftStyleVersionId: "00000000-0000-4000-0000-000000000017" } },
+      { ...version, sourceVersionId: id(99) },
+      { ...version, dependencyVersionIds: [content.draftStyleVersionId, id(99)] },
+    ]) {
+      const saved = context({ ...tester, currentArtifacts: [...approved, { ...artifact, versions: [bad] }] });
+      expect(() => simulateNarrativeResult(saved, "simulated")).toThrow();
+      expect(() => python({ started: true, mode: "simulated", inputFingerprint: "a".repeat(64), context: saved })).toThrow();
+    }
+  });
 
   it("keeps renamed and reordered draft rows, saved answers, and scoped revisions", () => {
     const { make, run, sources } = chain("professional_creator");
