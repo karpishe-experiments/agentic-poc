@@ -419,8 +419,22 @@ key. Preview `37268638506` reported no Terraform changes; it did not synchronize
 host files or authorize apply. The old subject-restricting index remains, so
 J09/J10 sheet admission also requires the separately authorized index transition.
 The local sheet journey is implemented, but actual Dify binary transfer and
-all-persona reference acceptance remain unverified. Index-maintenance preparation
-is a separate local candidate, not an executed transition.
+all-persona reference acceptance remain unverified. The reviewed index-maintenance
+capability merged through PR #127 and selective staging PR #128; publication is
+not an executed index transition.
+
+Private key preparation uses
+[`prepare-dify-booklet-keys.ps1`](../../../scripts/prepare-dify-booklet-keys.ps1).
+Preview lists the nine new workflow targets without reading credentials. Apply
+guides private callback binding, publication and application-key collection. It
+retains the six existing keys and callback, saves fifteen bindings into a separate
+`issue65-m2-bindings.dpapi.xml`, and refuses to overwrite either preparation file.
+It does not upload settings, execute workflows or activate staging. Codex must
+read back published identifiers before assembling the runtime settings; the helper
+does not invent them. The synthetic
+[PowerShell test](../../../tests/powershell/prepare-dify-booklet-keys.test.ps1)
+passed syntax, preview isolation, collection, invalid-clipboard retries and cleanup
+with all private surfaces stubbed. Actual private preparation remains a handoff.
 
 ### S5 sheet-fixture preparation
 
