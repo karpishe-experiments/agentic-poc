@@ -92,6 +92,14 @@ no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;
 successful recovery clears the current failure, not its evidence history.
 
+The local style-assembly service in `db/experiment-style.ts` combines a retained
+J08 textual draft with two completed sample operations. It checks their request
+fingerprints, saved lineage and original AssetStore bytes, then creates one
+application-owned immutable version and dependency edges in a transaction.
+Repeated assembly reuses that same version without another image reservation.
+It does not approve the package or dispatch work; J08 runtime admission,
+specialist materialization, acceptance and live Dify transfer remain pending.
+
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
 instruction. The matching tester answer restores that revision without another

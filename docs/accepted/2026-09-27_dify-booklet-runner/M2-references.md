@@ -161,9 +161,11 @@ On 2026-10-05 the exact serializer candidate passed clean-checkout typecheck,
 full lint and 17 tests across these three suites without retries. The main
 checkout's stale generated types and unrelated nested worktrees failed its
 checks; those results are not counted as passes. Independent reviews and
-publication of this increment remain pending.
+publication of this increment remain pending in that local record. The corrected
+candidate subsequently passed both reviews and [PR #115](https://github.com/karpishe-experiments/agentic-poc/pull/115)
+merged as `e306de7eddc287167433c0d7d657fa60f7e4e636`; Validate `37258194125` passed.
 
-The next persistence slice reuses the operation ledger, AssetStore and immutable
+The style-assembly persistence slice reuses the operation ledger, AssetStore and immutable
 artifact versions. Save textual J08 draft D; save its two successful sample
 operations; then assemble version A with `createdBy: application`,
 `sourceVersionId: D` and no duplicate specialist `sourceOperationId`. Read build
@@ -182,6 +184,32 @@ that operation; they do not authorize regeneration. Add
 draft-approval rejection and final acceptance. Live binary transfer, image
 scheduling and private bindings remain separate prerequisites; this handoff is
 not evidence of completed reference production.
+
+The local candidate in `db/experiment-style.ts` accepts `{runId,
+draftStyleVersionId, sampleOperationIds}`. The two operation IDs may arrive in
+either order; stored fingerprints select the canonical slots. It reads an idle
+Simulated run and current draft, verifies both completed image operations and
+original stored bytes, then publishes A in one transaction. A remains a draft;
+the service does not create an approval, reserve calls, dispatch work or change
+the booklet stage. Pause remains set. A fresh service instance can recover an
+already assembled matching version after a discarded response. Replay also
+checks the saved dependency edges; incomplete lineage remains a blocker.
+
+The focused integration fixtures seed the textual draft and approved sources,
+then create and complete both sample operations through the normal repository
+and image-storage service. They do not establish normal J08 specialist dispatch
+or live Dify execution. Draft-versus-assembled approval, delegated acceptance,
+J08 admission/materialization and automatic scheduling remain the next wiring
+slice. This increment verifies the assembly seam only; those remaining gates
+must be tested before claiming a completed style package.
+
+The assembly candidate passed clean-checkout typecheck, full lint and 24 tests
+across the new integration suite, existing image-storage integration suite and
+reference-request unit suite on 2026-10-05, without retries. The first run stopped
+on a lint error; the next found an extra field in the test's strict claim input.
+Both were corrected before the passing run. This proves local saved-image
+assembly, not Dify transfer or approved package production. Independent reviews
+and publication remain pending.
 
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
