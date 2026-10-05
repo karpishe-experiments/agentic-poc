@@ -41,7 +41,7 @@ usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, dify-repair-collaboration, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
+         restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -55,6 +55,7 @@ Options:
   --commit FULL_SHA                 required for deploy
   --backup-id ID --confirmation DB   required for restore
   --confirmation kids_booklet       required for reset-staging
+  --commit FULL_SHA --confirmation kids_booklet  required for index retirement apply
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
   --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE/DIFY_BOOKLET_RUNNER bundle
@@ -99,7 +100,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
@@ -138,6 +139,13 @@ validate_arguments() {
   fi
   if [[ "$ACTION" == reset-staging ]]; then
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
+  fi
+  if [[ "$ACTION" == retire-staging-artifact-index ]]; then
+    [[ "$ENVIRONMENT" == staging && -n "$COMMIT" ]] || die 'Index retirement requires staging and the exact deployed commit'
+    [[ "$APPLY" == false || "$CONFIRMATION" == kids_booklet ]] || die 'Index retirement requires --confirmation kids_booklet'
+    if [[ "$APPLY" == true && -n "$BACKUP_ID" && ! -f "$STATE/operation.json" ]]; then
+      die 'Index retirement creates its own pre-change backup'
+    fi
   fi
   case "$ACTION" in status|check|dify-check|dify-idle|dify-discover|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
@@ -343,6 +351,7 @@ run_lifecycle() {
   local current='' candidate='' previous=''
   [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || read -r current < "$STATE/releases/$ENVIRONMENT/current"
   case "$ACTION" in
+    retire-staging-artifact-index) retire_staging_artifact_index_host; return;;
     deploy)
       prepare_release
       candidate="$STATE/releases/$ENVIRONMENT/$COMMIT"
@@ -428,6 +437,98 @@ run_lifecycle() {
       if [[ "$ACTION" == rollback ]]; then save_success "$current" true; else save_success "$current"; fi ;;
     *) die 'Unsupported host lifecycle operation';;
   esac
+}
+verify_artifact_retirement_release() {
+  local release="$1" expected_commit="$2" image revision
+  [[ "$release" == "$STATE/releases/staging/$expected_commit" && "$expected_commit" =~ ^[a-f0-9]{40}$ && -d "$release" && ! -L "$release" ]] || die 'Index retirement release path is invalid'
+  (cd "$release" && sha256sum -c manifest.sha256 >/dev/null) || die 'Index retirement release manifest changed'
+  image="$(jq -er .services.app.image "$release/image.json")"
+  [[ "$image" == "$(jq -r .image "$CONFIG_FILE")"@sha256:* && "$image" =~ @sha256:[a-f0-9]{64}$ ]] || die 'Index retirement image repository or digest is invalid'
+  revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
+  [[ "$revision" == "$expected_commit" ]] || die 'Index retirement image revision differs from the release'
+}
+verify_artifact_retirement_rollback() {
+  local previous commit image pair
+  [[ -f "$STATE/releases/staging/previous" ]] || die 'Index retirement requires a verified compatible rollback release'
+  read -r previous < "$STATE/releases/staging/previous"
+  commit="${previous##*/}"
+  verify_artifact_retirement_release "$previous" "$commit"
+  image="$(jq -er .services.app.image "$previous/image.json")"
+  pair="$commit:${image##*@}"
+  # Exact reviewed startup-compatibility evidence from PR #114, #120 and #126.
+  # Unknown pairs require a reviewed table update, never a pointer rewrite.
+  case "$pair" in
+    ae2a2f767a2da8ef9e0bc372bd26199ee0c75e3e:sha256:4a2a97daa4075aad90ad1837b0ed6a1298aa37ec445322f0cac68c236e28119d|fac55e0730e0a7e297a2fbdf28fb888b87baf57a:sha256:959dee0035f80890b4851ed27f2652bc5ee9617cb2e692fae2c0069350d7c571|d88dfe308b809e019123f554fa5f43cbcf097c91:sha256:ee85f85aec0111fc488297faf507ef90ee593442c5d0d973f2b358443e26263c) :;;
+    *) die 'Rollback release lacks reviewed absent-legacy-index compatibility evidence';;
+  esac
+}
+retire_staging_artifact_index_host() {
+  local current checkpoint saved_image rollback_release rollback_image
+  [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet && -n "$COMMIT" ]] || die 'Index retirement requires the exact staging confirmation and commit'
+  [[ -f "$STATE/releases/staging/current" ]] || die 'Index retirement requires a deployed staging release'
+  read -r current < "$STATE/releases/staging/current"
+  verify_artifact_retirement_release "$current" "$COMMIT"
+  verify_artifact_retirement_rollback
+  checkpoint="$(jq -r '.step // "queued"' "$STATE/operation.json")"
+  saved_image="$(jq -r '.image // ""' "$STATE/operation.json")"
+  [[ -z "$saved_image" || "$saved_image" == "$(jq -er .services.app.image "$current/image.json")" ]] || die 'Retained index operation refers to a different release image'
+  record_release_metadata "$current" "$current"
+  read -r rollback_release < "$STATE/releases/staging/previous"
+  rollback_image="$(jq -er .services.app.image "$rollback_release/image.json")"
+  jq --arg release "$rollback_release" --arg image "$rollback_image" '.rollbackRelease=$release | .rollbackImage=$image' "$STATE/operation.json" > "$STATE/operation.next.json"
+  mv "$STATE/operation.next.json" "$STATE/operation.json"
+  if [[ "$checkpoint" == draining ]]; then
+    # No stop/removal checkpoint was reached. A crash may have bypassed the
+    # compensating ledger check, so make callback reconciliation possible first.
+    [[ -n "$(docker ps -q --filter 'label=com.docker.compose.project=kids-booklet-staging' --filter 'label=com.docker.compose.service=app' --filter 'label=com.docker.compose.oneoff=False' --filter 'status=running')" ]] || die 'Interrupted drain has no running original application; inspect host state before resume'
+    maintenance "$current" deployment-control disable
+    set_step reconciliation-required
+    checkpoint=reconciliation-required
+  fi
+  case "$checkpoint" in
+    index-finalizing)
+      # A crash may occur on either side of reopening admission. Do not stop
+      # the already-ready app or replay the backup/removal in either case.
+      verify_application "$current"
+      maintenance "$current" deployment-control disable
+      save_success "$current"
+      return;;
+    complete)
+      # Admission may already be open. Finalize the completed journal only.
+      verify_application "$current"
+      save_success "$current"
+      return;;
+    backup-verified|retiring-index|index-verified|index-restarting)
+      [[ -n "$BACKUP_ID" ]] || die 'Retained index operation lost its pre-change backup'
+      stop_application "$current"
+      maintenance "$current" retire-staging-artifact-index --verify-backup;;
+    *)
+      # Reject unresolved work while callbacks can still complete it.
+      maintenance "$current" retire-staging-artifact-index --preview
+      set_step draining; drain_application "$current"
+      if ! maintenance "$current" retire-staging-artifact-index --preview; then
+        maintenance "$current" deployment-control disable
+        set_step reconciliation-required
+        die 'Experiment work appeared during admission closure; original service remains running. Reconcile before resume'
+      fi
+      set_step stopping; stop_application "$current"
+      maintenance "$current" retire-staging-artifact-index --preview
+      set_step backup; ensure_backup_id; maintenance "$current" recovery backup
+      maintenance "$current" retire-staging-artifact-index --verify-backup
+      set_step backup-verified;;
+  esac
+  # Persist before removal: resume accepts absence and never replaces this backup.
+  verify_artifact_retirement_release "$current" "$COMMIT"
+  verify_artifact_retirement_rollback
+  set_step retiring-index
+  maintenance "$current" retire-staging-artifact-index --apply
+  set_step index-verified
+  set_step index-restarting
+  compose "$current" up -d --no-deps app
+  verify_application "$current"
+  set_step index-finalizing
+  maintenance "$current" deployment-control disable
+  save_success "$current"
 }
 dify_compose() {
   docker compose --project-name booklet-dify --env-file "$DIFY_ENV" -f "$DIFY_RELEASE/docker/docker-compose.yaml" -f "$ROOT/dify/compose.override.yml" "$@"
@@ -768,7 +869,12 @@ host_run() {
     esac
   fi
   recover_interrupted_rotation
-  if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then BACKUP_ID=''; fi
+  if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then
+    case "$ACTION:$(jq -r .step "$STATE/operation.json")" in
+      retire-staging-artifact-index:backup-verified|retire-staging-artifact-index:retiring-index|retire-staging-artifact-index:index-verified|retire-staging-artifact-index:index-restarting|retire-staging-artifact-index:index-finalizing|retire-staging-artifact-index:complete) :;;
+      *) BACKUP_ID='';;
+    esac
+  fi
   validate_arguments
   if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
   if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
@@ -808,7 +914,7 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
   if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
@@ -917,6 +1023,14 @@ host_dispatch() {
     printf 'updated: reviewed host configuration installed\n'; exit 0
   fi
   local current=''
+  if [[ "$ACTION" == retire-staging-artifact-index && "$APPLY" == false ]]; then
+    [[ -f "$STATE/releases/staging/current" ]] || die 'No staging release recorded'
+    read -r current < "$STATE/releases/staging/current"
+    verify_artifact_retirement_release "$current" "$COMMIT"
+    verify_artifact_retirement_rollback
+    maintenance "$current" retire-staging-artifact-index --preview
+    exit 0
+  fi
   if [[ "$ACTION" == reset-staging && "$APPLY" == false ]]; then
     [[ -f "$STATE/releases/staging/current" ]] || die 'No staging release recorded'
     read -r current < "$STATE/releases/staging/current"
@@ -994,7 +1108,7 @@ wait_operation() {
   [[ -f "$completed_journal" ]] || die 'Operation failed; journal retained. Use status and resume'
   printf 'updated: %s %s\n' "$ACTION" "$ENVIRONMENT"
   printf 'result: '
-  jq -c '{requestId,action,environment,commit,backupId,image,configHash,priorRelease,step}' "$completed_journal"
+  jq -c '{requestId,action,environment,commit,backupId,image,configHash,priorRelease,rollbackRelease,rollbackImage,step}' "$completed_journal"
 }
 backend_init() {
   local directory="$1" key="$2"
@@ -2373,7 +2487,7 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac

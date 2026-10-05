@@ -62,6 +62,32 @@ target first: deployment restarts the previous image without restoring its datab
 The later slice must reject sheet readiness while the old restriction remains.
 No live index removal, reset or migration authority is inferred from local tests.
 
+#### Bounded index-retirement implementation package
+
+Prepare one staging-only action in the existing deployment entrypoint and
+Maintenance workflow. This is local preparation, not approval to run it.
+Preserve all documents/assets, production, Cloud resources and release pointers.
+
+- Before closing admission, reject unresolved experiment operations and run
+  pointers. Do not add these records only to the maintenance drain loop: maintenance
+  also rejects callbacks that could complete them. Reconcile them first.
+- Close admission, drain tracked mutations, stop the application, and recheck the
+  experiment ledger. Verify the exact staging database and asset environment.
+- Take and verify the normal completed backup. Preserve its identifier on resume;
+  do not replace the pre-change backup after the index might already be removed.
+- Verify the replacement index and exact recognized legacy index before removing
+  only `artifacts_booklet_type_unique`. If it is already absent, verify readiness
+  and return an idempotent result. Reject incompatible catalog state.
+- Restart the compatible selected release and verify readiness. Never reset data,
+  automatically restore a database, or recreate the old index during startup.
+
+Reuse `db/setup.ts`, `RecoveryStorage`, deployment control, the operation journal
+and the shared host lock. Add focused tests for unresolved work, catalog drift,
+missing/incomplete backup, repeated execution and interruption after removal.
+Host lifecycle changes require both deployment shell suites and ShellCheck;
+backup validation changes also require recovery-storage tests. Record exact
+commands and the reviewed action contract before live authorization is exercised.
+
 The compatibility candidate passed isolated typecheck, full lint and 31 tests
 across those four integration suites without retries on 2026-10-05. The initial
 sandboxed test command could not spawn the Windows test runner; the permitted
@@ -369,17 +395,16 @@ MCP graph validation returned zero errors/warnings. It is not published or execu
 
 ### Current staging checkpoint
 
-The reviewed J08 implementation and required reference/image dependencies were
-selectively delivered through [PR #120](https://github.com/karpishe-experiments/agentic-poc/pull/120).
-Reviewed head: `51a6cb208baee0add6145f840942953b74c60e6c`; release:
-`fac55e0730e0a7e297a2fbdf28fb888b87baf57a`. Two consecutive clean independent
-reviews passed. Typecheck/lint, 87 runner/reference tests, 65 retained Cloud/probe
-regressions and twelve agent fixtures passed without retries. Disposable Mongo
-teardown required forced termination after its grace period. Validate
-`37269997010`, Deploy `37270417692` and Check `37270997041` passed.
-Image: `sha256:959dee0035f80890b4851ed27f2652bc5ee9617cb2e692fae2c0069350d7c571`;
-request: `37270417692-1`; backup:
-`staging-20261005T060654Z-6727f4cf0e4dec21`.
+The reviewed J01–J10 runtime and reference dependencies were selectively delivered
+through [PR #126](https://github.com/karpishe-experiments/agentic-poc/pull/126).
+Reviewed head: `3ee02e33b49272b971668ba945d71892f11170b3`; release:
+`d88dfe308b809e019123f554fa5f43cbcf097c91`. Two consecutive clean independent
+reviews passed. Typecheck/lint, 205 runner tests, 65 retained Cloud/probe regressions
+and twelve agent fixtures passed without retries; both test processes exited zero.
+Validate `37291499786`, Deploy `37292283170` and Check `37293054441` passed.
+Image: `sha256:ee85f85aec0111fc488297faf507ef90ee593442c5d0d973f2b358443e26263c`;
+request: `37292283170-1`; backup:
+`staging-20261005T095213Z-94c51b01b84faebf`.
 
 Chrome reload retained all three personas' saved J01/J02 work. Creator run
 `944b6e59-129e-451f-847e-840524b8b8c2` paused at revision 35 and resumed at
@@ -387,13 +412,15 @@ revision 36, retaining six operations, both approved versions and zero payable
 calls. It remains at `slice_complete`, not completed booklet generation.
 The temporary HTTP 502 during release cleared after deployment completed.
 
-Live J08 activation still requires authorized host-validator synchronization,
-seven additional privately configured app keys, drained manager/tester publication
+Live reference activation still requires authorized host-validator synchronization,
+nine additional privately configured app keys (J03–J10 and image), drained manager/tester publication
 and published-binding read-back. Preserve the existing six bindings and callback
 key. Preview `37268638506` reported no Terraform changes; it did not synchronize
 host files or authorize apply. The old subject-restricting index remains, so
 J09/J10 sheet admission also requires the separately authorized index transition.
-Local sheet implementation can proceed independently of those live checkpoints.
+The local sheet journey is implemented, but actual Dify binary transfer and
+all-persona reference acceptance remain unverified. Index-maintenance preparation
+is a separate local candidate, not an executed transition.
 
 ### S5 sheet-fixture preparation
 

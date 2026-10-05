@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard; do
+  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -41,6 +41,82 @@ docker() { printf 'docker %s\n' "$*" >> "$CALLS"; }
 verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 case "$1" in
+  index-finalize-before|index-finalize-after|index-admission-race|index-drain-resume)
+    ACTION=retire-staging-artifact-index CONFIRMATION=kids_booklet
+    verify_artifact_retirement_release() { :; }
+    verify_artifact_retirement_rollback() { :; }
+    mkdir -p "$STATE/releases/staging/rollback"
+    cp "$STATE/releases/staging/old/image.json" "$STATE/releases/staging/rollback/image.json"
+    printf '%s\n' "$STATE/releases/staging/rollback" > "$STATE/releases/staging/previous"
+    if [[ "$1" == index-admission-race || "$1" == index-drain-resume ]]; then
+      preview_calls=0
+      if [[ "$1" == index-drain-resume ]]; then
+        jq '.step="draining"' "$STATE/operation.json" > "$STATE/operation.next.json"
+        mv "$STATE/operation.next.json" "$STATE/operation.json"
+        preview_calls=1
+        docker() { printf 'running-original-app\n'; }
+      fi
+      maintenance() {
+        printf 'maintenance %s\n' "$*" >> "$CALLS"
+        if [[ "$2" == retire-staging-artifact-index && "${3:-}" == --preview ]]; then
+          preview_calls=$((preview_calls + 1))
+          [[ "$preview_calls" -lt 2 ]] || return 1
+        fi
+      }
+      if (retire_staging_artifact_index_host) >/dev/null 2>&1; then exit 1; fi
+      ! grep -q '^stop ' "$CALLS"
+      ! grep -q 'recovery backup\|--apply' "$CALLS"
+      grep -q 'deployment-control disable' "$CALLS"
+      jq -e '.step=="reconciliation-required"' "$STATE/operation.json" >/dev/null
+    else
+      BACKUP_ID=staging-before-index
+      jq --arg backup "$BACKUP_ID" '.step="index-finalizing" | .backupId=$backup' "$STATE/operation.json" > "$STATE/operation.next.json"
+      mv "$STATE/operation.next.json" "$STATE/operation.json"
+      # Both sides of admission reopening use the same idempotent finalizer.
+      if [[ "$1" == index-finalize-after ]]; then maintenance "$STATE/releases/staging/old" deployment-control disable; fi
+      retire_staging_artifact_index_host
+      ! grep -q '^stop \|recovery backup\|retire-staging-artifact-index --apply' "$CALLS"
+      grep -q 'deployment-control disable' "$CALLS"
+      jq -e '.backupId=="staging-before-index" and .step=="complete"' "$STATE/operations/test.json" >/dev/null
+    fi;;
+  index-retirement|index-retirement-resume)
+    ACTION=retire-staging-artifact-index CONFIRMATION=kids_booklet
+    verify_artifact_retirement_release() { printf 'release-verified\n' >> "$CALLS"; }
+    verify_artifact_retirement_rollback() { printf 'rollback-verified\n' >> "$CALLS"; }
+    cp "$STATE/releases/staging/current" "$TEMP_DIR/current-before"
+    mkdir -p "$STATE/releases/staging/rollback"
+    cp "$STATE/releases/staging/old/image.json" "$STATE/releases/staging/rollback/image.json"
+    printf '%s\n' "$STATE/releases/staging/rollback" > "$STATE/releases/staging/previous"
+    if [[ "$1" == index-retirement-resume ]]; then
+      BACKUP_ID=staging-before-index
+      jq --arg backup "$BACKUP_ID" '.step="retiring-index" | .backupId=$backup' "$STATE/operation.json" > "$STATE/operation.next.json"
+      mv "$STATE/operation.next.json" "$STATE/operation.json"
+    fi
+    retire_staging_artifact_index_host
+    calls="$(cat "$CALLS")"
+    [[ "$calls" == *'--verify-backup'*'--apply'*'up -d'*'verify '*'deployment-control disable'* ]]
+    if [[ "$1" == index-retirement ]]; then
+      [[ "$calls" == *'--preview'*'deployment-control enable'*'wait-for-deployment-drain'*'stop '*'--preview'*'recovery backup'*'--verify-backup'* ]]
+    else
+      ! grep -q 'recovery backup' "$CALLS"
+      jq -e '.backupId=="staging-before-index"' "$STATE/operations/test.json" >/dev/null
+    fi
+    cmp "$STATE/releases/staging/current" "$TEMP_DIR/current-before"
+    [[ "$(<"$STATE/releases/staging/previous")" == "$STATE/releases/staging/rollback" ]];;
+  index-retirement-rollback)
+    # Real manifest/path/table checks, with only Docker image inspection mocked.
+    sha=fac55e0730e0a7e297a2fbdf28fb888b87baf57a
+    image=ghcr.io/example/kids@sha256:959dee0035f80890b4851ed27f2652bc5ee9617cb2e692fae2c0069350d7c571
+    release="$STATE/releases/staging/$sha"
+    mkdir -p "$release"
+    jq -n --arg image "$image" '{services:{app:{image:$image}}}' > "$release/image.json"
+    (cd "$release" && sha256sum image.json > manifest.sha256)
+    printf '%s\n' "$release" > "$STATE/releases/staging/previous"
+    docker() { printf '%s\n' "$sha"; }
+    verify_artifact_retirement_rollback
+    if (sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; verify_artifact_retirement_rollback) >/dev/null 2>&1; then exit 1; fi
+    printf 'corrupt\n' >> "$release/image.json"
+    if (verify_artifact_retirement_rollback) >/dev/null 2>&1; then exit 1; fi;;
   release)
     run_lifecycle
     test -f "$STATE/operations/test.json"

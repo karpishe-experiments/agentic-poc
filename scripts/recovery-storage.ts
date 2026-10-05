@@ -30,6 +30,21 @@ export function parseManifest(value: unknown, backupId: string, database: string
 
 export class RecoveryStorage {
   constructor(private readonly s3: S3Client, private readonly bucket: string) {}
+  // Maintenance verifies the retained pre-change snapshot without reserving or
+  // writing another backup. Callers separately enforce admission and target scope.
+  async verifiedCompletedBackup(backupId: string, database: string, environment: string, imageDigest: string): Promise<RecoveryManifest> {
+    backupIdSchema.parse(backupId);
+    if (!/^(?:ghcr\.io\/[a-z0-9._/-]+@)?sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error("Backup verification requires the selected immutable image digest.");
+    const raw = (await this.read(`database/${backupId}.manifest.json`)).bytes;
+    const complete = (await this.read(`database/${backupId}.complete`)).bytes;
+    if (Buffer.from(complete).toString() !== digest(raw)) throw new Error("Backup completion marker does not match manifest.");
+    const manifest = parseManifest(JSON.parse(Buffer.from(raw).toString()), backupId, database, environment);
+    if (manifest.imageDigest !== imageDigest) throw new Error("Backup image does not match the selected release.");
+    const archive = (await this.read(`database/${backupId}.archive.gz`)).bytes;
+    if (digest(archive) !== manifest.sha256) throw new Error("Backup archive checksum verification failed.");
+    for (const asset of manifest.assets) await this.verifiedAsset(asset);
+    return manifest;
+  }
   async read(key: string, bucket = this.bucket) {
     const result = await this.s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
     if (!result.Body) throw new Error("Recovery object body is missing.");

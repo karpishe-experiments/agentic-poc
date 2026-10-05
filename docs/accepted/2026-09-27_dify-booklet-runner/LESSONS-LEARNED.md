@@ -177,3 +177,23 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [transport regression](../../../tests/unit/experiment-image-proxy-body.test.ts)
   and [Next.js proxy limit](https://nextjs.org/docs/app/api-reference/config/next-config-js/proxyClientMaxBodySize).
 - **Promotion target:** Documentation; reverify when Next.js or limits change.
+
+### Maintenance must preserve callback recovery and finalization
+
+- **Context:** A staging schema transition whose maintenance gate also rejects
+  external workflow callbacks.
+- **Observation:** A tracked-mutation count of zero does not prove the external
+  operation ledger is idle. Closing admission can prevent unresolved work from
+  completing. An interruption after admission reopens can also leave a journal
+  whose ordinary resume path would incorrectly stop the running app.
+- **Guidance:** Check external work before closing admission and again after drain,
+  before stop. On a pre-change race, reopen admission while the app is still
+  running. Record a finalization checkpoint before reopening admission; its resume
+  must not replay stop, backup or mutation. Preserve the pre-change backup after
+  the mutation checkpoint.
+- **Evidence:** [Mongo ledger tests](../../../tests/integration/experiment-maintenance.test.ts)
+  and [host interruption/race scenarios](../../../tests/shell/vps-host.test.sh).
+  Focused local scenarios passed; complete Linux suites and live retirement remain
+  separate verification gates.
+- **Promotion target:** Documentation; reverify the admission and callback behavior
+  before using this pattern for another runtime.

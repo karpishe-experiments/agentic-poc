@@ -127,8 +127,8 @@ retain old images and approvals. The public configuration reader and candidate h
 accept six, eleven, thirteen or fifteen complete bindings. The installed host dispatcher still needs
 the reviewed validator update. Live J08 publication, private
 bindings, actual Dify execution of the prepared DSL and binary transfer remain pending.
-The J08 application code is deployed to staging as `fac55e0730e0a7e297a2fbdf28fb888b87baf57a`;
-Deploy `37270417692` and Check `37270997041` passed. Active runtime settings still
+The J01–J10 reference application code is deployed to staging as `d88dfe308b809e019123f554fa5f43cbcf097c91`;
+Deploy `37292283170` and Check `37293054441` passed. Active runtime settings still
 contain the six M1 bindings, so the live boundary remains J01/J02. The J08 Dify
 draft imported and validated but remains unpublished and unexecuted. Deployment
 of scheduling code does not establish a complete simulation; see the
@@ -168,6 +168,17 @@ index transition before multiple same-type sheets can be stored. Deploy the
 compatibility release first so later index removal has a viable rollback image;
 the host's automatic image rollback does not restore the database. No reset or
 sheet-dispatch enablement is part of this compatibility step.
+
+The explicit staging index-retirement command is separate from startup and runner
+admission. It uses the existing host lock, journal, maintenance control and backup
+storage. It rejects unresolved experiment work before closing admission and checks
+again before and after stop. Catalog checks preserve compound-key order; backup
+verification reads the completion marker, archive and original asset bytes. The
+host checks reviewed rollback image identities and retains the pre-change backup
+across interrupted removal. Finalization can resume after admission reopens without
+stopping the app. The command removes one named index, not records or assets.
+Host installation and live retirement are pending; these local contracts do not
+establish live multi-subject storage readiness.
 `verifyExperimentData` checks experiment references without legacy agent seeds.
 The enabled, non-production runner profile initializes experiment structure
 without local-agent seeds or a host OpenAI key. It retains seed assets for health
