@@ -214,6 +214,11 @@ Private setup uses `scripts/prepare-dify-booklet-m3-keys.ps1`: preview by defaul
 the eleven M2 specialist/image credentials and creates a separate encrypted
 sixteen-binding file without overwriting M2. Run the file in a child PowerShell
 process instead of pasting a large function into PSReadLine. Preparation does not
+print keys. Use the established copy-to-clipboard and press-Enter flow.
+Temporary Windows clipboard-access failures receive five bounded reads, then
+repeat only the current key prompt. Earlier collected keys remain in memory.
+A failure reports only the phase, exception type and line
+number; do not share exception contents or credential files. Preparation does not
 upload keys or activate staging. The host validator must accept the complete
 J11 bundle before activation; existing profiles remain valid. Install the reviewed
 dispatcher, release the reviewed J11 application, verify publication read-back,
