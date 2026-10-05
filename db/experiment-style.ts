@@ -28,11 +28,20 @@ export function createExperimentStyleAssembly(input: { database: Database; store
   const { database, store } = input;
   const now = input.now ?? Date.now;
 
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false) {
     const options = { session };
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Style run was not found.");
-    if (run.mode !== "simulated" || !["queued", "running", "paused"].includes(run.status) || run.activeOperationId) invalid("Style assembly requires idle simulated work.");
+    // Managers retain null taskId; only the exact active, publication-verified
+    // unknown book operation may read J11 sources during GET recovery.
+    const recovered = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+        state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
+        workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
+        $or: [{ role: "specialist", taskId: "J11" }, { role: "tester" },
+          { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
+    if (run.mode !== "simulated" || (!recovered && !["queued", "running", "paused"].includes(run.status)) ||
+        (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");
     const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
@@ -69,6 +78,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
       if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J08" ||
         operation.subjectKind !== "book" || operation.subjectId !== run.bookletId || operation.mode !== "simulated" ||
         operation.state !== "succeeded" || operation.reservationCount !== 1 || !operation.workflowRunId || operation.imageCompletionClaim) invalid("Sample operation is not a completed authorized J08 image.");
+      if (verificationOnly && !operation.verifiedWorkflowId) invalid("Style approval requires verified image publication.");
       const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));
       if (canonical(request) !== canonical(slot.request) || canonical(operation.dependencyVersionIds) !== canonical(request.sourceVersionIds)) conflict("Sample request differs from its saved style slot.");
       const asset = await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
@@ -136,5 +146,22 @@ export function createExperimentStyleAssembly(input: { database: Database; store
       return { reused: false, version };
     });
   }
-  return { assemble };
+  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession) {
+    const version = await database.collections.artifact_versions.findOne({ _id: opaqueIdSchema.parse(identity.versionId) }, { session });
+    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
+    if (!version || !artifact || artifact.currentVersionId !== version._id || artifact.taskId !== "J08" ||
+        version.createdBy !== "application" || !version.sourceVersionId || artifact.state !== "approved") invalid("Current assembled style approval is missing.");
+    const content = parseReferenceProposal("J08", "assembled", json(version.contentJson)).content;
+    const checked = await load({ runId: opaqueIdSchema.parse(identity.runId), draftStyleVersionId: version.sourceVersionId,
+      sampleOperationIds: content.samples.map((sample) => sample.build.operationId) }, session, true);
+    if (checked.current._id !== version._id) conflict("Style approval target changed.");
+    for (const asset of checked.assets) {
+      try {
+        if (!await store.exists(asset.uri)) invalid("Saved style sample bytes are missing.");
+        const bytes = await store.get(asset.uri);
+        if (bytes.byteLength !== asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) invalid("Saved style sample bytes are corrupt.");
+      } catch { invalid("Style sample storage verification failed."); }
+    }
+  }
+  return { assemble, verifyVersion };
 }

@@ -2,6 +2,7 @@ import { CASES, conceptBriefSchema, parseDraftListProposal, parseNarrativePropos
 import type { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { simulateReferenceProposal } from "@/lib/experiment-runner/reference-fixtures";
 import { BOOK_TASKS } from "@/lib/experiment-runner/narrative-tasks";
+import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
 import { assembledVisualStyleSchema, parseReferenceProposal } from "@/lib/contracts/experiment-references";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
@@ -242,6 +243,7 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
   if (mode !== "simulated") throw new Error("Narrative fixtures require simulated mode.");
   if (context.role === "manager") {
     const taskId = context.eligibleRoute;
+    if (taskId === "J11") return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: "book", subjectId: context.run.bookletId } });
     if (taskId === "J09" || taskId === "J10") {
       if (!context.eligibleTarget || context.eligibleTarget.taskId !== taskId) throw new Error("Manager has no eligible sheet subject.");
       return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: context.eligibleTarget.subjectKind, subjectId: context.eligibleTarget.subjectId } });
@@ -310,6 +312,17 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
     const result = context.taskId === "J09" ? simulateReferenceProposal("J09", input) : simulateReferenceProposal("J10", input);
     return result.kind === "clarification" ? validateRoleResult("specialist", { kind: "clarification", payload: { question: result.question } }) :
       validateRoleResult("specialist", { kind: "proposal", payload: { taskId: context.taskId, content: result.content } });
+  }
+  if (context.taskId === "J11") {
+    const previous = context.currentTarget && currentVersion(context.currentTarget);
+    const revision = context.matchingRevision as { instruction?: string } | null;
+    const result = simulatePaginationProposal({ persona: context.persona, sources: context.approvedSources,
+      currentContent: previous?.content, sourceChanged: context.currentTarget?.state === "needs_review",
+      revision: revision?.instruction,
+      answers: context.questionAnswers.filter((item) => item.answer && (item.taskId === null || item.taskId === "J11")).map((item) => `${item.question}: ${item.answer}`),
+    });
+    return result.kind === "clarification" ? validateRoleResult("specialist", { kind: "clarification", payload: { question: result.question } }) :
+      validateRoleResult("specialist", { kind: "proposal", payload: { taskId: "J11", content: result.content } });
   }
   if (!context.taskId || !(BOOK_TASKS as readonly string[]).includes(context.taskId)) throw new Error("Specialist task is outside the narrative slice.");
   const persona = context.persona as Case;

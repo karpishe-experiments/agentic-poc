@@ -160,8 +160,24 @@ six/eleven/thirteen/fifteen-slot runs keep their original boundaries.
 | Verification | Focused page/source tests, then repository/context/dispatcher tests for all three personas, stale/missing/corrupt sheets, duplicate completion, revision/restart identity preservation, explicit/delegated approval and GET-only recovery. Run typecheck and lint after integration. |
 | Exit and escalation | Approved J11 reaches a saved J12 boundary, not full booklet completion. Preserve unknown-outcome handling; sheet verification during recovered J11 completion must not weaken assembly admission. Runtime reference transport remains a separate J13/judge gate. |
 
-The stored-layout parser and pure source helpers are local preparation. They do
-not enable J11 dispatch or prove durable IDs until the repository slice is tested.
+The stored-layout parser and pure source helpers alone do not enable J11 dispatch
+or prove durable page identities. The repository and runner own those operations.
+
+The local repository/runner candidate now connects J11 to normal artifact
+transactions, exact approvals and the complete sixteen-binding profile. Local
+all-persona tests reached approved layouts with 4/6/9 stable page IDs and stopped
+at J12. GET-only recovery did not repeat the specialist or a lost manager
+delegation to J11; revision preserved IDs
+and duplicate completion reused the saved result. Missing approval evidence and
+corrupt saved sheets rejected admission. Review, publication, private J11 keys
+and staging activation remain pending. These local tests are not full-booklet or
+live Dify acceptance. Manuscript units can span panels/pages; coverage is required
+on story pages, not satisfied by the cover alone.
+
+Final local validation passed 137 tests across twelve affected suites without
+retries, clean-checkout typecheck and lint, and twelve legacy agent fixtures.
+MongoDB teardown reported a Windows shutdown timeout after the passing tests;
+the test command exited zero. This is not live Dify execution evidence.
 
 Implement both one-page and ordered selected-batch scheduling, using existing
 jobs/items with the M1 operation ledger. Batches run sequentially; every page

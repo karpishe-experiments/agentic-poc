@@ -139,9 +139,11 @@ read back against the reviewed M2 source before activation. Configuration
 installation does not establish a complete simulation; see the
 [M2 live reference evidence](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-live-reference-evidence--2026-10-05)
 for retained run IDs, trace evidence and remaining M3 gates. The runner's saved-image
-viewer candidate uses only explicit J08 sample and J09/J10 build asset IDs through
-the existing authenticated asset route. It preserves version history and approvals;
-its staging release remains pending.
+viewer uses only explicit J08 sample and J09/J10 build asset IDs through
+the existing authenticated asset route. It preserves version history and approvals.
+Its reviewed staging release passed deployment and readiness; browser inspection
+loaded both style samples and one character sheet. This is not visual inspection
+of all sixteen retained images.
 
 The local sheet assembler in `db/experiment-sheets.ts` combines a retained
 J09/J10 subject draft with one completed image operation. It verifies current
@@ -160,6 +162,19 @@ Booklet-scoped delegation applies to every eligible subject, with one approval
 record per exact assembled version. Stage J11 requires all derived sheets, not
 one artifact per task. Model-free Dify sheet execution and acceptance passed for
 all three personas. Final-page reference inputs and completion remain unverified.
+
+The local sixteen-binding profile adds J11 pagination without extending the
+narrative graph past its sheet boundary. It requires all current approved book
+sources and every sheet derived from the final lists. Read-only assembly checks
+verify saved style/sample and sheet lineage and original bytes before admission,
+completion and approval; they do not loosen assembly mutation admission. Booklet
+assigns page IDs inside normal artifact completion and preserves the mapping by
+page index on revision. Story pages must cover all known manuscript units, but
+one unit can span multiple panels or pages. Routed references must identify exact
+current approved sheets. J11 acceptance reaches a saved J12 slice boundary, not
+booklet completion. Old binding profiles retain their original boundaries. This
+profile is local only until reviewed Dify publication, private binding preparation
+and staging activation; the live fifteen-binding profile remains unchanged.
 
 Specialist context includes saved task-and-subject-specific answers and global manager
 answers. During a revision, clarification preserves the original target and

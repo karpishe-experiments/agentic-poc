@@ -25,7 +25,11 @@ the two style-sample operations. See the sanitized
 [reference evidence](fixtures/m2-reference-evidence.json).
 
 These runs stop at `slice_complete`; they are not completed booklets. The saved-image
-viewer is a local candidate until its reviewed staging release. M3 must still prove
+viewer was released through PR #133 at staging commit
+`6c205c5ece052037a92edcd0e16b024dd6484af2`. Deployment `37317985953` and
+readiness check `37319530809` passed for that commit. Authorized browser inspection
+loaded both style samples and one creator character sheet without alerts; visual
+inspection of every retained image remains unverified. M3 must still prove
 ordered reference-file input transport and runtime access before final-page dispatch.
 Earlier local checkpoints below describe their evidence at that time; this section
 is the current live reference baseline.
