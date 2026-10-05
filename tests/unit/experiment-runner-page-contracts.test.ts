@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CASES, type Persona } from "@/lib/contracts/experiment-runner";
-import { parsePageProposal } from "@/lib/contracts/experiment-pages";
+import { parsePageProposal, parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 
 const id = (number: number) => `00000000-0000-4000-8000-${number.toString().padStart(12, "0")}`;
 const reference = () => ({ subjectKind: "character", subjectId: id(1), artifactVersionId: id(2), assetId: id(3) });
@@ -40,6 +40,19 @@ function subject() {
 }
 
 describe("J11 and J12 local page contracts", () => {
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("retains the %s stored page identities without accepting proposal identities", (persona) => {
+    const proposal = layout(persona);
+    const stored = { ...proposal, pages: proposal.pages.map((page) => ({ ...page, pageId: id(100 + page.pageIndex) })) };
+    expect(parseStoredPageLayout(persona, stored).pages.map((page) => page.pageId)).toEqual(stored.pages.map((page) => page.pageId));
+    expect(parsePageProposal("J11", persona, stored).content.pages.every((page) => !("pageId" in page))).toBe(true);
+    const duplicate = structuredClone(stored);
+    duplicate.pages[1].pageId = duplicate.pages[0].pageId;
+    expect(() => parseStoredPageLayout(persona, duplicate)).toThrow(/unique/);
+    expect(() => parseStoredPageLayout(persona, proposal)).toThrow();
+    const invalidOrder = structuredClone(stored);
+    invalidOrder.pages[1].pageIndex = 0;
+    expect(() => parseStoredPageLayout(persona, invalidOrder)).toThrow(/ordered/);
+  });
   it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("accepts the %s fixed case", (persona) => {
     expect(parsePageProposal("J11", persona, layout(persona)).content.pages).toHaveLength(CASES[persona].storyPages + 1);
   });

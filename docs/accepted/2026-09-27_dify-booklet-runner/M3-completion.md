@@ -143,6 +143,26 @@ descriptions when the configured image path cannot accept image references.
 
 ## Scheduling, review and evaluation
 
+### J11 local implementation package
+
+Extend the existing operation repository, context service and dispatcher;
+do not add another runner or page registry. Keep J11 separate from `BOOK_TASKS`
+so narrative routing cannot skip reference-sheet production. A future complete
+J11 binding profile has sixteen public slots and fourteen saved persona slots;
+six/eleven/thirteen/fifteen-slot runs keep their original boundaries.
+
+| Field | Bounded J11 slice |
+| --- | --- |
+| Goal and components | Persist a J11 pagination proposal with stable Booklet-owned page IDs, accept its exact version, then stop at J12. Reuse normal artifacts, versions, dependencies, approvals and the existing completion transaction. |
+| Sources | Fixed book sources J01, J02, J05, J06, J07 and assembled J08, then every required J09/J10 subject from current final lists, sorted by task and subject ID. Verify exact approvals, assembly lineage and original saved bytes in repository admission paths. A pure source projection alone proves none of these records or bytes. |
+| Page identity | Proposal pages remain index-based. Booklet assigns IDs once in the completion transaction, including cover index zero. Revisions reuse the previous mapping by page index; malformed saved mappings fail rather than create replacements. Restart reads saved content. |
+| Ordered work | Add pure eligibility/source checks and stored-layout parsing first; then repository source/routing/materialization, approval and recovery tests; then context/dispatcher/fixtures and the complete binding profile. Publish live Dify fixtures and install bindings only after review and private key setup. |
+| Verification | Focused page/source tests, then repository/context/dispatcher tests for all three personas, stale/missing/corrupt sheets, duplicate completion, revision/restart identity preservation, explicit/delegated approval and GET-only recovery. Run typecheck and lint after integration. |
+| Exit and escalation | Approved J11 reaches a saved J12 boundary, not full booklet completion. Preserve unknown-outcome handling; sheet verification during recovered J11 completion must not weaken assembly admission. Runtime reference transport remains a separate J13/judge gate. |
+
+The stored-layout parser and pure source helpers are local preparation. They do
+not enable J11 dispatch or prove durable IDs until the repository slice is tested.
+
 Implement both one-page and ordered selected-batch scheduling, using existing
 jobs/items with the M1 operation ledger. Batches run sequentially; every page
 has its own result and approval. A later failure does not erase earlier results.
