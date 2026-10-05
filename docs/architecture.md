@@ -104,6 +104,12 @@ saves original bytes. The proxy transport limit has headroom above the handler's
 20 MiB limit. Sixteen live model-free Dify image operations passed binary transfer,
 storage and reference acceptance across the three personas. This does not prove
 provider execution, the full 20 MiB transport limit or reference-image inputs.
+The separate local `reference-transport.ts` adapter prepares runtime-key uploads
+of original PNG/JPEG/WebP bytes under the workflow's `booklet-<runId>` user.
+It copies and decodes bytes before one bounded multipart request, retains only
+the returned file ID and verified original metadata, and does not retry unknown
+outcomes. Its initial upload limit is 10 MiB. It is not wired into dispatch;
+published file-list consumption, ownership and live capacity remain pending.
 Filesystem AssetStore publishes complete temporary-file bytes through an atomic
 no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;

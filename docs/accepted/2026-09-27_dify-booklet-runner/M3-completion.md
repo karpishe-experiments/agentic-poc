@@ -441,6 +441,30 @@ evaluation failed; final experiment acceptance still needs retained reports.
 
 ## UI and execution work
 
+### Next local slice: runtime reference upload
+
+Prepare one bounded upload adapter before wiring J13 dispatch. Use the official
+[file API](https://docs.dify.ai/en/api-reference/files/upload-file) and the
+[pinned 1.17.1 controller](https://github.com/langgenius/dify/blob/1.17.1/api/controllers/service_api/app/file.py),
+not console credentials or temporary signed URLs. Send one original image per
+multipart request with the target application's runtime key and the same
+`booklet-<runId>` user as workflow execution. Preserve input order in the caller.
+The initial local adapter limit is 10 MiB per image; verify the installed host
+limit before claiming live capacity. Validate original bytes with the existing
+image decoder. Retain only file ID, original byte length, canonical MIME and
+digest; discard returned URLs. Reject redirects and malformed acknowledgements.
+An upload timeout has an unknown outcome and is not automatically retried.
+
+Mock tests must prove multipart identity/bytes, canonical image metadata,
+rejected authentication, malformed results, bounds and no automatic retry.
+This slice does not change dispatch, create approvals or invoke a workflow.
+Published file-list inputs, runtime ownership, ordered consumption, measured
+size and lost-response recovery remain live gates before J13 activation.
+The local adapter and fourteen mocked tests are prepared. Tests passed for
+original bytes and run identity, input mutation, bounds, corrupt images,
+canonical metadata, HTTP rejection, uncertain failure and malformed responses.
+No runtime file was uploaded by these tests and dispatch remains unchanged.
+
 1. Add J11–J13 schemas, prompts, fixtures, source routing and completion predicate.
 2. Connect image operations to page jobs and exact per-page approvals.
 3. Add feedback/judge branches, result validators and separate evaluation status.
