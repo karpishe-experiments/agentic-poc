@@ -197,3 +197,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   separate verification gates.
 - **Promotion target:** Documentation; reverify the admission and callback behavior
   before using this pattern for another runtime.
+
+### A workflow failure does not prove that its callback did not save
+
+- **Context:** An external workflow times out while an authorized callback is
+  still running.
+- **Observation:** Dify can report a failed run after its save-node read timeout.
+  That status alone does not establish the callback's outcome. Clearing a claimed
+  operation can prevent its late result from saving.
+- **Guidance:** Classify the observation against the current persisted claim in
+  the outcome transaction. Retain uncertain claimed operations and their identities;
+  inspect the saved result before any replacement execution. Reuse expensive source
+  verification only within one transaction attempt, never across requests or retries.
+- **Evidence:** [outcome transaction](../../../db/experiment-repository.ts),
+  [pagination completion](../../../db/experiment-narrative.ts), and
+  [retained live failure](M3-completion.md#j11-dify-preparation-package).
+- **Promotion target:** Documentation; verify the callback and runtime recovery
+  interfaces before applying this pattern to another integration.

@@ -251,8 +251,39 @@ it did not activate the sixteen bindings. The J11 staging candidate in
 207 focused tests across 23 suites, typecheck, lint, twelve legacy fixtures and
 two independent reviews. Validate `37345410931` passed and PR #140 merged as
 staging commit `afe92b6509776058341cf2c4830bfe2633f83f80`. Deploy
-`37346290235` passed for that commit. Readiness check `37347710571`, private
-settings upload and drained activation remain pending.
+`37346290235` and readiness check `37347710571` passed for that commit.
+The reviewed helper in [PR #141](https://github.com/karpishe-experiments/agentic-poc/pull/141)
+passed two independent reviews and Windows PowerShell 5.1 mocked validation.
+Validate `37348398499` passed. Private settings upload succeeded; the encrypted
+file has Windows access limited to the user, administrators and SYSTEM.
+Drained staging activation `37348239296` completed with verified backup
+`staging-20261005T172539Z-9163268c683d14ee`. No reset or paid call occurred.
+Live J11 acceptance remains pending; configuration activation is not completion.
+
+The first live Kid J11 attempt, run `0e907bde-cbfc-49c7-8c6a-06f561ac195b`
+and booklet `2d9b0377-1f27-4327-8de9-4b959e0d7488`, retained approved J01–J10
+and five fixture images, then blocked during pagination. Specialist Dify run
+`daeaf29c-f977-4640-b2dd-1bba0b968f7e` links to manager
+`747000d0-a6d8-417b-9aa1-5c259f8c52c4`. Authorization and simulation succeeded;
+the save HTTP node failed after its 30-second read timeout. Reported tokens and
+payable counters were zero. Booklet marked a definite failure; no J11 artifact
+appeared on state read-back. A timed-out callback does not prove that no write
+occurred. Correct redundant transaction checks and uncertain-outcome handling,
+then retain a linked successor. Do not replay the original workflow automatically.
+
+The correction candidate reuses verified pagination sources only within one
+completion transaction attempt. It also classifies failed/stopped observations
+against the persisted claim inside the outcome transaction, so a claimed callback
+can still save a late result. Repeated source checks are a confirmed latency
+contributor, not proof of the timeout's complete cause. Clean-checkout typecheck
+and lint passed, as did 32 focused graph/page/transport tests and twelve legacy
+agent fixtures. Five repository, verification, narrative and image-storage suites
+passed 45 tests without retries. MongoDB teardown reported a Windows shutdown
+timeout after those passes; the command exited zero. The final two recovery suites
+passed 56 tests without retries, including transaction re-verification and late
+text/image callbacks without replacement dispatch. Their Windows MongoDB teardown
+also required forced shutdown after the passes. Independent reviews and corrected
+staging acceptance remain pending; these local results do not clear J11.
 
 `scripts/upload-dify-booklet-m3-settings.ps1` accepts a sanitized publication
 manifest through `-PublicationsPath`. Preview validates sixteen distinct app and
@@ -271,6 +302,20 @@ stopped at a Windows sandbox-configuration symlink check. Neither is a full-suit
 pass. Require Linux CI, including ShellCheck and both shell suites, before merge
 or dispatcher installation. The private helper passed PowerShell syntax/preview
 checks and two independent reviews, including synthetic collection tests.
+
+### Independent local preparation: J12 Page Bible slice
+
+This slice uses the existing page parser and artifact/operation services. It does
+not clear the separate final-page reference-transport or judge-image gates.
+
+| Field | Bounded J12 slice |
+| --- | --- |
+| Goal and components | Save and accept one Page Bible artifact per Booklet-owned J11 page, then stop at J13. Extend `db/experiment-pages.ts`, narrative/repository admission, runner contracts/config/context/dispatch and the existing fixtures. No new page registry. |
+| Contract and state | J12 uses `subjectKind: page` and the stable J11 `pageId`. Require the exact current approved J11/J05/J08 versions and relevant approved sheet versions/assets, with approval records, assembly lineage and original bytes. Preserve exact lettering, panel routing, text-free panels and cover title. Each accepted page remains saved; all 4/6/9 current approvals advance to the J13 boundary, not completion. |
+| Ordered edits | Add per-page source verification; integrate transactional materialization/approval and scoped invalidation; extend context/manager routing and deterministic fixtures; then add the complete seventeen-slot public profile and fifteen-slot saved persona shape. Validate exact slot identities, not count alone: the saved shape shares the old public J10 count. Preserve every older profile and boundary. |
+| Publication and keys | Reuse the sixteen credentials. Create only one new J12 app/key. Republish the M3 manager for page delegation after the active J11 campaign drains; retain tester publications unless focused tests require changes. Save separate encrypted J12 bindings/settings without overwriting J11. Extend host validation and preparation/upload for the exact new profile. Never rewrite old snapshots; use linked successors after changed configuration. |
+| Verification | Extend focused config/page/routing/fixture tests and repository/context/dispatch integration tests without retries. Cover all personas, old boundaries, duplicate completion, restart, GET-only recovery, exact sources/lettering, missing approvals/corrupt assets, revoked delegation and page-scoped revision. Run typecheck, lint and legacy agent fixtures; host changes require both shell suites and ShellCheck on Linux. |
+| Completion and escalation | Local implementation may proceed with fixtures while private J12 setup remains pending. Require two sequential clean reviews before publication. Drain/reconcile active operations, read back changed publications, then use reviewed staging release and backed-up activation. Unknown outcomes block publication to affected bindings; do not replay POST. No reset, provider calls or final-page completion is included. |
 
 Implement both one-page and ordered selected-batch scheduling, using existing
 jobs/items with the M1 operation ledger. Batches run sequentially; every page
