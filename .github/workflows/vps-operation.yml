@@ -86,7 +86,7 @@ jobs:
             printf "| Environment | Operation | Outcome |\n"
             printf "| --- | --- | --- |\n"
             printf "| \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$OPERATION" "$OUTCOME"
-            printf 'Request ID: `%s-%s`. If interrupted, inspect status before resume.\n\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf "Request ID: \`%s-%s\`. If interrupted, inspect status before resume.\n\n" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
             if [[ -s "$RUNNER_TEMP/vps-operation-output.txt" ]]; then
               printf "\`\`\`text\n"
               grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/vps-operation-output.txt" || true
