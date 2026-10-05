@@ -49,6 +49,9 @@ describe("booklet runner HTTP boundary", () => {
     for (const suffix of ["&extra=1", "&runId=00000000-0000-4000-8000-000000000001", "&workflowRunId=bad"]) {
       expect((await http.imageFixture(new Request(imageUrl + suffix, { headers: key }))).status).toBe(400);
     }
+    for (const suffix of ["&parentWorkflowRunId=bad", "&inputFingerprint=bad"]) {
+      expect((await http.imageFixture(new Request(imageUrl + suffix, { headers: key }))).status).toBe(400);
+    }
     const oversized = await http.imageComplete(new Request(imageUrl, { method: "POST", headers: { ...key, "content-length": String(20 * 1024 * 1024 + 1) }, body: "x" }));
     expect(oversized.status).toBe(413);
   });
