@@ -4,7 +4,7 @@ import type { Persona } from "@/lib/contracts/experiment-runner";
 import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 // Preparation can include sheet candidates before runtime admission is enabled.
-export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | "J09" | "J10" | "J11" | null; persona: Persona | null };
+export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | "J09" | "J10" | "J11" | "J12" | null; persona: Persona | null };
 export const M1_SIMULATION_MODULES: SimulationModule[] = [
   { role: "manager", taskId: null, persona: null },
   { role: "specialist", taskId: "J01", persona: null }, { role: "specialist", taskId: "J02", persona: null },
@@ -18,6 +18,10 @@ export const M3_SIMULATION_MODULES: SimulationModule[] = [
   { role: "manager", taskId: null, persona: null },
   ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
   { role: "specialist", taskId: "J11", persona: null },
+];
+export const M3_J12_SIMULATION_MODULES: SimulationModule[] = [
+  { role: "manager", taskId: null, persona: null },
+  { role: "specialist", taskId: "J12", persona: null },
 ];
 export function m3SimulationModuleName(module: SimulationModule) {
   return `issue65_m3_${module.taskId ?? module.persona ?? module.role}`;
@@ -43,11 +47,12 @@ function http(id: string, title: string, path: string, selector: string[], x: nu
 }
 
 /** Model-free candidate graphs. Live graph validation and publication remain separate. */
-export async function createSimulationGraph(module: SimulationModule, profile: "m1" | "m2" | "m3" = "m1") {
-  const modules = profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
+export async function createSimulationGraph(module: SimulationModule, profile: "m1" | "m2" | "m3" | "m3-j12" = "m1") {
+  const modules = profile === "m3-j12" ? M3_J12_SIMULATION_MODULES : profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
   if (!modules.some((item) => JSON.stringify(item) === JSON.stringify(module))) throw new Error("Unsupported simulation module");
-  const fixture = await readFile(resolve(`docs/accepted/2026-09-27_dify-booklet-runner/dify/${profile === "m3" ? "m2" : profile}-simulation.py`), "utf8") +
-    (profile === "m3" ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-pagination.py"), "utf8")}` : "");
+  const fixture = await readFile(resolve(`docs/accepted/2026-09-27_dify-booklet-runner/dify/${profile === "m3" || profile === "m3-j12" ? "m2" : profile}-simulation.py`), "utf8") +
+    (profile === "m3" || profile === "m3-j12" ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-pagination.py"), "utf8")}` : "") +
+    (profile === "m3-j12" ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-page-bible.py"), "utf8")}` : "");
   const wrapper = `\n\ndef main(authorization_body, run_id, operation_id, workflow_run_id, parent_workflow_run_id):\n    data = json.loads(authorization_body)["data"]\n    if data.get("started") is True:\n        ctx = data["context"]\n        if ctx.get("role") != ${JSON.stringify(module.role)}:\n            raise ValueError("Wrong module role")\n${module.taskId ? `        if ctx.get("taskId") != ${JSON.stringify(module.taskId)}:\n            raise ValueError("Wrong specialist task")\n` : ""}${module.persona ? `        if ctx.get("persona") != ${JSON.stringify(module.persona)}:\n            raise ValueError("Wrong tester persona")\n` : ""}    return simulation_main(authorization_body, run_id, operation_id, workflow_run_id, parent_workflow_run_id)\n`;
   const nodes: Node[] = [
     { id: "start", type: "custom", position: { x: 0, y: 0 }, data: { title: "Simulated input only", type: "start", variables: ["run_id", "operation_id", "parent_workflow_run_id", "mode"].map((variable) => ({ variable, label: variable, type: "text-input", required: variable !== "parent_workflow_run_id", default: "", options: [] })) } },

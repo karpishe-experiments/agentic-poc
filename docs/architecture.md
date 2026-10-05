@@ -128,8 +128,10 @@ explicit tester review or a recorded scoped delegation, with sample and source
 evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
-retain old images and approvals. The public configuration reader and candidate host validator
-accept six, eleven, thirteen, fifteen or sixteen complete bindings. The reviewed host
+retain old images and approvals. The public configuration reader accepts six,
+eleven, thirteen, fifteen, sixteen or seventeen complete bindings. The host
+validator currently accepts profiles only through sixteen slots; the J12 host
+handoff remains pending. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
 J08 and all reference modules are published. All-persona reference acceptance and
 model-free binary output transfer passed with 5/5/6 saved images. Staging release
@@ -174,8 +176,20 @@ one unit can span multiple panels or pages. Routed references must identify exac
 current approved sheets. J11 acceptance reaches a saved J12 slice boundary, not
 booklet completion. Old binding profiles retain their original boundaries. This
 profile is now published and active in staging after reviewed release, readiness
-and backed-up activation. Live J11 all-persona acceptance remains pending; the
-retained fifteen-binding M2 runs preserve their saved boundaries.
+and backed-up activation. The linked live Kid successor reached approved J11 and
+the J12 boundary without paid calls after the recovery correction. The Parent
+run also reached that boundary without repair. Creator J11 acceptance remains
+pending; see the [M3 evidence](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
+The retained fifteen-binding M2 runs preserve their saved boundaries.
+
+The local seventeen-binding candidate adds per-page J12 Page Bible work. It
+reuses the saved J11 page identities and verifies current approved manuscript,
+style and selected reference-sheet versions before completion or approval.
+Each page has its own artifact, dependency edges and approval record. All 4/6/9
+accepted pages advance to the J13 boundary, not booklet completion. Older
+profiles keep their existing boundaries. This candidate is not yet published or
+active in staging. Its model-free Dify fixture and graph are prepared locally;
+publication and the runtime binding remain pending.
 
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
@@ -218,7 +232,7 @@ without local-agent seeds or a host OpenAI key. It retains seed assets for healt
 checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
-`lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen- or sixteen-module configuration, browser
+`lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits

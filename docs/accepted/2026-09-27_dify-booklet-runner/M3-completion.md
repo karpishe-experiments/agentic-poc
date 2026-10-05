@@ -1,6 +1,6 @@
 # M3 — Pages, runner UI and advisory evaluation
 
-**State:** Planned. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
+**State:** In progress; full-booklet acceptance remains pending. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
 **Predecessor:** [M2](M2-references.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current entry readiness
@@ -172,7 +172,7 @@ and duplicate completion reused the saved result. Missing approval evidence and
 corrupt saved sheets rejected admission. Two independent reviews and Validate
 `37329273541` passed; [PR #136](https://github.com/karpishe-experiments/agentic-poc/pull/136)
 merged the reviewed local implementation. Publication and private J11 key
-preparation now passed; staging activation remains pending. These local tests are not full-booklet or
+preparation passed; reviewed staging activation is recorded below. These local tests are not full-booklet or
 live Dify acceptance. Manuscript units can span panels/pages; coverage is required
 on story pages, not satisfied by the cover alone.
 
@@ -204,7 +204,7 @@ Local preparation validation passed 66 tests across six focused suites without
 retries. After the final lint correction, typecheck, lint and the three affected
 graph tests passed in a fresh temporary checkout. Generated Code nodes contain
 47,026–47,135 UTF-8 bytes. These measurements do not establish a Studio limit;
-publication and live J11 execution remain unverified. The five new drafts passed
+publication and live J11 execution were separate gates, now recorded below. The five new drafts passed
 server-assisted graph validation. A synthetic single-node J11 check succeeded
 (`02c83edc-19a4-4e8c-a6fe-6305df04929c`) without callbacks or providers; this
 verifies the imported Code node, not runtime credentials or full dispatch.
@@ -243,8 +243,10 @@ Kid `c546bbc1-61c5-4bba-9b8d-f7e6ef4f8f4b`, Parent
 `c2285100-f758-4ba5-8a40-1405c7348c0f`, Creator
 `0c35b628-0908-4eaa-80b4-054fb99ea097`, and J11
 `26b4f146-f4f0-4779-8a83-192cec653bee`. The eleven reused publications also
-passed model-free node inspection. Runtime-key validity and J11 staging acceptance
-remain unverified. Infrastructure `37345579673` installed reviewed master
+passed model-free node inspection. The linked Kid acceptance below verifies
+runtime execution through J11; the Parent evidence is also retained below.
+Creator J11 acceptance remains pending.
+Infrastructure `37345579673` installed reviewed master
 `32befad909ffd8be207fb41e2b771ee5985757f9` with no Terraform resource changes;
 it did not activate the sixteen bindings. The J11 staging candidate in
 [PR #140](https://github.com/karpishe-experiments/agentic-poc/pull/140) passed
@@ -258,7 +260,7 @@ Validate `37348398499` passed. Private settings upload succeeded; the encrypted
 file has Windows access limited to the user, administrators and SYSTEM.
 Drained staging activation `37348239296` completed with verified backup
 `staging-20261005T172539Z-9163268c683d14ee`. No reset or paid call occurred.
-Live J11 acceptance remains pending; configuration activation is not completion.
+Configuration activation alone is not completion; see the live acceptance below.
 
 The first live Kid J11 attempt, run `0e907bde-cbfc-49c7-8c6a-06f561ac195b`
 and booklet `2d9b0377-1f27-4327-8de9-4b959e0d7488`, retained approved J01–J10
@@ -282,8 +284,31 @@ passed 45 tests without retries. MongoDB teardown reported a Windows shutdown
 timeout after those passes; the command exited zero. The final two recovery suites
 passed 56 tests without retries, including transaction re-verification and late
 text/image callbacks without replacement dispatch. Their Windows MongoDB teardown
-also required forced shutdown after the passes. Independent reviews and corrected
-staging acceptance remain pending; these local results do not clear J11.
+also required forced shutdown after the passes. Two consecutive independent
+reviews passed for the correction in [PR #142](https://github.com/karpishe-experiments/agentic-poc/pull/142),
+and Validate `37354658823` passed. The selective staging correction in
+[PR #143](https://github.com/karpishe-experiments/agentic-poc/pull/143) also passed
+two independent reviews and Validate `37355984987`. It merged as
+`0fb4c3d0d0996b38e7a8c03ffebf81793ddf1fe0`; Deploy `37356864220` and
+Check deployment `37357833756` passed. No binding change or original workflow
+replay was needed.
+
+### Current live pagination evidence — 2026-10-05
+
+The linked Kid successor `870c1d2c-963f-4aa6-83c5-67d667a74b03`, booklet
+`c7553125-a287-4eb0-8537-30bbb75a253d`, reached `slice_complete` with J11
+approved. Browser read-back retained predecessor
+`0e907bde-cbfc-49c7-8c6a-06f561ac195b`, five saved fixture images, 29/120
+logical text calls, 5/12 simulated image calls and 34/300 steps. Payable text
+and image counters were zero. The failed predecessor remains unchanged.
+This verifies the Kid pagination slice, not J12/J13 or full booklet completion.
+The Parent run `c2aa6a9f-503b-4de4-83ad-64f2a5b6efb8`, booklet
+`8ae9f1f0-d38a-4c0e-8364-be12b524d1b7`, also reached `slice_complete` with
+J11 approved. Browser read-back retained five fixture images, 29/160 logical
+text calls, 5/14 simulated image calls and 34/300 steps. Payable text and image
+counters were zero. No repair occurred during this run.
+Creator J11 acceptance, runtime reference inputs, final pages/cover and reports
+remain pending. These pagination results do not prove full-booklet completion.
 
 `scripts/upload-dify-booklet-m3-settings.ps1` accepts a sanitized publication
 manifest through `-PublicationsPath`. Preview validates sixteen distinct app and
@@ -307,6 +332,45 @@ checks and two independent reviews, including synthetic collection tests.
 
 This slice uses the existing page parser and artifact/operation services. It does
 not clear the separate final-page reference-transport or judge-image gates.
+
+The pure preparation check binds J12 to the selected saved page, exact source
+versions, ordered panel identities and unchanged routing memberships. It preserves
+lettering strings and order. It does not prove approvals, lineage or stored bytes.
+J11 owns page/panel allocation; J12 owns the reviewable composition and production
+lettering. A narrative unit can span pages, so do not require its complete text on
+every routed panel. The current contract does not mechanically prove whole-book
+text coverage; retain the approved manuscript for tester/judge comparison.
+
+Repository verification loads current approved J11/J05/J08 with exact approval
+records. It checks J11's saved dependency IDs against its edges and the current
+approved upstream identities. It then reads the assembled style samples and only
+the selected page's referenced sheet bytes, not every unrelated sheet. Return
+dependencies as J11, J05, J08, then deduplicated selected sheets sorted by task and
+subject ID. Reuse verified sources only inside one completion transaction attempt;
+a retry or later request verifies again. Unknown-outcome recovery must retain the
+exact active page operation, reservation and publication checks.
+
+Local J12 dispatcher tests completed all three persona journeys through the J13
+boundary, retaining 4/6/9 individually approved Page Bible artifacts, stable J11
+page identities and parent/child traces. Payable counters stayed zero. The final
+dispatcher suite passed 58 tests and the source-verifier suite passed three,
+without retries. Four context,
+dispatcher, verification and narrative regression suites passed 32 tests. Five
+page/configuration unit suites passed 35 tests. Clean-checkout typecheck and lint
+passed, as did twelve legacy agent fixtures. These are local fixture checks, not
+live J12 Dify execution or final booklet completion. A focused lost-response test
+recovers the same J12 operation and page version through GET, with no replacement
+POST. The final full dispatcher regression also passed.
+Windows required forced MongoDB process cleanup after the passing integration
+results; the test command exited zero.
+
+The local `m3-j12` preparation profile contains only the existing M3 manager and
+the new J12 specialist. It appends the Page Bible fixture to the unchanged M2 and
+J11 fixture sources. Existing preparation profiles retain their prior graphs.
+Python/TypeScript parity and model-free graph checks passed fifteen tests across
+three suites, including the J11 regression fixture. Final clean-checkout typecheck,
+lint and those suites passed after the test-only corrections. No workspace publication,
+runtime key collection or staging activation is included in this preparation.
 
 | Field | Bounded J12 slice |
 | --- | --- |
