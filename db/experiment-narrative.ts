@@ -1,15 +1,18 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ArtifactDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, MAX_DRAFT_LIST_CONTENT_BYTES, type RoleResult, type NarrativeWarning } from "@/lib/contracts/experiment-runner";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
-import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, NARRATIVE_DEPENDENCIES, NARRATIVE_TASKS, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
+import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, NARRATIVE_DEPENDENCIES, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import { materializeNarrativeContent } from "@/db/experiment-narrative-content";
+import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
+import type { AssetStore } from "@/lib/assets/asset-store";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 
 type RunPatch = Partial<Pick<ExperimentRunDocument, "activeDelegationId" | "decisionSequence" | "pendingDecisionJson" | "textRevisions">>;
 export type Materialized = { summary: Record<string, unknown>; runPatch: RunPatch };
-const names = { J01: "book_concept_brief", J02: "story_outline", J03: "draft_character_list", J04: "draft_location_list", J05: "page_by_page_manuscript", J06: "final_character_list", J07: "final_location_list" } as const;
+const names = { J01: "book_concept_brief", J02: "story_outline", J03: "draft_character_list", J04: "draft_location_list", J05: "page_by_page_manuscript", J06: "final_character_list", J07: "final_location_list", J08: "visual_style_package" } as const;
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
 function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_result", message); }
 function canonical(value: unknown) { return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item); }
@@ -23,7 +26,7 @@ function enabled(run: ExperimentRunDocument, task: unknown): task is NarrativeTa
 async function updateStage(database: Database, session: ClientSession, run: ExperimentRunDocument, nowMs: number) {
   const tasks = configuredNarrativeTasks(run.configurationJson);
   const artifacts = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId, subjectKind: "book", subjectId: run.bookletId }, { session }).toArray();
-  const stage = tasks.find((task) => !artifacts.some((item) => item.taskId === task && item.state === "approved")) ?? (tasks.length === 2 ? "J03" : "J08");
+  const stage = tasks.find((task) => !artifacts.some((item) => item.taskId === task && item.state === "approved")) ?? (tasks.length === 2 ? "J03" : tasks.includes("J08") ? "J09" : "J08");
   await database.collections.booklets.updateOne({ _id: run.bookletId }, { $set: { currentStage: stage, updatedAtMs: nowMs } }, { session });
 }
 
@@ -68,7 +71,7 @@ async function assertDependencies(database: Database, session: ClientSession, ru
   return current;
 }
 
-async function approveVersion(database: Database, session: ClientSession, run: ExperimentRunDocument, versionId: string, origin: "explicit" | "delegated", testerDecisionId: string, delegationId: string | null, reviewGroupId: string | null, nowMs: number) {
+async function approveVersion(database: Database, session: ClientSession, run: ExperimentRunDocument, versionId: string, origin: "explicit" | "delegated", testerDecisionId: string, delegationId: string | null, reviewGroupId: string | null, nowMs: number, assetStore: () => AssetStore) {
   const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
   if (!version) invalid("Approval version does not exist.");
   const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
@@ -78,7 +81,35 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   {
     const expected = await approvedSourceIds(database, session, run, artifact.taskId);
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as string[];
-    if (expected === null || canonical(dependencies) !== canonical(expected)) invalid("Approval dependencies are not current.");
+    if (artifact.taskId === "J08") {
+      let assembled;
+      try { assembled = parseReferenceProposal("J08", "assembled", JSON.parse(version.contentJson)).content; }
+      catch { invalid("Style approval requires two assembled samples, not a textual draft."); }
+      if (version.createdBy !== "application" || version.sourceVersionId !== assembled.draftStyleVersionId) invalid("Style assembly identity is invalid.");
+      if (expected === null || canonical(dependencies) !== canonical([assembled.draftStyleVersionId, ...expected])) invalid("Approval dependencies are not current.");
+      const draft = await database.collections.artifact_versions.findOne({ _id: assembled.draftStyleVersionId, artifactId: artifact._id }, { session });
+      const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: versionId }, { session }).toArray();
+      if (!draft || canonical(JSON.parse(draft.dependencyVersionIdsJson)) !== canonical(expected) ||
+          canonical(edges.map((edge) => edge.upstreamVersionId).sort()) !== canonical([...dependencies].sort())) invalid("Style assembly sources are incomplete.");
+      for (const sample of assembled.samples) {
+        const operation = await database.collections.experiment_operations.findOne({ _id: sample.build.operationId, runId: run._id }, { session });
+        const asset = await database.collections.assets.findOne({ _id: sample.build.assetId, bookletId: run.bookletId }, { session });
+        if (!operation || operation.role !== "image" || operation.taskId !== "J08" || operation.subjectId !== run.bookletId ||
+            operation.state !== "succeeded" || !asset || asset._id !== operation._id || asset.kind !== "style_preview") invalid("Style sample evidence is missing.");
+        const result = JSON.parse(operation.resultJson ?? "null") as { assetId?: string; uri?: string; sha256?: string } | null;
+        const request = JSON.parse(operation.imageRequestJson ?? "null") as { prompt?: string; sourceVersionIds?: string[] } | null;
+        if (result?.assetId !== asset._id || result.uri !== asset.uri || result.sha256 !== operation.resultDigest ||
+            request?.prompt !== sample.build.prompt || canonical(request.sourceVersionIds) !== canonical(sample.build.sourceVersionIds)) invalid("Style sample evidence changed after assembly.");
+        try {
+          const metadata = JSON.parse(asset.metadataJson ?? "null") as { sha256?: string; byteLength?: number } | null;
+          const store = assetStore();
+          if (!await store.exists(asset.uri)) invalid("Style sample bytes are missing.");
+          const bytes = await store.get(asset.uri);
+          if (metadata?.sha256 !== result.sha256 || bytes.byteLength !== metadata.byteLength ||
+              createHash("sha256").update(bytes).digest("hex") !== result.sha256) invalid("Style sample bytes are corrupt.");
+        } catch { invalid("Style sample storage verification failed."); }
+      }
+    } else if (expected === null || canonical(dependencies) !== canonical(expected)) invalid("Approval dependencies are not current.");
   }
   if (artifact.taskId === "J01") {
     const content = JSON.parse(version.contentJson) as { audience?: { ageBand?: string } };
@@ -94,7 +125,7 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   return approvalId;
 }
 
-export async function materializeNarrativeResult(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RoleResult, warnings: NarrativeWarning[], nowMs: number): Promise<Materialized> {
+export async function materializeNarrativeResult(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RoleResult, warnings: NarrativeWarning[], nowMs: number, assetStore: () => AssetStore = createAssetStore): Promise<Materialized> {
   const summary: Record<string, unknown> = {};
   const runPatch: RunPatch = {};
   if (result.kind === "proposal") {
@@ -125,9 +156,9 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     const currentPending = pending(run);
     if (currentPending?.kind === "revision" && currentPending.taskId === taskId && currentPending.artifactVersionId === (target?.currentVersionId ?? null)) runPatch.pendingDecisionJson = null;
     let approvalId: string | null = null;
-    if (run.activeDelegationId && !intentWarnings.some((warning) => warning.field === "audience.ageBand")) {
+    if (taskId !== "J08" && run.activeDelegationId && !intentWarnings.some((warning) => warning.field === "audience.ageBand")) {
       const grant = await database.collections.experiment_delegations.findOne({ _id: run.activeDelegationId, runId: run._id }, { session });
-      if (grant && !grant.revokedAtMs && !grant.supersededById && grant.subjectId === run.bookletId && grant.taskIds.includes(taskId)) approvalId = await approveVersion(database, session, run, versionId, "delegated", grant.testerDecisionId, grant._id, null, nowMs);
+      if (grant && !grant.revokedAtMs && !grant.supersededById && grant.subjectId === run.bookletId && grant.taskIds.includes(taskId)) approvalId = await approveVersion(database, session, run, versionId, "delegated", grant.testerDecisionId, grant._id, null, nowMs, assetStore);
     }
     summary.artifactId = artifactId; summary.versionId = versionId; summary.approvalId = approvalId; summary.warnings = intentWarnings;
     return { summary, runPatch };
@@ -156,8 +187,16 @@ export async function materializeNarrativeResult(database: Database, session: Cl
       for (const taskId of configuredNarrativeTasks(run.configurationJson)) if (decision.taskIds.includes(taskId)) {
         const artifact = await database.collections.artifacts.findOne(targetQuery(run, taskId), { session });
         if (artifact?.currentVersionId && artifact.state !== "approved") {
-          try { await approveVersion(database, session, run, artifact.currentVersionId, "delegated", decisionId, grantId, null, nowMs); }
-          catch (error) { if (!(error instanceof ExperimentRepositoryError && error.code === "invalid_result")) throw error; }
+          try { await approveVersion(database, session, run, artifact.currentVersionId, "delegated", decisionId, grantId, null, nowMs, assetStore); }
+          catch (error) {
+            if (taskId === "J08") {
+              const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId }, { session });
+              // Only an unassembled textual draft is an expected deferred grant.
+              // Broken assembled evidence must fail instead of renewing grants forever.
+              if (version?.createdBy === "application") throw error;
+            }
+            if (!(error instanceof ExperimentRepositoryError && error.code === "invalid_result")) throw error;
+          }
         }
       }
       summary.delegationId = grantId;
@@ -174,10 +213,10 @@ export async function materializeNarrativeResult(database: Database, session: Cl
         const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
         if (artifact) artifactByVersion.set(version._id, artifact);
       }
-      const rank = (id: string) => NARRATIVE_TASKS.findIndex((task) => task === artifactByVersion.get(id)?.taskId);
+      const rank = (id: string) => configuredNarrativeTasks(run.configurationJson).findIndex((task) => task === artifactByVersion.get(id)?.taskId);
       const ordered = [...decision.versionIds].sort((a, b) => rank(a) - rank(b));
       const approvalIds: string[] = [];
-      for (const versionId of ordered) approvalIds.push(await approveVersion(database, session, run, versionId, "explicit", decisionId, null, groupId, nowMs));
+      for (const versionId of ordered) approvalIds.push(await approveVersion(database, session, run, versionId, "explicit", decisionId, null, groupId, nowMs, assetStore));
       summary.approvalIds = approvalIds; summary.reviewGroupId = groupId;
     } else if (decision.action === "answer") {
       const current = pending(run);

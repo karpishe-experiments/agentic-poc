@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   currentApprovedSourceIds,
   configuredNarrativeTasks,
+  BOOK_TASKS,
   NARRATIVE_DEPENDENCIES,
   NARRATIVE_TASKS,
   type NarrativeTask,
@@ -28,16 +29,25 @@ describe("narrative task sources", () => {
   });
   it("defines every ordered direct dependency", () => {
     expect(NARRATIVE_TASKS).toEqual(["J01", "J02", "J03", "J04", "J05", "J06", "J07"]);
+    expect(BOOK_TASKS).toEqual([...NARRATIVE_TASKS, "J08"]);
     expect(NARRATIVE_DEPENDENCIES).toEqual({
       J01: [], J02: ["J01"], J03: ["J01", "J02"], J04: ["J01", "J02"],
       J05: ["J01", "J02", "J03", "J04"], J06: ["J02", "J03", "J05"], J07: ["J02", "J04", "J05"],
+      J08: ["J01", "J02", "J05", "J06", "J07"],
     });
   });
 
-  it.each(NARRATIVE_TASKS)("resolves %s in canonical order", (task) => {
+  it.each(BOOK_TASKS)("resolves %s in canonical order", (task) => {
     const sources = NARRATIVE_DEPENDENCIES[task].map(approved);
     expect(currentApprovedSourceIds(task, sources)).toEqual(sources.map((source) => source.currentVersionId));
     expect(currentApprovedSourceIds(task, [...sources].reverse())).toEqual(sources.map((source) => source.currentVersionId));
+  });
+
+  it("requires every approved style source before J08", () => {
+    const dependencies = NARRATIVE_DEPENDENCIES.J08;
+    for (const missing of dependencies) {
+      expect(currentApprovedSourceIds("J08", dependencies.filter((task) => task !== missing).map(approved))).toBeNull();
+    }
   });
 
   it("requires both siblings for the manuscript in either arrival order", () => {

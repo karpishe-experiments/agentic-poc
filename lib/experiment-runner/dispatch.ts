@@ -1,10 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
-import { createExperimentRepository } from "@/db/experiment-repository";
+import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
+import { createExperimentStyleAssembly } from "@/db/experiment-style";
+import type { AssetStore } from "@/lib/assets/asset-store";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
+import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
+import { styleSampleRequests } from "@/lib/experiment-runner/reference-requests";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { configurationSnapshot, selectBinding, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
-import { createWorkflowRuntime, runtimeCompletion, type RuntimeResult, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
+import { createWorkflowRuntime, runtimeCompletion, runtimeImageCompletion, type RuntimeResult, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { runTrackedMutation } from "@/lib/application/deployment-control";
 import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
@@ -17,20 +22,60 @@ function fingerprint(value: unknown) { return createHash("sha256").update(canoni
 export function createExperimentDispatcher(deps: {
   database: Database; config: BookletRunnerConfig; runtime?: WorkflowRuntime;
   mutate?: typeof runTrackedMutation; now?: () => number;
+  store?: () => AssetStore;
 }) {
-  const repository = createExperimentRepository(deps.database);
+  const store = deps.store ?? createAssetStore;
+  const repository = createExperimentRepository(deps.database, { store });
   const context = createExperimentContextService(deps.database);
   const runtime = deps.runtime ?? createWorkflowRuntime(deps.config);
   const mutate = deps.mutate ?? runTrackedMutation;
   const now = deps.now ?? Date.now;
+  const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
+    operation.role as "manager" | "specialist" | "tester" | "image", operation.taskId as NarrativeTask | null, run.persona);
+
+  async function prepareStyleSample(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>) {
+    const style = view.currentArtifacts.find((item) => item.taskId === "J08");
+    const draft = style?.versions.find((item) => item.id === style.currentVersionId);
+    const sources = currentApprovedSourceIds("J08", view.currentArtifacts);
+    if (!draft || !sources || canonical(draft.dependencyVersionIds) !== canonical(sources)) {
+      throw new ExperimentRepositoryError("conflict", "Style sample sources are unavailable or stale.");
+    }
+    const slots = styleSampleRequests(draft.content, { draftStyleVersionId: draft.id, conceptVersionId: sources[0],
+      outlineVersionId: sources[1], manuscriptVersionId: sources[2], finalCharactersVersionId: sources[3], finalLocationsVersionId: sources[4] });
+    const history = await repository.listOperations(run._id);
+    const savedIds: string[] = [];
+    for (const slot of slots) {
+      const inputFingerprint = imageRequestFingerprint(slot.request);
+      const matches = history.filter((item) => item.role === "image" && item.taskId === "J08" &&
+        item.subjectKind === "book" && item.subjectId === run.bookletId && item.inputFingerprint === inputFingerprint);
+      const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
+        item.reservationCount === 0 && item.verifiedWorkflowId && item.workflowRunId));
+      // An existing uncertain/failed attempt is not permission to generate again.
+      if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId ||
+          canonical(JSON.parse(item.imageRequestJson ?? "null")) !== canonical(slot.request))) {
+        throw new ExperimentRepositoryError("conflict", "Saved style sample requires reconciliation.");
+      }
+      if (executable.length === 1) { savedIds.push(executable[0]._id); continue; }
+      return { operation: await repository.prepareOperation({ runId: run._id, operationId: randomUUID(),
+        expectedRevision: run.revision, role: "image", taskId: "J08", subjectKind: "book", subjectId: run.bookletId,
+        inputFingerprint, attempt: Math.max(0, ...matches.map((item) => item.attempt)) + 1, providerKind: "image", imageRequest: slot.request, nowMs: now() }),
+        parentWorkflowRunId: draft.sourceOperationId ? history.find((item) => item._id === draft.sourceOperationId)?.workflowRunId ?? null : null };
+    }
+    await createExperimentStyleAssembly({ database: deps.database, store: store(), now }).assemble({
+      runId: run._id, draftStyleVersionId: draft.id, sampleOperationIds: savedIds,
+    });
+    return null;
+  }
 
   async function observeProgress(runId: string, operation: ExperimentOperationDocument) {
     if (operation.state !== "succeeded") return;
     const view = await context.getRunView(runId);
     if (!view) return;
+    const images = view.operationHistory.filter((item) => item.role === "image" && item.state === "succeeded").map((item) => item.id);
     await repository.recordProgress({ runId, operationId: operation._id, nowMs: now(), fingerprint64: fingerprint({
       artifacts: view.currentArtifacts.map(({ id, state, currentVersionId, versions }) => ({ id, state, currentVersionId, approvals: versions.map((version) => version.approval?.id ?? null) })),
       delegation: view.activeDelegation?.id ?? null, pending: view.pendingDecision, messages: view.creatorMessages.map((message) => message.id),
+      ...(images.length ? { images } : {}),
     }) });
   }
 
@@ -38,7 +83,7 @@ export function createExperimentDispatcher(deps: {
     const identity = { runId: run._id, operationId: operation._id, parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: now() };
     const current = await repository.getOperation(operation._id);
     if (!current) return;
-    const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as NarrativeTask | null, run.persona);
+    const binding = bindingFor(operation, run);
     if (result.kind === "execution") {
       const execution = result.execution;
       if (execution.workflow_id !== binding.publishedWorkflowId || (current.workflowRunId && current.workflowRunId !== execution.id)) {
@@ -46,8 +91,33 @@ export function createExperimentDispatcher(deps: {
         return;
       }
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id });
-      await repository.verifyDispatchPublication({ ...identity, workflowRunId: execution.id, workflowId: execution.workflow_id });
-      const completion = runtimeCompletion(execution);
+      const imageCompletion = operation.role === "image" ? runtimeImageCompletion(execution) : null;
+      const completion = operation.role === "image" ? null : runtimeCompletion(execution);
+      const unclaimedPause = execution.status === "succeeded" && execution.outputs?.authorization_reason === "paused" &&
+        current.state === "prepared" && current.reservationCount === 0;
+      if (operation.role === "image" && !unclaimedPause) {
+        if (execution.status === "running" && execution.outputs?.image_result === undefined) {
+          if (now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + 600_000)) {
+            if (current.state === "succeeded") await repository.blockRun({ runId: run._id, category: "unknown_outcome", nowMs: now() });
+            else await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
+          }
+          return;
+        }
+        if ((execution.status === "failed" || execution.status === "stopped") && current.state !== "succeeded") {
+          await repository.recordDispatchOutcome({ ...identity, category: "definite_failure" });
+          return;
+        }
+        if (!imageCompletion || imageCompletion.runId !== run._id || imageCompletion.operationId !== operation._id ||
+            imageCompletion.workflowRunId !== execution.id || imageCompletion.parentWorkflowRunId !== operation.parentWorkflowRunId ||
+            imageCompletion.inputFingerprint !== operation.inputFingerprint || imageCompletion.assetId !== operation._id ||
+            current.state !== "succeeded" || current.resultDigest !== imageCompletion.sha256) {
+          await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+          return;
+        }
+      }
+      if (operation.role !== "image" || execution.status === "succeeded") {
+        await repository.verifyDispatchPublication({ ...identity, workflowRunId: execution.id, workflowId: execution.workflow_id });
+      }
       if (completion) {
         if (completion.runId !== run._id || completion.operationId !== operation._id || completion.workflowRunId !== execution.id || completion.parentWorkflowRunId !== operation.parentWorkflowRunId || completion.inputFingerprint !== operation.inputFingerprint) {
           await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
@@ -93,9 +163,10 @@ export function createExperimentDispatcher(deps: {
         await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
         return "blocked";
       }
+      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") return "blocked";
       let operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
       if (operation?.dispatchStartedAtMs != null) {
-        const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as NarrativeTask | null, run.persona);
+        const binding = bindingFor(operation, run);
         // A retained ID is the only read-back path. Never POST after the marker.
         await reconcile(run, operation, operation.workflowRunId ? await runtime.retrieve(binding, operation.workflowRunId) : { kind: "unknown" });
         return "waiting";
@@ -106,10 +177,11 @@ export function createExperimentDispatcher(deps: {
       if (!operation) {
         const latest = (await repository.listOperations(runId)).at(-1);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
-          const binding = selectBinding(deps.config, latest.role as "manager" | "specialist" | "tester", latest.taskId as NarrativeTask | null, run.persona);
+          const binding = bindingFor(latest, run);
           await reconcile(run, latest, latest.workflowRunId ? await runtime.retrieve(binding, latest.workflowRunId) : { kind: "unknown" });
           run = (await repository.getRun(runId))!;
           if (run.status === "blocked") return "blocked";
+          if (!(await repository.getOperation(latest._id))?.verifiedWorkflowId) return "waiting";
         }
         if (latest?.state === "succeeded" && run.progressOperationId !== latest._id) {
           await observeProgress(runId, latest);
@@ -119,6 +191,19 @@ export function createExperimentDispatcher(deps: {
         const view = await context.getRunView(runId);
         if (!view || !view.nextNarrativeTask) return "waiting";
         if (view.nextNarrativeTask === "slice_complete") return "boundary";
+        if (view.nextNarrativeTask === "style_samples") {
+          try {
+            const prepared = await prepareStyleSample(run, view);
+            if (!prepared) return "advanced";
+            operation = prepared.operation; parentWorkflowRunId = prepared.parentWorkflowRunId;
+          } catch (error) {
+            // Concurrent admission and Pause are re-observed rather than retried.
+            const current = await repository.getRun(runId);
+            if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
+            await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+            return "blocked";
+          }
+        } else {
         const history = await repository.listOperations(runId);
         const last = history.at(-1);
         const initialDelegation = run.persona !== "professional_creator" && history.length === 0;
@@ -139,17 +224,21 @@ export function createExperimentDispatcher(deps: {
           }
         }
         operation = await repository.prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind: "book", subjectId: run.bookletId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, view }), attempt: 1, providerKind: "text", nowMs: now() });
+        }
       } else {
         // Before the marker a prepared specialist still needs its saved manager parent.
         if (operation.role === "specialist") {
           const history = await repository.listOperations(runId);
           parentWorkflowRunId = history.filter((item) => item.role === "manager" && item.state === "succeeded").at(-1)?.workflowRunId ?? null;
+        } else if (operation.role === "image") {
+          const style = await deps.database.collections.artifact_versions.findOne({ _id: operation.dependencyVersionIds[0] });
+          parentWorkflowRunId = style?.sourceOperationId ? (await repository.getOperation(style.sourceOperationId))?.workflowRunId ?? null : null;
         }
       }
       const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
-      const binding = selectBinding(deps.config, operation.role as "manager" | "specialist" | "tester", operation.taskId as NarrativeTask | null, run.persona);
+      const binding = bindingFor(operation, run);
       await reconcile(run, operation, await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated" }));
       return "advanced";
     });

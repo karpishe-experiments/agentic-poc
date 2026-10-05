@@ -4,10 +4,11 @@ import type { ArtifactDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
+import { assembledVisualStyleSchema } from "@/lib/contracts/experiment-references";
 import { configuredNarrativeTasks, currentApprovedSourceIds, NARRATIVE_DEPENDENCIES, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
-type NextTask = NarrativeTask | "tester" | "slice_complete" | null;
+type NextTask = NarrativeTask | "style_samples" | "tester" | "slice_complete" | null;
 function parseJson(value: string | null): unknown { return value === null ? null : JSON.parse(value) as unknown; }
 function deny(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
 
@@ -43,6 +44,8 @@ export function createExperimentContextService(database: Database) {
       const current = projected.find((item) => item.taskId === task);
       if ((!current || current.state === "needs_review") && currentApprovedSourceIds(task, projected) !== null) return task;
     }
+    const style = projected.find((item) => item.taskId === "J08" && item.state === "draft");
+    if (style && !assembledVisualStyleSchema.safeParse(style.versions.find((item) => item.id === style.currentVersionId)?.content).success) return "style_samples";
     if (projected.some((item) => enabled.includes(item.taskId) && item.state === "draft")) return "tester";
     return enabled.every((task) => projected.some((item) => item.taskId === task && item.state === "approved" && item.currentVersionId)) ? "slice_complete" : null;
   }

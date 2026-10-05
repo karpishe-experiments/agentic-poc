@@ -8,6 +8,7 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentImageRequestSchema, imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { materializeNarrativeResult, prepareNarrativeContext } from "@/db/experiment-narrative";
 import { assertCurrentImageSources } from "@/db/experiment-images";
+import type { AssetStore } from "@/lib/assets/asset-store";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -46,7 +47,7 @@ function must<T>(value: T | null, label: string): T {
 }
 function isDuplicate(error: unknown): boolean { return !!error && typeof error === "object" && "code" in error && error.code === 11000; }
 
-export function createExperimentRepository(database: Database) {
+export function createExperimentRepository(database: Database, options: { store?: () => AssetStore } = {}) {
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
 
@@ -227,7 +228,7 @@ export function createExperimentRepository(database: Database) {
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Publication verification identity differs from dispatch.");
       const configuration = parse(z.array(configurationItem), JSON.parse(run.configurationJson) as unknown);
-      const expected = configuration.find((item) => item.role === operation.role && item.taskId === operation.taskId);
+      const expected = configuration.find((item) => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
       if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
       if (operation.verifiedWorkflowId) return operation;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: input.workflowRunId, verifiedWorkflowId: null }, { $set: { verifiedWorkflowId: input.workflowId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
@@ -328,7 +329,7 @@ export function createExperimentRepository(database: Database) {
       }
       if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
       if ((operation.state !== "started" && operation.state !== "unknown") || operation.reservationCount !== 1 || run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting authorized completion.");
-      const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs);
+      const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs, options.store);
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state: "succeeded", resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation completion changed concurrently.");

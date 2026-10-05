@@ -1,8 +1,10 @@
-import { createSimulationGraph, M1_SIMULATION_MODULES, M2_SIMULATION_MODULES, simulationModuleName } from "@/lib/experiment-runner/workflow-graph";
+import { createSimulatedImageGraph, createSimulationGraph, M1_SIMULATION_MODULES, M2_SIMULATION_MODULES, simulationModuleName } from "@/lib/experiment-runner/workflow-graph";
+
+const IMAGE_PROBE_NAME = "issue65_m2_image_probe";
 
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--help") {
-  console.log("Usage: tsx scripts/prepare-dify-booklet-module.ts --module <name> [--profile m1|m2] [--graph]\nNames: " + M2_SIMULATION_MODULES.map(simulationModuleName).join(", "));
+  console.log("Usage: tsx scripts/prepare-dify-booklet-module.ts --module <name> [--profile m1|m2] [--graph]\nNames: " + [...M2_SIMULATION_MODULES.map(simulationModuleName), IMAGE_PROBE_NAME].join(", "));
 } else {
   if (args[0] !== "--module" || !args[1]) throw new Error("Use --help for the exact module preparation arguments.");
   let profile: "m1" | "m2" = "m1";
@@ -14,11 +16,12 @@ if (args.length === 1 && args[0] === "--help") {
       profile = args[++index] as "m1" | "m2"; hasProfile = true;
     } else throw new Error("Use --help for the exact module preparation arguments.");
   }
+  const imageProbe = args[1] === IMAGE_PROBE_NAME && profile === "m2";
   const selectedModule = (profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES).find((item) => simulationModuleName(item) === args[1]);
-  if (!selectedModule) throw new Error("Unknown simulation module for this profile; use --help.");
-  const graph = await createSimulationGraph(selectedModule, profile);
+  if (!selectedModule && !imageProbe) throw new Error("Unknown simulation module for this profile; use --help.");
+  const graph = imageProbe ? createSimulatedImageGraph() : await createSimulationGraph(selectedModule!, profile);
   const value = graphOnly ? graph : {
-    app: { name: simulationModuleName(selectedModule), description: `Issue65 ${profile.toUpperCase()} model-free narrative module. Private bindings and live acceptance remain separate.`, mode: "workflow", icon: "M", icon_type: "emoji", icon_background: "#E8F4FF", use_icon_as_answer_icon: false },
+    app: { name: imageProbe ? IMAGE_PROBE_NAME : simulationModuleName(selectedModule!), description: `Issue65 ${profile.toUpperCase()} model-free ${imageProbe ? "image transport probe" : "narrative module"}. Private bindings and live acceptance remain separate.`, mode: "workflow", icon: "M", icon_type: "emoji", icon_background: "#E8F4FF", use_icon_as_answer_icon: false },
     dependencies: [], kind: "app", version: "0.7.0",
     workflow: { graph, features: { file_upload: { enabled: false } }, conversation_variables: [], environment_variables: [
       { id: "00000000-0000-4000-8000-000000000065", name: "BOOKLET_ORIGIN", selector: ["env", "BOOKLET_ORIGIN"], value: "https://booklet-staging.uniwares.co.uk", value_type: "string", description: "Reviewed Booklet staging origin." },
