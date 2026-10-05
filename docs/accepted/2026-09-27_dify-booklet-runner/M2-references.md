@@ -68,6 +68,37 @@ copy. Local links and whitespace passed. The main checkout's stale generated
 types were not counted as a successful check. This proves parser behavior only;
 it does not prove three-persona reference production or any live image transfer.
 
+### S5 second increment: local reference simulation fixtures
+
+Add `lib/experiment-runner/reference-fixtures.ts` and
+`tests/unit/experiment-runner-reference-fixtures.test.ts`, using the reference
+contracts above. The caller supplies current approved sources; the fixture
+parses their contents and UUIDs but does not establish approval or create assets.
+J08 receives version/content pairs for J01/J02/J05/J06/J07. J09/J10 receive the
+target final-list entry ID, final-list version and assembled J08 style version/content,
+including its two sample build records. A textual draft style alone is insufficient.
+Each call requires Simulated mode and the persona's exact fixed brief.
+
+For example, Kid J08 proposes two sample plans from the kite narrative; J09
+proposes the robot's montage instructions; J10 proposes the park's overview and
+supporting views. The shared module contains reusable visual/lettering direction,
+not named characters, places or a specific story action. Scene details belong in
+the sample plan or subject prompt. No proposal fabricates an image build record.
+Missing expressions produce a focused question; saved answers prevent repetition.
+Notes-only revisions retain current content; source changes refresh from current
+facts without changing the target ID. Required instructions do not claim rendering
+quality. The later assembler retains the shared module unchanged.
+
+The corrected local candidate passed isolated typecheck, full lint and 28 tests across five
+suites without retries on 2026-10-05. Tests vary all three persona inputs and
+cover paid-mode/wrong-brief rejection, source UUIDs/counts, subject targeting,
+style hash/whitespace, clarification and revision. This is local proposal proof
+only. Independent reviews and publication remain pending; no Dify fixture parity,
+image assembly, persistence or live reference production is established. The final
+checks include corrections for full-body wording, duplicate saved-answer expressions,
+assembled-style compatibility and story-specific promise text in the shared module.
+Both independent reviews must pass on this corrected candidate before publication.
+
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
 `knownRelationship`, `knownFacts` and `openQuestions`; package notes are
