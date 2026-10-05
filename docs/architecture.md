@@ -65,13 +65,21 @@ PNG/JPEG/WebP bytes, enforces 20 MiB and one frame, and reads stored bytes back
 before saving asset/operation success. Same-byte recovery preserves counters.
 The proxy has 32 MiB transport headroom above the content limit. Filesystem assets
 publish atomically without replacing an existing URI. Cloud trial routes remain
-unchanged. The candidate dispatcher accepts complete six-, eleven- or thirteen-slot
+unchanged. The candidate dispatcher accepts complete six-, eleven-, thirteen- or fifteen-slot
 profiles. Thirteen slots add J08 and a separate model-free image workflow. It saves
 the textual style draft, dispatches two samples, requires matching workflow/upload
 acknowledgements, and assembles a successor without approving the internal draft.
 Only the assembled package receives explicit or scoped delegated acceptance.
 Retained workflow IDs recover through GET; no-ID unknown outcomes never repeat POST.
-Local Python/TypeScript parity covers all three personas through J08. Actual Dify
+Fifteen slots add independent J09/J10 specialists. The existing repository and
+dispatcher schedule every saved recurring-character and final-location target,
+verify source approvals and original image bytes, and accept only assembled
+packages. Clarification and revisions retain their subject identity. Unknown
+tester outcomes recover without replay; manager delegation may select either
+ready sheet sibling. Sheet admission requires the replacement subject-aware
+index and absence of the retained legacy restriction. These are local contracts,
+not proof of activated bindings or full booklet generation.
+Local Python/TypeScript parity covers all three personas through J10. Actual Dify
 binary transfer, expanded private bindings and staging activation remain pending.
 The master-owned host validator update requires separate infrastructure approval;
 this release does not update the host dispatcher, rotate settings or remove an index.

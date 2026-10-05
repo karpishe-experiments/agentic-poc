@@ -38,8 +38,8 @@ describe("isolated simulated image transport graph", () => {
     expect(() => executeCode("ack", { ...identity, status_code: 200, input_fingerprint: fingerprint, body: JSON.stringify({ data: { state: "succeeded", assetId: identity.run_id, sha256: "b".repeat(64) } }) })).toThrow("saved image completion");
   });
 
-  it("keeps twelve text modules separate and has complete image success and pause paths", () => {
-    expect(M2_SIMULATION_MODULES).toHaveLength(12);
+  it("keeps fourteen text modules separate and has complete image success and pause paths", () => {
+    expect(M2_SIMULATION_MODULES).toHaveLength(14);
     expect(M2_SIMULATION_MODULES.map(simulationModuleName)).not.toContain("issue65_m2_image_probe");
     const graph = createSimulatedImageGraph();
     const node = (id: string) => graph.nodes.find((item) => item.id === id)!;
