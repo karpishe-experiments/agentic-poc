@@ -169,7 +169,9 @@ all-persona tests reached approved layouts with 4/6/9 stable page IDs and stoppe
 at J12. GET-only recovery did not repeat the specialist or a lost manager
 delegation to J11; revision preserved IDs
 and duplicate completion reused the saved result. Missing approval evidence and
-corrupt saved sheets rejected admission. Review, publication, private J11 keys
+corrupt saved sheets rejected admission. Two independent reviews and Validate
+`37329273541` passed; [PR #136](https://github.com/karpishe-experiments/agentic-poc/pull/136)
+merged the reviewed local implementation. Dify publication, private J11 keys
 and staging activation remain pending. These local tests are not full-booklet or
 live Dify acceptance. Manuscript units can span panels/pages; coverage is required
 on story pages, not satisfied by the cover alone.
@@ -178,6 +180,31 @@ Final local validation passed 137 tests across twelve affected suites without
 retries, clean-checkout typecheck and lint, and twelve legacy agent fixtures.
 MongoDB teardown reported a Windows shutdown timeout after the passing tests;
 the test command exited zero. This is not live Dify execution evidence.
+
+### J11 Dify preparation package
+
+Prepare five new model-free M3 modules: manager, three persona testers and J11.
+Reuse the current J01–J10 specialist and image publications in the eventual
+sixteen-binding bundle. Keep M1/M2 names and generated graphs unchanged; this
+preparation neither publishes nor changes active bindings.
+
+Extend the preparation command with `--profile m3`. Concatenate the unchanged
+M2 Python fixture and a short `dify/m3-pagination.py` extension in the generated
+Code node; do not copy the complete fixture into another source. The extension
+handles J11 and falls back to existing task behavior. Test Python/TypeScript
+parity for all personas, source routing, revision, clarification, manager and
+tester decisions, and missing-sheet rejection. Test generated module names,
+model-free nodes and disabled retries. Record generated Code size, then verify
+Studio compatibility on a disposable draft before publication. Local preparation
+does not prove the Code-node size limit or live behavior. New application keys
+remain a private handoff; publication, host validation and drained activation
+require their separate reviewed checkpoints.
+
+Local preparation validation passed 66 tests across six focused suites without
+retries. After the final lint correction, typecheck, lint and the three affected
+graph tests passed in a fresh temporary checkout. Generated Code nodes contain
+47,026–47,135 UTF-8 bytes. These measurements do not establish a Studio limit;
+draft compatibility, publication and live J11 execution remain unverified.
 
 Implement both one-page and ordered selected-batch scheduling, using existing
 jobs/items with the M1 operation ledger. Batches run sequentially; every page
