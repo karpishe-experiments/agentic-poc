@@ -67,7 +67,16 @@ across those four integration suites without retries on 2026-10-05. The initial
 sandboxed test command could not spawn the Windows test runner; the permitted
 unsandboxed run completed against disposable MongoDB. This proves local index
 behavior and existing narrative/image regressions, not live sheet readiness.
-Two independent reviews and release verification remain required.
+Two independent reviews passed before [PR #113](https://github.com/karpishe-experiments/agentic-poc/pull/113)
+merged as `4991f2e0a02bfdf1efce9a9671c55463d461637f`; Validate `37249133821` passed.
+The selective staging candidate passed typecheck, lint, 31 persistence/runner
+tests and 65 Cloud/probe regression tests without retries, plus two independent
+reviews. [PR #114](https://github.com/karpishe-experiments/agentic-poc/pull/114)
+merged as `ae2a2f767a2da8ef9e0bc372bd26199ee0c75e3e`; Validate `37257021647`,
+Deploy `37257380550` and Check `37257804610` passed. The immutable image is
+`sha256:4a2a97daa4075aad90ad1837b0ed6a1298aa37ec445322f0cac68c236e28119d`.
+This establishes the compatible release baseline, not removal of the retained
+index or live multi-subject sheet storage. No reset or binding change occurred.
 
 ### S5 first increment: local style/reference contracts
 
@@ -125,11 +134,54 @@ The corrected local candidate passed isolated typecheck, full lint and 28 tests 
 suites without retries on 2026-10-05. Tests vary all three persona inputs and
 cover paid-mode/wrong-brief rejection, source UUIDs/counts, subject targeting,
 style hash/whitespace, clarification and revision. This is local proposal proof
-only. Independent reviews and publication remain pending; no Dify fixture parity,
+only. Two independent reviews passed and [PR #112](https://github.com/karpishe-experiments/agentic-poc/pull/112)
+merged as `92b7a1c12ab802481141e325c0e4c6006f119d99`; Validate `37248425372` passed. No Dify fixture parity,
 image assembly, persistence or live reference production is established. The final
 checks include corrections for full-body wording, duplicate saved-answer expressions,
 assembled-style compatibility and story-specific promise text in the shared module.
-Both independent reviews must pass on this corrected candidate before publication.
+The reviewed fixture candidate does not establish those later runtime capabilities.
+
+### S5 third increment: reproducible image requests and assembly handoff
+
+`lib/experiment-runner/reference-requests.ts` serializes two J08 sample requests
+in `sample_1`/`sample_2` order and one montage request per J09/J10 subject.
+It retains the shared style module byte-for-byte. Non-rendered slot identity
+distinguishes sample fingerprints even when purposes are identical. J08 sources
+are ordered draft style, J01, J02, J05, J06, J07; sheet sources are final list
+and assembled style. Current-source approval remains a repository check, not a
+serializer claim. No operation, asset, binding or provider call is created here.
+
+Verify `tests/unit/experiment-runner-reference-requests.test.ts` with the existing
+reference contract and fixture suites, without retries, plus typecheck and lint.
+Require two clean reviews before publication. Tests cover reload determinism,
+reordered sample plans, exact module whitespace, subject instructions and source
+identity, duplicate IDs, invalid hashes and the existing prompt-size bound.
+
+On 2026-10-05 the exact serializer candidate passed clean-checkout typecheck,
+full lint and 17 tests across these three suites without retries. The main
+checkout's stale generated types and unrelated nested worktrees failed its
+checks; those results are not counted as passes. Independent reviews and
+publication of this increment remain pending.
+
+The next persistence slice reuses the operation ledger, AssetStore and immutable
+artifact versions. Save textual J08 draft D; save its two successful sample
+operations; then assemble version A with `createdBy: application`,
+`sourceVersionId: D` and no duplicate specialist `sourceOperationId`. Read build
+records from saved operations, never from caller-supplied build content. Check
+slot fingerprints, exact ordered sources, operation/asset identity and stored
+byte hashes before the transaction; recheck current sources at commit. Replace
+the current draft using compare-and-set and retain dependency edges to D and its
+narrative inputs. Assembly is completion, not a revision: do not invalidate A
+through its new D dependency. Only A can receive explicit/delegated acceptance.
+
+Repeated assembly must return the existing matching A without another image
+reservation. Concurrent or interrupted assembly must reuse the same saved image
+results. Missing/corrupt bytes, stale sources or a different sample pair block
+that operation; they do not authorize regeneration. Add
+`tests/integration/experiment-runner-style-assembly.test.ts` for these states,
+draft-approval rejection and final acceptance. Live binary transfer, image
+scheduling and private bindings remain separate prerequisites; this handoff is
+not evidence of completed reference production.
 
 S1's first parser increment accepts `schemaVersion: "2"`, title and narrative
 lists. J03 rows have `entryKey`, `nameOrRole`, `narrativeFunction`, `role`,
