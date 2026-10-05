@@ -507,6 +507,33 @@ The local transport and upload-adapter suites passed 23 tests without retries,
 including the ordered fifteen-file boundary and zero network requests for
 invalid input. This does not prove runtime file ownership or live consumption.
 
+### Next Simulated slice: manager-selected J13 page packages
+
+Reuse the existing image app for a named J13 branch; do not add another text
+call or application key merely to label the responsibility. This is a selected
+implementation layout, not evidence that the branch exists or consumes files.
+Keep editable task instructions and eventual provider choices in Dify.
+
+| Field | Bounded slice |
+| --- | --- |
+| Goal and components | Save one independently reviewable J13 package per physical page through the existing operation, image-storage and artifact services. Extend runner contracts/config/context/dispatch, page verification, image assembly and the focused image graph. No new page registry or runtime. |
+| Enablement | Add optional `finalPageIllustration: true` only to the sole image binding in the complete seventeen-slot profile. Add the optional flag to the strict saved configuration-item schema and include it in new fifteen-row persona snapshots only when true. Use no default; omit it when absent so old snapshot bytes/hash and J12 boundaries remain unchanged. Test distinct configuration evidence for enabled runs as well as unchanged legacy evidence. Extend strict repository, host and private-settings validation. Reuse the image key. |
+| Input and output | Verify current approved J12/J11/J05/J08 and selected sheet versions/bytes. Save exact page identity, request, ordered attachment roles/assets/digests/MIME/file IDs and run-user ownership. Return one asset plus actual executed prompt, source versions, operation/publication/parent identities, candidate lineage and warnings. A saved image is not approval. |
+| Ordered edits | Add current J12 admission and source checks; explicit manager J13 delegation; named model-free Dify page branch; persisted upload acknowledgements and GET-only execution recovery; immutable package assembly and exact explicit/delegated approval. Preserve prior versions and other pages on revision. |
+| Clarification | Permit a typed clarification only for the authorized Simulated J13 image owner, before binary completion. Reuse the existing question/answer flow and retain the same page/revision target. One clarification spends its existing logical image reservation and step, creates no asset, and consumes no creative revision. After the answer, a fresh manager delegation and operation are required; never reuse the terminal clarification for generation. Count saved assets, not successful clarification operations, as generated images. |
+| Verification | Cover all personas, exact sources/style/lettering/attachment order, per-page approvals, stale sources, corrupt bytes, duplicate completion, clarification-versus-image races, revision accounting, restart after upload/save, and GET-only recovery. Prove old profile snapshot bytes/hash and boundaries remain unchanged. Run focused contracts/integration, typecheck/lint and two sequential reviews. |
+| Live gate and exit | Before live dispatch, prove published file-list consumption, runtime-key ownership, count/order/digests, installed size capacity and result recovery with the model-free probe. Drain users of the shared image app before publication, retain backup and read back bindings. Local mocked page packages are not full-booklet acceptance. |
+
+The current Real claim counter increments before branch execution. It cannot
+prove an actual provider request for a clarification. Keep this slice Simulated
+only; accurate paid-attempt evidence remains a later readiness gate. Never refund
+an uncertain provider reservation solely from a declared clarification result.
+Do not force clarification for complete approved inputs; it consumes the same
+bounded image allowance even when no image is generated.
+
+Ordered selected-batch jobs, final generation completion and tester/judge reports
+remain subsequent M3 work. Do not omit them from full-booklet acceptance.
+
 1. Add J11–J13 schemas, prompts, fixtures, source routing and completion predicate.
 2. Connect image operations to page jobs and exact per-page approvals.
 3. Add feedback/judge branches, result validators and separate evaluation status.
