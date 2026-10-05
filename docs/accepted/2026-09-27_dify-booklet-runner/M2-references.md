@@ -1,6 +1,6 @@
 # M2 — Narrative completion and reference packages
 
-**State:** Narrative, image callback/storage and automatic J08 sample-dispatch code deployed; active bindings remain J01/J02. Live M2 bindings and Dify image transfer pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
+**State:** Fifteen model-free bindings activated on staging on 2026-10-05. The subject-aware index is active and the legacy restriction is removed. Live Dify image transfer and all-persona reference acceptance remain pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Entry gate
@@ -412,16 +412,13 @@ revision 36, retaining six operations, both approved versions and zero payable
 calls. It remains at `slice_complete`, not completed booklet generation.
 The temporary HTTP 502 during release cleared after deployment completed.
 
-Live reference activation still requires authorized host-validator synchronization,
-nine additional privately configured app keys (J03–J10 and image), drained manager/tester publication
-and published-binding read-back. Preserve the existing six bindings and callback
-key. Preview `37268638506` reported no Terraform changes; it did not synchronize
-host files or authorize apply. The old subject-restricting index remains, so
-J09/J10 sheet admission also requires the separately authorized index transition.
-The local sheet journey is implemented, but actual Dify binary transfer and
-all-persona reference acceptance remain unverified. The reviewed index-maintenance
-capability merged through PR #127 and selective staging PR #128; publication is
-not an executed index transition.
+The reviewed index-maintenance capability was delivered through PR #127 and
+selective staging PR #128. Current staging release:
+`74f73208393a0f9c69ac6023de1e1f10dd43b6ee`; Deploy `37298690237` and
+Check `37299391353` passed. Image:
+`sha256:34ea00a2a9cefe39274c28781c2d952660f78a38d5d058a6f9be801b6858985b`.
+The authorized activation and index transition are recorded below. Actual Dify
+binary transfer and all-persona reference acceptance remain unverified.
 
 Private key preparation uses
 [`prepare-dify-booklet-keys.ps1`](../../../scripts/prepare-dify-booklet-keys.ps1).
@@ -434,7 +431,24 @@ read back published identifiers before assembling the runtime settings; the help
 does not invent them. The synthetic
 [PowerShell test](../../../tests/powershell/prepare-dify-booklet-keys.test.ps1)
 passed syntax, preview isolation, collection, invalid-clipboard retries and cleanup
-with all private surfaces stubbed. Actual private preparation remains a handoff.
+with all private surfaces stubbed. The operator completed private preparation on
+2026-10-05. Codex verified the nine new publications, preserved the six existing
+keys and callback, and installed fifteen disabled bindings before updating the
+manager and three testers. Published read-back matched their reviewed M2 code;
+private environment bindings remained unchanged. MCP synchronization hit the
+known unsupported `environment_variables` payload; inspected official CLI import
+provided the verified fallback. Direct application bindings have no Workflow Tool
+provider to synchronize.
+
+Infrastructure `37307131902` synchronized the reviewed dispatcher with zero
+Terraform changes. Maintenance preview `37307216171` passed. Authorized maintenance
+`37307366249` drained staging, verified backup
+`staging-20261005T120906Z-4bf0d3b2d7950104`, removed only
+`artifacts_booklet_type_unique`, and completed readiness with release pointers
+unchanged. Enabled-settings installation `37308665258` passed for the same staging
+image. Saved data, Cloud bindings and production were preserved; no reset or
+provider execution occurred. Activation is not live M2 acceptance: verify actual
+Dify binary transfer and the three reference journeys next.
 
 ### S5 sheet-fixture preparation
 

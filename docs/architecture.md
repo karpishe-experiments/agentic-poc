@@ -48,12 +48,13 @@ Mongo collections. Normal artifacts, immutable versions, dependencies, approvals
 and messages retain the created content and decision provenance.
 
 The local narrative implementation covers J01–J07, through the final character
-and location lists, plus the J08 persistence path described below. Live configuration remains restricted to M1's six bindings
-and J01/J02 boundary until M2 bindings are verified. Configuration accepts only
+and location lists, plus the J08 persistence path described below. Staging has
+fifteen model-free bindings through J10; live reference acceptance is pending.
+Configuration accepts only
 complete six-slot M1, eleven-slot J01–J07, thirteen-slot J08/image or fifteen-slot
 J09/J10 sheet bundles,
 not partial profiles. The thirteen-slot profile adds a J08 specialist and one
-generic image binding; actual staging bindings remain pending. The M2 module
+generic image binding. The M2 module
 preparation profile includes fourteen independent text modules through J10 and the
 separate model-free image workflow. Local Python/TypeScript parity covers J08
 style proposals, revisions and assembled-style tester decisions. J09/J10 preparation
@@ -124,14 +125,14 @@ evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
 retain old images and approvals. The public configuration reader and candidate host validator
-accept six, eleven, thirteen or fifteen complete bindings. The installed host dispatcher still needs
-the reviewed validator update. Live J08 publication, private
-bindings, actual Dify execution of the prepared DSL and binary transfer remain pending.
-The J01–J10 reference application code is deployed to staging as `d88dfe308b809e019123f554fa5f43cbcf097c91`;
-Deploy `37292283170` and Check `37293054441` passed. Active runtime settings still
-contain the six M1 bindings, so the live boundary remains J01/J02. The J08 Dify
-draft imported and validated but remains unpublished and unexecuted. Deployment
-of scheduling code does not establish a complete simulation; see the
+accept six, eleven, thirteen or fifteen complete bindings. The reviewed host
+dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
+J08 and all reference modules are published; actual Dify binary transfer and
+all-persona reference acceptance remain pending. Staging release
+`74f73208393a0f9c69ac6023de1e1f10dd43b6ee` passed deployment and readiness.
+The manager/tester publications were updated while dispatch was disabled and
+read back against the reviewed M2 source before activation. Configuration
+installation does not establish a complete simulation; see the
 [M2 current staging checkpoint](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-staging-checkpoint)
 for evidence and remaining activation gates.
 
@@ -177,15 +178,17 @@ verification reads the completion marker, archive and original asset bytes. The
 host checks reviewed rollback image identities and retains the pre-change backup
 across interrupted removal. Finalization can resume after admission reopens without
 stopping the app. The command removes one named index, not records or assets.
-Host installation and live retirement are pending; these local contracts do not
-establish live multi-subject storage readiness.
+Authorized live staging retirement passed on 2026-10-05 with verified backup
+`staging-20261005T120906Z-4bf0d3b2d7950104`. It removed only the legacy index,
+preserved data/assets and release pointers, and passed readiness. This establishes
+the index prerequisite, not live sheet-production acceptance.
 `verifyExperimentData` checks experiment references without legacy agent seeds.
 The enabled, non-production runner profile initializes experiment structure
 without local-agent seeds or a host OpenAI key. It retains seed assets for health
 checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
-`lib/experiment-runner/` supplies strict six-, eleven- or thirteen-module configuration, browser
+`lib/experiment-runner/` supplies complete six-, eleven-, thirteen- or fifteen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits
@@ -194,9 +197,9 @@ Published workflow identities and the saved configuration snapshot must match.
 Three unchanged progress observations block the run. Pause prevents admission
 but does not cancel in-flight work; an authorized result can still be stored.
 
-With the runner enabled, `/experiments/booklet-runs` shows saved J01/J02 work,
+With the runner enabled, `/experiments/booklet-runs` shows saved work through the configured slice,
 warnings, exact version approvals, limits and Pause/Resume. Only Simulated runs
-can be created. The approved J02/J03 boundary remains a queued partial booklet,
+can be created. An approved configured slice boundary remains a queued partial booklet,
 not completion. The legacy home and agent navigation remain when disabled.
 The six M1 Community bindings and all three live Simulated J01/J02 cases are
 verified; [M1 evidence](accepted/2026-09-27_dify-booklet-runner/M1-runner.md)
@@ -207,6 +210,14 @@ it does not retry an uncertain write. Live active-operation Pause persisted afte
 reload and Resume did not duplicate work. Rapid progression can exhaust the
 single retry and require another Pause click. Production, Cloud and the diagnostic
 probe are unchanged.
+
+The local `scripts/experiment-runner.ts` driver uses these same application APIs
+for create, observe and exact-revision Pause/Resume. It defaults mutations to
+preview, accepts only staging/loopback targets and Simulated creation, retains
+request identity, and sends no automatic retries. It reports allowlisted saved
+state, not credentials or full creative content. It is not a separate dispatcher
+or a full acceptance verifier; image-byte, page and report verification remain
+outside its current scope.
 
 Every legacy-profile booklet has eight ordered artifact records:
 

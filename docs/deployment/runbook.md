@@ -12,13 +12,14 @@ the error names the missing setting without printing its value.
 ## Current deployment status
 
 Initial live acceptance completed on 2026-09-15. The latest staging transition
-passed on 2026-10-05. M1 browser/persona acceptance passed; expanded reference
-bindings and full booklet simulation remain pending.
+passed on 2026-10-05. M1 browser/persona acceptance passed; fifteen model-free
+reference bindings are active. Live reference acceptance and full booklet
+simulation remain pending.
 
 | Checkpoint | Verified state |
 | --- | --- |
-| Infrastructure | Cloudflare infrastructure applied successfully for `master` commit `fc81f4e272a3fba2086a1c24b40d7cc15d291c73` |
-| Staging | Release `d88dfe308b809e019123f554fa5f43cbcf097c91`; Deploy `37292283170` and Check `37293054441` passed. J01–J10 reference code is installed, but active bindings remain the six M1 bindings. Deployment backup: `staging-20261005T095213Z-94c51b01b84faebf`. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
+| Infrastructure | Run `37307131902` synchronized reviewed `master` commit `4a8ad276fdb5ec7fd5701a9f7cf6ec7b1addb6bf`; Terraform reported no changes. |
+| Staging | Release `74f73208393a0f9c69ac6023de1e1f10dd43b6ee`; Deploy `37298690237` and Check `37299391353` passed. Fifteen model-free bindings activated through `37308665258`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
@@ -76,7 +77,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Expand narrative bindings | Follow [M2 S3](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s3-binding-and-publication-package); use the complete eleven-slot bundle after reviewed dispatcher installation, closed admission, reconciliation and published read-back. Preserve old run evidence; do not repeat the staging reset. |
 | Enable style/image bindings | Follow [M2 scheduling](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s5-automatic-style-sample-dispatch); thirteen slots add J08 and one model-free image workflow. Verify Python/DSL parity, private bindings and live binary transfer before activation. Host dispatcher installation remains a separate authorized checkpoint; no new reset. |
 | Enable sheet bindings | Fifteen slots add independent J09/J10 specialists. Verify complete local reference journeys, private publications and binary transfer first. Sheet admission requires the subject-aware index and absence of the retained old restriction. Index removal and host synchronization require their separate maintenance checkpoints; configuration validation does not authorize them. |
-| Retire the staging artifact restriction | After the reviewed host action and application command are installed, run **Maintenance** on `_staging` with `action=retire-staging-artifact-index`, `environment=staging`, and default `apply=false`. Inspect its real catalog/ledger and rollback preview. After exact-target authorization, use `apply=true`, confirmation `kids_booklet`, and no supplied backup ID. The action creates and verifies its own pre-change backup, removes only `artifacts_booklet_type_unique`, and preserves data/assets and release pointers. This action is not yet live-verified. |
+| Retire the staging artifact restriction | Run **Maintenance** on `_staging` with `action=retire-staging-artifact-index`, `environment=staging`, and default `apply=false`. Inspect its real catalog/ledger and rollback preview. After exact-target authorization, use `apply=true`, confirmation `kids_booklet`, and no supplied backup ID. The action creates and verifies its own pre-change backup, removes only `artifacts_booklet_type_unique`, and preserves data/assets and release pointers. The authorized staging transition passed; do not repeat it as setup. |
 | Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
 | Reset staging | Run **Reset staging** on `_staging`, confirm `kids_booklet`, and use default `apply=false` for inventory. Set `apply=true` only after exact-target approval. A valid prepared Dify bundle activates after reset; production reset is rejected |
