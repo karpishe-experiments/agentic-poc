@@ -38,7 +38,7 @@ usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, resume, atlas-reconcile, credential-session,
+         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
@@ -51,7 +51,7 @@ Options:
   --image-digest ghcr.io/name@sha256:HEX  required for deploy
   --commit FULL_SHA                 required for deploy
   --backup-id ID --confirmation DB   required for restore
-  --confirmation kids_booklet       required for reset-staging
+  --confirmation kids_booklet       required for reset-staging or index retirement apply
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
   --secret-name NAME                repair or rotate only one application secret
@@ -96,7 +96,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
@@ -127,6 +127,10 @@ validate_arguments() {
   fi
   if [[ "$ACTION" == reset-staging ]]; then
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
+  fi
+  if [[ "$ACTION" == retire-staging-artifact-index ]]; then
+    [[ "$ENVIRONMENT" == staging && -n "$COMMIT" && -z "$BACKUP_ID" ]] || die 'Index retirement requires staging, exact commit and no supplied backup ID'
+    [[ "$APPLY" == false || "$CONFIRMATION" == kids_booklet ]] || die 'Index retirement apply requires --confirmation kids_booklet'
   fi
   case "$ACTION" in status|check|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
@@ -1730,7 +1734,9 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != check && "$ACTION" != status ]]; then
+      # Staging transports this action only. The reviewed master-installed
+      # dispatcher owns its locked lifecycle and retained-operation recovery.
+      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac

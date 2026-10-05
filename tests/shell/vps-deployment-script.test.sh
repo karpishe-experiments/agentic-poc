@@ -44,6 +44,10 @@ fi
 reject() { if bash "$script" "$@" > /dev/null 2>&1; then printf 'unexpected success: %s\n' "$*" >&2; exit 1; fi; }
 reject unexpected
 reject --action unknown
+reject --action retire-staging-artifact-index --environment prod --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+reject --action retire-staging-artifact-index --environment staging
+reject --action retire-staging-artifact-index --environment staging --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --backup-id unexpected
+reject --action retire-staging-artifact-index --environment staging --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --apply
 reject --action deploy --environment prod
 reject --action discover-config
 reject --action discover-config --zone example.com
@@ -391,4 +395,14 @@ grep -q 'ProxyCommand=cloudflared access ssh' "$SSH_LOG"
 if grep -q 'never-print-me' "$SSH_LOG" "$root/output"; then echo 'Access credential leaked' >&2; exit 1; fi
 export SSH_EXIT=0
 bash "$script" --action check --environment staging --vps-host vps.example >/dev/null
+# The staging checkout is a client, not the authoritative installed dispatcher.
+: > "$SSH_LOG"
+bash "$script" --action retire-staging-artifact-index --environment staging --commit "$commit" --config "$root/not-required-for-client.json" --vps-host vps.example >/dev/null
+grep -q -- '--action retire-staging-artifact-index' "$SSH_LOG"
+grep -q -- "--commit $commit" "$SSH_LOG"
+! grep -q -- '--apply' "$SSH_LOG"
+: > "$SSH_LOG"
+bash "$script" --action retire-staging-artifact-index --environment staging --commit "$commit" --confirmation kids_booklet --config "$root/not-required-for-client.json" --vps-host vps.example --apply >/dev/null
+grep -q -- '--apply' "$SSH_LOG"
+grep -q -- '--confirmation kids_booklet' "$SSH_LOG"
 printf 'deployment argument, preview, error propagation and SSH transport contracts passed\n'

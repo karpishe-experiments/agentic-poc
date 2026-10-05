@@ -33,6 +33,40 @@ export async function verifySheetStorageReady(context: MongoDatabaseContext): Pr
   if (indexes.some((item) => item.name === LEGACY_ARTIFACT_INDEX.name)) throw new Error("Sheet storage is blocked by the retained legacy artifact index; use authorized maintenance.");
 }
 
+// Call only after the caller has verified the target environment, closed admission,
+// drained work, stopped the application, and completed a verified backup.
+// This catalog helper owns none of those maintenance or authorization gates.
+export async function inspectArtifactIndexRetirement(context: MongoDatabaseContext): Promise<"ready" | "already_absent"> {
+  const indexes = await context.collections.artifacts.listIndexes().toArray();
+  const replacement = REQUIRED_INDEXES.find((item) => item.name === "artifacts_booklet_type_subject_unique")!;
+  const exact = (actual: IndexDescriptionInfo | undefined, expected: typeof replacement): boolean => {
+    if (!actual) return false;
+    const entries = (key: Document) => JSON.stringify(Object.entries(key));
+    const catalog = actual as Document;
+    const allowed = new Set(["v", "key", "name", "unique", "ns", "collation"]);
+    const collation = catalog.collation as Document | undefined;
+    return entries(actual.key) === entries(expected.key as Document)
+      && actual.unique === true
+      && !Object.keys(catalog).some((key) => !allowed.has(key))
+      && (collation === undefined || (Object.keys(collation).length === 1 && collation.locale === "simple"));
+  };
+  if (!exact(indexes.find((index) => index.name === replacement.name), replacement))
+    throw new Error(`MongoDB index ${replacement.name} is missing or incompatible for retirement.`);
+  const legacy = indexes.find((index) => index.name === LEGACY_ARTIFACT_INDEX.name);
+  if (legacy && !exact(legacy, LEGACY_ARTIFACT_INDEX))
+    throw new Error(`MongoDB index ${LEGACY_ARTIFACT_INDEX.name} is incompatible for retirement.`);
+  return legacy ? "ready" : "already_absent";
+}
+
+export async function retireLegacyArtifactIndex(context: MongoDatabaseContext): Promise<"removed" | "already_absent"> {
+  const state = await inspectArtifactIndexRetirement(context);
+  await verifyMongoStructure(context);
+  if (state === "ready") await context.collections.artifacts.dropIndex(LEGACY_ARTIFACT_INDEX.name);
+  await verifySheetStorageReady(context);
+  await verifyMongoStructure(context);
+  return state === "ready" ? "removed" : "already_absent";
+}
+
 export async function verifyMongoStructure(context: MongoDatabaseContext): Promise<void> {
   const existingCollections = new Set((await context.database.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name));
   for (const name of COLLECTION_NAMES) if (!existingCollections.has(name)) throw new Error(`MongoDB collection ${name} is missing.`);
