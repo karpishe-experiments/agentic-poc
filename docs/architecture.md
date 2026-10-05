@@ -132,6 +132,16 @@ of scheduling code does not establish a complete simulation; see the
 [M2 current staging checkpoint](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-staging-checkpoint)
 for evidence and remaining activation gates.
 
+The local sheet assembler in `db/experiment-sheets.ts` combines a retained
+J09/J10 subject draft with one completed image operation. It verifies current
+approved final-list/style sources, subject identity, exact style bytes, saved
+request and asset lineage, and original stored bytes before committing an
+application-owned version. It rechecks database evidence after the storage read.
+Replay verifies the same image and dependency edges and returns the existing
+version without another reservation. Pause is preserved. This service does not
+admit sheet specialists, create subject artifacts, approve sheets, schedule images
+or advance stages; those runtime paths and live verification remain pending.
+
 Specialist context includes saved task-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
 instruction. The matching tester answer restores that revision without another
