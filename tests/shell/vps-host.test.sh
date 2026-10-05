@@ -272,6 +272,15 @@ CHILD
     (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$layout_settings" build_booklet_runner_patch staging "$TEMP_DIR/layout-runner.json")
     booklet_runner_patch_is_valid "$TEMP_DIR/layout-runner.json"
     jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==16' "$TEMP_DIR/layout-runner.json" >/dev/null
+    page_bible_bindings="$(jq -c '. + [{role:"specialist",taskId:"J12",persona:null,appId:"00000000-0000-4000-8000-000000000025",publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"}]' <<< "$layout_bindings")"
+    page_bible_settings="$(jq -c --arg bindings "$page_bible_bindings" '.DIFY_BOOKLET_BINDINGS_JSON=$bindings' <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+    (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$page_bible_settings" build_booklet_runner_patch staging "$TEMP_DIR/page-bible-runner.json")
+    booklet_runner_patch_is_valid "$TEMP_DIR/page-bible-runner.json"
+    jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==17' "$TEMP_DIR/page-bible-runner.json" >/dev/null
+    for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[16].taskId="J11"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].taskId="J12"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[16].role="tester"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[16].appId=.[0].appId|tojson)'; do
+      invalid="$(jq -c "$mutation" <<< "$page_bible_settings")"
+      if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid page bible runner settings'; exit 1; fi
+    done
     for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[14].taskId="J11"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].taskId="J10"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].role="tester"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].persona="playful_kid"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].appId=.[0].appId|tojson)'; do
       invalid="$(jq -c "$mutation" <<< "$layout_settings")"
       if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid layout runner settings'; exit 1; fi

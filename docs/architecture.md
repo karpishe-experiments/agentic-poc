@@ -130,8 +130,8 @@ and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
 retain old images and approvals. The public configuration reader accepts six,
 eleven, thirteen, fifteen, sixteen or seventeen complete bindings. The host
-validator currently accepts profiles only through sixteen slots; the J12 host
-handoff remains pending. The reviewed host
+validator candidate also accepts the exact seventeen-slot J12 profile. Its
+installation and the J12 host handoff remain pending. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
 J08 and all reference modules are published. All-persona reference acceptance and
 model-free binary output transfer passed with 5/5/6 saved images. Staging release
@@ -178,8 +178,8 @@ booklet completion. Old binding profiles retain their original boundaries. This
 profile is now published and active in staging after reviewed release, readiness
 and backed-up activation. The linked live Kid successor reached approved J11 and
 the J12 boundary without paid calls after the recovery correction. The Parent
-run also reached that boundary without repair. Creator J11 acceptance remains
-pending; see the [M3 evidence](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
+and Creator runs also reached that boundary with zero payable calls; see the
+[M3 evidence](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
 The retained fifteen-binding M2 runs preserve their saved boundaries.
 
 The local seventeen-binding candidate adds per-page J12 Page Bible work. It
@@ -432,7 +432,7 @@ application API key remain private operator bindings; no provider call is needed
 
 The same protected workflow can stage the issue #65 runner's five settings from
 one private JSON bundle. The host validates the fixed staging/Community origins
-and complete six-, eleven-, thirteen-, fifteen- or sixteen-slot bindings, including disabled
+and complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-slot bindings, including disabled
 bundles, then preserves existing
 Cloud, probe and application secrets during the normal serialized rotation.
 Compose defaults the runner off. Private module keys/publications, exact-target

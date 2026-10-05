@@ -245,7 +245,7 @@ Kid `c546bbc1-61c5-4bba-9b8d-f7e6ef4f8f4b`, Parent
 `26b4f146-f4f0-4779-8a83-192cec653bee`. The eleven reused publications also
 passed model-free node inspection. The linked Kid acceptance below verifies
 runtime execution through J11; the Parent evidence is also retained below.
-Creator J11 acceptance remains pending.
+Creator J11 acceptance is recorded below.
 Infrastructure `37345579673` installed reviewed master
 `32befad909ffd8be207fb41e2b771ee5985757f9` with no Terraform resource changes;
 it did not activate the sixteen bindings. The J11 staging candidate in
@@ -307,7 +307,12 @@ The Parent run `c2aa6a9f-503b-4de4-83ad-64f2a5b6efb8`, booklet
 J11 approved. Browser read-back retained five fixture images, 29/160 logical
 text calls, 5/14 simulated image calls and 34/300 steps. Payable text and image
 counters were zero. No repair occurred during this run.
-Creator J11 acceptance, runtime reference inputs, final pages/cover and reports
+The Creator run `7568d4b6-7748-4a06-89b4-4186f08be5be` reached
+`slice_complete` with J11 explicitly approved at version
+`7b162b17-8c1e-453c-9d38-3bd05c58e9b2`. Browser read-back retained
+37/220 logical text calls, 6/20 simulated image calls, 43/300 steps and eleven
+tester decisions. Payable text and image counters were zero.
+Runtime reference inputs, J12 live execution, final pages/cover and reports
 remain pending. These pagination results do not prove full-booklet completion.
 
 `scripts/upload-dify-booklet-m3-settings.ps1` accepts a sanitized publication
@@ -319,6 +324,21 @@ bindings, validates the exact slots, saves separate encrypted settings and uploa
 activate staging or execute Dify. After an interrupted upload, rerunning is allowed
 only when the existing encrypted settings exactly match the computed payload;
 different settings are not overwritten. Re-read publications before activation.
+
+The local J12 handoff adds `-Profile m3-j12` to the same uploader. It requires
+seventeen publications and the separate `issue65-m3-j12-bindings.dpapi.xml`
+source; the default `m3` profile keeps its sixteen-binding behavior. The
+one-app helper `scripts/prepare-dify-booklet-j12-keys.ps1` reuses all sixteen
+bindings and the callback key, then privately collects only the new J12 key.
+It writes a separate encrypted file without overwriting the M3 source.
+Synthetic PowerShell 5.1 tests passed for both helpers, including preview
+isolation, clipboard contention, exact profiles and no-overwrite behavior.
+The J12 preparation helper passed two sequential independent reviews.
+No J12 private key collection, publication, upload or staging activation is
+claimed by these local checks.
+The three focused deployment/recovery/environment contract suites passed all
+37 tests. The image-digest text check normalizes CRLF to LF so Windows checkout
+line endings do not create a false failure; configuration bytes are unchanged.
 
 Local host preparation passed Bash syntax checks and the focused
 `tests/shell/vps-host.test.sh booklet-runner-staging` scenario. The complete
@@ -371,6 +391,17 @@ Python/TypeScript parity and model-free graph checks passed fifteen tests across
 three suites, including the J11 regression fixture. Final clean-checkout typecheck,
 lint and those suites passed after the test-only corrections. No workspace publication,
 runtime key collection or staging activation is included in this preparation.
+
+The separate Community draft `issue65_m3_J12`, app
+`f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1`, was imported from the reviewed
+`m3-j12` candidate. Draft read-back contains only Start, Code, HTTP, condition
+and End nodes. Offline and server-assisted validation both returned zero errors
+and warnings. Its single `simulate` Code node succeeded with synthetic cover
+input, node execution `65bbc19a-130b-4a78-a7cf-98747d252b6c`, and returned
+the expected J12 proposal. This invoked no callback or provider; the empty
+execution metadata supplies no usage measurement. It proves Code-node
+compatibility only. The active manager and sixteen staging bindings remain
+unchanged. Publication and private J12 key entry are separate checkpoints.
 
 | Field | Bounded J12 slice |
 | --- | --- |
