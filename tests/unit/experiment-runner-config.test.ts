@@ -10,6 +10,25 @@ const bindings = entries.map(([role, taskId, persona], index) => ({ role, taskId
 const env = { DEPLOYMENT_ENV: "local", DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: "https://dify.example.test", DIFY_BOOKLET_PUBLIC_ORIGIN: "http://localhost:3000", DIFY_BOOKLET_TOOL_KEY: "x".repeat(32), DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bindings) };
 
 describe("booklet runner configuration", () => {
+  it("requires the exact seventeen-slot J12 profile and saves fifteen persona bindings", () => {
+    const later = Array.from({ length: 10 }, (_, index) => ({
+      role: "specialist", taskId: `J${String(index + 3).padStart(2, "0")}`, persona: null,
+      appId: `00000000-0000-4000-8000-${String(index + 30).padStart(12, "0")}`,
+      publishedWorkflowId: ids[17], toolProviderId: null, apiKey: `pages-${index}`,
+    }));
+    const image = { role: "image", taskId: null, persona: null, appId: ids[16], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: "image-key" };
+    const expanded = [...bindings, ...later, image];
+    const state = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(expanded) });
+    if (!state.enabled) throw new Error("Expected J12 profile");
+    expect(configurationForPersona(state.config, "playful_kid")).toHaveLength(15);
+    expect(bindingFor(state.config, { role: "specialist", taskId: "J12", persona: "playful_kid" }).apiKey).toBe("pages-9");
+    expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(expanded.filter((row) => row.taskId !== "J12")) }).enabled).toBe(true);
+    for (const bad of [expanded.map((row) => row.taskId === "J12" ? { ...row, taskId: "J10" } : row),
+      expanded.map((row) => row.taskId === "J12" ? { ...row, appId: bindings[0].appId } : row),
+      expanded.map((row) => row.role === "image" ? { ...row, taskId: "J12" } : row)]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
+    }
+  });
   it("requires all sixteen pagination bindings and retains a fourteen-slot private snapshot", () => {
     const later = ["J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11"].map((taskId, index) => ({
       role: "specialist", taskId, persona: null, appId: ids[index + 6], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: `pagination-${index}`,

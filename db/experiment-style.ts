@@ -33,12 +33,13 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Style run was not found.");
     // Managers retain null taskId; only the exact active, publication-verified
-    // unknown book operation may read J11 sources during GET recovery.
+    // unknown operation may read J11/J12 sources during GET recovery.
     const recovered = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
         workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
-        $or: [{ role: "specialist", taskId: "J11" }, { role: "tester" },
+        $or: [{ role: "specialist", taskId: "J11" },
+          { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" }, { role: "tester" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
     if (run.mode !== "simulated" || (!recovered && !["queued", "running", "paused"].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");

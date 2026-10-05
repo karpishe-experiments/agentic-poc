@@ -98,6 +98,14 @@ exact-source approvals and GET-only recovery. Sixteen bindings enable J11 after
 private configuration and drained activation; existing profiles retain their
 boundaries. Approved J11 stops at J12, not completed booklet generation.
 
+The selective J12 candidate adds a complete seventeen-binding profile and one
+Page Bible artifact per saved J11 page. It verifies current approved manuscript,
+style and selected sheet sources before completion and exact-version approval.
+All 4/6/9 approved Page Bibles reach the J13 boundary, not booklet completion.
+Older profiles retain their existing boundaries. Publication, private binding
+setup and drained activation remain separate checkpoints; this delivery does
+not change active settings or claim live J12 acceptance.
+
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
 Failed/stopped runtime observations are classified against the persisted claim.

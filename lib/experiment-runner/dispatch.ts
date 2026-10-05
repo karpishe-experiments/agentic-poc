@@ -16,6 +16,7 @@ import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask } f
 import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks } from "@/lib/experiment-runner/reference-targets";
 import { configuredPaginationTask } from "@/lib/experiment-runner/pagination-tasks";
+import { configuredPageBibleTask } from "@/lib/experiment-runner/page-bible-tasks";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -245,9 +246,11 @@ export function createExperimentDispatcher(deps: {
           const result = JSON.parse(last.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string; subjectKind?: string; subjectId?: string } } | null;
           const delegated = result?.payload?.taskId;
           const sheet = delegated === "J09" || delegated === "J10";
-          const target = view.currentArtifacts.find((item) => item.taskId === delegated && (!sheet || item.subjectKind === result?.payload?.subjectKind && item.subjectId === result?.payload?.subjectId));
-          const pending = view.pendingDecision as { kind?: string; taskId?: string; artifactVersionId?: string } | null;
-          const matchingRevision = pending?.kind === "revision" && pending.taskId === delegated && pending.artifactVersionId === target?.currentVersionId;
+          const page = delegated === "J12";
+          const target = view.currentArtifacts.find((item) => item.taskId === delegated && (!(sheet || page) || item.subjectKind === result?.payload?.subjectKind && item.subjectId === result?.payload?.subjectId));
+          const pending = view.pendingDecision as { kind?: string; taskId?: string; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
+          const matchingRevision = pending?.kind === "revision" && pending.taskId === delegated && pending.artifactVersionId === target?.currentVersionId &&
+            (!page || (pending.subjectKind === "page" && pending.subjectId === result?.payload?.subjectId));
           // Both siblings can be ready. Honor the saved manager choice rather
           // than forcing the projection's deterministic display order.
           if (result?.kind === "delegate" && sheet && configuredReferenceSheetTasks(run.configurationJson).includes(delegated) &&
@@ -258,6 +261,11 @@ export function createExperimentDispatcher(deps: {
               view.nextNarrativeTask === "J11" && (!pending || matchingRevision) &&
               (!target || target.state === "needs_review" || matchingRevision)) {
             role = "specialist"; taskId = delegated; parentWorkflowRunId = last.workflowRunId;
+          } else if (result?.kind === "delegate" && page && configuredPageBibleTask(run.configurationJson) &&
+              view.nextNarrativeTask === "J12" && view.nextPageBibleWork && "taskId" in view.nextPageBibleWork &&
+              result.payload?.subjectKind === "page" && result.payload.subjectId === view.nextPageBibleWork.subjectId &&
+              (!pending || matchingRevision) && (!target || target.state === "needs_review" || matchingRevision)) {
+            role = "specialist"; taskId = "J12"; subjectKind = "page"; subjectId = result.payload.subjectId!; parentWorkflowRunId = last.workflowRunId;
           } else if (result?.kind === "delegate" && isNarrativeTask(delegated) && configuredNarrativeTasks(run.configurationJson).includes(delegated) &&
               currentApprovedSourceIds(delegated, view.currentArtifacts) !== null && (!pending || matchingRevision) &&
               (!target || target.state === "needs_review" || matchingRevision)) {
