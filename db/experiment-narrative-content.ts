@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument } from "@/db/documents";
-import { draftCharacterListSchema, draftLocationListSchema, manuscriptSchema, storedDraftCharacterListSchema, storedDraftLocationListSchema, storedManuscriptSchema, finalCharacterListSchema, finalLocationListSchema } from "@/lib/contracts/experiment-runner";
+import { draftCharacterListSchema, draftLocationListSchema, manuscriptSchema, storedDraftCharacterListSchema, storedDraftLocationListSchema, storedManuscriptSchema, finalCharacterListSchema, finalLocationListSchema, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
@@ -14,7 +14,7 @@ function sameIds(left: string[], right: string[]) {
 
 // This function runs inside the existing completion transaction. Proposal IDs
 // never create subjects; Booklet assigns IDs and validates exact saved sources.
-export async function materializeNarrativeContent(database: Database, session: ClientSession, operation: ExperimentOperationDocument, task: NarrativeTask, content: unknown, previous: unknown) {
+export async function materializeNarrativeContent(database: Database, session: ClientSession, operation: ExperimentOperationDocument, task: SpecialistTask, content: unknown, previous: unknown) {
   try {
     if (task === "J08") return parseReferenceProposal("J08", "proposal", content).content;
     if (task === "J01" || task === "J02") return content;
@@ -35,6 +35,25 @@ export async function materializeNarrativeContent(database: Database, session: C
       const row = rows.find((item) => item.artifactId === artifact?._id);
       if (!row) invalid(`Missing saved ${sourceTask} content.`);
       return JSON.parse(row.contentJson) as unknown;
+    }
+    if (task === "J09" || task === "J10") {
+      const proposal = parseReferenceProposal(task, "proposal", content).content;
+      if (!("finalListVersionId" in proposal)) invalid("Sheet content is invalid.");
+      const style = parseReferenceProposal("J08", "assembled", source("J08")).content;
+      if (JSON.stringify(operation.dependencyVersionIds) !== JSON.stringify([proposal.finalListVersionId, proposal.styleVersionId]) ||
+          proposal.stylePromptModule !== style.stylePromptModule || proposal.stylePromptModuleHash !== style.stylePromptModuleHash) invalid("Sheet source identities or style differ from approved evidence.");
+      if (task === "J09" && "characterId" in proposal) {
+        const subject = finalCharacterListSchema.parse(source("J06")).characters.find((item) => item.characterId === operation.subjectId);
+        if (!subject || operation.subjectKind !== "character" || proposal.characterId !== subject.characterId ||
+            !subject.sheetRequired || subject.recurrence !== "recurring" || JSON.stringify(proposal.attireRequirements) !== JSON.stringify(subject.attireRequirements) ||
+            JSON.stringify(proposal.accessories) !== JSON.stringify(subject.accessories)) invalid("Character sheet changes approved subject facts.");
+      } else if (task === "J10" && "locationId" in proposal) {
+        const subject = finalLocationListSchema.parse(source("J07")).locations.find((item) => item.locationId === operation.subjectId);
+        if (!subject || operation.subjectKind !== "location" || proposal.locationId !== subject.locationId ||
+            !subject.sheetRequired || JSON.stringify(proposal.stableAnchors) !== JSON.stringify(subject.stableAnchors) ||
+            JSON.stringify(proposal.requiredFeatures) !== JSON.stringify(subject.requiredFeatures)) invalid("Location sheet changes approved subject facts.");
+      } else invalid("Sheet task and subject differ.");
+      return proposal;
     }
     if (task === "J05") {
       const proposal = manuscriptSchema.parse(content);

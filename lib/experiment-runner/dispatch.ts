@@ -3,15 +3,18 @@ import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
+import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
-import { styleSampleRequests } from "@/lib/experiment-runner/reference-requests";
+import { styleSampleRequests, referenceSheetRequest } from "@/lib/experiment-runner/reference-requests";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { configurationSnapshot, selectBinding, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createWorkflowRuntime, runtimeCompletion, runtimeImageCompletion, type RuntimeResult, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { runTrackedMutation } from "@/lib/application/deployment-control";
-import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
+import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
+import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
+import { configuredReferenceSheetTasks } from "@/lib/experiment-runner/reference-targets";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -31,7 +34,34 @@ export function createExperimentDispatcher(deps: {
   const mutate = deps.mutate ?? runTrackedMutation;
   const now = deps.now ?? Date.now;
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
-    operation.role as "manager" | "specialist" | "tester" | "image", operation.taskId as NarrativeTask | null, run.persona);
+    operation.role as "manager" | "specialist" | "tester" | "image", operation.taskId as SpecialistTask | null, run.persona);
+
+  async function prepareSheetImage(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>) {
+    const work = view.nextSheetWork;
+    if (!work || work.kind !== "image" || !work.currentVersionId) throw new ExperimentRepositoryError("conflict", "Sheet image target is unavailable.");
+    const artifact = view.currentArtifacts.find((item) => item.taskId === work.target.taskId && item.subjectKind === work.target.subjectKind && item.subjectId === work.target.subjectId);
+    const draft = artifact?.versions.find((item) => item.id === work.currentVersionId);
+    if (!draft || canonical(draft.dependencyVersionIds) !== canonical(work.target.sourceVersionIds)) throw new ExperimentRepositoryError("conflict", "Sheet image sources changed.");
+    const request = referenceSheetRequest(work.target.taskId, draft.content);
+    const inputFingerprint = imageRequestFingerprint(request);
+    const history = await repository.listOperations(run._id);
+    const matches = history.filter((item) => item.role === "image" && item.taskId === work.target.taskId &&
+      item.subjectKind === work.target.subjectKind && item.subjectId === work.target.subjectId && item.inputFingerprint === inputFingerprint);
+    const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
+      item.reservationCount === 0 && item.verifiedWorkflowId && item.workflowRunId));
+    if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId ||
+        canonical(JSON.parse(item.imageRequestJson ?? "null")) !== canonical(request))) throw new ExperimentRepositoryError("conflict", "Saved sheet image requires reconciliation.");
+    if (executable.length === 1) {
+      await createExperimentSheetAssembly({ database: deps.database, store: store(), now }).assemble({
+        runId: run._id, draftSheetVersionId: draft.id, imageOperationId: executable[0]._id,
+      });
+      return null;
+    }
+    return { operation: await repository.prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
+      role: "image", taskId: work.target.taskId, subjectKind: work.target.subjectKind, subjectId: work.target.subjectId,
+      inputFingerprint, attempt: Math.max(0, ...matches.map((item) => item.attempt)) + 1, providerKind: "image", imageRequest: request, nowMs: now() }),
+      parentWorkflowRunId: draft.sourceOperationId ? history.find((item) => item._id === draft.sourceOperationId)?.workflowRunId ?? null : null };
+  }
 
   async function prepareStyleSample(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>) {
     const style = view.currentArtifacts.find((item) => item.taskId === "J08");
@@ -191,9 +221,9 @@ export function createExperimentDispatcher(deps: {
         const view = await context.getRunView(runId);
         if (!view || !view.nextNarrativeTask) return "waiting";
         if (view.nextNarrativeTask === "slice_complete") return "boundary";
-        if (view.nextNarrativeTask === "style_samples") {
+        if (view.nextNarrativeTask === "style_samples" || view.nextNarrativeTask === "sheet_image") {
           try {
-            const prepared = await prepareStyleSample(run, view);
+            const prepared = view.nextNarrativeTask === "style_samples" ? await prepareStyleSample(run, view) : await prepareSheetImage(run, view);
             if (!prepared) return "advanced";
             operation = prepared.operation; parentWorkflowRunId = prepared.parentWorkflowRunId;
           } catch (error) {
@@ -208,22 +238,35 @@ export function createExperimentDispatcher(deps: {
         const last = history.at(-1);
         const initialDelegation = run.persona !== "professional_creator" && history.length === 0;
         let role: "manager" | "specialist" | "tester" = view.nextNarrativeTask === "tester" || initialDelegation ? "tester" : "manager";
-        let taskId: NarrativeTask | null = null;
+        let taskId: SpecialistTask | null = null;
+        let subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId;
         if (!initialDelegation && view.nextNarrativeTask !== "tester" && last?.state === "succeeded" && last.role === "manager") {
-          const result = JSON.parse(last.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string } } | null;
+          const result = JSON.parse(last.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string; subjectKind?: string; subjectId?: string } } | null;
           const delegated = result?.payload?.taskId;
-          const target = view.currentArtifacts.find((item) => item.taskId === delegated);
+          const sheet = delegated === "J09" || delegated === "J10";
+          const target = view.currentArtifacts.find((item) => item.taskId === delegated && (!sheet || item.subjectKind === result?.payload?.subjectKind && item.subjectId === result?.payload?.subjectId));
           const pending = view.pendingDecision as { kind?: string; taskId?: string; artifactVersionId?: string } | null;
           const matchingRevision = pending?.kind === "revision" && pending.taskId === delegated && pending.artifactVersionId === target?.currentVersionId;
           // Both siblings can be ready. Honor the saved manager choice rather
           // than forcing the projection's deterministic display order.
-          if (result?.kind === "delegate" && isNarrativeTask(delegated) && configuredNarrativeTasks(run.configurationJson).includes(delegated) &&
+          if (result?.kind === "delegate" && sheet && configuredReferenceSheetTasks(run.configurationJson).includes(delegated) &&
+              result.payload?.subjectKind === (delegated === "J09" ? "character" : "location") && result.payload.subjectId &&
+              (!pending || matchingRevision) && (!target || target.state === "needs_review" || matchingRevision)) {
+            role = "specialist"; taskId = delegated; subjectKind = result.payload.subjectKind; subjectId = result.payload.subjectId; parentWorkflowRunId = last.workflowRunId;
+          } else if (result?.kind === "delegate" && isNarrativeTask(delegated) && configuredNarrativeTasks(run.configurationJson).includes(delegated) &&
               currentApprovedSourceIds(delegated, view.currentArtifacts) !== null && (!pending || matchingRevision) &&
               (!target || target.state === "needs_review" || matchingRevision)) {
             role = "specialist"; taskId = delegated; parentWorkflowRunId = last.workflowRunId;
           }
         }
-        operation = await repository.prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind: "book", subjectId: run.bookletId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, view }), attempt: 1, providerKind: "text", nowMs: now() });
+        try {
+          operation = await repository.prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind, subjectId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, subjectKind, subjectId, view }), attempt: 1, providerKind: "text", nowMs: now() });
+        } catch (error) {
+          const current = await repository.getRun(runId);
+          if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
+          await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+          return "blocked";
+        }
         }
       } else {
         // Before the marker a prepared specialist still needs its saved manager parent.
@@ -231,8 +274,11 @@ export function createExperimentDispatcher(deps: {
           const history = await repository.listOperations(runId);
           parentWorkflowRunId = history.filter((item) => item.role === "manager" && item.state === "succeeded").at(-1)?.workflowRunId ?? null;
         } else if (operation.role === "image") {
-          const style = await deps.database.collections.artifact_versions.findOne({ _id: operation.dependencyVersionIds[0] });
-          parentWorkflowRunId = style?.sourceOperationId ? (await repository.getOperation(style.sourceOperationId))?.workflowRunId ?? null : null;
+          const imageTarget = operation.taskId === "J09" || operation.taskId === "J10" ?
+            await deps.database.collections.artifacts.findOne({ experimentRunId: run._id, bookletId: run.bookletId, taskId: operation.taskId,
+              subjectKind: operation.subjectKind, subjectId: operation.subjectId }) : null;
+          const draft = await deps.database.collections.artifact_versions.findOne({ _id: imageTarget?.currentVersionId ?? operation.dependencyVersionIds[0] });
+          parentWorkflowRunId = draft?.sourceOperationId ? (await repository.getOperation(draft.sourceOperationId))?.workflowRunId ?? null : null;
         }
       }
       const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });

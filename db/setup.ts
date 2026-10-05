@@ -23,6 +23,16 @@ async function verifyRetainedArtifactIndex(context: MongoDatabaseContext): Promi
     throw new Error(`MongoDB index ${LEGACY_ARTIFACT_INDEX.name} exists with incompatible keys or options.`);
 }
 
+// Catalog checks cannot run inside a Mongo transaction. Admission calls this
+// before preparing sheet work; it never changes or removes an index.
+export async function verifySheetStorageReady(context: MongoDatabaseContext): Promise<void> {
+  const indexes = await context.collections.artifacts.listIndexes().toArray();
+  const required = REQUIRED_INDEXES.find((item) => item.name === "artifacts_booklet_type_subject_unique")!;
+  const current = indexes.find((item) => item.name === required.name);
+  if (!current || !indexMatches(current, required.key as Document, required.options)) throw new Error("Sheet storage requires the verified subject-aware artifact index.");
+  if (indexes.some((item) => item.name === LEGACY_ARTIFACT_INDEX.name)) throw new Error("Sheet storage is blocked by the retained legacy artifact index; use authorized maintenance.");
+}
+
 export async function verifyMongoStructure(context: MongoDatabaseContext): Promise<void> {
   const existingCollections = new Set((await context.database.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name));
   for (const name of COLLECTION_NAMES) if (!existingCollections.has(name)) throw new Error(`MongoDB collection ${name} is missing.`);

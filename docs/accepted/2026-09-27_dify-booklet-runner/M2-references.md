@@ -855,8 +855,21 @@ final-list/style sources, request/asset lineage and original bytes. The transact
 creates one application-owned version with edges to the draft, final list and
 style. Concurrent calls and restart reuse the same result; pause and warnings
 remain saved. It does not approve, dispatch, create subject artifacts or advance
-stages. Tests seed the subject drafts because specialist admission is still pending.
-Runtime sheet admission, per-subject acceptance and scheduling remain next.
+stages. Its focused tests seed subject drafts. The current runtime candidate adds
+specialist admission, per-subject acceptance and scheduling through the existing
+repository and dispatcher; deployed execution remains pending.
+
+For that wiring, `lib/experiment-runner/reference-targets.ts` derives stable
+J09 character and J10 location targets from final lists and an assembled style.
+Each target retains its exact final-list/style version pair. The pure work selector
+distinguishes missing/invalidated proposals, textual drafts needing images,
+assembled drafts needing review and approved packages. Duplicate current targets,
+stale source/subject identities and malformed image builds require recovery, not
+automatic image replay. One accepted subject does not complete the other sheets.
+The current runtime candidate connects this helper to runner dispatch. Database
+approval and stored-file verification remain repository responsibilities.
+Focused routing/assembly tests passed (11 tests, no
+retries), with isolated typecheck and scoped lint.
 
 The candidate passed isolated typecheck, full lint and 21 sheet/style assembly
 and pure assembly tests without retries. The checked source/test hashes match
@@ -879,6 +892,32 @@ subject drafts, not specialist dispatch, approval or actual Dify sheet productio
    Simulated cases to accepted reference packages on staging.
 
 ## Tests and exit
+
+### Current runtime-integration change surface
+
+Connect sheet routing to the existing operation repository, context, dispatcher
+and exact-version approval path. Extend specialist contracts and configuration
+only for a complete J01–J10 plus image bundle; retained M1/narrative/style
+snapshots keep their existing boundaries. Reuse the saved sheet assembler and
+AssetStore, not a second orchestrator. Add subject-specific clarification and
+revision context, source checks, one-image scheduling and per-subject acceptance.
+Update Dify deterministic fixtures, protected-setting contracts and architecture
+with the same boundary. Verify all three local persona journeys, stale sources,
+duplicate callbacks, Pause/Resume and saved-result recovery before review.
+Live bindings, binary transfer and old-index maintenance remain separate gates.
+The candidate includes the saved-binding guard and local sheet dispatch. This does
+not activate live bindings or establish actual Dify sheet production. Approval
+verification permits retained unknown-outcome tester recovery, while ordinary
+assembly still requires idle work. Saved manager choices may select either ready
+sheet sibling; repository admission rechecks its subject and source versions.
+
+Current local evidence: 32 dispatch tests, 165 runner unit tests, 46 deployment
+contracts, deterministic agent fixtures, typecheck and lint passed without test
+retries. The dispatch tests start all three personas from empty saved runs and
+reach accepted reference packages; they also cover unknown tester recovery and
+location-first delegation. These use a local workflow-runtime harness, not live
+Dify. Linux shell/permission checks remain required in CI; Windows cannot prove
+their POSIX permission and symlink behavior.
 
 Focused contract/integration tests: each J03–J10 clarification/draft/revision
 contract; sibling gates; unknown/missing IDs; sample

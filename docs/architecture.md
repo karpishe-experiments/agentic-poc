@@ -50,14 +50,17 @@ and messages retain the created content and decision provenance.
 The local narrative implementation covers J01–J07, through the final character
 and location lists, plus the J08 persistence path described below. Live configuration remains restricted to M1's six bindings
 and J01/J02 boundary until M2 bindings are verified. Configuration accepts only
-complete six-slot M1, eleven-slot J01–J07 or thirteen-slot J08/image bundles,
+complete six-slot M1, eleven-slot J01–J07, thirteen-slot J08/image or fifteen-slot
+J09/J10 sheet bundles,
 not partial profiles. The thirteen-slot profile adds a J08 specialist and one
 generic image binding; actual staging bindings remain pending. The M2 module
 preparation profile includes fourteen independent text modules through J10 and the
 separate model-free image workflow. Local Python/TypeScript parity covers J08
 style proposals, revisions and assembled-style tester decisions. J09/J10 preparation
 uses a supplied final-list subject ID and exact assembled-style source; these
-proposal candidates do not enable runtime sheet admission or acceptance. A valid
+proposals use stable subject IDs. The fifteen-slot runtime path admits sheet
+specialists only after subject-aware index readiness and current source approval
+checks. A valid
 J07 list can have no additional required features; J10 preserves that empty list
 and the nonempty approved anchors instead of inventing a feature.
 The app API executes the latest publication; saved publication evidence is not
@@ -121,7 +124,7 @@ evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
 retain old images and approvals. The public configuration reader and candidate host validator
-accept six, eleven or thirteen complete bindings. The installed host dispatcher still needs
+accept six, eleven, thirteen or fifteen complete bindings. The installed host dispatcher still needs
 the reviewed validator update. Live J08 publication, private
 bindings, actual Dify execution of the prepared DSL and binary transfer remain pending.
 The J08 application code is deployed to staging as `fac55e0730e0a7e297a2fbdf28fb888b87baf57a`;
@@ -139,10 +142,17 @@ request and asset lineage, and original stored bytes before committing an
 application-owned version. It rechecks database evidence after the storage read.
 Replay verifies the same image and dependency edges and returns the existing
 version without another reservation. Pause is preserved. This service does not
-admit sheet specialists, create subject artifacts, approve sheets, schedule images
-or advance stages; those runtime paths and live verification remain pending.
+admit sheet specialists, create subject artifacts, approve sheets or schedule images
+itself. The existing operation repository and dispatcher own those steps for the
+fifteen-slot profile. They save one textual draft and one assembled version per
+subject, verify image publication before assembly, and retain the specialist's
+workflow as the image's trace parent. Approval reuses transaction-aware assembly
+verification and reads saved bytes; textual drafts cannot receive acceptance.
+Booklet-scoped delegation applies to every eligible subject, with one approval
+record per exact assembled version. Stage J11 requires all derived sheets, not
+one artifact per task. Actual Dify sheet execution remains unverified.
 
-Specialist context includes saved task-specific answers and global manager
+Specialist context includes saved task-and-subject-specific answers and global manager
 answers. During a revision, clarification preserves the original target and
 instruction. The matching tester answer restores that revision without another
 revision debit. Restart reads reconstruct this context from saved operations and
