@@ -214,3 +214,17 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   [retained live failure](M3-completion.md#j11-dify-preparation-package).
 - **Promotion target:** Documentation; verify the callback and runtime recovery
   interfaces before applying this pattern to another integration.
+
+### Validation normalization can change approved lettering
+
+- **Context:** A page-production fixture reads an approved manuscript through a
+  schema that trims strings.
+- **Observation:** Schema validation produced normalized narration and dialogue.
+  A fixture test with leading whitespace and a trailing newline detected a change
+  to the approved text.
+- **Guidance:** Validate the structure, but preserve the saved original strings
+  when the output contract requires exact approved lettering. Test whitespace as
+  well as words. Do not substitute normalized text for the approved source.
+- **Evidence:** [J12 fixture](../../../lib/experiment-runner/page-bible-fixtures.ts)
+  and [exact-lettering tests](../../../tests/unit/experiment-runner-page-bible-fixtures.test.ts).
+- **Promotion target:** Documentation for exact-text artifact transformations.

@@ -104,6 +104,17 @@ saves original bytes. The proxy transport limit has headroom above the handler's
 20 MiB limit. Sixteen live model-free Dify image operations passed binary transfer,
 storage and reference acceptance across the three personas. This does not prove
 provider execution, the full 20 MiB transport limit or reference-image inputs.
+The separate local `reference-transport.ts` adapter prepares runtime-key uploads
+of original PNG/JPEG/WebP bytes under the workflow's `booklet-<runId>` user.
+It copies and decodes bytes before one bounded multipart request, retains only
+the returned file ID and verified original metadata, and does not retry unknown
+outcomes. Its initial upload limit is 10 MiB. It is not wired into dispatch;
+published file-list consumption, ownership and live capacity remain pending.
+The runtime transport can serialize an optional ordered list of uploaded image
+IDs into the custom `reference_files` input using the same run user. It rejects
+invalid lists before dispatch and preserves the old request when no files are
+supplied. No runner caller supplies this input yet; live consumption and file
+recovery remain unverified.
 Filesystem AssetStore publishes complete temporary-file bytes through an atomic
 no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
 Image failures retain their original category and timestamp when recorded;
@@ -128,8 +139,10 @@ explicit tester review or a recorded scoped delegation, with sample and source
 evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
-retain old images and approvals. The public configuration reader and candidate host validator
-accept six, eleven, thirteen, fifteen or sixteen complete bindings. The reviewed host
+retain old images and approvals. The public configuration reader accepts six,
+eleven, thirteen, fifteen, sixteen or seventeen complete bindings. The host
+validator candidate also accepts the exact seventeen-slot J12 profile. Its
+installation and the J12 host handoff remain pending. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
 J08 and all reference modules are published. All-persona reference acceptance and
 model-free binary output transfer passed with 5/5/6 saved images. Staging release
@@ -174,8 +187,27 @@ one unit can span multiple panels or pages. Routed references must identify exac
 current approved sheets. J11 acceptance reaches a saved J12 slice boundary, not
 booklet completion. Old binding profiles retain their original boundaries. This
 profile is now published and active in staging after reviewed release, readiness
-and backed-up activation. Live J11 all-persona acceptance remains pending; the
-retained fifteen-binding M2 runs preserve their saved boundaries.
+and backed-up activation. The linked live Kid successor reached approved J11 and
+the J12 boundary without paid calls after the recovery correction. The Parent
+and Creator runs also reached that boundary with zero payable calls; see the
+[M3 evidence](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
+The retained fifteen-binding M2 runs preserve their saved boundaries.
+
+The local seventeen-binding candidate adds per-page J12 Page Bible work. It
+reuses the saved J11 page identities and verifies current approved manuscript,
+style and selected reference-sheet versions before completion or approval.
+Each page has its own artifact, dependency edges and approval record. All 4/6/9
+accepted pages advance to the J13 boundary, not booklet completion. Older
+profiles keep their existing boundaries. This candidate is not yet published or
+active in staging. Its model-free Dify fixture and graph are prepared locally;
+publication and the runtime binding remain pending.
+
+The local `page-image-requests.ts` serializer prepares one J13 `page_source`
+request from the saved J11 layout, selected J12 content and assembled J08 style.
+It retains exact native lettering and the unchanged style module, and returns
+only selected sheet identities in deterministic attachment order. This is pure
+request preparation, not an approval or byte-integrity check. It is not wired
+into dispatch; final-page persistence, approvals and completion remain pending.
 
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
@@ -218,7 +250,7 @@ without local-agent seeds or a host OpenAI key. It retains seed assets for healt
 checks and leaves existing legacy seeds unchanged. Disabled settings retain
 legacy initialization and execution.
 
-`lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen- or sixteen-module configuration, browser
+`lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
 application-key transport. A transactional dispatch marker precedes each single
 POST. Callback authorization reserves once. A retained workflow-run ID permits
@@ -418,7 +450,7 @@ application API key remain private operator bindings; no provider call is needed
 
 The same protected workflow can stage the issue #65 runner's five settings from
 one private JSON bundle. The host validates the fixed staging/Community origins
-and complete six-, eleven-, thirteen-, fifteen- or sixteen-slot bindings, including disabled
+and complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-slot bindings, including disabled
 bundles, then preserves existing
 Cloud, probe and application secrets during the normal serialized rotation.
 Compose defaults the runner off. Private module keys/publications, exact-target

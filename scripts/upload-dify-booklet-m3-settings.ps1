@@ -1,15 +1,19 @@
 param(
     [Parameter(Mandatory=$true)][string]$PublicationsPath,
+    [ValidateSet('m3','m3-j12')][string]$Profile='m3',
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
-$sourcePath = Join-Path $env:LOCALAPPDATA 'DifyWf-Community-Codex/issue65-m3-bindings.dpapi.xml'
-$outputPath = Join-Path $env:LOCALAPPDATA 'DifyWf-Community-Codex/issue65-m3-settings.dpapi.xml'
+$profileSuffix = if ($Profile -eq 'm3-j12') { 'm3-j12' } else { 'm3' }
+$expectedCount = if ($Profile -eq 'm3-j12') { 17 } else { 16 }
+$sourcePath = Join-Path $env:LOCALAPPDATA "DifyWf-Community-Codex/issue65-$profileSuffix-bindings.dpapi.xml"
+$outputPath = Join-Path $env:LOCALAPPDATA "DifyWf-Community-Codex/issue65-$profileSuffix-settings.dpapi.xml"
 $uuid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 $allowedTypes = @('start','code','http-request','if-else','list-operator','end')
 $expectedSlots = @('manager::','image::','tester::playful_kid','tester::enthusiast_parent','tester::professional_creator') +
     @(1..11 | ForEach-Object { 'specialist:J{0:D2}:' -f $_ })
+if ($Profile -eq 'm3-j12') { $expectedSlots += 'specialist:J12:' }
 $step = 'validate publication manifest'
 $sourceSecret = $null
 $outputSecret = $null
@@ -29,7 +33,7 @@ $bindingsJson = $null
 try {
     if (-not (Test-Path -LiteralPath $PublicationsPath -PathType Leaf)) { throw 'Missing publication manifest.' }
     [object[]]$publications = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $PublicationsPath -Raw)
-    if ($publications.Count -ne 16) { throw 'Expected sixteen publications.' }
+    if ($publications.Count -ne $expectedCount) { throw 'Unexpected publication count.' }
     $byApp = @{}
     foreach ($publication in $publications) {
         $names = @($publication.PSObject.Properties.Name)
@@ -45,29 +49,29 @@ try {
         $byApp.Add([string]$publication.appId, $publication)
     }
     if (-not $Apply) {
-        Write-Host 'Preview: sixteen model-free publications validated. Apply will bind the private M3 keys and upload one GitHub Actions secret.'
+        Write-Host "Preview: $expectedCount model-free publications validated for $Profile. Apply will bind private keys and upload one GitHub Actions secret."
         Write-Host 'No private file read, network request, file write, workflow dispatch, host change or Dify execution.'
         return
     }
 
     $step = 'validate private M3 source and destination'
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI is unavailable.' }
-    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw 'Encrypted M3 bindings are missing.' }
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw 'Encrypted profile bindings are missing.' }
     $sourceSecret = Import-Clixml -LiteralPath $sourcePath
-    if ($sourceSecret -isnot [Security.SecureString]) { throw 'Invalid encrypted M3 source.' }
+    if ($sourceSecret -isnot [Security.SecureString]) { throw 'Invalid encrypted profile source.' }
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sourceSecret)
     $prepared = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) | ConvertFrom-Json
-    if (@($prepared.PSObject.Properties.Name | Where-Object { $_ -cnotin @('callbackKey','bindings') }).Count -ne 0) { throw 'Invalid M3 source fields.' }
+    if (@($prepared.PSObject.Properties.Name | Where-Object { $_ -cnotin @('callbackKey','bindings') }).Count -ne 0) { throw 'Invalid profile source fields.' }
     if ([string]$prepared.callbackKey -cnotmatch '^\S{32,}$') { throw 'Invalid callback key.' }
     [object[]]$sourceBindings = $prepared.bindings
-    if ($sourceBindings.Count -ne 16) { throw 'Expected sixteen private bindings.' }
+    if ($sourceBindings.Count -ne $expectedCount) { throw 'Unexpected private binding count.' }
     $slots = @{}
     $apps = @{}
     $keys = @{}
     $bindings = @()
     foreach ($item in $sourceBindings) {
         $names = @($item.PSObject.Properties.Name)
-        if (@(Compare-Object @('appId','role','taskId','persona','apiKey') $names).Count -ne 0) { throw 'Invalid M3 binding fields.' }
+        if (@(Compare-Object @('appId','role','taskId','persona','apiKey') $names).Count -ne 0) { throw 'Invalid profile binding fields.' }
         foreach ($nullableField in @('taskId','persona')) {
             if ($null -ne $item.$nullableField -and
                 ($item.$nullableField -isnot [string] -or [string]::IsNullOrEmpty($item.$nullableField))) {
@@ -91,7 +95,7 @@ try {
             apiKey=[string]$item.apiKey; publishedWorkflowId=[string]$publication.publishedWorkflowId; toolProviderId=$null
         }
     }
-    if ($slots.Count -ne 16 -or $apps.Count -ne $byApp.Count) { throw 'Incomplete M3 bindings.' }
+    if ($slots.Count -ne $expectedCount -or $apps.Count -ne $byApp.Count) { throw 'Incomplete profile bindings.' }
     $step = 'save encrypted runner settings'
     $bindingsJson = ConvertTo-Json -InputObject @($bindings) -Depth 10 -Compress
     $settings = [ordered]@{
@@ -120,10 +124,10 @@ try {
     $step = 'upload GitHub Actions secret'
     $settingsJson | & gh secret set DIFY_BOOKLET_RUNNER_SETTINGS_JSON --repo karpishe-experiments/agentic-poc 1>$null 2>$null
     if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI upload failed.' }
-    Write-Host 'PASS: encrypted M3 settings saved and GitHub Actions secret uploaded.'
+    Write-Host "PASS: encrypted $Profile settings saved and GitHub Actions secret uploaded."
 } catch {
     $safeType = $_.Exception.GetType().Name
-    Write-Error "Private M3 settings upload stopped at $step (type=$safeType). Share only this status; never private content." -ErrorAction Continue
+    Write-Error "Private $Profile settings upload stopped at $step (type=$safeType). Share only this status; never private content." -ErrorAction Continue
     exit 1
 } finally {
     if ($pointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }

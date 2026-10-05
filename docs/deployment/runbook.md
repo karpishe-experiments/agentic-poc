@@ -12,14 +12,15 @@ the error names the missing setting without printing its value.
 ## Current deployment status
 
 Initial live acceptance completed on 2026-09-15. The latest staging transition
-passed on 2026-10-05. M1 browser/persona acceptance passed; fifteen model-free
-reference bindings are active. Live reference acceptance and full booklet
-simulation remain pending.
+passed on 2026-10-05. Sixteen model-free bindings are active through J11.
+All three persona simulations reached approved pagination with zero payable
+calls. J12/J13, final images and full-booklet simulation remain pending; see
+[M3 evidence](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
 
 | Checkpoint | Verified state |
 | --- | --- |
 | Infrastructure | Run `37307131902` synchronized reviewed `master` commit `4a8ad276fdb5ec7fd5701a9f7cf6ec7b1addb6bf`; Terraform reported no changes. |
-| Staging | Release `74f73208393a0f9c69ac6023de1e1f10dd43b6ee`; Deploy `37298690237` and Check `37299391353` passed. Fifteen model-free bindings activated through `37308665258`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
+| Staging | Release `0fb4c3d0d0996b38e7a8c03ffebf81793ddf1fe0`; Deploy `37356864220` and Check `37357833756` passed. Sixteen model-free bindings activated through `37348239296` with backup `staging-20261005T172539Z-9163268c683d14ee`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
@@ -75,6 +76,7 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 | Configure the Community staging probe | Follow [Community checkpoint 5](dify-community.md#checkpoint-5--deterministic-booklet-round-trip); select `DIFY_COMMUNITY_PROBE` in **Dify staging key** after the reviewed host dispatcher and staging routes are installed |
 | Stage issue #65 runner bindings | Follow [M1 private setup](../accepted/2026-09-27_dify-booklet-runner/M1-runner.md#s4d-protected-staging-runner-bindings); store `DIFY_BOOKLET_RUNNER_SETTINGS_JSON` privately, initially disabled, then select `DIFY_BOOKLET_RUNNER` in **Dify staging key** on reviewed `master` |
 | Prepare J11 pagination bindings | Follow [M3 preparation](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#j11-dify-preparation-package). Sixteen slots add J11 and use new manager/tester apps. Private setup, reviewed host validator, staging release and drained activation are separate checkpoints; no reset or paid call. |
+| Prepare J12 Page Bible bindings | Follow [M3 J12 preparation](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#independent-local-preparation-j12-page-bible-slice). `scripts/prepare-dify-booklet-j12-keys.ps1` reuses sixteen bindings and privately adds only J12. Use `scripts/upload-dify-booklet-m3-settings.ps1 -Profile m3-j12` with the verified seventeen-publication manifest. Separate encrypted files preserve M3. Reviewed dispatcher installation, manager publication/read-back, staging release and drained activation remain separate gates; no reset or paid call. |
 | Expand narrative bindings | Follow [M2 S3](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s3-binding-and-publication-package); use the complete eleven-slot bundle after reviewed dispatcher installation, closed admission, reconciliation and published read-back. Preserve old run evidence; do not repeat the staging reset. |
 | Enable style/image bindings | Follow [M2 scheduling](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s5-automatic-style-sample-dispatch); thirteen slots add J08 and one model-free image workflow. Verify Python/DSL parity, private bindings and live binary transfer before activation. Host dispatcher installation remains a separate authorized checkpoint; no new reset. |
 | Enable sheet bindings | Fifteen slots add independent J09/J10 specialists. Verify complete local reference journeys, private publications and binary transfer first. Sheet admission requires the subject-aware index and absence of the retained old restriction. Index removal and host synchronization require their separate maintenance checkpoints; configuration validation does not authorize them. |

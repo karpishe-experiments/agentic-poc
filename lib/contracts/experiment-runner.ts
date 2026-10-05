@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { parseReferenceProposal, type VisualStyleProposal, type CharacterSheetProposal, type LocationSheetProposal } from "@/lib/contracts/experiment-references";
-import { parsePageProposal, type PageLayoutProposal } from "@/lib/contracts/experiment-pages";
+import { parsePageProposal, type PageLayoutProposal, type PageSubjectProposal } from "@/lib/contracts/experiment-pages";
 
 export const EXPERIMENT_PROFILE = "dify_booklet_v1" as const;
 export const experimentTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11", "J12", "J13"]);
@@ -72,7 +72,7 @@ export type StoryOutlineContent = z.infer<typeof storyOutlineSchema>;
 export type NarrativeContent = ConceptBriefContent | StoryOutlineContent;
 export type NarrativeWarning = { field: string; message: string };
 export const narrativeTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08"]);
-export const specialistTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11"]);
+export const specialistTaskSchema = z.enum(["J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11", "J12"]);
 export type SpecialistTask = z.infer<typeof specialistTaskSchema>;
 const characterEntryKey = z.enum(["character_1", "character_2"]);
 const locationEntryKey = z.enum(["location_1", "location_2"]);
@@ -241,9 +241,11 @@ export function parseNarrativeTaskProposal(task: "J06", persona: Persona, conten
 export function parseNarrativeTaskProposal(task: "J07", persona: Persona, content: unknown): { content: FinalLocationListContent; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: "J08", persona: Persona, content: unknown): { content: VisualStyleProposal; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: "J11", persona: Persona, content: unknown): { content: PageLayoutProposal; warnings: NarrativeWarning[] };
+export function parseNarrativeTaskProposal(task: "J12", persona: Persona, content: unknown): { content: PageSubjectProposal; warnings: NarrativeWarning[] };
 export function parseNarrativeTaskProposal(task: z.infer<typeof narrativeTaskSchema>, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal; warnings: NarrativeWarning[] };
-export function parseNarrativeTaskProposal(task: SpecialistTask, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal | CharacterSheetProposal | LocationSheetProposal | PageLayoutProposal; warnings: NarrativeWarning[] };
-export function parseNarrativeTaskProposal(task: SpecialistTask, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal | CharacterSheetProposal | LocationSheetProposal | PageLayoutProposal; warnings: NarrativeWarning[] } {
+export function parseNarrativeTaskProposal(task: SpecialistTask, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal | CharacterSheetProposal | LocationSheetProposal | PageLayoutProposal | PageSubjectProposal; warnings: NarrativeWarning[] };
+export function parseNarrativeTaskProposal(task: SpecialistTask, persona: Persona, content: unknown): { content: NarrativeContent | DraftCharacterListContent | DraftLocationListContent | ManuscriptContent | FinalCharacterListContent | FinalLocationListContent | VisualStyleProposal | CharacterSheetProposal | LocationSheetProposal | PageLayoutProposal | PageSubjectProposal; warnings: NarrativeWarning[] } {
+  if (task === "J12") return parsePageProposal("J12", persona, content);
   if (task === "J11") return parsePageProposal("J11", persona, content);
   if (task === "J09") return parseReferenceProposal("J09", "proposal", content);
   if (task === "J10") return parseReferenceProposal("J10", "proposal", content);
@@ -271,7 +273,7 @@ export const testerDecisionSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("revise"), taskId: specialistTaskSchema, artifactVersionId: opaqueIdSchema, instruction: text }),
 ]);
 export type TesterDecision = z.infer<typeof testerDecisionSchema>;
-const managerDelegate = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({ taskId: specialistTaskSchema, subjectKind: z.enum(["book", "character", "location"]), subjectId: opaqueIdSchema }) });
+const managerDelegate = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({ taskId: specialistTaskSchema, subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema }) });
 const managerAsk = z.strictObject({ kind: z.literal("ask"), payload: questionPayload });
 const specialistProposal = z.strictObject({ kind: z.literal("proposal"), payload: z.strictObject({ taskId: specialistTaskSchema, content: z.unknown() }) });
 const specialistClarification = z.strictObject({ kind: z.literal("clarification"), payload: questionPayload });

@@ -61,7 +61,7 @@ describe("deployment contracts", () => {
       source_archive_sha256: string;
       images: Record<string, string>;
     };
-    const override = readFileSync("deploy/dify/compose.override.yml", "utf8");
+    const override = readFileSync("deploy/dify/compose.override.yml", "utf8").replace(/\r\n/g, "\n");
     expect(release.release).toBe("1.17.1");
     expect(release.source_commit).toMatch(/^[a-f0-9]{40}$/);
     expect(release.source_archive_sha256).toMatch(/^[a-f0-9]{64}$/);

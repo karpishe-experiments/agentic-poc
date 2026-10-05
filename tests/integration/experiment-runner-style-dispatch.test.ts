@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { MongoServerError } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
-import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
+import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
@@ -25,7 +25,7 @@ class MemoryStore implements AssetStore {
   async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
   async exists(uri: string) { return this.files.has(uri); }
 }
-async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 = 13) {
+async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 = 13) {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const store = new MemoryStore(), repository = createExperimentRepository(database, { store: () => store });
   const context = createExperimentContextService(database);
@@ -33,7 +33,8 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     { role: "manager", taskId: null, persona: null },
     ...BOOK_TASKS.map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(["J09", "J10"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
-    ...(slots === 16 ? [{ role: "specialist" as const, taskId: "J11" as const, persona: null }] : []),
+    ...(slots >= 16 ? [{ role: "specialist" as const, taskId: "J11" as const, persona: null }] : []),
+    ...(slots === 17 ? [{ role: "specialist" as const, taskId: "J12" as const, persona: null }] : []),
     ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
     { role: "image", taskId: null, persona: null },
   ].filter((item) => slots >= 15 || (item.taskId !== "J09" && item.taskId !== "J10" && (slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
@@ -44,7 +45,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
   await repository.createRun({ runId, bookletId, persona, mode: "simulated", configuration: configurationSnapshot(config, persona), nowMs: clock++ });
   const saved = new Map<string, RuntimeExecution>();
   let lostImageResponse = false, pauseImage = false, pauseBeforeClaim = false, omitImageUpload = false, wrongImageDigest = false;
-  let lostPaginationResponse = false, lostManagerPaginationResponse = false;
+  let lostPaginationResponse = false, lostManagerPaginationResponse = false, lostPageBibleResponse = false;
   let paginationTerminal: "failed" | "stopped" | null = null;
   let acknowledgement: "normal" | "missing" | "nonstring" | "running" | "failed" = "normal";
   const runtime: WorkflowRuntime = {
@@ -75,7 +76,8 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
         const envelope = { ...identity, inputFingerprint: operation.inputFingerprint, result };
         const lostManager = binding.role === "manager" && lostManagerPaginationResponse &&
           result.kind === "delegate" && result.payload.taskId === "J11";
-        if (!(binding.taskId === "J11" && (lostPaginationResponse || paginationTerminal)) && !lostManager) {
+        if (!(binding.taskId === "J11" && (lostPaginationResponse || paginationTerminal)) &&
+            !(binding.taskId === "J12" && lostPageBibleResponse) && !lostManager) {
           await repository.completeOperation({ envelope: { runId, operationId: operation._id, workflowRunId, inputFingerprint: operation.inputFingerprint, result },
             parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
         }
@@ -85,6 +87,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
         status: binding.taskId === "J11" && paginationTerminal ? paginationTerminal : "succeeded", outputs };
       saved.set(workflowRunId, execution);
       if (binding.taskId === "J11" && lostPaginationResponse) { lostPaginationResponse = false; return { kind: "unknown" }; }
+      if (binding.taskId === "J12" && lostPageBibleResponse) { lostPageBibleResponse = false; return { kind: "unknown" }; }
       if (binding.role === "manager" && lostManagerPaginationResponse && outputs.booklet_result &&
           JSON.parse(outputs.booklet_result as string).result?.payload?.taskId === "J11") {
         lostManagerPaginationResponse = false; return { kind: "unknown" };
@@ -132,16 +135,260 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     return repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
   }
   return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples, reachSheet, reachPagination, testerDecision,
-    faults: (value: { lost?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+    faults: (value: { lost?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
       lostPaginationResponse = value.lostPagination ?? false;
       lostManagerPaginationResponse = value.lostManagerPagination ?? false;
+      lostPageBibleResponse = value.lostPageBible ?? false;
       paginationTerminal = value.paginationTerminal ?? null;
       omitImageUpload = value.omitUpload ?? false; wrongImageDigest = value.wrongDigest ?? false;
       pauseBeforeClaim = value.beforeClaim ?? false; acknowledgement = value.acknowledgement ?? "normal";
     }, next: () => clock++ };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it("recovers a lost J12 result through GET with the same page and no replacement POST", async () => {
+    const env = await setup("playful_kid", 17);
+    for (let step = 0; step < 120; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "J12") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    const before = (await env.context.getRunView(env.runId))!;
+    expect(before.nextNarrativeTask).toBe("J12");
+    const savedLayout = before.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const layout = parseStoredPageLayout(before.persona, savedLayout.versions.find((item) => item.id === savedLayout.currentVersionId)!.content);
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced"); // manager page delegation
+    const manager = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(manager).toMatchObject({ role: "manager", state: "succeeded" });
+    env.faults({ lostPageBible: true });
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    const blocked = (await env.repository.getRun(env.runId))!;
+    const operation = (await env.repository.getOperation(blocked.activeOperationId!))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
+    expect(operation).toMatchObject({ role: "specialist", taskId: "J12", subjectKind: "page",
+      subjectId: layout.pages[0].pageId, state: "unknown", reservationCount: 1,
+      parentWorkflowRunId: manager.workflowRunId });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const recovered = (await env.repository.getOperation(operation._id))!;
+    expect(recovered).toMatchObject({ state: "succeeded", workflowRunId: operation.workflowRunId,
+      parentWorkflowRunId: manager.workflowRunId, reservationCount: 1 });
+    const saved = JSON.parse(recovered.materializationJson!) as { versionId: string; artifactId: string };
+    expect(await env.database.collections.artifacts.findOne({ _id: saved.artifactId })).toMatchObject({
+      taskId: "J12", subjectKind: "page", subjectId: layout.pages[0].pageId, currentVersionId: saved.versionId, state: "approved",
+    });
+    expect(await env.database.collections.artifact_versions.countDocuments({ artifactId: saved.artifactId })).toBe(1);
+    expect((await env.repository.listOperations(env.runId)).filter((item) => item.taskId === "J12")).toHaveLength(1);
+  });
+
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("dispatches the full 17-slot %s profile through J13", async (persona) => {
+    const env = await setup(persona, 17);
+    let reached = false;
+    for (let step = 0; step < 160; step++) {
+      const outcome = await env.dispatcher().advance(env.runId);
+      expect(outcome).not.toBe("blocked");
+      if (outcome === "boundary") { reached = true; break; }
+    }
+    expect(reached).toBe(true);
+    const view = (await env.context.getRunView(env.runId))!;
+    const layoutArtifact = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const layout = parseStoredPageLayout(persona, layoutArtifact.versions.find((item) => item.id === layoutArtifact.currentVersionId)!.content);
+    expect(layout.pages).toHaveLength(persona === "playful_kid" ? 4 : persona === "enthusiast_parent" ? 6 : 9);
+    expect(layout.pages.slice(1).filter((page) => page.panels.length > 1)).toHaveLength(persona === "playful_kid" ? 0 : persona === "enthusiast_parent" ? 1 : 2);
+    const manuscript = view.currentArtifacts.find((item) => item.taskId === "J05")!;
+    const style = view.currentArtifacts.find((item) => item.taskId === "J08")!;
+    const source = manuscript.versions.find((item) => item.id === manuscript.currentVersionId)!.content as { units: { narration: string }[] };
+    const pageArtifacts = view.currentArtifacts.filter((item) => item.taskId === "J12");
+    expect(pageArtifacts).toHaveLength(layout.pages.length);
+    for (const page of layout.pages) {
+      const artifact = pageArtifacts.find((item) => item.subjectKind === "page" && item.subjectId === page.pageId)!;
+      expect(artifact.state).toBe("approved");
+      const version = artifact.versions.find((item) => item.id === artifact.currentVersionId)!;
+      expect(version.approval).toBeTruthy();
+      const content = version.content as { pageId: string; pageIndex: number; layoutVersionId: string; manuscriptVersionId: string;
+        styleVersionId: string; panels: { panelKey: string; manuscriptUnitIds: string[]; lettering: { kind: string; text: string }[] }[] };
+      expect(content).toMatchObject({ pageId: page.pageId, pageIndex: page.pageIndex,
+        layoutVersionId: layoutArtifact.currentVersionId, manuscriptVersionId: manuscript.currentVersionId,
+        styleVersionId: style.currentVersionId });
+      expect(content.panels.map((panel) => panel.panelKey)).toEqual(page.panels.map((panel) => panel.panelKey));
+      if (page.pageIndex === 0) expect(content.panels[0].lettering).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "title", text: layout.title })]));
+      else for (const panel of content.panels) for (const letter of panel.lettering.filter((item) => item.kind === "narration")) {
+        expect(source.units.some((unit) => unit.narration === letter.text)).toBe(true);
+      }
+    }
+    const operations = (await env.repository.listOperations(env.runId)).filter((item) => item.taskId === "J12" && item.role === "specialist");
+    expect(operations).toHaveLength(layout.pages.length);
+    const managers = await env.repository.listOperations(env.runId);
+    for (const operation of operations) {
+      expect(operation).toMatchObject({ state: "succeeded", reservationCount: 1 });
+      expect(operation.parentWorkflowRunId).toBeTruthy();
+      expect(managers.some((item) => item.role === "manager" && item.workflowRunId === operation.parentWorkflowRunId &&
+        item.resultJson?.includes('"taskId":"J12"'))).toBe(true);
+    }
+    expect(view.counters).toMatchObject({ payableText: 0, payableImage: 0 });
+    expect(view.status).not.toBe("completed");
+    expect((await env.database.collections.booklets.findOne({ _id: view.bookletId }))?.currentStage).toBe("J13");
+  });
+
+  async function pageBibleEnvironment(persona: Persona) {
+    const env = await setup(persona, 16);
+    let reached = false;
+    for (let step = 0; step < 100; step++) {
+      const outcome = await env.dispatcher().advance(env.runId);
+      expect(outcome).not.toBe("blocked");
+      if (outcome === "boundary") { reached = true; break; }
+    }
+    expect(reached).toBe(true);
+    const view = (await env.context.getRunView(env.runId))!;
+    const layoutVersion = view.currentArtifacts.find((item) => item.taskId === "J11")!.currentVersionId!;
+    const manuscriptVersion = view.currentArtifacts.find((item) => item.taskId === "J05")!.currentVersionId!;
+    const styleVersion = view.currentArtifacts.find((item) => item.taskId === "J08")!.currentVersionId!;
+    const layoutContent = view.currentArtifacts.find((item) => item.taskId === "J11")!.versions.find((item) => item.id === layoutVersion)!.content;
+    const layout = parseStoredPageLayout(persona, layoutContent);
+    const run = (await env.repository.getRun(env.runId))!;
+    const saved = JSON.parse(run.configurationJson) as Record<string, unknown>[];
+    expect(saved).toHaveLength(14);
+    saved.push({ role: "specialist", taskId: "J12", appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { configurationJson: JSON.stringify(saved) } });
+    function proposal(pageIndex: number) {
+      const page = layout.pages[pageIndex];
+      return { schemaVersion: "2", pageId: page.pageId, pageIndex, layoutVersionId: layoutVersion,
+        manuscriptVersionId: manuscriptVersion, styleVersionId: styleVersion,
+        panels: page.panels.map((panel, index) => ({ panelKey: panel.panelKey,
+          manuscriptUnitIds: panel.manuscriptUnitIds, sheetReferences: panel.sheetReferences,
+          actionBeat: "Follow the saved manuscript beat.", emotionalBeat: "Curiosity", composition: "Clear focal action",
+          characterIds: panel.sheetReferences.filter((ref) => ref.subjectKind === "character").map((ref) => ref.subjectId),
+          locationIds: panel.sheetReferences.filter((ref) => ref.subjectKind === "location").map((ref) => ref.subjectId),
+          lettering: index === 0 ? [{ kind: pageIndex === 0 ? "title" : "narration", text: pageIndex === 0 ? `  ${layout.title}  ` : "  Follow the light.  ",
+            form: pageIndex === 0 ? "display" : "caption", speakerEntityId: null, panelKey: panel.panelKey,
+            placement: "Inside live safe region", typographyTreatment: "Saved hierarchy", bubbleTreatment: "No bubble" }] : [],
+          noText: index !== 0,
+        })), reviewQuestions: [] };
+    }
+    async function produce(pageIndex: number, content: ReturnType<typeof proposal> = proposal(pageIndex), unknown = false) {
+      const pageId = layout.pages[pageIndex].pageId;
+      const operationId = randomUUID(), workflowRunId = randomUUID();
+      const run = (await env.repository.getRun(env.runId))!;
+      const operation = await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+        role: "specialist", taskId: "J12", subjectKind: "page", subjectId: pageId,
+        inputFingerprint: createHash("sha256").update(operationId).digest("hex"), attempt: 1, providerKind: "text", nowMs: env.next() });
+      await env.repository.beginDispatch({ runId: env.runId, operationId, parentWorkflowRunId: null, nowMs: env.next() });
+      await env.repository.claimOperation({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: env.next() });
+      if (unknown) {
+        await env.repository.verifyDispatchPublication({ runId: env.runId, operationId, workflowRunId,
+          parentWorkflowRunId: null, workflowId: saved.at(-1)!.publishedWorkflowId, nowMs: env.next() });
+        await env.repository.recordDispatchOutcome({ runId: env.runId, operationId, parentWorkflowRunId: null,
+          category: "unknown_outcome", nowMs: env.next() });
+      }
+      const envelope = { runId: env.runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint,
+        result: { kind: "proposal", payload: { taskId: "J12", content } } as RoleResult };
+      const completed = await env.repository.completeOperation({ envelope, parentWorkflowRunId: null, nowMs: env.next() });
+      return { completed, envelope };
+    }
+    return { ...env, layout, proposal, produce };
+  }
+
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("retains %s per-page J12 approvals and stops at J13", async (persona) => {
+    const env = await pageBibleEnvironment(persona);
+    const run = (await env.repository.getRun(env.runId))!;
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J12"], subjectId: run.bookletId } } });
+    for (const page of env.layout.pages) {
+      const result = await env.produce(page.pageIndex);
+      expect(result.completed.reused).toBe(false);
+    }
+    const artifacts = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J12" }).sort({ subjectId: 1 }).toArray();
+    expect(artifacts).toHaveLength(env.layout.pages.length);
+    expect(new Set(artifacts.map((item) => item.subjectId))).toEqual(new Set(env.layout.pages.map((page) => page.pageId)));
+    expect(artifacts.every((item) => item.state === "approved")).toBe(true);
+    expect(await env.database.collections.approvals.countDocuments({ experimentRunId: env.runId,
+      artifactVersionId: { $in: artifacts.map((item) => item.currentVersionId!) } })).toBe(env.layout.pages.length);
+    expect((await env.database.collections.booklets.findOne({ _id: run.bookletId }))?.currentStage).toBe("J13");
+    expect((await env.repository.getRun(env.runId))?.status).not.toBe("completed");
+  });
+
+  it("rejects wrong-page J12 content and retains its claimed operation", async () => {
+    const env = await pageBibleEnvironment("playful_kid");
+    const wrong = { ...env.proposal(1), pageId: env.layout.pages[2].pageId };
+    await expect(env.produce(1, wrong)).rejects.toThrow();
+    const failed = (await env.repository.getRun(env.runId))!;
+    const active = (await env.repository.getOperation(failed.activeOperationId!))!;
+    await env.repository.recordDispatchOutcome({ runId: env.runId, operationId: active._id, parentWorkflowRunId: null,
+      category: "unknown_outcome", nowMs: env.next() });
+    // The bad operation retains its claim; recovery requires the exact result identity.
+    expect((await env.repository.getOperation(active._id))?.state).toBe("unknown");
+  });
+  it("completes an unknown J12 claim once and reuses its saved version after restart", async () => {
+    const env = await pageBibleEnvironment("playful_kid");
+    const reads = vi.spyOn(env.store, "get");
+    const first = await env.produce(1, env.proposal(1), true);
+    expect(reads).toHaveBeenCalled();
+    const saved = JSON.parse(first.completed.operation.materializationJson!) as { versionId: string; artifactId: string };
+    const duplicate = await createExperimentRepository(env.database, { store: () => env.store }).completeOperation({
+      envelope: first.envelope, parentWorkflowRunId: null, nowMs: env.next() });
+    expect(duplicate.reused).toBe(true);
+    expect(JSON.parse(duplicate.operation.materializationJson!)).toMatchObject(saved);
+    expect(await env.database.collections.artifact_versions.countDocuments({ artifactId: saved.artifactId })).toBe(1);
+    reads.mockRestore();
+  });
+  it("leaves a J12 draft after revocation and accepts it through explicit tester approval", async () => {
+    const env = await pageBibleEnvironment("playful_kid");
+    const run = (await env.repository.getRun(env.runId))!;
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J12"], subjectId: run.bookletId } } });
+    const grantId = (await env.repository.getRun(env.runId))!.activeDelegationId!;
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revoke_delegation", delegationId: grantId } } });
+    const { completed } = await env.produce(1);
+    const saved = JSON.parse(completed.operation.materializationJson!) as { versionId: string; approvalId: string | null };
+    expect(saved.approvalId).toBeNull();
+    expect((await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12", subjectId: env.layout.pages[1].pageId }))?.state).toBe("draft");
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "approve", versionIds: [saved.versionId] } } });
+    expect((await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12", subjectId: env.layout.pages[1].pageId }))?.state).toBe("approved");
+    expect((await env.database.collections.booklets.findOne({ _id: run.bookletId }))?.currentStage).toBe("J12");
+  });
+  it("rechecks selected J12 source bytes on a transaction retry", async () => {
+    const env = await pageBibleEnvironment("playful_kid");
+    const get = vi.spyOn(env.store, "get");
+    const run = (await env.repository.getRun(env.runId))!;
+    await withMongoTransaction(env.database, (session) => verifyCurrentPageBibleSources(env.database, session,
+      run, env.layout.pages[1].pageId, env.store));
+    const readsPerAttempt = get.mock.calls.length;
+    expect(readsPerAttempt).toBeGreaterThan(0);
+    const versions = env.database.collections.artifact_versions;
+    const insert = versions.insertOne.bind(versions);
+    let retried = false;
+    const spy = vi.spyOn(versions, "insertOne").mockImplementation(async (...args) => {
+      if (!retried && args[0].createdBy === "agent" && args[0].sourceOperationId) {
+        retried = true;
+        const error = new MongoServerError({ ok: 0, errmsg: "synthetic retry", code: 112 });
+        error.addErrorLabel("TransientTransactionError");
+        throw error;
+      }
+      return insert(...args);
+    });
+    get.mockClear();
+    try { await env.produce(1); } finally { spy.mockRestore(); }
+    expect(retried).toBe(true);
+    expect(get).toHaveBeenCalledTimes(3 * readsPerAttempt);
+    get.mockRestore();
+  });
+  it("revises one J12 page without changing an approved sibling", async () => {
+    const env = await pageBibleEnvironment("playful_kid");
+    const run = (await env.repository.getRun(env.runId))!;
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J12"], subjectId: run.bookletId } } });
+    const first = await env.produce(1), sibling = await env.produce(2);
+    const original = JSON.parse(first.completed.operation.materializationJson!) as { versionId: string };
+    const siblingSaved = JSON.parse(sibling.completed.operation.materializationJson!) as { versionId: string };
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J12",
+      artifactVersionId: original.versionId, instruction: "Clarify the first story page." } } });
+    const revised = env.proposal(1);
+    revised.panels[0].lettering[0].text = "  The path opens.  ";
+    const replacement = await env.produce(1, revised);
+    expect(JSON.parse(replacement.completed.operation.materializationJson!)).toMatchObject({ approvalId: expect.any(String) });
+    const siblingArtifact = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12",
+      subjectId: env.layout.pages[2].pageId });
+    expect(siblingArtifact).toMatchObject({ currentVersionId: siblingSaved.versionId, state: "approved" });
+    expect((await env.repository.getRun(env.runId))?.textRevisions).toBe(1);
+  });
   it("rejects J11 preparation after a required sheet loses approval or saved bytes", async () => {
     const env = await setup("professional_creator", 16);
     await env.reachPagination();
