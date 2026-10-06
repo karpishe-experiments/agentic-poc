@@ -1124,14 +1124,46 @@ outcome, 38 logical text requests, 6 logical image requests and zero payable cal
 Do not replay that operation. Parent and Creator full-booklet campaigns remain
 pending.
 
-The local callback correction batches shared source/version/approval reads on
+The callback correction batches shared source/version/approval reads on
 the same Mongo session. Manager delegation retains full selected-page source and
 byte verification, then checks every current Page Bible's approval, content and
 exact dependencies/edges without rebuilding sibling image requests. Image claim
 and context still perform separate source checks. The two focused integration
 suites passed 24 tests without retries (33.64 seconds), and focused lint passed.
-This correction is not yet reviewed for publication or deployed; reduced live
-callback latency and all-persona completion remain unverified.
+The clean candidate passed standard typecheck/lint, twelve agent fixtures,
+74 affected integration checks and eight shared dispatcher cases without retries.
+Two consecutive independent reviews passed for main and selective staging delivery.
+[PR #152](https://github.com/karpishe-experiments/agentic-poc/pull/152) merged after
+[Validate 37499392340](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37499392340)
+passed 814 tests across 107 files. The four-file staging carry in
+[PR #153](https://github.com/karpishe-experiments/agentic-poc/pull/153) passed
+[Validate 37500336682](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37500336682).
+Staging release `835c912794a80bf162f82342da6db19e68694cbe` passed
+[Deploy 37501574059](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37501574059)
+and [Check 37502716764](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37502716764),
+retaining backup `staging-20261006T171635Z-19dbc66bd48a497d` and immutable image
+`sha256:30c4b357c521cc00c621e540e9a2eb0ac2cfa010cd550c7c639aea19ccb3bd4a`.
+Dify graphs and bindings are unchanged. Full all-persona completion remains
+unverified; use linked successors, not replay. The next attempt's callback
+measurements are recorded below.
+
+Linked Kid successor `743163ae-d179-49de-82d7-382fa8bd1941` reached approved
+J01–J11 and all four J12 Page Bibles on this release. Its first J13 workflow
+`08a4cd3b-bb6f-4929-9e36-e71f4756e258` succeeded in 22.51 seconds with zero
+tokens. Authorization took 10.51 seconds and the binary upload took 9.22 seconds;
+this attempt cleared the earlier authorization timeout. Booklet then blocked
+on reference read-back: Dify returned `reference_files: null` for the reference-free
+cover, while the dispatcher accepted only omission or an empty array. The saved
+image operation `0213da53-31c4-4147-bf59-7914d815218c` remains succeeded; no replay
+or in-place acceptance repair occurred. Counters were 38 logical text requests,
+6 logical image requests and zero payable calls. Full completion is not proved.
+The local correction accepts null only for an empty expected-reference list;
+nonempty references still require exact ordered identities. Publication and live
+verification of this correction remain pending. Four focused integration cases
+passed without retries (51.05 seconds): omitted/null cover output recovers without
+replay, and reversed/null required-reference output blocks without another image
+dispatch. Focused lint passed. The initial sandbox test launch failed with
+`spawn EPERM`; the same focused command passed outside the sandbox.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.

@@ -242,7 +242,10 @@ then retains ordered acknowledgements in `referenceUploadsJson`. It verifies the
 saved image binding, manager selection and current original reference bytes.
 Interrupted or unknown uploads stop without another POST; completed prefix uploads
 remain saved. It does not establish recovery of a missing file identity. Dispatch
-uses its ordered saved file identifiers. Live application-key ownership checks remain pending. Shared
+uses its ordered saved file identifiers. A reference-free cover can return an
+omitted, null or empty `reference_files` output. A page with required references
+still needs exact ordered runtime file identities; null does not satisfy it.
+Live application-key ownership checks remain pending. Shared
 numeric image limits do not load the server-side decoder.
 
 The local page-work projection distinguishes generation, review and all-page
