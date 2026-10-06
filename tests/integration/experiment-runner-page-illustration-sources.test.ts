@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
-import { materializePageLayout, verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
+import { materializePageLayout, verifyCurrentPageIllustrationSources, verifyCurrentApprovedPageBibles } from "@/db/experiment-pages";
 import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
 import { simulatePageBibleProposal } from "@/lib/experiment-runner/page-bible-fixtures";
 import { parsePageBibleForLayout } from "@/lib/experiment-runner/page-bible-tasks";
@@ -86,10 +86,69 @@ async function setup(persona: Persona = "playful_kid", pageIndex = 1) {
   }
   const run = (await repository.getRun(runId))!;
   const verify = () => database.client.withSession((session) => verifyCurrentPageIllustrationSources(database, session, run, pageId, store));
-  return { database, layout, pageIndex, pageId, store, verify, runId };
+  async function addSiblingBibles() {
+    for (const [index, page] of layout.pages.entries()) {
+      if (page.pageId === pageId) continue;
+      const proposal = simulatePageBibleProposal({ persona, pageId: page.pageId,
+        sources: [...sources, { taskId: "J11", id: id(90), content: layout }] });
+      if (proposal.kind !== "proposal") throw new Error("Expected sibling Bible.");
+      const dependencies = parsePageBibleForLayout({ persona, pageId: page.pageId, layout,
+        layoutVersionId: id(90), manuscriptVersionId: id(5), styleVersionId: id(8), proposal: proposal.content }).dependencyVersionIds;
+      const artifactId = id(1100 + index), versionId = id(1200 + index);
+      await database.collections.artifacts.insertOne({ _id: artifactId, bookletId, artifactType: "J12", taskId: "J12",
+        experimentRunId: runId, subjectKind: "page", subjectId: page.pageId, state: "approved", currentVersionId: versionId, createdAtMs: 1, updatedAtMs: 1 });
+      await database.collections.artifact_versions.insertOne({ _id: versionId, artifactId, versionNumber: 1, schemaVersion: "2",
+        contentJson: JSON.stringify(proposal.content), dependencyVersionIdsJson: JSON.stringify(dependencies),
+        createdBy: "agent", sourceVersionId: null, sourceExecutionBatchId: null, createdAtMs: 1 });
+      await database.collections.approvals.insertOne({ _id: id(1300 + index), bookletId, artifactVersionId: versionId, scope: "artifact",
+        subjectKey: null, action: "approve", origin: "explicit", sourceApprovalId: null, cardResponseId: null, qualityReviewId: null,
+        experimentRunId: runId, testerDecisionId: id(600), createdAtMs: 1 });
+      for (const [edgeIndex, upstreamVersionId] of dependencies.entries()) await database.collections.artifact_dependencies.insertOne({
+        _id: id(1400 + index * 20 + edgeIndex), downstreamVersionId: versionId, upstreamVersionId, createdAtMs: 1 });
+    }
+  }
+  const verifyBibles = () => database.client.withSession((session) => verifyCurrentApprovedPageBibles(database, session, run,
+    { layout, layoutVersionId: id(90), manuscriptVersionId: id(5), styleVersionId: id(8) }));
+  return { database, layout, pageIndex, pageId, store, verify, runId, addSiblingBibles, verifyBibles };
 }
 
 describe("J13 selected page source verification", () => {
+  it("batches shared approval reads without dropping current-source checks", async () => {
+    const env = await setup();
+    const versions = vi.spyOn(env.database.collections.artifact_versions, "find");
+    const approvals = vi.spyOn(env.database.collections.approvals, "find");
+    await env.verify();
+    const isBatch = (value: unknown) => value !== null && typeof value === "object" && "$in" in value;
+    expect(versions.mock.calls.filter(([query]) => isBatch((query as { _id?: unknown })._id))).toHaveLength(2);
+    expect(approvals.mock.calls.filter(([query]) => isBatch((query as { artifactVersionId?: unknown }).artifactVersionId))).toHaveLength(2);
+    await env.database.collections.approvals.deleteOne({ artifactVersionId: id(1) });
+    await expect(env.verify()).rejects.toThrow("stale or unapproved source");
+  });
+
+  it("checks every sibling Bible without reading image bytes", async () => {
+    const env = await setup();
+    await expect(env.verifyBibles()).rejects.toThrow("every current approved Page Bible");
+    await env.addSiblingBibles();
+    await env.verifyBibles();
+    expect(env.store.get).not.toHaveBeenCalled();
+  });
+
+  it.each(["approval", "state", "version", "dependencies", "edge", "duplicate", "content"] as const)(
+    "rejects a sibling Bible with invalid %s", async (fault) => {
+      const env = await setup(); await env.addSiblingBibles();
+      const artifact = (await env.database.collections.artifacts.findOne({ _id: id(1100) }))!;
+      const versionId = artifact.currentVersionId!;
+      if (fault === "approval") await env.database.collections.approvals.deleteOne({ artifactVersionId: versionId });
+      if (fault === "state") await env.database.collections.artifacts.updateOne({ _id: artifact._id }, { $set: { state: "needs_review" } });
+      if (fault === "version") await env.database.collections.artifact_versions.deleteOne({ _id: versionId });
+      if (fault === "dependencies") await env.database.collections.artifact_versions.updateOne({ _id: versionId }, { $set: { dependencyVersionIdsJson: "[]" } });
+      if (fault === "edge") await env.database.collections.artifact_dependencies.deleteOne({ downstreamVersionId: versionId });
+      if (fault === "duplicate") await env.database.collections.artifacts.insertOne({ ...artifact, _id: id(1900), artifactType: "duplicate_bible" });
+      if (fault === "content") await env.database.collections.artifact_versions.updateOne({ _id: versionId }, { $set: { contentJson: "{}" } });
+      await expect(env.verifyBibles()).rejects.toThrow();
+      expect(env.store.get).not.toHaveBeenCalled();
+    });
+
   it("returns the current J12 request and only selected, ordered original sheet attachments", async () => {
     const { layout, pageIndex, pageId, store, verify } = await setup();
     const result = await verify();

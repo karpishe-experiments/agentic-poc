@@ -11,7 +11,7 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { configuredReferenceSheetTasks, referenceSheetTargets } from "@/lib/experiment-runner/reference-targets";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
-import { materializePageLayout, validatePaginationRouting, verifyCurrentPaginationSources, verifyCurrentPageBibleSources, verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
+import { materializePageLayout, validatePaginationRouting, verifyCurrentPaginationSources, verifyCurrentPageBibleSources, verifyCurrentPageIllustrationSources, verifyCurrentApprovedPageBibles } from "@/db/experiment-pages";
 import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 import { configuredPaginationTask } from "@/lib/experiment-runner/pagination-tasks";
 import { configuredPageBibleTask, parsePageBibleForLayout } from "@/lib/experiment-runner/page-bible-tasks";
@@ -316,11 +316,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
         const selected = await verifyCurrentPageIllustrationSources(database, session, run, result.payload.subjectId, store);
         // Page Bible is one internal production gate, even when creator review
         // is delegated. A valid selected page cannot bypass an unfinished sibling.
-        for (const page of selected.layout.pages) {
-          if (page.pageId !== result.payload.subjectId) {
-            await verifyCurrentPageIllustrationSources(database, session, run, page.pageId, store);
-          }
-        }
+        await verifyCurrentApprovedPageBibles(database, session, run, selected);
       } else {
         await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore);
       }
