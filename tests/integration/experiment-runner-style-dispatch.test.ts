@@ -58,6 +58,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
   let lostPaginationResponse = false, lostManagerPaginationResponse = false, lostPageBibleResponse = false, pageClarification = false;
   let paginationTerminal: "failed" | "stopped" | null = null;
   let reverseReferenceReadback = false;
+  let nullReferenceReadback = false;
   let lostJudgeResponse = false;
   let lostBeforeUpload = false;
   let lateImage: { identity: { runId: string; operationId: string; workflowRunId: string; parentWorkflowRunId: string | null; inputFingerprint: string }; binding: BookletRunnerConfig["bindings"][number]; referenceFileIds: string[] | undefined } | null = null;
@@ -115,6 +116,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
           outputs.reference_files = referenceIds.map((record_id) => ({ type: "image", transfer_method: "local_file",
             reference: `dify-file-ref:${Buffer.from(JSON.stringify({ record_id })).toString("base64url")}` }));
         }
+        if (operation.taskId === "J13" && nullReferenceReadback) outputs.reference_files = null;
       } else {
         const result = simulateNarrativeResult(operationContext, "simulated");
         const envelope = { ...identity, inputFingerprint: operation.inputFingerprint, result };
@@ -218,10 +220,11 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
         } });
       return result;
     },
-    faults: (value: { lostBeforeUpload?: boolean; lostJudge?: boolean; reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+    faults: (value: { lostBeforeUpload?: boolean; lostJudge?: boolean; nullReferences?: boolean; reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
       lostBeforeUpload = value.lostBeforeUpload ?? false;
       lostJudgeResponse = value.lostJudge ?? false;
       reverseReferenceReadback = value.reverseReferences ?? false;
+      nullReferenceReadback = value.nullReferences ?? false;
       pageClarification = value.pageClarification ?? false;
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
       corruptSavedPage = value.corruptSavedPage ?? false;
@@ -287,7 +290,7 @@ describe("automatic saved J08 sample dispatch", () => {
       configurationHash: run.configurationHash, versionIds: [workflowRunId], warningCount: 0 });
     await expect(env.testerDecision({ kind: "feedback", payload: report }, false, true)).rejects.toThrow("Evaluation requires saved generation completion");
   });
-  it("recovers a reference-free cover with omitted file output without replay", async () => {
+  it.each([false, true])("recovers a reference-free cover without replay (null file output: %s)", async (nullReferences) => {
     const env = await setup("playful_kid", 17, true);
     let ready = false;
     for (let step = 0; step < 160; step++) {
@@ -298,7 +301,7 @@ describe("automatic saved J08 sample dispatch", () => {
       expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
     }
     expect(ready).toBe(true);
-    env.faults({ lost: true });
+    env.faults({ lost: true, nullReferences });
     const imageCalls = () => vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image").length;
     const before = imageCalls();
     await env.dispatcher().advance(env.runId);
@@ -310,10 +313,10 @@ describe("automatic saved J08 sample dispatch", () => {
     expect((await env.repository.getOperation(operation._id))!.verifiedWorkflowId).toBeTruthy();
     expect(imageCalls()).toBe(before + 1);
   }, 120_000);
-  it("blocks reversed final-page reference read-back without another image dispatch", async () => {
+  it.each(["reversed", "null"] as const)("blocks %s final-page reference read-back without another image dispatch", async (readback) => {
     const env = await setup("playful_kid", 17, true);
     await env.reachPageImageWithReferences();
-    env.faults({ reverseReferences: true });
+    env.faults({ reverseReferences: readback === "reversed", nullReferences: readback === "null" });
     const before = vi.mocked(env.runtime.start).mock.calls.length;
     await env.dispatcher().advance(env.runId);
     expect((await env.repository.getRun(env.runId))!.status).toBe("blocked");
