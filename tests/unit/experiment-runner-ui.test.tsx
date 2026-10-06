@@ -9,6 +9,32 @@ beforeEach(() => { fetchMock = vi.fn().mockResolvedValue(new Response(JSON.strin
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it.each([false, true])("saves selected page order without resuming or replaying after uncertain response=%s", async (lost) => {
+    const pageSelection = { schemaVersion: "2", runId: run.runId, configurationHash: "a".repeat(64), layoutVersionId: "layout",
+      pages: [{ pageId: "page-1", pageIndex: 1, pageBibleVersionId: "bible-1", previousPageVersionId: null },
+        { pageId: "page-3", pageIndex: 3, pageBibleVersionId: "bible-3", previousPageVersionId: null }] };
+    const paused = { ...run, status: "paused", pauseRequested: true, activeOperationId: null, pendingDecision: null, pageSelection };
+    fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        if (lost) throw new Error("lost");
+        return new Response(JSON.stringify({ data: { jobId: "job", reused: false } }));
+      }
+      return new Response(JSON.stringify({ data: [paused] }));
+    });
+    render(<BookletRunner />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Page 3" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Page 1" }));
+    expect(screen.getByText("Selected order: Page 3 → Page 1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save page order" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save page order" }).hasAttribute("disabled")).toBe(false));
+    const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toBe(`/api/experiments/booklet-runs/${run.runId}/pages`);
+    expect(JSON.parse(writes[0][1].body)).toMatchObject({ expectedRevision: 2, batch: { selection: "selected_batch",
+      pages: [{ pageId: "page-3", pageBibleVersionId: "bible-3" }, { pageId: "page-1", pageBibleVersionId: "bible-1" }] } });
+    if (lost) expect(screen.getByRole("alert").textContent).toContain("No automatic retry");
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+  });
   it("shows generation separately from blocked evaluation and keeps advisory reports inspectable", async () => {
     const report = { role: "tester", mode: "simulated", summary: "Deterministic feedback; creative quality not assessed." };
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, bookletId: "saved-book", status: "blocked",

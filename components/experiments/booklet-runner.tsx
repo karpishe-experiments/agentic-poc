@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SavedArtifactImages } from "./saved-artifact-images";
 import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
+import type { ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
+import { PageBatchSelector, type PageSelection } from "./page-batch-selector";
 
 const personas = [
   { id: "playful_kid", label: "Playful kid" },
@@ -26,6 +28,8 @@ type Run = {
   evaluationStatus?: "pending" | "running" | "complete" | "failed";
   reports?: { operationId: string; workflowRunId: string | null; verifiedWorkflowId: string | null;
     matchesCurrentVersions: boolean; report: ExperimentReport }[];
+  pageSelection?: PageSelection | null;
+  pageBatch?: ExperimentPageBatch;
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
 type PendingCreate = { persona: Persona; key: string; predecessorRunId?: string };
@@ -110,6 +114,18 @@ export function BookletRunner() {
     finally { setBusy(false); }
   }
 
+  async function savePages(run: Run, batch: ExperimentPageBatch) {
+    setBusy(true); setActionError(null);
+    try {
+      await read(await fetch(`/api/experiments/booklet-runs/${run.runId}/pages`, {
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ expectedRevision: run.revision, batch }),
+      }));
+    } catch (caught) {
+      setActionError(safeMessage(caught, "Selection response was lost. Inspect the saved page batch before trying again. No automatic retry was sent."));
+    } finally { await refresh(); setBusy(false); }
+  }
+
   return <section className="max-w-4xl space-y-8">
     <header className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Dify booklet experiment</p><h1 className="text-3xl font-semibold">Booklet runs</h1><p className="text-[var(--muted-ink)]">Inspect saved artifacts, images, approvals and advisory reports. Shorter suites stop at their slice boundary; full suites record generation and evaluation separately.</p></header>
     <section aria-labelledby="new-run-heading" className="space-y-3 rounded-lg border border-[var(--border)] p-5">
@@ -125,6 +141,12 @@ export function BookletRunner() {
       <p>{run.brief}</p><p className="text-sm">Next: {run.nextNarrativeTask ?? "Awaiting state change"}{run.safeFailure ? ` · ${run.safeFailure}` : ""}</p>
       <p className="text-sm">Generation: {run.generationStatus ?? "in_progress"} · Evaluation: {run.evaluationStatus ?? "pending"}</p>
       {run.bookletId ? <a className="underline" href={`/booklets/${encodeURIComponent(run.bookletId)}`}>Open saved booklet</a> : null}
+      {run.pageSelection ? <PageBatchSelector key={`${run.runId}:${run.pageSelection.layoutVersionId}:${run.pageSelection.pages.map((page) => `${page.pageBibleVersionId}:${page.previousPageVersionId}`).join(",")}`}
+        selection={run.pageSelection} busy={busy} onSave={(batch) => void savePages(run, batch)} /> : null}
+      {run.pageBatch ? <details><summary>Saved page batch ({run.pageBatch.pages.length} pages)</summary>
+        <p className="text-sm">Retained dispatch order; individual approvals still apply.</p>
+        <ol className="list-decimal pl-5">{run.pageBatch.pages.map((page) => <li className="break-all text-xs" key={page.pageId}>{page.pageId}</li>)}</ol>
+      </details> : null}
       {run.reports?.length ? <section aria-label="Advisory reports" className="space-y-2"><h4 className="font-semibold">Advisory reports</h4>
         {run.reports.map((entry) => <details key={entry.operationId}><summary>{entry.report.role === "tester" ? "Tester feedback" : "Independent judge assessment"} · {entry.report.mode}</summary>
           <p>{entry.report.summary}</p><p className="text-sm">Current artifact versions: {entry.matchesCurrentVersions ? "match" : "do not match; report is historical"}</p>

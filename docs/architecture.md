@@ -300,15 +300,25 @@ The candidate ordered page-batch contract preserves selected page order and
 source versions, with separate operation, asset and version identities per item.
 The selection repository retains jobs and ordered items in existing generation
 collections under `dify_pages`, with current-source checks and atomic run-revision
-admission. Item binding records the owning prepared operation before dispatch;
+admission. New batch selection stops once generation is saved. Duplicate selection can
+still return its retained job without changing generation or evaluation evidence.
+The authenticated `POST /api/experiments/booklet-runs/[runId]/pages` endpoint
+records this intent through the same repository and maintenance gate. A drained
+paused run can record selection without resuming or starting an operation;
+Resume remains separate. Active operations and pending decisions prevent selection.
+Item binding records the owning prepared operation before dispatch;
 reconciliation retains its uncertain outcome or verified assembled result without
 executing another call. Pause can retain an in-flight result without admitting the
 next item. The dispatcher binds each J13 operation before external work and
 reconciles its saved result after assembly. A published, materialized tester answer
 permits clarification rebinding while the item retains the earlier operation ID.
 Known post-callback images are assembled before new work is planned. Active-job
-projection uses the saved run identity. Creator-facing batch selection, arbitrary
-subset ordering and deployed verification remain incomplete.
+projection uses the saved run identity. The local runner selector appears after
+current Page Bible readiness when the run is drained and paused. It retains click
+order for a single page or subset, submits exact source identities, and displays
+the saved batch. The repository rechecks those identities transactionally.
+Selection does not resume dispatch and an uncertain response is not replayed
+automatically. Deployed selector verification remains incomplete.
 The legacy worker's restart recovery and
 active/runnable projections select only `references`, `pages` and `export`.
 Dify recovery must reconcile the retained operation ledger, not reset uncertain

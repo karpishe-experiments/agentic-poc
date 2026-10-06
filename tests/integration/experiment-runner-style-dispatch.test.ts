@@ -301,16 +301,28 @@ describe("automatic saved J08 sample dispatch", () => {
   it("dispatches a retained two-page selection in order with separate saved results and approvals", async () => {
     const env = await setup("enthusiast_parent", 17, true);
     await env.reachPageImageWithReferences();
+    const readyRun = (await env.repository.getRun(env.runId))!;
+    expect((await env.context.getRunView(env.runId))!.pageSelection).toBeNull();
+    await env.repository.pause({ runId: env.runId, expectedRevision: readyRun.revision, nowMs: env.next() });
     const run = (await env.repository.getRun(env.runId))!, view = (await env.context.getRunView(env.runId))!;
     const layoutArtifact = view.currentArtifacts.find((artifact) => artifact.taskId === "J11")!;
     const layout = parseStoredPageLayout(run.persona, layoutArtifact.versions.find((version) => version.id === layoutArtifact.currentVersionId)!.content);
     const selected = [layout.pages[3]!, layout.pages[1]!].map((page) => ({ pageId: page.pageId,
       pageBibleVersionId: view.currentArtifacts.find((artifact) => artifact.taskId === "J12" && artifact.subjectId === page.pageId)!.currentVersionId!,
       previousPageVersionId: null }));
+    expect(view.pageSelection).toMatchObject({ runId: run._id, layoutVersionId: layoutArtifact.currentVersionId });
+    expect(selected.every((page) => view.pageSelection?.pages.some((available) => available.pageId === page.pageId &&
+      available.pageBibleVersionId === page.pageBibleVersionId))).toBe(true);
     const batches = createExperimentPageBatchRepository({ database: env.database, store: env.store, now: env.next });
     const jobId = randomUUID();
     await batches.select({ jobId, expectedRevision: run.revision, batch: { schemaVersion: "2", runId: run._id,
       configurationHash: run.configurationHash, layoutVersionId: layoutArtifact.currentVersionId!, selection: "selected_batch", pages: selected } });
+    expect((await env.context.getRunView(env.runId))!.pageSelection).toBeNull();
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(vi.mocked(env.runtime.start).mock.calls.length).toBe(calls);
+    const pausedRun = (await env.repository.getRun(env.runId))!;
+    await env.repository.resume({ runId: env.runId, expectedRevision: pausedRun.revision, nowMs: env.next() });
     let approved = false;
     for (let step = 0; step < 12; step++) {
       expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");

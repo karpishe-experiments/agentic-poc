@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
+import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import { createRepositories } from "@/db/repositories";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -43,6 +44,27 @@ async function prepareFirst(env: Awaited<ReturnType<typeof setup>>) {
   return { identity: { runId: id(1), jobId: id(8) }, binding: { runId: id(1), jobId: id(8), operationId: id(11), expectedRevision: 2 }, request };
 }
 describe("saved Dify page batch selection", () => {
+  it("records a paused selection through the browser API and returns its retained job on replay", async () => {
+    const env = await setup();
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { status: "paused", pauseRequested: true } });
+    const http = createBookletRunnerHttp({ database: () => env.database, store: () => ({} as AssetStore),
+      mutate: async (operation) => operation(), config: () => ({ enabled: true, config: { enabled: true,
+        baseUrl: "https://dify.example.test", publicOrigin: "http://localhost:3000", callbackKey: "x".repeat(32), bindings: [] } }) });
+    const request = () => new Request(`http://localhost:3000/api/experiments/booklet-runs/${id(1)}/pages`, {
+      method: "POST", headers: { origin: "http://localhost:3000", "idempotency-key": id(9) },
+      body: JSON.stringify({ expectedRevision: 0, batch: env.batch }),
+    });
+    const first = await http.selectPages(request(), id(1));
+    expect(first.status).toBe(200);
+    const saved = (await first.json()).data;
+    expect(saved.reused).toBe(false);
+    const replay = await http.selectPages(request(), id(1));
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).data).toEqual({ ...saved, reused: true });
+    expect(await env.database.collections.generation_jobs.countDocuments({})).toBe(1);
+    expect(await env.database.collections.experiment_operations.countDocuments({})).toBe(0);
+    expect(await env.database.collections.experiment_runs.findOne({ _id: id(1) })).toMatchObject({ pauseRequested: true, status: "paused", revision: 1 });
+  });
   it("does not load a retained active batch from another run of the same booklet", async () => {
     const env = await setup();
     await env.repository().select({ jobId: id(8), expectedRevision: 0, batch: env.batch });
@@ -144,14 +166,45 @@ describe("saved Dify page batch selection", () => {
     expect(await env.database.collections.experiment_operations.countDocuments({})).toBe(0);
     expect(await createRepositories(env.database).jobs.listRunnable()).toEqual([]);
     expect(await env.database.collections.approvals.countDocuments({})).toBe(0);
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, {
+      $set: { generationCompletedAtMs: 3, generationVersionIds: [id(15)] },
+    });
+    const completed = await env.database.collections.experiment_runs.findOne({ _id: id(1) });
+    expect(await env.repository().select({ ...input, jobId: id(9) })).toEqual({ jobId: id(8), reused: true });
+    expect(await env.database.collections.experiment_runs.findOne({ _id: id(1) })).toEqual(completed);
   });
-  it("rejects paused work and stale revisions without creating jobs", async () => {
+  it("rejects active work and stale revisions without creating jobs", async () => {
     const env = await setup();
     const input = { jobId: id(8), expectedRevision: 1, batch: env.batch };
     await expect(env.repository().select(input)).rejects.toMatchObject({ code: "stale_revision" });
-    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { pauseRequested: true, status: "paused" } });
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { activeOperationId: id(11), pauseRequested: true, status: "paused" } });
     await expect(env.repository().select({ ...input, expectedRevision: 0 })).rejects.toMatchObject({ code: "invalid_state" });
     expect(await env.database.collections.generation_jobs.countDocuments({})).toBe(0);
+  });
+  it("records selection while drained and paused without resuming or dispatching", async () => {
+    const env = await setup();
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { pauseRequested: true, status: "paused" } });
+    expect(await env.repository().select({ jobId: id(8), expectedRevision: 0, batch: env.batch }))
+      .toEqual({ jobId: id(8), reused: false });
+    const run = (await env.database.collections.experiment_runs.findOne({ _id: id(1) }))!;
+    expect(run).toMatchObject({ status: "paused", pauseRequested: true, activeOperationId: null, revision: 1 });
+    expect(run.counters).toEqual(env.run.counters);
+    expect((await env.repository().get({ runId: id(1), jobId: id(8) })).next).toEqual({ kind: "paused" });
+    expect(await env.database.collections.experiment_operations.countDocuments({})).toBe(0);
+    expect(await env.database.collections.approvals.countDocuments({})).toBe(0);
+  });
+  it("rejects new selections after generation is saved without changing evidence", async () => {
+    const env = await setup();
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, {
+      $set: { generationCompletedAtMs: 0, generationVersionIds: [id(15)] },
+    });
+    const before = await env.database.collections.experiment_runs.findOne({ _id: id(1) });
+    await expect(env.repository().select({ jobId: id(8), expectedRevision: 0, batch: env.batch }))
+      .rejects.toMatchObject({ code: "invalid_state" });
+    expect(await env.database.collections.experiment_runs.findOne({ _id: id(1) })).toEqual(before);
+    expect(await env.database.collections.generation_jobs.countDocuments({})).toBe(0);
+    expect(await env.database.collections.generation_items.countDocuments({})).toBe(0);
+    expect(verifySources).not.toHaveBeenCalled();
   });
   it("rolls back when a selected source is stale and prevents overlapping selections", async () => {
     const env = await setup(); const input = { jobId: id(8), expectedRevision: 0, batch: env.batch };

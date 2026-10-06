@@ -105,7 +105,30 @@ The existing runner inspector now shows generation and evaluation separately,
 links to the saved booklet and retains tester/judge report details with operation,
 workflow, publication and current-versus-historical version evidence. Ten UI unit
 checks passed. This is component-fixture evidence; browser and staging checks
-remain pending. Page/batch selection is still separate unfinished UI work.
+remain pending. The local selector evidence below supersedes the earlier
+unfinished UI status; deployed selector inspection remains pending.
+
+Batch admission now rejects new selections after the saved generation marker,
+including while advisory evaluation is pending. Existing duplicate selections
+remain read-only lookups. The browser page-selection endpoint uses existing
+authentication, origin, maintenance and transactional source checks. A drained
+paused run can save selection intent without resuming or dispatching work.
+All eleven batch-repository integration tests passed without retries (15.22
+seconds), including browser-to-persistence selection and duplicate lookup.
+Source verification is mocked in this suite; deployed readiness remains pending.
+Eleven HTTP boundary tests passed (3.02 seconds), including staging authentication,
+origin, disabled state, malformed input and maintenance admission.
+
+The local selector now records click order for one page or a selected batch.
+It appears only after current Page Bible readiness in a drained paused run;
+saving does not Resume. Twelve runner UI tests passed (5.77 seconds), including
+ordered submission and uncertain-response handling with no automatic replay.
+The existing Parent selected-batch dispatch fixture passed (24.41 seconds,
+no retries) with real saved artifact/approval/byte verification: paused projection,
+selection, no dispatch while paused, explicit Resume, pages 3 then 1 and separate
+results/approvals. Focused lint and current-source typecheck passed; the latter
+excludes ignored output copies and stale `.next` inputs. This is local fixture
+evidence, not deployed Dify or browser acceptance.
 
 All three live Simulated M2 cases reached approved reference packages on
 2026-10-05; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).
@@ -823,8 +846,9 @@ The candidate selection repository now stores ordered `dify_pages` jobs and
 items in the existing generation collections. It verifies the saved configuration,
 current Page Bible and prior illustration versions, then admits selection with
 the run revision in the same transaction. Duplicate selection returns its retained
-job without another reservation. Pause, stale revisions and overlapping active
-selections reject new jobs. Four focused integration tests passed without retries,
+job without another reservation. Active operations, stale revisions and overlapping
+active selections reject new jobs. Drained paused runs can retain intent while
+dispatch stays paused. Four initial focused integration tests passed without retries,
 including concurrent duplicate selection with one retained winner;
 their source-verification dependency is mocked, so they establish transaction and
 ownership behavior, not real saved-artifact readiness.

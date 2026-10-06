@@ -218,6 +218,26 @@ export function createExperimentContextService(database: Database, options: { st
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" }).sort({ sequence: 1 }).toArray();
     const operationRows = await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray();
+    let pageSelection = null;
+    if (configuredPageIllustrationTask(run.configurationJson) && run.mode === "simulated" &&
+        run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
+        run.generationCompletedAtMs == null && !pageBatch) {
+      const readiness = pageBibleWork(run, currentArtifacts);
+      const layoutArtifact = currentArtifacts.find((item) => item.taskId === "J11" && item.state === "approved");
+      const layoutVersion = layoutArtifact?.versions.find((item) => item.id === layoutArtifact.currentVersionId);
+      if (readiness && "complete" in readiness && layoutVersion?.approval) {
+        const layout = parseStoredPageLayout(run.persona, layoutVersion.content);
+        const pages = layout.pages.flatMap((page) => {
+          const bible = currentArtifacts.find((item) => item.taskId === "J12" && item.subjectId === page.pageId);
+          const illustration = currentArtifacts.find((item) => item.taskId === "J13" && item.subjectId === page.pageId);
+          if (!bible?.currentVersionId || illustration && illustration.state !== "needs_review") return [];
+          return [{ pageId: page.pageId, pageIndex: page.pageIndex, pageBibleVersionId: bible.currentVersionId,
+            previousPageVersionId: illustration?.currentVersionId ?? null }];
+        });
+        if (pages.length) pageSelection = { schemaVersion: "2" as const, runId: run._id,
+          configurationHash: run.configurationHash, layoutVersionId: layoutVersion.id, pages };
+      }
+    }
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
@@ -229,6 +249,7 @@ export function createExperimentContextService(database: Database, options: { st
       pendingDecision: parseJson(run.pendingDecisionJson),
       activeDelegation: grant && !grant.revokedAtMs && !grant.supersededById ? { id: grant._id, taskIds: [...grant.taskIds], subjectKind: grant.subjectKind, subjectId: grant.subjectId, testerDecisionId: grant.testerDecisionId, effectiveSequence: grant.effectiveSequence } : null,
       currentArtifacts,
+      pageSelection,
       creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: parseJson(row.uiMessageJson), createdAtMs: row.createdAtMs })),
       operationHistory: operationRows.map((row) => ({ id: row._id, role: row.role, taskId: row.taskId, state: row.state,
         workflowRunId: row.workflowRunId, parentWorkflowRunId: row.parentWorkflowRunId,

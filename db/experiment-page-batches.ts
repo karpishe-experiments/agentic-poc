@@ -182,12 +182,15 @@ export function createExperimentPageBatchRepository(input: { database: Database;
         return { jobId: existing._id, reused: true };
       }
       if (run.revision !== value.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Page batch run revision changed.");
+      if (run.generationCompletedAtMs != null) {
+        invalid("Saved generation is immutable; select pages in a successor run.");
+      }
       const pending = run.pendingDecisionJson ? JSON.parse(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectKind?: string; subjectId?: string; artifactVersionId?: string } : null;
       const exactRevision = pending?.kind === "revision" && pending.taskId === "J13" && pending.subjectKind === "page" &&
         value.batch.selection === "single" && value.batch.pages.length === 1 && pending.subjectId === value.batch.pages[0].pageId &&
         pending.artifactVersionId === value.batch.pages[0].previousPageVersionId;
-      if (run.pauseRequested || !["queued", "running"].includes(run.status) || run.activeOperationId || pending && !exactRevision) {
-        invalid("Page batch selection requires idle, unpaused work with no pending decision.");
+      if (!["queued", "running", "paused"].includes(run.status) || run.activeOperationId || pending && !exactRevision) {
+        invalid("Page batch selection requires idle work with no pending decision.");
       }
       const active = await database.collections.generation_jobs.findOne({ bookletId: run.bookletId, jobType: "dify_pages",
         status: { $in: ["pending", "running", "paused", "unknown", "partial"] } }, options);
@@ -205,7 +208,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       }
       const timestamp = now();
       const changed = await database.collections.experiment_runs.updateOne({ _id: run._id, revision: value.expectedRevision,
-        activeOperationId: null, pauseRequested: false }, { $inc: { revision: 1 }, $set: { updatedAtMs: timestamp } }, options);
+        activeOperationId: null, pauseRequested: run.pauseRequested }, { $inc: { revision: 1 }, $set: { updatedAtMs: timestamp } }, options);
       if (!changed.matchedCount) throw new ExperimentRepositoryError("stale_revision", "Page batch admission lost the run revision.");
       await database.collections.generation_jobs.insertOne({ _id: value.jobId, bookletId: run.bookletId, jobType: "dify_pages",
         status: "pending", idempotencyKey, inputJson: JSON.stringify(value.batch), errorJson: null,
