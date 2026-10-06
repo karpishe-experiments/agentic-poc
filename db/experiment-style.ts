@@ -42,7 +42,15 @@ export function createExperimentStyleAssembly(input: { database: Database; store
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" }, { role: "tester" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
-    if (run.mode !== "simulated" || (!recovered && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
+    // The original image callback can arrive before publication GET readback.
+    // Permit source reads for that exact claimed unknown J13 operation only;
+    // assembly mutations and later publication/approval checks remain unchanged.
+    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+        role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: "simulated",
+        state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
+        parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
+    if (run.mode !== "simulated" || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");

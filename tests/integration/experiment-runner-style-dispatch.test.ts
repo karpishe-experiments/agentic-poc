@@ -59,6 +59,8 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
   let paginationTerminal: "failed" | "stopped" | null = null;
   let reverseReferenceReadback = false;
   let lostJudgeResponse = false;
+  let lostBeforeUpload = false;
+  let lateImage: { identity: { runId: string; operationId: string; workflowRunId: string; parentWorkflowRunId: string | null; inputFingerprint: string }; binding: BookletRunnerConfig["bindings"][number]; referenceFileIds: string[] | undefined } | null = null;
   let acknowledgement: "normal" | "missing" | "nonstring" | "running" | "failed" = "normal";
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input) => {
@@ -76,6 +78,12 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
       let outputs: Record<string, unknown>;
       if (binding.role === "image") {
         expect(operationContext.role).toBe("image");
+        if (lostBeforeUpload && operation.taskId === "J13") {
+          lostBeforeUpload = false;
+          lateImage = { identity: { ...identity, inputFingerprint: operation.inputFingerprint }, binding, referenceFileIds: input.referenceFileIds };
+          saved.set(workflowRunId, { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "running", outputs: {} });
+          return { kind: "unknown" };
+        }
         if (pageClarification && operation.taskId === "J13") {
           pageClarification = false;
           const result: RoleResult = { kind: "clarification", payload: { question: "Should the robot look pleased in this approved scene?" } };
@@ -196,7 +204,22 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     return completed;
   }
   return { database, repository, context, config, runId, store, runtime, uploadReference, dispatcher, reachSamples, reachSheet, reachPagination, reachPageImageWithReferences, testerDecision,
-    faults: (value: { lostJudge?: boolean; reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+    async finishLateImage(invalidIdentity = false) {
+      if (!lateImage) throw new Error("No retained late image callback.");
+      const bytes = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#74aadd" } }).png().toBuffer();
+      const result = await createExperimentImageStorage({ database, store, now: () => clock++ }).complete({
+        identity: { ...lateImage.identity, ...(invalidIdentity ? { workflowRunId: randomUUID() } : {}) }, content: bytes,
+      });
+      saved.set(lateImage.identity.workflowRunId, { id: lateImage.identity.workflowRunId,
+        workflow_id: lateImage.binding.publishedWorkflowId, status: "succeeded", outputs: {
+          image_result: JSON.stringify({ ...lateImage.identity, assetId: lateImage.identity.operationId, sha256: result.operation.resultDigest }),
+          ...(lateImage.referenceFileIds ? { reference_files: lateImage.referenceFileIds.map((record_id) => ({ type: "image", transfer_method: "local_file",
+            reference: `dify-file-ref:${Buffer.from(JSON.stringify({ record_id })).toString("base64url")}` })) } : {}),
+        } });
+      return result;
+    },
+    faults: (value: { lostBeforeUpload?: boolean; lostJudge?: boolean; reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+      lostBeforeUpload = value.lostBeforeUpload ?? false;
       lostJudgeResponse = value.lostJudge ?? false;
       reverseReferenceReadback = value.reverseReferences ?? false;
       pageClarification = value.pageClarification ?? false;
@@ -538,6 +561,38 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(env.runtime.start).toHaveBeenCalledTimes(posts);
   }, 120_000);
 
+  it("recovers the original J13 upload after a claimed timeout without replay or another reservation", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    const before = (await env.repository.getRun(env.runId))!;
+    env.faults({ lostBeforeUpload: true });
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 });
+    expect(operation.verifiedWorkflowId).toBeFalsy();
+    const blocked = (await env.repository.getRun(env.runId))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
+    expect(blocked.counters.logicalImage).toBe(before.counters.logicalImage + 1);
+    const imagePosts = () => vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image").length;
+    const posts = imagePosts(), uploads = env.uploadReference.mock.calls.length;
+    await expect(env.finishLateImage(true)).rejects.toThrow();
+    const bible = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12", subjectId: operation.subjectId }))!;
+    await env.database.collections.artifacts.updateOne({ _id: bible._id }, { $set: { state: "needs_review" } });
+    await expect(env.finishLateImage()).rejects.toThrow();
+    expect((await env.repository.getOperation(operation._id))!.imageCompletionDigest).toBeFalsy();
+    await env.database.collections.artifacts.updateOne({ _id: bible._id }, { $set: { state: bible.state } });
+    await env.finishLateImage();
+    await env.dispatcher().advance(env.runId);
+    expect(imagePosts()).toBe(posts);
+    expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const recovered = (await env.repository.getOperation(operation._id))!;
+    expect(recovered).toMatchObject({ state: "succeeded", reservationCount: 1, verifiedWorkflowId: env.config.bindings.find((item) => item.role === "image")!.publishedWorkflowId });
+    const artifact = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId });
+    expect(artifact).toBeTruthy();
+    expect(await env.database.collections.artifact_versions.countDocuments({ artifactId: artifact!._id })).toBe(1);
+    expect((await env.repository.getRun(env.runId))!.counters.logicalImage).toBe(blocked.counters.logicalImage);
+  }, 120_000);
   it("recovers a lost J13 image response through GET without repeating upload or execution", async () => {
     const env = await setup("playful_kid", 17, true);
     await env.reachPageImageWithReferences();

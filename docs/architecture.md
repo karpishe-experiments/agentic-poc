@@ -266,6 +266,11 @@ operation in the item’s `pausedOperationIds` history. Reconciliation returns t
 same ordered item to pending. Resume can attach a fresh operation without
 discarding earlier pages or resetting the batch. Unknown outcomes, unverified
 attempts and actual failures do not receive this exception.
+The exact active claimed J13 operation can read its original approved style and
+sheet sources while its outcome is unknown. This permits a late authenticated
+binary callback before publication readback. Current-source and callback identity
+checks still apply. Assembly mutation remains blocked during active unknown work;
+saved J13 materialization still requires publication verification through GET.
 Live full-booklet acceptance is still incomplete; the candidate is not ready for
 publication.
 The read-only generation verifier derives completion evidence from the current

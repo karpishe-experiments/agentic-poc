@@ -1004,8 +1004,15 @@ passed (23 tests, no retries). Focused lint, whitespace and source typechecking
 passed; the source check excludes ignored validation worktrees and stale generated
 Next.js route validators. Standard clean-candidate validation remains required.
 Independent review passed for this correction. This is local evidence, not live Dify acceptance. Historical
-batch revision handling and late output recovery after a claimed timeout remain
-publication blockers.
+batch revision handling remains a publication blocker.
+
+The late-output correction passed its focused claimed-timeout integration check
+without retries. The original J13 operation saves its delayed binary output,
+then GET verifies publication and assembles that result. No extra image dispatch,
+reference upload or reservation occurs. Wrong callback identity and a stale J12
+source are rejected. All 17 affected style/sheet assembly tests passed without
+retries. Focused lint, source typechecking, whitespace, 17 local link targets and
+independent review passed. This in-process test does not prove deployed callbacks.
 
 Browser test through the runner: launch, inspect progress, pause/resume, reload,
 open saved booklet/pages, inspect warnings and reports. Do not claim a Playwright

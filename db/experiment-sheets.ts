@@ -47,7 +47,14 @@ export function createExperimentSheetAssembly(input: { database: Database; store
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
-    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
+    // Read original approved references for a late callback from the exact
+    // claimed J13 operation. This does not authorize assembly or a new dispatch.
+    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+        role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: "simulated",
+        state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
+        parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
+    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
