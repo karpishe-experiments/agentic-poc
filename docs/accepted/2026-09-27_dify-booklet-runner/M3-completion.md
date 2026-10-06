@@ -3,6 +3,14 @@
 **State:** In progress; full-booklet acceptance remains pending. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
 **Predecessor:** [M2](M2-references.md). Apply [EXECUTION](EXECUTION.md).
 
+Track missing private bindings and permissions only in the
+[readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
+Keep technical readiness and acceptance evidence here. Apply the
+[three validation levels](EXECUTION.md#validation-levels-and-result-reuse);
+use named cases/small suites per edit and reuse valid results at local commits.
+Broad affected validation and two clean reviews belong to the frozen publication
+candidate, not every implementation increment.
+
 ## Compact remaining delivery
 
 Use three checkpoints for the remaining M3 work. This sequence consolidates

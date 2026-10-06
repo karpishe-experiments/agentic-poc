@@ -199,14 +199,29 @@ unchanged.
 
 **Coverage:** AC04–AC13.
 
-- Confirm exact local/staging database names, asset roots and storage prefixes. Verify they cannot target production or unrelated files. Preserve a sanitized summary of the previous trial.
-- Perform required clean-baseline setup only at the verified, explicitly authorized checkpoint. If local reset is needed earlier for implementation, apply the same checkpoint then; do not delay basic local setup until Real testing.
-- Use existing staging deployment procedures with explicit authorization. No new secrets or infrastructure unless a demonstrated requirement is separately approved.
-- Deploy and verify application/Dify configuration compatibility before acceptance runs. Balanced testing may use an earlier authorized staging deployment if needed; no implicit deployment authority follows from milestone order.
-- Obtain explicit paid-execution authorization within the agreed call limits.
-- Complete the 3-page Real case first. Resolve technical blockers, rerun affected Simulated/Balanced checks after corrections, and retain a clean successor before advancing.
-- Then complete the 5-page case, followed by the 8-page case. Stop progression on a technical failure; do not automatically raise budgets.
-- Keep all failed predecessors, successful successors, assets, prompts/configuration evidence and reports. Acceptance runs have no manual repair during execution.
+M5 remains planned, pending M4 acceptance. Use the three
+[M5 checkpoints](M5-real.md#three-execution-checkpoints):
+
+| Checkpoint | Work and exit |
+| --- | --- |
+| 1. Confirm readiness once | Reconcile M4 successes, exact published bindings, actual image-reference transport, accounting and model/token/retry settings. Reuse valid evidence and the completed staging reset; run only missing or invalidated non-billable checks. Bundle private setup and finite Real campaign authorization. |
+| 2. Run the ordered Real campaign | Kid 3 pages → Parent 5 pages → Creator 8 pages, each plus cover. Advance only after an uninterrupted success. Use one checklist for required assets, exact versions/per-page approvals, lettering/style/reference routing, reports, durable bytes and usage. Retain persona-specific multi-panel requirements. |
+| 3. Record evidence and hand off | Keep one concise M5 exit record linking configuration, runs, assets, usage, failures and successors. Hand the retained baseline to M6; defer quality-only improvements. |
+
+Default proposal: three initial runs, zero successors, at most 500 LLM and 46 real
+image requests; explicit spending approval is still required. Per-run limits remain
+120/160/220 LLM and 12/14/20 image requests; baseline outputs remain 9/11/15.
+Additional paid runs, including Balanced reruns, need remaining finite authority.
+
+Do not routinely reset or redeploy. Preserve M1–M4 evidence; any necessary new
+reset needs exact-target approval and backup/preservation. Deploy only required
+changes after affected validation and two consecutive clean independent reviews;
+reuse unchanged simulation/Balanced proof. Preserve production and Cloud resources.
+On technical failure, stop progression, retain evidence, inspect unknown outcomes
+without automatic replay, and use linked successors after correction. Never call
+an in-place repaired run uninterrupted or increase limits/reset counters to conceal
+failure. Missing/corrupt outputs, invalid authorization and exhausted limits remain
+technical blockers; creative inconsistencies remain warnings.
 
 **Exit:** three retained uninterrupted Real completions, required saved images/approvals, reports and reconciled request evidence. Quality warnings remain visible and do not fail completion.
 

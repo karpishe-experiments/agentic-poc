@@ -3,6 +3,13 @@
 **State:** Planned. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
+Track private setup and paid permissions only in the
+[readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
+Keep model/accounting proof and campaign evidence here. Apply the
+[three validation levels](EXECUTION.md#validation-levels-and-result-reuse);
+reuse valid tests and repeat only affected checks during implementation/corrections.
+Complete broader affected checks before publication, not after each local commit.
+
 M4 remains planned, pending M3's deployed completion. This document update does
 not start runs, change configuration or grant spending/deployment authority.
 
@@ -26,8 +33,8 @@ retries, actual Dify publication/tool binding, and per-node reservation evidence
 Inspect source/configuration for hidden provider retries, not just node toggles.
 An opaque unbounded node is not acceptable for paid readiness.
 
-Before paid execution starts, bundle model/binding confirmation, any
-private credential handoff, staging release access and paid campaign authorization.
+Before paid execution starts, reconcile model/binding evidence here with the shared
+readiness register and bundle only its unresolved required actions into one handoff.
 Default proposal: three initial runs, one per persona, zero successors and at most
 500 LLM requests in total (120 + 160 + 220). This is not spending authorization.
 If successors are requested, obtain a finite allowance and show its additional

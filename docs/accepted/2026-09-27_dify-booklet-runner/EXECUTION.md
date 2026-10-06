@@ -63,7 +63,8 @@ A later readiness state is not a prerequisite for independent earlier work.
    its dependent operation, not before unrelated local implementation. Record
    `verified`, `not needed`, or `handoff required`, with dated evidence.
 4. Resolve discoverable IDs/settings through repository, MCP or inspected CLI
-   descriptors. For a required user action, send one consolidated handoff listing
+   descriptors. Record manual actions only in the readiness register in B; milestone
+   files retain technical evidence and link to that register. Send one consolidated handoff listing
    exact target, reason, private-entry location, requested authorization and
    how Codex will verify success. Never ask for secrets in chat.
 5. If an essential handoff remains, pause the dependent operation. Independent
@@ -107,21 +108,31 @@ selection does not change operation authority, request limits or acceptance.
 
 ## B. Authorization register
 
-Technical access is not authority. The current request asks for advance approvals;
-it does not itself approve all of the following. Record the user's actual answer
-and scope before marking a row granted.
+This is the canonical **readiness and manual-handoff register** for M0–M6.
+Technical access is not authority. Record verification and permission separately;
+never infer a grant from a working login. These are the latest recorded results,
+not fresh live checks. Recheck the required row before dependent execution.
 
-| Grant | Exact bounded scope | Current state |
-| --- | --- | --- |
-| Repository/release | Reviewed issue #65 runner PRs may merge after required CI and deploy through the existing staging release process; preserve Cloud and production | Runner scope granted by the operator on 2026-10-04 in this chat. Resets, paid calls, credential entry and existing Dify-resource changes are excluded. Main implementation ownership stays on the issue branch. |
-| Staging delivery exception | Reuse `agent/issue-65-community-probe-staging` to selectively carry reviewed runner commits; preserve Cloud and require release review/CI | Granted on 2026-10-04. Implementation and corrections stay on the main issue branch; this delivery branch does not authorize unrelated imports or changes. |
-| Browser control | Read-only Dify capacity/New Agent inspection and issue #65 runner UI verification in this chat | Runner UI verification granted on 2026-10-04. Dify edits and credential entry remain private or require separate authorization |
-| Dify writes | Create, edit, test without provider calls, publish and restore new `issue65-` probe/suite resources; existing Booklet Dify resources, credentials and workspace plan unchanged | Granted by the operator in this chat on 2026-09-27 |
-| Private setup | Login for the interface that fails; provision required suite execution keys and callback bindings privately; any direct-provider secret stays inside Dify | CLI and MCP inventory authenticated; new-suite bindings remain unverified |
-| Reset | Staging database `kids_booklet` and the whole `kids-booklet-staging-assets` bucket, after inventory and verified backup; activate Simulated-only runner after reset | Granted and executed on 2026-10-04; Reset `37216104737` and post-reset Check `37216248316` passed. Retained backup and exact scope are in M1. This does not grant another reset. Local reset, production, existing Dify resources and paid calls remain excluded. |
-| Balanced spending | Identified model, token/retry bounds and total campaign run allowance, including failed successors | Not granted |
-| Real spending | Identified image/text bindings and total campaign allowance, including failed successors | Not granted |
-| Probe cleanup | Explicit list of disposable resource IDs; no prefix-wide deletion | Not granted; retaining probes is acceptable |
+| Dependency / exact target | Technical status and evidence | Private reference / location (no values) | Required action / authority | Blocks / verification |
+| --- | --- | --- | --- | --- |
+| Community control: `https://dify.uniwares.co.uk`, workspace `ffac910f-2786-490e-90d8-07243d49741b` | MCP/CLI inventory and deterministic control passed; [M0](M0-readiness.md) | Separate Community CLI profile and local `DifyWf-Community-Codex` state; [access guide](../../dify-getting-started.md) | Private login only for an expired/failing interface. New `issue65-` model-free writes/publication/restoration granted in this chat on 2026-09-27; preserve existing Booklet resources, credentials and plan | Dependent Dify control; verify exact workspace with inventory, publication/read-back and applicable tool sync |
+| Runner app/callback bindings: issue #65 Community apps and Booklet staging | Fifteen M2 bindings live; sixteen M3 bindings prepared; additional J12 and judge readiness pending; [M2](M2-references.md), [M3](M3-completion.md) | Existing encrypted local binding files and protected `DIFY_BOOKLET_RUNNER_SETTINGS_JSON`; callback secret `BOOKLET_TOOL_KEY` in Dify | Reuse valid prepared bindings; collect only missing app keys privately through existing helpers. Credential entry remains operator-only | Dependent suite activation; read back exact publication IDs and prove authenticated runtime/callback round trip |
+| Image transport/accounting: selected Community image workflow | Local ordered transport/recovery candidate exists; live runtime ownership, size and provider reference/accounting proof pending; [M3 entry gate](M3-completion.md#entry-gate) | Existing image app binding; provider credentials inside Dify only | Resolve model-free capabilities first; privately configure only missing approved provider binding | Dependent final-page/Real execution; verify order/digests, runtime access, output recovery, retries and pre-call reservations |
+| Data/assets: staging `kids_booklet` and `kids-booklet-staging-assets` | Saved M1/M2 artifacts and byte retrieval passed; [M1](M1-runner.md), [M2](M2-references.md) | Existing protected staging DB/storage configuration | Reuse access; private repair only if required checks fail. No production data or credentials | Dependent persistence/storage; verify current readiness and original-byte retrieval without destructive changes |
+| GitHub/release: issue branch → `master`, reviewed staging delivery | Prior release/CI/deploy/check evidence in [M1](M1-runner.md), [M2](M2-references.md); candidate checks still required | Existing GitHub CLI/MCP session and protected deployment access | Runner merge/staging deployment granted on 2026-10-04 in this chat after required review/CI. Preserve Cloud/production; exclude resets, paid calls, credential entry and existing Dify-resource changes | Release only; verify exact PR SHA/checks, required human reviews, deploy digest and staging Check |
+| Staging delivery exception: `agent/issue-65-community-probe-staging` | Selective delivery used; [M1](M1-runner.md), [M2](M2-references.md) | Same GitHub/deployment access | Granted on 2026-10-04 for selective reviewed runner commits; main implementation/corrections stay on issue branch; no unrelated imports | Staging delivery; inspect complete release diff and required CI/reviews |
+| Browser control: read-only Dify capacity/New Agent inspection and runner UI | Prior browser evidence in [M0](M0-readiness.md), [M1](M1-runner.md) | Private browser login; no cookie values in evidence | Runner UI verification granted on 2026-10-04 in this chat. Dify edits/credential entry require their separate authority; authorization does not carry to another chat | Browser verification only; inspect allowed UI flows and retain sanitized evidence |
+| Reset: staging `kids_booklet` and entire `kids-booklet-staging-assets` bucket | Granted/executed 2026-10-04; Reset `37216104737`, Check `37216248316`; backup/targets in [M1](M1-runner.md#current-staging-transition-evidence) | Protected staging configuration and retained private backup | No further reset needed merely for a milestone. A new reset needs exact-target authorization, backup and evidence preservation; local/prod/Dify resources excluded | Only a necessary clean-baseline transition; verify inventory, backup, target isolation and post-reset Check |
+| Balanced campaign: three persona runs on staging | Model/token/retry/internal-call enforcement pending; [M4](M4-balanced.md) | Text provider credentials inside Dify; approved model/binding references | Not granted. Bundle missing setup and finite campaign approval; default three initial runs, zero successors, ≤500 LLM requests, zero real images | Paid Balanced calls; verify models, branch routing, reservations and approved run/successor allowance |
+| Real campaign: ordered 3/5/8-page staging runs, each plus cover | M4 completion and image-provider readiness pending; [M5](M5-real.md) | Text/image provider credentials inside Dify; approved model/binding references | Not granted. Default three initial runs, zero successors, ≤500 LLM and 46 real image requests; any additional allowance explicit | Paid Real calls; verify M4 successes, reference support, accounting, settings and approved finite campaign |
+| Probe cleanup: explicitly listed disposable IDs only | Retained probes documented in [M0](M0-readiness.md) | Existing Community control profile | Not granted; retaining probes is acceptable; no prefix-wide deletion | Cleanup only; verify exact IDs and confirmation before removal |
+
+Update a row when evidence or scope changes, including its date and link. Milestone
+files keep observed results and detailed setup procedures, not a second manual
+action queue. If a required dependency is missing, add its exact target and private
+reference here before the consolidated handoff; do not invent a credential name.
+Ask again only for new resources, changed scope, expired/revoked access or exhausted
+campaign authority. An unresolved row blocks only its dependent operation.
 
 Codex may select and record the simplest verified layout: independent modules
 first, small focused groups when necessary, never one all-role workflow. Verify
@@ -145,11 +156,43 @@ no campaign-count cap, but each run has a bounded loop.
 
 Use one working branch and sequential integration. Delegate bounded read-only
 investigation, tests or reviews where useful; do not let reviewers edit the diff.
-Run focused tests after each slice. Do not start paid calls to debug basic schemas.
+Use the validation levels below. Do not start paid calls to debug basic schemas.
+
+### Validation levels and result reuse
+
+| Level | When | Required checks |
+| --- | --- | --- |
+| Implementation loop | After a bounded slice or correction | Smallest relevant test files or named cases, focused lint and independent review of changed behavior. Immediately check persistence, authorization, recovery and provider-accounting regressions when those boundaries change. |
+| Local checkpoint | Before a work-in-progress commit | Reuse still-valid focused results/reviews; inspect the entire proposed commit, secrets/unexpected files, whitespace and affected documentation. Obtain review for any newly included behavior; no automatic broad-suite rerun. Label unfinished acceptance explicitly. |
+| Publication checkpoint | Frozen candidate before code/configuration publication | Typecheck, lint, plan/CI-selected affected suites, required agent checks and applicable browser/contracts checks; two consecutive clean independent reviews of the exact candidate and evidence. Required CI still runs. |
+
+For M0–M6, these levels govern when milestone verification commands run. Lists of
+broad checks in slice packages are publication sets, not instructions to repeat
+all checks after every edit or local commit. Historical test results remain evidence,
+not a requirement to repeat their commands.
+
+Record commands, test scope, result, source/configuration input identity and test
+environment assumptions in the existing milestone evidence. Reuse passing results
+only while relevant inputs are unchanged. Corrections invalidate affected results,
+not unrelated suites. Use clean validation inputs when stale generated files or
+old output copies contaminate a checkout; do not label a scoped substitute as a
+passing standard typecheck.
+
+Check test prerequisites before expensive campaigns. Use non-secret test fixtures
+and isolated resources, never paid execution or live data to satisfy test setup.
+After a failure, inspect the failed step and run a focused reproduction first.
+Do not repeat an unchanged deterministic failure or hide it with test retries.
+Do not run duplicate broad commands concurrently; keep MongoDB integration files
+serial. Run one broad local set per frozen candidate, not per small edit. Repeat
+broad checks when shared behavior, suite assumptions or other relevant inputs
+change; otherwise rerun affected checks only. CI selectors and required checks are
+unchanged. Live acceptance follows deployment; mocks or browser discovery alone
+cannot replace it.
 
 Before publishing the candidate configuration/code:
 
-1. Freeze the candidate diff and run affected validation. Record commands/results.
+1. Freeze the candidate diff and complete publication-level validation, reusing
+   still-valid results. Record commands/results and relevant input identities.
 2. Independent read-only review A checks the complete milestone diff and acceptance
    available evidence, including Dify configuration and release compatibility.
    Live acceptance of an unpublished release is not a prerequisite for this review.
@@ -186,6 +229,9 @@ as well as the caller configuration; drain before their synchronization. See
 [M0 binding evidence](M0-readiness.md#binding-change-and-restoration-evidence).
 
 ### Execution readiness dependencies
+
+Section B owns all manual actions, permissions and private credential references.
+The table below is a technical evidence index, not another handoff queue.
 
 | Dependency | Required proof/handoff | Blocks |
 | --- | --- | --- |

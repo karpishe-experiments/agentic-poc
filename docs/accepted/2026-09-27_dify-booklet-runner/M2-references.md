@@ -3,6 +3,14 @@
 **State:** Fifteen model-free bindings activated on staging on 2026-10-05. The subject-aware index is active and the legacy restriction is removed. All three personas reached the J10 reference boundary with approved artifacts and 5/5/6 saved images. Final pages and booklet completion remain pending. **Coverage:** J03–J10; AC01–AC02, AC05–AC06.
 **Predecessor:** [M1](M1-runner.md). Apply [EXECUTION](EXECUTION.md).
 
+Track private setup and permissions only in the
+[readiness/manual-handoff register](EXECUTION.md#b-authorization-register),
+with links to technical evidence here. Apply the
+[three validation levels](EXECUTION.md#validation-levels-and-result-reuse):
+use focused contracts/regressions per slice, reuse unchanged results at local
+commits, and defer broad affected checks to the frozen publication candidate.
+Retained historical commands/results do not require another campaign.
+
 ## Current live reference evidence — 2026-10-05
 
 The approved dispatcher synchronization, drained index maintenance and expanded
@@ -40,7 +48,8 @@ Revise this file against M1's actual schemas, callbacks and Dify node bindings.
 Require a staging J01/J02 success, role separation, saved delegation and restart
 proof. Confirm the three fixed briefs and subject-ID materializer. Verify file
 transfer and storage using synthetic bytes before image-provider work. Bundle
-any missing Dify configuration or staging-login handoff before implementation.
+any required private action through the shared readiness register before its
+dependent operation; missing live setup does not block unrelated local work.
 This milestone uses simulated images and text; no paid approval is required.
 
 ## Compact execution packages from M1
