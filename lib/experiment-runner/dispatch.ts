@@ -227,7 +227,9 @@ export function createExperimentDispatcher(deps: {
           const references = JSON.parse(current.referenceUploadsJson ?? "null") as { uploadFileId: string }[];
           const expectedIds = references.map((item) => item.uploadFileId);
           const returned = execution.outputs?.reference_files;
-          matches = (Array.isArray(references) && expectedIds.length === 0 && returned === undefined) ||
+          // Dify 1.17.1 serializes an unprovided optional file-list as null.
+          // This is empty evidence only when no references were expected.
+          matches = (Array.isArray(references) && expectedIds.length === 0 && (returned === undefined || returned === null)) ||
             verifyReferenceReadback(returned, expectedIds);
         } catch { /* Missing or corrupt retained evidence cannot authorize read-back. */ }
         if (!matches) {
