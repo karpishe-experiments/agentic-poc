@@ -866,13 +866,9 @@ feedback dispatch, independent judge binding/execution, batch jobs, final status
 transition and deployed acceptance remain incomplete.
 Do not publish or activate this partial candidate as full M3 acceptance.
 
-The current Community MCP workspace/app inventory succeeded for workspace
-`ffac910f-2786-490e-90d8-07243d49741b`. J12 draft read-back retains hash
-`76eabb774c171af451fb75375384e5bdaf1c5bff36df1c0aa098213b9977e07f`,
-nine nodes and no model/image node. Published-version listing returned no versions.
-The sixteen-binding M3 private file exists; the separate seventeen-binding J12 file
-does not. One new J12 private publication/key handoff remains; do not repeat the
-sixteen existing bindings or infer runtime authentication from administrative MCP.
+The latest Community publication and private-binding status is recorded in
+[the final binding preparation candidate](#final-binding-preparation-candidate).
+Do not infer runtime authentication from administrative MCP inventory.
 
 The local J13 source verifier checks the current approved J12 page, exact
 dependency edges, and selected reference bytes against saved hashes, sizes and
@@ -1053,16 +1049,51 @@ errors before MongoDB setup. The unchanged runtime inputs at `04bda6a` passed
 `vitest run experiment-runner tests/integration/restart-resume.test.ts --bail=1
 --retry=0`: 65 files and 563 tests in 1047.76 seconds, using fake providers and an
 isolated database. Process cleanup completed with exit 0. Twelve agent fixtures
-passed on the same runtime inputs. Required CI and two final clean publication
-reviews remain pending; no production/container build was run.
+passed on the same runtime inputs. Two consecutive independent publication
+reviews passed for candidate `a7565df02bc81d83b7d5bb3c438905620fdda281`.
+Validate `37473823718` then passed, including both Linux deployment shell suites
+and Terraform validation/tests. PR #149 merged into `master` as
+`c3207e78188518e5defaea28d0793ecb6c8d7163`.
+No production/container build was run during validation. Selective staging
+delivery, final binding activation and deployed M3 acceptance remain pending.
 
 Community MCP inventory on 2026-10-06 verified workspace
-`ffac910f-2786-490e-90d8-07243d49741b`. J12 and judge remain unpublished. The corrected
+`ffac910f-2786-490e-90d8-07243d49741b`. The corrected
 local judge graph has 11 nodes and 11 edges; server-default MCP validation returned
 zero errors and warnings. A draft-sync preview showed only the report-routing
-correction and no validation issues. The stored judge draft still has the earlier
-nine-node graph. Validation and preview do not establish synchronization or
-publication.
+correction and no validation issues. The attempted MCP synchronization returned
+HTTP 400 because the bridge sends `environment_variables`, which the pinned
+server rejects. Read-back confirmed that this failure did not change the draft.
+The inspected official CLI import then replaced only the graph from the retained
+private export. Final MCP read-back matches the reviewed source exactly: judge
+has 11 nodes and 11 edges, hash
+`a2df41b37b6451e5dac2a130a7ca3625e1a915112f5cae14c65176d5c92d6892`.
+The same fallback updated J12's final-profile simulation code. Server-default
+validation returned no issues, and final graph read-back matches the reviewed
+source, hash `6c5704556273dbce3cd16f8a67599987b6be0174bdb795f00cbdfd1d5237267d`.
+Both app IDs and environment-variable definitions remain unchanged. Private
+exports and candidate DSL files remain outside Git.
+The operator subsequently published both workflows and prepared the encrypted
+eighteen-binding file `issue65-m3-j13-bindings.dpapi.xml`. Latest publication
+read-back identifies J12 `b57240f9-a7ee-40a7-b106-029137c0a108` and judge
+`e8949547-0454-4d5c-8912-018759d3c2e8`. Node instructions match the reviewed
+source; only start, code, HTTP, condition and end nodes are present. Neither
+publication has a Workflow Tool binding. This does not prove callback-key
+authentication or final-suite execution. Do not repeat private key preparation.
+The [shared readiness register](EXECUTION.md#b-authorization-register) tracks
+remaining publication, activation and runtime checks.
+
+The saved-output correction routes booklet inspection through
+`/experiments/booklet-runs/<runId>` and the existing authenticated detail API.
+Legacy Booklet services still exclude `dify_booklet_v1`. J13 versions now expose
+cover/page previews and original-image links, including historical outputs.
+Focused UI tests passed 23 checks without retries. The isolated browser fixture
+passed one test and verified navigation with an experiment-profile booklet,
+cover/page previews and original links. Its API and image responses remain
+fixtures; this does not prove live Dify completion. Standard typecheck passed in
+clean main and staging candidate worktrees; focused lint passed. The root checkout
+typecheck was contaminated by temporary worktree sources and stale Next.js types,
+so it is not reported as a pass.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
