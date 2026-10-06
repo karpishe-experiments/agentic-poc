@@ -1031,12 +1031,13 @@ test-list discovery as browser execution. Use the existing e2e runner with a foc
 new spec, fixtures and no providers; record a separate authorized staging browser
 smoke through the live Dify simulated branch.
 
-The current `scripts/run-e2e.ts` starts `next start` and seeds local agents.
-Adapt its explicit experiment test profile to start a development server and
-initialize v2 fixture data without agent seeds. Keep the existing profile for
-unaffected tests. This permits focused browser execution without inserting a
-production build into validation. Test cleanup still stops the isolated server
-and MongoDB. Do not run the current wrapper unchanged and assume it tests v2.
+The default `scripts/run-e2e.ts` profile retains `next start` and local agent seeds.
+Use `npm run test:e2e -- --profile experiment-runner` for the new runner fixture.
+This profile starts a development server and initializes isolated MongoDB storage
+without agent seeds. Its browser fixture intercepts runner APIs and image responses;
+it does not prove backend persistence or deployed Dify execution. Cleanup stops the
+isolated server and MongoDB. Browser execution remains pending; adding this profile
+does not satisfy the browser publication gate.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
