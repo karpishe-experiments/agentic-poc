@@ -258,20 +258,35 @@ before consuming an allowance. The local image-clarification path retains a
 page-scoped question and answer without creating an asset; binary completion and
 clarification cannot replace each other's terminal result. Each clarification
 consumes its logical image reservation, not a creative revision allowance.
-Final reports, final completion and live acceptance are still incomplete; the
-candidate is not ready for publication.
+Live full-booklet acceptance is still incomplete; the candidate is not ready for
+publication.
 The read-only generation verifier derives completion evidence from the current
 run revision, exact approved artifact sets, dependency edges and retained image
 bytes. It does not change run status. The pure advisory report contract checks
 run/configuration/version identity, finding targets and explicit missing evidence.
 Visual assessment requires every final page and cover; monetary availability
 must match actual, estimated or absent cost evidence. Independent judge
-execution is not yet wired. The local tester-feedback persistence path
+execution is routed separately in the full eighteen-binding local profile. The tester-feedback persistence path
 uses immutable operation results, rechecks complete generation evidence and
 requires publication verification before acceptance. The runner projection
 returns retained report and operation/publication identities separately from
 whether its version evidence still matches the current artifact versions.
-Automatic evaluation dispatch and the final run transition remain incomplete.
+The dispatcher records generation completion only after the thirteen artifact
+sets, exact approvals and durable bytes pass verification. It saves the generation
+timestamp and exact version IDs, marks the Booklet complete, and then runs tester
+feedback followed by the independent judge. Evaluation becomes complete only
+after both exact publication-verified reports pass validation. Missing reports
+and uncertain evaluation outcomes leave generation success intact. After
+generation completion, only advisory evaluation is permitted; revisions require
+a successor run. Repository admission and report saving require the persisted
+generation marker, one verified tester report before the judge, and no duplicate
+reports. Shorter saved profiles retain their original slice boundary.
+Pause prevents new evaluation dispatch. Unknown report results use GET recovery,
+not execution replay. Repeated completion rechecks retained evidence without
+changing counters or the run revision.
+The runner inspector shows generation/evaluation status separately and links to
+the existing saved-booklet view. Advisory reports retain operation, workflow and
+publication identities and show whether their version evidence is current.
 The local context endpoint supplies claimed tester/judge operations with verified
 generation evidence, current artifacts, dialogue, warnings, usage counters and
 durable image identities. Initial execution can read this evidence before runtime

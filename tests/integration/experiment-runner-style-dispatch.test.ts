@@ -7,13 +7,14 @@ import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources, verifyCu
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
 import { materializeNarrativeResult } from "@/db/experiment-narrative";
-import { verifyExperimentGeneration } from "@/db/experiment-completion";
+import { verifyExperimentGeneration, createExperimentCompletionService } from "@/db/experiment-completion";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
+import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { BOOK_TASKS } from "@/lib/experiment-runner/narrative-tasks";
 import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
@@ -57,6 +58,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
   let lostPaginationResponse = false, lostManagerPaginationResponse = false, lostPageBibleResponse = false, pageClarification = false;
   let paginationTerminal: "failed" | "stopped" | null = null;
   let reverseReferenceReadback = false;
+  let lostJudgeResponse = false;
   let acknowledgement: "normal" | "missing" | "nonstring" | "running" | "failed" = "normal";
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input) => {
@@ -111,7 +113,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
         const lostManager = binding.role === "manager" && lostManagerPaginationResponse &&
           result.kind === "delegate" && result.payload.taskId === "J11";
         if (!(binding.taskId === "J11" && (lostPaginationResponse || paginationTerminal)) &&
-            !(binding.taskId === "J12" && lostPageBibleResponse) && !lostManager) {
+            !(binding.taskId === "J12" && lostPageBibleResponse) && !lostManager && result.kind !== "feedback" && result.kind !== "assessment") {
           await repository.completeOperation({ envelope: { runId, operationId: operation._id, workflowRunId, inputFingerprint: operation.inputFingerprint, result },
             parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
         }
@@ -120,6 +122,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
       const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId,
         status: binding.taskId === "J11" && paginationTerminal ? paginationTerminal : "succeeded", outputs };
       saved.set(workflowRunId, execution);
+      if (binding.role === "judge" && lostJudgeResponse) { lostJudgeResponse = false; return { kind: "unknown" }; }
       if (binding.taskId === "J11" && lostPaginationResponse) { lostPaginationResponse = false; return { kind: "unknown" }; }
       if (binding.taskId === "J12" && lostPageBibleResponse) { lostPageBibleResponse = false; return { kind: "unknown" }; }
       if (binding.role === "manager" && lostManagerPaginationResponse && outputs.booklet_result &&
@@ -193,7 +196,8 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     return completed;
   }
   return { database, repository, context, config, runId, store, runtime, uploadReference, dispatcher, reachSamples, reachSheet, reachPagination, reachPageImageWithReferences, testerDecision,
-    faults: (value: { reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+    faults: (value: { lostJudge?: boolean; reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+      lostJudgeResponse = value.lostJudge ?? false;
       reverseReferenceReadback = value.reverseReferences ?? false;
       pageClarification = value.pageClarification ?? false;
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
@@ -207,16 +211,58 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }, next: () => clock++ };
 }
 describe("automatic saved J08 sample dispatch", () => {
-  it("does not provide report context to a judge before generation completes", async () => {
+  it("automatically completes generation and separate reports, recovering a lost judge response without replay", async () => {
+    const env = await setup("playful_kid", 18, true);
+    env.faults({ lostJudge: true });
+    let recovered = false, finished = false, checkedPendingEvaluation = false;
+    for (let step = 0; step < 210; step++) {
+      const outcome = await env.dispatcher().advance(env.runId);
+      const run = (await env.repository.getRun(env.runId))!;
+      if (run.generationCompletedAtMs != null && run.status === "queued" && !checkedPendingEvaluation) {
+        checkedPendingEvaluation = true;
+        const completion = createExperimentCompletionService(env.database, env.store);
+        await expect(completion.completeEvaluation({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() }))
+          .rejects.toThrow("Exactly one saved tester report and independent judge report");
+        await expect(env.repository.prepareOperation({ runId: env.runId, operationId: randomUUID(), expectedRevision: run.revision,
+          role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1,
+          inputFingerprint: "a".repeat(64), nowMs: env.next() })).rejects.toThrow("Completed generation permits evaluation only");
+        await env.repository.pause({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() });
+        const calls = vi.mocked(env.runtime.start).mock.calls.length;
+        expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
+        expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+        const paused = (await env.repository.getRun(env.runId))!;
+        await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.next() });
+      }
+      if (run.status === "blocked") {
+        expect(run.safeFailure).toBe("unknown_outcome");
+        expect(run.generationCompletedAtMs).toBeTypeOf("number");
+        expect(await env.database.collections.booklets.findOne({ _id: run.bookletId })).toMatchObject({ lifecycle: "completed" });
+        recovered = true;
+      }
+      if (outcome === "boundary") { finished = true; break; }
+    }
+    expect(finished).toBe(true); expect(recovered).toBe(true); expect(checkedPendingEvaluation).toBe(true);
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "completed", evaluationStatus: "complete", activeOperationId: null,
+      counters: { payableText: 0, payableImage: 0 } });
+    expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
+    expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "judge")).toHaveLength(1);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const completion = createExperimentCompletionService(env.database, env.store);
+    expect((await completion.completeEvaluation({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() })).revision).toBe(run.revision);
+    const before = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(before);
+  }, 120_000);
+  it("rejects evaluator reports and judge admission before saved generation completion", async () => {
     const env = await setup("playful_kid", 18, true);
     const run = (await env.repository.getRun(env.runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
-    await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+    await expect(env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
       role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text",
-      attempt: 1, inputFingerprint: "a".repeat(64), nowMs: env.next() });
-    await env.repository.beginDispatch({ runId: env.runId, operationId, parentWorkflowRunId: null, nowMs: env.next() });
-    await env.repository.claimOperation({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: env.next() });
-    await expect(env.context.getOperationContext({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId: null }))
-      .rejects.toThrow("Role context is not supported");
+      attempt: 1, inputFingerprint: "a".repeat(64), nowMs: env.next() })).rejects.toThrow("Evaluation requires saved generation completion");
+    const report = simulatedExperimentReport({ role: "tester", mode: "simulated", runId: env.runId,
+      configurationHash: run.configurationHash, versionIds: [workflowRunId], warningCount: 0 });
+    await expect(env.testerDecision({ kind: "feedback", payload: report }, false, true)).rejects.toThrow("Evaluation requires saved generation completion");
   });
   it("recovers a reference-free cover with omitted file output without replay", async () => {
     const env = await setup("playful_kid", 17, true);
@@ -463,6 +509,7 @@ describe("automatic saved J08 sample dispatch", () => {
       (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow();
     let boundary = false;
     for (let step = 0; step < 200; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "slice_complete") { boundary = true; break; }
       const outcome = await env.dispatcher().advance(env.runId);
       expect(outcome).not.toBe("blocked");
       if (outcome === "boundary") { boundary = true; break; }
@@ -494,6 +541,15 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(completedEvidence.referenceAssetIds).toHaveLength(persona === "professional_creator" ? 6 : 5);
     expect(new Set([...completedEvidence.finalAssetIds, ...completedEvidence.referenceAssetIds]).size).toBe(persona === "playful_kid" ? 9 : persona === "enthusiast_parent" ? 11 : 15);
     if (persona === "playful_kid") {
+      await createExperimentCompletionService(env.database, env.store).markGenerationComplete({ runId: env.runId,
+        expectedRevision: (await env.repository.getRun(env.runId))!.revision, nowMs: env.next() });
+      const assertAdmissionRejected = async (role: "tester" | "judge") => {
+        const run = (await env.repository.getRun(env.runId))!;
+        await expect(env.repository.prepareOperation({ runId: env.runId, operationId: randomUUID(), expectedRevision: run.revision,
+          role, taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1,
+          inputFingerprint: "a".repeat(64), nowMs: env.next() })).rejects.toThrow("Evaluation must save one tester report");
+      };
+      await assertAdmissionRejected("judge");
       const report = {
         schemaVersion: "2", role: "tester", mode: "simulated", runId: env.runId, configurationHash: completedEvidence.configurationHash,
         summary: "Simulated creator feedback; not a human UI usability assessment.",
@@ -533,6 +589,7 @@ describe("automatic saved J08 sample dispatch", () => {
         workflowRunId: retained.operation.workflowRunId!, inputFingerprint: retained.operation.inputFingerprint,
         result: { kind: "feedback", payload: report } }, parentWorkflowRunId: null, nowMs: env.next() });
       expect(reused.reused).toBe(true);
+      await assertAdmissionRejected("tester");
       expect((await env.context.getRunView(env.runId))!.reports).toMatchObject([{ operationId: retained.operation._id,
         verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "tester" && binding.persona === persona)!.publishedWorkflowId,
         matchesCurrentVersions: true, report }]);
@@ -551,6 +608,7 @@ describe("automatic saved J08 sample dispatch", () => {
         workflowRunId: judgeOperation.workflowRunId!, inputFingerprint: judgeOperation.inputFingerprint, result: assessment },
         parentWorkflowRunId: null, nowMs: env.next() });
       expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
+      await assertAdmissionRejected("judge");
       const sheet = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J09" });
       const sheetVersion = await env.database.collections.artifact_versions.findOne({ _id: sheet!.currentVersionId! });
       const sheetApproval = await env.database.collections.approvals.findOne({ experimentRunId: env.runId, artifactVersionId: sheet!.currentVersionId! });

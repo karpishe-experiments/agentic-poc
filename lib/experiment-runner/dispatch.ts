@@ -24,6 +24,8 @@ import { createExperimentReferenceUploads } from "@/db/experiment-reference-uplo
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
 import { createReferenceTransport, type ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { verifyReferenceReadback } from "@/lib/experiment-runner/reference-readback";
+import { createExperimentCompletionService } from "@/db/experiment-completion";
+import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -46,7 +48,7 @@ export function createExperimentDispatcher(deps: {
   const uploadReference = deps.uploadReference ?? createReferenceTransport(deps.config).upload;
   const batches = () => createExperimentPageBatchRepository({ database: deps.database, store: store(), now });
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
-    operation.role as "manager" | "specialist" | "tester" | "image", operation.taskId as SpecialistTask | null, run.persona);
+    operation.role, operation.taskId as SpecialistTask | null, run.persona);
 
   async function preparePageImage(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>, manager: ExperimentOperationDocument) {
     const work = view.nextPageIllustrationWork;
@@ -295,7 +297,8 @@ export function createExperimentDispatcher(deps: {
         const savedView = await context.getRunView(runId);
         if (savedView?.nextNarrativeTask === "slice_complete") {
           const last = (await repository.listOperations(runId)).at(-1);
-          if (last?.state === "succeeded" && last.verifiedWorkflowId && run.progressOperationId === last._id) return "boundary";
+          if (last?.state === "succeeded" && last.verifiedWorkflowId && run.progressOperationId === last._id &&
+              !savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).some((binding) => binding.role === "judge")) return "boundary";
         }
       }
       const expected = configurationSnapshot(deps.config, run.persona);
@@ -330,7 +333,25 @@ export function createExperimentDispatcher(deps: {
         }
         const view = await context.getRunView(runId);
         if (!view || !view.nextNarrativeTask) return "waiting";
-        if (view.nextNarrativeTask === "slice_complete") return "boundary";
+        let evaluationRole: "tester" | "judge" | null = null;
+        if (view.nextNarrativeTask === "slice_complete") {
+          if (!savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).some((binding) => binding.role === "judge")) return "boundary";
+          try {
+            const completion = createExperimentCompletionService(deps.database, store());
+            run = await completion.markGenerationComplete({ runId, expectedRevision: run.revision, nowMs: now() });
+            const reports = view.reports ?? [];
+            evaluationRole = !reports.some((item) => item.report.role === "tester" && item.matchesCurrentVersions) ? "tester" :
+              !reports.some((item) => item.report.role === "judge" && item.matchesCurrentVersions) ? "judge" : null;
+            if (!evaluationRole) {
+              await completion.completeEvaluation({ runId, expectedRevision: run.revision, nowMs: now() });
+              return "boundary";
+            }
+          } catch (error) {
+            if (error instanceof ExperimentRepositoryError && error.code === "stale_revision") return "waiting";
+            await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+            return "blocked";
+          }
+        }
         const latestSelection = latest?.role === "manager" && latest.state === "succeeded" ?
           (JSON.parse(latest.resultJson ?? "null") as { payload?: { taskId?: string; subjectId?: string } } | null)?.payload : null;
         const latestPageManager = view.nextNarrativeTask === "J13" && view.nextPageIllustrationWork?.kind === "image" &&
@@ -351,10 +372,10 @@ export function createExperimentDispatcher(deps: {
         const history = await repository.listOperations(runId);
         const last = history.at(-1);
         const initialDelegation = run.persona !== "professional_creator" && history.length === 0;
-        let role: "manager" | "specialist" | "tester" = view.nextNarrativeTask === "tester" || initialDelegation ? "tester" : "manager";
+        let role: "manager" | "specialist" | "tester" | "judge" = evaluationRole ?? (view.nextNarrativeTask === "tester" || initialDelegation ? "tester" : "manager");
         let taskId: SpecialistTask | null = null;
         let subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId;
-        if (!initialDelegation && view.nextNarrativeTask !== "tester" && last?.state === "succeeded" && last.role === "manager") {
+        if (!evaluationRole && !initialDelegation && view.nextNarrativeTask !== "tester" && last?.state === "succeeded" && last.role === "manager") {
           const result = JSON.parse(last.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string; subjectKind?: string; subjectId?: string } } | null;
           const delegated = result?.payload?.taskId;
           const sheet = delegated === "J09" || delegated === "J10";

@@ -18,7 +18,7 @@ import { configuredPageBibleTask, parsePageBibleForLayout } from "@/lib/experime
 import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { withPageImageRevisions } from "@/lib/experiment-runner/page-image-requests";
-import { verifyExperimentGeneration } from "@/db/experiment-completion";
+import { verifyExperimentGeneration, assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 import { validateExperimentReport } from "@/lib/contracts/experiment-reports";
 
 type RunPatch = Partial<Pick<ExperimentRunDocument, "activeDelegationId" | "decisionSequence" | "pendingDecisionJson" | "textRevisions" | "imageRevisions" | "evaluationStatus">>;
@@ -221,9 +221,13 @@ async function approveVersion(database: Database, session: ClientSession, run: E
 export async function materializeNarrativeResult(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RoleResult, warnings: NarrativeWarning[], nowMs: number, assetStore: () => AssetStore = createAssetStore): Promise<Materialized> {
   const summary: Record<string, unknown> = {};
   const runPatch: RunPatch = {};
+  if (run.generationCompletedAtMs != null && result.kind !== "feedback" && result.kind !== "assessment") {
+    invalid("Completed generation permits advisory reports only; use a successor for changes.");
+  }
   if (result.kind === "feedback" || result.kind === "assessment") {
     const role = result.kind === "feedback" ? "tester" : "judge";
     if (operation.role !== role) invalid("Report role differs from its evaluation owner.");
+    await assertExperimentEvaluationOrder(database, session, run, role);
     const generation = await verifyExperimentGeneration(database, session, run, assetStore(), operation._id);
     try {
       validateExperimentReport(result.payload, { role, mode: run.mode, runId: run._id, configurationHash: run.configurationHash,

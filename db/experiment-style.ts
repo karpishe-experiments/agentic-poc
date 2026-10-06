@@ -42,7 +42,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" }, { role: "tester" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
-    if (run.mode !== "simulated" || (!recovered && !["queued", "running", "paused"].includes(run.status)) ||
+    if (run.mode !== "simulated" || (!recovered && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");

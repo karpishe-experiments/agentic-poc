@@ -75,8 +75,37 @@ typecheck passed with ignored output copies and stale `.next` inputs excluded;
 this is not a standard typecheck pass.
 Deterministic reports retain exact versions and mark creative assessment as
 `not_assessed`; they do not claim image inspection. Automatic evaluation
-dispatch, final completion, UI selection and deployed acceptance remain pending.
+dispatch and final completion were pending at this context checkpoint; the local
+completion evidence below supersedes those two items. UI selection and deployed
+acceptance remain pending.
 This evidence applies to the local candidate, not a published configuration.
+
+### Local automatic completion evidence
+
+The eighteen-binding dispatcher now records generation success separately from
+evaluation. It verifies current artifacts, approvals and durable bytes, stores
+the exact generation versions and cover, then dispatches tester feedback and the
+independent judge. Final run completion requires both exact verified reports.
+Saved generation cannot be revised in place. Shorter saved profiles retain their
+slice boundaries.
+
+Three focused cases passed (66.12 seconds, no retries): automatic Kid completion,
+direct evaluator admission/report ordering, and the existing Kid report-context
+and approval journey. They cover reports before the saved generation marker,
+judge-before-tester and duplicate evaluator rejection, missing reports, rejected
+post-generation manager work, Pause/Resume before evaluation, lost judge response
+recovery without replay, zero payable counters and idempotent final completion.
+Focused lint and current-source typecheck passed; the
+latter excludes ignored output copies and stale `.next` inputs. These are local
+runtime fixtures, not proof of deployed Dify completion. Published judge/tester
+graphs, bindings, UI inspection and the deployed all-persona campaign remain
+publication/acceptance work.
+
+The existing runner inspector now shows generation and evaluation separately,
+links to the saved booklet and retains tester/judge report details with operation,
+workflow, publication and current-versus-historical version evidence. Ten UI unit
+checks passed. This is component-fixture evidence; browser and staging checks
+remain pending. Page/batch selection is still separate unfinished UI work.
 
 All three live Simulated M2 cases reached approved reference packages on
 2026-10-05; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).

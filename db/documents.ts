@@ -31,6 +31,8 @@ export type ExperimentRunDocument = BaseDocument & {
   predecessorRunId: string | null; configurationJson: string; configurationHash: string;
   status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
   evaluationStatus: "pending" | "running" | "complete" | "failed";
+  generationCompletedAtMs?: number;
+  generationVersionIds?: string[];
   revision: number; pauseRequested: boolean; activeOperationId: string | null;
   counters: ExperimentCounters; limits: { text: number; image: number; steps: number };
   safeFailure: "limit_exhausted" | "unknown_outcome" | "definite_failure" | null;

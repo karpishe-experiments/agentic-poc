@@ -222,6 +222,8 @@ export function createExperimentContextService(database: Database, options: { st
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
+      generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
+      generationCompletedAtMs: run.generationCompletedAtMs ?? null,
       safeFailure: run.safeFailure, activeOperationId: run.activeOperationId,
       createdAtMs: run.createdAtMs, updatedAtMs: run.updatedAtMs,
       pendingDecision: parseJson(run.pendingDecisionJson),
@@ -281,6 +283,7 @@ export function createExperimentContextService(database: Database, options: { st
     const view = await getRunView(run._id);
     if (!view) deny("Run view is unavailable.");
     if ((operation.role === "judge" || operation.role === "tester") &&
+        run.generationCompletedAtMs != null &&
         configuredPageIllustrationTask(run.configurationJson) &&
         chooseNext({ ...run, activeOperationId: null, pauseRequested: false,
           status: run.status === "paused" || run.status === "blocked" && run.safeFailure === "unknown_outcome" ? "running" : run.status },

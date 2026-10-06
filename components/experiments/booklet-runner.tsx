@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SavedArtifactImages } from "./saved-artifact-images";
+import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 
 const personas = [
   { id: "playful_kid", label: "Playful kid" },
@@ -20,6 +21,11 @@ type Run = {
   creatorMessages?: { id: string; sequence: number; content: unknown; createdAtMs: number }[];
   activeDelegation?: { id: string; taskIds: string[]; subjectKind: string; subjectId: string; testerDecisionId: string } | null;
   operationHistory?: Operation[];
+  bookletId?: string;
+  generationStatus?: "in_progress" | "complete";
+  evaluationStatus?: "pending" | "running" | "complete" | "failed";
+  reports?: { operationId: string; workflowRunId: string | null; verifiedWorkflowId: string | null;
+    matchesCurrentVersions: boolean; report: ExperimentReport }[];
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
 type PendingCreate = { persona: Persona; key: string; predecessorRunId?: string };
@@ -105,7 +111,7 @@ export function BookletRunner() {
   }
 
   return <section className="max-w-4xl space-y-8">
-    <header className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Dify booklet experiment</p><h1 className="text-3xl font-semibold">Booklet runs</h1><p className="text-[var(--muted-ink)]">Inspect saved narrative artifacts and approvals. Each run stops at its configured slice boundary; this does not complete a booklet.</p></header>
+    <header className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Dify booklet experiment</p><h1 className="text-3xl font-semibold">Booklet runs</h1><p className="text-[var(--muted-ink)]">Inspect saved artifacts, images, approvals and advisory reports. Shorter suites stop at their slice boundary; full suites record generation and evaluation separately.</p></header>
     <section aria-labelledby="new-run-heading" className="space-y-3 rounded-lg border border-[var(--border)] p-5">
       <h2 id="new-run-heading" className="text-xl font-semibold">Start simulated runs</h2>
       <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
@@ -117,6 +123,14 @@ export function BookletRunner() {
     <section aria-labelledby="saved-runs-heading" className="space-y-4"><h2 id="saved-runs-heading" className="text-xl font-semibold">Saved runs</h2>{loading ? <p role="status">Loading runs…</p> : runs.length === 0 ? <p>No runs yet.</p> : runs.map((run) => <article key={run.runId} className="space-y-4 rounded-lg border border-[var(--border)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">{personas.find((item) => item.id === run.persona)?.label ?? run.persona}</h3><p className="text-sm">{run.mode} · {run.status} · revision {run.revision}</p><p className="break-all text-xs text-[var(--muted-ink)]">Run {run.runId}</p></div><div>{run.pauseRequested || run.status === "paused" ? <button disabled={busy || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button disabled={busy || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}</div></div>
       <p>{run.brief}</p><p className="text-sm">Next: {run.nextNarrativeTask ?? "Awaiting state change"}{run.safeFailure ? ` · ${run.safeFailure}` : ""}</p>
+      <p className="text-sm">Generation: {run.generationStatus ?? "in_progress"} · Evaluation: {run.evaluationStatus ?? "pending"}</p>
+      {run.bookletId ? <a className="underline" href={`/booklets/${encodeURIComponent(run.bookletId)}`}>Open saved booklet</a> : null}
+      {run.reports?.length ? <section aria-label="Advisory reports" className="space-y-2"><h4 className="font-semibold">Advisory reports</h4>
+        {run.reports.map((entry) => <details key={entry.operationId}><summary>{entry.report.role === "tester" ? "Tester feedback" : "Independent judge assessment"} · {entry.report.mode}</summary>
+          <p>{entry.report.summary}</p><p className="text-sm">Current artifact versions: {entry.matchesCurrentVersions ? "match" : "do not match; report is historical"}</p>
+          <p className="break-all text-xs">Operation {entry.operationId} · Workflow {entry.workflowRunId ?? "unavailable"} · Published {entry.verifiedWorkflowId ?? "unverified"}</p>
+          <pre className="overflow-auto whitespace-pre-wrap text-sm">{format(entry.report)}</pre>
+        </details>)}</section> : null}
       {run.predecessorRunId ? <p className="break-all text-xs">Predecessor run: {run.predecessorRunId}</p> : null}
       {run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={busy || pending !== null} onClick={() => void create([{ persona: run.persona, key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
       <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · Image calls {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>

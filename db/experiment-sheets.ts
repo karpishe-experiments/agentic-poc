@@ -47,7 +47,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
-    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !["queued", "running", "paused"].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
+    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);

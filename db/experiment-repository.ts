@@ -16,6 +16,7 @@ import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-page-illustrations";
+import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -249,6 +250,12 @@ export function createExperimentRepository(database: Database, options: { store?
         const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
         if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
         if (run.status !== "queued" && run.status !== "running" || run.pauseRequested || run.activeOperationId) throw new ExperimentRepositoryError("invalid_state", "Run cannot prepare another operation.");
+        if (run.generationCompletedAtMs != null && input.role !== "tester" && input.role !== "judge") {
+          throw new ExperimentRepositoryError("invalid_state", "Completed generation permits evaluation only; use a successor for changes.");
+        }
+        if (input.role === "judge" || input.role === "tester" && run.generationCompletedAtMs != null) {
+          await assertExperimentEvaluationOrder(database, session, run, input.role);
+        }
         if (input.subjectKind === "book" && input.subjectId !== run.bookletId) throw new ExperimentRepositoryError("invalid_input", "Book subject must match booklet ID.");
         if (input.role === "specialist" && input.subjectKind !== (input.taskId === "J09" ? "character" : input.taskId === "J10" ? "location" : input.taskId === "J12" ? "page" : "book")) throw new ExperimentRepositoryError("invalid_input", "Specialist task requires its matching subject kind.");
         if (input.imageRequest && !j13) await assertCurrentImageSources(database, session, run, input.imageRequest);

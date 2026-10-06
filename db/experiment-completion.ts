@@ -1,5 +1,8 @@
 import type { ClientSession } from "mongodb";
-import type { Database } from "@/db/client";
+import { withMongoTransaction, type Database } from "@/db/client";
+import { z } from "zod";
+import { opaqueIdSchema } from "@/lib/contracts/common";
+import { experimentReportSchema, validateExperimentReport } from "@/lib/contracts/experiment-reports";
 import type { ExperimentRunDocument } from "@/db/documents";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
@@ -106,6 +109,83 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   });
   const finalAssetIds = finalPages.map((page) => page.assetId);
   if (new Set([...referenceAssetIds, ...finalAssetIds]).size !== referenceAssetIds.length + finalAssetIds.length) incomplete("Generated asset identities are duplicated.");
+  if (run.generationCompletedAtMs != null && (!run.generationVersionIds || run.generationVersionIds.length !== evidence.length ||
+      new Set(run.generationVersionIds).size !== evidence.length || evidence.some((item) => !run.generationVersionIds!.includes(item.versionId)))) {
+    incomplete("Completed generation versions changed; retain this run and use a successor.");
+  }
   return { runId: run._id, configurationHash: run.configurationHash, artifacts: evidence,
     finalPages, finalAssetIds, referenceAssetIds, warnings };
+}
+
+const transitionInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: z.number().int().nonnegative() });
+
+export async function assertExperimentEvaluationOrder(database: Database, session: ClientSession, run: ExperimentRunDocument, role: "tester" | "judge") {
+  if (run.generationCompletedAtMs == null || !run.generationVersionIds) incomplete("Evaluation requires saved generation completion.");
+  const bindings = savedConfigurationSchema.parse(JSON.parse(run.configurationJson));
+  const rows = await database.collections.experiment_operations.find({ runId: run._id, state: "succeeded",
+    role: { $in: ["tester", "judge"] } }, { session }).toArray();
+  const reports = rows.flatMap((operation) => {
+    const result = JSON.parse(operation.resultJson ?? "null");
+    if (result?.kind !== (operation.role === "tester" ? "feedback" : "assessment")) return [];
+    const report = experimentReportSchema.safeParse(result.payload);
+    const binding = bindings.find((item) => item.role === operation.role && item.taskId === null);
+    if (!report.success || !binding || operation.verifiedWorkflowId !== binding.publishedWorkflowId || !operation.workflowRunId ||
+        operation.reservationCount !== 1 || operation.dispatchStartedAtMs == null || operation.subjectKind !== "book" ||
+        operation.subjectId !== run.bookletId || operation.taskId !== null || operation.providerKind !== "text" ||
+        report.data.role !== operation.role || report.data.runId !== run._id || report.data.mode !== run.mode ||
+        report.data.configurationHash !== run.configurationHash || report.data.evidence.versionIds.length !== run.generationVersionIds!.length ||
+        report.data.evidence.versionIds.some((id) => !run.generationVersionIds!.includes(id))) incomplete("Saved evaluation report evidence is invalid.");
+    return [operation.role];
+  });
+  if (reports.includes("judge") || reports.filter((item) => item === "tester").length !== (role === "judge" ? 1 : 0)) {
+    incomplete("Evaluation must save one tester report before one independent judge report.");
+  }
+}
+
+// Generation and evaluation are separate persisted outcomes. No provider call,
+// artifact approval or quality threshold is part of either transaction.
+export function createExperimentCompletionService(database: Database, store: AssetStore) {
+  async function transition(raw: unknown, evaluation: boolean) {
+    const input = transitionInput.parse(raw);
+    return withMongoTransaction(database, async (session) => {
+      const run = await database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
+      if (!run || run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Completion run revision changed.");
+      const evidence = await verifyExperimentGeneration(database, session, run, store);
+      const bindings = savedConfigurationSchema.parse(JSON.parse(run.configurationJson) as unknown);
+      if (bindings.filter((binding) => binding.role === "judge").length !== 1) incomplete("Full completion requires the independent judge binding.");
+      if (evaluation) {
+        if (run.generationCompletedAtMs == null) incomplete("Generation success must be retained before evaluation completion.");
+        const rows = await database.collections.experiment_operations.find({ runId: run._id, state: "succeeded",
+          role: { $in: ["tester", "judge"] } }, { session }).toArray();
+        for (const role of ["tester", "judge"] as const) {
+          const reports = rows.filter((row) => row.role === role && JSON.parse(row.resultJson ?? "null")?.kind === (role === "tester" ? "feedback" : "assessment"));
+          const binding = bindings.find((item) => item.role === role && item.taskId === null);
+          if (reports.length !== 1 || !binding) incomplete("Exactly one saved tester report and independent judge report are required.");
+          const operation = reports[0];
+          if (operation.taskId !== null || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId ||
+              operation.providerKind !== "text" || operation.reservationCount !== 1 || !operation.workflowRunId ||
+              operation.dispatchStartedAtMs == null || operation.verifiedWorkflowId !== binding.publishedWorkflowId) incomplete("Report publication or authorization evidence is incomplete.");
+          try {
+            validateExperimentReport(JSON.parse(operation.resultJson!).payload, { role, mode: run.mode, runId: run._id,
+              configurationHash: run.configurationHash, artifacts: evidence.artifacts,
+              availableAssetIds: [...evidence.referenceAssetIds, ...evidence.finalAssetIds], requiredFinalAssetIds: evidence.finalAssetIds });
+          } catch { incomplete("Saved report no longer matches current generation evidence."); }
+        }
+      }
+      if (evaluation ? run.status === "completed" && run.evaluationStatus === "complete" : run.generationCompletedAtMs != null) return run;
+      const patch = evaluation ? { status: "completed" as const, evaluationStatus: "complete" as const, updatedAtMs: input.nowMs } :
+        { generationCompletedAtMs: input.nowMs, generationVersionIds: evidence.artifacts.map((item) => item.versionId), updatedAtMs: input.nowMs };
+      const updated = await database.collections.experiment_runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null },
+        { $set: patch, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("stale_revision", "Completion changed concurrently.");
+      if (!evaluation) {
+        const changed = await database.collections.booklets.updateOne({ _id: run.bookletId, experimentRunId: run._id },
+          { $set: { lifecycle: "completed", currentStage: "J13", coverAssetId: evidence.finalPages.find((page) => page.pageIndex === 0)!.assetId,
+            updatedAtMs: input.nowMs } }, { session });
+        if (changed.matchedCount !== 1) incomplete("Generation booklet identity is missing.");
+      }
+      return updated;
+    });
+  }
+  return { markGenerationComplete: (raw: unknown) => transition(raw, false), completeEvaluation: (raw: unknown) => transition(raw, true) };
 }

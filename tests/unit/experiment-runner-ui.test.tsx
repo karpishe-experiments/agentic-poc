@@ -9,6 +9,21 @@ beforeEach(() => { fetchMock = vi.fn().mockResolvedValue(new Response(JSON.strin
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("shows generation separately from blocked evaluation and keeps advisory reports inspectable", async () => {
+    const report = { role: "tester", mode: "simulated", summary: "Deterministic feedback; creative quality not assessed." };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, bookletId: "saved-book", status: "blocked",
+      generationStatus: "complete", evaluationStatus: "running", reports: [{ operationId: "feedback-1", workflowRunId: "run-1",
+        verifiedWorkflowId: "published-1", matchesCurrentVersions: true, report },
+      { operationId: "judge-1", workflowRunId: "run-2", verifiedWorkflowId: "published-2", matchesCurrentVersions: false,
+        report: { ...report, role: "judge", summary: "Historical judge assessment." } }] }] }), { status: 200 }));
+    render(<BookletRunner />);
+    expect(await screen.findByText("Generation: complete · Evaluation: running")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open saved booklet" }).getAttribute("href")).toBe("/booklets/saved-book");
+    expect(screen.getByText("Tester feedback · simulated")).toBeTruthy();
+    expect(screen.getByText("Independent judge assessment · simulated")).toBeTruthy();
+    expect(screen.getByText("Current artifact versions: do not match; report is historical")).toBeTruthy();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
   it("reads current state and retries a definite control conflict once", async () => {
     let writes = 0;
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
@@ -83,7 +98,7 @@ describe("booklet runner inspector", () => {
     expect(screen.getByText("title: Needs review.")).toBeTruthy();
     expect(screen.getByText("Text calls 1/120", { exact: false })).toBeTruthy();
     expect(screen.getByText("Balanced and Real modes are unavailable.")).toBeTruthy();
-    expect(screen.getByText("Each run stops at its configured slice boundary; this does not complete a booklet.", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Shorter suites stop at their slice boundary; full suites record generation and evaluation separately.", { exact: false })).toBeTruthy();
     expect(screen.getByText("Pending decision")).toBeTruthy();
     expect(screen.getByText("Active operation: specialist J02", { exact: false })).toBeTruthy();
     expect(screen.getByText("Active tester grant: J01, J02", { exact: false })).toBeTruthy();
