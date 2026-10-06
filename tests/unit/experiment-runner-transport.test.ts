@@ -27,13 +27,47 @@ describe("model-free runtime transport", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     const [url, options] = fetcher.mock.calls[0];
     expect(url).toBe("https://dify.test/v1/workflows/run");
-    expect(JSON.parse(options!.body as string)).toMatchObject({ inputs: { mode: "simulated", run_id: id, parent_workflow_run_id: "" } });
+    expect(JSON.parse(options!.body as string)).toEqual({
+      inputs: { run_id: id, operation_id: workflow, parent_workflow_run_id: "", mode: "simulated" },
+      response_mode: "blocking", user: `booklet-${id}`,
+    });
     expect(options?.redirect).toBe("error");
     expect(options?.body).not.toContain(config.callbackKey);
   });
+  it("serializes ordered local image descriptors in the custom reference_files input", async () => {
+    const secondFile = "00000000-0000-4000-8000-000000000003";
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: { id, workflow_id: workflow, status: "succeeded", outputs: {} } }));
+    await createWorkflowRuntime(config, fetcher).start(binding, { ...input, referenceFileIds: [secondFile, id] });
+    const body = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
+    expect(body.user).toBe(`booklet-${id}`);
+    expect(body.inputs.reference_files).toEqual([
+      { type: "image", transfer_method: "local_file", upload_file_id: secondFile },
+      { type: "image", transfer_method: "local_file", upload_file_id: id },
+    ]);
+    expect(body.files).toBeUndefined();
+  });
+  it("rejects invalid reference selections before any POST", async () => {
+    const invalid: unknown[] = [
+      [], [id, id], Array.from({ length: 16 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`),
+      ["https://example.test/file.png"], ["not-a-uuid"], null, "not-an-array", [42],
+    ];
+    for (const referenceFileIds of invalid) {
+      const fetcher = vi.fn<typeof fetch>();
+      expect(await createWorkflowRuntime(config, fetcher).start(binding, { ...input, referenceFileIds } as unknown as typeof input)).toEqual({ kind: "rejected" });
+      expect(fetcher).not.toHaveBeenCalled();
+    }
+  });
+  it("accepts the ordered 15-file boundary", async () => {
+    const referenceFileIds = Array.from({ length: 15 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index + 10).padStart(12, "0")}`);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: { id, workflow_id: workflow, status: "succeeded", outputs: {} } }));
+    expect((await createWorkflowRuntime(config, fetcher).start(binding, { ...input, referenceFileIds })).kind).toBe("execution");
+    expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).inputs.reference_files.map((item: { upload_file_id: string }) => item.upload_file_id))
+      .toEqual(referenceFileIds);
+  });
   it("does not retry lost POST or leak the thrown error", async () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error(binding.apiKey));
-    expect(await createWorkflowRuntime(config, fetcher).start(binding, input)).toEqual({ kind: "unknown" });
+    expect(await createWorkflowRuntime(config, fetcher).start(binding, { ...input, referenceFileIds: [id] })).toEqual({ kind: "unknown" });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("uses GET only and bounds read retries", async () => {

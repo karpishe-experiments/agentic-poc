@@ -69,6 +69,11 @@ describe("J12 pure page preparation", () => {
       .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== "persona")));
     expect(configuredPageBibleTask(JSON.stringify(base))).toBe(true);
     expect(configuredPageBibleTask(JSON.stringify(saved))).toBe(true);
+    const judge = { role: "judge", taskId: null, persona: null, appId: idFor(90), publishedWorkflowId: idFor(91) };
+    expect(configuredPageBibleTask(JSON.stringify([...base, judge]))).toBe(true);
+    expect(configuredPageBibleTask(JSON.stringify([...saved, judge]))).toBe(true);
+    expect(configuredPageBibleTask(JSON.stringify([...base, { ...judge, taskId: "J12" }]))).toBe(false);
+    expect(configuredPageBibleTask(JSON.stringify([...base, judge, judge]))).toBe(false);
     expect(configuredPageBibleTask(JSON.stringify(base.filter((row) => row.taskId !== "J12")))).toBe(false);
     expect(configuredPageBibleTask(JSON.stringify(base.map((row) => row.taskId === "J12" ? { ...row, taskId: "J10" } : row)))).toBe(false);
     expect(configuredPageBibleTask(JSON.stringify(base.map((row) => row.taskId === "J12" ? { ...row, appId: base[0].appId } : row)))).toBe(false);

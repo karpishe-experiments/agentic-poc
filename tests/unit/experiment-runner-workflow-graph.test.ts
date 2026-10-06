@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { createSimulationGraph, M1_SIMULATION_MODULES, M2_SIMULATION_MODULES, M3_SIMULATION_MODULES, m3SimulationModuleName, simulationModuleName } from "@/lib/experiment-runner/workflow-graph";
 
 describe("independent M1 simulation graph candidates", () => {
+  it.each(["issue65_m3_judge", "issue65_m3_playful_kid", "issue65_m2_image_probe"])(
+    "prepares the final model-free %s through the existing CLI helper", (name) => {
+      const result = spawnSync(process.execPath, ["node_modules/tsx/dist/cli.mjs", "scripts/prepare-dify-booklet-module.ts",
+        "--module", name, "--profile", "m3-j13"], { encoding: "utf8", timeout: 15_000 });
+      expect(result.status, result.stderr).toBe(0);
+      const dsl = JSON.parse(result.stdout);
+      expect(dsl.app.name).toBe(name);
+      expect(dsl.workflow.environment_variables.find((item: { name: string }) => item.name === "BOOKLET_TOOL_KEY").value).toBe("");
+      expect(dsl.workflow.graph.nodes.every((node: { data: { type: string } }) =>
+        ["start", "code", "http-request", "if-else", "end", ...(name === "issue65_m2_image_probe" ? ["list-operator"] : [])].includes(node.data.type))).toBe(true);
+      if (name === "issue65_m2_image_probe") {
+        expect(dsl.workflow.graph.nodes.find((node: { id: string }) => node.id === "start").data.variables
+          .some((variable: { variable: string }) => variable.variable === "reference_files")).toBe(true);
+      } else {
+        expect(dsl.workflow.graph.nodes.find((node: { id: string }) => node.id === "simulate").data.code).toContain("report_fixture");
+      }
+    });
   it("prepares five independent M3 modules while retaining the M1/M2 names and graph code", async () => {
     expect(M3_SIMULATION_MODULES.map(m3SimulationModuleName)).toEqual([
       "issue65_m3_manager", "issue65_m3_playful_kid", "issue65_m3_enthusiast_parent",

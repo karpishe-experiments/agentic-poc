@@ -17,6 +17,16 @@ const fingerprint = "a".repeat(64);
 const authorization = { started: true, role: "image", mode: "simulated", inputFingerprint: fingerprint, context: { role: "image", mode: "simulated", inputFingerprint: fingerprint, imageRequest: { prompt: "Synthetic transport probe", sourceVersionIds: [identity.run_id] } } };
 
 describe("isolated simulated image transport graph", () => {
+  it("adds ordered local reference inputs and read-back only to the final-page candidate", () => {
+    const graph = createSimulatedImageGraph({ finalPages: true });
+    const variables = graph.nodes.find((node) => node.id === "start")!.data.variables as Record<string, unknown>[];
+    expect(variables.at(-1)).toMatchObject({ variable: "reference_files", type: "file-list", required: false,
+      max_length: 15, allowed_file_types: ["image"], allowed_file_upload_methods: ["local_file"] });
+    expect(graph.nodes.find((node) => node.id === "finish")!.data.outputs).toContainEqual({
+      variable: "reference_files", value_type: "array[file]", value_selector: ["start", "reference_files"] });
+    expect(JSON.stringify(createSimulatedImageGraph())).not.toContain("reference_files");
+    expect(graph.edges).toEqual(createSimulatedImageGraph().edges);
+  });
   it("executes identity, authorization URLs, pause and saved-result acknowledgement", () => {
     expect(JSON.parse(executeCode("identity", { ...identity, mode: "simulated" }).identity_json)).toMatchObject({ runId: identity.run_id, parentWorkflowRunId: null });
     const args = { ...identity, status_code: 200, authorization_body: JSON.stringify({ data: authorization }), booklet_origin: "https://booklet-staging.uniwares.co.uk/" };

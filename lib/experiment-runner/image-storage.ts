@@ -10,7 +10,7 @@ function hash(bytes: Uint8Array) { return createHash("sha256").update(bytes).dig
 function storageFailure(): never { throw new ExperimentRepositoryError("invalid_state", "Image storage could not verify the original bytes."); }
 
 export function createExperimentImageStorage(input: { database: Database; store: AssetStore; now?: () => number; newClaimId?: () => string }) {
-  const repository = createExperimentImageRepository(input.database);
+  const repository = createExperimentImageRepository(input.database, { store: () => input.store });
   const now = input.now ?? Date.now;
   const newClaimId = input.newClaimId ?? randomUUID;
 

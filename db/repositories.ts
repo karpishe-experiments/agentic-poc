@@ -323,14 +323,18 @@ export function createRepositories(database: Database): Repositories {
     async continueJob(jobId) { await c.generation_jobs.updateOne({ _id: jobId, status: "paused" }, { $set: { status: "pending", errorJson: null, finishedAtMs: null, updatedAtMs: Date.now() } }); },
     async recoverInterrupted() {
       return withMongoTransaction(database, async (session) => {
-        const waitingJobIds = await c.generation_items.distinct("jobId", { status: { $in: ["waiting_for_agents", "waiting_for_selection"] } }, { session });
-        const recovered = await c.generation_items.updateMany({ status: "running" }, { $set: { status: "pending", startedAtMs: null } }, { session });
-        await c.generation_jobs.updateMany({ status: "running", _id: { $nin: waitingJobIds } }, { $set: { status: "pending", startedAtMs: null, finishedAtMs: null, updatedAtMs: Date.now() } }, { session }); return recovered.modifiedCount;
+        // Dify jobs use their retained operation ledger to reconcile uncertain
+        // outcomes. The legacy worker must never reset those items for replay.
+        const legacyJobs = await c.generation_jobs.find({ jobType: { $in: ["references", "pages", "export"] } }, { session }).toArray();
+        const legacyJobIds = legacyJobs.map((job) => job._id);
+        const waitingJobIds = await c.generation_items.distinct("jobId", { jobId: { $in: legacyJobIds }, status: { $in: ["waiting_for_agents", "waiting_for_selection"] } }, { session });
+        const recovered = await c.generation_items.updateMany({ jobId: { $in: legacyJobIds }, status: "running" }, { $set: { status: "pending", startedAtMs: null } }, { session });
+        await c.generation_jobs.updateMany({ jobType: { $in: ["references", "pages", "export"] }, status: "running", _id: { $nin: waitingJobIds } }, { $set: { status: "pending", startedAtMs: null, finishedAtMs: null, updatedAtMs: Date.now() } }, { session }); return recovered.modifiedCount;
       });
     },
     async listRunnable() { const rows = await c.generation_jobs.find({ status: { $in: ["pending", "partial", "running"] } }).sort({ createdAtMs: 1 }).toArray(); return rows.filter((row): row is typeof row & { jobType: "references" | "pages" | "export" } => row.jobType === "references" || row.jobType === "pages" || row.jobType === "export").map((row) => ({ id: row._id, bookletId: row.bookletId, jobType: row.jobType })); },
     async listActiveByBooklet(bookletId) {
-      const rows = (await c.generation_jobs.find({ bookletId }).toArray()).filter((row) => activeJobStatuses.has(row.status));
+      const rows = (await c.generation_jobs.find({ bookletId, jobType: { $in: ["references", "pages", "export"] } }).toArray()).filter((row) => activeJobStatuses.has(row.status));
       return Promise.all(rows.map(async (job) => {
         const items = await c.generation_items.find({ jobId: job._id }).toArray();
         return { id: job._id, jobType: job.jobType as ActiveJobSummary["jobType"], status: await derivedJobStatus(job.status, items), progress: { completed: items.filter((item) => item.status === "succeeded").length, total: items.length }, updatedAt: iso(job.updatedAtMs) };

@@ -8,6 +8,26 @@ const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 describe("restart recovery", () => {
+  it("preserves Dify running and unknown work outside the legacy worker", async () => {
+    const database = await createTestDatabase({ seedAgents: false });
+    databases.push(database);
+    const repositories = createRepositories(database);
+    for (const [position, status] of ["running", "unknown"].entries()) {
+      const jobId = `dify-job-${position}`, itemId = `dify-item-${position}`;
+      await database.collections.generation_jobs.insertOne({ _id: jobId, bookletId: "dify-booklet", jobType: "dify_pages", status,
+        idempotencyKey: jobId, inputJson: "{}", errorJson: null, createdAtMs: 1, startedAtMs: 2, finishedAtMs: null, updatedAtMs: 2 });
+      await database.collections.generation_items.insertOne({ _id: itemId, jobId, itemKey: itemId, position: 0, status, attemptCount: 1,
+        inputJson: "{}", resultJson: null, assetId: null, errorJson: null, executionCardId: null, executionBatchId: null, startedAtMs: 2, finishedAtMs: null });
+    }
+    const jobs = await database.collections.generation_jobs.find({}).toArray();
+    const items = await database.collections.generation_items.find({}).toArray();
+    expect(await repositories.jobs.recoverInterrupted()).toBe(0);
+    expect(await database.collections.generation_jobs.find({}).toArray()).toEqual(jobs);
+    expect(await database.collections.generation_items.find({}).toArray()).toEqual(items);
+    expect(await repositories.jobs.listRunnable()).toEqual([]);
+    expect(await repositories.jobs.listActiveByBooklet("dify-booklet")).toEqual([]);
+  });
+
   it("returns an interrupted card follow-up and only the running generation item to pending", async () => {
     const database = await createTestDatabase();
     databases.push(database);

@@ -68,9 +68,18 @@ describe("experiment runner contracts", () => {
     expect(validateRoleResult("specialist", { kind: "proposal", payload: { taskId: "J01", content: concept } }).kind).toBe("proposal");
     expect(validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "approve", versionIds: [id] } } }).kind).toBe("decision");
     expect(validateRoleResult("judge", { kind: "assessment", payload: {} }).kind).toBe("assessment");
+    expect(validateRoleResult("image", { kind: "clarification", payload: { question: "Which expression fits the approved scene?" } }).kind).toBe("clarification");
     expect(() => validateRoleResult("manager", { kind: "decision", payload: { decision: { action: "approve", versionIds: [id] } } })).toThrow();
     expect(() => validateRoleResult("specialist", { kind: "assessment", payload: {} })).toThrow();
     expect(() => validateRoleResult("image", { kind: "decision", payload: { decision: { action: "approve", versionIds: [id] } } })).toThrow();
     expect(() => validateRoleResult("tester", { kind: "approval", payload: {} })).toThrow();
+  });
+
+  it("routes J13 manager delegation to pages without making it a text specialist", () => {
+    expect(validateRoleResult("manager", { kind: "delegate", payload: { taskId: "J13", subjectKind: "page", subjectId: id } }).kind).toBe("delegate");
+    for (const subjectKind of ["book", "character", "location"]) {
+      expect(() => validateRoleResult("manager", { kind: "delegate", payload: { taskId: "J13", subjectKind, subjectId: id } })).toThrow();
+    }
+    expect(() => validateRoleResult("specialist", { kind: "proposal", payload: { taskId: "J13", content: {} } })).toThrow();
   });
 });

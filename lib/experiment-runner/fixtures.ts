@@ -5,6 +5,7 @@ import { BOOK_TASKS, isNarrativeTask } from "@/lib/experiment-runner/narrative-t
 import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
 import { simulatePageBibleProposal } from "@/lib/experiment-runner/page-bible-fixtures";
 import { assembledVisualStyleSchema, parseReferenceProposal } from "@/lib/contracts/experiment-references";
+import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
 type Case = keyof typeof CASES;
@@ -242,10 +243,13 @@ function simulateLaterNarrativeTask(
 
 export function simulateNarrativeResult(context: Context, mode: ExperimentMode): RoleResult {
   if (mode !== "simulated") throw new Error("Narrative fixtures require simulated mode.");
+  if ("reportEvidence" in context) return validateRoleResult(context.role, {
+    kind: context.role === "tester" ? "feedback" : "assessment", payload: simulatedExperimentReport(context.reportEvidence),
+  });
   if (context.role === "manager") {
     const taskId = context.eligibleRoute;
     if (taskId === "J11") return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: "book", subjectId: context.run.bookletId } });
-    if (taskId === "J09" || taskId === "J10" || taskId === "J12") {
+    if (taskId === "J09" || taskId === "J10" || taskId === "J12" || taskId === "J13") {
       if (!context.eligibleTarget || context.eligibleTarget.taskId !== taskId) throw new Error("Manager has no eligible subject.");
       return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: context.eligibleTarget.subjectKind, subjectId: context.eligibleTarget.subjectId } });
     }
@@ -291,7 +295,7 @@ export function simulateNarrativeResult(context: Context, mode: ExperimentMode):
     });
     if (current.length === 0) throw new Error("No current eligible draft version to review.");
     if (context.persona !== "professional_creator" && context.activeDelegation &&
-        context.currentArtifacts.some((item) => ["J08", "J09", "J10"].includes(item.taskId) && current.includes(item.currentVersionId ?? "") && context.activeDelegation!.taskIds.includes(item.taskId))) {
+        context.currentArtifacts.some((item) => ["J08", "J09", "J10", "J13"].includes(item.taskId) && current.includes(item.currentVersionId ?? "") && context.activeDelegation!.taskIds.includes(item.taskId))) {
       return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "delegate", taskIds: context.activeDelegation.taskIds, subjectId: context.bookletId } } });
     }
     return validateRoleResult("tester", { kind: "decision", payload: { decision: { action: "approve", versionIds: current } } });

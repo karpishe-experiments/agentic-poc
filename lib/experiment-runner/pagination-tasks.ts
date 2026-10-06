@@ -11,16 +11,19 @@ export function configuredPaginationTask(configurationJson: string): boolean {
   if (configuredReferenceSheetTasks(configurationJson).length !== 2) return false;
   let entries: unknown;
   try { entries = JSON.parse(configurationJson); } catch { return false; }
-  if (!Array.isArray(entries) || ![14, 15, 16, 17].includes(entries.length) ||
+  if (!Array.isArray(entries) || ![14, 15, 16, 17, 18].includes(entries.length) ||
       entries.some((item) => !item || typeof item !== "object" || Array.isArray(item))) return false;
   const rows = entries as Record<string, unknown>[];
+  const hasJudge = rows.some((row) => row.role === "judge");
+  if (hasJudge && ![16, 18].includes(entries.length)) return false;
   const expected = [
     { role: "manager", taskId: null, persona: null },
-    ...[...BOOK_TASKS, "J09", "J10", "J11", ...([15, 17].includes(entries.length) ? ["J12"] : [])].map((taskId) => ({ role: "specialist", taskId, persona: null })),
+    ...[...BOOK_TASKS, "J09", "J10", "J11", ...([15, 17, 18].includes(entries.length) || hasJudge ? ["J12"] : [])].map((taskId) => ({ role: "specialist", taskId, persona: null })),
     { role: "image", taskId: null, persona: null },
+    ...(hasJudge ? [{ role: "judge", taskId: null, persona: null }] : []),
   ];
   const testers = rows.filter((row) => row.role === "tester");
-  const publicProfile = entries.length === 16 || entries.length === 17;
+  const publicProfile = entries.length === 16 && !hasJudge || entries.length === 17 || entries.length === 18;
   if (testers.length !== (publicProfile ? 3 : 1) ||
       testers.some((row) => row.taskId !== null || (publicProfile && !PERSONAS.includes(row.persona as typeof PERSONAS[number])) ||
         (!publicProfile && row.persona !== undefined && !PERSONAS.includes(row.persona as typeof PERSONAS[number]))) ||

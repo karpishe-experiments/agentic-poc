@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import type { ConfigState } from "@/lib/experiment-runner/config";
 
@@ -34,6 +34,32 @@ describe("booklet runner HTTP boundary", () => {
     expect((await http.create(request({ origin: "http://localhost:3001" }))).status).toBe(403);
     expect((await http.create(request({ origin: "http://localhost:3000" }))).status).toBe(400);
   });
+  it("validates page selection origin, identity and body before database access", async () => {
+    const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });
+    const runId = "00000000-0000-4000-8000-000000000001";
+    expect((await http.selectPages(request({ origin: "http://localhost:3001" }), runId)).status).toBe(403);
+    expect((await http.selectPages(request({ origin: "http://localhost:3000" }), runId)).status).toBe(400);
+    const headers = { origin: "http://localhost:3000", "idempotency-key": runId };
+    expect((await http.selectPages(request(headers, "not-json"), runId)).status).toBe(400);
+    const batch = { schemaVersion: "2", runId, configurationHash: "a".repeat(64), layoutVersionId: runId,
+      selection: "single", pages: [{ pageId: runId, pageBibleVersionId: runId, previousPageVersionId: null }] };
+    expect((await http.selectPages(request(headers, JSON.stringify({ expectedRevision: 0, batch })),
+      "00000000-0000-4000-8000-000000000002")).status).toBe(400);
+    const blocked = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); },
+      mutate: async () => { throw new Error("maintenance"); } });
+    expect((await blocked.selectPages(request(headers, JSON.stringify({ expectedRevision: 0, batch })), runId)).status).toBe(503);
+    const off = createBookletRunnerHttp({ config: () => disabled, database: () => { throw new Error("unexpected database access"); } });
+    expect((await off.selectPages(request(headers), runId)).status).toBe(404);
+  });
+  it("requires staging browser authentication for page selection", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "staging");
+    vi.stubEnv("ACCESS_GATE_PASSWORD", "test-only-password-long-enough");
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });
+      expect((await http.selectPages(request({ origin: "http://localhost:3000" }),
+        "00000000-0000-4000-8000-000000000001")).status).toBe(401);
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("keeps image callbacks closed when disabled or in production", async () => {
     for (const state of [disabled, { enabled: false, reason: "production" } as ConfigState]) {
       const http = createBookletRunnerHttp({ config: () => state, database: () => { throw new Error("unexpected database access"); } });
@@ -47,6 +73,9 @@ describe("booklet runner HTTP boundary", () => {
     expect((await http.imageComplete(new Request(imageUrl + "&extra=1", { method: "POST", body: "bad" }))).status).toBe(401);
     const key = { "x-booklet-tool-key": "x".repeat(32) };
     for (const suffix of ["&extra=1", "&runId=00000000-0000-4000-8000-000000000001", "&workflowRunId=bad"]) {
+      expect((await http.imageFixture(new Request(imageUrl + suffix, { headers: key }))).status).toBe(400);
+    }
+    for (const suffix of ["&parentWorkflowRunId=bad", "&inputFingerprint=bad"]) {
       expect((await http.imageFixture(new Request(imageUrl + suffix, { headers: key }))).status).toBe(400);
     }
     const oversized = await http.imageComplete(new Request(imageUrl, { method: "POST", headers: { ...key, "content-length": String(20 * 1024 * 1024 + 1) }, body: "x" }));

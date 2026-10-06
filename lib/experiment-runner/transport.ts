@@ -15,11 +15,43 @@ const execution = z.object({
 }).strip();
 export type RuntimeExecution = z.infer<typeof execution>;
 export type RuntimeResult = { kind: "execution"; execution: RuntimeExecution } | { kind: "unknown" } | { kind: "rejected" };
-export type RuntimeInput = { runId: string; operationId: string; parentWorkflowRunId: string | null; mode: "simulated" };
+export type RuntimeInput = {
+  runId: string;
+  operationId: string;
+  parentWorkflowRunId: string | null;
+  mode: "simulated";
+  referenceFileIds?: string[];
+};
 export type WorkflowRuntime = {
   start(binding: BookletBinding, input: RuntimeInput): Promise<RuntimeResult>;
   retrieve(binding: BookletBinding, workflowRunId: string): Promise<RuntimeResult>;
 };
+
+const runtimeInputSchema = z.object({
+  runId: opaqueIdSchema,
+  operationId: opaqueIdSchema,
+  parentWorkflowRunId: opaqueIdSchema.nullable(),
+  mode: z.literal("simulated"),
+  referenceFileIds: z.array(opaqueIdSchema).min(1).max(15)
+    .refine((ids) => new Set(ids).size === ids.length, "Reference file IDs must be unique")
+    .optional(),
+}).strict();
+
+function runtimeBody(input: z.infer<typeof runtimeInputSchema>): string {
+  // Keep the established four-input body byte-for-byte shape when no selected
+  // files are supplied. Dify custom workflow inputs use descriptors, not
+  // top-level `files`; the caller owns upload and reference identity checks.
+  const inputs = input.referenceFileIds === undefined
+    ? { run_id: input.runId, operation_id: input.operationId, parent_workflow_run_id: input.parentWorkflowRunId ?? "", mode: "simulated" }
+    : {
+      run_id: input.runId,
+      operation_id: input.operationId,
+      parent_workflow_run_id: input.parentWorkflowRunId ?? "",
+      mode: "simulated",
+      reference_files: input.referenceFileIds.map((upload_file_id) => ({ type: "image", transfer_method: "local_file", upload_file_id })),
+    };
+  return JSON.stringify({ inputs, response_mode: "blocking", user: `booklet-${input.runId}` });
+}
 
 // Do not return provider bodies, URLs or credentials to logs or browser clients.
 async function readResponse(response: Response): Promise<unknown> {
@@ -46,10 +78,7 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       const response = await fetcher(`${config.baseUrl}/v1${path}`, {
         method: input ? "POST" : "GET", redirect: "error", cache: "no-store",
         headers: { Authorization: `Bearer ${binding.apiKey}`, ...(input ? { "Content-Type": "application/json" } : {}) },
-        ...(input ? { body: JSON.stringify({
-          inputs: { run_id: input.runId, operation_id: input.operationId, parent_workflow_run_id: input.parentWorkflowRunId ?? "", mode: "simulated" },
-          response_mode: "blocking", user: `booklet-${input.runId}`,
-        }) } : {}),
+        ...(input ? { body: runtimeBody(input) } : {}),
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) {
@@ -65,7 +94,12 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
     } catch { return { kind: "unknown" }; }
   }
   return {
-    start(binding, input) { return request(binding, "/workflows/run", input); },
+    start(binding, input) {
+      const checked = runtimeInputSchema.safeParse(input);
+      // Reject malformed reference selections before any POST. A caller must
+      // inspect persisted state before deciding whether an unknown POST ran.
+      return checked.success ? request(binding, "/workflows/run", checked.data) : Promise.resolve({ kind: "rejected" });
+    },
     async retrieve(binding, workflowRunId) {
       const checked = opaqueIdSchema.parse(workflowRunId);
       // GET can be retried safely; POST never is. No provider execution occurs here.
