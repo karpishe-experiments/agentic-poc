@@ -63,7 +63,9 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Page illustration run was not found.");
     const recovery = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id, role: "tester",
+      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+        $or: [{ role: "tester" }, { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId,
+          providerKind: "text", workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null } }],
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
     if (run.mode !== "simulated" || (!recovery && !["queued", "running", "paused"].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
       invalid("Page illustration assembly requires idle simulated work.");

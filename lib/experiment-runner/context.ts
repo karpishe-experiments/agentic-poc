@@ -1,5 +1,7 @@
 import { z } from "zod";
-import type { Database } from "@/db/client";
+import { withMongoTransaction, type Database } from "@/db/client";
+import { verifyExperimentGeneration } from "@/db/experiment-completion";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 import type { ArtifactDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
@@ -278,6 +280,23 @@ export function createExperimentContextService(database: Database, options: { st
     }
     const view = await getRunView(run._id);
     if (!view) deny("Run view is unavailable.");
+    if ((operation.role === "judge" || operation.role === "tester") &&
+        configuredPageIllustrationTask(run.configurationJson) &&
+        chooseNext({ ...run, activeOperationId: null, pauseRequested: false,
+          status: run.status === "paused" || run.status === "blocked" && run.safeFailure === "unknown_outcome" ? "running" : run.status },
+        view.currentArtifacts, view.pageBatch) === "slice_complete") {
+      // Context is needed inside execution, before runtime readback can verify
+      // publication. Report materialization still uses the strict completion phase.
+      const generation = await withMongoTransaction(database, (session) =>
+        verifyExperimentGeneration(database, session, run, (options.store ?? createAssetStore)(), operation._id, "context"));
+      return { role: operation.role as "tester" | "judge", bookletId: view.bookletId, brief: view.brief, persona: view.persona,
+        currentArtifacts: view.currentArtifacts, creatorMessages: view.creatorMessages, operationHistory: view.operationHistory,
+        counters: view.counters, limits: view.limits, warnings: generation.warnings,
+        imageEvidence: { finalPages: generation.finalPages, referenceAssetIds: generation.referenceAssetIds },
+        reportEvidence: { role: operation.role as "tester" | "judge", mode: "simulated" as const, runId: run._id,
+          configurationHash: generation.configurationHash, versionIds: generation.artifacts.map((artifact) => artifact.versionId),
+          warningCount: generation.warnings.reduce((count, entry) => count + (Array.isArray(entry.warnings) ? entry.warnings.length : 0), 0) } };
+    }
     if (operation.role === "manager") {
       const eligibleRoute = chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts, view.pageBatch);
       const pending = view.pendingDecision as { kind?: string; subjectKind?: string; subjectId?: string; taskId?: string } | null;

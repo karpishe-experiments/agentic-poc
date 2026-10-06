@@ -58,6 +58,26 @@ call is part of this compact delivery.
 
 ## Current entry readiness
 
+### Local evaluation context readiness
+
+Claimed tester and judge operations can retrieve verified generation evidence,
+current artifacts, creator dialogue, warnings, counters and durable image
+identities. Context retrieval does not approve artifacts, save a report or
+complete the run. Report saving still requires publication verification and
+rechecks the saved evidence. Unknown judge operations use the verified read-only
+recovery path; no workflow replay is required.
+
+The focused Kid J13 journey with eighteen bindings and the pre-generation judge
+rejection case passed (two tests, 33.49 seconds, no retries). The journey includes
+separate tester/judge reports and publication rejection/recovery. Twelve
+routing/report fixture unit checks and focused lint passed. The current-source
+typecheck passed with ignored output copies and stale `.next` inputs excluded;
+this is not a standard typecheck pass.
+Deterministic reports retain exact versions and mark creative assessment as
+`not_assessed`; they do not claim image inspection. Automatic evaluation
+dispatch, final completion, UI selection and deployed acceptance remain pending.
+This evidence applies to the local candidate, not a published configuration.
+
 All three live Simulated M2 cases reached approved reference packages on
 2026-10-05; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).
 The next dependent gate is ordered reference-file transport. The current image

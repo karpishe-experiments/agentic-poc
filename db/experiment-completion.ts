@@ -17,7 +17,8 @@ function incomplete(message: string): never { throw new ExperimentRepositoryErro
 // Read-only evidence for the generation/evaluation boundary. The caller owns
 // the transaction and any later run transition; this does not mark completion.
 export async function verifyExperimentGeneration(database: Database, session: ClientSession,
-  inputRun: ExperimentRunDocument, store: AssetStore, reportOperationId?: string) {
+  inputRun: ExperimentRunDocument, store: AssetStore, reportOperationId?: string,
+  phase: "completion" | "context" = "completion") {
   const run = await database.collections.experiment_runs.findOne({ _id: inputRun._id }, { session });
   if (!run || run.revision !== inputRun.revision || run.configurationHash !== inputRun.configurationHash) incomplete("Generation run evidence changed before verification.");
   if (reportOperationId) {
@@ -30,7 +31,8 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     const bindings = savedConfigurationSchema.parse(JSON.parse(run.configurationJson) as unknown)
       .filter((binding) => binding.role === operation.role && binding.taskId === null);
     if (bindings.length !== 1 || !operation.workflowRunId || operation.dispatchStartedAtMs == null ||
-        operation.verifiedWorkflowId !== bindings[0].publishedWorkflowId) {
+        (phase === "completion" ? operation.verifiedWorkflowId !== bindings[0].publishedWorkflowId :
+          operation.verifiedWorkflowId != null && operation.verifiedWorkflowId !== bindings[0].publishedWorkflowId)) {
       incomplete("Report requires its exact verified published workflow binding.");
     }
   }

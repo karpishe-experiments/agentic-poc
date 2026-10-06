@@ -272,6 +272,14 @@ requires publication verification before acceptance. The runner projection
 returns retained report and operation/publication identities separately from
 whether its version evidence still matches the current artifact versions.
 Automatic evaluation dispatch and the final run transition remain incomplete.
+The local context endpoint supplies claimed tester/judge operations with verified
+generation evidence, current artifacts, dialogue, warnings, usage counters and
+durable image identities. Initial execution can read this evidence before runtime
+publication readback; saving the report still requires its exact verified binding.
+Publication-verified unknown judge operations can read saved source evidence for
+recovery. The full eighteen-binding profile and its persona-filtered snapshot keep
+J11/J12/J13 eligibility. Deterministic reports mark creative assessment as
+`not_assessed` and do not claim visual inspection.
 
 The candidate ordered page-batch contract preserves selected page order and
 source versions, with separate operation, asset and version identities per item.

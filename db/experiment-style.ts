@@ -40,6 +40,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
         $or: [{ role: "specialist", taskId: "J11" },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" }, { role: "tester" },
+          { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
     if (run.mode !== "simulated" || (!recovered && !["queued", "running", "paused"].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");

@@ -5,6 +5,7 @@ import { BOOK_TASKS, isNarrativeTask } from "@/lib/experiment-runner/narrative-t
 import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
 import { simulatePageBibleProposal } from "@/lib/experiment-runner/page-bible-fixtures";
 import { assembledVisualStyleSchema, parseReferenceProposal } from "@/lib/contracts/experiment-references";
+import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 
 type Context = Awaited<ReturnType<ReturnType<typeof createExperimentContextService>["getOperationContext"]>>;
 type Case = keyof typeof CASES;
@@ -242,6 +243,9 @@ function simulateLaterNarrativeTask(
 
 export function simulateNarrativeResult(context: Context, mode: ExperimentMode): RoleResult {
   if (mode !== "simulated") throw new Error("Narrative fixtures require simulated mode.");
+  if ("reportEvidence" in context) return validateRoleResult(context.role, {
+    kind: context.role === "tester" ? "feedback" : "assessment", payload: simulatedExperimentReport(context.reportEvidence),
+  });
   if (context.role === "manager") {
     const taskId = context.eligibleRoute;
     if (taskId === "J11") return validateRoleResult("manager", { kind: "delegate", payload: { taskId, subjectKind: "book", subjectId: context.run.bookletId } });

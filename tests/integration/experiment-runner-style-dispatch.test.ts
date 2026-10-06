@@ -29,7 +29,7 @@ class MemoryStore implements AssetStore {
   async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
   async exists(uri: string) { return this.files.has(uri); }
 }
-async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 = 13, finalPages = false) {
+async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 | 18 = 13, finalPages = false) {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const store = new MemoryStore(), repository = createExperimentRepository(database, { store: () => store });
   const context = createExperimentContextService(database, { store: () => store });
@@ -38,7 +38,8 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     ...BOOK_TASKS.map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(["J09", "J10"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(slots >= 16 ? [{ role: "specialist" as const, taskId: "J11" as const, persona: null }] : []),
-    ...(slots === 17 ? [{ role: "specialist" as const, taskId: "J12" as const, persona: null }] : []),
+    ...(slots >= 17 ? [{ role: "specialist" as const, taskId: "J12" as const, persona: null }] : []),
+    ...(slots === 18 ? [{ role: "judge" as const, taskId: null, persona: null }] : []),
     ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
     { role: "image", taskId: null, persona: null },
   ].filter((item) => slots >= 15 || (item.taskId !== "J09" && item.taskId !== "J10" && (slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
@@ -46,7 +47,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     .map((item) => ({ ...item, appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null, apiKey: "test-key" })) as BookletRunnerConfig["bindings"];
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test", callbackKey: "test-callback", bindings };
   if (finalPages) {
-    if (slots !== 17) throw new Error("Final page fixture requires all seventeen bindings.");
+    if (slots < 17) throw new Error("Final page fixture requires at least seventeen bindings.");
     bindings.find((item) => item.role === "image")!.finalPageIllustration = true;
   }
   const runId = randomUUID(), bookletId = randomUUID(); let clock = 1;
@@ -174,15 +175,20 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }
     throw new Error("No manager-selected story page image.");
   }
-  async function testerDecision(result: RoleResult, recover = false, dispatched = false, unverified = false) {
+  async function testerDecision(result: RoleResult, recover = false, dispatched = false, unverified = false, role: "tester" | "judge" = "tester") {
     const run = (await repository.getRun(runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
-    const operation = await repository.prepareOperation({ runId, operationId, expectedRevision: run.revision, role: "tester", taskId: null,
+    const operation = await repository.prepareOperation({ runId, operationId, expectedRevision: run.revision, role, taskId: null,
       subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1, inputFingerprint: randomUUID().replaceAll("-", "").repeat(2), nowMs: clock++ });
     if (recover || dispatched) await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: clock++ });
     await repository.claimOperation({ runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: clock++ });
+    if (dispatched && unverified) {
+      const reportContext = await context.getOperationContext({ runId, operationId, workflowRunId, parentWorkflowRunId: null });
+      expect(simulateNarrativeResult(reportContext, "simulated")).toMatchObject({ kind: role === "tester" ? "feedback" : "assessment",
+        payload: { intent: { status: "not_assessed" }, evidence: { inspectedAssetIds: [] } } });
+    }
     if (recover) await repository.recordDispatchOutcome({ runId, operationId, parentWorkflowRunId: null, category: "unknown_outcome", nowMs: clock++ });
     if (dispatched && !unverified) await repository.verifyDispatchPublication({ runId, operationId, workflowRunId, parentWorkflowRunId: null,
-      workflowId: bindings.find((binding) => binding.role === "tester" && binding.persona === persona)!.publishedWorkflowId, nowMs: clock++ });
+      workflowId: bindings.find((binding) => binding.role === role && binding.persona === (role === "tester" ? persona : null))!.publishedWorkflowId, nowMs: clock++ });
     const completed = await repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
     return completed;
   }
@@ -201,6 +207,17 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }, next: () => clock++ };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it("does not provide report context to a judge before generation completes", async () => {
+    const env = await setup("playful_kid", 18, true);
+    const run = (await env.repository.getRun(env.runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
+    await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+      role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text",
+      attempt: 1, inputFingerprint: "a".repeat(64), nowMs: env.next() });
+    await env.repository.beginDispatch({ runId: env.runId, operationId, parentWorkflowRunId: null, nowMs: env.next() });
+    await env.repository.claimOperation({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: env.next() });
+    await expect(env.context.getOperationContext({ runId: env.runId, operationId, workflowRunId, parentWorkflowRunId: null }))
+      .rejects.toThrow("Role context is not supported");
+  });
   it("recovers a reference-free cover with omitted file output without replay", async () => {
     const env = await setup("playful_kid", 17, true);
     let ready = false;
@@ -441,7 +458,7 @@ describe("automatic saved J08 sample dispatch", () => {
   }, 120_000);
 
   it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("saves and independently approves every J13 page for %s", async (persona) => {
-    const env = await setup(persona, 17, true);
+    const env = await setup(persona, persona === "playful_kid" ? 18 : 17, true);
     await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
       (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow();
     let boundary = false;
@@ -498,6 +515,10 @@ describe("automatic saved J08 sample dispatch", () => {
         workflowRunId: pendingReport.workflowRunId!, parentWorkflowRunId: null,
         workflowId: env.config.bindings.find((binding) => binding.role === "tester" && binding.persona === persona)!.publishedWorkflowId,
         nowMs: env.next() });
+      const reportContext = await env.context.getOperationContext({ runId: env.runId, operationId: pendingReport._id,
+        workflowRunId: pendingReport.workflowRunId!, parentWorkflowRunId: null });
+      expect(reportContext).toMatchObject({ role: "tester", reportEvidence: { mode: "simulated", runId: env.runId,
+        configurationHash: completedEvidence.configurationHash } });
       await expect(env.repository.completeOperation({ envelope: { runId: env.runId, operationId: pendingReport._id,
         workflowRunId: pendingReport.workflowRunId!, inputFingerprint: pendingReport.inputFingerprint,
         result: { kind: "feedback", payload: { ...report, configurationHash: "b".repeat(64) } } }, parentWorkflowRunId: null, nowMs: env.next() }))
@@ -516,6 +537,20 @@ describe("automatic saved J08 sample dispatch", () => {
         verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "tester" && binding.persona === persona)!.publishedWorkflowId,
         matchesCurrentVersions: true, report }]);
       expect(await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J13", state: "approved" })).toBe(expected);
+      await expect(env.testerDecision({ kind: "assessment", payload: { ...report, role: "judge" } }, true, true, true, "judge"))
+        .rejects.toMatchObject({ code: "invalid_state" });
+      const judgeOperation = (await env.repository.listOperations(env.runId)).at(-1)!;
+      const judgeBinding = env.config.bindings.find((binding) => binding.role === "judge")!;
+      await env.repository.verifyDispatchPublication({ runId: env.runId, operationId: judgeOperation._id,
+        workflowRunId: judgeOperation.workflowRunId!, parentWorkflowRunId: null, workflowId: judgeBinding.publishedWorkflowId, nowMs: env.next() });
+      const judgeContext = await env.context.getOperationContext({ runId: env.runId, operationId: judgeOperation._id,
+        workflowRunId: judgeOperation.workflowRunId!, parentWorkflowRunId: null });
+      const assessment = simulateNarrativeResult(judgeContext, "simulated");
+      expect(assessment).toMatchObject({ kind: "assessment", payload: { role: "judge", intent: { status: "not_assessed" } } });
+      await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: judgeOperation._id,
+        workflowRunId: judgeOperation.workflowRunId!, inputFingerprint: judgeOperation.inputFingerprint, result: assessment },
+        parentWorkflowRunId: null, nowMs: env.next() });
+      expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
       const sheet = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J09" });
       const sheetVersion = await env.database.collections.artifact_versions.findOne({ _id: sheet!.currentVersionId! });
       const sheetApproval = await env.database.collections.approvals.findOne({ experimentRunId: env.runId, artifactVersionId: sheet!.currentVersionId! });

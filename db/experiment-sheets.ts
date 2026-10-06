@@ -45,6 +45,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         // verification for its exact active book operation after GET recovery.
         $or: [{ role: "specialist", taskId: "J11" },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
+          { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
     if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !["queued", "running", "paused"].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
     const draft = await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
