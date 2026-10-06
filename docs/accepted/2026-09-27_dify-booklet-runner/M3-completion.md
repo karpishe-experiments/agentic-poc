@@ -3,6 +3,51 @@
 **State:** In progress; full-booklet acceptance remains pending. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
 **Predecessor:** [M2](M2-references.md). Apply [EXECUTION](EXECUTION.md).
 
+## Compact remaining delivery
+
+Use three checkpoints for the remaining M3 work. This sequence consolidates
+delivery, not the PRD requirements or completion evidence. The detailed contracts
+and verified evidence below support these checkpoints, not a separate release
+sequence. Current entry gates remain mandatory: prove runtime-key file ownership,
+ordered references, size limits and lost-response recovery before J13 dispatch.
+This plan update does not start implementation, publish Dify
+configuration, activate bindings or authorize new execution.
+
+| Checkpoint | Work | Exit evidence |
+| --- | --- | --- |
+| 1. Finish one runnable candidate | Wire separate tester feedback and judge execution, generation/evaluation status and recovery. Reuse existing artifact/image viewers. Add a minimal single-page or ordered-batch selector, progress and Pause/Resume; retain individual page approvals. Finish compatible Dify graph/settings/host-validation changes and consolidate only missing private bindings into one handoff. | Focused contracts and integration checks cover reports, completion, exact sources/references, approvals, limits and recovery. Existing working bindings and saved evidence remain intact; unresolved live dependencies are explicit. |
+| 2. Review and release one candidate | Freeze application code, Dify graphs and non-secret binding evidence together. Run one affected validation set and two consecutive independent clean reviews. Publish/read back workflows and synchronize applicable Workflow Tools, then use the reviewed staging delivery and drained binding-activation process. | Required CI, exact reviewed/published identities, synchronized applicable tool bindings and staging health pass. Stop new dispatch and reconcile in-flight/unknown work before changing configuration; Pause alone is not a drain. Private setup and release actions still require their existing authorization checkpoints. |
+| 3. Verify and record one acceptance campaign | Complete all three cases through actual deployed Dify in Simulated mode. Combine browser inspection, targeted failure/recovery checks and sanitized evidence capture in the same campaign. Correct defects and rerun affected checks/reviews; use linked successors rather than rewriting failed runs. | All thirteen responsibilities, required current artifacts and images, individual approvals, tester/judge reports and durable lineage are saved. Zero real provider calls, warning-bearing completion, UI controls and no uncertain-operation replay are verified. Record limitations and hand off to M4. |
+
+### Simplifications and retained boundaries
+
+- **Reports:** use short structured reports with exact version references. Keep
+  tester feedback separate from the independent judge. Simulated creative/visual
+  assessment is explicitly `not_assessed`; retain warning and interaction-flow
+  evidence without claiming human usability or real model judgement. No scoring
+  framework or passing quality score is needed.
+- **UI:** reuse saved booklet/artifact/image views and provide the basic selector,
+  progress, warnings, history, reports and Pause/Resume. Defer richer dashboards,
+  presentation polish and new agent-authoring tools, not required inspection.
+- **Tests:** use one representative end-to-end case per failure mechanism where
+  the execution path is shared. Use focused contracts for persona differences;
+  add another recovery case only for a materially different path. All three
+  deployed happy-path cases and the required failure scenarios still need proof.
+- **Documentation:** keep one concise M3 exit record with evidence links and
+  remaining limitations in this document. Do not create another report hierarchy.
+- **Release:** aim for one candidate and staging release cycle. A discovered
+  defect requires correction plus affected validation and the two-review cycle
+  before republishing. A successful run alone does not require another deployment.
+
+Do not relax thirteen specialist responsibilities, persona-adaptive delegation,
+per-page approvals, exact lettering/style/reference routing, request limits,
+durable outputs, unknown-outcome recovery, production/Cloud isolation or the
+required reviews. Local runtime mocks cannot replace deployed Dify acceptance.
+Baseline images remain 9/11/15 per case, including style samples, reference sheets,
+story pages and cover; retain additional revision assets as history. Balanced/Real
+readiness, paid runs, PDF and production hardening are outside M3. No reset or paid
+call is part of this compact delivery.
+
 ## Current entry readiness
 
 All three live Simulated M2 cases reached approved reference packages on

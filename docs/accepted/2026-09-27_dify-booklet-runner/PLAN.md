@@ -138,17 +138,33 @@ Record these in the detailed plan as they are resolved, with evidence or explici
 
 **Coverage:** J11–J13; AC01, AC02, AC05–AC07, AC10.
 
-- Implement pagination, Page Bible and final images, including native text and persona-specific multi-panel cases.
-- Support page-by-page and ordered selected batches while retaining per-page inspection and explicit/delegated approval records; grouped acceptance does not erase individual page identity.
-- Add bounded safe recovery, uncertain-outcome inspection, request-limit enforcement and warning-bearing completion.
-- Add tester feedback and independent judge reporting; keep evaluation status separate from generation success.
-- Extend existing viewers and provide the simple runner controls/history/evidence UI; no manual takeover or agent editor.
+Deliver the remaining work through the three
+[compact M3 checkpoints](M3-completion.md#compact-remaining-delivery):
+
+| Checkpoint | Scope |
+| --- | --- |
+| 1. Runnable candidate | Finish J11–J13 generation, separate tester/judge reports, completion and recovery. Reuse viewers; add minimal single-page/ordered-batch controls with per-page explicit/delegated approvals. Consolidate missing private setup into one handoff. |
+| 2. Review and release | Freeze code and Dify configuration together. Run the affected checks and two consecutive independent clean reviews, then use authorized publication/read-back, applicable tool synchronization, drained staging release and binding activation. |
+| 3. Acceptance and evidence | Complete all three deployed model-free cases, browser inspection and representative failure/recovery checks in one campaign. Save exact evidence and limitations; correct defects through the affected validation/review cycle before republishing. |
+
+Keep native lettering, persona-specific multi-panel layouts, exact references,
+limits, durable evidence, warning-bearing completion and separate generation/
+evaluation status. Use short structured reports, with simulated creative/visual
+quality marked `not_assessed`; no quality score is required. Reuse shared-path
+recovery proof rather than repeating the same campaign for every persona, but
+retain all required scenarios and persona-specific contracts. Defer richer UI and
+report polish, not required controls or inspection. No manual takeover or agent
+editor is required. Keep one concise exit record in M3; do not add a plan hierarchy.
 
 **Tests:** exact prompt text propagation, relevant references only, one physical-page image, missing/corrupt outputs, duplicate/conflicting/concurrent completion, stale results, exhausted limits and saved-success preservation after judge failure.
 
 Also verify that usable image geometry/format-label differences, preferred-length overruns and harmless extra content fields do not fail the flow. Keep required content, decoding, storage and identity checks, and retain warnings instead of silently discarding deviations.
 
-**Exit:** all Simulated booklets finish, including multi-panel layouts and failure/recovery scenarios.
+**Exit:** all three Simulated booklets finish through deployed Dify, including
+multi-panel layouts, individual page approvals, retained tester/judge reports and
+required failure/recovery evidence. Local mocks alone do not satisfy this exit.
+Balanced/Real readiness, paid execution, PDF and production hardening remain
+outside M3; this consolidation does not change PRD limits or acceptance criteria.
 
 ## Milestone 4 — Simulation hardening, then Balanced acceptance
 
