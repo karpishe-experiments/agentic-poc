@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Bind the active publication, not a matching history entry
+
+- **Context:** Application-key execution on Dify Community 1.17.1.
+- **Observation:** The first workflow-history entry and the active workflow had
+  equal graph hashes but different IDs. Execution used the active ID, and Booklet
+  correctly stopped a run configured with the history ID.
+- **Guidance:** Read `app_get.workflow.id`, retrieve that exact version, verify
+  its graph, and bind its ID. Preserve rejected runs and use linked successors
+  after correcting settings. Do not relax publication-identity checks.
+- **Evidence:** [M3 deployed candidate](M3-completion.md#current-deployed-candidate--2026-10-06)
+  and runtime run `22fcdfd1-491c-4cfb-a28e-0dfe75ba04cb`.
+- **Promotion target:** Dify integration documentation; verified on this release.
+
 ### Publish complete asset bytes before recording completion
 
 - **Context:** An image operation stores original bytes at an immutable attempt URI.

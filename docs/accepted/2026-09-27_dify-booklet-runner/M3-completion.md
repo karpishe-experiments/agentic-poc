@@ -1074,14 +1074,40 @@ source, hash `6c5704556273dbce3cd16f8a67599987b6be0174bdb795f00cbdfd1d5237267d`.
 Both app IDs and environment-variable definitions remain unchanged. Private
 exports and candidate DSL files remain outside Git.
 The operator subsequently published both workflows and prepared the encrypted
-eighteen-binding file `issue65-m3-j13-bindings.dpapi.xml`. Latest publication
-read-back identifies J12 `b57240f9-a7ee-40a7-b106-029137c0a108` and judge
-`e8949547-0454-4d5c-8912-018759d3c2e8`. Node instructions match the reviewed
+eighteen-binding file `issue65-m3-j13-bindings.dpapi.xml`. Active publication
+read-back identifies J12 `b89109fd-7e59-4da8-9a23-48165ee74473` and judge
+`539c1fa5-a07d-40d2-835f-b290d3c8bab9`. Node instructions match the reviewed
 source; only start, code, HTTP, condition and end nodes are present. Neither
 publication has a Workflow Tool binding. This does not prove callback-key
 authentication or final-suite execution. Do not repeat private key preparation.
 The [shared readiness register](EXECUTION.md#b-authorization-register) tracks
 remaining publication, activation and runtime checks.
+
+### Current deployed candidate — 2026-10-06
+
+Main PR #150 and selective staging PR #151 merged after required CI. Staging
+release `53c99366b2006a3062a48f9b8b005f8cd2ca38e4` passed
+[Deploy 37483990775](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37483990775)
+and [Check 37485322794](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37485322794).
+The immutable image is
+`sha256:9f1e03934d2bd64acb8c14a1e95ecd804bf9e3cf3bfe92c6e9887ec6a9d8ff60`.
+All eighteen active publication graphs were read back; none has a Workflow Tool
+binding. Final graph parity passed for manager, testers, image, J12 and judge.
+The image validator retains its known `list-operator` recognition warning.
+
+[Infrastructure synchronization 37488988142](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37488988142)
+passed with zero Terraform resource changes. Corrected eighteen-binding
+[activation 37490374204](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37490374204)
+passed with backup `staging-20261006T154826Z-b370e46222477157`, without changing
+the application image. Cloud and production were outside the activation target.
+
+Retained Kid run `628e9054-5d8e-41f3-8256-8e7902d2b058` stopped after one saved
+tester decision because history IDs had been bound instead of active publication
+IDs. Dify run `22fcdfd1-491c-4cfb-a28e-0dfe75ba04cb` succeeded with zero tokens;
+Booklet rejected the identity mismatch. The corrected active graphs have the same
+hashes. Linked successor `43f91bcd-1325-4d0b-8b97-6df622a133a4` has passed the
+tester and manager boundary, with zero payable calls. Full campaign completion,
+saved-page inspection and final M3 acceptance remain pending.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.
