@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { configurationForPersona, getRunnerConfig, bindingFor } from "@/lib/experiment-runner/config";
+import { createHash } from "node:crypto";
+import { configurationForPersona, getRunnerConfig, bindingFor, savedConfigurationSchema } from "@/lib/experiment-runner/config";
 
 const ids = Array.from({ length: 18 }, (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
 const entries = [
@@ -10,6 +11,28 @@ const bindings = entries.map(([role, taskId, persona], index) => ({ role, taskId
 const env = { DEPLOYMENT_ENV: "local", DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: "https://dify.example.test", DIFY_BOOKLET_PUBLIC_ORIGIN: "http://localhost:3000", DIFY_BOOKLET_TOOL_KEY: "x".repeat(32), DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bindings) };
 
 describe("booklet runner configuration", () => {
+  it("requires a separate judge only in the complete final-page evaluation profile", () => {
+    const specialists = Array.from({ length: 10 }, (_, index) => ({ role: "specialist", taskId: `J${String(index + 3).padStart(2, "0")}`,
+      persona: null, appId: `00000000-0000-4000-8000-${String(index + 30).padStart(12, "0")}`,
+      publishedWorkflowId: ids[17], toolProviderId: null, apiKey: "private-specialist" }));
+    const image = { role: "image", taskId: null, persona: null, appId: ids[16], publishedWorkflowId: ids[17],
+      toolProviderId: null, apiKey: "private-image", finalPageIllustration: true };
+    const judge = { role: "judge", taskId: null, persona: null, appId: ids[17], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: "private-judge" };
+    const rows = [...bindings, ...specialists, image, judge];
+    const state = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(rows) });
+    if (!state.enabled) throw new Error("Expected evaluation profile");
+    const snapshot = configurationForPersona(state.config, "playful_kid");
+    expect(snapshot).toHaveLength(16);
+    expect(savedConfigurationSchema.safeParse(snapshot).success).toBe(true);
+    expect(bindingFor(state.config, { role: "judge", taskId: null, persona: "playful_kid" }).apiKey).toBe("private-judge");
+    expect(JSON.stringify(snapshot)).not.toContain("private-");
+    for (const bad of [rows.map((row) => row.role === "judge" ? { ...row, persona: "playful_kid" } : row),
+      rows.map((row) => row.role === "image" ? { ...row, finalPageIllustration: undefined } : row),
+      rows.map((row) => row.role === "judge" ? { ...row, appId: image.appId } : row)]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) }).enabled).toBe(false);
+    }
+    expect(savedConfigurationSchema.safeParse(snapshot.filter((row) => row.taskId !== "J12")).success).toBe(false);
+  });
   it("requires the exact seventeen-slot J12 profile and saves fifteen persona bindings", () => {
     const later = Array.from({ length: 10 }, (_, index) => ({
       role: "specialist", taskId: `J${String(index + 3).padStart(2, "0")}`, persona: null,
@@ -28,6 +51,49 @@ describe("booklet runner configuration", () => {
       expanded.map((row) => row.role === "image" ? { ...row, taskId: "J12" } : row)]) {
       expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(bad) })).toEqual({ enabled: false, reason: "invalid" });
     }
+  });
+  it("records final-page evidence only for the complete image binding and preserves legacy snapshots", () => {
+    const later = Array.from({ length: 10 }, (_, index) => ({
+      role: "specialist", taskId: `J${String(index + 3).padStart(2, "0")}`, persona: null,
+      appId: `00000000-0000-4000-8000-${String(index + 30).padStart(12, "0")}`,
+      publishedWorkflowId: ids[17], toolProviderId: null, apiKey: `pages-${index}`,
+    }));
+    const image = { role: "image", taskId: null, persona: null, appId: ids[16], publishedWorkflowId: ids[17], toolProviderId: null, apiKey: "image-key" };
+    const legacy = [...bindings, ...later, image];
+    const legacyState = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(legacy) });
+    if (!legacyState.enabled) throw new Error("Expected legacy J12 profile");
+    const legacySnapshot = configurationForPersona(legacyState.config, "playful_kid");
+    const expectedLegacySnapshot = legacy.filter((item) => item.persona === null || item.persona === "playful_kid").map(({ role, taskId, appId, publishedWorkflowId, toolProviderId }) => ({ role, taskId, appId, publishedWorkflowId, toolProviderId }));
+    expect(JSON.stringify(legacySnapshot)).not.toContain("finalPageIllustration");
+    expect(JSON.stringify(legacySnapshot)).toBe(JSON.stringify(expectedLegacySnapshot));
+    const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    expect(hash(legacySnapshot)).toBe(hash(expectedLegacySnapshot));
+    expect(savedConfigurationSchema.safeParse(legacySnapshot).success).toBe(true);
+
+    const enabled = legacy.map((row) => row.role === "image" ? { ...row, finalPageIllustration: true } : row);
+    const enabledState = getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(enabled) });
+    if (!enabledState.enabled) throw new Error("Expected enabled J13 evidence profile");
+    const snapshot = configurationForPersona(enabledState.config, "playful_kid");
+    expect(snapshot).toHaveLength(15);
+    expect(snapshot.filter((row) => row.finalPageIllustration === true)).toEqual([expect.objectContaining({ role: "image", taskId: null })]);
+    expect(hash(snapshot)).not.toBe(hash(legacySnapshot));
+    expect(savedConfigurationSchema.safeParse(snapshot).success).toBe(true);
+
+    const wrongRole = enabled.map((row) => row.role === "image" ? { ...row, finalPageIllustration: undefined } : row.taskId === "J12" ? { ...row, finalPageIllustration: true } : row);
+    const partial = enabled.filter((row) => row.taskId !== "J12");
+    for (const rows of [wrongRole, partial, enabled.map((row) => row.role === "image" ? { ...row, finalPageIllustration: false } : row)]) {
+      expect(getRunnerConfig({ ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(rows) })).toEqual({ enabled: false, reason: "invalid" });
+    }
+    expect(savedConfigurationSchema.safeParse(snapshot.map((row) => row.role === "image" ? { ...row, finalPageIllustration: undefined } : row.taskId === "J12" ? { ...row, finalPageIllustration: true } : row)).success).toBe(false);
+    expect(savedConfigurationSchema.safeParse(snapshot.filter((row) => row.taskId !== "J12")).success).toBe(false);
+  });
+  it("preserves legacy saved judge and J13 records when final-page evidence is absent", () => {
+    const legacy = [
+      { role: "judge", taskId: "J13", appId: ids[0], publishedWorkflowId: ids[1], toolProviderId: null },
+      { role: "specialist", taskId: "J13", appId: ids[2], publishedWorkflowId: ids[3], toolProviderId: null },
+    ];
+    expect(savedConfigurationSchema.safeParse(legacy).success).toBe(true);
+    expect(savedConfigurationSchema.safeParse([...legacy, { role: "image", taskId: null, appId: ids[4], publishedWorkflowId: ids[5], toolProviderId: null, finalPageIllustration: true }]).success).toBe(false);
   });
   it("requires all sixteen pagination bindings and retains a fourteen-slot private snapshot", () => {
     const later = ["J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10", "J11"].map((taskId, index) => ({

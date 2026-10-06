@@ -9,6 +9,56 @@ beforeEach(() => { fetchMock = vi.fn().mockResolvedValue(new Response(JSON.strin
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it.each([false, true])("saves selected page order without resuming or replaying after uncertain response=%s", async (lost) => {
+    const pageSelection = { schemaVersion: "2", runId: run.runId, configurationHash: "a".repeat(64), layoutVersionId: "layout",
+      pages: [{ pageId: "page-1", pageIndex: 1, pageBibleVersionId: "bible-1", previousPageVersionId: null },
+        { pageId: "page-3", pageIndex: 3, pageBibleVersionId: "bible-3", previousPageVersionId: null }] };
+    const paused = { ...run, status: "paused", pauseRequested: true, activeOperationId: null, pendingDecision: null, pageSelection };
+    fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        if (lost) throw new Error("lost");
+        return new Response(JSON.stringify({ data: { jobId: "job", reused: false } }));
+      }
+      return new Response(JSON.stringify({ data: [paused] }));
+    });
+    render(<BookletRunner />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Page 3" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Page 1" }));
+    expect(screen.getByText("Selected order: Page 3 → Page 1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save page order" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save page order" }).hasAttribute("disabled")).toBe(false));
+    const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toBe(`/api/experiments/booklet-runs/${run.runId}/pages`);
+    expect(JSON.parse(writes[0][1].body)).toMatchObject({ expectedRevision: 2, batch: { selection: "selected_batch",
+      pages: [{ pageId: "page-3", pageBibleVersionId: "bible-3" }, { pageId: "page-1", pageBibleVersionId: "bible-1" }] } });
+    if (lost) expect(screen.getByRole("alert").textContent).toContain("No automatic retry");
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+  });
+  it("shows generation separately from blocked evaluation and keeps advisory reports inspectable", async () => {
+    const report = { role: "tester", mode: "simulated", summary: "Deterministic feedback; creative quality not assessed." };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, bookletId: "saved-book", status: "blocked",
+      generationStatus: "complete", evaluationStatus: "running", reports: [{ operationId: "feedback-1", workflowRunId: "run-1",
+        verifiedWorkflowId: "published-1", matchesCurrentVersions: true, report },
+      { operationId: "judge-1", workflowRunId: "run-2", verifiedWorkflowId: "published-2", matchesCurrentVersions: false,
+        report: { ...report, role: "judge", summary: "Historical judge assessment." } }] }] }), { status: 200 }));
+    render(<BookletRunner />);
+    expect(await screen.findByText("Generation: complete · Evaluation: running")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open saved booklet" }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
+    expect(screen.getByText("Tester feedback · simulated")).toBeTruthy();
+    expect(screen.getByText("Independent judge assessment · simulated")).toBeTruthy();
+    expect(screen.getByText("Current artifact versions: do not match; report is historical")).toBeTruthy();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
+  it("loads a saved runner booklet through its detail API, not the legacy workspace", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { ...run, bookletId: "saved-book", status: "blocked" } })));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    expect(await screen.findByText("Booklet saved-book")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to all runs" }).getAttribute("href")).toBe("/experiments/booklet-runs");
+    expect(screen.queryByRole("button", { name: "Start selected" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start linked successor" })).toBeNull();
+    expect(fetchMock.mock.calls.every(([url, options]) => url === `/api/experiments/booklet-runs/${run.runId}` && options?.method !== "POST")).toBe(true);
+  });
   it("reads current state and retries a definite control conflict once", async () => {
     let writes = 0;
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
@@ -83,7 +133,7 @@ describe("booklet runner inspector", () => {
     expect(screen.getByText("title: Needs review.")).toBeTruthy();
     expect(screen.getByText("Text calls 1/120", { exact: false })).toBeTruthy();
     expect(screen.getByText("Balanced and Real modes are unavailable.")).toBeTruthy();
-    expect(screen.getByText("Each run stops at its configured slice boundary; this does not complete a booklet.", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Shorter suites stop at their slice boundary; full suites record generation and evaluation separately.", { exact: false })).toBeTruthy();
     expect(screen.getByText("Pending decision")).toBeTruthy();
     expect(screen.getByText("Active operation: specialist J02", { exact: false })).toBeTruthy();
     expect(screen.getByText("Active tester grant: J01, J02", { exact: false })).toBeTruthy();

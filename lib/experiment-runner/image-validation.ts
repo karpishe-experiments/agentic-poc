@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
-
-export const MAX_EXPERIMENT_IMAGE_BYTES = 20 * 1024 * 1024;
-export const MAX_EXPERIMENT_IMAGE_PIXELS = 64_000_000;
+export { MAX_EXPERIMENT_IMAGE_BYTES, MAX_EXPERIMENT_IMAGE_PIXELS } from "@/lib/experiment-runner/image-limits";
+import { MAX_EXPERIMENT_IMAGE_BYTES, MAX_EXPERIMENT_IMAGE_PIXELS } from "@/lib/experiment-runner/image-limits";
 
 export type ExperimentImageValidationCode =
   | "empty"

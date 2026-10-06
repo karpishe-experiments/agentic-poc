@@ -3,18 +3,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { MongoServerError } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
-import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources } from "@/db/experiment-pages";
+import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources, verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
+import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
+import { materializeNarrativeResult } from "@/db/experiment-narrative";
+import { verifyExperimentGeneration, createExperimentCompletionService } from "@/db/experiment-completion";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
+import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { BOOK_TASKS } from "@/lib/experiment-runner/narrative-tasks";
 import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 import type { RuntimeExecution, WorkflowRuntime } from "@/lib/experiment-runner/transport";
+import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
 const databases: Database[] = [];
@@ -25,28 +30,37 @@ class MemoryStore implements AssetStore {
   async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
   async exists(uri: string) { return this.files.has(uri); }
 }
-async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 = 13) {
+async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 | 18 = 13, finalPages = false) {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const store = new MemoryStore(), repository = createExperimentRepository(database, { store: () => store });
-  const context = createExperimentContextService(database);
+  const context = createExperimentContextService(database, { store: () => store });
   const bindings: BookletRunnerConfig["bindings"] = [
     { role: "manager", taskId: null, persona: null },
     ...BOOK_TASKS.map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(["J09", "J10"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null })),
     ...(slots >= 16 ? [{ role: "specialist" as const, taskId: "J11" as const, persona: null }] : []),
-    ...(slots === 17 ? [{ role: "specialist" as const, taskId: "J12" as const, persona: null }] : []),
+    ...(slots >= 17 ? [{ role: "specialist" as const, taskId: "J12" as const, persona: null }] : []),
+    ...(slots === 18 ? [{ role: "judge" as const, taskId: null, persona: null }] : []),
     ...(["playful_kid", "enthusiast_parent", "professional_creator"] as const).map((persona) => ({ role: "tester" as const, taskId: null, persona })),
     { role: "image", taskId: null, persona: null },
   ].filter((item) => slots >= 15 || (item.taskId !== "J09" && item.taskId !== "J10" && (slots === 13 || (item.role !== "image" && item.taskId !== "J08" &&
     (slots === 11 || item.taskId === null || ["J01", "J02"].includes(item.taskId))))))
     .map((item) => ({ ...item, appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null, apiKey: "test-key" })) as BookletRunnerConfig["bindings"];
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test", callbackKey: "test-callback", bindings };
+  if (finalPages) {
+    if (slots < 17) throw new Error("Final page fixture requires at least seventeen bindings.");
+    bindings.find((item) => item.role === "image")!.finalPageIllustration = true;
+  }
   const runId = randomUUID(), bookletId = randomUUID(); let clock = 1;
   await repository.createRun({ runId, bookletId, persona, mode: "simulated", configuration: configurationSnapshot(config, persona), nowMs: clock++ });
   const saved = new Map<string, RuntimeExecution>();
-  let lostImageResponse = false, pauseImage = false, pauseBeforeClaim = false, omitImageUpload = false, wrongImageDigest = false;
-  let lostPaginationResponse = false, lostManagerPaginationResponse = false, lostPageBibleResponse = false;
+  let lostImageResponse = false, pauseImage = false, pauseBeforeClaim = false, omitImageUpload = false, wrongImageDigest = false, corruptSavedPage = false;
+  let lostPaginationResponse = false, lostManagerPaginationResponse = false, lostPageBibleResponse = false, pageClarification = false;
   let paginationTerminal: "failed" | "stopped" | null = null;
+  let reverseReferenceReadback = false;
+  let lostJudgeResponse = false;
+  let lostBeforeUpload = false;
+  let lateImage: { identity: { runId: string; operationId: string; workflowRunId: string; parentWorkflowRunId: string | null; inputFingerprint: string }; binding: BookletRunnerConfig["bindings"][number]; referenceFileIds: string[] | undefined } | null = null;
   let acknowledgement: "normal" | "missing" | "nonstring" | "running" | "failed" = "normal";
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input) => {
@@ -64,20 +78,50 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
       let outputs: Record<string, unknown>;
       if (binding.role === "image") {
         expect(operationContext.role).toBe("image");
+        if (lostBeforeUpload && operation.taskId === "J13") {
+          lostBeforeUpload = false;
+          lateImage = { identity: { ...identity, inputFingerprint: operation.inputFingerprint }, binding, referenceFileIds: input.referenceFileIds };
+          saved.set(workflowRunId, { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "running", outputs: {} });
+          return { kind: "unknown" };
+        }
+        if (pageClarification && operation.taskId === "J13") {
+          pageClarification = false;
+          const result: RoleResult = { kind: "clarification", payload: { question: "Should the robot look pleased in this approved scene?" } };
+          const envelope = { ...identity, inputFingerprint: operation.inputFingerprint, result };
+          await repository.completeOperation({ envelope: { runId, operationId: input.operationId, workflowRunId,
+            inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
+          const lateBytes = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#74aadd" } }).png().toBuffer();
+          await expect(createExperimentImageStorage({ database, store, now: () => clock++ }).complete({
+            identity: { ...identity, inputFingerprint: operation.inputFingerprint }, content: lateBytes,
+          })).rejects.toThrow();
+          const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "succeeded", outputs: { booklet_result: JSON.stringify(envelope) } };
+          saved.set(workflowRunId, execution);
+          return { kind: "execution", execution };
+        }
         if (pauseImage) await repository.pause({ runId, expectedRevision: (await repository.getRun(runId))!.revision, nowMs: clock++ });
+        if (operation.taskId === "J13" && "answers" in operationContext && operationContext.answers?.length) {
+          expect(operationContext.answers.some((answer) => answer.question === "Should the robot look pleased in this approved scene?" && answer.answer)).toBe(true);
+        }
         const bytes = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#74aadd" } }).png().toBuffer();
         const result = omitImageUpload ? null : await createExperimentImageStorage({ database, store, now: () => clock++ }).complete({
           identity: { ...identity, inputFingerprint: operation.inputFingerprint }, content: bytes,
         });
+        if (corruptSavedPage && operation.taskId === "J13" && result?.asset) store.files.set(result.asset.uri, new Uint8Array([1]));
         outputs = { image_result: JSON.stringify({ ...identity, inputFingerprint: operation.inputFingerprint, assetId: operation._id,
           sha256: wrongImageDigest ? "b".repeat(64) : result?.operation.resultDigest ?? "a".repeat(64) }) };
+        if (operation.taskId === "J13" && input.referenceFileIds !== undefined) {
+          const referenceIds = [...(input.referenceFileIds ?? [])];
+          if (reverseReferenceReadback) referenceIds.reverse();
+          outputs.reference_files = referenceIds.map((record_id) => ({ type: "image", transfer_method: "local_file",
+            reference: `dify-file-ref:${Buffer.from(JSON.stringify({ record_id })).toString("base64url")}` }));
+        }
       } else {
         const result = simulateNarrativeResult(operationContext, "simulated");
         const envelope = { ...identity, inputFingerprint: operation.inputFingerprint, result };
         const lostManager = binding.role === "manager" && lostManagerPaginationResponse &&
           result.kind === "delegate" && result.payload.taskId === "J11";
         if (!(binding.taskId === "J11" && (lostPaginationResponse || paginationTerminal)) &&
-            !(binding.taskId === "J12" && lostPageBibleResponse) && !lostManager) {
+            !(binding.taskId === "J12" && lostPageBibleResponse) && !lostManager && result.kind !== "feedback" && result.kind !== "assessment") {
           await repository.completeOperation({ envelope: { runId, operationId: operation._id, workflowRunId, inputFingerprint: operation.inputFingerprint, result },
             parentWorkflowRunId: input.parentWorkflowRunId, nowMs: clock++ });
         }
@@ -86,6 +130,7 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
       const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId,
         status: binding.taskId === "J11" && paginationTerminal ? paginationTerminal : "succeeded", outputs };
       saved.set(workflowRunId, execution);
+      if (binding.role === "judge" && lostJudgeResponse) { lostJudgeResponse = false; return { kind: "unknown" }; }
       if (binding.taskId === "J11" && lostPaginationResponse) { lostPaginationResponse = false; return { kind: "unknown" }; }
       if (binding.taskId === "J12" && lostPageBibleResponse) { lostPageBibleResponse = false; return { kind: "unknown" }; }
       if (binding.role === "manager" && lostManagerPaginationResponse && outputs.booklet_result &&
@@ -102,7 +147,11 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }),
     retrieve: vi.fn<WorkflowRuntime["retrieve"]>(async (_binding, id) => saved.has(id) ? { kind: "execution", execution: saved.get(id)! } : { kind: "unknown" }),
   };
-  const dispatcher = () => createExperimentDispatcher({ database, config, runtime, store: () => store, mutate: async (fn) => fn(), now: () => clock++ });
+  const uploadReference = vi.fn(async (_binding: BookletRunnerConfig["bindings"][number], _runId: string, bytes: Uint8Array): Promise<ReferenceUploadResult> => ({
+    kind: "uploaded" as const, id: randomUUID(), byteLength: bytes.byteLength, mimeType: "image/png" as const,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  }));
+  const dispatcher = () => createExperimentDispatcher({ database, config, runtime, uploadReference, store: () => store, mutate: async (fn) => fn(), now: () => clock++ });
   async function reachSamples() {
     for (let step = 0; step < 60; step++) {
       if ((await context.getRunView(runId))?.nextNarrativeTask === "style_samples") return;
@@ -125,18 +174,57 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }
     throw new Error("No pagination work");
   }
-  async function testerDecision(result: RoleResult, recover = false, dispatched = false) {
+  async function reachPageImageWithReferences() {
+    for (let step = 0; step < 160; step++) {
+      const view = await context.getRunView(runId);
+      const last = (await repository.listOperations(runId)).at(-1);
+      if (view?.nextNarrativeTask === "J13" && view.nextPageIllustrationWork &&
+          "pageIndex" in view.nextPageIllustrationWork && view.nextPageIllustrationWork.pageIndex > 0 &&
+          last?.role === "manager" && last.state === "succeeded" &&
+          JSON.parse(last.resultJson ?? "null")?.payload?.taskId === "J13") return;
+      expect(await dispatcher().advance(runId)).not.toBe("blocked");
+    }
+    throw new Error("No manager-selected story page image.");
+  }
+  async function testerDecision(result: RoleResult, recover = false, dispatched = false, unverified = false, role: "tester" | "judge" = "tester") {
     const run = (await repository.getRun(runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
-    const operation = await repository.prepareOperation({ runId, operationId, expectedRevision: run.revision, role: "tester", taskId: null,
+    const operation = await repository.prepareOperation({ runId, operationId, expectedRevision: run.revision, role, taskId: null,
       subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1, inputFingerprint: randomUUID().replaceAll("-", "").repeat(2), nowMs: clock++ });
     if (recover || dispatched) await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: clock++ });
     await repository.claimOperation({ runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: clock++ });
+    if (dispatched && unverified) {
+      const reportContext = await context.getOperationContext({ runId, operationId, workflowRunId, parentWorkflowRunId: null });
+      expect(simulateNarrativeResult(reportContext, "simulated")).toMatchObject({ kind: role === "tester" ? "feedback" : "assessment",
+        payload: { intent: { status: "not_assessed" }, evidence: { inspectedAssetIds: [] } } });
+    }
     if (recover) await repository.recordDispatchOutcome({ runId, operationId, parentWorkflowRunId: null, category: "unknown_outcome", nowMs: clock++ });
-    return repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
+    if (dispatched && !unverified) await repository.verifyDispatchPublication({ runId, operationId, workflowRunId, parentWorkflowRunId: null,
+      workflowId: bindings.find((binding) => binding.role === role && binding.persona === (role === "tester" ? persona : null))!.publishedWorkflowId, nowMs: clock++ });
+    const completed = await repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: operation.inputFingerprint, result }, parentWorkflowRunId: null, nowMs: clock++ });
+    return completed;
   }
-  return { database, repository, context, config, runId, store, runtime, dispatcher, reachSamples, reachSheet, reachPagination, testerDecision,
-    faults: (value: { lost?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+  return { database, repository, context, config, runId, store, runtime, uploadReference, dispatcher, reachSamples, reachSheet, reachPagination, reachPageImageWithReferences, testerDecision,
+    async finishLateImage(invalidIdentity = false) {
+      if (!lateImage) throw new Error("No retained late image callback.");
+      const bytes = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#74aadd" } }).png().toBuffer();
+      const result = await createExperimentImageStorage({ database, store, now: () => clock++ }).complete({
+        identity: { ...lateImage.identity, ...(invalidIdentity ? { workflowRunId: randomUUID() } : {}) }, content: bytes,
+      });
+      saved.set(lateImage.identity.workflowRunId, { id: lateImage.identity.workflowRunId,
+        workflow_id: lateImage.binding.publishedWorkflowId, status: "succeeded", outputs: {
+          image_result: JSON.stringify({ ...lateImage.identity, assetId: lateImage.identity.operationId, sha256: result.operation.resultDigest }),
+          ...(lateImage.referenceFileIds ? { reference_files: lateImage.referenceFileIds.map((record_id) => ({ type: "image", transfer_method: "local_file",
+            reference: `dify-file-ref:${Buffer.from(JSON.stringify({ record_id })).toString("base64url")}` })) } : {}),
+        } });
+      return result;
+    },
+    faults: (value: { lostBeforeUpload?: boolean; lostJudge?: boolean; reverseReferences?: boolean; pageClarification?: boolean; lost?: boolean; corruptSavedPage?: boolean; lostPagination?: boolean; lostManagerPagination?: boolean; lostPageBible?: boolean; paginationTerminal?: "failed" | "stopped"; pause?: boolean; beforeClaim?: boolean; omitUpload?: boolean; wrongDigest?: boolean; acknowledgement?: typeof acknowledgement }) => {
+      lostBeforeUpload = value.lostBeforeUpload ?? false;
+      lostJudgeResponse = value.lostJudge ?? false;
+      reverseReferenceReadback = value.reverseReferences ?? false;
+      pageClarification = value.pageClarification ?? false;
       lostImageResponse = value.lost ?? false; pauseImage = value.pause ?? false;
+      corruptSavedPage = value.corruptSavedPage ?? false;
       lostPaginationResponse = value.lostPagination ?? false;
       lostManagerPaginationResponse = value.lostManagerPagination ?? false;
       lostPageBibleResponse = value.lostPageBible ?? false;
@@ -146,6 +234,586 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }, next: () => clock++ };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it("automatically completes generation and separate reports, recovering a lost judge response without replay", async () => {
+    const env = await setup("playful_kid", 18, true);
+    env.faults({ lostJudge: true });
+    let recovered = false, finished = false, checkedPendingEvaluation = false;
+    for (let step = 0; step < 210; step++) {
+      const outcome = await env.dispatcher().advance(env.runId);
+      const run = (await env.repository.getRun(env.runId))!;
+      if (run.generationCompletedAtMs != null && run.status === "queued" && !checkedPendingEvaluation) {
+        checkedPendingEvaluation = true;
+        const completion = createExperimentCompletionService(env.database, env.store);
+        await expect(completion.completeEvaluation({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() }))
+          .rejects.toThrow("Exactly one saved tester report and independent judge report");
+        await expect(env.repository.prepareOperation({ runId: env.runId, operationId: randomUUID(), expectedRevision: run.revision,
+          role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1,
+          inputFingerprint: "a".repeat(64), nowMs: env.next() })).rejects.toThrow("Completed generation permits evaluation only");
+        await env.repository.pause({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() });
+        const calls = vi.mocked(env.runtime.start).mock.calls.length;
+        expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
+        expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+        const paused = (await env.repository.getRun(env.runId))!;
+        await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.next() });
+      }
+      if (run.status === "blocked") {
+        expect(run.safeFailure).toBe("unknown_outcome");
+        expect(run.generationCompletedAtMs).toBeTypeOf("number");
+        expect(await env.database.collections.booklets.findOne({ _id: run.bookletId })).toMatchObject({ lifecycle: "completed" });
+        recovered = true;
+      }
+      if (outcome === "boundary") { finished = true; break; }
+    }
+    expect(finished).toBe(true); expect(recovered).toBe(true); expect(checkedPendingEvaluation).toBe(true);
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "completed", evaluationStatus: "complete", activeOperationId: null,
+      counters: { payableText: 0, payableImage: 0 } });
+    expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
+    expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "judge")).toHaveLength(1);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const completion = createExperimentCompletionService(env.database, env.store);
+    expect((await completion.completeEvaluation({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() })).revision).toBe(run.revision);
+    const before = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(before);
+  }, 120_000);
+  it("rejects evaluator reports and judge admission before saved generation completion", async () => {
+    const env = await setup("playful_kid", 18, true);
+    const run = (await env.repository.getRun(env.runId))!, operationId = randomUUID(), workflowRunId = randomUUID();
+    await expect(env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: run.revision,
+      role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text",
+      attempt: 1, inputFingerprint: "a".repeat(64), nowMs: env.next() })).rejects.toThrow("Evaluation requires saved generation completion");
+    const report = simulatedExperimentReport({ role: "tester", mode: "simulated", runId: env.runId,
+      configurationHash: run.configurationHash, versionIds: [workflowRunId], warningCount: 0 });
+    await expect(env.testerDecision({ kind: "feedback", payload: report }, false, true)).rejects.toThrow("Evaluation requires saved generation completion");
+  });
+  it("recovers a reference-free cover with omitted file output without replay", async () => {
+    const env = await setup("playful_kid", 17, true);
+    let ready = false;
+    for (let step = 0; step < 160; step++) {
+      const view = await env.context.getRunView(env.runId);
+      const last = (await env.repository.listOperations(env.runId)).at(-1);
+      if (view?.nextNarrativeTask === "J13" && view.nextPageIllustrationWork?.kind === "image" &&
+          view.nextPageIllustrationWork.pageIndex === 0 && last?.role === "manager" && last.state === "succeeded") { ready = true; break; }
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    expect(ready).toBe(true);
+    env.faults({ lost: true });
+    const imageCalls = () => vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image").length;
+    const before = imageCalls();
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(JSON.parse(operation.referenceUploadsJson!)).toEqual([]);
+    expect(vi.mocked(env.runtime.start).mock.calls.at(-1)![1].referenceFileIds).toBeUndefined();
+    await env.dispatcher().advance(env.runId);
+    expect((await env.repository.getRun(env.runId))!.status).not.toBe("blocked");
+    expect((await env.repository.getOperation(operation._id))!.verifiedWorkflowId).toBeTruthy();
+    expect(imageCalls()).toBe(before + 1);
+  }, 120_000);
+  it("blocks reversed final-page reference read-back without another image dispatch", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    env.faults({ reverseReferences: true });
+    const before = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect((await env.repository.getRun(env.runId))!.status).toBe("blocked");
+    expect((await env.repository.getRun(env.runId))!.safeFailure).toBe("definite_failure");
+    expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
+    expect(vi.mocked(env.runtime.start).mock.calls.length).toBe(before + 1);
+  }, 120_000);
+  it("dispatches a retained two-page selection in order with separate saved results and approvals", async () => {
+    const env = await setup("enthusiast_parent", 17, true);
+    await env.reachPageImageWithReferences();
+    const readyRun = (await env.repository.getRun(env.runId))!;
+    expect((await env.context.getRunView(env.runId))!.pageSelection).toBeNull();
+    await env.repository.pause({ runId: env.runId, expectedRevision: readyRun.revision, nowMs: env.next() });
+    const run = (await env.repository.getRun(env.runId))!, view = (await env.context.getRunView(env.runId))!;
+    const layoutArtifact = view.currentArtifacts.find((artifact) => artifact.taskId === "J11")!;
+    const layout = parseStoredPageLayout(run.persona, layoutArtifact.versions.find((version) => version.id === layoutArtifact.currentVersionId)!.content);
+    const selected = [layout.pages[3]!, layout.pages[1]!].map((page) => ({ pageId: page.pageId,
+      pageBibleVersionId: view.currentArtifacts.find((artifact) => artifact.taskId === "J12" && artifact.subjectId === page.pageId)!.currentVersionId!,
+      previousPageVersionId: null }));
+    expect(view.pageSelection).toMatchObject({ runId: run._id, layoutVersionId: layoutArtifact.currentVersionId });
+    expect(selected.every((page) => view.pageSelection?.pages.some((available) => available.pageId === page.pageId &&
+      available.pageBibleVersionId === page.pageBibleVersionId))).toBe(true);
+    const batches = createExperimentPageBatchRepository({ database: env.database, store: env.store, now: env.next });
+    const jobId = randomUUID();
+    await batches.select({ jobId, expectedRevision: run.revision, batch: { schemaVersion: "2", runId: run._id,
+      configurationHash: run.configurationHash, layoutVersionId: layoutArtifact.currentVersionId!, selection: "selected_batch", pages: selected } });
+    expect((await env.context.getRunView(env.runId))!.pageSelection).toBeNull();
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(vi.mocked(env.runtime.start).mock.calls.length).toBe(calls);
+    const pausedRun = (await env.repository.getRun(env.runId))!;
+    await env.repository.resume({ runId: env.runId, expectedRevision: pausedRun.revision, nowMs: env.next() });
+    let approved = false;
+    for (let step = 0; step < 12; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      const artifacts = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13",
+        subjectId: { $in: selected.map((page) => page.pageId) }, state: "approved" }).toArray();
+      if (artifacts.length === 2) { approved = true; break; }
+    }
+    expect(approved).toBe(true);
+    const saved = await batches.get({ runId: env.runId, jobId });
+    expect(saved.next).toEqual({ kind: "complete" });
+    expect(saved.items.map((item) => item.pageId)).toEqual(selected.map((page) => page.pageId));
+    expect(saved.items.every((item) => item.status === "succeeded")).toBe(true);
+    expect(new Set(saved.items.map((item) => item.assetId)).size).toBe(2);
+    for (const item of saved.items) {
+      expect(await env.database.collections.approvals.findOne({ experimentRunId: env.runId, artifactVersionId: item.pageVersionId! })).toBeTruthy();
+      expect((await env.repository.getOperation(item.operationId!))!.subjectId).toBe(item.pageId);
+    }
+    expect((await env.repository.getRun(env.runId))!.status).not.toBe("completed");
+  }, 120_000);
+
+  it.each(["single", "selected_batch"] as const)("resumes a %s J13 image paused before claim without spending or replacing the batch", async (selection) => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    if (selection === "selected_batch") {
+      const run = (await env.repository.getRun(env.runId))!, view = (await env.context.getRunView(env.runId))!;
+      const artifact = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+      const layout = parseStoredPageLayout(run.persona, artifact.versions.find((item) => item.id === artifact.currentVersionId)!.content);
+      await createExperimentPageBatchRepository({ database: env.database, store: env.store }).select({
+        jobId: randomUUID(), expectedRevision: run.revision, batch: { schemaVersion: "2", runId: run._id,
+          configurationHash: run.configurationHash, layoutVersionId: artifact.currentVersionId!, selection,
+          pages: layout.pages.filter((page) => page.pageIndex > 0).slice(0, 2).map((page) => ({ pageId: page.pageId,
+            pageBibleVersionId: view.currentArtifacts.find((item) => item.taskId === "J12" && item.subjectId === page.pageId)!.currentVersionId!,
+            previousPageVersionId: null })) },
+      });
+    }
+    const before = (await env.repository.getRun(env.runId))!;
+    const earlierPages = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13", state: "approved" }).toArray();
+    env.faults({ beforeClaim: true });
+    await env.dispatcher().advance(env.runId);
+    const paused = (await env.repository.getRun(env.runId))!;
+    expect(paused.status).toBe("paused");
+    expect(paused.counters.logicalImage).toBe(before.counters.logicalImage);
+    const attempt = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(attempt).toMatchObject({ role: "image", taskId: "J13", state: "failed", safeFailure: null, reservationCount: 0 });
+    const batches = createExperimentPageBatchRepository({ database: env.database, store: env.store });
+    const jobs = await batches.listActive(env.runId);
+    expect(jobs).toHaveLength(1);
+    await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.next() });
+    env.faults({});
+    for (let step = 0; step < 6; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      if (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: attempt.subjectId })) break;
+    }
+    const attempts = (await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === attempt.subjectId);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toMatchObject({ state: "succeeded", reservationCount: 1, attempt: 2 });
+    expect((await env.repository.getRun(env.runId))!.counters.logicalImage).toBe(before.counters.logicalImage + 1);
+    const batch = await batches.get({ runId: env.runId, jobId: jobs[0].jobId });
+    expect(batch.items[0]).toMatchObject({ status: "succeeded", operationId: attempts[1]._id });
+    expect(batch.next).toMatchObject({ kind: selection === "single" ? "complete" : "ready" });
+    for (const earlier of earlierPages) expect(await env.database.collections.artifacts.findOne({ _id: earlier._id })).toEqual(earlier);
+  }, 120_000);
+  it("routes J13 image clarification through a saved tester answer before a fresh image operation", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    const before = (await env.repository.getRun(env.runId))!;
+    const assetsBefore = await env.database.collections.assets.countDocuments({ bookletId: before.bookletId });
+    env.faults({ pageClarification: true });
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    const questionOperation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    const asked = (await env.repository.getRun(env.runId))!;
+    expect(JSON.parse(asked.pendingDecisionJson!)).toMatchObject({ kind: "question", taskId: "J13", questionId: questionOperation._id });
+    expect(asked.imageRevisions).toBe(before.imageRevisions);
+    expect(asked.counters.logicalImage).toBe(before.counters.logicalImage + 1);
+    expect(asked.counters.payableImage).toBe(0);
+    expect(asked.counters.payableText).toBe(0);
+    expect(questionOperation.reservationCount).toBe(1);
+    expect(await env.database.collections.assets.countDocuments({ bookletId: before.bookletId })).toBe(assetsBefore);
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    expect((await env.repository.getRun(env.runId))!.pendingDecisionJson).toBeNull();
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    const image = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(image.role).toBe("image");
+    expect(image._id).not.toBe(questionOperation._id);
+    expect(await env.database.collections.assets.countDocuments({ bookletId: before.bookletId })).toBe(assetsBefore + 1);
+    expect((await env.repository.getRun(env.runId))!.counters.logicalImage).toBe(before.counters.logicalImage + 2);
+    expect((await env.repository.getOperation(questionOperation._id))!.state).toBe("succeeded");
+    const batchItems = await env.database.collections.generation_items.find({ itemKey: image.subjectId }).toArray();
+    expect(batchItems).toHaveLength(1);
+    expect(JSON.parse(batchItems[0].resultJson!)).toMatchObject({ operationId: image._id, assetId: image._id,
+      clarificationOperationIds: [questionOperation._id] });
+    expect(batchItems[0]).toMatchObject({ status: "succeeded", attemptCount: 2 });
+  }, 120_000);
+  it("recovers the persisted post-callback pre-assembly boundary without another image POST", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    const artifact = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId }))!;
+    const item = (await env.database.collections.generation_items.findOne({ itemKey: operation.subjectId }))!;
+    // Restore only this isolated fixture to the durable state left by a process
+    // interruption after the callback committed but before assembly began.
+    await env.database.collections.artifact_dependencies.deleteMany({ downstreamVersionId: artifact.currentVersionId! });
+    await env.database.collections.artifact_versions.deleteOne({ _id: artifact.currentVersionId! });
+    await env.database.collections.artifacts.deleteOne({ _id: artifact._id });
+    await env.database.collections.generation_items.updateOne({ _id: item._id }, { $set: { status: "running", assetId: null, finishedAtMs: null,
+      resultJson: JSON.stringify({ operationId: operation._id, assetId: null, pageVersionId: null }) } });
+    await env.database.collections.generation_jobs.updateOne({ _id: item.jobId }, { $set: { status: "running", finishedAtMs: null } });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { progressOperationId: null } });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    const imageStarts = vi.mocked(env.runtime.start).mock.calls.slice(starts).filter(([binding]) => binding.role === "image");
+    expect(imageStarts).toHaveLength(0);
+    expect((await env.database.collections.generation_items.findOne({ _id: item._id }))!).toMatchObject({ status: "succeeded", assetId: operation._id });
+    expect(await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId })).toBe(1);
+    expect((await env.repository.getOperation(operation._id))!.state).toBe("succeeded");
+  }, 120_000);
+  it("regenerates only the affected J13 after a J12 revision without reviving its completed batch", async () => {
+    const env = await setup("playful_kid", 18, true);
+    await env.reachPageImageWithReferences();
+    await env.dispatcher().advance(env.runId);
+    const image = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await env.dispatcher().advance(env.runId);
+    const original = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: image.subjectId }))!;
+    const bible = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12", subjectId: image.subjectId }))!;
+    const siblings = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13", subjectId: { $ne: image.subjectId } }).toArray();
+    const jobs = await env.database.collections.generation_jobs.find({ bookletId: original.bookletId, jobType: "dify_pages" }).toArray();
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J12",
+      artifactVersionId: bible.currentVersionId!, instruction: "Keep the exact lettering but clarify the camera composition." } } }, false, true);
+    let regenerated = false;
+    for (let step = 0; step < 16; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      const current = (await env.database.collections.artifacts.findOne({ _id: original._id }))!;
+      if (current.currentVersionId !== original.currentVersionId && current.state === "approved") { regenerated = true; break; }
+    }
+    expect(regenerated).toBe(true);
+    const changed = (await env.database.collections.artifacts.findOne({ _id: original._id }))!;
+    const version = (await env.database.collections.artifact_versions.findOne({ _id: changed.currentVersionId! }))!;
+    expect(JSON.parse(version.contentJson).pageBibleVersionId).not.toBe(bible.currentVersionId);
+    expect(version.sourceVersionId).toBe(original.currentVersionId);
+    expect(await env.database.collections.approvals.findOne({ artifactVersionId: original.currentVersionId! })).toBeTruthy();
+    for (const job of jobs) expect(await env.database.collections.generation_jobs.findOne({ _id: job._id })).toEqual(job);
+    for (const sibling of siblings) expect(await env.database.collections.artifacts.findOne({ _id: sibling._id })).toEqual(sibling);
+    expect((await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === image.subjectId)).toHaveLength(2);
+  }, 120_000);
+  it("preserves the pending tail when revising the first image of an active selected batch", async () => {
+    const env = await setup("playful_kid", 18, true);
+    await env.reachPageImageWithReferences();
+    const run = (await env.repository.getRun(env.runId))!, view = (await env.context.getRunView(env.runId))!;
+    const layoutArtifact = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const layout = parseStoredPageLayout(run.persona, layoutArtifact.versions.find((item) => item.id === layoutArtifact.currentVersionId)!.content);
+    const storyPages = layout.pages.filter((page) => page.pageIndex > 0);
+    const pages = [storyPages[2], storyPages[0], storyPages[1]].map((page) => ({ pageId: page.pageId,
+      pageBibleVersionId: view.currentArtifacts.find((item) => item.taskId === "J12" && item.subjectId === page.pageId)!.currentVersionId!, previousPageVersionId: null }));
+    const batches = createExperimentPageBatchRepository({ database: env.database, store: env.store, now: env.next }), jobId = randomUUID();
+    await batches.select({ jobId, expectedRevision: run.revision, batch: { schemaVersion: "2", runId: env.runId,
+      configurationHash: run.configurationHash, layoutVersionId: layoutArtifact.currentVersionId!, selection: "selected_batch", pages } });
+    for (let step = 0; step < 4; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      if (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: pages[0].pageId })) break;
+    }
+    const original = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: pages[0].pageId }))!;
+    expect(original.state).toBe("draft");
+    const retainedItems = await env.database.collections.generation_items.find({ jobId }).sort({ position: 1 }).toArray();
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J13",
+      artifactVersionId: original.currentVersionId!, instruction: "Make the kite visible without changing the lettering." } } }, false, true);
+    let finished = false;
+    for (let step = 0; step < 18; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      if (await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J13", subjectId: { $in: pages.map((page) => page.pageId) }, state: "approved" }) === pages.length) { finished = true; break; }
+    }
+    expect(finished).toBe(true);
+    const oldJob = (await env.database.collections.generation_jobs.findOne({ _id: jobId }))!;
+    expect(oldJob.status).toBe("superseded");
+    expect(await env.database.collections.generation_items.find({ jobId }).sort({ position: 1 }).toArray()).toEqual(retainedItems);
+    const successor = await batches.get({ runId: env.runId, jobId: oldJob.supersededByJobId! });
+    expect(successor.batch.pages.map((page) => page.pageId)).toEqual(pages.map((page) => page.pageId));
+    expect(successor.batch.pages[0].previousPageVersionId).toBe(original.currentVersionId);
+    expect(successor.next).toEqual({ kind: "complete" });
+  }, 120_000);
+  it("revises only the selected J13 page, retains feedback after assembly and enforces image allowance", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    await env.dispatcher().advance(env.runId);
+    const image = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await env.dispatcher().advance(env.runId);
+    const artifact = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: image.subjectId }))!;
+    const originalVersionId = artifact.currentVersionId!;
+    expect(artifact.state).toBe("approved");
+    const siblings = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13", subjectId: { $ne: image.subjectId } }).toArray();
+    const before = (await env.repository.getRun(env.runId))!;
+    const tester = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await expect(withMongoTransaction(env.database, (session) => materializeNarrativeResult(env.database, session, before,
+      { ...tester, _id: randomUUID() }, { kind: "decision", payload: { decision: { action: "revise", taskId: "J13",
+        artifactVersionId: originalVersionId, instruction: "x".repeat(16_000) } } }, [], env.next(), () => env.store)))
+      .rejects.toMatchObject({ code: "invalid_result" });
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ imageRevisions: before.imageRevisions, pendingDecisionJson: null });
+    expect((await env.database.collections.artifacts.findOne({ _id: artifact._id }))!.state).toBe("approved");
+    const instruction = "Make the kite easier to see. Keep the exact approved lettering.";
+    const decision = await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J13",
+      artifactVersionId: originalVersionId, instruction } } }, false, true);
+    const pending = (await env.repository.getRun(env.runId))!;
+    expect(pending).toMatchObject({ imageRevisions: 1, textRevisions: before.textRevisions });
+    expect(JSON.parse(pending.pendingDecisionJson!)).toMatchObject({ taskId: "J13", subjectKind: "page", subjectId: image.subjectId,
+      artifactVersionId: originalVersionId, decisionId: decision.operation._id });
+    await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: decision.operation._id, workflowRunId: decision.operation.workflowRunId!,
+      inputFingerprint: decision.operation.inputFingerprint, result: JSON.parse(decision.operation.resultJson!) }, parentWorkflowRunId: null, nowMs: env.next() });
+    expect((await env.repository.getRun(env.runId))!.imageRevisions).toBe(1);
+    await env.dispatcher().advance(env.runId); // Fresh manager selects the revision.
+    await env.dispatcher().advance(env.runId); // New image and immutable assembly.
+    expect((await env.repository.getRun(env.runId))!.pendingDecisionJson).toBeNull();
+    const revised = (await env.database.collections.artifacts.findOne({ _id: artifact._id }))!;
+    const version = (await env.database.collections.artifact_versions.findOne({ _id: revised.currentVersionId! }))!;
+    const content = JSON.parse(version.contentJson);
+    expect(version.sourceVersionId).toBe(originalVersionId);
+    expect(content.request.revisions).toEqual([{ decisionId: decision.operation._id, previousPageVersionId: originalVersionId, instruction }]);
+    expect(content.request.prompt).toContain(instruction);
+    expect(await env.database.collections.artifact_versions.countDocuments({ _id: originalVersionId })).toBe(1);
+    await env.dispatcher().advance(env.runId); // Approval still verifies retained feedback with no pending revision.
+    expect((await env.database.collections.artifacts.findOne({ _id: artifact._id }))!.state).toBe("approved");
+    for (const sibling of siblings) expect((await env.database.collections.artifacts.findOne({ _id: sibling._id }))!.currentVersionId).toBe(sibling.currentVersionId);
+    await expect(env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J13",
+      artifactVersionId: revised.currentVersionId!, instruction: "Another revision" } } })).rejects.toMatchObject({ code: "invalid_result" });
+    expect((await env.repository.getRun(env.runId))!.imageRevisions).toBe(1);
+    const verifySavedRevision = () => withMongoTransaction(env.database, async (session) =>
+      verifyCurrentPageIllustrationSources(env.database, session, (await env.repository.getRun(env.runId))!, image.subjectId, env.store));
+    expect((await verifySavedRevision()).request.request.revisions).toEqual(content.request.revisions);
+    const savedDecision = JSON.parse(decision.operation.resultJson!);
+    for (const changed of [{ instruction: "Unrecorded feedback" }, { artifactVersionId: randomUUID() }, { taskId: "J12" }]) {
+      await env.database.collections.experiment_operations.updateOne({ _id: decision.operation._id }, { $set: { resultJson: JSON.stringify({
+        ...savedDecision, payload: { decision: { ...savedDecision.payload.decision, ...changed } },
+      }) } });
+      await expect(verifySavedRevision()).rejects.toMatchObject({ code: "invalid_result" });
+    }
+    await env.database.collections.experiment_operations.updateOne({ _id: decision.operation._id }, { $set: { resultJson: decision.operation.resultJson } });
+    const testerPublication = env.config.bindings.find((binding) => binding.role === "tester" && binding.persona === "playful_kid")!.publishedWorkflowId;
+    await env.database.collections.experiment_operations.updateOne({ _id: decision.operation._id }, { $set: { verifiedWorkflowId: randomUUID() } });
+    await expect(verifySavedRevision()).rejects.toMatchObject({ code: "invalid_result" });
+    await env.database.collections.experiment_operations.updateOne({ _id: decision.operation._id }, { $set: { verifiedWorkflowId: testerPublication } });
+    expect((await verifySavedRevision()).request.request.revisions).toEqual(content.request.revisions);
+  }, 120_000);
+
+  it("blocks failed J13 assembly after a saved result instead of creating a replacement POST", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    env.faults({ corruptSavedPage: true });
+    await env.dispatcher().advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts + 1);
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "definite_failure", activeOperationId: null });
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "succeeded" });
+    expect(operation.verifiedWorkflowId).toBeTruthy();
+    const uploads = env.uploadReference.mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts + 1);
+    expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+  }, 120_000);
+
+  it("blocks an unknown J13 reference upload before workflow dispatch and never repeats its POST", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    env.uploadReference.mockResolvedValueOnce({ kind: "unknown" });
+    expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
+    const uploads = env.uploadReference.mock.calls.length;
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts);
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
+    const operation = (await env.repository.getOperation(run.activeOperationId!))!;
+    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "prepared", workflowRunId: null });
+    expect(JSON.parse(operation.referenceUploadJournalJson!)[0].state).toBe("unknown");
+    expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
+    expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts);
+  }, 120_000);
+
+  it("recovers the original J13 upload after a claimed timeout without replay or another reservation", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    const before = (await env.repository.getRun(env.runId))!;
+    env.faults({ lostBeforeUpload: true });
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 });
+    expect(operation.verifiedWorkflowId).toBeFalsy();
+    const blocked = (await env.repository.getRun(env.runId))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
+    expect(blocked.counters.logicalImage).toBe(before.counters.logicalImage + 1);
+    const imagePosts = () => vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image").length;
+    const posts = imagePosts(), uploads = env.uploadReference.mock.calls.length;
+    await expect(env.finishLateImage(true)).rejects.toThrow();
+    const bible = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12", subjectId: operation.subjectId }))!;
+    await env.database.collections.artifacts.updateOne({ _id: bible._id }, { $set: { state: "needs_review" } });
+    await expect(env.finishLateImage()).rejects.toThrow();
+    expect((await env.repository.getOperation(operation._id))!.imageCompletionDigest).toBeFalsy();
+    await env.database.collections.artifacts.updateOne({ _id: bible._id }, { $set: { state: bible.state } });
+    await env.finishLateImage();
+    await env.dispatcher().advance(env.runId);
+    expect(imagePosts()).toBe(posts);
+    expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const recovered = (await env.repository.getOperation(operation._id))!;
+    expect(recovered).toMatchObject({ state: "succeeded", reservationCount: 1, verifiedWorkflowId: env.config.bindings.find((item) => item.role === "image")!.publishedWorkflowId });
+    const artifact = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId });
+    expect(artifact).toBeTruthy();
+    expect(await env.database.collections.artifact_versions.countDocuments({ artifactId: artifact!._id })).toBe(1);
+    expect((await env.repository.getRun(env.runId))!.counters.logicalImage).toBe(blocked.counters.logicalImage);
+  }, 120_000);
+  it("recovers a lost J13 image response through GET without repeating upload or execution", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    env.faults({ lost: true });
+    const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts + 1);
+    expect(env.runtime.retrieve).toHaveBeenCalled();
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "succeeded" });
+    expect(operation.verifiedWorkflowId).toBeTruthy();
+    const uploads = env.uploadReference.mock.calls.length;
+    const artifact = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId });
+    expect(artifact).toMatchObject({ state: "draft" });
+    await env.dispatcher().advance(env.runId);
+    expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+    expect((await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === operation.subjectId)).toHaveLength(1);
+  }, 120_000);
+
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("saves and independently approves every J13 page for %s", async (persona) => {
+    const env = await setup(persona, persona === "playful_kid" ? 18 : 17, true);
+    await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow();
+    let boundary = false;
+    for (let step = 0; step < 200; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "slice_complete") { boundary = true; break; }
+      const outcome = await env.dispatcher().advance(env.runId);
+      expect(outcome).not.toBe("blocked");
+      if (outcome === "boundary") { boundary = true; break; }
+    }
+    expect(boundary).toBe(true);
+    const expected = persona === "playful_kid" ? 4 : persona === "enthusiast_parent" ? 6 : 9;
+    const artifacts = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13" }).toArray();
+    expect(artifacts).toHaveLength(expected);
+    expect(artifacts.every((artifact) => artifact.state === "approved" && artifact.currentVersionId)).toBe(true);
+    expect(new Set(artifacts.map((artifact) => artifact.subjectId)).size).toBe(expected);
+    for (const artifact of artifacts) {
+      expect(await env.database.collections.approvals.countDocuments({ experimentRunId: env.runId, artifactVersionId: artifact.currentVersionId!, action: "approve" })).toBe(1);
+    }
+    const operations = (await env.repository.listOperations(env.runId)).filter((operation) => operation.role === "image" && operation.taskId === "J13");
+    expect(operations).toHaveLength(expected);
+    expect(operations.every((operation) => operation.state === "succeeded" && operation.parentWorkflowRunId && operation.verifiedWorkflowId)).toBe(true);
+    expect(env.uploadReference).toHaveBeenCalled();
+    const pageCalls = vi.mocked(env.runtime.start).mock.calls.filter(([, input]) => operations.some((operation) => operation._id === input.operationId));
+    expect(pageCalls).toHaveLength(expected);
+    for (const [, input] of pageCalls) {
+      const operation = operations.find((item) => item._id === input.operationId)!;
+      const acknowledgements = JSON.parse(operation.referenceUploadsJson ?? "[]") as { uploadFileId: string }[];
+      expect(input.referenceFileIds ?? []).toEqual(acknowledgements.map((item) => item.uploadFileId));
+    }
+    expect((await env.repository.getRun(env.runId))?.counters).toMatchObject({ payableText: 0, payableImage: 0 });
+    const completedEvidence = await withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store));
+    expect(completedEvidence.finalPages).toHaveLength(expected);
+    expect(completedEvidence.referenceAssetIds).toHaveLength(persona === "professional_creator" ? 6 : 5);
+    expect(new Set([...completedEvidence.finalAssetIds, ...completedEvidence.referenceAssetIds]).size).toBe(persona === "playful_kid" ? 9 : persona === "enthusiast_parent" ? 11 : 15);
+    if (persona === "playful_kid") {
+      await createExperimentCompletionService(env.database, env.store).markGenerationComplete({ runId: env.runId,
+        expectedRevision: (await env.repository.getRun(env.runId))!.revision, nowMs: env.next() });
+      const assertAdmissionRejected = async (role: "tester" | "judge") => {
+        const run = (await env.repository.getRun(env.runId))!;
+        await expect(env.repository.prepareOperation({ runId: env.runId, operationId: randomUUID(), expectedRevision: run.revision,
+          role, taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text", attempt: 1,
+          inputFingerprint: "a".repeat(64), nowMs: env.next() })).rejects.toThrow("Evaluation must save one tester report");
+      };
+      await assertAdmissionRejected("judge");
+      const report = {
+        schemaVersion: "2", role: "tester", mode: "simulated", runId: env.runId, configurationHash: completedEvidence.configurationHash,
+        summary: "Simulated creator feedback; not a human UI usability assessment.",
+        intent: { status: "observed", explanation: "The fixed brief is retained." },
+        consistency: { status: "observed", explanation: "Synthetic page images carry advisory consistency warnings." },
+        interaction: { status: "observed", explanation: "Low-interaction delegated journey completed." },
+        costEvidence: { status: "available", actualUsd: 0, estimatedUsd: null, explanation: "No payable provider requests in this simulation." },
+        findings: [{ category: "consistency", target: { kind: "run", runId: env.runId }, explanation: "Synthetic images do not establish real visual quality. No regeneration requested." }],
+        evidence: { versionIds: completedEvidence.artifacts.map((artifact) => artifact.versionId),
+          inspectedAssetIds: [...completedEvidence.referenceAssetIds, ...completedEvidence.finalAssetIds] },
+      };
+      await expect(env.testerDecision({ kind: "feedback", payload: report }, true, true, true))
+        .rejects.toMatchObject({ code: "invalid_state" });
+      const pendingReport = (await env.repository.listOperations(env.runId)).at(-1)!;
+      expect(pendingReport.state).toBe("unknown");
+      expect((await env.repository.getRun(env.runId))!.evaluationStatus).toBe("pending");
+      expect(pendingReport.resultJson).toBeNull();
+      await env.repository.verifyDispatchPublication({ runId: env.runId, operationId: pendingReport._id,
+        workflowRunId: pendingReport.workflowRunId!, parentWorkflowRunId: null,
+        workflowId: env.config.bindings.find((binding) => binding.role === "tester" && binding.persona === persona)!.publishedWorkflowId,
+        nowMs: env.next() });
+      const reportContext = await env.context.getOperationContext({ runId: env.runId, operationId: pendingReport._id,
+        workflowRunId: pendingReport.workflowRunId!, parentWorkflowRunId: null });
+      expect(reportContext).toMatchObject({ role: "tester", reportEvidence: { mode: "simulated", runId: env.runId,
+        configurationHash: completedEvidence.configurationHash } });
+      await expect(env.repository.completeOperation({ envelope: { runId: env.runId, operationId: pendingReport._id,
+        workflowRunId: pendingReport.workflowRunId!, inputFingerprint: pendingReport.inputFingerprint,
+        result: { kind: "feedback", payload: { ...report, configurationHash: "b".repeat(64) } } }, parentWorkflowRunId: null, nowMs: env.next() }))
+        .rejects.toMatchObject({ code: "invalid_result" });
+      const retained = await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: pendingReport._id,
+        workflowRunId: pendingReport.workflowRunId!, inputFingerprint: pendingReport.inputFingerprint,
+        result: { kind: "feedback", payload: report } }, parentWorkflowRunId: null, nowMs: env.next() });
+      expect(retained.operation.state).toBe("succeeded");
+      expect(JSON.parse(retained.operation.resultJson!).payload).toEqual(report);
+      expect((await env.repository.getRun(env.runId))!).toMatchObject({ status: "queued", evaluationStatus: "running", activeOperationId: null });
+      const reused = await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: retained.operation._id,
+        workflowRunId: retained.operation.workflowRunId!, inputFingerprint: retained.operation.inputFingerprint,
+        result: { kind: "feedback", payload: report } }, parentWorkflowRunId: null, nowMs: env.next() });
+      expect(reused.reused).toBe(true);
+      await assertAdmissionRejected("tester");
+      expect((await env.context.getRunView(env.runId))!.reports).toMatchObject([{ operationId: retained.operation._id,
+        verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "tester" && binding.persona === persona)!.publishedWorkflowId,
+        matchesCurrentVersions: true, report }]);
+      expect(await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J13", state: "approved" })).toBe(expected);
+      await expect(env.testerDecision({ kind: "assessment", payload: { ...report, role: "judge" } }, true, true, true, "judge"))
+        .rejects.toMatchObject({ code: "invalid_state" });
+      const judgeOperation = (await env.repository.listOperations(env.runId)).at(-1)!;
+      const judgeBinding = env.config.bindings.find((binding) => binding.role === "judge")!;
+      await env.repository.verifyDispatchPublication({ runId: env.runId, operationId: judgeOperation._id,
+        workflowRunId: judgeOperation.workflowRunId!, parentWorkflowRunId: null, workflowId: judgeBinding.publishedWorkflowId, nowMs: env.next() });
+      const judgeContext = await env.context.getOperationContext({ runId: env.runId, operationId: judgeOperation._id,
+        workflowRunId: judgeOperation.workflowRunId!, parentWorkflowRunId: null });
+      const assessment = simulateNarrativeResult(judgeContext, "simulated");
+      expect(assessment).toMatchObject({ kind: "assessment", payload: { role: "judge", intent: { status: "not_assessed" } } });
+      await env.repository.completeOperation({ envelope: { runId: env.runId, operationId: judgeOperation._id,
+        workflowRunId: judgeOperation.workflowRunId!, inputFingerprint: judgeOperation.inputFingerprint, result: assessment },
+        parentWorkflowRunId: null, nowMs: env.next() });
+      expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
+      await assertAdmissionRejected("judge");
+      const sheet = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J09" });
+      const sheetVersion = await env.database.collections.artifact_versions.findOne({ _id: sheet!.currentVersionId! });
+      const sheetApproval = await env.database.collections.approvals.findOne({ experimentRunId: env.runId, artifactVersionId: sheet!.currentVersionId! });
+      const extraId = randomUUID(), extraVersionId = randomUUID(), extraApprovalId = randomUUID();
+      const extraContent = JSON.parse(sheetVersion!.contentJson) as { build: { assetId: string } };
+      extraContent.build.assetId = randomUUID();
+      await env.database.collections.artifacts.insertOne({ ...sheet!, _id: extraId, subjectId: randomUUID(), currentVersionId: extraVersionId });
+      await env.database.collections.artifact_versions.insertOne({ ...sheetVersion!, _id: extraVersionId, artifactId: extraId,
+        createdBy: "agent", sourceVersionId: null, dependencyVersionIdsJson: "[]", contentJson: JSON.stringify(extraContent) });
+      await env.database.collections.approvals.insertOne({ ...sheetApproval!, _id: extraApprovalId, artifactVersionId: extraVersionId });
+      await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+        (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("exact required sheet targets");
+      await env.database.collections.approvals.deleteOne({ _id: extraApprovalId });
+      await env.database.collections.artifact_versions.deleteOne({ _id: extraVersionId });
+      await env.database.collections.artifacts.deleteOne({ _id: extraId });
+      const draftList = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J03" });
+      const version = await env.database.collections.artifact_versions.findOne({ _id: draftList!.currentVersionId! });
+      await env.database.collections.artifact_versions.updateOne({ _id: version!._id }, { $set: { dependencyVersionIdsJson: "[]" } });
+      await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+        (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("dependency edges");
+      await env.database.collections.artifact_versions.updateOne({ _id: version!._id }, { $set: { dependencyVersionIdsJson: version!.dependencyVersionIdsJson } });
+      const approval = await env.database.collections.approvals.findOne({ experimentRunId: env.runId, artifactVersionId: completedEvidence.finalPages[0].versionId });
+      await env.database.collections.approvals.updateOne({ _id: approval!._id }, { $set: { action: "reject" } });
+      await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+        (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("approval evidence");
+      await env.database.collections.approvals.updateOne({ _id: approval!._id }, { $set: { action: approval!.action } });
+    }
+    const damaged = await env.database.collections.assets.findOne({ _id: completedEvidence.finalAssetIds[0] });
+    env.store.files.set(damaged!.uri, new Uint8Array([1]));
+    await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow();
+  }, 120_000);
+
   it("recovers a lost J12 result through GET with the same page and no replacement POST", async () => {
     const env = await setup("playful_kid", 17);
     for (let step = 0; step < 120; step++) {

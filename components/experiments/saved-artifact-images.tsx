@@ -32,6 +32,12 @@ function savedImages(taskId: string, content: unknown): Array<{ id: string; labe
     const title = typeof saved.title === "string" && saved.title.trim() ? saved.title.trim() : taskId === "J09" ? "Character reference sheet" : "Location reference sheet";
     return [{ id, label: `${title} image` }];
   }
+  if (taskId === "J13") {
+    const id = assetId(saved.assetId);
+    const index = saved.pageIndex;
+    if (!id || typeof index !== "number" || !Number.isInteger(index) || index < 0) return [];
+    return [{ id, label: index === 0 ? "Cover image" : `Page ${index} image` }];
+  }
   return [];
 }
 

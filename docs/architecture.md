@@ -106,6 +106,24 @@ Older profiles retain their existing boundaries. Publication, private binding
 setup and drained activation remain separate checkpoints; this delivery does
 not change active settings or claim live J12 acceptance.
 
+The selective M3 final-page candidate carries the reviewed implementation from
+master PR #149. The complete eighteen-binding profile adds an independent judge
+and explicit final-page capability on the existing image binding. Booklet verifies
+approved Page Bibles and original reference bytes, retains ordered upload
+acknowledgements, and saves one image and approval record for each physical page
+and cover. Selected page batches retain their order across Pause/Resume and
+restart. Unknown outcomes recover existing results without automatic replay.
+Generation completion and advisory tester/judge evaluation are separate saved
+states; quality warnings do not force regeneration. The runner exposes saved
+images, reports and ordered page selection. Saved booklet links use the runner's
+`/experiments/booklet-runs/<runId>` detail view, not the legacy workspace. J13
+versions show page/cover previews and original links, including historical assets.
+Older profiles keep their boundaries.
+Cloud trial routes, collections, deployment configuration and browser profile
+remain unchanged. This candidate does not activate bindings or prove live M3
+completion. The master-owned dispatcher and drained private-setting rotation
+remain separate release checkpoints.
+
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
 Failed/stopped runtime observations are classified against the persisted claim.

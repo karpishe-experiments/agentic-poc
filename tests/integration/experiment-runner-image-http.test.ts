@@ -115,4 +115,25 @@ describe("experiment image HTTP callbacks", () => {
     expect((await env.post(env.bytes)).status).toBe(200);
     expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "paused", counters: { logicalImage: 1, payableImage: 0 } });
   });
+  it("keeps POST maintenance-closed without changing counters or assets", async () => {
+    const env = await setup();
+    await env.repository.claimOperation({ runId: env.runId, operationId: env.operationId, workflowRunId: env.workflowRunId, parentWorkflowRunId: null, nowMs: 3 });
+    const guarded = createBookletRunnerHttp({ database: () => env.database, store: () => env.store, config: () => ({ enabled: true, config: { enabled: true, baseUrl: "https://dify.example.test", publicOrigin: "http://localhost:3000", callbackKey: key["x-booklet-tool-key"], bindings: [] } }), mutate: async () => { throw new Error("maintenance"); } });
+    expect((await guarded.imageComplete(new Request(env.url, { method: "POST", headers: key, body: new Uint8Array(env.bytes) }))).status).toBe(503);
+    expect(await env.database.collections.assets.countDocuments()).toBe(0);
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ counters: { logicalImage: 1, payableImage: 0 } });
+  });
+  it("matches saved parent identity and permits an unknown in-flight completion", async () => {
+    const env = await setup();
+    const parentWorkflowRunId = id(77);
+    await env.repository.claimOperation({ runId: env.runId, operationId: env.operationId, workflowRunId: env.workflowRunId, parentWorkflowRunId, nowMs: 3 });
+    expect((await env.get()).status).toBe(409);
+    const parentUrl = `${env.url}&parentWorkflowRunId=${parentWorkflowRunId}`;
+    const parentFixtureUrl = `${env.fixtureUrl}&parentWorkflowRunId=${parentWorkflowRunId}`;
+    expect((await env.get(parentFixtureUrl)).status).toBe(200);
+    await env.repository.failOperation({ runId: env.runId, operationId: env.operationId, workflowRunId: env.workflowRunId, parentWorkflowRunId, category: "unknown_outcome", nowMs: 4 });
+    expect((await env.get(parentFixtureUrl)).status).toBe(200);
+    expect((await env.post(env.bytes, parentUrl)).status).toBe(200);
+    expect((await env.repository.getOperation(env.operationId))?.imageFailureHistory).toEqual([{ category: "unknown_outcome", recordedAtMs: 4 }]);
+  });
 });

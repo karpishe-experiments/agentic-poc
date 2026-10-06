@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, EXPERIMENT_PROFILE, MAX_NARRATIVE_CONTENT_BYTES, experimentModeSchema, experimentRoleSchema, experimentTaskSchema, parseNarrativeTaskProposal, personaSchema, resultEnvelopeSchema, validateRoleResult, type RoleResult } from "@/lib/contracts/experiment-runner";
@@ -9,14 +10,19 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentImageRequestSchema, imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { materializeNarrativeResult, prepareNarrativeContext } from "@/db/experiment-narrative";
 import { assertCurrentImageSources } from "@/db/experiment-images";
+import { verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
+import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
+import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
+import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-page-illustrations";
+import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
-const configurationItem = z.strictObject({ role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), appId: opaqueIdSchema, publishedWorkflowId: opaqueIdSchema, toolProviderId: opaqueIdSchema.nullable() });
-const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: z.array(configurationItem).max(100), nowMs: time });
+const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: savedConfigurationSchema, nowMs: time });
 const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: time });
-const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), nowMs: time });
+const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), parentWorkflowRunId: opaqueIdSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const dispatchInput = claimInput.omit({ workflowRunId: true });
 const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema });
@@ -48,9 +54,113 @@ function must<T>(value: T | null, label: string): T {
 }
 function isDuplicate(error: unknown): boolean { return !!error && typeof error === "object" && "code" in error && error.code === 11000; }
 
+const j13ManagerDecision = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({
+  taskId: z.literal("J13"), subjectKind: z.literal("page"), subjectId: opaqueIdSchema,
+}) });
+const uploadJournal = z.array(z.strictObject({
+  assetId: opaqueIdSchema, artifactVersionId: opaqueIdSchema, sha256: fingerprint,
+  state: z.enum(["started", "uploaded", "unknown", "rejected"]), uploadFileId: opaqueIdSchema.nullable(),
+})).max(15);
+const pendingJ13Revision = z.object({ kind: z.literal("revision"), taskId: z.literal("J13"),
+  subjectKind: z.literal("page"), subjectId: opaqueIdSchema, artifactVersionId: opaqueIdSchema }).passthrough();
+const rawAcknowledgements = z.array(z.unknown()).max(15);
+
+function sameJson(left: unknown, right: unknown): boolean { return canonical(left) === canonical(right); }
+function parseAcknowledgements(value: unknown, runId: string) {
+  return rawAcknowledgements.parse(value).map((entry) => pageIllustrationAttachmentSchema.parse({
+    ...(entry as Record<string, unknown>), uploadUser: `booklet-${runId}`,
+  }));
+}
+function isJ13Image(operation: Pick<ExperimentOperationDocument, "role" | "taskId" | "subjectKind" | "providerKind">): boolean {
+  return operation.role === "image" && operation.taskId === "J13" && operation.subjectKind === "page" && operation.providerKind === "image";
+}
+
 export function createExperimentRepository(database: Database, options: { store?: () => AssetStore } = {}) {
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
+
+  async function assertJ13Admission(
+    session: ClientSession,
+    run: ExperimentRunDocument,
+    operation: ExperimentOperationDocument,
+    parentWorkflowRunId: string | null,
+    phase: "prepare" | "dispatch" | "claim",
+  ): Promise<{ expectedTargetVersionId: string | null }> {
+    if (!isJ13Image(operation) || run.mode !== "simulated" || operation.mode !== "simulated" ||
+        !operation.imageRequestJson || !options.store || !configuredPageIllustrationTask(run.configurationJson)) {
+      throw new ExperimentRepositoryError("invalid_state", "J13 requires the enabled simulated final-page profile and retained source verification.");
+    }
+    const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
+    const image = configuration.find((item) => item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
+    const managerBinding = configuration.find((item) => item.role === "manager" && item.taskId === null);
+    if (!image || !managerBinding) throw new ExperimentRepositoryError("invalid_state", "J13 configuration is incomplete.");
+
+    let request: z.infer<typeof experimentImageRequestSchema>;
+    try { request = experimentImageRequestSchema.parse(JSON.parse(operation.imageRequestJson) as unknown); }
+    catch { throw new ExperimentRepositoryError("invalid_state", "J13 has no valid saved image request."); }
+    if (request.kind !== "page_source" || imageRequestFingerprint(request) !== operation.inputFingerprint) {
+      throw new ExperimentRepositoryError("conflict", "J13 request differs from its saved fingerprint.");
+    }
+    const sources = await verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId, options.store());
+    if (!sameJson(request, sources.request.request) || !sameJson(operation.dependencyVersionIds, sources.request.request.sourceVersionIds)) {
+      throw new ExperimentRepositoryError("conflict", "J13 current page sources differ from its saved request.");
+    }
+
+    const managers = await operations.find({ runId: run._id, role: "manager", taskId: null,
+      subjectKind: "book", subjectId: run.bookletId, providerKind: "text", mode: "simulated", state: "succeeded" }, { session })
+      .sort({ createdAtMs: -1, _id: -1 }).limit(1).toArray();
+    const manager = managers[0];
+    const decision = j13ManagerDecision.safeParse(JSON.parse(manager?.resultJson ?? "null"));
+    if (!parentWorkflowRunId) {
+      throw new ExperimentRepositoryError("conflict", "J13 requires a non-null manager workflow parent at each dispatch boundary.");
+    }
+    const requiredParent = parentWorkflowRunId;
+    if (!manager || !decision.success || decision.data.payload.subjectId !== operation.subjectId ||
+        manager.reservationCount !== 1 || !manager.workflowRunId || manager.workflowRunId !== requiredParent ||
+        manager.verifiedWorkflowId !== managerBinding.publishedWorkflowId) {
+      throw new ExperimentRepositoryError("conflict", "J13 requires the latest verified manager selection for this exact page.");
+    }
+
+    if (phase !== "prepare") {
+      const journal = uploadJournal.safeParse(JSON.parse(operation.referenceUploadJournalJson ?? "[]"));
+      let acknowledgements: ReturnType<typeof parseAcknowledgements>;
+      try { acknowledgements = parseAcknowledgements(JSON.parse(operation.referenceUploadsJson ?? "[]"), run._id); }
+      catch { throw new ExperimentRepositoryError("conflict", "J13 upload acknowledgements are invalid."); }
+      if (!journal.success || journal.data.length !== sources.attachments.length ||
+          acknowledgements.length !== sources.attachments.length || journal.data.some((entry, index) => {
+            const source = sources.attachments[index]!;
+            return entry.state !== "uploaded" || entry.uploadFileId === null || entry.assetId !== source.assetId ||
+              entry.artifactVersionId !== source.artifactVersionId || entry.sha256 !== source.sha256;
+          }) || acknowledgements.some((entry, index) => {
+            const source = sources.attachments[index]!, marker = journal.data[index]!;
+            return entry.role !== source.subjectKind || entry.subjectId !== source.subjectId || entry.assetId !== source.assetId ||
+              entry.artifactVersionId !== source.artifactVersionId || entry.uploadFileId !== marker.uploadFileId ||
+              entry.mimeType !== source.mimeType || entry.sha256 !== source.sha256 || entry.byteLength !== source.byteLength ||
+              entry.width !== source.width || entry.height !== source.height || entry.byteLength > MAX_REFERENCE_UPLOAD_BYTES;
+          }) || new Set(acknowledgements.map((entry) => entry.uploadFileId)).size !== acknowledgements.length) {
+        throw new ExperimentRepositoryError("conflict", "J13 requires complete ordered reference-upload evidence before workflow dispatch.");
+      }
+    }
+
+    const artifacts = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
+      taskId: "J13", subjectKind: "page", subjectId: operation.subjectId }, { session }).toArray();
+    if (artifacts.length > 1) throw new ExperimentRepositoryError("conflict", "J13 page artifact identity is ambiguous.");
+    const artifact = artifacts[0];
+    const expectedTargetVersionId = artifact?.currentVersionId ?? null;
+    let pendingValue: unknown;
+    try { pendingValue = JSON.parse(run.pendingDecisionJson ?? "null") as unknown; }
+    catch { throw new ExperimentRepositoryError("conflict", "J13 pending revision evidence is malformed."); }
+    const pending = pendingJ13Revision.safeParse(pendingValue);
+    const exactPendingRevision = pending.success && pending.data.subjectId === operation.subjectId &&
+      pending.data.artifactVersionId === expectedTargetVersionId;
+    if (artifact && (!expectedTargetVersionId || !(artifact.state === "needs_review" || artifact.state === "draft" && exactPendingRevision))) {
+      throw new ExperimentRepositoryError("conflict", "J13 can replace only the current version of a page marked needs_review.");
+    }
+    if (operation.parentWorkflowRunId !== requiredParent) {
+      throw new ExperimentRepositoryError("conflict", "J13 manager parent differs from the saved operation.");
+    }
+    return { expectedTargetVersionId };
+  }
 
   async function getRun(runId: string) { return runs.findOne({ _id: parse(opaqueIdSchema, runId) }); }
   async function listRuns() { return runs.find().sort({ createdAtMs: -1, _id: -1 }).toArray(); }
@@ -121,6 +231,13 @@ export function createExperimentRepository(database: Database, options: { store?
     const sheetTask = input.taskId === "J09" || input.taskId === "J10";
     if ((input.role === "image") !== (input.providerKind === "image") || (input.role === "specialist" && !isNarrativeTask(input.taskId) && !sheetTask && input.taskId !== "J11" && input.taskId !== "J12") || (input.role !== "specialist" && input.role !== "image" && input.taskId)) throw new ExperimentRepositoryError("invalid_input", "Role, task and provider kind do not match.");
     if (input.imageRequest && (input.role !== "image" || imageRequestFingerprint(input.imageRequest) !== input.inputFingerprint)) throw new ExperimentRepositoryError("invalid_input", "Image request must match its operation fingerprint.");
+    const j13 = input.role === "image" && input.taskId === "J13";
+    if (j13 && (!input.imageRequest || input.subjectKind !== "page" || !input.parentWorkflowRunId)) {
+      throw new ExperimentRepositoryError("invalid_input", "J13 requires a page image request and its manager workflow parent.");
+    }
+    if (!j13 && input.parentWorkflowRunId) {
+      throw new ExperimentRepositoryError("invalid_input", "Only J13 image work may provide a manager workflow parent at preparation.");
+    }
     const idempotencyKey = digest(canonical([input.runId, input.role, input.taskId, input.subjectKind, input.subjectId, input.inputFingerprint, input.attempt]));
     const existing = await operations.findOne({ idempotencyKey });
     if (existing) return existing;
@@ -133,14 +250,24 @@ export function createExperimentRepository(database: Database, options: { store?
         const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
         if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
         if (run.status !== "queued" && run.status !== "running" || run.pauseRequested || run.activeOperationId) throw new ExperimentRepositoryError("invalid_state", "Run cannot prepare another operation.");
+        if (run.generationCompletedAtMs != null && input.role !== "tester" && input.role !== "judge") {
+          throw new ExperimentRepositoryError("invalid_state", "Completed generation permits evaluation only; use a successor for changes.");
+        }
+        if (input.role === "judge" || input.role === "tester" && run.generationCompletedAtMs != null) {
+          await assertExperimentEvaluationOrder(database, session, run, input.role);
+        }
         if (input.subjectKind === "book" && input.subjectId !== run.bookletId) throw new ExperimentRepositoryError("invalid_input", "Book subject must match booklet ID.");
         if (input.role === "specialist" && input.subjectKind !== (input.taskId === "J09" ? "character" : input.taskId === "J10" ? "location" : input.taskId === "J12" ? "page" : "book")) throw new ExperimentRepositoryError("invalid_input", "Specialist task requires its matching subject kind.");
-        if (input.imageRequest) await assertCurrentImageSources(database, session, run, input.imageRequest);
+        if (input.imageRequest && !j13) await assertCurrentImageSources(database, session, run, input.imageRequest);
         const narrative = input.role === "specialist" && (isNarrativeTask(input.taskId) || input.taskId === "J09" || input.taskId === "J10" || input.taskId === "J11" || input.taskId === "J12") ? await prepareNarrativeContext(database, session, run, input.taskId, input.subjectKind, input.subjectId, options.store) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
-        const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
+        const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: j13 ? input.parentWorkflowRunId! : null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
         if (input.imageRequest) {
           operation.imageRequestJson = JSON.stringify(input.imageRequest);
           operation.dependencyVersionIds = [...input.imageRequest.sourceVersionIds];
+        }
+        if (j13) {
+          const admission = await assertJ13Admission(session, run, operation, input.parentWorkflowRunId!, "prepare");
+          operation.expectedTargetVersionId = admission.expectedTargetVersionId;
         }
         await operations.insertOne(operation, { session });
         const changed = await runs.updateOne({ _id: input.runId, revision: input.expectedRevision, activeOperationId: null }, { $set: { activeOperationId: input.operationId, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
@@ -168,6 +295,12 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.activeOperationId !== operation._id || operation.state !== "prepared") throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting dispatch.");
       if (run.pauseRequested || run.status === "paused" || (run.status !== "queued" && run.status !== "running")) return { dispatched: false, operation };
+      if (isJ13Image(operation)) {
+        const admission = await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "dispatch");
+        if (operation.expectedTargetVersionId !== admission.expectedTargetVersionId) {
+          throw new ExperimentRepositoryError("conflict", "J13 replacement target changed before dispatch.");
+        }
+      }
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", dispatchStartedAtMs: null }, { $set: { dispatchStartedAtMs: input.nowMs, parentWorkflowRunId: input.parentWorkflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Dispatch was recorded concurrently.");
       // Touch the run in the same transaction so Pause cannot race admission.
@@ -188,10 +321,16 @@ export function createExperimentRepository(database: Database, options: { store?
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
       if (run.pauseRequested || run.status === "paused") return { started: false, reason: "paused", operation };
       if (run.status !== "queued" && run.status !== "running") return { started: false, reason: "blocked", operation };
-      if (operation.imageRequestJson) {
+      if (operation.imageRequestJson && !isJ13Image(operation)) {
         const imageRequest = experimentImageRequestSchema.parse(JSON.parse(operation.imageRequestJson) as unknown);
         if (operation.role !== "image" || imageRequestFingerprint(imageRequest) !== operation.inputFingerprint) throw new ExperimentRepositoryError("invalid_state", "Saved image request differs from its operation.");
         await assertCurrentImageSources(database, session, run, imageRequest);
+      }
+      if (isJ13Image(operation)) {
+        const admission = await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "claim");
+        if (operation.expectedTargetVersionId !== admission.expectedTargetVersionId) {
+          throw new ExperimentRepositoryError("conflict", "J13 replacement target changed before claim.");
+        }
       }
       const logical = operation.providerKind === "text" ? "logicalText" : "logicalImage";
       const payable = operation.providerKind === "text" ? "payableText" : "payableImage";
@@ -233,7 +372,7 @@ export function createExperimentRepository(database: Database, options: { store?
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Publication verification identity differs from dispatch.");
-      const configuration = parse(z.array(configurationItem), JSON.parse(run.configurationJson) as unknown);
+      const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
       const expected = configuration.find((item) => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
       if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
       if (operation.verifiedWorkflowId) return operation;
@@ -323,6 +462,10 @@ export function createExperimentRepository(database: Database, options: { store?
       let result: RoleResult;
       try { result = validateRoleResult(operation.role, envelope.result); }
       catch { throw new ExperimentRepositoryError("invalid_result", "Result kind does not match the operation role."); }
+      if (operation.role === "image" && (operation.taskId !== "J13" || result.kind !== "clarification" ||
+          !configuredPageIllustrationTask(run.configurationJson) || operation.imageCompletionDigest || operation.imageCompletionClaim)) {
+        throw new ExperimentRepositoryError("invalid_result", "Image clarification requires an enabled page operation with no binary completion claim.");
+      }
       let warnings: { field: string; message: string }[] = [];
       if (result.kind === "proposal") {
         if (result.payload.taskId !== operation.taskId) throw new ExperimentRepositoryError("invalid_result", "Proposal task differs from the operation.");
@@ -341,6 +484,7 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
       if ((operation.state !== "started" && operation.state !== "unknown") || operation.reservationCount !== 1 || run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting authorized completion.");
+      if (operation.role === "image") await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "claim");
       const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs, options.store);
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state: "succeeded", resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });

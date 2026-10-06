@@ -7,6 +7,20 @@ const id = (last: string) => `00000000-0000-4000-8000-0000000000${last}`;
 afterEach(cleanup);
 
 describe("saved reference images", () => {
+  it.each([[0, "Cover image"], [2, "Page 2 image"]])("opens the saved J13 output for index %s", (pageIndex, label) => {
+    render(<SavedArtifactImages taskId="J13" simulated content={{ pageIndex, assetId: id("05") }} />);
+    expect(screen.getByRole("img", { name: label }).getAttribute("src")).toBe(`http://localhost:3000/api/assets/${id("05")}`);
+    expect(screen.getByRole("link").getAttribute("href")).toBe(`/api/assets/${id("05")}`);
+  });
+  it("keeps current and historical J13 assets independently inspectable", () => {
+    render(<><SavedArtifactImages taskId="J13" simulated content={{ pageIndex: 1, assetId: id("05") }} />
+      <SavedArtifactImages taskId="J13" simulated content={{ pageIndex: 1, assetId: id("06") }} /></>);
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([`/api/assets/${id("05")}`, `/api/assets/${id("06")}`]);
+  });
+  it.each([{ pageIndex: -1, assetId: id("05") }, { pageIndex: 1, assetId: "https://example.com/page.png" }])("rejects malformed J13 output identity", (content) => {
+    render(<SavedArtifactImages taskId="J13" simulated content={content} />);
+    expect(screen.queryByRole("img")).toBeNull();
+  });
   it("shows both style samples from their explicit builds", () => {
     render(<SavedArtifactImages taskId="J08" simulated content={{ samples: [
       { sampleKey: "sample_1", build: { assetId: id("01") } },
