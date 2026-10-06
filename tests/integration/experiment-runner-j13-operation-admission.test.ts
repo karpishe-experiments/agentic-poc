@@ -7,12 +7,12 @@ import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
-const { verifySources } = vi.hoisted(() => ({ verifySources: vi.fn() }));
-vi.mock("@/db/experiment-pages", () => ({ verifyCurrentPageIllustrationSources: verifySources }));
+const { verifySources, verifyBibles } = vi.hoisted(() => ({ verifySources: vi.fn(), verifyBibles: vi.fn() }));
+vi.mock("@/db/experiment-pages", () => ({ verifyCurrentPageIllustrationSources: verifySources, verifyCurrentApprovedPageBibles: verifyBibles }));
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
 const databases: Database[] = [];
-afterEach(async () => { verifySources.mockReset(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
+afterEach(async () => { verifySources.mockReset(); verifyBibles.mockReset(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 async function setup(references = 1) {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
@@ -55,6 +55,8 @@ describe("J13 image-operation admission", () => {
     const save = () => withMongoTransaction(env.database, (session) => materializeNarrativeResult(env.database, session,
       run, operation, result, [], 3, () => ({} as AssetStore)));
     expect((await save()).summary).toEqual({ delegatedTaskId: "J13" });
+    expect(verifySources).toHaveBeenCalledTimes(1);
+    expect(verifyBibles).toHaveBeenCalledTimes(1);
     verifySources.mockRejectedValue(new Error("Corrupt approved reference"));
     await expect(save()).rejects.toMatchObject({ code: "invalid_result" });
   });
@@ -79,11 +81,12 @@ describe("J13 image-operation admission", () => {
     const operation = (await env.repository.getOperation(id(6)))!;
     verifySources.mockResolvedValueOnce({ request: { request: env.request }, attachments: [], warnings: [],
       layout: { pages: [{ pageId: env.pageId }, { pageId: id(90) }] } });
-    verifySources.mockRejectedValueOnce(new Error("Sibling Page Bible is missing or stale"));
+    verifyBibles.mockRejectedValueOnce(new Error("Sibling Page Bible is missing or stale"));
     await expect(withMongoTransaction(env.database, (session) => materializeNarrativeResult(env.database, session,
       run, operation, { kind: "delegate", payload: { taskId: "J13", subjectKind: "page", subjectId: env.pageId } },
       [], 3, () => ({} as AssetStore)))).rejects.toMatchObject({ code: "invalid_result" });
-    expect(verifySources.mock.calls.at(-1)?.[3]).toBe(id(90));
+    expect(verifySources).toHaveBeenCalledTimes(1);
+    expect(verifyBibles.mock.calls.at(-1)?.[3].layout.pages).toEqual([{ pageId: env.pageId }, { pageId: id(90) }]);
   });
 
   it("requires the latest verified manager selection, then completed ordered uploads before dispatch and claim", async () => {

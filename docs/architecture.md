@@ -254,8 +254,13 @@ recheck current source bytes; completed historical replay does not rewrite evide
 Reference upload admission updates the run revision and journal in one transaction
 before the external POST, so Pause cannot admit new uploads after it takes effect.
 The manager result contract permits J13 page delegation separately from text
-specialist tasks. Materialization verifies current sources for every Page Bible
-in the layout and replacement eligibility before retaining that decision.
+specialist tasks. Materialization verifies the selected page's current sources,
+original reference bytes and replacement eligibility. It then checks every Page
+Bible's current approval, content and exact dependency edges against the same
+transaction's verified layout/manuscript/style identities. Sibling checks do not
+prepare unrelated image requests. Shared source/version/approval reads are batched
+and remain serial on one Mongo session; image claim and context recheck sources
+at their own boundaries.
 The enabled candidate routes this selection to the existing image binding, not
 a new text-specialist binding. Local page revisions retain tester-decision and
 publication provenance, preserve prior versions and validate cumulative prompts
