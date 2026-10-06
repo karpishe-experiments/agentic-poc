@@ -1036,8 +1036,33 @@ Use `npm run test:e2e -- --profile experiment-runner` for the new runner fixture
 This profile starts a development server and initializes isolated MongoDB storage
 without agent seeds. Its browser fixture intercepts runner APIs and image responses;
 it does not prove backend persistence or deployed Dify execution. Cleanup stops the
-isolated server and MongoDB. Browser execution remains pending; adding this profile
-does not satisfy the browser publication gate.
+isolated server and MongoDB. On 2026-10-06, this command passed with `--retries=0`
+against clean candidate `4087484`: one browser test, including selected-persona
+start, progress, saved artifact/report links, Pause/Resume and reload. No external
+browser request occurred. The expanded fixture then passed without retries
+(one test, 27.4 seconds): paused selection `3 → 1`, exact page-order submission,
+no implicit Resume, retained order after reload, advisory warning display, the
+actual saved-booklet route backed by an isolated seeded booklet, and an opened
+original-image response with decoded bytes. Runner APIs and image responses remain
+intercepted; this does not prove Dify-generated persistence. Deployed Dify browser
+acceptance remains pending.
+
+The clean `4087484` checkout passed standard `npm run typecheck` and `npm run lint`.
+Missing/invalid profile and invalid-port preflight checks returned the expected
+errors before MongoDB setup. The unchanged runtime inputs at `04bda6a` passed
+`vitest run experiment-runner tests/integration/restart-resume.test.ts --bail=1
+--retry=0`: 65 files and 563 tests in 1047.76 seconds, using fake providers and an
+isolated database. Process cleanup completed with exit 0. Twelve agent fixtures
+passed on the same runtime inputs. Required CI and two final clean publication
+reviews remain pending; no production/container build was run.
+
+Community MCP inventory on 2026-10-06 verified workspace
+`ffac910f-2786-490e-90d8-07243d49741b`. J12 and judge remain unpublished. The corrected
+local judge graph has 11 nodes and 11 edges; server-default MCP validation returned
+zero errors and warnings. A draft-sync preview showed only the report-routing
+correction and no validation issues. The stored judge draft still has the earlier
+nine-node graph. Validation and preview do not establish synchronization or
+publication.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
