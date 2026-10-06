@@ -1053,16 +1053,33 @@ errors before MongoDB setup. The unchanged runtime inputs at `04bda6a` passed
 `vitest run experiment-runner tests/integration/restart-resume.test.ts --bail=1
 --retry=0`: 65 files and 563 tests in 1047.76 seconds, using fake providers and an
 isolated database. Process cleanup completed with exit 0. Twelve agent fixtures
-passed on the same runtime inputs. Required CI and two final clean publication
-reviews remain pending; no production/container build was run.
+passed on the same runtime inputs. Two consecutive independent publication
+reviews passed for candidate `a7565df02bc81d83b7d5bb3c438905620fdda281`.
+Validate `37473823718` then passed, including both Linux deployment shell suites
+and Terraform validation/tests. PR #149 merged into `master` as
+`c3207e78188518e5defaea28d0793ecb6c8d7163`.
+No production/container build was run during validation. Selective staging
+delivery, final binding activation and deployed M3 acceptance remain pending.
 
 Community MCP inventory on 2026-10-06 verified workspace
 `ffac910f-2786-490e-90d8-07243d49741b`. J12 and judge remain unpublished. The corrected
 local judge graph has 11 nodes and 11 edges; server-default MCP validation returned
 zero errors and warnings. A draft-sync preview showed only the report-routing
-correction and no validation issues. The stored judge draft still has the earlier
-nine-node graph. Validation and preview do not establish synchronization or
-publication.
+correction and no validation issues. The attempted MCP synchronization returned
+HTTP 400 because the bridge sends `environment_variables`, which the pinned
+server rejects. Read-back confirmed that this failure did not change the draft.
+The inspected official CLI import then replaced only the graph from the retained
+private export. Final MCP read-back matches the reviewed source exactly: judge
+has 11 nodes and 11 edges, hash
+`a2df41b37b6451e5dac2a130a7ca3625e1a915112f5cae14c65176d5c92d6892`.
+The same fallback updated J12's final-profile simulation code. Server-default
+validation returned no issues, and final graph read-back matches the reviewed
+source, hash `6c5704556273dbce3cd16f8a67599987b6be0174bdb795f00cbdfd1d5237267d`.
+Both app IDs and environment-variable definitions remain unchanged. Private
+exports and candidate DSL files remain outside Git. Both version listings are
+empty: neither workflow was published or executed. The final eighteen-binding
+file is absent, so private J12/judge key preparation remains required through
+the [shared readiness register](EXECUTION.md#b-authorization-register).
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
