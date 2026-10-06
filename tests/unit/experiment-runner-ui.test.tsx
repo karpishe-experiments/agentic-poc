@@ -44,11 +44,20 @@ describe("booklet runner inspector", () => {
         report: { ...report, role: "judge", summary: "Historical judge assessment." } }] }] }), { status: 200 }));
     render(<BookletRunner />);
     expect(await screen.findByText("Generation: complete · Evaluation: running")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open saved booklet" }).getAttribute("href")).toBe("/booklets/saved-book");
+    expect(screen.getByRole("link", { name: "Open saved booklet" }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
     expect(screen.getByText("Tester feedback · simulated")).toBeTruthy();
     expect(screen.getByText("Independent judge assessment · simulated")).toBeTruthy();
     expect(screen.getByText("Current artifact versions: do not match; report is historical")).toBeTruthy();
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
+  it("loads a saved runner booklet through its detail API, not the legacy workspace", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { ...run, bookletId: "saved-book", status: "blocked" } })));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    expect(await screen.findByText("Booklet saved-book")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to all runs" }).getAttribute("href")).toBe("/experiments/booklet-runs");
+    expect(screen.queryByRole("button", { name: "Start selected" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start linked successor" })).toBeNull();
+    expect(fetchMock.mock.calls.every(([url, options]) => url === `/api/experiments/booklet-runs/${run.runId}` && options?.method !== "POST")).toBe(true);
   });
   it("reads current state and retries a definite control conflict once", async () => {
     let writes = 0;

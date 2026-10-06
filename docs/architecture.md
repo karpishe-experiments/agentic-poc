@@ -155,9 +155,11 @@ read back against the reviewed M2 source before activation. Configuration
 installation does not establish a complete simulation; see the
 [M2 live reference evidence](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-live-reference-evidence--2026-10-05)
 for retained run IDs, trace evidence and remaining M3 gates. The runner's saved-image
-viewer uses only explicit J08 sample and J09/J10 build asset IDs through
+viewer uses explicit J08 sample, J09/J10 build and J13 page/cover asset IDs through
 the existing authenticated asset route. It preserves version history and approvals.
-Its reviewed staging release passed deployment and readiness; browser inspection
+Runner booklet links use `/experiments/booklet-runs/<runId>` and the existing
+authenticated run-detail API. The legacy workspace still excludes this profile.
+Its earlier reference-viewer staging release passed deployment and readiness; browser inspection
 loaded both style samples and one character sheet. This is not visual inspection
 of all sixteen retained images.
 

@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { createMongoDatabase } from "@/db/client";
 import { createRepositories } from "@/db/repositories";
-import { BOOKLET_ARTIFACT_TYPES } from "@/lib/contracts/domain";
 
 const runId = "00000000-0000-4000-8000-000000000701";
 const bookletId = "00000000-0000-4000-8000-000000000702";
 const assetId = "00000000-0000-4000-8000-000000000703";
+const coverAssetId = "00000000-0000-4000-8000-000000000715";
+const pageAssetId = "00000000-0000-4000-8000-000000000716";
 const layoutVersionId = "00000000-0000-4000-8000-000000000709";
 const pageOneId = "00000000-0000-4000-8000-000000000710";
 const pageThreeId = "00000000-0000-4000-8000-000000000711";
@@ -44,7 +45,10 @@ function savedRun(status: "queued" | "paused", revision: number) {
       report: { role: "tester", mode: "simulated", summary: "The creator-facing flow is clear; no quality score is claimed." } }],
     currentArtifacts: [{ id: "00000000-0000-4000-8000-000000000707", taskId: "J09", state: "approved", currentVersionId: "00000000-0000-4000-8000-000000000708",
       versions: [{ id: "00000000-0000-4000-8000-000000000708", number: 1, approval: { origin: "explicit" }, dependencyVersionIds: [],
-        content: { title: "Observatory friends", build: { assetId } }, warnings: [{ field: "composition", message: "Fixture warning remains advisory." }] }] }],
+        content: { title: "Observatory friends", build: { assetId } }, warnings: [{ field: "composition", message: "Fixture warning remains advisory." }] }] },
+      ...[0, 1].map((pageIndex) => ({ id: `final-page-${pageIndex}`, taskId: "J13", state: "approved", currentVersionId: `page-version-${pageIndex}`,
+        versions: [{ id: `page-version-${pageIndex}`, number: 1, approval: { origin: "explicit" }, dependencyVersionIds: [],
+          content: { pageIndex, assetId: pageIndex === 0 ? coverAssetId : pageAssetId }, warnings: [] }] }))],
   };
 }
 
@@ -56,14 +60,10 @@ async function seedSavedBooklet() {
   if (!uri || !databaseName) throw new Error("The isolated E2E MongoDB configuration is missing.");
   const database = createMongoDatabase({ uri, databaseName });
   try {
-    await createRepositories(database).booklets.createWithInitialState({
-      booklet: { id: bookletId, workingTitle: "Observatory friends", createdAtMs: 1 },
-      artifacts: BOOKLET_ARTIFACT_TYPES.map((artifactType, index) => ({
-        id: `00000000-0000-4000-8000-${String(800 + index).padStart(12, "0")}`,
-        artifactType,
-      })),
-      initialMessage: { id: "00000000-0000-4000-8000-000000000799", idea: "Two friends repair their community observatory." },
-    });
+    await database.collections.booklets.insertOne({ _id: bookletId, schemaVersion: "2", workingTitle: "Observatory friends",
+      lifecycle: "draft", currentStage: "J13", coverAssetId: null, executionProfile: "dify_booklet_v1", experimentRunId: runId,
+      createdAtMs: 1, updatedAtMs: 1 });
+    expect(await createRepositories(database).booklets.get(bookletId)).toBeNull();
   } finally {
     await database.close();
   }
@@ -87,7 +87,7 @@ test("runs the isolated simulated runner UI fixture without provider or Dify tra
     const rawBody = request.postData();
     const body = rawBody ? request.postDataJSON() as unknown : null;
     requests.push({ pathname: url.pathname, method: request.method(), body });
-    if (request.method() === "GET") return route.fulfill({ json: { data: state ? [state] : [] } });
+    if (request.method() === "GET") return route.fulfill({ json: { data: url.pathname.endsWith(runId) ? state : state ? [state] : [] } });
     if (request.method() !== "POST") return route.fulfill({ status: 405, json: { error: { code: "method_not_allowed", message: "Fixture accepts GET and POST only." } } });
     if (url.pathname === "/api/experiments/booklet-runs") {
       state = savedRun("queued", 3);
@@ -119,7 +119,7 @@ test("runs the isolated simulated runner UI fixture without provider or Dify tra
   expect(requests.find((request) => request.pathname === "/api/experiments/booklet-runs" && request.method === "POST")?.body)
     .toEqual({ persona: "professional_creator", mode: "simulated" });
   await expect(page.getByText("Next: J13")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open saved booklet" })).toHaveAttribute("href", `/booklets/${bookletId}`);
+  await expect(page.getByRole("link", { name: "Open saved booklet" })).toHaveAttribute("href", `/experiments/booklet-runs/${runId}`);
   await expect(page.getByRole("link", { name: "Open original observatory friends image" })).toHaveAttribute("href", `/api/assets/${assetId}`);
   await page.getByText(/Tester feedback/).click();
   await expect(page.getByText("The creator-facing flow is clear; no quality score is claimed.", { exact: true })).toBeVisible();
@@ -144,7 +144,12 @@ test("runs the isolated simulated runner UI fixture without provider or Dify tra
   const savedBookletLink = page.getByRole("link", { name: "Open saved booklet" });
   await savedBookletLink.evaluate((link) => link.setAttribute("target", "_blank"));
   const [savedBooklet] = await Promise.all([page.waitForEvent("popup"), savedBookletLink.click()]);
-  await expect(savedBooklet.getByRole("heading", { name: "Observatory friends" })).toBeVisible();
+  await expect(savedBooklet.getByText(`Booklet ${bookletId}`, { exact: true })).toBeVisible();
+  await expect(savedBooklet.getByRole("link", { name: "Back to all runs" })).toBeVisible();
+  await expect(savedBooklet.getByRole("img", { name: "Cover image" })).toBeVisible();
+  await expect(savedBooklet.getByRole("img", { name: "Page 1 image" })).toBeVisible();
+  await expect(savedBooklet.getByRole("link", { name: "Open original cover image" })).toHaveAttribute("href", `/api/assets/${coverAssetId}`);
+  await expect(savedBooklet.getByRole("link", { name: "Open original page 1 image" })).toHaveAttribute("href", `/api/assets/${pageAssetId}`);
   await savedBooklet.close();
 
   const [originalImage] = await Promise.all([
