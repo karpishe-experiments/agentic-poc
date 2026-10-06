@@ -23,6 +23,9 @@ export const M3_J12_SIMULATION_MODULES: SimulationModule[] = [
   { role: "manager", taskId: null, persona: null },
   { role: "specialist", taskId: "J12", persona: null },
 ];
+export const M3_FINAL_SIMULATION_MODULES: SimulationModule[] = [
+  ...M3_SIMULATION_MODULES, M3_J12_SIMULATION_MODULES[1], { role: "judge", taskId: null, persona: null },
+];
 export function m3SimulationModuleName(module: SimulationModule) {
   return `issue65_m3_${module.taskId ?? module.persona ?? module.role}`;
 }
@@ -51,7 +54,7 @@ export async function createSimulationGraph(module: SimulationModule, profile: "
   const finalPages = profile === "m3-j13";
   const pageBibles = profile === "m3-j12" || finalPages;
   const pagination = profile === "m3" || pageBibles;
-  const modules: SimulationModule[] = finalPages ? [...M3_SIMULATION_MODULES, M3_J12_SIMULATION_MODULES[1], { role: "judge", taskId: null, persona: null }] : profile === "m3-j12" ? M3_J12_SIMULATION_MODULES : profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
+  const modules: SimulationModule[] = finalPages ? M3_FINAL_SIMULATION_MODULES : profile === "m3-j12" ? M3_J12_SIMULATION_MODULES : profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
   if (!modules.some((item) => JSON.stringify(item) === JSON.stringify(module))) throw new Error("Unsupported simulation module");
   const fixture = await readFile(resolve(`docs/accepted/2026-09-27_dify-booklet-runner/dify/${pagination ? "m2" : profile}-simulation.py`), "utf8") +
     (pagination ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-pagination.py"), "utf8")}` : "") +

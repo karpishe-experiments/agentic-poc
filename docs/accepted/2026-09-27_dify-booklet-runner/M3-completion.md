@@ -58,6 +58,29 @@ call is part of this compact delivery.
 
 ## Current entry readiness
 
+### Final module preparation and live judge draft
+
+The existing `scripts/prepare-dify-booklet-module.ts` now accepts `m3-j13`.
+It prepares separate manager, persona tester, J11, J12 and judge graphs and
+the existing image module with final-page reference inputs. Earlier profiles
+and app names remain unchanged. The helper reads no credentials and does not
+publish or execute a workflow. Twelve graph/Python parity tests passed (3.96
+seconds, no retries); after a profile type correction, all six affected helper
+tests passed again (2.63 seconds). Focused lint, current-source typecheck and
+independent review passed. The typecheck excludes ignored output copies and
+stale `.next` inputs; it is not a standard typecheck pass.
+
+Community MCP inventory reverified the intended host/workspace on 2026-10-06.
+The new independent `issue65_m3_judge` draft is
+`89f1adcd-1073-460d-98a3-e4df35c4263c`. MCP graph validation against Community
+defaults returned no errors or warnings. Draft synchronization and readback
+retained nine nodes and hash
+`622a1193ef20230aaba91c4b78aaa28c97f1d4f9c4faa25ea999b3276e6b8f55`.
+`BOOKLET_ORIGIN` is the reviewed staging origin; `BOOKLET_TOOL_KEY` remains an
+empty Secret placeholder. The version list is empty. No workflow was executed
+or published. Private J12/judge key preparation, eighteen-slot upload/host
+validation, publication reviews and deployed acceptance remain pending.
+
 ### Local evaluation context readiness
 
 Claimed tester and judge operations can retrieve verified generation evidence,
