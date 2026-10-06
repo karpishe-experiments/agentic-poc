@@ -52,6 +52,7 @@ function http(id: string, title: string, path: string, selector: string[], x: nu
 /** Model-free candidate graphs. Live graph validation and publication remain separate. */
 export async function createSimulationGraph(module: SimulationModule, profile: "m1" | "m2" | "m3" | "m3-j12" | "m3-j13" = "m1") {
   const finalPages = profile === "m3-j13";
+  const reports = finalPages && (module.role === "tester" || module.role === "judge");
   const pageBibles = profile === "m3-j12" || finalPages;
   const pagination = profile === "m3" || pageBibles;
   const modules: SimulationModule[] = finalPages ? M3_FINAL_SIMULATION_MODULES : profile === "m3-j12" ? M3_J12_SIMULATION_MODULES : profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
@@ -69,12 +70,25 @@ export async function createSimulationGraph(module: SimulationModule, profile: "
     { id: "authorized", type: "custom", position: { x: 1120, y: 0 }, data: { title: "Save only an authorized result", type: "if-else", cases: [{ case_id: "true", logical_operator: "and", conditions: [{ id: "has-result", comparison_operator: "not empty", variable_selector: ["simulate", "booklet_result"], varType: "string", value: "" }] }] } },
     http("save", "Save original result in Booklet", "result", ["simulate", "booklet_result"], 1400),
     code("ack", "Require Booklet saved completion", "import json\n\ndef main(body, status_code, booklet_result):\n    data = json.loads(body).get('data', {})\n    if status_code != 200 or data.get('state') != 'succeeded':\n        raise ValueError('Booklet did not confirm saved completion')\n    return {'booklet_result': booklet_result, 'authorization_reason': ''}\n", { body: ["save", "body"], status_code: ["save", "status_code"], booklet_result: ["simulate", "booklet_result"] }, ["booklet_result", "authorization_reason"], 1680),
-    // Studio requires globally unique End output names. Each branch exposes only
-    // the output consumed by the runner; saved results still require the ack gate.
-    { id: "finish", type: "custom", position: { x: 1960, y: 0 }, data: { title: "Saved completion", type: "end", outputs: [{ variable: "booklet_result", value_type: "string", value_selector: ["ack", "booklet_result"] }] } },
+    // A report must return before Booklet can verify its runtime publication.
+    // Ordinary results still traverse save + ack. Both paths share one End output
+    // name, selected from their common simulation node, as required by Studio.
+    { id: "finish", type: "custom", position: { x: 1960, y: 0 }, data: { title: reports ? "Result for publication-verified acceptance" : "Saved completion", type: "end", outputs: [{ variable: "booklet_result", value_type: "string", value_selector: [reports ? "simulate" : "ack", "booklet_result"] }] } },
     { id: "paused", type: "custom", position: { x: 1400, y: 300 }, data: { title: "Paused without execution", type: "end", outputs: [{ variable: "authorization_reason", value_type: "string", value_selector: ["simulate", "authorization_reason"] }] } },
   ];
   const links = [["start", "identity"], ["identity", "authorize"], ["authorize", "simulate"], ["simulate", "authorized"], ["authorized", "save", "true"], ["authorized", "paused", "false"], ["save", "ack"], ["ack", "finish"]];
+  if (reports) {
+    nodes.push(code("report-kind", "Separate advisory report from creator action",
+      "import json\n\ndef main(booklet_result):\n    kind = json.loads(booklet_result).get('result', {}).get('kind')\n    return {'report_kind': kind if kind in ('feedback', 'assessment') else ''}\n",
+      { booklet_result: ["simulate", "booklet_result"] }, ["report_kind"], 1400));
+    nodes.push({ id: "report-route", type: "custom", position: { x: 1680, y: 300 }, data: {
+      title: "Return report before publication readback", type: "if-else", cases: [{ case_id: "true", logical_operator: "and",
+        conditions: [{ id: "is-report", comparison_operator: "not empty", variable_selector: ["report-kind", "report_kind"], varType: "string", value: "" }] }],
+    } });
+    const savedLink = links.findIndex(([source, target]) => source === "authorized" && target === "save");
+    links.splice(savedLink, 1, ["authorized", "report-kind", "true"], ["report-kind", "report-route"],
+      ["report-route", "finish", "true"], ["report-route", "save", "false"]);
+  }
   const edges = links.map(([source, target, handle]) => ({ id: `${source}-${target}`, source, target, sourceHandle: handle ?? "source", targetHandle: "target", type: "custom", data: { sourceType: nodes.find((node) => node.id === source)!.data.type, targetType: nodes.find((node) => node.id === target)!.data.type } }));
   return { nodes, edges };
 }

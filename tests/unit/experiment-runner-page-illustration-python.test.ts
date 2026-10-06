@@ -20,6 +20,21 @@ describe("model-free Dify final-page manager candidate", () => {
     expect(result.stderr).toBe(""); expect(result.status).toBe(0);
     expect(JSON.parse(JSON.parse(result.stdout).booklet_result).result).toEqual({
       kind: role === "tester" ? "feedback" : "assessment", payload: simulatedExperimentReport(evidence) });
+    const reportRoute = graph.nodes.find((node) => node.id === "report-kind")!.data.code;
+    for (const [kind, expected] of [["feedback", "feedback"], ["assessment", "assessment"], ["decision", ""], ["proposal", ""]]) {
+      const routed = spawnSync("python", ["-c", program], { input: JSON.stringify({ source: reportRoute,
+        args: { booklet_result: JSON.stringify({ result: { kind, payload: {} } }) } }), encoding: "utf8",
+        env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1" } });
+      expect(routed.status, routed.stderr).toBe(0);
+      expect(JSON.parse(routed.stdout)).toEqual({ report_kind: expected });
+    }
+    expect(graph.edges.find((edge) => edge.source === "report-route" && edge.sourceHandle === "true")?.target).toBe("finish");
+    expect(graph.edges.find((edge) => edge.source === "report-route" && edge.sourceHandle === "false")?.target).toBe("save");
+    expect(graph.edges.find((edge) => edge.source === "save")?.target).toBe("ack");
+    expect(graph.edges.find((edge) => edge.source === "ack")?.target).toBe("finish");
+    expect(graph.nodes.find((node) => node.id === "finish")!.data.outputs).toEqual([
+      { variable: "booklet_result", value_type: "string", value_selector: ["simulate", "booklet_result"] },
+    ]);
   });
   it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("preserves %s final-page review preference", async (persona) => {
     const selectedModule = M3_SIMULATION_MODULES.find((item) => item.persona === persona)!;
