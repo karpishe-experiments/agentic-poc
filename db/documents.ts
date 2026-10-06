@@ -11,7 +11,7 @@ export type CardDocument = BaseDocument & { bookletId: string; messageId: string
 export type CardResponseDocument = BaseDocument & { cardId: string; action: string; valueJson: string | null; revisionInstruction: string | null; followupStatus: string; followupMessageId: string | null; createdAtMs: number };
 export type AssetDocument = BaseDocument & { bookletId: string | null; kind: string; uri: string; mimeType: string; width: number | null; height: number | null; sourceAssetId: string | null; metadataJson: string | null; createdAtMs: number };
 export type StyleCatalogDocument = BaseDocument & { name: string; description: string; previewAssetId: string; prompt: string; provenance: string; sortOrder: number; createdAtMs: number };
-export type GenerationJobDocument = BaseDocument & { bookletId: string; jobType: string; status: string; idempotencyKey: string; inputJson: string; errorJson: string | null; createdAtMs: number; startedAtMs: number | null; finishedAtMs: number | null; updatedAtMs: number };
+export type GenerationJobDocument = BaseDocument & { bookletId: string; jobType: string; status: string; idempotencyKey: string; inputJson: string; errorJson: string | null; createdAtMs: number; startedAtMs: number | null; finishedAtMs: number | null; updatedAtMs: number; supersedesJobId?: string; supersededByJobId?: string };
 export type GenerationItemDocument = BaseDocument & { jobId: string; itemKey: string; position: number; status: string; attemptCount: number; inputJson: string; resultJson: string | null; assetId: string | null; errorJson: string | null; executionCardId: string | null; executionBatchId: string | null; startedAtMs: number | null; finishedAtMs: number | null };
 export type ModelCallDocument = BaseDocument & { bookletId: string; operation: string; skillId: string | null; artifactVersionId: string | null; jobId: string | null; provider: string; model: string; traceId: string | null; providerRequestId: string | null; status: string; attempt: number; startedAtMs: number; latencyMs: number; inputRefJson: string; outputRefJson: string | null; usageJson: string | null; actualCostUsd: string | null; estimatedCostUsd: string | null; pricingVersion: string | null; errorKind: string | null; errorMessage: string | null; agentDefinitionId: string | null; agentVersionId: string | null; agentConfigSnapshotJson: string | null; executionBatchId: string | null; executionItemId: string | null };
 export type AgentDefinitionDocument = BaseDocument & { createdAtMs: number; createdBy: string };
@@ -31,6 +31,8 @@ export type ExperimentRunDocument = BaseDocument & {
   predecessorRunId: string | null; configurationJson: string; configurationHash: string;
   status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
   evaluationStatus: "pending" | "running" | "complete" | "failed";
+  generationCompletedAtMs?: number;
+  generationVersionIds?: string[];
   revision: number; pauseRequested: boolean; activeOperationId: string | null;
   counters: ExperimentCounters; limits: { text: number; image: number; steps: number };
   safeFailure: "limit_exhausted" | "unknown_outcome" | "definite_failure" | null;
@@ -49,6 +51,12 @@ export type ExperimentOperationDocument = BaseDocument & {
   dispatchStartedAtMs?: number | null;
   verifiedWorkflowId?: string | null;
   imageRequestJson?: string | null;
+  // Retained J13 runtime upload acknowledgements in selected-reference order.
+  // Absence is not permission to upload again after an uncertain request.
+  referenceUploadsJson?: string | null;
+  // Written before each reference POST. An interrupted started attempt cannot
+  // be repeated merely because its acknowledgement is absent.
+  referenceUploadJournalJson?: string | null;
   imageCompletionDigest?: string | null;
   imageCompletionClaim?: { id: string; digest: string; expiresAtMs: number } | null;
   imageFailureHistory?: { category: "unknown_outcome" | "definite_failure"; recordedAtMs: number }[];

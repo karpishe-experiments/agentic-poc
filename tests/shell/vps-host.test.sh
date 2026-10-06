@@ -277,6 +277,28 @@ CHILD
     (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$page_bible_settings" build_booklet_runner_patch staging "$TEMP_DIR/page-bible-runner.json")
     booklet_runner_patch_is_valid "$TEMP_DIR/page-bible-runner.json"
     jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==17' "$TEMP_DIR/page-bible-runner.json" >/dev/null
+    final_page_bindings="$(jq -c 'map(if .role=="image" then .finalPageIllustration=true else . end)' <<< "$page_bible_bindings")"
+    final_page_settings="$(jq -c --arg bindings "$final_page_bindings" '.DIFY_BOOKLET_BINDINGS_JSON=$bindings' <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+    (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$final_page_settings" build_booklet_runner_patch staging "$TEMP_DIR/final-page-runner.json")
+    booklet_runner_patch_is_valid "$TEMP_DIR/final-page-runner.json"
+    evaluation_bindings="$(jq -c '. + [{role:"judge",taskId:null,persona:null,appId:"00000000-0000-4000-8000-000000000026",publishedWorkflowId:"00000000-0000-4000-8000-000000000099",toolProviderId:null,apiKey:"private$fixture"}]' <<< "$final_page_bindings")"
+    evaluation_settings="$(jq -c --arg bindings "$evaluation_bindings" '.DIFY_BOOKLET_BINDINGS_JSON=$bindings' <<< "$DIFY_BOOKLET_RUNNER_SETTINGS_JSON")"
+    (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$evaluation_settings" build_booklet_runner_patch staging "$TEMP_DIR/evaluation-runner.json")
+    booklet_runner_patch_is_valid "$TEMP_DIR/evaluation-runner.json"
+    jq -e '.services.app.environment.DIFY_BOOKLET_BINDINGS_JSON|fromjson|length==18 and any(.[];.role=="image" and .finalPageIllustration==true)' "$TEMP_DIR/evaluation-runner.json" >/dev/null
+    for mutation in \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|map(del(.finalPageIllustration))|tojson)' \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|map(if .role=="image" then .finalPageIllustration=false else . end)|tojson)' \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[0].finalPageIllustration=true|tojson)' \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[17].role="manager"|tojson)' \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[17].taskId="J12"|tojson)' \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[17].appId=.[0].appId|tojson)' \
+      '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[17].extra=true|tojson)'; do
+      invalid="$(jq -c "$mutation" <<< "$evaluation_settings")"
+      if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid final evaluation settings'; exit 1; fi
+    done
+    invalid="$(jq -c '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|map(if .role=="image" then .finalPageIllustration=true else . end)|tojson)' <<< "$layout_settings")"
+    if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted final-page flag in pagination profile'; exit 1; fi
     for mutation in '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[16].taskId="J11"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[15].taskId="J12"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[16].role="tester"|tojson)' '.DIFY_BOOKLET_BINDINGS_JSON|=(fromjson|.[16].appId=.[0].appId|tojson)'; do
       invalid="$(jq -c "$mutation" <<< "$page_bible_settings")"
       if (DIFY_BOOKLET_RUNNER_SETTINGS_JSON="$invalid" build_booklet_runner_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo 'accepted invalid page bible runner settings'; exit 1; fi

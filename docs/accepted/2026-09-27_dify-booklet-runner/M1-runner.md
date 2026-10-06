@@ -5,6 +5,13 @@
 review and publication. These are proposed shared contracts; finalize them from
 M0's verified packaging before implementing the dependent interfaces.
 
+Private setup and permissions are tracked only in the
+[readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
+Keep binding and acceptance evidence here. Apply the
+[three validation levels](EXECUTION.md#validation-levels-and-result-reuse);
+package verification lists are affected publication checks, not a broad rerun
+requirement after each edit or work-in-progress commit.
+
 Before handing a slice to Sol/low, fill the compact
 [execution package](EXECUTION.md#sol-low-execution-packages) in this file using
 M0 evidence. The contracts below remain proposed until that reconciliation;

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { styleModuleHash } from "@/lib/contracts/experiment-references";
 import { materializePageLayout } from "@/db/experiment-pages";
 import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
-import { pageSourceRequest } from "@/lib/experiment-runner/page-image-requests";
+import { pageSourceRequest, withPageImageRevisions } from "@/lib/experiment-runner/page-image-requests";
 import { id, paginationSources } from "@/tests/helpers/pagination-fixtures";
 
 function setup(persona: "playful_kid" | "enthusiast_parent" | "professional_creator", pageIndex: number) {
@@ -121,5 +122,24 @@ describe("J13 page image request serialization", () => {
     const oversized = structuredClone(proposal);
     oversized.panels[0].composition = "x".repeat(16_000);
     expect(() => pageSourceRequest({ ...input, pageBible: oversized })).toThrow();
+  });
+
+  it("retains exact approved instructions while appending linked image revisions", () => {
+    const { input, styleModule } = setup("playful_kid", 1);
+    const base = pageSourceRequest(input).request;
+    expect(imageRequestFingerprint(base)).toBe(createHash("sha256").update(JSON.stringify({ kind: base.kind, prompt: base.prompt,
+      sourceVersionIds: base.sourceVersionIds, styleVersionId: base.styleVersionId })).digest("hex"));
+    const revisions = [{ decisionId: id(200), previousPageVersionId: id(201), instruction: "Make the kite easier to see." }];
+    const revised = withPageImageRevisions(base, revisions);
+    expect(revised.prompt.startsWith(base.prompt)).toBe(true);
+    expect(revised.prompt).toContain(styleModule);
+    expect(revised.sourceVersionIds).toEqual(base.sourceVersionIds);
+    expect(revised.revisions).toEqual(revisions);
+    expect(imageRequestFingerprint(revised)).not.toBe(imageRequestFingerprint(base));
+    expect(withPageImageRevisions(base, [...revisions, { decisionId: id(202), previousPageVersionId: id(203), instruction: "Use clearer expressions." }]).prompt)
+      .toContain("Image revision 2: Use clearer expressions.");
+    expect(() => withPageImageRevisions(revised, revisions)).toThrow("base page request");
+    expect(() => withPageImageRevisions(base, [revisions[0], revisions[0]])).toThrow();
+    expect(() => withPageImageRevisions({ ...base, prompt: "x".repeat(15_900) }, [{ ...revisions[0], instruction: "x".repeat(200) }])).toThrow();
   });
 });

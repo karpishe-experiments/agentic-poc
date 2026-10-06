@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
+import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
+import { experimentPageBatchSchema } from "@/lib/contracts/experiment-page-batches";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { ExperimentImageValidationError, MAX_EXPERIMENT_IMAGE_BYTES } from "@/lib/experiment-runner/image-validation";
@@ -18,6 +20,7 @@ import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/de
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
 const control = z.strictObject({ expectedRevision: z.number().int().nonnegative() });
+const pageSelection = control.extend({ batch: experimentPageBatchSchema });
 const failure = identity.extend({ category: z.enum(["definite_failure", "unknown_outcome"]) });
 const result = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/), result: resultEnvelopeSchema.shape.result });
 const headers = { "Cache-Control": "no-store" };
@@ -126,14 +129,14 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
   const mutate = deps.mutate ?? runTrackedMutation;
   const store = deps.store ?? createAssetStore;
   const admit = deps.admit ?? assertMutationsAllowed;
-  function services() { const db = database(); return { repository: createExperimentRepository(db, { store }), context: createExperimentContextService(db) }; }
+  function services() { const db = database(); return { repository: createExperimentRepository(db, { store }), context: createExperimentContextService(db, { store }) }; }
   async function run(operation: () => Promise<Response>) { try { return await operation(); } catch (error) { return safeError(error); } }
   return {
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;
       const input = imageQuery(request);
       await admit();
-      await createExperimentImageRepository(database()).authorizeFixture(input);
+      await createExperimentImageRepository(database(), { store }).authorizeFixture(input);
       const rgb = Buffer.from(input.inputFingerprint.slice(0, 6), "hex");
       const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: rgb[0], g: rgb[1], b: rgb[2] } } }).png().toBuffer();
       return new Response(new Uint8Array(bytes), { headers: { ...headers, "Content-Type": "image/png", "X-Content-Type-Options": "nosniff" } });
@@ -171,6 +174,18 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const { repository, context } = services();
       const saved = await mutate(() => repository[action]({ runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() }));
       return data(await context.getRunView(saved._id));
+    }); },
+    selectPages(request: Request, runId: string) { return run(async () => {
+      const denied = browserAuth(request, config(), true); if (denied) return denied;
+      const key = opaqueIdSchema.safeParse(request.headers.get("idempotency-key"));
+      if (!key.success) return reply(400, "invalid_request");
+      const body = pageSelection.parse(await boundedJson(request, 8192));
+      if (body.batch.runId !== opaqueIdSchema.parse(runId)) return reply(400, "invalid_request");
+      // The repository verifies every supplied source identity against current
+      // saved approvals. Selection records intent; it never starts provider work.
+      const selected = await mutate(() => createExperimentPageBatchRepository({ database: database(), store: store() })
+        .select({ ...body, jobId: stableUuid(key.data, `page-batch:${runId}`) }));
+      return data(selected);
     }); },
     tool(request: Request, action: "authorize" | "context" | "result" | "failure") { return run(async () => {
       const state = config(); const denied = toolAuth(request, state); if (denied) return denied;

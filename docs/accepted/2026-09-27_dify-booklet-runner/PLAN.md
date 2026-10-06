@@ -138,29 +138,60 @@ Record these in the detailed plan as they are resolved, with evidence or explici
 
 **Coverage:** J11–J13; AC01, AC02, AC05–AC07, AC10.
 
-- Implement pagination, Page Bible and final images, including native text and persona-specific multi-panel cases.
-- Support page-by-page and ordered selected batches while retaining per-page inspection and explicit/delegated approval records; grouped acceptance does not erase individual page identity.
-- Add bounded safe recovery, uncertain-outcome inspection, request-limit enforcement and warning-bearing completion.
-- Add tester feedback and independent judge reporting; keep evaluation status separate from generation success.
-- Extend existing viewers and provide the simple runner controls/history/evidence UI; no manual takeover or agent editor.
+Deliver the remaining work through the three
+[compact M3 checkpoints](M3-completion.md#compact-remaining-delivery):
+
+| Checkpoint | Scope |
+| --- | --- |
+| 1. Runnable candidate | Finish J11–J13 generation, separate tester/judge reports, completion and recovery. Reuse viewers; add minimal single-page/ordered-batch controls with per-page explicit/delegated approvals. Consolidate missing private setup into one handoff. |
+| 2. Review and release | Freeze code and Dify configuration together. Run the affected checks and two consecutive independent clean reviews, then use authorized publication/read-back, applicable tool synchronization, drained staging release and binding activation. |
+| 3. Acceptance and evidence | Complete all three deployed model-free cases, browser inspection and representative failure/recovery checks in one campaign. Save exact evidence and limitations; correct defects through the affected validation/review cycle before republishing. |
+
+Keep native lettering, persona-specific multi-panel layouts, exact references,
+limits, durable evidence, warning-bearing completion and separate generation/
+evaluation status. Use short structured reports, with simulated creative/visual
+quality marked `not_assessed`; no quality score is required. Reuse shared-path
+recovery proof rather than repeating the same campaign for every persona, but
+retain all required scenarios and persona-specific contracts. Defer richer UI and
+report polish, not required controls or inspection. No manual takeover or agent
+editor is required. Keep one concise exit record in M3; do not add a plan hierarchy.
 
 **Tests:** exact prompt text propagation, relevant references only, one physical-page image, missing/corrupt outputs, duplicate/conflicting/concurrent completion, stale results, exhausted limits and saved-success preservation after judge failure.
 
 Also verify that usable image geometry/format-label differences, preferred-length overruns and harmless extra content fields do not fail the flow. Keep required content, decoding, storage and identity checks, and retain warnings instead of silently discarding deviations.
 
-**Exit:** all Simulated booklets finish, including multi-panel layouts and failure/recovery scenarios.
+**Exit:** all three Simulated booklets finish through deployed Dify, including
+multi-panel layouts, individual page approvals, retained tester/judge reports and
+required failure/recovery evidence. Local mocks alone do not satisfy this exit.
+Balanced/Real readiness, paid execution, PDF and production hardening remain
+outside M3; this consolidation does not change PRD limits or acceptance criteria.
 
 ## Milestone 4 — Simulation hardening, then Balanced acceptance
 
 **Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
-- Complete all three simulated acceptance cases and failure scenarios before enabling real LLMs.
-- Exercise low-interaction kid/parent flows and detailed creator control, grouped reviews, changed delegation and material-conflict escalation. Assert that quality warnings cannot force an unbounded approval/revision loop.
-- Run focused unit/integration contracts, typecheck, lint, routing fixtures and fake browser checks.
-- Verify zero provider execution in simulation and zero real image execution in Balanced mode, including failure branches.
-- Obtain paid-test authorization separately. Complete all three Balanced cases within the PRD's limits, including testers and judge.
-- Inspect Dify traces, request reservations and usage together; record missing evidence honestly.
-- Independently review application changes and sanitized Dify configuration. Publish reviewed versions and read back both workflow publication and Workflow Tool synchronization.
+M4 remains planned, pending M3's deployed completion. Use the three
+[M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
+
+| Checkpoint | Work and exit |
+| --- | --- |
+| 1. Close readiness gaps | Reuse valid M3 simulation/recovery/browser evidence; test uncovered or changed paths. Preserve all required scenarios and persona contracts. Verify real-text/simulated-image routing, models, tokens, disabled automatic provider retries and reservations for all internal calls. Consolidate missing private setup and paid authorization into one handoff. |
+| 2. Execute one Balanced campaign | Run Kid → Parent → Creator sequentially within 120/160/220 LLM requests; zero real image calls. Retain artifacts, individual approvals, short tester/judge reports, usage and timing. Quality findings remain warnings; simulated images do not prove real image-provider quality. |
+| 3. Record results and prepare M5 | Keep one concise exit record in M4 with bindings, runs, failures/successors, measured usage and limitations. Pass exact evidence to M5; no new report hierarchy. |
+
+Default campaign proposal: three initial runs, zero successors, at most 500 LLM
+requests in total; this is not spending authorization. Any successors need a finite
+approved allowance with its additional worst-case request total. Without paid
+approval, complete non-billable readiness work and stop at the paid checkpoint.
+
+Use representative shared-mechanism recovery tests and focused persona contracts,
+not repeated unchanged campaigns. Aim for one reviewed release candidate. Defects
+require affected validation and two consecutive clean independent reviews before
+republishing; synchronize applicable tools and read back published bindings.
+Dify-only corrections do not redeploy unchanged application code. Stop dispatch
+and reconcile active/uncertain work before configuration changes; do not replay
+unknown outcomes automatically. Existing PRD limits and release authority remain
+unchanged.
 
 **Exit:** no known technical completion blockers, all Balanced cases complete, and configuration/accounting evidence is current. This does not prove image quality or Real acceptance.
 
@@ -168,14 +199,29 @@ Also verify that usable image geometry/format-label differences, preferred-lengt
 
 **Coverage:** AC04–AC13.
 
-- Confirm exact local/staging database names, asset roots and storage prefixes. Verify they cannot target production or unrelated files. Preserve a sanitized summary of the previous trial.
-- Perform required clean-baseline setup only at the verified, explicitly authorized checkpoint. If local reset is needed earlier for implementation, apply the same checkpoint then; do not delay basic local setup until Real testing.
-- Use existing staging deployment procedures with explicit authorization. No new secrets or infrastructure unless a demonstrated requirement is separately approved.
-- Deploy and verify application/Dify configuration compatibility before acceptance runs. Balanced testing may use an earlier authorized staging deployment if needed; no implicit deployment authority follows from milestone order.
-- Obtain explicit paid-execution authorization within the agreed call limits.
-- Complete the 3-page Real case first. Resolve technical blockers, rerun affected Simulated/Balanced checks after corrections, and retain a clean successor before advancing.
-- Then complete the 5-page case, followed by the 8-page case. Stop progression on a technical failure; do not automatically raise budgets.
-- Keep all failed predecessors, successful successors, assets, prompts/configuration evidence and reports. Acceptance runs have no manual repair during execution.
+M5 remains planned, pending M4 acceptance. Use the three
+[M5 checkpoints](M5-real.md#three-execution-checkpoints):
+
+| Checkpoint | Work and exit |
+| --- | --- |
+| 1. Confirm readiness once | Reconcile M4 successes, exact published bindings, actual image-reference transport, accounting and model/token/retry settings. Reuse valid evidence and the completed staging reset; run only missing or invalidated non-billable checks. Bundle private setup and finite Real campaign authorization. |
+| 2. Run the ordered Real campaign | Kid 3 pages → Parent 5 pages → Creator 8 pages, each plus cover. Advance only after an uninterrupted success. Use one checklist for required assets, exact versions/per-page approvals, lettering/style/reference routing, reports, durable bytes and usage. Retain persona-specific multi-panel requirements. |
+| 3. Record evidence and hand off | Keep one concise M5 exit record linking configuration, runs, assets, usage, failures and successors. Hand the retained baseline to M6; defer quality-only improvements. |
+
+Default proposal: three initial runs, zero successors, at most 500 LLM and 46 real
+image requests; explicit spending approval is still required. Per-run limits remain
+120/160/220 LLM and 12/14/20 image requests; baseline outputs remain 9/11/15.
+Additional paid runs, including Balanced reruns, need remaining finite authority.
+
+Do not routinely reset or redeploy. Preserve M1–M4 evidence; any necessary new
+reset needs exact-target approval and backup/preservation. Deploy only required
+changes after affected validation and two consecutive clean independent reviews;
+reuse unchanged simulation/Balanced proof. Preserve production and Cloud resources.
+On technical failure, stop progression, retain evidence, inspect unknown outcomes
+without automatic replay, and use linked successors after correction. Never call
+an in-place repaired run uninterrupted or increase limits/reset counters to conceal
+failure. Missing/corrupt outputs, invalid authorization and exhausted limits remain
+technical blockers; creative inconsistencies remain warnings.
 
 **Exit:** three retained uninterrupted Real completions, required saved images/approvals, reports and reconciled request evidence. Quality warnings remain visible and do not fail completion.
 

@@ -8,7 +8,7 @@ export function configuredPageBibleTask(configurationJson: string): boolean {
   if (!configuredPaginationTask(configurationJson)) return false;
   let entries: unknown;
   try { entries = JSON.parse(configurationJson); } catch { return false; }
-  if (!Array.isArray(entries) || ![15, 17].includes(entries.length)) return false;
+  if (!Array.isArray(entries) || ![15, 16, 17, 18].includes(entries.length)) return false;
   return entries.filter((entry) => entry && typeof entry === "object" &&
     (entry as Record<string, unknown>).role === "specialist" && (entry as Record<string, unknown>).taskId === "J12").length === 1;
 }

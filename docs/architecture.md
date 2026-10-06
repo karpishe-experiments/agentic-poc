@@ -140,9 +140,12 @@ evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
 retain old images and approvals. The public configuration reader accepts six,
-eleven, thirteen, fifteen, sixteen or seventeen complete bindings. The host
-validator candidate also accepts the exact seventeen-slot J12 profile. Its
-installation and the J12 host handoff remain pending. The reviewed host
+eleven, thirteen, fifteen, sixteen, seventeen or eighteen complete bindings. The host
+validator candidate also accepts the exact seventeen-slot J12 and eighteen-slot
+final/evaluation profiles. Only their image binding can have
+`finalPageIllustration: true`; the eighteen-slot profile requires it. Existing
+profiles keep their original shape. Installation and the final host handoff remain
+pending. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
 J08 and all reference modules are published. All-persona reference acceptance and
 model-free binary output transfer passed with 5/5/6 saved images. Staging release
@@ -206,9 +209,9 @@ The local J13 configuration prerequisite adds optional
 `finalPageIllustration: true` to the image binding of a complete seventeen-slot
 profile. New persona snapshots retain that flag as configuration evidence;
 omitting it preserves older snapshot bytes and hashes. Saved enabled snapshots
-require the complete fifteen-row persona profile. This does not enable J13
-dispatch or change host settings; page admission, uploads and assembly remain
-subsequent work.
+require the complete fifteen-row persona profile. The local candidate uses this
+flag to enable J13 dispatch after all Page Bibles are accepted. Existing snapshots
+keep their J12 boundary. No live host settings have changed.
 
 The local `page-image-requests.ts` serializer prepares one J13 `page_source`
 request from the saved J11 layout, selected J12 content and assembled J08 style.
@@ -218,8 +221,128 @@ request preparation, not an approval or byte-integrity check. The separate
 `verifyCurrentPageIllustrationSources` database helper checks current J12 approval,
 exact dependencies, and selected original sheet hashes, sizes and dimensions.
 It returns ordered attachments and advisory MIME-label warnings. Neither helper
-claims an operation or uploads files. The serializer is not wired
-into dispatch; final-page persistence, approvals and completion remain pending.
+claims an operation or uploads files. The candidate dispatcher uses these sources
+for manager-selected page-image operations. Live delivery and completion remain pending.
+
+The local J13 saved-package contract retains exact request/source order, output
+metadata, selected runtime upload acknowledgements and per-page candidate lineage.
+Its pure builder does not prove database approval or runtime file ownership.
+The local assembly service consumes completed, publication-verified J13 image
+operations and saves immutable per-page versions with exact dependencies. Replay
+reuses the same version; eligible replacements retain the earlier version. MIME
+labels and preferred canvas deviations produce warnings, not quality blockers.
+The candidate dispatcher assembles verified completed outputs; tester approval
+rechecks the assembled version and original bytes. Failed assembly blocks the run
+and retains the known result instead of permitting an automatic replacement POST.
+
+The local reference-upload service writes an operation journal before each POST,
+then retains ordered acknowledgements in `referenceUploadsJson`. It verifies the
+saved image binding, manager selection and current original reference bytes.
+Interrupted or unknown uploads stop without another POST; completed prefix uploads
+remain saved. It does not establish recovery of a missing file identity. Dispatch
+uses its ordered saved file identifiers. Live application-key ownership checks remain pending. Shared
+numeric image limits do not load the server-side decoder.
+
+The local page-work projection distinguishes generation, review and all-page
+acceptance while preserving older profiles' J12 dispatch boundary. J13 operation
+admission requires the saved manager parent, exact current page sources and ordered
+upload acknowledgements before dispatch or claim. A draft replacement requires the
+exact pending page/version revision. Image fixture access and output materialization
+recheck current source bytes; completed historical replay does not rewrite evidence.
+Reference upload admission updates the run revision and journal in one transaction
+before the external POST, so Pause cannot admit new uploads after it takes effect.
+The manager result contract permits J13 page delegation separately from text
+specialist tasks. Materialization verifies current sources for every Page Bible
+in the layout and replacement eligibility before retaining that decision.
+The enabled candidate routes this selection to the existing image binding, not
+a new text-specialist binding. Local page revisions retain tester-decision and
+publication provenance, preserve prior versions and validate cumulative prompts
+before consuming an allowance. The local image-clarification path retains a
+page-scoped question and answer without creating an asset; binary completion and
+clarification cannot replace each other's terminal result. Each clarification
+consumes its logical image reservation, not a creative revision allowance.
+For J13, a publication-verified Pause before claim retains a zero-reservation
+operation in the item’s `pausedOperationIds` history. Reconciliation returns that
+same ordered item to pending. Resume can attach a fresh operation without
+discarding earlier pages or resetting the batch. Unknown outcomes, unverified
+attempts and actual failures do not receive this exception.
+The exact active claimed J13 operation can read its original approved style and
+sheet sources while its outcome is unknown. This permits a late authenticated
+binary callback before publication readback. Current-source and callback identity
+checks still apply. Assembly mutation remains blocked during active unknown work;
+saved J13 materialization still requires publication verification through GET.
+Completed batches guide review only while their J11/J12 sources are current.
+They do not schedule replacements after source revisions. A drained active batch
+can be superseded by a linked successor with current source and prior-image
+versions. The revision target comes first; remaining selected pages retain their
+order. Predecessor inputs, items, operations and assets remain unchanged.
+Running, unknown or unreconciled failed items prevent supersession. The refresh
+transaction neither reserves nor dispatches an image.
+Live full-booklet acceptance is still incomplete; the candidate is not ready for
+publication.
+The read-only generation verifier derives completion evidence from the current
+run revision, exact approved artifact sets, dependency edges and retained image
+bytes. It does not change run status. The pure advisory report contract checks
+run/configuration/version identity, finding targets and explicit missing evidence.
+Visual assessment requires every final page and cover; monetary availability
+must match actual, estimated or absent cost evidence. Independent judge
+execution is routed separately in the full eighteen-binding local profile. The tester-feedback persistence path
+uses immutable operation results, rechecks complete generation evidence and
+requires publication verification before acceptance. The runner projection
+returns retained report and operation/publication identities separately from
+whether its version evidence still matches the current artifact versions.
+The dispatcher records generation completion only after the thirteen artifact
+sets, exact approvals and durable bytes pass verification. It saves the generation
+timestamp and exact version IDs, marks the Booklet complete, and then runs tester
+feedback followed by the independent judge. Evaluation becomes complete only
+after both exact publication-verified reports pass validation. Missing reports
+and uncertain evaluation outcomes leave generation success intact. After
+generation completion, only advisory evaluation is permitted; revisions require
+a successor run. Repository admission and report saving require the persisted
+generation marker, one verified tester report before the judge, and no duplicate
+reports. Shorter saved profiles retain their original slice boundary.
+Pause prevents new evaluation dispatch. Unknown report results use GET recovery,
+not execution replay. Repeated completion rechecks retained evidence without
+changing counters or the run revision.
+The runner inspector shows generation/evaluation status separately and links to
+the existing saved-booklet view. Advisory reports retain operation, workflow and
+publication identities and show whether their version evidence is current.
+The local context endpoint supplies claimed tester/judge operations with verified
+generation evidence, current artifacts, dialogue, warnings, usage counters and
+durable image identities. Initial execution can read this evidence before runtime
+publication readback; saving the report still requires its exact verified binding.
+Publication-verified unknown judge operations can read saved source evidence for
+recovery. The full eighteen-binding profile and its persona-filtered snapshot keep
+J11/J12/J13 eligibility. Deterministic reports mark creative assessment as
+`not_assessed` and do not claim visual inspection.
+
+The candidate ordered page-batch contract preserves selected page order and
+source versions, with separate operation, asset and version identities per item.
+The selection repository retains jobs and ordered items in existing generation
+collections under `dify_pages`, with current-source checks and atomic run-revision
+admission. New batch selection stops once generation is saved. Duplicate selection can
+still return its retained job without changing generation or evaluation evidence.
+The authenticated `POST /api/experiments/booklet-runs/[runId]/pages` endpoint
+records this intent through the same repository and maintenance gate. A drained
+paused run can record selection without resuming or starting an operation;
+Resume remains separate. Active operations and pending decisions prevent selection.
+Item binding records the owning prepared operation before dispatch;
+reconciliation retains its uncertain outcome or verified assembled result without
+executing another call. Pause can retain an in-flight result without admitting the
+next item. The dispatcher binds each J13 operation before external work and
+reconciles its saved result after assembly. A published, materialized tester answer
+permits clarification rebinding while the item retains the earlier operation ID.
+Known post-callback images are assembled before new work is planned. Active-job
+projection uses the saved run identity. The local runner selector appears after
+current Page Bible readiness when the run is drained and paused. It retains click
+order for a single page or subset, submits exact source identities, and displays
+the saved batch. The repository rechecks those identities transactionally.
+Selection does not resume dispatch and an uncertain response is not replayed
+automatically. Deployed selector verification remains incomplete.
+The legacy worker's restart recovery and
+active/runnable projections select only `references`, `pages` and `export`.
+Dify recovery must reconcile the retained operation ledger, not reset uncertain
+items to pending. Batch generation does not replace per-page approval.
 
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.

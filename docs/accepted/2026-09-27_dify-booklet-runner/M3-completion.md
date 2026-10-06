@@ -3,7 +3,186 @@
 **State:** In progress; full-booklet acceptance remains pending. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
 **Predecessor:** [M2](M2-references.md). Apply [EXECUTION](EXECUTION.md).
 
+Track missing private bindings and permissions only in the
+[readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
+Keep technical readiness and acceptance evidence here. Apply the
+[three validation levels](EXECUTION.md#validation-levels-and-result-reuse);
+use named cases/small suites per edit and reuse valid results at local commits.
+Broad affected validation and two clean reviews belong to the frozen publication
+candidate, not every implementation increment.
+
+## Compact remaining delivery
+
+Use three checkpoints for the remaining M3 work. This sequence consolidates
+delivery, not the PRD requirements or completion evidence. The detailed contracts
+and verified evidence below support these checkpoints, not a separate release
+sequence. Current entry gates remain mandatory: prove runtime-key file ownership,
+ordered references, size limits and lost-response recovery before J13 dispatch.
+This plan update does not start implementation, publish Dify
+configuration, activate bindings or authorize new execution.
+
+| Checkpoint | Work | Exit evidence |
+| --- | --- | --- |
+| 1. Finish one runnable candidate | Wire separate tester feedback and judge execution, generation/evaluation status and recovery. Reuse existing artifact/image viewers. Add a minimal single-page or ordered-batch selector, progress and Pause/Resume; retain individual page approvals. Finish compatible Dify graph/settings/host-validation changes and consolidate only missing private bindings into one handoff. | Focused contracts and integration checks cover reports, completion, exact sources/references, approvals, limits and recovery. Existing working bindings and saved evidence remain intact; unresolved live dependencies are explicit. |
+| 2. Review and release one candidate | Freeze application code, Dify graphs and non-secret binding evidence together. Run one affected validation set and two consecutive independent clean reviews. Publish/read back workflows and synchronize applicable Workflow Tools, then use the reviewed staging delivery and drained binding-activation process. | Required CI, exact reviewed/published identities, synchronized applicable tool bindings and staging health pass. Stop new dispatch and reconcile in-flight/unknown work before changing configuration; Pause alone is not a drain. Private setup and release actions still require their existing authorization checkpoints. |
+| 3. Verify and record one acceptance campaign | Complete all three cases through actual deployed Dify in Simulated mode. Combine browser inspection, targeted failure/recovery checks and sanitized evidence capture in the same campaign. Correct defects and rerun affected checks/reviews; use linked successors rather than rewriting failed runs. | All thirteen responsibilities, required current artifacts and images, individual approvals, tester/judge reports and durable lineage are saved. Zero real provider calls, warning-bearing completion, UI controls and no uncertain-operation replay are verified. Record limitations and hand off to M4. |
+
+### Simplifications and retained boundaries
+
+- **Reports:** use short structured reports with exact version references. Keep
+  tester feedback separate from the independent judge. Simulated creative/visual
+  assessment is explicitly `not_assessed`; retain warning and interaction-flow
+  evidence without claiming human usability or real model judgement. No scoring
+  framework or passing quality score is needed.
+- **UI:** reuse saved booklet/artifact/image views and provide the basic selector,
+  progress, warnings, history, reports and Pause/Resume. Defer richer dashboards,
+  presentation polish and new agent-authoring tools, not required inspection.
+- **Tests:** use one representative end-to-end case per failure mechanism where
+  the execution path is shared. Use focused contracts for persona differences;
+  add another recovery case only for a materially different path. All three
+  deployed happy-path cases and the required failure scenarios still need proof.
+- **Documentation:** keep one concise M3 exit record with evidence links and
+  remaining limitations in this document. Do not create another report hierarchy.
+- **Release:** aim for one candidate and staging release cycle. A discovered
+  defect requires correction plus affected validation and the two-review cycle
+  before republishing. A successful run alone does not require another deployment.
+
+Do not relax thirteen specialist responsibilities, persona-adaptive delegation,
+per-page approvals, exact lettering/style/reference routing, request limits,
+durable outputs, unknown-outcome recovery, production/Cloud isolation or the
+required reviews. Local runtime mocks cannot replace deployed Dify acceptance.
+Baseline images remain 9/11/15 per case, including style samples, reference sheets,
+story pages and cover; retain additional revision assets as history. Balanced/Real
+readiness, paid runs, PDF and production hardening are outside M3. No reset or paid
+call is part of this compact delivery.
+
 ## Current entry readiness
+
+### Final module preparation and live judge draft
+
+The existing `scripts/prepare-dify-booklet-module.ts` now accepts `m3-j13`.
+It prepares separate manager, persona tester, J11, J12 and judge graphs and
+the existing image module with final-page reference inputs. Earlier profiles
+and app names remain unchanged. The helper reads no credentials and does not
+publish or execute a workflow. Twelve graph/Python parity tests passed (3.96
+seconds, no retries); after a profile type correction, all six affected helper
+tests passed again (2.63 seconds). Focused lint, current-source typecheck and
+independent review passed. The typecheck excludes ignored output copies and
+stale `.next` inputs; it is not a standard typecheck pass.
+
+Community MCP inventory reverified the intended host/workspace on 2026-10-06.
+The new independent `issue65_m3_judge` draft is
+`89f1adcd-1073-460d-98a3-e4df35c4263c`. MCP graph validation against Community
+defaults returned no errors or warnings. Draft synchronization and readback
+retained nine nodes and hash
+`622a1193ef20230aaba91c4b78aaa28c97f1d4f9c4faa25ea999b3276e6b8f55`.
+`BOOKLET_ORIGIN` is the reviewed staging origin; `BOOKLET_TOOL_KEY` remains an
+empty Secret placeholder. The version list is empty. No workflow was executed
+or published. Private J12/judge key preparation, eighteen-slot upload/host
+validation, publication reviews and deployed acceptance remain pending.
+
+### Final binding preparation candidate
+
+The existing J12 preparation helper now has a `m3-j13` profile. It reuses the
+sixteen-binding M3 file, or the seventeen-binding J12 file if present, and
+collects only missing J12/judge keys with the existing callback key. It writes a
+separate encrypted eighteen-binding file without overwriting prior files.
+The local file-presence check found the sixteen-binding file only; no private
+contents were read. Operator preparation remains pending in the
+[canonical register](EXECUTION.md#b-authorization-register).
+
+The existing uploader accepts an eighteen-publication `m3-j13` manifest and adds
+`finalPageIllustration: true` only to its image binding. Its earlier profiles
+remain unchanged. Focused synthetic PowerShell tests passed for legacy profiles,
+both final-source paths, clipboard retry, preview isolation, malformed source
+rejection and no-overwrite behavior. No real private file, upload, workflow or
+host operation ran in these tests.
+
+The host validator candidate now accepts the same complete eighteen-slot
+profile, requires the final-page image flag, and rejects misplaced/false flags,
+duplicate identities and extra fields. The focused staging-runner shell fixture,
+Bash syntax and ShellCheck passed. Both full shell suites were attempted on
+Windows: deployment-script stopped at existing Python-alias/symlink fixtures;
+host tests stopped at an existing `mkdir -m` permission fixture. Neither full
+suite passed. Required Linux CI must verify both before merge or deployment.
+All eleven isolated deployment contracts passed (2.05 seconds, no retries),
+and the implementation-loop independent review passed. Local link targets in
+the five changed documents passed. This is not a full-suite or frozen-publication
+review result.
+These results do not establish deployed readiness or permit activation before
+the frozen-candidate reviews, published readback and maintenance checkpoints.
+
+### Local evaluation context readiness
+
+Claimed tester and judge operations can retrieve verified generation evidence,
+current artifacts, creator dialogue, warnings, counters and durable image
+identities. Context retrieval does not approve artifacts, save a report or
+complete the run. Report saving still requires publication verification and
+rechecks the saved evidence. Unknown judge operations use the verified read-only
+recovery path; no workflow replay is required.
+
+The focused Kid J13 journey with eighteen bindings and the pre-generation judge
+rejection case passed (two tests, 33.49 seconds, no retries). The journey includes
+separate tester/judge reports and publication rejection/recovery. Twelve
+routing/report fixture unit checks and focused lint passed. The current-source
+typecheck passed with ignored output copies and stale `.next` inputs excluded;
+this is not a standard typecheck pass.
+Deterministic reports retain exact versions and mark creative assessment as
+`not_assessed`; they do not claim image inspection. Automatic evaluation
+dispatch and final completion were pending at this context checkpoint; the local
+completion evidence below supersedes those two items. UI selection and deployed
+acceptance remain pending.
+This evidence applies to the local candidate, not a published configuration.
+
+### Local automatic completion evidence
+
+The eighteen-binding dispatcher now records generation success separately from
+evaluation. It verifies current artifacts, approvals and durable bytes, stores
+the exact generation versions and cover, then dispatches tester feedback and the
+independent judge. Final run completion requires both exact verified reports.
+Saved generation cannot be revised in place. Shorter saved profiles retain their
+slice boundaries.
+
+Three focused cases passed (66.12 seconds, no retries): automatic Kid completion,
+direct evaluator admission/report ordering, and the existing Kid report-context
+and approval journey. They cover reports before the saved generation marker,
+judge-before-tester and duplicate evaluator rejection, missing reports, rejected
+post-generation manager work, Pause/Resume before evaluation, lost judge response
+recovery without replay, zero payable counters and idempotent final completion.
+Focused lint and current-source typecheck passed; the
+latter excludes ignored output copies and stale `.next` inputs. These are local
+runtime fixtures, not proof of deployed Dify completion. Published judge/tester
+graphs, bindings, UI inspection and the deployed all-persona campaign remain
+publication/acceptance work.
+
+The existing runner inspector now shows generation and evaluation separately,
+links to the saved booklet and retains tester/judge report details with operation,
+workflow, publication and current-versus-historical version evidence. Ten UI unit
+checks passed. This is component-fixture evidence; browser and staging checks
+remain pending. The local selector evidence below supersedes the earlier
+unfinished UI status; deployed selector inspection remains pending.
+
+Batch admission now rejects new selections after the saved generation marker,
+including while advisory evaluation is pending. Existing duplicate selections
+remain read-only lookups. The browser page-selection endpoint uses existing
+authentication, origin, maintenance and transactional source checks. A drained
+paused run can save selection intent without resuming or dispatching work.
+All eleven batch-repository integration tests passed without retries (15.22
+seconds), including browser-to-persistence selection and duplicate lookup.
+Source verification is mocked in this suite; deployed readiness remains pending.
+Eleven HTTP boundary tests passed (3.02 seconds), including staging authentication,
+origin, disabled state, malformed input and maintenance admission.
+
+The local selector now records click order for one page or a selected batch.
+It appears only after current Page Bible readiness in a drained paused run;
+saving does not Resume. Twelve runner UI tests passed (5.77 seconds), including
+ordered submission and uncertain-response handling with no automatic replay.
+The existing Parent selected-batch dispatch fixture passed (24.41 seconds,
+no retries) with real saved artifact/approval/byte verification: paused projection,
+selection, no dispatch while paused, explicit Resume, pages 3 then 1 and separate
+results/approvals. Focused lint and current-source typecheck passed; the latter
+excludes ignored output copies and stale `.next` inputs. This is local fixture
+evidence, not deployed Dify or browser acceptance.
 
 All three live Simulated M2 cases reached approved reference packages on
 2026-10-05; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).
@@ -442,6 +621,13 @@ uses its own image-request allowance. Technical safe retries do not consume the
 creative revision allowance but do consume provider requests when a call occurs.
 
 At generation completion, schedule separate tester feedback and judge operations.
+Local configuration preparation now accepts an explicit eighteen-binding
+evaluation profile: the complete J12/image suite plus one separate judge.
+Final-page enablement is required; each persona snapshot has sixteen non-secret
+rows. Older profiles retain their shape. Configuration and page-planning tests
+passed (23), with focused lint and clean-checkout typecheck. Judge dispatch,
+published graph, private key setup, host validation and staging activation remain
+pending; accepting configuration alone is not evaluation readiness.
 Judge branch receives the fixed brief, dialogue/decisions, warning and usage
 evidence, all final page/cover images and reference packages. It has independent
 instructions and no manager mutation tools. To keep context bounded, supply
@@ -526,6 +712,16 @@ invalid input. This does not prove runtime file ownership or live consumption.
 
 ### Next Simulated slice: manager-selected J13 page packages
 
+The local saved-package contract retains the page and J12 identities, exact
+executed request, output image metadata, operation/publication/manager-parent
+identities, previous page-version lineage and ordered upload acknowledgements.
+Its pure builder matches the supplied selected-reference order and derives the
+run user. Empty attachments are valid only when the approved page routes no
+references. Repository checks must still prove approvals, original bytes and
+runtime ownership; schema acceptance is not that proof. Output bytes retain the
+20 MiB decoder bound, while each uploaded reference retains the 10 MiB bound.
+Neither bound is a claim that the live transport has been tested at that size.
+
 Reuse the existing image app for a named J13 branch; do not add another text
 call or application key merely to label the responsibility. This is a selected
 implementation layout, not evidence that the branch exists or consumes files.
@@ -576,12 +772,172 @@ final-page execution; host validation and delivery are subsequent work.
 
 ## Verification and exit
 
+The local J13 package/assembly candidate saves per-page output evidence and
+immutable replacement history from completed, publication-verified operations.
+Preferred canvas and MIME-label differences remain advisory. Its reference-upload
+service saves a journal before each POST and ordered acknowledgements afterward.
+Interrupted or unknown uploads cannot repeat their POST; completed prefix uploads
+remain saved. Thirty-eight focused package, assembly, upload-journal, admission
+and image-storage tests passed together without retries. Typecheck and lint passed
+in the isolated verification checkout with the same candidate source files.
+Admission preserves a non-null manager parent and permits a draft replacement only
+for the exact pending page/version revision. Upload admission checks Pause atomically;
+already admitted uploads can save their acknowledgement after Pause.
+These integration fixtures mock upstream source verification;
+the existing source-verifier suite checks that separate boundary. The subsequent
+candidate connects dispatcher and tester approval; live application-key file inputs
+and full-booklet simulation remain pending. No live bindings, provider calls or
+staging resources changed in this slice.
+
+The local manager result contract now accepts J13 delegation only for a page.
+It does not add J13 to text-specialist proposals. Manager-result materialization
+requires the enabled Simulated profile, current approved source evidence for every
+Page Bible in the layout and an eligible target; replacing a draft requires its
+exact recorded pending revision. Thirteen focused contract/admission tests passed
+without retries after this change,
+and typecheck and lint passed. The foundation candidate check passed all 47 tests across these six suites
+without retries, including the corrected all-page manager gate.
+
+The subsequent local dispatcher candidate saves and separately approves all 4/6/9
+cover/story images in three persona tests using real MongoDB persistence and image
+bytes, but simulated Dify transport. It passes ordered runtime file identifiers,
+retains the manager parent across restart and blocks an unknown upload before
+workflow dispatch. A focused corrupt-output test confirms that failed assembly
+retains the successful operation and blocks automatic replay. The recovery/legacy
+J12 selection passed 19 checks, but its eight-page journey timed out at 120 seconds
+while another MongoDB suite ran. An isolated diagnostic run of that case passed in
+49 seconds without retries; do not report the combined command as a pass. Final
+validation must run these MongoDB suites serially. Typecheck and lint passed after
+the assembly-failure correction. The local page-revision candidate now records
+tester feedback and its publication provenance, preserves prior page versions,
+and changes only the selected page. It checks the combined prompt before accepting
+feedback, so oversized feedback does not consume an allowance or change page state.
+The focused revision/allowance selection passed four tests without retries
+(68 unrelated tests skipped); typecheck and lint passed after this correction.
+Independent focused revision review passed. This is not a final review of the
+whole candidate. The local J13 clarification candidate saves an image-owner
+question before binary completion, retains its page/revision scope, and passes
+the saved answer to a fresh image operation. It rejects a late binary upload to
+the completed clarification. Clarification consumes its logical image reservation,
+not a creative revision allowance, and is not counted as a saved image. Three
+focused checks passed without retries (69 unrelated tests skipped); typecheck and
+lint passed. Independent focused clarification review passed. The complete pure
+contract/page-image/package suites passed all 24 tests, and the affected admission,
+assembly, binary-storage and upload-journal suites passed all 30 tests without
+retries. These local checks use simulated Dify transport, not deployed acceptance.
+Tester/judge reports,
+final completion and live Dify acceptance remain incomplete.
+The pure advisory report validator is prepared with explicit role, mode, run,
+configuration and current-version evidence. Findings link an exact current
+artifact/version/page or the run. Visual consistency cannot be marked observed
+without every final page and cover in the inspected-image evidence; missing
+evidence must be marked `not_assessed`. Actual, estimated and unavailable cost
+remain separate. Five focused tests, typecheck and lint passed. Report persistence,
+independent judge execution, image access and final completion are not implemented
+by this pure validator. Independent focused review passed after correcting cost
+availability: `available` requires actual cost, `partial` requires at least one
+actual or estimated value, and `unavailable` requires both values to be absent.
+Verified zero actual cost remains valid. The five tests, typecheck and lint passed
+after that correction.
+The read-only generation verifier is also prepared. It checks the retained run
+revision, all thirteen approved responsibilities, exact sheet/page sets, current
+dependency edges, per-page approval and original image bytes. It returns final
+and reference image identities and warning evidence for later report context;
+it does not mark the run completed or dispatch evaluation. Independent focused
+review passed after enforcing the exact required reference-sheet set. Final
+three-persona verification passed without retries: each local journey produced
+and separately approved its 4/6/9 final page/cover images and retained the expected
+9/11/15 total baseline image identities. The same tests rejected a corrupt final
+image; the kid case also rejected an extra approved sheet, missing page approval
+and inconsistent dependency edges. Typecheck and lint passed after the final
+correction. These tests use real MongoDB and image storage with simulated Dify
+transport. Automatic report dispatch, independent judge execution, selected-batch jobs, final run transition
+and deployed simulation still require implementation.
+Tester feedback persistence now has a local candidate through the existing
+immutable operation result, not a separate report registry. It rechecks generation
+evidence and requires the exact saved, publication-verified tester binding before
+acceptance. The runner view exposes retained reports with their operation and
+publication identities and whether their artifact versions still match current
+versions. The kid journey verifies rejection of an unverified report and wrong
+configuration, recovery of its retained operation, identical-result reuse and
+unchanged page approvals. Six focused checks, typecheck and lint passed after the
+publication-gate correction. Independent focused review passed. Automatic
+feedback dispatch, independent judge binding/execution, batch jobs, final status
+transition and deployed acceptance remain incomplete.
+Do not publish or activate this partial candidate as full M3 acceptance.
+
+The current Community MCP workspace/app inventory succeeded for workspace
+`ffac910f-2786-490e-90d8-07243d49741b`. J12 draft read-back retains hash
+`76eabb774c171af451fb75375384e5bdaf1c5bff36df1c0aa098213b9977e07f`,
+nine nodes and no model/image node. Published-version listing returned no versions.
+The sixteen-binding M3 private file exists; the separate seventeen-binding J12 file
+does not. One new J12 private publication/key handoff remains; do not repeat the
+sixteen existing bindings or infer runtime authentication from administrative MCP.
+
 The local J13 source verifier checks the current approved J12 page, exact
 dependency edges, and selected reference bytes against saved hashes, sizes and
 dimensions. It returns decoded MIME types and reports MIME-label differences as
 warnings. It does not upload, dispatch or save a page image. Seventeen focused
 tests passed without retries. The new source-verifier tests mock upstream style
 and sheet assembly checks; they do not prove the complete production pipeline.
+
+### Ordered batch preparation and restart ownership
+
+The candidate page-batch contract retains the selected page order, configuration
+hash, layout version, Page Bible versions and prior page versions. Each saved
+item must retain its own operation, asset and illustration version. Pause stops
+new items; running items require reconciliation, and failed or unknown items
+cannot advance or replay automatically. Generated batch completion does not
+approve pages or complete a booklet.
+
+Legacy restart recovery now selects only `references`, `pages` and `export`
+jobs. It preserves `dify_pages` jobs and items unchanged. Legacy runnable and
+active-job projections exclude those jobs. Eight focused local tests passed
+without retries, followed by typecheck and lint in the isolated checkout.
+These checks cover the pure batch contract and restart isolation only.
+
+The candidate selection repository now stores ordered `dify_pages` jobs and
+items in the existing generation collections. It verifies the saved configuration,
+current Page Bible and prior illustration versions, then admits selection with
+the run revision in the same transaction. Duplicate selection returns its retained
+job without another reservation. Active operations, stale revisions and overlapping
+active selections reject new jobs. Drained paused runs can retain intent while
+dispatch stays paused. Four initial focused integration tests passed without retries,
+including concurrent duplicate selection with one retained winner;
+their source-verification dependency is mocked, so they establish transaction and
+ownership behavior, not real saved-artifact readiness.
+
+The repository also binds an item to its owning prepared J13 operation before
+dispatch. Reconciliation reads only that retained operation. Unknown and failed
+outcomes stop later items; a saved result requires the current assembled version
+and original-byte verification. Pause permits that result to be retained but
+prevents the next pending item from starting. Repeated unchanged observations
+do not change the run revision. Eight focused repository integration tests passed
+without retries. These tests mock source and assembly verification; the existing
+assembly tests own original-byte checks. The active-job projection filters saved
+run identity before loading a job; another run's retained batch is not projected
+as the current run's work.
+
+The candidate dispatcher now retains a single-page job before J13 preparation
+and binds its operation before reference upload or workflow dispatch. It can
+consume a preselected ordered batch when its next page matches the manager's
+eligible target. A verified, materialized tester answer permits a new operation
+after clarification; the item retains the original clarification operation ID.
+The post-callback/pre-assembly recovery path materializes the known image result
+before planning more work. Local clarification, revision and interrupted-boundary
+checks passed without retries. A retained natural-order two-page selection also
+passed through the dispatcher with separate results and approvals. The selected
+batch, lost-response, assembly-failure and uncertain-upload checks passed as four
+focused tests; typecheck and lint passed. Independent focused review passed after
+the run-isolation correction. Creator-facing batch selection, arbitrary subset
+ordering and deployed batch acceptance remain pending.
+
+After the batch-wiring correction, all three local Simulated generation journeys
+passed again without retries (three tests, 119.53 seconds). They independently
+verify 4/6/9 approved page-and-cover packages and 9/11/15 distinct baseline image
+assets, including saved byte evidence. This uses the in-process workflow runtime
+fixture, not the deployed Dify interface. It does not establish judge execution,
+final evaluation completion or live full-booklet acceptance.
 
 Focused tests cover each J11–J13 clarification/draft/revision contract and prove
 multi-panel layouts remain one image, cover completion,
@@ -591,18 +947,122 @@ Test pause/restart around a completed page, unavailable assets, corrupt output,
 storage failure, unknown provider outcome, cap exhaustion, warning-bearing success
 and failed judge without loss of generation success.
 
+The separate `m3-j13` graph candidate adds model-free Python manager routing for
+the exact eligible J13 page. The generated code executed locally and returned
+the expected delegation. Graph and Page Bible regression checks passed (11 tests),
+with focused lint and typecheck. Older profiles omit the extension. This candidate
+does not yet prove live tester execution, image transport, reports or publication.
+The final-page tester extension now retains existing J13 delegation for Kid and
+Parent when the baseline fixture selects an eligible draft for approval. Creator
+keeps explicit version approval. Four generated-Python tests passed, including
+all three persona decisions, and focused lint passed.
+The combined graph and Python regression selection passed 14 tests without
+retries, and the clean verification-checkout typecheck passed. The focused
+independent routing review returned Pass; this is not a full release review.
+These minimal projection
+fixtures do not prove stored artifact validity; repository admission remains
+responsible for that check. Image transport, reports and live publication remain
+pending.
+The optional final-page image graph now accepts an ordered, local-file-only image
+list (maximum 15) and returns resolved descriptors for runtime read-back. Its five
+graph tests and focused lint passed; the default graph stays unchanged. This
+does not establish descriptor identity parity, application-key live transport or
+provider reference use. Those checks remain explicit activation gates.
+Local J13 reconciliation now compares returned local image descriptors, in order,
+with the saved upload acknowledgements before publication verification. The parser
+uses the canonical opaque `reference` defined by pinned Dify 1.17.1's
+[file builder](https://github.com/langgenius/dify/blob/1.17.1/api/factories/file_factory/builders.py)
+and [reference helper](https://github.com/langgenius/dify/blob/1.17.1/api/core/workflow/file_reference.py),
+not the graph file ID. Two parser tests passed. Positive selected-batch and
+lost-response checks passed; the reversed-reference regression then passed after
+its assertion was corrected to inspect persisted blocked state rather than the
+advance return value. A second advance made no new image dispatch. Focused lint
+and typecheck passed before that assertion-only correction. Live transport remains
+unverified.
+Reference review found and corrected the zero-reference cover path: a missing
+optional file output is allowed only when saved upload evidence parses as exactly
+empty. Missing, corrupt or nonempty saved evidence does not receive that exception.
+The cover lost-response recovery and reversed-reference tests passed (2 tests,
+25.77 seconds, no retries). Recovery sent no additional image request; a later
+tester call is separate. The focused independent re-review returned Pass.
+
+The local selected-batch routing check now selects physical pages 3 then 1.
+The manager follows that saved order, retains separate approvals and returns to
+the remaining required pages. A prior manager selection for a different page
+requires a fresh manager decision. Twelve planning tests and the focused
+transactional dispatcher check passed without retries; focused lint and the clean
+verification-checkout typecheck passed. This is in-process simulated runtime
+evidence, not deployed Dify acceptance or creator-facing selection UI evidence.
+
+The local pre-claim Pause correction passed eight focused integration checks
+across three files without retries. Single-page and selected-batch Resume retain
+the original zero-reservation attempt and earlier approved pages, then save one
+fresh image attempt. Repository checks keep unknown, reserved, unverified and
+failed attempts blocked. The context fixture now rejects judge admission before
+saved generation. The complete affected batch-repository and context files also
+passed (23 tests, no retries). Focused lint, whitespace and source typechecking
+passed; the source check excludes ignored validation worktrees and stale generated
+Next.js route validators. Standard clean-candidate validation remains required.
+Independent review passed for this correction. This is local evidence, not live
+Dify acceptance.
+
+The late-output correction passed its focused claimed-timeout integration check
+without retries. The original J13 operation saves its delayed binary output,
+then GET verifies publication and assembles that result. No extra image dispatch,
+reference upload or reservation occurs. Wrong callback identity and a stale J12
+source are rejected. All 17 affected style/sheet assembly tests passed without
+retries. Focused lint, source typechecking, whitespace, 17 local link targets and
+independent review passed. This in-process test does not prove deployed callbacks.
+
+The batch-revision correction separates active selections from historical review
+hints. A completed single-page batch no longer blocks J13 regeneration after a
+J12 replacement. A drained partially completed batch receives a linked successor
+with current sources, preserving predecessor inputs/items and remaining page
+order. Refresh is transactional and idempotent; unknown, running or unreconciled
+failed work cannot be superseded. Twenty-two focused tests passed without retries,
+including all batch-repository cases and both full-profile revision paths.
+Focused lint, whitespace, source typechecking and independent review passed.
+Final clean-candidate checks and two consecutive independent reviews remain the
+publication gate; these local changes are not deployed acceptance.
+
 Browser test through the runner: launch, inspect progress, pause/resume, reload,
 open saved booklet/pages, inspect warnings and reports. Do not claim a Playwright
 test-list discovery as browser execution. Use the existing e2e runner with a focused
 new spec, fixtures and no providers; record a separate authorized staging browser
 smoke through the live Dify simulated branch.
 
-The current `scripts/run-e2e.ts` starts `next start` and seeds local agents.
-Adapt its explicit experiment test profile to start a development server and
-initialize v2 fixture data without agent seeds. Keep the existing profile for
-unaffected tests. This permits focused browser execution without inserting a
-production build into validation. Test cleanup still stops the isolated server
-and MongoDB. Do not run the current wrapper unchanged and assume it tests v2.
+The default `scripts/run-e2e.ts` profile retains `next start` and local agent seeds.
+Use `npm run test:e2e -- --profile experiment-runner` for the new runner fixture.
+This profile starts a development server and initializes isolated MongoDB storage
+without agent seeds. Its browser fixture intercepts runner APIs and image responses;
+it does not prove backend persistence or deployed Dify execution. Cleanup stops the
+isolated server and MongoDB. On 2026-10-06, this command passed with `--retries=0`
+against clean candidate `4087484`: one browser test, including selected-persona
+start, progress, saved artifact/report links, Pause/Resume and reload. No external
+browser request occurred. The expanded fixture then passed without retries
+(one test, 27.4 seconds): paused selection `3 → 1`, exact page-order submission,
+no implicit Resume, retained order after reload, advisory warning display, the
+actual saved-booklet route backed by an isolated seeded booklet, and an opened
+original-image response with decoded bytes. Runner APIs and image responses remain
+intercepted; this does not prove Dify-generated persistence. Deployed Dify browser
+acceptance remains pending.
+
+The clean `4087484` checkout passed standard `npm run typecheck` and `npm run lint`.
+Missing/invalid profile and invalid-port preflight checks returned the expected
+errors before MongoDB setup. The unchanged runtime inputs at `04bda6a` passed
+`vitest run experiment-runner tests/integration/restart-resume.test.ts --bail=1
+--retry=0`: 65 files and 563 tests in 1047.76 seconds, using fake providers and an
+isolated database. Process cleanup completed with exit 0. Twelve agent fixtures
+passed on the same runtime inputs. Required CI and two final clean publication
+reviews remain pending; no production/container build was run.
+
+Community MCP inventory on 2026-10-06 verified workspace
+`ffac910f-2786-490e-90d8-07243d49741b`. J12 and judge remain unpublished. The corrected
+local judge graph has 11 nodes and 11 edges; server-default MCP validation returned
+zero errors and warnings. A draft-sync preview showed only the report-routing
+correction and no validation issues. The stored judge draft still has the earlier
+nine-node graph. Validation and preview do not establish synchronization or
+publication.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,

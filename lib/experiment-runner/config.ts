@@ -4,7 +4,7 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentRoleSchema, experimentTaskSchema, specialistTaskSchema, personaSchema, type Persona, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 
 const binding = z.strictObject({
-  role: z.enum(["manager", "specialist", "tester", "image"]),
+  role: z.enum(["manager", "specialist", "tester", "image", "judge"]),
   taskId: specialistTaskSchema.nullable(),
   persona: personaSchema.nullable(),
   appId: opaqueIdSchema,
@@ -18,7 +18,7 @@ const binding = z.strictObject({
 export type BookletBinding = z.infer<typeof binding>;
 export const savedConfigurationItemSchema = z.strictObject({
   // Preserve the pre-J13 persistence contract when the optional evidence is
-  // absent. Runtime bindings remain narrower and do not accept judge/J13.
+  // absent. J13 remains an image responsibility, not a text specialist binding.
   role: experimentRoleSchema,
   taskId: experimentTaskSchema.nullable(),
   appId: opaqueIdSchema,
@@ -34,9 +34,10 @@ const savedFinalPageSlots = [
   "image::",
 ];
 function completeSavedFinalPageProfile(items: z.infer<typeof savedConfigurationItemSchema>[]): boolean {
-  if (items.length !== savedFinalPageSlots.length ||
+  const expectedSlots = items.some((item) => item.role === "judge") ? [...savedFinalPageSlots, "judge::"] : savedFinalPageSlots;
+  if (items.length !== expectedSlots.length ||
       new Set(items.map((item) => `${item.role}:${item.taskId ?? ""}:`)).size !== items.length ||
-      !savedFinalPageSlots.every((slot) => items.some((item) => `${item.role}:${item.taskId ?? ""}:` === slot)) ||
+      !expectedSlots.every((slot) => items.some((item) => `${item.role}:${item.taskId ?? ""}:` === slot)) ||
       new Set(items.map((item) => item.appId)).size !== items.length) return false;
   return items.filter((item) => item.finalPageIllustration === true).length === 1 &&
     items.some((item) => item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
@@ -74,7 +75,7 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   const callbackKey = env.DIFY_BOOKLET_TOOL_KEY;
   let raw: unknown;
   try { raw = JSON.parse(env.DIFY_BOOKLET_BINDINGS_JSON ?? ""); } catch { return { enabled: false, reason: "invalid" }; }
-  const parsed = z.array(binding).refine((items) => [6, 11, 13, 15, 16, 17].includes(items.length)).safeParse(raw);
+  const parsed = z.array(binding).refine((items) => [6, 11, 13, 15, 16, 17, 18].includes(items.length)).safeParse(raw);
   if (!baseUrl || !publicOrigin || !callbackKey || callbackKey.length < 32 || !parsed.success) return { enabled: false, reason: "invalid" };
   const bindings = parsed.data;
   const slots = bindings.map((item) => `${item.role}:${item.taskId ?? ""}:${item.persona ?? ""}`);
@@ -83,14 +84,16 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   if (bindings.length >= 13) expected.push("specialist:J08:", "image::");
   if (bindings.length >= 15) expected.push("specialist:J09:", "specialist:J10:");
   if (bindings.length >= 16) expected.push("specialist:J11:");
-  if (bindings.length === 17) expected.push("specialist:J12:");
+  if (bindings.length >= 17) expected.push("specialist:J12:");
+  if (bindings.length === 18) expected.push("judge::");
   const finalPageBindings = bindings.filter((item) => item.finalPageIllustration === true);
   if (new Set(slots).size !== bindings.length || expected.some((slot) => !slots.includes(slot)) || new Set(bindings.map((item) => item.appId)).size !== bindings.length ||
-      (finalPageBindings.length > 0 && (bindings.length !== 17 || finalPageBindings.length !== 1 || finalPageBindings[0].role !== "image" || finalPageBindings[0].taskId !== null || finalPageBindings[0].persona !== null))) return { enabled: false, reason: "invalid" };
+      (bindings.length === 18 && finalPageBindings.length !== 1) ||
+      (finalPageBindings.length > 0 && (![17, 18].includes(bindings.length) || finalPageBindings.length !== 1 || finalPageBindings[0].role !== "image" || finalPageBindings[0].taskId !== null || finalPageBindings[0].persona !== null))) return { enabled: false, reason: "invalid" };
   return { enabled: true, config: { enabled: true, baseUrl, publicOrigin, callbackKey, bindings } };
 }
 
-export function selectBinding(config: BookletRunnerConfig, role: "manager" | "specialist" | "tester" | "image", taskId: SpecialistTask | null, persona: Persona) {
+export function selectBinding(config: BookletRunnerConfig, role: BookletBinding["role"], taskId: SpecialistTask | null, persona: Persona) {
   const selected = config.bindings.find((item) => item.role === role && item.taskId === (role === "image" ? null : taskId) && item.persona === (role === "tester" ? persona : null));
   if (!selected) throw new Error("No configured binding for this role and task.");
   return selected;
@@ -108,6 +111,6 @@ export function validToolKey(candidate: string | null, expected: string): boolea
 }
 export const getRunnerConfig = readBookletRunnerConfig;
 export const configurationForPersona = configurationSnapshot;
-export function bindingFor(config: RunnerConfig, input: { role: "manager" | "specialist" | "tester" | "image"; taskId: SpecialistTask | null; persona: Persona }) {
+export function bindingFor(config: RunnerConfig, input: { role: BookletBinding["role"]; taskId: SpecialistTask | null; persona: Persona }) {
   return selectBinding(config, input.role, input.taskId, input.persona);
 }

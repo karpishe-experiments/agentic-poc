@@ -14,6 +14,12 @@ runtime-key saved-result lookup passed on 2026-10-03.
 **Read first:** [EXECUTION.md](EXECUTION.md), [PRD.md](PRD.md),
 [Dify access runbook](../2026-09-26_codex-dify-access/runbook.md).
 
+Use the canonical [readiness/manual-handoff register](EXECUTION.md#b-authorization-register)
+for private setup and permissions. Keep technical probe results here, not another
+manual action queue. Apply the [three validation levels](EXECUTION.md#validation-levels-and-result-reuse):
+focused probe checks during implementation; reuse valid results at local commits;
+complete affected publication checks and two clean reviews before publishing.
+
 ## Execution checklist
 
 Run these checkpoints in order. The sections below supply the constraints and
