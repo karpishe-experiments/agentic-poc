@@ -1003,8 +1003,8 @@ saved generation. The complete affected batch-repository and context files also
 passed (23 tests, no retries). Focused lint, whitespace and source typechecking
 passed; the source check excludes ignored validation worktrees and stale generated
 Next.js route validators. Standard clean-candidate validation remains required.
-Independent review passed for this correction. This is local evidence, not live Dify acceptance. Historical
-batch revision handling remains a publication blocker.
+Independent review passed for this correction. This is local evidence, not live
+Dify acceptance.
 
 The late-output correction passed its focused claimed-timeout integration check
 without retries. The original J13 operation saves its delayed binary output,
@@ -1013,6 +1013,17 @@ reference upload or reservation occurs. Wrong callback identity and a stale J12
 source are rejected. All 17 affected style/sheet assembly tests passed without
 retries. Focused lint, source typechecking, whitespace, 17 local link targets and
 independent review passed. This in-process test does not prove deployed callbacks.
+
+The batch-revision correction separates active selections from historical review
+hints. A completed single-page batch no longer blocks J13 regeneration after a
+J12 replacement. A drained partially completed batch receives a linked successor
+with current sources, preserving predecessor inputs/items and remaining page
+order. Refresh is transactional and idempotent; unknown, running or unreconciled
+failed work cannot be superseded. Twenty-two focused tests passed without retries,
+including all batch-repository cases and both full-profile revision paths.
+Focused lint, whitespace, source typechecking and independent review passed.
+Final clean-candidate checks and two consecutive independent reviews remain the
+publication gate; these local changes are not deployed acceptance.
 
 Browser test through the runner: launch, inspect progress, pause/resume, reload,
 open saved booklet/pages, inspect warnings and reports. Do not claim a Playwright

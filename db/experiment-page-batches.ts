@@ -15,6 +15,7 @@ import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 const selectionInput = z.strictObject({ jobId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), batch: experimentPageBatchSchema });
 const identityInput = z.strictObject({ runId: opaqueIdSchema, jobId: opaqueIdSchema });
 const bindingInput = identityInput.extend({ operationId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative() });
+const refreshInput = identityInput.extend({ pageId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative() });
 const itemResult = z.strictObject({ operationId: opaqueIdSchema.nullable(), assetId: opaqueIdSchema.nullable(), pageVersionId: opaqueIdSchema.nullable(),
   pausedOperationIds: z.array(opaqueIdSchema).max(300).optional(),
   clarificationOperationIds: z.array(opaqueIdSchema).max(300).optional() });
@@ -236,5 +237,70 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       return { jobId: value.jobId, reused: false };
     });
   }
-  return { select, get, listActive, bind, reconcile };
+  // Replace a drained stale selection with linked current work. Historical
+  // inputs/items stay immutable; no image is reserved or dispatched here.
+  async function refresh(raw: unknown) {
+    const value = refreshInput.parse(raw);
+    return withMongoTransaction(database, async (session) => {
+      const checked = await load(value, session), options = { session };
+      if (checked.job.supersededByJobId) {
+        const successor = await load({ runId: value.runId, jobId: checked.job.supersededByJobId }, session);
+        if (successor.job.supersedesJobId !== checked.job._id) invalid("Page batch successor linkage changed.");
+        return { jobId: successor.job._id, reused: true };
+      }
+      const run = checked.run;
+      if (run.revision !== value.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Page batch refresh revision changed.");
+      if (run.activeOperationId || run.pauseRequested || !["queued", "running"].includes(run.status) || run.generationCompletedAtMs != null ||
+        !["pending", "running", "paused", "partial"].includes(checked.job.status) ||
+        checked.states.some((item) => !["pending", "succeeded"].includes(item.status))) invalid("Page batch refresh requires drained, reconciled work.");
+      if (await database.collections.experiment_operations.findOne({ runId: run._id, state: { $in: ["prepared", "started", "unknown"] } }, options)) {
+        invalid("Outstanding page operation must be reconciled before refreshing selection.");
+      }
+      const pending = run.pendingDecisionJson ? JSON.parse(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectKind?: string; subjectId?: string; artifactVersionId?: string } : null;
+      if (pending && !(pending.kind === "revision" && pending.taskId === "J13" && pending.subjectKind === "page" && pending.subjectId === value.pageId)) {
+        invalid("Page batch refresh requires an exact page revision or changed approved sources.");
+      }
+      const pages: z.infer<typeof experimentPageBatchSchema>["pages"] = [];
+      let layoutVersionId: string | null = null;
+      let targetChanged = false;
+      const orderedIds = [value.pageId, ...checked.batch.pages.map((page) => page.pageId).filter((pageId) => pageId !== value.pageId)];
+      for (const pageId of orderedIds) {
+        const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
+          taskId: "J13", subjectKind: "page", subjectId: pageId }, options).toArray();
+        if (rows.length > 1) invalid("Page batch target is ambiguous.");
+        const artifact = rows[0];
+        if (pageId === value.pageId && pending && pending.artifactVersionId !== artifact?.currentVersionId) invalid("Page revision target changed.");
+        if (artifact && !["needs_review", ...(pageId === value.pageId && pending ? ["draft"] : [])].includes(artifact.state)) {
+          if (pageId === value.pageId) invalid("Selected page does not require regeneration.");
+          continue;
+        }
+        const sources = await verifyCurrentPageIllustrationSources(database, session, run, pageId, store);
+        if (layoutVersionId && layoutVersionId !== sources.layoutVersionId) invalid("Refreshed pages have different layouts.");
+        layoutVersionId = sources.layoutVersionId;
+        const prior = checked.batch.pages.find((page) => page.pageId === pageId);
+        if (pageId === value.pageId) targetChanged = !!pending || !prior || checked.batch.layoutVersionId !== sources.layoutVersionId ||
+          prior.pageBibleVersionId !== sources.pageBibleVersionId || prior.previousPageVersionId !== (artifact?.currentVersionId ?? null);
+        pages.push({ pageId, pageBibleVersionId: sources.pageBibleVersionId, previousPageVersionId: artifact?.currentVersionId ?? null });
+      }
+      if (!targetChanged || !layoutVersionId || !pages.length) invalid("Page batch refresh has no verified changed target.");
+      const batch = experimentPageBatchSchema.parse({ ...checked.batch, layoutVersionId, pages,
+        selection: pages.length === 1 ? "single" : "selected_batch" });
+      const idempotencyKey = `dify-pages:${run._id}:${pageBatchFingerprint(batch)}`;
+      if (await database.collections.generation_jobs.findOne({ idempotencyKey }, options)) invalid("Refreshed page selection already has unreconciled history.");
+      const timestamp = now(), jobId = randomUUID();
+      const changed = await database.collections.experiment_runs.updateOne({ _id: run._id, revision: value.expectedRevision,
+        activeOperationId: null, pauseRequested: false }, { $inc: { revision: 1 }, $set: { updatedAtMs: timestamp } }, options);
+      if (!changed.matchedCount) throw new ExperimentRepositoryError("stale_revision", "Page refresh lost the run revision.");
+      await database.collections.generation_jobs.updateOne({ _id: checked.job._id, status: checked.job.status },
+        { $set: { status: "superseded", supersededByJobId: jobId, updatedAtMs: timestamp, finishedAtMs: timestamp } }, options);
+      await database.collections.generation_jobs.insertOne({ _id: jobId, bookletId: run.bookletId, jobType: "dify_pages", status: "pending",
+        idempotencyKey, inputJson: JSON.stringify(batch), errorJson: null, supersedesJobId: checked.job._id,
+        createdAtMs: timestamp, startedAtMs: null, finishedAtMs: null, updatedAtMs: timestamp }, options);
+      await database.collections.generation_items.insertMany(batch.pages.map((page, position) => ({ _id: randomUUID(), jobId,
+        itemKey: page.pageId, position, status: "pending", attemptCount: 0, inputJson: JSON.stringify(page), resultJson: null,
+        assetId: null, errorJson: null, executionCardId: null, executionBatchId: null, startedAtMs: null, finishedAtMs: null })), options);
+      return { jobId, reused: false };
+    });
+  }
+  return { select, get, listActive, bind, reconcile, refresh };
 }

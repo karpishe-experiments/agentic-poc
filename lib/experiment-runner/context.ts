@@ -182,8 +182,8 @@ export function createExperimentContextService(database: Database, options: { st
         sourceVersionIds: [version.id, ...version.dependencyVersionIds as string[]] };
     });
     if (pages.some((page) => page === null)) return null;
-    if (batch && (batch.layoutVersionId !== layoutVersion.id || batch.pages.some((selected) =>
-      !pages.some((page) => page?.pageId === selected.pageId && page.pageBibleVersionId === selected.pageBibleVersionId)))) return null;
+    // An active selection supplies order, not source authorization. Revisions
+    // refresh its saved sources transactionally before another image dispatch.
     const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
     if (pending && !(pending.kind === "revision" && pending.taskId === "J13" && pending.subjectKind === "page" &&
         pending.subjectId && pending.artifactVersionId)) return null;
@@ -212,9 +212,18 @@ export function createExperimentContextService(database: Database, options: { st
     const batchRows = configuredPageIllustrationTask(run.configurationJson) ? await database.collections.generation_jobs.find({
       bookletId: run.bookletId, jobType: "dify_pages",
     }).sort({ createdAtMs: -1, _id: -1 }).toArray() : [];
-    const pageBatch = batchRows.map((row) => experimentPageBatchSchema.parse(JSON.parse(row.inputJson))).find((batch) =>
-      batch.runId === run._id && batch.configurationHash === run.configurationHash && batch.pages.some((page) =>
-        !currentArtifacts.some((artifact) => artifact.taskId === "J13" && artifact.subjectId === page.pageId && artifact.state === "approved")));
+    const ownedBatches = batchRows.map((row) => ({ row, batch: experimentPageBatchSchema.parse(JSON.parse(row.inputJson)) }))
+      .filter(({ batch }) => batch.runId === run._id && batch.configurationHash === run.configurationHash);
+    const activeBatches = ownedBatches.filter(({ row }) => ["pending", "running", "paused", "unknown", "partial"].includes(row.status));
+    if (activeBatches.length > 1) deny("Run has overlapping active page batches.");
+    // Completed batches can prioritize their current draft's review. They must
+    // never revive old generation selection after an upstream source revision.
+    const reviewBatch = ownedBatches.find(({ row, batch }) => row.status === "succeeded" &&
+      currentArtifacts.some((artifact) => artifact.taskId === "J11" && artifact.state === "approved" && artifact.currentVersionId === batch.layoutVersionId) &&
+      batch.pages.every((page) => currentArtifacts.some((artifact) => artifact.taskId === "J12" && artifact.subjectId === page.pageId &&
+        artifact.state === "approved" && artifact.currentVersionId === page.pageBibleVersionId)) &&
+      batch.pages.some((page) => currentArtifacts.some((artifact) => artifact.taskId === "J13" && artifact.subjectId === page.pageId && artifact.state === "draft")));
+    const pageBatch = activeBatches[0]?.batch ?? reviewBatch?.batch;
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" }).sort({ sequence: 1 }).toArray();
     const operationRows = await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray();

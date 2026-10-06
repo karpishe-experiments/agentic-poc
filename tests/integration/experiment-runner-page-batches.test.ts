@@ -44,6 +44,37 @@ async function prepareFirst(env: Awaited<ReturnType<typeof setup>>) {
   return { identity: { runId: id(1), jobId: id(8) }, binding: { runId: id(1), jobId: id(8), operationId: id(11), expectedRevision: 2 }, request };
 }
 describe("saved Dify page batch selection", () => {
+  it("refreshes changed sources into one linked successor without rewriting retained items", async () => {
+    const env = await setup();
+    await env.repository().select({ jobId: id(8), expectedRevision: 0, batch: env.batch });
+    const original = (await env.repository().get({ runId: id(1), jobId: id(8) }));
+    verifySources.mockImplementation(async (_database, _session, _run, pageId) => ({ layoutVersionId: id(3),
+      pageBibleVersionId: pageId === id(4) ? id(25) : id(7) }));
+    const counters = (await env.database.collections.experiment_runs.findOne({ _id: id(1) }))!.counters;
+    const input = { runId: id(1), jobId: id(8), pageId: id(4), expectedRevision: 1 };
+    const refreshed = await env.repository().refresh(input);
+    expect(refreshed.reused).toBe(false);
+    expect(await env.repository().refresh(input)).toEqual({ ...refreshed, reused: true });
+    const retained = await env.repository().get({ runId: id(1), jobId: id(8) });
+    expect(retained).toEqual({ ...original, status: "superseded" });
+    const successor = await env.repository().get({ runId: id(1), jobId: refreshed.jobId });
+    expect(successor.batch.pages).toEqual([{ ...env.batch.pages[0], pageBibleVersionId: id(25) }, env.batch.pages[1]]);
+    expect((await env.repository().listActive(id(1))).map((job) => job.jobId)).toEqual([refreshed.jobId]);
+    expect(await env.database.collections.generation_jobs.findOne({ _id: refreshed.jobId })).toMatchObject({ supersedesJobId: id(8) });
+    expect(await env.database.collections.generation_jobs.findOne({ _id: id(8) })).toMatchObject({ supersededByJobId: refreshed.jobId, inputJson: JSON.stringify(env.batch) });
+    expect((await env.database.collections.experiment_runs.findOne({ _id: id(1) }))!.counters).toEqual(counters);
+  });
+  it.each(["running", "unknown", "failed"])("rejects refreshing an unreconciled %s item without changing history", async (status) => {
+    const env = await setup(); const { identity, binding } = await prepareFirst(env);
+    await env.repository().bind(binding);
+    await env.database.collections.generation_items.updateOne({ jobId: id(8), position: 0 }, { $set: { status } });
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { activeOperationId: null } });
+    const revision = (await env.database.collections.experiment_runs.findOne({ _id: id(1) }))!.revision;
+    const before = await env.repository().get(identity);
+    await expect(env.repository().refresh({ ...identity, pageId: id(4), expectedRevision: revision })).rejects.toMatchObject({ code: "invalid_state" });
+    expect(await env.repository().get(identity)).toEqual(before);
+    expect(await env.database.collections.generation_jobs.countDocuments({})).toBe(1);
+  });
   it("retains a verified unclaimed Pause and rebinds the same ordered item after Resume", async () => {
     const env = await setup(); const { identity, binding } = await prepareFirst(env);
     await env.repository().bind(binding);

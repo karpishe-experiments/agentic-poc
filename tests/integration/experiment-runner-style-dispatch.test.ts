@@ -464,6 +464,69 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId })).toBe(1);
     expect((await env.repository.getOperation(operation._id))!.state).toBe("succeeded");
   }, 120_000);
+  it("regenerates only the affected J13 after a J12 revision without reviving its completed batch", async () => {
+    const env = await setup("playful_kid", 18, true);
+    await env.reachPageImageWithReferences();
+    await env.dispatcher().advance(env.runId);
+    const image = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await env.dispatcher().advance(env.runId);
+    const original = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: image.subjectId }))!;
+    const bible = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J12", subjectId: image.subjectId }))!;
+    const siblings = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13", subjectId: { $ne: image.subjectId } }).toArray();
+    const jobs = await env.database.collections.generation_jobs.find({ bookletId: original.bookletId, jobType: "dify_pages" }).toArray();
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J12",
+      artifactVersionId: bible.currentVersionId!, instruction: "Keep the exact lettering but clarify the camera composition." } } }, false, true);
+    let regenerated = false;
+    for (let step = 0; step < 16; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      const current = (await env.database.collections.artifacts.findOne({ _id: original._id }))!;
+      if (current.currentVersionId !== original.currentVersionId && current.state === "approved") { regenerated = true; break; }
+    }
+    expect(regenerated).toBe(true);
+    const changed = (await env.database.collections.artifacts.findOne({ _id: original._id }))!;
+    const version = (await env.database.collections.artifact_versions.findOne({ _id: changed.currentVersionId! }))!;
+    expect(JSON.parse(version.contentJson).pageBibleVersionId).not.toBe(bible.currentVersionId);
+    expect(version.sourceVersionId).toBe(original.currentVersionId);
+    expect(await env.database.collections.approvals.findOne({ artifactVersionId: original.currentVersionId! })).toBeTruthy();
+    for (const job of jobs) expect(await env.database.collections.generation_jobs.findOne({ _id: job._id })).toEqual(job);
+    for (const sibling of siblings) expect(await env.database.collections.artifacts.findOne({ _id: sibling._id })).toEqual(sibling);
+    expect((await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === image.subjectId)).toHaveLength(2);
+  }, 120_000);
+  it("preserves the pending tail when revising the first image of an active selected batch", async () => {
+    const env = await setup("playful_kid", 18, true);
+    await env.reachPageImageWithReferences();
+    const run = (await env.repository.getRun(env.runId))!, view = (await env.context.getRunView(env.runId))!;
+    const layoutArtifact = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+    const layout = parseStoredPageLayout(run.persona, layoutArtifact.versions.find((item) => item.id === layoutArtifact.currentVersionId)!.content);
+    const storyPages = layout.pages.filter((page) => page.pageIndex > 0);
+    const pages = [storyPages[2], storyPages[0], storyPages[1]].map((page) => ({ pageId: page.pageId,
+      pageBibleVersionId: view.currentArtifacts.find((item) => item.taskId === "J12" && item.subjectId === page.pageId)!.currentVersionId!, previousPageVersionId: null }));
+    const batches = createExperimentPageBatchRepository({ database: env.database, store: env.store, now: env.next }), jobId = randomUUID();
+    await batches.select({ jobId, expectedRevision: run.revision, batch: { schemaVersion: "2", runId: env.runId,
+      configurationHash: run.configurationHash, layoutVersionId: layoutArtifact.currentVersionId!, selection: "selected_batch", pages } });
+    for (let step = 0; step < 4; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      if (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: pages[0].pageId })) break;
+    }
+    const original = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: pages[0].pageId }))!;
+    expect(original.state).toBe("draft");
+    const retainedItems = await env.database.collections.generation_items.find({ jobId }).sort({ position: 1 }).toArray();
+    await env.testerDecision({ kind: "decision", payload: { decision: { action: "revise", taskId: "J13",
+      artifactVersionId: original.currentVersionId!, instruction: "Make the kite visible without changing the lettering." } } }, false, true);
+    let finished = false;
+    for (let step = 0; step < 18; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      if (await env.database.collections.artifacts.countDocuments({ experimentRunId: env.runId, taskId: "J13", subjectId: { $in: pages.map((page) => page.pageId) }, state: "approved" }) === pages.length) { finished = true; break; }
+    }
+    expect(finished).toBe(true);
+    const oldJob = (await env.database.collections.generation_jobs.findOne({ _id: jobId }))!;
+    expect(oldJob.status).toBe("superseded");
+    expect(await env.database.collections.generation_items.find({ jobId }).sort({ position: 1 }).toArray()).toEqual(retainedItems);
+    const successor = await batches.get({ runId: env.runId, jobId: oldJob.supersededByJobId! });
+    expect(successor.batch.pages.map((page) => page.pageId)).toEqual(pages.map((page) => page.pageId));
+    expect(successor.batch.pages[0].previousPageVersionId).toBe(original.currentVersionId);
+    expect(successor.next).toEqual({ kind: "complete" });
+  }, 120_000);
   it("revises only the selected J13 page, retains feedback after assembly and enforces image allowance", async () => {
     const env = await setup("playful_kid", 17, true);
     await env.reachPageImageWithReferences();

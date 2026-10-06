@@ -83,7 +83,17 @@ export function createExperimentDispatcher(deps: {
       });
       return null;
     }
-    const active = await batches().listActive(run._id);
+    let active = await batches().listActive(run._id);
+    if (active.length === 1) {
+      const retained = active[0], selected = retained.batch.pages.find((page) => page.pageId === work.subjectId);
+      if (!("pageId" in retained.next) || retained.next.pageId !== work.subjectId ||
+        retained.batch.layoutVersionId !== sources.layoutVersionId || selected?.pageBibleVersionId !== sources.pageBibleVersionId ||
+        selected.previousPageVersionId !== work.currentVersionId) {
+        await batches().refresh({ runId: run._id, jobId: retained.jobId, pageId: work.subjectId, expectedRevision: run.revision });
+        run = (await repository.getRun(run._id))!;
+        active = await batches().listActive(run._id);
+      }
+    }
     if (active.length > 1 || active.length === 1 && (!("pageId" in active[0].next) || active[0].next.pageId !== work.subjectId)) {
       throw new ExperimentRepositoryError("conflict", "Retained batch selection differs from the eligible manager page.");
     }

@@ -271,6 +271,13 @@ sheet sources while its outcome is unknown. This permits a late authenticated
 binary callback before publication readback. Current-source and callback identity
 checks still apply. Assembly mutation remains blocked during active unknown work;
 saved J13 materialization still requires publication verification through GET.
+Completed batches guide review only while their J11/J12 sources are current.
+They do not schedule replacements after source revisions. A drained active batch
+can be superseded by a linked successor with current source and prior-image
+versions. The revision target comes first; remaining selected pages retain their
+order. Predecessor inputs, items, operations and assets remain unchanged.
+Running, unknown or unreconciled failed items prevent supersession. The refresh
+transaction neither reserves nor dispatches an image.
 Live full-booklet acceptance is still incomplete; the candidate is not ready for
 publication.
 The read-only generation verifier derives completion evidence from the current
