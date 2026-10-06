@@ -11,12 +11,17 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { configuredReferenceSheetTasks, referenceSheetTargets } from "@/lib/experiment-runner/reference-targets";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
-import { materializePageLayout, validatePaginationRouting, verifyCurrentPaginationSources, verifyCurrentPageBibleSources } from "@/db/experiment-pages";
+import { materializePageLayout, validatePaginationRouting, verifyCurrentPaginationSources, verifyCurrentPageBibleSources, verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
 import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 import { configuredPaginationTask } from "@/lib/experiment-runner/pagination-tasks";
 import { configuredPageBibleTask, parsePageBibleForLayout } from "@/lib/experiment-runner/page-bible-tasks";
+import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
+import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
+import { withPageImageRevisions } from "@/lib/experiment-runner/page-image-requests";
+import { verifyExperimentGeneration } from "@/db/experiment-completion";
+import { validateExperimentReport } from "@/lib/contracts/experiment-reports";
 
-type RunPatch = Partial<Pick<ExperimentRunDocument, "activeDelegationId" | "decisionSequence" | "pendingDecisionJson" | "textRevisions">>;
+type RunPatch = Partial<Pick<ExperimentRunDocument, "activeDelegationId" | "decisionSequence" | "pendingDecisionJson" | "textRevisions" | "imageRevisions" | "evaluationStatus">>;
 export type Materialized = { summary: Record<string, unknown>; runPatch: RunPatch };
 const names = { J01: "book_concept_brief", J02: "story_outline", J03: "draft_character_list", J04: "draft_location_list", J05: "page_by_page_manuscript", J06: "final_character_list", J07: "final_location_list", J08: "visual_style_package", J09: "character_sheet_package", J10: "location_sheet_package", J11: "pagination_layout_plan", J12: "final_page_bible" } as const;
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
@@ -145,9 +150,13 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   if (!version) invalid("Approval version does not exist.");
   const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
   if (!artifact || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId || artifact.currentVersionId !== versionId) invalid("Approval target is not the current run artifact.");
-  if (!enabled(run, artifact.taskId)) invalid("Approval task is outside the saved configuration.");
+  const pageImage = artifact.taskId === "J13" && configuredPageIllustrationTask(run.configurationJson);
+  if (!pageImage && !enabled(run, artifact.taskId)) invalid("Approval task is outside the saved configuration.");
   if (artifact.state === "needs_review") invalid("Stale content requires an updated proposal before approval.");
-  {
+  if (pageImage) {
+    await createExperimentPageIllustrationAssembly({ database, store: assetStore() }).verifyVersion({ runId: run._id, versionId }, session);
+  } else {
+    if (!enabled(run, artifact.taskId)) invalid("Approval task is outside the saved configuration.");
     const expected = await approvedSourceIds(database, session, run, artifact.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore, verifyPagination, verifyPageBible);
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as string[];
     if (artifact.taskId === "J09" || artifact.taskId === "J10") {
@@ -212,6 +221,22 @@ async function approveVersion(database: Database, session: ClientSession, run: E
 export async function materializeNarrativeResult(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RoleResult, warnings: NarrativeWarning[], nowMs: number, assetStore: () => AssetStore = createAssetStore): Promise<Materialized> {
   const summary: Record<string, unknown> = {};
   const runPatch: RunPatch = {};
+  if (result.kind === "feedback" || result.kind === "assessment") {
+    const role = result.kind === "feedback" ? "tester" : "judge";
+    if (operation.role !== role) invalid("Report role differs from its evaluation owner.");
+    const generation = await verifyExperimentGeneration(database, session, run, assetStore(), operation._id);
+    try {
+      validateExperimentReport(result.payload, { role, mode: run.mode, runId: run._id, configurationHash: run.configurationHash,
+        artifacts: generation.artifacts, availableAssetIds: [...generation.referenceAssetIds, ...generation.finalAssetIds],
+        requiredFinalAssetIds: generation.finalAssetIds });
+    } catch { invalid("Report does not match the current retained generation evidence."); }
+    summary.reportRole = role;
+    summary.generationVersionIds = generation.artifacts.map((artifact) => artifact.versionId);
+    runPatch.evaluationStatus = "running";
+    // The validated payload remains in this immutable operation's resultJson.
+    // Publication verification and final status transition are separate gates.
+    return { summary, runPatch };
+  }
   // This cache belongs to one transaction attempt. A retry or later request
   // verifies approvals, assembly lineage and stored bytes again.
   let verifiedPagination: VerifiedPagination | null = null;
@@ -267,12 +292,35 @@ export async function materializeNarrativeResult(database: Database, session: Cl
   if (result.kind === "ask" || result.kind === "clarification") {
     const current = pending(run);
     if (current?.kind === "question") invalid("An unanswered creator decision is already pending.");
-    if (current?.kind === "revision" && (result.kind !== "clarification" || operation.role !== "specialist" || operation.taskId !== current.taskId || operation.expectedTargetVersionId !== current.artifactVersionId)) invalid("Clarification must belong to the pending revision owner.");
+    if (current?.kind === "revision" && (result.kind !== "clarification" ||
+        !(operation.role === "specialist" || operation.role === "image" && operation.taskId === "J13") ||
+        operation.taskId !== current.taskId || operation.expectedTargetVersionId !== current.artifactVersionId)) invalid("Clarification must belong to the pending revision owner.");
     runPatch.pendingDecisionJson = canonical({ kind: "question", questionId: operation._id, taskId: operation.taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, question: result.payload.question, resumeRevision: current?.kind === "revision" ? current : null });
     summary.questionId = operation._id;
   } else if (result.kind === "delegate") {
     if (operation.taskId && operation.taskId !== result.payload.taskId) invalid("Manager delegation target is not eligible.");
-    try { await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore); }
+    try {
+      if (result.payload.taskId === "J13") {
+        if (!configuredPageIllustrationTask(run.configurationJson) || run.mode !== "simulated") invalid("Page illustration is outside the saved configuration.");
+        const target = await database.collections.artifacts.findOne({ bookletId: run.bookletId, experimentRunId: run._id,
+          taskId: "J13", subjectKind: "page", subjectId: result.payload.subjectId }, { session });
+        const decision = pending(run);
+        const revision = decision?.kind === "revision" && decision.taskId === "J13" && decision.subjectKind === "page" &&
+          decision.subjectId === result.payload.subjectId && decision.artifactVersionId === target?.currentVersionId;
+        if (decision && !revision || target?.currentVersionId && target.state !== "needs_review" && !revision) invalid("Page illustration requires an eligible current target.");
+        const store = assetStore();
+        const selected = await verifyCurrentPageIllustrationSources(database, session, run, result.payload.subjectId, store);
+        // Page Bible is one internal production gate, even when creator review
+        // is delegated. A valid selected page cannot bypass an unfinished sibling.
+        for (const page of selected.layout.pages) {
+          if (page.pageId !== result.payload.subjectId) {
+            await verifyCurrentPageIllustrationSources(database, session, run, page.pageId, store);
+          }
+        }
+      } else {
+        await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore);
+      }
+    }
     catch { invalid("Manager delegation target is not currently eligible."); }
     summary.delegatedTaskId = result.payload.taskId;
   } else if (result.kind === "decision") {
@@ -280,7 +328,8 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     const sequence = run.decisionSequence + 1;
     const decisionId = operation._id;
     if (decision.action === "delegate") {
-      if (decision.subjectId !== run.bookletId || decision.taskIds.some((task) => !enabled(run, task))) invalid("Delegation exceeds the saved booklet task scope.");
+      if (decision.subjectId !== run.bookletId || decision.taskIds.some((task) => !enabled(run, task) &&
+          !(task === "J13" && configuredPageIllustrationTask(run.configurationJson)))) invalid("Delegation exceeds the saved booklet task scope.");
       const grantId = randomUUID();
       if (run.activeDelegationId) await database.collections.experiment_delegations.updateOne({ _id: run.activeDelegationId, runId: run._id, supersededById: null }, { $set: { supersededById: grantId } }, { session });
       await database.collections.experiment_delegations.insertOne({ _id: grantId, runId: run._id, testerDecisionId: decisionId, taskIds: decision.taskIds, subjectKind: "book", subjectId: run.bookletId, action: "approve", effectiveSequence: sequence, supersededById: null, revokedAtMs: null, createdAtMs: nowMs }, { session });
@@ -316,7 +365,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
         const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
         if (artifact) artifactByVersion.set(version._id, artifact);
       }
-      const rank = (id: string) => [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), "J11", "J12"].findIndex((task) => task === artifactByVersion.get(id)?.taskId);
+      const rank = (id: string) => [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), "J11", "J12", "J13"].findIndex((task) => task === artifactByVersion.get(id)?.taskId);
       const ordered = [...decision.versionIds].sort((a, b) => rank(a) - rank(b));
       const approvalIds: string[] = [];
       for (const versionId of ordered) approvalIds.push(await approveVersion(database, session, run, versionId, "explicit", decisionId, null, groupId, nowMs, assetStore, verifyPagination, verifyPageBible));
@@ -329,15 +378,36 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     } else {
       const current = pending(run);
       if (current) invalid("Another creator decision is pending.");
-      if (!enabled(run, decision.taskId)) invalid("Revision task is outside the saved configuration.");
+      const pageImageRevision = decision.taskId === "J13" && configuredPageIllustrationTask(run.configurationJson);
+      if (!pageImageRevision && !enabled(run, decision.taskId)) invalid("Revision task is outside the saved configuration.");
       const targetVersion = await database.collections.artifact_versions.findOne({ _id: decision.artifactVersionId }, { session });
       const artifact = targetVersion ? await database.collections.artifacts.findOne({ _id: targetVersion.artifactId,
         experimentRunId: run._id, bookletId: run.bookletId, taskId: decision.taskId }, { session }) : null;
       if (!artifact || artifact.currentVersionId !== decision.artifactVersionId) invalid("Revision target is not current.");
-      if (artifact.state === "needs_review" || await approvedSourceIds(database, session, run, decision.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore) === null) invalid("Revision requires current approved dependencies.");
-      if (run.textRevisions >= CASES[run.persona].textRevisionLimit) invalid("Text revision allowance is exhausted.");
-      runPatch.textRevisions = run.textRevisions + 1;
-      runPatch.pendingDecisionJson = canonical({ kind: "revision", taskId: decision.taskId, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId, artifactVersionId: decision.artifactVersionId, instruction: decision.instruction });
+      if (pageImageRevision) {
+        if (run.mode !== "simulated" || artifact.subjectKind !== "page" || !artifact.subjectId ||
+            !["draft", "approved"].includes(artifact.state)) invalid("Image revision requires a current saved page image.");
+        if (run.imageRevisions >= CASES[run.persona].imageRevisionLimit) invalid("Image revision allowance is exhausted.");
+        await createExperimentPageIllustrationAssembly({ database, store: assetStore() }).verifyVersion({ runId: run._id, versionId: decision.artifactVersionId }, session);
+        const sources = await verifyCurrentPageIllustrationSources(database, session, run, artifact.subjectId, assetStore());
+        try {
+          withPageImageRevisions(sources.baseRequest, [...sources.request.request.revisions ?? [], {
+            decisionId, previousPageVersionId: decision.artifactVersionId, instruction: decision.instruction,
+          }]);
+        } catch { invalid("Image revision cannot form a valid bounded page request."); }
+        // Keep earlier approval/version evidence. Only this page becomes a draft
+        // target while its explicit revision is pending.
+        await database.collections.artifacts.updateOne({ _id: artifact._id, currentVersionId: decision.artifactVersionId },
+          { $set: { state: "draft", updatedAtMs: nowMs } }, { session });
+        runPatch.imageRevisions = run.imageRevisions + 1;
+      } else {
+        if (!enabled(run, decision.taskId)) invalid("Revision task is outside the saved configuration.");
+        if (artifact.state === "needs_review" || await approvedSourceIds(database, session, run, decision.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore) === null) invalid("Revision requires current approved dependencies.");
+        if (run.textRevisions >= CASES[run.persona].textRevisionLimit) invalid("Text revision allowance is exhausted.");
+        runPatch.textRevisions = run.textRevisions + 1;
+      }
+      runPatch.pendingDecisionJson = canonical({ kind: "revision", taskId: decision.taskId, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId, artifactVersionId: decision.artifactVersionId, instruction: decision.instruction,
+        ...(pageImageRevision ? { decisionId } : {}) });
       summary.revisionTaskId = decision.taskId;
     }
     runPatch.decisionSequence = sequence;

@@ -1,8 +1,8 @@
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { ExperimentImageValidationError, validateExperimentImage } from "@/lib/experiment-runner/image-validation";
+import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import type { BookletBinding, BookletRunnerConfig } from "@/lib/experiment-runner/config";
 
-const MAX_REFERENCE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_ACK_BYTES = 64 * 1024;
 
 export type ReferenceUploadResult =

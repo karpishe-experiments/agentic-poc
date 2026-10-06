@@ -6,6 +6,10 @@ import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentImageRequestSchema, imageRequestFingerprint, type ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import { MAX_EXPERIMENT_IMAGE_BYTES, MAX_EXPERIMENT_IMAGE_PIXELS } from "@/lib/experiment-runner/image-validation";
+import { verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
+import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
+import type { AssetStore } from "@/lib/assets/asset-store";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 
 const time = z.number().int().nonnegative();
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
@@ -40,10 +44,23 @@ export async function assertCurrentImageSources(database: Database, session: Cli
   }
 }
 
-export function createExperimentImageRepository(database: Database) {
+export function createExperimentImageRepository(database: Database, options: { store?: () => AssetStore } = {}) {
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
   const assets = database.collections.assets;
+
+  async function assertOperationSources(session: ClientSession, run: ExperimentRunDocument,
+    operation: ExperimentOperationDocument, request: ExperimentImageRequest) {
+    if (operation.taskId !== "J13") return assertCurrentImageSources(database, session, run, request);
+    if (!configuredPageIllustrationTask(run.configurationJson) || request.kind !== "page_source" ||
+        operation.subjectKind !== "page" || !operation.parentWorkflowRunId) invalid("J13 image completion requires its saved page configuration and manager parent.");
+    const sources = await verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId,
+      (options.store ?? createAssetStore)());
+    if (JSON.stringify(request) !== JSON.stringify(sources.request.request) ||
+        JSON.stringify(operation.dependencyVersionIds) !== JSON.stringify(sources.request.request.sourceVersionIds)) {
+      conflict("J13 image sources changed before fixture or storage access.");
+    }
+  }
 
   async function checked(input: z.infer<typeof identitySchema>, session: ClientSession) {
     const operation = await operations.findOne({ _id: input.operationId, runId: input.runId }, { session });
@@ -75,7 +92,7 @@ export function createExperimentImageRepository(database: Database) {
       if (operation.state !== "started" && operation.state !== "unknown") invalid("Image fixture operation has not started.");
       if (run.activeOperationId !== operation._id ||
           !(["queued", "running", "paused"].includes(run.status) || operation.state === "unknown" && run.status === "blocked" && run.safeFailure === "unknown_outcome")) invalid("Image fixture operation is no longer active.");
-      await assertCurrentImageSources(database, session, run, request);
+      await assertOperationSources(session, run, operation, request);
       return request;
     });
   }
@@ -91,7 +108,7 @@ export function createExperimentImageRepository(database: Database) {
         return { reused: true, operation, asset };
       }
       await assertRecoverable(run, operation, session);
-      await assertCurrentImageSources(database, session, run, request);
+      await assertOperationSources(session, run, operation, request);
       if (operation.imageCompletionClaim && operation.imageCompletionClaim.expiresAtMs > input.nowMs) conflict("Image completion is already claimed.");
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, imageCompletionClaim: operation.imageCompletionClaim ?? null }, { $set: { imageCompletionDigest: input.validatedImage.sha256, imageCompletionClaim: { id: input.claimId, digest: input.validatedImage.sha256, expiresAtMs: input.nowMs + LEASE_MS }, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) conflict("Image completion claim changed concurrently.");
@@ -110,7 +127,7 @@ export function createExperimentImageRepository(database: Database) {
         return { reused: true, operation, asset: saved };
       }
       await assertRecoverable(run, operation, session);
-      await assertCurrentImageSources(database, session, run, request);
+      await assertOperationSources(session, run, operation, request);
       const lease = operation.imageCompletionClaim;
       if (!lease || lease.id !== input.claimId || lease.digest !== input.validatedImage.sha256 || lease.expiresAtMs <= input.nowMs || operation.imageCompletionDigest !== input.validatedImage.sha256) conflict("Image completion claim expired or changed.");
       const expectedUri = `experiments/${run.bookletId}/${run._id}/${operation._id}/attempt-${operation.attempt}/image.${input.validatedImage.extension}`;

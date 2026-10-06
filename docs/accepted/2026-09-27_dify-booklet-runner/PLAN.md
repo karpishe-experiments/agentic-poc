@@ -170,13 +170,28 @@ outside M3; this consolidation does not change PRD limits or acceptance criteria
 
 **Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
-- Complete all three simulated acceptance cases and failure scenarios before enabling real LLMs.
-- Exercise low-interaction kid/parent flows and detailed creator control, grouped reviews, changed delegation and material-conflict escalation. Assert that quality warnings cannot force an unbounded approval/revision loop.
-- Run focused unit/integration contracts, typecheck, lint, routing fixtures and fake browser checks.
-- Verify zero provider execution in simulation and zero real image execution in Balanced mode, including failure branches.
-- Obtain paid-test authorization separately. Complete all three Balanced cases within the PRD's limits, including testers and judge.
-- Inspect Dify traces, request reservations and usage together; record missing evidence honestly.
-- Independently review application changes and sanitized Dify configuration. Publish reviewed versions and read back both workflow publication and Workflow Tool synchronization.
+M4 remains planned, pending M3's deployed completion. Use the three
+[M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
+
+| Checkpoint | Work and exit |
+| --- | --- |
+| 1. Close readiness gaps | Reuse valid M3 simulation/recovery/browser evidence; test uncovered or changed paths. Preserve all required scenarios and persona contracts. Verify real-text/simulated-image routing, models, tokens, disabled automatic provider retries and reservations for all internal calls. Consolidate missing private setup and paid authorization into one handoff. |
+| 2. Execute one Balanced campaign | Run Kid → Parent → Creator sequentially within 120/160/220 LLM requests; zero real image calls. Retain artifacts, individual approvals, short tester/judge reports, usage and timing. Quality findings remain warnings; simulated images do not prove real image-provider quality. |
+| 3. Record results and prepare M5 | Keep one concise exit record in M4 with bindings, runs, failures/successors, measured usage and limitations. Pass exact evidence to M5; no new report hierarchy. |
+
+Default campaign proposal: three initial runs, zero successors, at most 500 LLM
+requests in total; this is not spending authorization. Any successors need a finite
+approved allowance with its additional worst-case request total. Without paid
+approval, complete non-billable readiness work and stop at the paid checkpoint.
+
+Use representative shared-mechanism recovery tests and focused persona contracts,
+not repeated unchanged campaigns. Aim for one reviewed release candidate. Defects
+require affected validation and two consecutive clean independent reviews before
+republishing; synchronize applicable tools and read back published bindings.
+Dify-only corrections do not redeploy unchanged application code. Stop dispatch
+and reconcile active/uncertain work before configuration changes; do not replay
+unknown outcomes automatically. Existing PRD limits and release authority remain
+unchanged.
 
 **Exit:** no known technical completion blockers, all Balanced cases complete, and configuration/accounting evidence is current. This does not prove image quality or Real acceptance.
 

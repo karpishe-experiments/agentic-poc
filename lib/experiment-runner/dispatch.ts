@@ -17,6 +17,13 @@ import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks } from "@/lib/experiment-runner/reference-targets";
 import { configuredPaginationTask } from "@/lib/experiment-runner/pagination-tasks";
 import { configuredPageBibleTask } from "@/lib/experiment-runner/page-bible-tasks";
+import { withMongoTransaction } from "@/db/client";
+import { verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
+import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
+import { createExperimentReferenceUploads } from "@/db/experiment-reference-uploads";
+import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
+import { createReferenceTransport, type ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
+import { verifyReferenceReadback } from "@/lib/experiment-runner/reference-readback";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -28,15 +35,66 @@ export function createExperimentDispatcher(deps: {
   database: Database; config: BookletRunnerConfig; runtime?: WorkflowRuntime;
   mutate?: typeof runTrackedMutation; now?: () => number;
   store?: () => AssetStore;
+  uploadReference?: (binding: ReturnType<typeof selectBinding>, runId: string, bytes: Uint8Array) => Promise<ReferenceUploadResult>;
 }) {
   const store = deps.store ?? createAssetStore;
   const repository = createExperimentRepository(deps.database, { store });
-  const context = createExperimentContextService(deps.database);
+  const context = createExperimentContextService(deps.database, { store });
   const runtime = deps.runtime ?? createWorkflowRuntime(deps.config);
   const mutate = deps.mutate ?? runTrackedMutation;
   const now = deps.now ?? Date.now;
+  const uploadReference = deps.uploadReference ?? createReferenceTransport(deps.config).upload;
+  const batches = () => createExperimentPageBatchRepository({ database: deps.database, store: store(), now });
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
     operation.role as "manager" | "specialist" | "tester" | "image", operation.taskId as SpecialistTask | null, run.persona);
+
+  async function preparePageImage(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>, manager: ExperimentOperationDocument) {
+    const work = view.nextPageIllustrationWork;
+    if (!work || work.kind !== "image" || !manager.workflowRunId || !manager.verifiedWorkflowId) {
+      throw new ExperimentRepositoryError("conflict", "Page image requires a verified manager selection.");
+    }
+    const selection = JSON.parse(manager.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string; subjectKind?: string; subjectId?: string } } | null;
+    if (selection?.kind !== "delegate" || selection.payload?.taskId !== "J13" || selection.payload.subjectKind !== "page" || selection.payload.subjectId !== work.subjectId) {
+      throw new ExperimentRepositoryError("conflict", "Manager selection does not match the eligible page.");
+    }
+    const assetStore = store();
+    const sources = await withMongoTransaction(deps.database, async (session) => {
+      const selected = await verifyCurrentPageIllustrationSources(deps.database, session, run, work.subjectId, assetStore);
+      for (const page of selected.layout.pages) {
+        if (page.pageId !== work.subjectId) await verifyCurrentPageIllustrationSources(deps.database, session, run, page.pageId, assetStore);
+      }
+      return selected;
+    });
+    const request = sources.request.request;
+    const inputFingerprint = imageRequestFingerprint(request);
+    const history = await repository.listOperations(run._id);
+    const matches = history.filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectKind === "page" &&
+      item.subjectId === work.subjectId && item.parentWorkflowRunId === manager.workflowRunId && item.inputFingerprint === inputFingerprint);
+    if (matches.length) {
+      if (matches.length !== 1 || matches[0].state !== "succeeded" || !matches[0].verifiedWorkflowId) {
+        throw new ExperimentRepositoryError("conflict", "Existing page-image outcome requires reconciliation.");
+      }
+      await createExperimentPageIllustrationAssembly({ database: deps.database, store: assetStore, now }).assemble({
+        runId: run._id, pageId: work.subjectId, imageOperationId: matches[0]._id,
+      });
+      return null;
+    }
+    const active = await batches().listActive(run._id);
+    if (active.length > 1 || active.length === 1 && (!("pageId" in active[0].next) || active[0].next.pageId !== work.subjectId)) {
+      throw new ExperimentRepositoryError("conflict", "Retained batch selection differs from the eligible manager page.");
+    }
+    if (!active.length) {
+      await batches().select({ jobId: randomUUID(), expectedRevision: run.revision, batch: { schemaVersion: "2", runId: run._id,
+        configurationHash: run.configurationHash, layoutVersionId: sources.layoutVersionId, selection: "single",
+        pages: [{ pageId: work.subjectId, pageBibleVersionId: sources.pageBibleVersionId, previousPageVersionId: work.currentVersionId }] } });
+      run = (await repository.getRun(run._id))!;
+    }
+    return { operation: await repository.prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
+      role: "image", taskId: "J13", subjectKind: "page", subjectId: work.subjectId, inputFingerprint,
+      attempt: Math.max(0, ...history.filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === work.subjectId).map((item) => item.attempt)) + 1,
+      providerKind: "image", imageRequest: request, parentWorkflowRunId: manager.workflowRunId, nowMs: now() }),
+      parentWorkflowRunId: manager.workflowRunId };
+  }
 
   async function prepareSheetImage(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>) {
     const work = view.nextSheetWork;
@@ -103,7 +161,8 @@ export function createExperimentDispatcher(deps: {
     if (operation.state !== "succeeded") return;
     const view = await context.getRunView(runId);
     if (!view) return;
-    const images = view.operationHistory.filter((item) => item.role === "image" && item.state === "succeeded").map((item) => item.id);
+    const images = (await repository.listOperations(runId)).filter((item) => item.role === "image" && item.state === "succeeded" &&
+      typeof (JSON.parse(item.resultJson ?? "null") as { assetId?: unknown } | null)?.assetId === "string").map((item) => item._id);
     await repository.recordProgress({ runId, operationId: operation._id, nowMs: now(), fingerprint64: fingerprint({
       artifacts: view.currentArtifacts.map(({ id, state, currentVersionId, versions }) => ({ id, state, currentVersionId, approvals: versions.map((version) => version.approval?.id ?? null) })),
       delegation: view.activeDelegation?.id ?? null, pending: view.pendingDecision, messages: view.creatorMessages.map((message) => message.id),
@@ -124,10 +183,11 @@ export function createExperimentDispatcher(deps: {
       }
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id });
       const imageCompletion = operation.role === "image" ? runtimeImageCompletion(execution) : null;
-      const completion = operation.role === "image" ? null : runtimeCompletion(execution);
+      const completion = runtimeCompletion(execution);
+      const imageClarification = operation.role === "image" && operation.taskId === "J13" && completion?.result.kind === "clarification";
       const unclaimedPause = execution.status === "succeeded" && execution.outputs?.authorization_reason === "paused" &&
         current.state === "prepared" && current.reservationCount === 0;
-      if (operation.role === "image" && !unclaimedPause) {
+      if (operation.role === "image" && !unclaimedPause && !imageClarification) {
         if (execution.status === "running" && execution.outputs?.image_result === undefined) {
           if (now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + 600_000)) {
             if (current.state === "succeeded") await repository.blockRun({ runId: run._id, category: "unknown_outcome", nowMs: now() });
@@ -143,6 +203,20 @@ export function createExperimentDispatcher(deps: {
             imageCompletion.workflowRunId !== execution.id || imageCompletion.parentWorkflowRunId !== operation.parentWorkflowRunId ||
             imageCompletion.inputFingerprint !== operation.inputFingerprint || imageCompletion.assetId !== operation._id ||
             current.state !== "succeeded" || current.resultDigest !== imageCompletion.sha256) {
+          await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+          return;
+        }
+      }
+      if (operation.role === "image" && operation.taskId === "J13" && imageCompletion) {
+        let matches = false;
+        try {
+          const references = JSON.parse(current.referenceUploadsJson ?? "null") as { uploadFileId: string }[];
+          const expectedIds = references.map((item) => item.uploadFileId);
+          const returned = execution.outputs?.reference_files;
+          matches = (Array.isArray(references) && expectedIds.length === 0 && returned === undefined) ||
+            verifyReferenceReadback(returned, expectedIds);
+        } catch { /* Missing or corrupt retained evidence cannot authorize read-back. */ }
+        if (!matches) {
           await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
           return;
         }
@@ -174,6 +248,24 @@ export function createExperimentDispatcher(deps: {
       return;
     }
     const saved = await repository.getOperation(operation._id);
+    if (saved?.role === "image" && saved.taskId === "J13" && saved.state === "succeeded" && saved.verifiedWorkflowId &&
+        (JSON.parse(saved.resultJson ?? "null") as { kind?: string } | null)?.kind !== "clarification") {
+      try {
+        await createExperimentPageIllustrationAssembly({ database: deps.database, store: store(), now }).assemble({
+          runId: run._id, pageId: saved.subjectId, imageOperationId: saved._id,
+        });
+      } catch {
+        // The provider result is known and retained. A materialization failure
+        // is not permission to create a new manager/image operation.
+        await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+        return;
+      }
+    }
+    if (saved?.role === "image" && saved.taskId === "J13") {
+      for (const batch of await batches().listActive(run._id)) {
+        if (batch.items.some((item) => item.operationId === saved._id)) await batches().reconcile({ runId: run._id, jobId: batch.jobId });
+      }
+    }
     if (saved) await observeProgress(run._id, saved);
   }
 
@@ -181,6 +273,22 @@ export function createExperimentDispatcher(deps: {
     return mutate(async () => {
       let run = await repository.getRun(runId);
       if (!run || run.mode !== "simulated" || run.status === "completed" || run.status === "failed") return "blocked";
+      if (!run.activeOperationId && run.status !== "blocked") {
+        const last = (await repository.listOperations(runId)).at(-1);
+        if (last?.role === "image" && last.taskId === "J13" && last.state === "succeeded" && last.verifiedWorkflowId && last.imageCompletionDigest) {
+          try {
+            await createExperimentPageIllustrationAssembly({ database: deps.database, store: store(), now }).assemble({ runId,
+              pageId: last.subjectId, imageOperationId: last._id });
+            for (const batch of await batches().listActive(runId)) {
+              if (batch.items.some((item) => item.operationId === last._id)) await batches().reconcile({ runId, jobId: batch.jobId });
+            }
+            run = (await repository.getRun(runId))!;
+          } catch {
+            await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+            return "blocked";
+          }
+        }
+      }
       // Completed slice evidence remains complete after a newer suite is bound.
       // This is a saved-state read, not permission to execute an old publication.
       if (!run.activeOperationId && run.status !== "blocked") {
@@ -223,9 +331,13 @@ export function createExperimentDispatcher(deps: {
         const view = await context.getRunView(runId);
         if (!view || !view.nextNarrativeTask) return "waiting";
         if (view.nextNarrativeTask === "slice_complete") return "boundary";
-        if (view.nextNarrativeTask === "style_samples" || view.nextNarrativeTask === "sheet_image") {
+        const latestSelection = latest?.role === "manager" && latest.state === "succeeded" ?
+          (JSON.parse(latest.resultJson ?? "null") as { payload?: { taskId?: string; subjectId?: string } } | null)?.payload : null;
+        const latestPageManager = view.nextNarrativeTask === "J13" && view.nextPageIllustrationWork?.kind === "image" &&
+          latestSelection?.taskId === "J13" && latestSelection.subjectId === view.nextPageIllustrationWork.subjectId ? latest : null;
+        if (view.nextNarrativeTask === "style_samples" || view.nextNarrativeTask === "sheet_image" || latestPageManager) {
           try {
-            const prepared = view.nextNarrativeTask === "style_samples" ? await prepareStyleSample(run, view) : await prepareSheetImage(run, view);
+            const prepared = latestPageManager ? await preparePageImage(run, view, latestPageManager) : view.nextNarrativeTask === "style_samples" ? await prepareStyleSample(run, view) : await prepareSheetImage(run, view);
             if (!prepared) return "advanced";
             operation = prepared.operation; parentWorkflowRunId = prepared.parentWorkflowRunId;
           } catch (error) {
@@ -286,6 +398,8 @@ export function createExperimentDispatcher(deps: {
         if (operation.role === "specialist") {
           const history = await repository.listOperations(runId);
           parentWorkflowRunId = history.filter((item) => item.role === "manager" && item.state === "succeeded").at(-1)?.workflowRunId ?? null;
+        } else if (operation.role === "image" && operation.taskId === "J13") {
+          parentWorkflowRunId = operation.parentWorkflowRunId;
         } else if (operation.role === "image") {
           const imageTarget = operation.taskId === "J09" || operation.taskId === "J10" ?
             await deps.database.collections.artifacts.findOne({ experimentRunId: run._id, bookletId: run.bookletId, taskId: operation.taskId,
@@ -294,11 +408,34 @@ export function createExperimentDispatcher(deps: {
           parentWorkflowRunId = draft?.sourceOperationId ? (await repository.getOperation(draft.sourceOperationId))?.workflowRunId ?? null : null;
         }
       }
+      const binding = bindingFor(operation, run);
+      let referenceFileIds: string[] | undefined;
+      if (operation.role === "image" && operation.taskId === "J13") {
+        try {
+          if (!parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Page image manager parent is missing.");
+          const active = await batches().listActive(runId);
+          if (active.length !== 1) throw new ExperimentRepositoryError("conflict", "Page image requires one retained batch.");
+          const currentRun = (await repository.getRun(runId))!;
+          await batches().bind({ runId, jobId: active[0].jobId, operationId: operation._id, expectedRevision: currentRun.revision });
+          const uploads = await createExperimentReferenceUploads({ database: deps.database, store: store(), upload: uploadReference })
+            .prepare({ runId, operationId: operation._id, parentWorkflowRunId }, binding);
+          if (uploads.kind !== "ready") {
+            await repository.blockRun({ runId, category: uploads.kind === "unknown" ? "unknown_outcome" : "definite_failure", nowMs: now() });
+            return "blocked";
+          }
+          if (uploads.fileIds.length) referenceFileIds = uploads.fileIds;
+        } catch (error) {
+          const current = await repository.getRun(runId);
+          if (error instanceof ExperimentRepositoryError && (current?.pauseRequested || current?.status === "paused")) return "waiting";
+          await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+          return "blocked";
+        }
+      }
       const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
-      const binding = bindingFor(operation, run);
-      await reconcile(run, operation, await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated" }));
+      await reconcile(run, operation, await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated",
+        ...(referenceFileIds ? { referenceFileIds } : {}) }));
       return "advanced";
     });
   }

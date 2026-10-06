@@ -49,6 +49,12 @@ export type ExperimentOperationDocument = BaseDocument & {
   dispatchStartedAtMs?: number | null;
   verifiedWorkflowId?: string | null;
   imageRequestJson?: string | null;
+  // Retained J13 runtime upload acknowledgements in selected-reference order.
+  // Absence is not permission to upload again after an uncertain request.
+  referenceUploadsJson?: string | null;
+  // Written before each reference POST. An interrupted started attempt cannot
+  // be repeated merely because its acknowledgement is absent.
+  referenceUploadJournalJson?: string | null;
   imageCompletionDigest?: string | null;
   imageCompletionClaim?: { id: string; digest: string; expiresAtMs: number } | null;
   imageFailureHistory?: { category: "unknown_outcome" | "definite_failure"; recordedAtMs: number }[];

@@ -4,7 +4,7 @@ import type { Persona } from "@/lib/contracts/experiment-runner";
 import type { NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 
 // Preparation can include sheet candidates before runtime admission is enabled.
-export type SimulationModule = { role: "manager" | "specialist" | "tester"; taskId: NarrativeTask | "J09" | "J10" | "J11" | "J12" | null; persona: Persona | null };
+export type SimulationModule = { role: "manager" | "specialist" | "tester" | "judge"; taskId: NarrativeTask | "J09" | "J10" | "J11" | "J12" | null; persona: Persona | null };
 export const M1_SIMULATION_MODULES: SimulationModule[] = [
   { role: "manager", taskId: null, persona: null },
   { role: "specialist", taskId: "J01", persona: null }, { role: "specialist", taskId: "J02", persona: null },
@@ -47,12 +47,16 @@ function http(id: string, title: string, path: string, selector: string[], x: nu
 }
 
 /** Model-free candidate graphs. Live graph validation and publication remain separate. */
-export async function createSimulationGraph(module: SimulationModule, profile: "m1" | "m2" | "m3" | "m3-j12" = "m1") {
-  const modules = profile === "m3-j12" ? M3_J12_SIMULATION_MODULES : profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
+export async function createSimulationGraph(module: SimulationModule, profile: "m1" | "m2" | "m3" | "m3-j12" | "m3-j13" = "m1") {
+  const finalPages = profile === "m3-j13";
+  const pageBibles = profile === "m3-j12" || finalPages;
+  const pagination = profile === "m3" || pageBibles;
+  const modules: SimulationModule[] = finalPages ? [...M3_SIMULATION_MODULES, M3_J12_SIMULATION_MODULES[1], { role: "judge", taskId: null, persona: null }] : profile === "m3-j12" ? M3_J12_SIMULATION_MODULES : profile === "m3" ? M3_SIMULATION_MODULES : profile === "m2" ? M2_SIMULATION_MODULES : M1_SIMULATION_MODULES;
   if (!modules.some((item) => JSON.stringify(item) === JSON.stringify(module))) throw new Error("Unsupported simulation module");
-  const fixture = await readFile(resolve(`docs/accepted/2026-09-27_dify-booklet-runner/dify/${profile === "m3" || profile === "m3-j12" ? "m2" : profile}-simulation.py`), "utf8") +
-    (profile === "m3" || profile === "m3-j12" ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-pagination.py"), "utf8")}` : "") +
-    (profile === "m3-j12" ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-page-bible.py"), "utf8")}` : "");
+  const fixture = await readFile(resolve(`docs/accepted/2026-09-27_dify-booklet-runner/dify/${pagination ? "m2" : profile}-simulation.py`), "utf8") +
+    (pagination ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-pagination.py"), "utf8")}` : "") +
+    (pageBibles ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-page-bible.py"), "utf8")}` : "") +
+    (finalPages ? `\n${await readFile(resolve("docs/accepted/2026-09-27_dify-booklet-runner/dify/m3-page-illustration.py"), "utf8")}` : "");
   const wrapper = `\n\ndef main(authorization_body, run_id, operation_id, workflow_run_id, parent_workflow_run_id):\n    data = json.loads(authorization_body)["data"]\n    if data.get("started") is True:\n        ctx = data["context"]\n        if ctx.get("role") != ${JSON.stringify(module.role)}:\n            raise ValueError("Wrong module role")\n${module.taskId ? `        if ctx.get("taskId") != ${JSON.stringify(module.taskId)}:\n            raise ValueError("Wrong specialist task")\n` : ""}${module.persona ? `        if ctx.get("persona") != ${JSON.stringify(module.persona)}:\n            raise ValueError("Wrong tester persona")\n` : ""}    return simulation_main(authorization_body, run_id, operation_id, workflow_run_id, parent_workflow_run_id)\n`;
   const nodes: Node[] = [
     { id: "start", type: "custom", position: { x: 0, y: 0 }, data: { title: "Simulated input only", type: "start", variables: ["run_id", "operation_id", "parent_workflow_run_id", "mode"].map((variable) => ({ variable, label: variable, type: "text-input", required: variable !== "parent_workflow_run_id", default: "", options: [] })) } },
@@ -73,7 +77,7 @@ export async function createSimulationGraph(module: SimulationModule, profile: "
 }
 
 /** Separate model-free image transport; text modules never generate image bytes. */
-export function createSimulatedImageGraph() {
+export function createSimulatedImageGraph(options: { finalPages?: boolean } = {}) {
   const nodes: Node[] = [
     { id: "start", type: "custom", position: { x: 0, y: 0 }, data: { title: "Simulated image probe input", type: "start", variables: ["run_id", "operation_id", "parent_workflow_run_id", "mode"].map((variable) => ({ variable, label: variable, type: "text-input", required: variable !== "parent_workflow_run_id", default: "", options: [] })) } },
     code("identity", "Validate simulation identity", "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id, workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'simulated':\n        raise ValueError('This publication supports simulation only')\n    for value in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n    if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n    return {'identity_json': json.dumps({'runId': run_id, 'operationId': operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId': parent_workflow_run_id or None})}\n", { run_id: ["start", "run_id"], operation_id: ["start", "operation_id"], workflow_run_id: ["sys", "workflow_run_id"], parent_workflow_run_id: ["start", "parent_workflow_run_id"], mode: ["start", "mode"] }, ["identity_json"], 280),
@@ -88,6 +92,16 @@ export function createSimulatedImageGraph() {
     { id: "finish", type: "custom", position: { x: 2240, y: 0 }, data: { title: "Saved image completion", type: "end", outputs: [{ variable: "image_result", value_type: "string", value_selector: ["ack", "image_result"] }] } },
     { id: "paused", type: "custom", position: { x: 1400, y: 300 }, data: { title: "Paused without execution", type: "end", outputs: [{ variable: "authorization_reason", value_type: "string", value_selector: ["prepare", "authorization_reason"] }] } },
   ];
+  if (options.finalPages) {
+    const variables = nodes.find((node) => node.id === "start")!.data.variables as Record<string, unknown>[];
+    variables.push({ variable: "reference_files", label: "Ordered approved image references", type: "file-list",
+      required: false, max_length: 15, allowed_file_types: ["image"], allowed_file_extensions: [".png", ".jpg", ".jpeg", ".webp"],
+      allowed_file_upload_methods: ["local_file"] });
+    // Return Dify's resolved file descriptors for runtime read-back. This is
+    // transport evidence only; it does not establish provider use or identity parity.
+    const outputs = nodes.find((node) => node.id === "finish")!.data.outputs as Record<string, unknown>[];
+    outputs.push({ variable: "reference_files", value_type: "array[file]", value_selector: ["start", "reference_files"] });
+  }
   const links = [["start", "identity"], ["identity", "authorize"], ["authorize", "prepare"], ["prepare", "authorized"], ["authorized", "fixture", "true"], ["authorized", "paused", "false"], ["fixture", "select_file"], ["select_file", "upload"], ["upload", "ack"], ["ack", "finish"]];
   const edges = links.map(([source, target, handle]) => ({ id: `${source}-${target}`, source, target, sourceHandle: handle ?? "source", targetHandle: "target", type: "custom", data: { sourceType: nodes.find((node) => node.id === source)!.data.type, targetType: nodes.find((node) => node.id === target)!.data.type } }));
   return { nodes, edges };

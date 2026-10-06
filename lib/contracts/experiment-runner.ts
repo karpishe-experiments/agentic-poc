@@ -270,10 +270,14 @@ export const testerDecisionSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("revoke_delegation"), delegationId: opaqueIdSchema }),
   z.strictObject({ action: z.literal("approve"), versionIds: uniqueIds }),
   z.strictObject({ action: z.literal("answer"), questionId: opaqueIdSchema, text }),
-  z.strictObject({ action: z.literal("revise"), taskId: specialistTaskSchema, artifactVersionId: opaqueIdSchema, instruction: text }),
+  z.strictObject({ action: z.literal("revise"), taskId: z.union([specialistTaskSchema, z.literal("J13")]), artifactVersionId: opaqueIdSchema, instruction: text }),
 ]);
 export type TesterDecision = z.infer<typeof testerDecisionSchema>;
-const managerDelegate = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({ taskId: specialistTaskSchema, subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema }) });
+// J13 is an image owner, not a text specialist. Keep its delegation page-only.
+const managerDelegate = z.strictObject({ kind: z.literal("delegate"), payload: z.union([
+  z.strictObject({ taskId: specialistTaskSchema, subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema }),
+  z.strictObject({ taskId: z.literal("J13"), subjectKind: z.literal("page"), subjectId: opaqueIdSchema }),
+]) });
 const managerAsk = z.strictObject({ kind: z.literal("ask"), payload: questionPayload });
 const specialistProposal = z.strictObject({ kind: z.literal("proposal"), payload: z.strictObject({ taskId: specialistTaskSchema, content: z.unknown() }) });
 const specialistClarification = z.strictObject({ kind: z.literal("clarification"), payload: questionPayload });
@@ -296,7 +300,7 @@ const allowedKinds: Record<ExperimentRole, ReadonlySet<RoleResult["kind"]>> = {
   specialist: new Set(["proposal", "clarification"]),
   tester: new Set(["decision", "feedback"]),
   judge: new Set(["assessment"]),
-  image: new Set(),
+  image: new Set(["clarification"]),
 };
 
 // This checks result routing only. The owning service validates decisions, grants,

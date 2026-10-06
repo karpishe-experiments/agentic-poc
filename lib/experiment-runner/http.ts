@@ -126,14 +126,14 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
   const mutate = deps.mutate ?? runTrackedMutation;
   const store = deps.store ?? createAssetStore;
   const admit = deps.admit ?? assertMutationsAllowed;
-  function services() { const db = database(); return { repository: createExperimentRepository(db, { store }), context: createExperimentContextService(db) }; }
+  function services() { const db = database(); return { repository: createExperimentRepository(db, { store }), context: createExperimentContextService(db, { store }) }; }
   async function run(operation: () => Promise<Response>) { try { return await operation(); } catch (error) { return safeError(error); } }
   return {
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;
       const input = imageQuery(request);
       await admit();
-      await createExperimentImageRepository(database()).authorizeFixture(input);
+      await createExperimentImageRepository(database(), { store }).authorizeFixture(input);
       const rgb = Buffer.from(input.inputFingerprint.slice(0, 6), "hex");
       const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: rgb[0], g: rgb[1], b: rgb[2] } } }).png().toBuffer();
       return new Response(new Uint8Array(bytes), { headers: { ...headers, "Content-Type": "image/png", "X-Content-Type-Options": "nosniff" } });

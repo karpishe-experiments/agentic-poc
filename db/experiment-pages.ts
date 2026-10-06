@@ -13,7 +13,10 @@ import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
-import { pageSourceRequest } from "@/lib/experiment-runner/page-image-requests";
+import { pageSourceRequest, withPageImageRevisions } from "@/lib/experiment-runner/page-image-requests";
+import { pageImageRevisionsSchema } from "@/lib/contracts/experiment-image";
+import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment-page-illustrations";
+import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 
 // Pure preparation for the existing completion transaction. The application
 // allocates page identities; a specialist's supplied pageId is discarded by
@@ -220,6 +223,48 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     layoutVersionId: sources.layoutVersionId, manuscriptVersionId: sources.manuscriptVersionId,
     styleVersionId: sources.styleVersionId, pageBibleVersionId: version._id, pageBible,
     approvedVisualStyle: JSON.parse(style.contentJson) as unknown });
+  const baseRequest = request.request;
+
+  const illustrations = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    taskId: "J13", subjectKind: "page", subjectId: pageId }, { session }).toArray();
+  if (illustrations.length > 1) reject("J13 page image target is ambiguous.");
+  const illustration = illustrations[0];
+  const currentImage = illustration?.currentVersionId ? await database.collections.artifact_versions.findOne({
+    _id: illustration.currentVersionId, artifactId: illustration._id }, { session }) : null;
+  if (illustration?.currentVersionId && !currentImage) reject("J13 current image version is missing.");
+  const packageContent = currentImage ? validateSavedPageIllustrationPackage(JSON.parse(currentImage.contentJson)) : null;
+  if (packageContent && (packageContent.runId !== run._id || packageContent.pageId !== pageId)) reject("J13 current package belongs to another page.");
+  // A changed upstream source invalidates the old image request. Feedback for
+  // unchanged sources remains explicit, cumulative and linked to tester decisions.
+  const revisions = packageContent && canonical(packageContent.sourceVersionIds) === canonical(request.request.sourceVersionIds)
+    ? [...packageContent.request.revisions ?? []] : [];
+  const pending = run.pendingDecisionJson ? JSON.parse(run.pendingDecisionJson) as Record<string, unknown> : null;
+  if (pending?.kind === "revision" && pending.taskId === "J13" && pending.subjectKind === "page" && pending.subjectId === pageId) {
+    if (!currentImage || pending.artifactVersionId !== currentImage._id || typeof pending.decisionId !== "string") reject("J13 pending revision target is not current.");
+    if (!revisions.some((revision) => revision.decisionId === pending.decisionId)) {
+      revisions.push({ decisionId: pending.decisionId, previousPageVersionId: currentImage._id, instruction: String(pending.instruction ?? "") });
+    }
+  }
+  if (revisions.length) {
+    const checked = pageImageRevisionsSchema.parse(revisions);
+    const testerBinding = savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).find((binding) => binding.role === "tester");
+    for (const [index, revision] of checked.entries()) {
+      const decision = await database.collections.experiment_operations.findOne({ _id: revision.decisionId, runId: run._id,
+        role: "tester", state: "succeeded", reservationCount: 1 }, { session });
+      const result = decision?.resultJson ? JSON.parse(decision.resultJson) as { kind?: string; payload?: { decision?: {
+        action?: string; taskId?: string; artifactVersionId?: string; instruction?: string } } } : null;
+      const action = result?.payload?.decision;
+      const previous = illustration ? await database.collections.artifact_versions.findOne({ _id: revision.previousPageVersionId,
+        artifactId: illustration._id, createdBy: "application" }, { session }) : null;
+      const prior = previous ? validateSavedPageIllustrationPackage(JSON.parse(previous.contentJson)) : null;
+      if (!decision || !testerBinding || !decision.workflowRunId || decision.verifiedWorkflowId !== testerBinding.publishedWorkflowId ||
+          result?.kind !== "decision" || action?.action !== "revise" || action.taskId !== "J13" ||
+          action.artifactVersionId !== revision.previousPageVersionId || action.instruction !== revision.instruction ||
+          !prior || prior.runId !== run._id || prior.pageId !== pageId || canonical(prior.sourceVersionIds) !== canonical(request.request.sourceVersionIds) ||
+          canonical(prior.request.revisions ?? []) !== canonical(checked.slice(0, index))) reject("J13 revision decision or version ancestry is invalid.");
+    }
+    request.request = withPageImageRevisions(request.request, checked);
+  }
 
   const warnings: string[] = [];
   const attachments = [] as Array<{
@@ -250,5 +295,5 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     attachments.push({ ...reference, bytes: Uint8Array.from(bytes), mimeType: decoded.mimeType, byteLength: decoded.byteLength,
       sha256: decoded.sha256, width: decoded.width, height: decoded.height });
   }
-  return { ...sources, pageBibleVersionId: version._id, pageBible, request, attachments, warnings };
+  return { ...sources, pageBibleVersionId: version._id, pageBible, baseRequest, request, attachments, warnings };
 }

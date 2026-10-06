@@ -6,18 +6,22 @@ import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { assembledVisualStyleSchema } from "@/lib/contracts/experiment-references";
 import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask, type NarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
-import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
+import type { ExperimentTask, SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks, nextReferenceSheetWork, referenceSheetTargets } from "@/lib/experiment-runner/reference-targets";
 import { configuredPaginationTask, currentPaginationSourceIds } from "@/lib/experiment-runner/pagination-tasks";
 import { configuredPageBibleTask, parsePageBibleForLayout } from "@/lib/experiment-runner/page-bible-tasks";
 import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
+import { configuredPageIllustrationTask, nextPageIllustrationWork } from "@/lib/experiment-runner/page-illustration-tasks";
+import type { AssetStore } from "@/lib/assets/asset-store";
+import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
+import { experimentPageBatchSchema, type ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
-type NextTask = SpecialistTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
+type NextTask = ExperimentTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
 function parseJson(value: string | null): unknown { return value === null ? null : JSON.parse(value) as unknown; }
 function deny(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
 
-export function createExperimentContextService(database: Database) {
+export function createExperimentContextService(database: Database, options: { store?: () => AssetStore } = {}) {
   const { experiment_runs: runs, experiment_operations: operations, experiment_delegations: delegations, artifacts, artifact_versions: versions, approvals, messages, booklets } = database.collections;
 
   async function projectArtifact(artifact: ArtifactDocument) {
@@ -25,7 +29,7 @@ export function createExperimentContextService(database: Database) {
     const approvalRows = await approvals.find({ experimentRunId: artifact.experimentRunId, artifactVersionId: { $in: rows.map((row) => row._id) } }).toArray();
     const approvalByVersion = new Map(approvalRows.map((row) => [row.artifactVersionId, row]));
     return {
-      id: artifact._id, taskId: artifact.taskId as SpecialistTask, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId,
+      id: artifact._id, taskId: artifact.taskId as ExperimentTask, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId,
       state: artifact.state, currentVersionId: artifact.currentVersionId,
       versions: rows.map((row) => {
         const approval = approvalByVersion.get(row._id);
@@ -118,12 +122,13 @@ export function createExperimentContextService(database: Database) {
     return selected ? null : { complete: true as const };
   }
 
-  function chooseNext(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[]): NextTask {
+  function chooseNext(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[], batch?: ExperimentPageBatch): NextTask {
     if (run.pauseRequested || run.status === "paused" || run.status === "blocked" || run.status === "failed" || run.status === "completed" || run.activeOperationId) return null;
     const enabled = configuredNarrativeTasks(run.configurationJson);
-    const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: SpecialistTask; subjectId?: string; subjectKind?: string } | null;
+    const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: ExperimentTask; subjectId?: string; subjectKind?: string } | null;
     if (pending?.kind === "question") return "tester";
     if (pending?.kind === "revision") {
+      if (pending.taskId === "J13") return illustrationWork(run, projected)?.kind === "image" ? "J13" : null;
       if (pending.taskId === "J12") return pageBibleWork(run, projected)?.taskId === "J12" ? "J12" : null;
       if (pending.taskId === "J11") return paginationSources(run, projected) !== null ? "J11" : null;
       if (pending.taskId === "J09" || pending.taskId === "J10") return sheetTargets(run, projected).some((target) => target.taskId === pending.taskId && target.subjectKind === pending.subjectKind && target.subjectId === pending.subjectId) ? pending.taskId : null;
@@ -148,10 +153,42 @@ export function createExperimentContextService(database: Database) {
     if (configuredPageBibleTask(run.configurationJson)) {
       const work = pageBibleWork(run, projected);
       if (!work) return null;
-      if ("complete" in work) return "slice_complete";
+      if ("complete" in work) {
+        if (!configuredPageIllustrationTask(run.configurationJson)) return "slice_complete";
+        const page = illustrationWork(run, projected, batch);
+        return page?.kind === "image" ? "J13" : page?.kind === "review" ? "tester" : page?.kind === "complete" ? "slice_complete" : null;
+      }
       return "review" in work ? "tester" : "J12";
     }
     return "slice_complete";
+  }
+
+  function illustrationWork(run: ExperimentRunDocument, projected: Awaited<ReturnType<typeof projectArtifact>>[], batch?: ExperimentPageBatch) {
+    if (!configuredPageIllustrationTask(run.configurationJson)) return null;
+    const bibleWork = pageBibleWork(run, projected);
+    if (!bibleWork || !("complete" in bibleWork)) return null;
+    const layoutArtifact = projected.find((item) => item.taskId === "J11" && item.state === "approved");
+    const layoutVersion = layoutArtifact?.versions.find((item) => item.id === layoutArtifact.currentVersionId);
+    if (!layoutVersion?.approval) return null;
+    const layout = parseStoredPageLayout(run.persona, layoutVersion.content);
+    const pages = layout.pages.map((page) => {
+      const artifact = projected.find((item) => item.taskId === "J12" && item.subjectKind === "page" && item.subjectId === page.pageId);
+      const version = artifact?.versions.find((item) => item.id === artifact.currentVersionId);
+      if (!version?.approval || artifact?.state !== "approved" || !Array.isArray(version.dependencyVersionIds) ||
+          version.dependencyVersionIds.some((id) => typeof id !== "string")) return null;
+      return { pageId: page.pageId, pageIndex: page.pageIndex, pageBibleVersionId: version.id,
+        sourceVersionIds: [version.id, ...version.dependencyVersionIds as string[]] };
+    });
+    if (pages.some((page) => page === null)) return null;
+    if (batch && (batch.layoutVersionId !== layoutVersion.id || batch.pages.some((selected) =>
+      !pages.some((page) => page?.pageId === selected.pageId && page.pageBibleVersionId === selected.pageBibleVersionId)))) return null;
+    const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
+    if (pending && !(pending.kind === "revision" && pending.taskId === "J13" && pending.subjectKind === "page" &&
+        pending.subjectId && pending.artifactVersionId)) return null;
+    return nextPageIllustrationWork({ runId: run._id, persona: run.persona, configurationJson: run.configurationJson,
+      pages: pages.filter((page) => page !== null), artifacts: projected,
+      selectedPageIds: batch?.pages.map((page) => page.pageId),
+      revision: pending ? { pageId: pending.subjectId!, artifactVersionId: pending.artifactVersionId! } : null });
   }
 
   async function getRunView(runId: string) {
@@ -166,9 +203,16 @@ export function createExperimentContextService(database: Database) {
       { subjectKind: "book", subjectId: run.bookletId, taskId: { $in: [...enabled, ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : [])] } },
       ...(sheetsEnabled ? [{ taskId: "J09" as const, subjectKind: "character" as const }, { taskId: "J10" as const, subjectKind: "location" as const }] : []),
       ...(configuredPageBibleTask(run.configurationJson) ? [{ taskId: "J12" as const, subjectKind: "page" as const }] : []),
+      ...(configuredPageIllustrationTask(run.configurationJson) ? [{ taskId: "J13" as const, subjectKind: "page" as const }] : []),
     ] }).sort({ taskId: 1, subjectId: 1 }).toArray();
     if (new Set(artifactRows.map((row) => `${row.taskId}:${row.subjectKind}:${row.subjectId}`)).size !== artifactRows.length) deny("Run has duplicate task subject artifacts.");
     const currentArtifacts = await Promise.all(artifactRows.map(projectArtifact));
+    const batchRows = configuredPageIllustrationTask(run.configurationJson) ? await database.collections.generation_jobs.find({
+      bookletId: run.bookletId, jobType: "dify_pages",
+    }).sort({ createdAtMs: -1, _id: -1 }).toArray() : [];
+    const pageBatch = batchRows.map((row) => experimentPageBatchSchema.parse(JSON.parse(row.inputJson))).find((batch) =>
+      batch.runId === run._id && batch.configurationHash === run.configurationHash && batch.pages.some((page) =>
+        !currentArtifacts.some((artifact) => artifact.taskId === "J13" && artifact.subjectId === page.pageId && artifact.state === "approved")));
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" }).sort({ sequence: 1 }).toArray();
     const operationRows = await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray();
@@ -187,13 +231,27 @@ export function createExperimentContextService(database: Database) {
         verifiedWorkflowId: row.verifiedWorkflowId ?? null,
         reservationCount: row.reservationCount, safeFailure: row.safeFailure,
         createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs })),
-      nextNarrativeTask: chooseNext(run, currentArtifacts),
+      nextNarrativeTask: chooseNext(run, currentArtifacts, pageBatch),
+      ...(pageBatch ? { pageBatch } : {}),
       ...(sheetsEnabled ? { nextSheetWork: sheetWork(run, currentArtifacts) } : {}),
       ...(configuredPageBibleTask(run.configurationJson) ? { nextPageBibleWork: pageBibleWork(run, currentArtifacts) } : {}),
+      ...(configuredPageIllustrationTask(run.configurationJson) ? { nextPageIllustrationWork: illustrationWork(run, currentArtifacts, pageBatch) } : {}),
+      ...(configuredPageIllustrationTask(run.configurationJson) ? { reports: operationRows.flatMap((row) => {
+        if (row.state !== "succeeded" || row.role !== "tester" && row.role !== "judge") return [];
+        const result = parseJson(row.resultJson) as { kind?: string; payload?: unknown } | null;
+        if (result?.kind !== (row.role === "tester" ? "feedback" : "assessment")) return [];
+        const parsed = experimentReportSchema.safeParse(result.payload);
+        if (!parsed.success || parsed.data.runId !== run._id || parsed.data.role !== row.role ||
+            parsed.data.mode !== run.mode || parsed.data.configurationHash !== run.configurationHash) return [];
+        const currentIds = currentArtifacts.map((artifact) => artifact.currentVersionId);
+        return [{ operationId: row._id, workflowRunId: row.workflowRunId, verifiedWorkflowId: row.verifiedWorkflowId ?? null,
+          matchesCurrentVersions: currentIds.length === parsed.data.evidence.versionIds.length &&
+            currentIds.every((id) => id !== null && parsed.data.evidence.versionIds.includes(id)), report: parsed.data }];
+      }) } : {}),
     };
   }
 
-  async function getQuestionAnswers(runId: string, taskId: SpecialistTask, subjectId: string) {
+  async function getQuestionAnswers(runId: string, taskId: ExperimentTask, subjectId: string) {
     const questionRows = await operations.find({ runId, state: "succeeded", $or: [{ taskId: null }, { taskId, subjectId }] }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const creatorRows = await messages.find({ experimentRunId: runId, role: "user" }).sort({ sequence: 1 }).toArray();
     const answers = new Map<string, string>();
@@ -214,19 +272,20 @@ export function createExperimentContextService(database: Database) {
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     if (operation.role === "image") {
-      const imageRequest = await createExperimentImageRepository(database).authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
-      return { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest };
+      const imageRequest = await createExperimentImageRepository(database, options).authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
+      return { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest,
+        ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId) } : {}) };
     }
     const view = await getRunView(run._id);
     if (!view) deny("Run view is unavailable.");
     if (operation.role === "manager") {
-      const eligibleRoute = chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts);
+      const eligibleRoute = chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts, view.pageBatch);
       const pending = view.pendingDecision as { kind?: string; subjectKind?: string; subjectId?: string; taskId?: string } | null;
-      const eligibleTarget = eligibleRoute === "J12" ? (view.nextPageBibleWork && "taskId" in view.nextPageBibleWork ? view.nextPageBibleWork : null) : eligibleRoute === "J09" || eligibleRoute === "J10" ?
+      const eligibleTarget = eligibleRoute === "J13" ? (view.nextPageIllustrationWork?.kind === "image" ? view.nextPageIllustrationWork : null) : eligibleRoute === "J12" ? (view.nextPageBibleWork && "taskId" in view.nextPageBibleWork ? view.nextPageBibleWork : null) : eligibleRoute === "J09" || eligibleRoute === "J10" ?
         sheetTargets(run, view.currentArtifacts).find((target) => target.taskId === eligibleRoute && (pending?.kind === "revision" ? target.subjectId === pending.subjectId && target.subjectKind === pending.subjectKind : target.subjectId === view.nextSheetWork?.target.subjectId)) ?? null : null;
       return { role: "manager" as const, run: view, eligibleRoute, ...(eligibleTarget ? { eligibleTarget } : {}) };
     }
-    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : []), ...(configuredPageBibleTask(run.configurationJson) ? ["J12" as const] : [])] };
+    if (operation.role === "tester") return { role: "tester" as const, bookletId: view.bookletId, brief: view.brief, persona: view.persona, currentArtifacts: view.currentArtifacts, pendingDecision: view.pendingDecision, activeDelegation: view.activeDelegation, creatorMessages: view.creatorMessages, eligibleTaskIds: [...configuredNarrativeTasks(run.configurationJson), ...configuredReferenceSheetTasks(run.configurationJson), ...(configuredPaginationTask(run.configurationJson) ? ["J11" as const] : []), ...(configuredPageBibleTask(run.configurationJson) ? ["J12" as const] : []), ...(configuredPageIllustrationTask(run.configurationJson) ? ["J13" as const] : [])] };
     if (operation.role === "specialist") {
       const enabled = configuredNarrativeTasks(run.configurationJson);
       const isSheet = operation.taskId === "J09" || operation.taskId === "J10";
