@@ -141,7 +141,9 @@ describe("saved experiment context", () => {
     await database.collections.artifacts.insertOne({ _id: id(990), bookletId, artifactType: "book_concept_brief", state: "draft", currentVersionId: id(991), taskId: "J01", subjectKind: "book", subjectId: bookletId, experimentRunId: runId, createdAtMs: 1, updatedAtMs: 1 });
     await expect(context.getOperationContext({ runId, operationId: id(440), workflowRunId: id(1440), parentWorkflowRunId: null })).rejects.toMatchObject({ code: "conflict" });
     const other = await setup();
-    const judge = await other.start(450, "judge");
-    await expect(other.context.getOperationContext(judge.identity)).rejects.toMatchObject({ code: "conflict" });
+    // Judge admission is rejected before saved generation, rather than creating
+    // an unsupported active operation just to inspect its context.
+    await expect(other.start(450, "judge")).rejects.toMatchObject({ code: "invalid_state" });
+    expect((await other.repository.getRun(runId))!.activeOperationId).toBeNull();
   });
 });

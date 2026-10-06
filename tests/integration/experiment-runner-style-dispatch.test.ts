@@ -343,6 +343,48 @@ describe("automatic saved J08 sample dispatch", () => {
     expect((await env.repository.getRun(env.runId))!.status).not.toBe("completed");
   }, 120_000);
 
+  it.each(["single", "selected_batch"] as const)("resumes a %s J13 image paused before claim without spending or replacing the batch", async (selection) => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    if (selection === "selected_batch") {
+      const run = (await env.repository.getRun(env.runId))!, view = (await env.context.getRunView(env.runId))!;
+      const artifact = view.currentArtifacts.find((item) => item.taskId === "J11")!;
+      const layout = parseStoredPageLayout(run.persona, artifact.versions.find((item) => item.id === artifact.currentVersionId)!.content);
+      await createExperimentPageBatchRepository({ database: env.database, store: env.store }).select({
+        jobId: randomUUID(), expectedRevision: run.revision, batch: { schemaVersion: "2", runId: run._id,
+          configurationHash: run.configurationHash, layoutVersionId: artifact.currentVersionId!, selection,
+          pages: layout.pages.filter((page) => page.pageIndex > 0).slice(0, 2).map((page) => ({ pageId: page.pageId,
+            pageBibleVersionId: view.currentArtifacts.find((item) => item.taskId === "J12" && item.subjectId === page.pageId)!.currentVersionId!,
+            previousPageVersionId: null })) },
+      });
+    }
+    const before = (await env.repository.getRun(env.runId))!;
+    const earlierPages = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J13", state: "approved" }).toArray();
+    env.faults({ beforeClaim: true });
+    await env.dispatcher().advance(env.runId);
+    const paused = (await env.repository.getRun(env.runId))!;
+    expect(paused.status).toBe("paused");
+    expect(paused.counters.logicalImage).toBe(before.counters.logicalImage);
+    const attempt = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(attempt).toMatchObject({ role: "image", taskId: "J13", state: "failed", safeFailure: null, reservationCount: 0 });
+    const batches = createExperimentPageBatchRepository({ database: env.database, store: env.store });
+    const jobs = await batches.listActive(env.runId);
+    expect(jobs).toHaveLength(1);
+    await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.next() });
+    env.faults({});
+    for (let step = 0; step < 6; step++) {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      if (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: attempt.subjectId })) break;
+    }
+    const attempts = (await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === attempt.subjectId);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toMatchObject({ state: "succeeded", reservationCount: 1, attempt: 2 });
+    expect((await env.repository.getRun(env.runId))!.counters.logicalImage).toBe(before.counters.logicalImage + 1);
+    const batch = await batches.get({ runId: env.runId, jobId: jobs[0].jobId });
+    expect(batch.items[0]).toMatchObject({ status: "succeeded", operationId: attempts[1]._id });
+    expect(batch.next).toMatchObject({ kind: selection === "single" ? "complete" : "ready" });
+    for (const earlier of earlierPages) expect(await env.database.collections.artifacts.findOne({ _id: earlier._id })).toEqual(earlier);
+  }, 120_000);
   it("routes J13 image clarification through a saved tester answer before a fresh image operation", async () => {
     const env = await setup("playful_kid", 17, true);
     await env.reachPageImageWithReferences();

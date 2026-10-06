@@ -15,7 +15,8 @@ import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 const selectionInput = z.strictObject({ jobId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), batch: experimentPageBatchSchema });
 const identityInput = z.strictObject({ runId: opaqueIdSchema, jobId: opaqueIdSchema });
 const bindingInput = identityInput.extend({ operationId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative() });
-const itemResult = z.strictObject({ operationId: opaqueIdSchema, assetId: opaqueIdSchema.nullable(), pageVersionId: opaqueIdSchema.nullable(),
+const itemResult = z.strictObject({ operationId: opaqueIdSchema.nullable(), assetId: opaqueIdSchema.nullable(), pageVersionId: opaqueIdSchema.nullable(),
+  pausedOperationIds: z.array(opaqueIdSchema).max(300).optional(),
   clarificationOperationIds: z.array(opaqueIdSchema).max(300).optional() });
 function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
 
@@ -112,6 +113,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       const item = checked.items[checked.next.position];
       await database.collections.generation_items.updateOne({ _id: item._id, status: checked.states[checked.next.position].status }, { $set: { status: "running",
         resultJson: JSON.stringify({ operationId: operation._id, assetId: null, pageVersionId: null,
+          ...(priorResult?.pausedOperationIds?.length ? { pausedOperationIds: priorResult.pausedOperationIds } : {}),
           ...(clarificationOperationIds.length ? { clarificationOperationIds } : {}) }), startedAtMs: timestamp }, $inc: { attemptCount: 1 } }, options);
       await database.collections.generation_jobs.updateOne({ _id: checked.job._id }, { $set: { status: "running",
         startedAtMs: checked.job.startedAtMs ?? timestamp, updatedAtMs: timestamp } }, options);
@@ -130,7 +132,20 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       const operation = await database.collections.experiment_operations.findOne({ _id: state.operationId!, runId: identity.runId,
         role: "image", taskId: "J13", subjectKind: "page", subjectId: selected.pageId }, options);
       if (!operation) invalid("Retained page batch operation is missing.");
-      let status: "running" | "unknown" | "failed" | "succeeded" = operation.state === "unknown" ? "unknown" : operation.state === "failed" ? "failed" : "running";
+      const configuration = savedConfigurationSchema.parse(JSON.parse(checked.run.configurationJson));
+      const imageBinding = configuration.find((binding) => binding.role === "image" && binding.taskId === null);
+      // A verified pre-claim Pause is not an image failure. Keep its operation as
+      // evidence, but leave this exact ordered item available for Resume.
+      const unclaimedPause = operation.state === "failed" && operation.safeFailure === null && operation.reservationCount === 0 &&
+        !!operation.workflowRunId && !!imageBinding && operation.verifiedWorkflowId === imageBinding.publishedWorkflowId &&
+        !operation.imageCompletionClaim && !operation.imageCompletionDigest && !operation.resultJson;
+      const previousResult = itemResult.parse(JSON.parse(checked.items[state.position].resultJson!));
+      const pausedOperationIds = [...previousResult.pausedOperationIds ?? []];
+      if (unclaimedPause) {
+        if (pausedOperationIds.includes(operation._id) || pausedOperationIds.length >= 300) invalid("Page pause history is invalid or exhausted.");
+        pausedOperationIds.push(operation._id);
+      }
+      let status: "pending" | "running" | "unknown" | "failed" | "succeeded" = unclaimedPause ? "pending" : operation.state === "unknown" ? "unknown" : operation.state === "failed" ? "failed" : "running";
       let assetId: string | null = null, pageVersionId: string | null = null;
       if (operation.state === "succeeded" && operation.imageCompletionDigest) {
         const rows = await database.collections.artifacts.find({ experimentRunId: identity.runId, bookletId: checked.run.bookletId,
@@ -152,10 +167,11 @@ export function createExperimentPageBatchRepository(input: { database: Database;
         { $inc: { revision: 1 }, $set: { updatedAtMs: timestamp } }, options);
       if (!changed.matchedCount) throw new ExperimentRepositoryError("stale_revision", "Page batch reconciliation lost the run revision.");
       await database.collections.generation_items.updateOne({ _id: checked.items[state.position]._id }, { $set: { status, assetId,
-        resultJson: JSON.stringify({ operationId: operation._id, assetId, pageVersionId,
+        resultJson: JSON.stringify({ operationId: unclaimedPause ? null : operation._id, assetId, pageVersionId,
+          ...(pausedOperationIds.length ? { pausedOperationIds } : {}),
           ...(JSON.parse(checked.items[state.position].resultJson!).clarificationOperationIds ? { clarificationOperationIds: JSON.parse(checked.items[state.position].resultJson!).clarificationOperationIds } : {}) }),
         finishedAtMs: ["succeeded", "failed"].includes(status) ? timestamp : null } }, options);
-      const states = checked.states.map((item) => item.position === state.position ? { ...item, status, assetId, pageVersionId } : item);
+      const states = checked.states.map((item) => item.position === state.position ? { ...item, status, operationId: unclaimedPause ? null : operation._id, assetId, pageVersionId } : item);
       const next = nextPageBatchItem(checked.batch, states, checked.run.pauseRequested || checked.run.status === "paused");
       await database.collections.generation_jobs.updateOne({ _id: checked.job._id }, { $set: { status: next.kind === "complete" ? "succeeded" :
         status === "unknown" ? "unknown" : status === "failed" ? "failed" : next.kind === "paused" ? "paused" : "running",

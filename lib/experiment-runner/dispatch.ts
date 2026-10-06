@@ -72,12 +72,14 @@ export function createExperimentDispatcher(deps: {
     const history = await repository.listOperations(run._id);
     const matches = history.filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectKind === "page" &&
       item.subjectId === work.subjectId && item.parentWorkflowRunId === manager.workflowRunId && item.inputFingerprint === inputFingerprint);
-    if (matches.length) {
-      if (matches.length !== 1 || matches[0].state !== "succeeded" || !matches[0].verifiedWorkflowId) {
+    const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
+      item.reservationCount === 0 && item.verifiedWorkflowId && item.workflowRunId));
+    if (executable.length) {
+      if (executable.length !== 1 || executable[0].state !== "succeeded" || !executable[0].verifiedWorkflowId) {
         throw new ExperimentRepositoryError("conflict", "Existing page-image outcome requires reconciliation.");
       }
       await createExperimentPageIllustrationAssembly({ database: deps.database, store: assetStore, now }).assemble({
-        runId: run._id, pageId: work.subjectId, imageOperationId: matches[0]._id,
+        runId: run._id, pageId: work.subjectId, imageOperationId: executable[0]._id,
       });
       return null;
     }

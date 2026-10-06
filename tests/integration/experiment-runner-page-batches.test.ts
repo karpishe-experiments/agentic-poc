@@ -44,6 +44,37 @@ async function prepareFirst(env: Awaited<ReturnType<typeof setup>>) {
   return { identity: { runId: id(1), jobId: id(8) }, binding: { runId: id(1), jobId: id(8), operationId: id(11), expectedRevision: 2 }, request };
 }
 describe("saved Dify page batch selection", () => {
+  it("retains a verified unclaimed Pause and rebinds the same ordered item after Resume", async () => {
+    const env = await setup(); const { identity, binding } = await prepareFirst(env);
+    await env.repository().bind(binding);
+    const original = (await env.database.collections.experiment_operations.findOne({ _id: id(11) }))!;
+    await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: {
+      state: "failed", workflowRunId: id(18), verifiedWorkflowId: id(214), safeFailure: null, reservationCount: 0,
+    } });
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { activeOperationId: null, status: "paused", pauseRequested: true } });
+    expect(await env.repository().reconcile(identity)).toEqual({ kind: "paused" });
+    expect((await env.repository().get(identity)).items.map((item) => item.status)).toEqual(["pending", "pending"]);
+    expect(await env.repository().listActive(id(1))).toHaveLength(1);
+    await env.database.collections.experiment_operations.insertOne({ ...original, _id: id(19), idempotencyKey: "resume", attempt: 2 });
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { activeOperationId: id(19), status: "queued", pauseRequested: false } });
+    const resumed = (await env.database.collections.experiment_runs.findOne({ _id: id(1) }))!;
+    await env.repository().bind({ ...binding, operationId: id(19), expectedRevision: resumed.revision });
+    const item = await env.database.collections.generation_items.findOne({ jobId: id(8), position: 0 });
+    expect(JSON.parse(item!.resultJson!)).toMatchObject({ operationId: id(19), pausedOperationIds: [id(11)] });
+    expect(item!.attemptCount).toBe(2);
+    expect((await env.database.collections.experiment_operations.findOne({ _id: id(11) }))!).toMatchObject({ state: "failed", reservationCount: 0 });
+    expect((await env.repository().get(identity)).next).toMatchObject({ kind: "waiting", pageId: id(4), operationId: id(19) });
+  });
+  it.each(["unverified", "reserved", "unknown", "failed"])("does not requeue a %s page attempt", async (failure) => {
+    const env = await setup(); const { identity, binding } = await prepareFirst(env);
+    await env.repository().bind(binding);
+    await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: {
+      state: failure === "unknown" ? "unknown" : "failed", workflowRunId: id(18),
+      verifiedWorkflowId: failure === "unverified" ? id(999) : id(214), reservationCount: failure === "reserved" ? 1 : 0,
+      safeFailure: failure === "unknown" ? "unknown_outcome" : failure === "failed" ? "definite_failure" : null,
+    } });
+    expect(await env.repository().reconcile(identity)).toMatchObject({ kind: "blocked", operationId: id(11) });
+  });
   it("records a paused selection through the browser API and returns its retained job on replay", async () => {
     const env = await setup();
     await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { status: "paused", pauseRequested: true } });

@@ -994,6 +994,19 @@ transactional dispatcher check passed without retries; focused lint and the clea
 verification-checkout typecheck passed. This is in-process simulated runtime
 evidence, not deployed Dify acceptance or creator-facing selection UI evidence.
 
+The local pre-claim Pause correction passed eight focused integration checks
+across three files without retries. Single-page and selected-batch Resume retain
+the original zero-reservation attempt and earlier approved pages, then save one
+fresh image attempt. Repository checks keep unknown, reserved, unverified and
+failed attempts blocked. The context fixture now rejects judge admission before
+saved generation. The complete affected batch-repository and context files also
+passed (23 tests, no retries). Focused lint, whitespace and source typechecking
+passed; the source check excludes ignored validation worktrees and stale generated
+Next.js route validators. Standard clean-candidate validation remains required.
+Independent review passed for this correction. This is local evidence, not live Dify acceptance. Historical
+batch revision handling and late output recovery after a claimed timeout remain
+publication blockers.
+
 Browser test through the runner: launch, inspect progress, pause/resume, reload,
 open saved booklet/pages, inspect warnings and reports. Do not claim a Playwright
 test-list discovery as browser execution. Use the existing e2e runner with a focused

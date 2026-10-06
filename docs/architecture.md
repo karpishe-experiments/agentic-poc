@@ -261,6 +261,11 @@ before consuming an allowance. The local image-clarification path retains a
 page-scoped question and answer without creating an asset; binary completion and
 clarification cannot replace each other's terminal result. Each clarification
 consumes its logical image reservation, not a creative revision allowance.
+For J13, a publication-verified Pause before claim retains a zero-reservation
+operation in the item’s `pausedOperationIds` history. Reconciliation returns that
+same ordered item to pending. Resume can attach a fresh operation without
+discarding earlier pages or resetting the batch. Unknown outcomes, unverified
+attempts and actual failures do not receive this exception.
 Live full-booklet acceptance is still incomplete; the candidate is not ready for
 publication.
 The read-only generation verifier derives completion evidence from the current
