@@ -1105,9 +1105,33 @@ Retained Kid run `628e9054-5d8e-41f3-8256-8e7902d2b058` stopped after one saved
 tester decision because history IDs had been bound instead of active publication
 IDs. Dify run `22fcdfd1-491c-4cfb-a28e-0dfe75ba04cb` succeeded with zero tokens;
 Booklet rejected the identity mismatch. The corrected active graphs have the same
-hashes. Linked successor `43f91bcd-1325-4d0b-8b97-6df622a133a4` has passed the
-tester and manager boundary, with zero payable calls. Full campaign completion,
-saved-page inspection and final M3 acceptance remain pending.
+hashes. Linked successor `43f91bcd-1325-4d0b-8b97-6df622a133a4` stopped at a
+terminal model-free sandbox timeout; the exact failed node input passed a separate
+diagnostic probe. Its evidence remains saved and paused, without replay.
+
+Current linked Kid attempt `dab26b7e-e892-4c12-8b07-94ca993bfeec` reached approved
+J01–J11, both character sheets, the location sheet and all four J12 Page Bibles.
+Live Pause/Resume preserved completed work. A Page 1 selection was saved while
+drained and paused; saving did not resume or consume a request. Manager run
+`f59d5386-86f5-46b1-a346-7c4c00271af8` timed out at its result callback, but the
+late result persisted and the dispatcher continued without replay or manual
+repair. This proves that recovery path, not final booklet completion.
+
+The first J13 image run `ab6e63db-78cd-4757-87ec-f826137c0b69` then failed at its
+authorization callback after 30.07 seconds. The claim was saved, but image
+execution did not start. The attempt remains paused with an unknown application
+outcome, 38 logical text requests, 6 logical image requests and zero payable calls.
+Do not replay that operation. Parent and Creator full-booklet campaigns remain
+pending.
+
+The local callback correction batches shared source/version/approval reads on
+the same Mongo session. Manager delegation retains full selected-page source and
+byte verification, then checks every current Page Bible's approval, content and
+exact dependencies/edges without rebuilding sibling image requests. Image claim
+and context still perform separate source checks. The two focused integration
+suites passed 24 tests without retries (33.64 seconds), and focused lint passed.
+This correction is not yet reviewed for publication or deployed; reduced live
+callback latency and all-persona completion remain unverified.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.

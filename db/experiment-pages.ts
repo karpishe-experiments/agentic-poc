@@ -106,21 +106,25 @@ export function validatePaginationRouting(layout: StoredPageLayout, sources: Awa
 // checked through saved identities, approvals and dependency edges.
 export async function verifyCurrentPageBibleSources(database: Database, session: ClientSession, run: ExperimentRunDocument,
   pageId: string, store: AssetStore) {
-  const book = async (taskId: "J11" | "J05" | "J08") => {
-    const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
-      taskId, subjectKind: "book", subjectId: run.bookletId }, { session }).toArray();
+  // Batch independent reads, but keep commands serial on the transaction session.
+  const books = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    taskId: { $in: ["J11", "J05", "J08"] }, subjectKind: "book", subjectId: run.bookletId }, { session }).toArray();
+  const bookIds = books.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+  const bookVersions = await database.collections.artifact_versions.find({ _id: { $in: bookIds } }, { session }).toArray();
+  const bookApprovals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    artifactVersionId: { $in: bookIds }, action: "approve", scope: "artifact" }, { session }).toArray();
+  const book = (taskId: "J11" | "J05" | "J08") => {
+    const rows = books.filter((artifact) => artifact.taskId === taskId);
     const artifact = rows.length === 1 ? rows[0] : null;
     if (!artifact || artifact.state !== "approved" || !artifact.currentVersionId) reject(`J12 requires current approved ${taskId}.`);
-    const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, { session });
-    const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-      artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
+    const version = bookVersions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id);
+    const approval = bookApprovals.find((item) => item.artifactVersionId === artifact.currentVersionId);
     if (!version || !approval) reject(`J12 ${taskId} approval evidence is incomplete.`);
     return version;
   };
-  // MongoDB transactions do not support parallel operations on one session.
-  const layoutVersion = await book("J11");
-  const manuscriptVersion = await book("J05");
-  const styleVersion = await book("J08");
+  const layoutVersion = book("J11");
+  const manuscriptVersion = book("J05");
+  const styleVersion = book("J08");
   const layout = parseStoredPageLayout(run.persona, JSON.parse(layoutVersion.contentJson) as unknown);
   const pages = layout.pages.filter((item) => item.pageId === pageId);
   if (pages.length !== 1) reject("J12 page is not in the current J11 layout.");
@@ -134,12 +138,17 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
       !savedDependencies.every((item) => edgeIds.includes(item))) reject("J11 dependency edges differ from its saved sources.");
   if (!savedDependencies.includes(manuscriptVersion._id) || !savedDependencies.includes(styleVersion._id)) reject("J11 manuscript or style source changed.");
   const approvedUpstream = new Map<string, { taskId?: string; subjectKind?: string; subjectId?: string }>();
+  const upstreamVersions = await database.collections.artifact_versions.find({ _id: { $in: savedDependencies } }, { session }).toArray();
+  const upstreamArtifacts = await database.collections.artifacts.find({ _id: { $in: upstreamVersions.map((version) => version.artifactId) } }, { session }).toArray();
+  const upstreamApprovals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    artifactVersionId: { $in: savedDependencies }, action: "approve", scope: "artifact" }, { session }).toArray();
+  const versionsById = new Map(upstreamVersions.map((version) => [version._id, version]));
+  const artifactsById = new Map(upstreamArtifacts.map((artifact) => [artifact._id, artifact]));
+  const approvedIds = new Set(upstreamApprovals.map((approval) => approval.artifactVersionId));
   for (const versionId of savedDependencies) {
-    const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
-    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
-    const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-      artifactVersionId: versionId, action: "approve", scope: "artifact" }, { session });
-    if (!artifact || !approval || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId ||
+    const version = versionsById.get(versionId);
+    const artifact = version ? artifactsById.get(version.artifactId) : null;
+    if (!artifact || !approvedIds.has(versionId) || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId ||
         artifact.state !== "approved" || artifact.currentVersionId !== versionId) reject("J11 has a stale or unapproved source.");
     approvedUpstream.set(versionId, artifact);
   }
@@ -158,7 +167,7 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
     const source = approvedUpstream.get(ref.artifactVersionId);
     if (!source || source.taskId !== (ref.subjectKind === "character" ? "J09" : "J10") ||
         source.subjectKind !== ref.subjectKind || source.subjectId !== ref.subjectId) reject("J11 page sheet reference is not an approved dependency.");
-    const version = await database.collections.artifact_versions.findOne({ _id: ref.artifactVersionId }, { session });
+    const version = versionsById.get(ref.artifactVersionId);
     if (!version || version.createdBy !== "application") reject("J12 requires assembled sheet references.");
     const content = parseReferenceProposal(source.taskId as "J09" | "J10", "assembled", JSON.parse(version.contentJson) as unknown).content;
     if (!("build" in content) || content.build.assetId !== ref.assetId) reject("J11 page sheet asset differs from its approved version.");
@@ -167,6 +176,38 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
   return { layout, page, layoutVersionId: layoutVersion._id, manuscriptVersionId: manuscriptVersion._id,
     styleVersionId: styleVersion._id, versionIds: [layoutVersion._id, manuscriptVersion._id, styleVersion._id,
       ...ordered.map((ref) => ref.artifactVersionId)] };
+}
+
+// Run after selected-page verification in the same transaction. All Page Bibles
+// must remain current and approved; only the selected image needs attachments.
+export async function verifyCurrentApprovedPageBibles(database: Database, session: ClientSession,
+  run: ExperimentRunDocument, sources: Pick<Awaited<ReturnType<typeof verifyCurrentPageBibleSources>>,
+    "layout" | "layoutVersionId" | "manuscriptVersionId" | "styleVersionId">) {
+  const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    taskId: "J12", subjectKind: "page", subjectId: { $in: sources.layout.pages.map((page) => page.pageId) } }, { session }).toArray();
+  const ids = rows.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+  const versions = await database.collections.artifact_versions.find({ _id: { $in: ids } }, { session }).toArray();
+  const approvals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    artifactVersionId: { $in: ids }, action: "approve", scope: "artifact" }, { session }).toArray();
+  const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: { $in: ids } }, { session }).toArray();
+  for (const page of sources.layout.pages) {
+    const matches = rows.filter((artifact) => artifact.subjectId === page.pageId);
+    const artifact = matches.length === 1 ? matches[0] : null;
+    const version = artifact?.currentVersionId ? versions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id) : null;
+    if (!artifact || artifact.state !== "approved" || !version ||
+        !approvals.some((approval) => approval.artifactVersionId === version._id)) reject("J13 requires every current approved Page Bible.");
+    const parsed = parsePageBibleForLayout({ persona: run.persona, pageId: page.pageId, layout: sources.layout,
+      layoutVersionId: sources.layoutVersionId, manuscriptVersionId: sources.manuscriptVersionId,
+      styleVersionId: sources.styleVersionId, proposal: JSON.parse(version.contentJson) });
+    const saved = JSON.parse(version.dependencyVersionIdsJson) as unknown;
+    const pageEdges = edges.filter((edge) => edge.downstreamVersionId === version._id);
+    if (!Array.isArray(saved) || canonical(saved) !== canonical(parsed.dependencyVersionIds) ||
+        pageEdges.length !== parsed.dependencyVersionIds.length ||
+        new Set(pageEdges.map((edge) => edge.upstreamVersionId)).size !== pageEdges.length ||
+        !parsed.dependencyVersionIds.every((id) => pageEdges.some((edge) => edge.upstreamVersionId === id))) {
+      reject("J13 Page Bible dependencies differ from current sources.");
+    }
+  }
 }
 
 type StoredImageMetadata = {
