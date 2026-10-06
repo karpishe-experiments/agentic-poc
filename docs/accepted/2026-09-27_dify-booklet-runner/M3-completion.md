@@ -81,6 +81,37 @@ empty Secret placeholder. The version list is empty. No workflow was executed
 or published. Private J12/judge key preparation, eighteen-slot upload/host
 validation, publication reviews and deployed acceptance remain pending.
 
+### Final binding preparation candidate
+
+The existing J12 preparation helper now has a `m3-j13` profile. It reuses the
+sixteen-binding M3 file, or the seventeen-binding J12 file if present, and
+collects only missing J12/judge keys with the existing callback key. It writes a
+separate encrypted eighteen-binding file without overwriting prior files.
+The local file-presence check found the sixteen-binding file only; no private
+contents were read. Operator preparation remains pending in the
+[canonical register](EXECUTION.md#b-authorization-register).
+
+The existing uploader accepts an eighteen-publication `m3-j13` manifest and adds
+`finalPageIllustration: true` only to its image binding. Its earlier profiles
+remain unchanged. Focused synthetic PowerShell tests passed for legacy profiles,
+both final-source paths, clipboard retry, preview isolation, malformed source
+rejection and no-overwrite behavior. No real private file, upload, workflow or
+host operation ran in these tests.
+
+The host validator candidate now accepts the same complete eighteen-slot
+profile, requires the final-page image flag, and rejects misplaced/false flags,
+duplicate identities and extra fields. The focused staging-runner shell fixture,
+Bash syntax and ShellCheck passed. Both full shell suites were attempted on
+Windows: deployment-script stopped at existing Python-alias/symlink fixtures;
+host tests stopped at an existing `mkdir -m` permission fixture. Neither full
+suite passed. Required Linux CI must verify both before merge or deployment.
+All eleven isolated deployment contracts passed (2.05 seconds, no retries),
+and the implementation-loop independent review passed. Local link targets in
+the five changed documents passed. This is not a full-suite or frozen-publication
+review result.
+These results do not establish deployed readiness or permit activation before
+the frozen-candidate reviews, published readback and maintenance checkpoints.
+
 ### Local evaluation context readiness
 
 Claimed tester and judge operations can retrieve verified generation evidence,

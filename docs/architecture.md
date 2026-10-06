@@ -140,9 +140,12 @@ evidence checked again. Acceptance also reads both sample files from AssetStore
 and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
 files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
 retain old images and approvals. The public configuration reader accepts six,
-eleven, thirteen, fifteen, sixteen or seventeen complete bindings. The host
-validator candidate also accepts the exact seventeen-slot J12 profile. Its
-installation and the J12 host handoff remain pending. The reviewed host
+eleven, thirteen, fifteen, sixteen, seventeen or eighteen complete bindings. The host
+validator candidate also accepts the exact seventeen-slot J12 and eighteen-slot
+final/evaluation profiles. Only their image binding can have
+`finalPageIllustration: true`; the eighteen-slot profile requires it. Existing
+profiles keep their original shape. Installation and the final host handoff remain
+pending. The reviewed host
 dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
 J08 and all reference modules are published. All-persona reference acceptance and
 model-free binary output transfer passed with 5/5/6 saved images. Staging release

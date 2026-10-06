@@ -10,7 +10,8 @@ $global:UploadTest = @{ profile='m3'; reads=0; imports=0; uploads=0; exports=0; 
 function Slots([int]$count) {
     $items = @(@{ role='manager'; taskId=$null; persona=$null })
     $items += 1..11 | ForEach-Object { @{ role='specialist'; taskId=('J{0:D2}' -f $_); persona=$null } }
-    if ($count -eq 17) { $items += @{ role='specialist'; taskId='J12'; persona=$null } }
+    if ($count -ge 17) { $items += @{ role='specialist'; taskId='J12'; persona=$null } }
+    if ($count -eq 18) { $items += @{ role='judge'; taskId=$null; persona=$null } }
     $items += @('playful_kid','enthusiast_parent','professional_creator') | ForEach-Object { @{ role='tester'; taskId=$null; persona=$_ } }
     $items += @{ role='image'; taskId=$null; persona=$null }
     return ,$items
@@ -37,14 +38,14 @@ function Test-Path { param($LiteralPath, $PathType)
 function Get-Content { param($LiteralPath, [switch]$Raw)
     if ($LiteralPath -ne 'synthetic-publications.json') { throw 'Unexpected manifest path.' }
     $global:UploadTest.reads++
-    $bindings = Bindings $(if ($global:UploadTest.profile -eq 'm3-j12') { 17 } else { 16 })
+    $bindings = Bindings $(switch ($global:UploadTest.profile) { 'm3-j13' { 18 }; 'm3-j12' { 17 }; default { 16 } })
     $publications = @(Publications $bindings)
     return ConvertTo-Json -InputObject $publications -Depth 10 -Compress
 }
 function Import-Clixml { param($LiteralPath)
     $global:UploadTest.imports++
     if ($LiteralPath -like '*settings.dpapi.xml') { return ConvertTo-SecureString $global:UploadTest.saved -AsPlainText -Force }
-    $count = if ($global:UploadTest.profile -eq 'm3-j12') { 17 } else { 16 }
+    $count = switch ($global:UploadTest.profile) { 'm3-j13' { 18 }; 'm3-j12' { 17 }; default { 16 } }
     $bindings = Bindings $count
     if ($InvalidCase -eq 'duplicate') { $bindings[-1].appId = $bindings[0].appId }
     if ($InvalidCase -eq 'missing') { $bindings = @($bindings | Select-Object -SkipLast 1) }
@@ -65,11 +66,11 @@ function gh { process { $global:UploadTest.uploads++; $global:LASTEXITCODE = 0 }
 
 try {
     if ($InvalidCase) {
-        $global:UploadTest.profile = 'm3-j12'
-        & $helper -PublicationsPath 'synthetic-publications.json' -Profile m3-j12 -Apply
+        $global:UploadTest.profile = 'm3-j13'
+        & $helper -PublicationsPath 'synthetic-publications.json' -Profile m3-j13 -Apply
         throw 'Invalid source was accepted.'
     }
-    foreach ($profile in @('m3','m3-j12')) {
+    foreach ($profile in @('m3','m3-j12','m3-j13')) {
         $global:UploadTest.profile = $profile
         $global:UploadTest.outputExists = $false
         $global:UploadTest.saved = $null
@@ -80,10 +81,16 @@ try {
         & $helper -PublicationsPath 'synthetic-publications.json' -Profile $profile -Apply
         $saved = $global:UploadTest.saved | ConvertFrom-Json
         $bindings = $saved.DIFY_BOOKLET_BINDINGS_JSON | ConvertFrom-Json
-        $expected = if ($profile -eq 'm3-j12') { 17 } else { 16 }
+        $expected = switch ($profile) { 'm3-j13' { 18 }; 'm3-j12' { 17 }; default { 16 } }
         if (@($bindings).Count -ne $expected -or $saved.DIFY_BOOKLET_BASE_URL -cne 'https://dify.uniwares.co.uk' -or
             $saved.DIFY_BOOKLET_PUBLIC_ORIGIN -cne 'https://booklet-staging.uniwares.co.uk') { throw 'Saved bundle is not exact.' }
         if ($profile -eq 'm3-j12' -and @($bindings | Where-Object { $_.taskId -ceq 'J12' }).Count -ne 1) { throw 'J12 slot missing.' }
+        $flags = @($bindings | Where-Object { $_.PSObject.Properties.Name -ccontains 'finalPageIllustration' })
+        if ($profile -eq 'm3-j13') {
+            if (@($bindings | Where-Object { $_.role -ceq 'judge' }).Count -ne 1 -or
+                @($bindings | Where-Object { $_.taskId -ceq 'J12' }).Count -ne 1 -or
+                $flags.Count -ne 1 -or $flags[0].role -cne 'image' -or $flags[0].finalPageIllustration -ne $true) { throw 'Final profile is not exact.' }
+        } elseif ($flags.Count) { throw 'Legacy profile acquired a final-page flag.' }
         $exportCount = $global:UploadTest.exports
         & $helper -PublicationsPath 'synthetic-publications.json' -Profile $profile -Apply
         if ($global:UploadTest.exports -ne $exportCount) { throw 'Existing encrypted settings were overwritten.' }
@@ -95,7 +102,7 @@ try {
         finally { $ErrorActionPreference = $prior }
         if ($LASTEXITCODE -eq 0 -or @($output | Where-Object { "$_" -match 'app-synthetic|synthetic-callback' }).Count) { throw "Invalid $case source did not stop safely." }
     }
-    'PASS: uploader syntax, 16/17 preview, exact bindings, fixed origins, no overwrite and malformed 17-source rejection.'
+    'PASS: uploader syntax, 16/17/18 preview, exact bindings/image flag, fixed origins, no overwrite and malformed final-source rejection.'
 } finally {
     Remove-Variable UploadTest -Scope Global -ErrorAction SilentlyContinue
     foreach ($name in 'Slots','Bindings','Publications','Test-Path','Get-Content','Import-Clixml','Export-Clixml','gh') {

@@ -2053,20 +2053,25 @@ booklet_runner_settings_are_valid() {
       $e.DIFY_BOOKLET_PUBLIC_ORIGIN=="https://booklet-staging.uniwares.co.uk" and
       ($e.DIFY_BOOKLET_TOOL_KEY|type=="string" and length>=32) and
       ($e.DIFY_BOOKLET_BINDINGS_JSON|type=="string") and
-      ($bindings|type=="array" and (length==6 or length==11 or length==13 or length==15 or length==16 or length==17)) and
+      ($bindings|type=="array" and (length==6 or length==11 or length==13 or length==15 or length==16 or length==17 or length==18)) and
       all($bindings[];
-        type=="object" and keys==["apiKey","appId","persona","publishedWorkflowId","role","taskId","toolProviderId"] and
+        type=="object" and
+        (keys==["apiKey","appId","persona","publishedWorkflowId","role","taskId","toolProviderId"] or
+          (keys==["apiKey","appId","finalPageIllustration","persona","publishedWorkflowId","role","taskId","toolProviderId"] and
+            .finalPageIllustration==true and .role=="image" and .taskId==null and .persona==null and ($bindings|length)>=17)) and
         (.appId|uuid) and (.publishedWorkflowId|uuid) and
         (.toolProviderId==null or (.toolProviderId|uuid)) and
         (.apiKey|type=="string" and length>0)) and
       ([$bindings[].appId]|unique|length)==($bindings|length) and
+      (($bindings|length)!=18 or any($bindings[]; .role=="image" and .finalPageIllustration==true)) and
       ([$bindings[] | [.role,.taskId,.persona]] | sort)==
         ([["manager",null,null],["specialist","J01",null],["specialist","J02",null],["tester",null,"playful_kid"],["tester",null,"enthusiast_parent"],["tester",null,"professional_creator"]] +
           (if ($bindings|length)>=11 then ["J03","J04","J05","J06","J07"]|map(["specialist",.,null]) else [] end) +
           (if ($bindings|length)>=13 then [["specialist","J08",null],["image",null,null]] else [] end) +
           (if ($bindings|length)>=15 then [["specialist","J09",null],["specialist","J10",null]] else [] end) +
           (if ($bindings|length)>=16 then [["specialist","J11",null]] else [] end) +
-          (if ($bindings|length)==17 then [["specialist","J12",null]] else [] end)|sort)
+          (if ($bindings|length)>=17 then [["specialist","J12",null]] else [] end) +
+          (if ($bindings|length)==18 then [["judge",null,null]] else [] end)|sort)
     end' "$1" >/dev/null 2>&1
 }
 booklet_runner_patch_is_valid() {

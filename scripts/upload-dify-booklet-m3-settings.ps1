@@ -1,19 +1,20 @@
 param(
     [Parameter(Mandatory=$true)][string]$PublicationsPath,
-    [ValidateSet('m3','m3-j12')][string]$Profile='m3',
+    [ValidateSet('m3','m3-j12','m3-j13')][string]$Profile='m3',
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
-$profileSuffix = if ($Profile -eq 'm3-j12') { 'm3-j12' } else { 'm3' }
-$expectedCount = if ($Profile -eq 'm3-j12') { 17 } else { 16 }
+$profileSuffix = $Profile
+$expectedCount = switch ($Profile) { 'm3-j13' { 18 }; 'm3-j12' { 17 }; default { 16 } }
 $sourcePath = Join-Path $env:LOCALAPPDATA "DifyWf-Community-Codex/issue65-$profileSuffix-bindings.dpapi.xml"
 $outputPath = Join-Path $env:LOCALAPPDATA "DifyWf-Community-Codex/issue65-$profileSuffix-settings.dpapi.xml"
 $uuid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 $allowedTypes = @('start','code','http-request','if-else','list-operator','end')
 $expectedSlots = @('manager::','image::','tester::playful_kid','tester::enthusiast_parent','tester::professional_creator') +
     @(1..11 | ForEach-Object { 'specialist:J{0:D2}:' -f $_ })
-if ($Profile -eq 'm3-j12') { $expectedSlots += 'specialist:J12:' }
+if ($Profile -in @('m3-j12','m3-j13')) { $expectedSlots += 'specialist:J12:' }
+if ($Profile -eq 'm3-j13') { $expectedSlots += 'judge::' }
 $step = 'validate publication manifest'
 $sourceSecret = $null
 $outputSecret = $null
@@ -90,10 +91,12 @@ try {
         $apps.Add([string]$item.appId, $true)
         $keys.Add([string]$item.apiKey, $true)
         $publication = $byApp[[string]$item.appId]
-        $bindings += [ordered]@{
+        $binding = [ordered]@{
             appId=[string]$item.appId; role=$role; taskId=$item.taskId; persona=$item.persona
             apiKey=[string]$item.apiKey; publishedWorkflowId=[string]$publication.publishedWorkflowId; toolProviderId=$null
         }
+        if ($Profile -eq 'm3-j13' -and $role -ceq 'image') { $binding.finalPageIllustration = $true }
+        $bindings += $binding
     }
     if ($slots.Count -ne $expectedCount -or $apps.Count -ne $byApp.Count) { throw 'Incomplete profile bindings.' }
     $step = 'save encrypted runner settings'
