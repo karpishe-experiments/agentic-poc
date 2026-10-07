@@ -1173,15 +1173,46 @@ blocked run above. Its J13 operation is succeeded, but page materialization did
 not finish. The user approved failing only these two bookkeeping records after
 a verified staging backup. Preserve the failed run, saved operation/result,
 assets, Cloud and production; do not replay generation. The retained deployment
-journal is at `draining`, with an empty backup ID. Backup, exact repair and
-deployment resume are not yet verified.
+journal was at `draining`, with an empty backup ID. The user subsequently
+approved reconciliation of three additional historical operations and their
+owning paused runs. On 2026-10-07, runtime-key GETs proved two terminal failures
+and one successful tester execution with a mismatched saved publication.
+The exact-target repair retained successful results/materialization and recorded
+provider status, prior operation state, publication identities and backup ID in
+`maintenanceReconciliationJson`. It did not label the mismatched publication
+verified, reopen failed runs or replay generation.
+
+The operator's repair passed with verified backup
+`staging-approved-reconciliation-20261007T083649Z-4008958`: archive SHA-256
+`1256b30c03b6c96968e8784990e3b91d1e61c6295959155f7fba7a0bf1ebe2d0`,
+56 referenced assets, and the complete staging collection inventory. The normal
+maintenance-idle postcheck passed. The prior app restarted healthy and admission
+reopened with zero active mutations. Saved data, assets, Cloud and production
+were preserved. Read-only status
+[37595401356](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37595401356)
+confirmed the unchanged retained deployment target. Maintenance resume
+[37595520504](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37595520504)
+passed in 3m33s. It completed retained request `37510610960-1`, deployed staging
+`0a8ceb4a7b23ef1a0fef62a6fba29790b4acb950` with immutable image
+`sha256:772a7607f69303d46c43851cd8b4f823341953680910d9cb82151cf8f19fcbed`,
+and retained normal release backup `staging-20261007T084407Z-0adf5dd0b58a1ba4`.
+[Check 37596067024](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37596067024)
+passed in 21 seconds. The null-cover correction is deployed and healthy;
+the prevention fix and linked successor acceptance remain separate checkpoints.
 
 The local prevention correction closes eligible running item/job bookkeeping
 inside `blockRun` only for a definite failure and exact terminal J13 evidence.
 Eight focused checks passed; focused lint and clean-candidate typecheck passed.
 The corrected unit fixture passed six checks. Independent code review passed.
-Unknown outcomes and missing evidence remain untouched. Publication and live
-verification of this prevention correction remain pending.
+Unknown outcomes and missing evidence remain untouched. Frozen publication
+validation passed 108 files/822 tests, full lint, clean-candidate typecheck and
+12 agent fixtures. Two consecutive independent publication reviews passed.
+[PR #156](https://github.com/karpishe-experiments/agentic-poc/pull/156) merged as
+`e6c2880a2b60954c44fb5482b3fa5aabee744b3b` after
+[Validate 37591306685](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37591306685)
+passed in 8m12s. The same issue branch is refreshed and pushed. This prevention
+fix is not yet deployed to staging; it is separate from the retained null-cover
+correction deployment being resumed.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.
