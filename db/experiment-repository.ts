@@ -17,6 +17,7 @@ import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-ill
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-page-illustrations";
 import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
+import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -443,11 +444,15 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (run.status === "completed" || run.status === "failed") throw new ExperimentRepositoryError("invalid_state", "Terminal run cannot be blocked.");
       if (run.status === "blocked") {
-        if (run.safeFailure === input.category) return run;
+        if (run.safeFailure === input.category) {
+          await failTerminalPageBatchItems(database, run, session, input.nowMs);
+          return run;
+        }
         throw new ExperimentRepositoryError("conflict", "Run is blocked for another reason.");
       }
       const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed before block.");
+      await failTerminalPageBatchItems(database, updated, session, input.nowMs);
       return updated;
     });
   }

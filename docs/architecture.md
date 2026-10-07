@@ -124,6 +124,11 @@ remain unchanged. This candidate does not activate bindings or prove live M3
 completion. The master-owned dispatcher and drained private-setting rotation
 remain separate release checkpoints.
 
+The blocked-run correction closes running `dify_pages` item/job bookkeeping
+inside the existing transaction only for a definitely blocked owning run and
+exact retained terminal J13 operation. Provider results, assets and operations
+remain unchanged. Unknown, missing or nonterminal evidence remains unresolved.
+
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
 Failed/stopped runtime observations are classified against the persisted claim.
