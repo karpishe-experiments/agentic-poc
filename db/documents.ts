@@ -55,6 +55,7 @@ export type ExperimentOperationDocument = BaseDocument & {
   state: "prepared" | "started" | "succeeded" | "failed" | "unknown";
   workflowRunId: string | null; parentWorkflowRunId: string | null;
   dispatchStartedAtMs?: number | null;
+  nextObservationAtMs?: number | null;
   verifiedWorkflowId?: string | null;
   imageRequestJson?: string | null;
   // Retained J13 runtime upload acknowledgements in selected-reference order.

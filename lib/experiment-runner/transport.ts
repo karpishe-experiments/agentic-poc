@@ -14,7 +14,7 @@ const execution = z.object({
   outputs: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strip();
 export type RuntimeExecution = z.infer<typeof execution>;
-export type RuntimeResult = { kind: "execution"; execution: RuntimeExecution } | { kind: "unknown" } | { kind: "rejected" };
+export type RuntimeResult = { kind: "accepted"; execution: RuntimeExecution } | { kind: "execution"; execution: RuntimeExecution } | { kind: "conflict" } | { kind: "unknown" } | { kind: "rejected" };
 export type RuntimeInput = {
   runId: string;
   operationId: string;
@@ -22,8 +22,19 @@ export type RuntimeInput = {
   mode: "simulated";
   referenceFileIds?: string[];
 };
+export type WorkflowStartOptions = {
+  // Persist the provider run identity before the caller treats a POST as
+  // accepted. This callback is intentionally awaited.
+  onStarted?: (execution: RuntimeExecution) => Promise<void> | void;
+  // The transport owns the stream reader after `start` returns. It reports a
+  // terminal event, or a lost stream, without replaying the provider request.
+  onTerminal?: (result: RuntimeResult) => Promise<void> | void;
+  // The caller can pass the original operation deadline. It bounds the
+  // detached reader; the first acknowledgement is always limited to 30s.
+  deadlineAtMs?: number;
+};
 export type WorkflowRuntime = {
-  start(binding: BookletBinding, input: RuntimeInput): Promise<RuntimeResult>;
+  start(binding: BookletBinding, input: RuntimeInput, options?: WorkflowStartOptions): Promise<RuntimeResult>;
   retrieve(binding: BookletBinding, workflowRunId: string): Promise<RuntimeResult>;
 };
 
@@ -50,7 +61,7 @@ function runtimeBody(input: z.infer<typeof runtimeInputSchema>): string {
       mode: "simulated",
       reference_files: input.referenceFileIds.map((upload_file_id) => ({ type: "image", transfer_method: "local_file", upload_file_id })),
     };
-  return JSON.stringify({ inputs, response_mode: "blocking", user: `booklet-${input.runId}` });
+  return JSON.stringify({ inputs, response_mode: "streaming", user: `booklet-${input.runId}` });
 }
 
 // Do not return provider bodies, URLs or credentials to logs or browser clients.
@@ -72,40 +83,298 @@ async function readResponse(response: Response): Promise<unknown> {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
 }
 
+const START_ACKNOWLEDGEMENT_MS = 30_000;
+const DEFAULT_STREAM_DEADLINE_MS = 10 * 60_000;
+const MAX_SSE_EVENT_CHARS = 1_000_000;
+
+type ServerSentEvent = { event: string | null; data: string };
+
+class BoundedSseParser {
+  private buffer = "";
+  private eventName: string | null = null;
+  private dataLines: string[] = [];
+  private dataLength = 0;
+
+  push(chunk: string): ServerSentEvent[] {
+    this.buffer += chunk;
+    if (this.buffer.length > MAX_SSE_EVENT_CHARS) throw new Error("Runtime SSE line limit");
+    const events: ServerSentEvent[] = [];
+    for (;;) {
+      const newline = this.buffer.indexOf("\n");
+      if (newline === -1) break;
+      const line = this.buffer.slice(0, newline).replace(/\r$/, "");
+      this.buffer = this.buffer.slice(newline + 1);
+      const event = this.acceptLine(line);
+      if (event) events.push(event);
+    }
+    return events;
+  }
+
+  finish(): ServerSentEvent[] {
+    const events: ServerSentEvent[] = [];
+    if (this.buffer.length > 0) {
+      const event = this.acceptLine(this.buffer.replace(/\r$/, ""));
+      if (event) events.push(event);
+      this.buffer = "";
+    }
+    const event = this.flush();
+    if (event) events.push(event);
+    return events;
+  }
+
+  private acceptLine(line: string): ServerSentEvent | null {
+    if (line === "") return this.flush();
+    if (line.startsWith(":")) return null;
+    const separator = line.indexOf(":");
+    const field = separator === -1 ? line : line.slice(0, separator);
+    const rawValue = separator === -1 ? "" : line.slice(separator + 1);
+    const value = rawValue.startsWith(" ") ? rawValue.slice(1) : rawValue;
+    if (field === "event") this.eventName = value;
+    if (field === "data") {
+      this.dataLength += value.length;
+      if (this.dataLength > MAX_SSE_EVENT_CHARS) throw new Error("Runtime SSE event limit");
+      this.dataLines.push(value);
+    }
+    return null;
+  }
+
+  private flush(): ServerSentEvent | null {
+    if (this.dataLines.length === 0) {
+      this.eventName = null;
+      this.dataLength = 0;
+      return null;
+    }
+    const event = { event: this.eventName, data: this.dataLines.join("\n") };
+    this.eventName = null;
+    this.dataLines = [];
+    this.dataLength = 0;
+    return event;
+  }
+}
+
+function eventName(event: ServerSentEvent, payload: unknown): string | null {
+  if (event.event) return event.event;
+  const parsed = z.object({ event: z.string().optional() }).passthrough().safeParse(payload);
+  return parsed.success ? parsed.data.event ?? null : null;
+}
+
+type StreamIdentity = { kind: "execution"; execution: RuntimeExecution } | { kind: "conflict" } | { kind: "unknown" };
+
+function startedIdentity(payload: unknown, publishedWorkflowId: string): StreamIdentity {
+  const parsed = z.object({
+    workflow_run_id: opaqueIdSchema.optional(),
+    workflow_id: opaqueIdSchema.optional(),
+    data: z.object({ id: opaqueIdSchema.optional(), workflow_id: opaqueIdSchema.optional() }).passthrough().optional(),
+  }).passthrough().safeParse(payload);
+  if (!parsed.success) return { kind: "unknown" };
+  const id = parsed.data.workflow_run_id ?? parsed.data.data?.id;
+  const workflowId = parsed.data.data?.workflow_id ?? parsed.data.workflow_id;
+  if (!id || !workflowId) return { kind: "unknown" };
+  if (workflowId !== publishedWorkflowId ||
+      parsed.data.workflow_run_id && parsed.data.data?.id && parsed.data.workflow_run_id !== parsed.data.data.id ||
+      parsed.data.workflow_id && parsed.data.data?.workflow_id && parsed.data.workflow_id !== parsed.data.data.workflow_id) return { kind: "conflict" };
+  return { kind: "execution", execution: { id, workflow_id: workflowId, status: "running" } };
+}
+
+function terminalIdentity(payload: unknown, publishedWorkflowId: string, started: RuntimeExecution | null): StreamIdentity {
+  const outer = z.object({ data: z.unknown().optional() }).passthrough().safeParse(payload);
+  const candidate = outer.success && outer.data.data !== undefined ? outer.data.data : payload;
+  const parsed = execution.safeParse(candidate);
+  if (!parsed.success || parsed.data.status === "running") return { kind: "unknown" };
+  if (parsed.data.workflow_id !== publishedWorkflowId || !started || parsed.data.id !== started.id) return { kind: "conflict" };
+  return { kind: "execution", execution: parsed.data };
+}
+
+async function notify(options: WorkflowStartOptions, result: RuntimeResult): Promise<void> {
+  try { await options.onTerminal?.(result); } catch { /* A notification must not restart or leak the stream. */ }
+}
+
+async function readUntilAbort(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) return { done: true, value: undefined };
+  let removeAbortListener: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+        const onAbort = () => resolve({ done: true, value: undefined });
+        signal.addEventListener("abort", onAbort, { once: true });
+        removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+        if (signal.aborted) onAbort();
+      }),
+    ]);
+  } finally { removeAbortListener?.(); }
+}
+
+async function readWorkflowStream(
+  response: Response,
+  binding: BookletBinding,
+  options: WorkflowStartOptions,
+  signal: AbortSignal,
+  acknowledge: (result: RuntimeResult) => void,
+): Promise<void> {
+  if (!response.body) {
+    acknowledge({ kind: "unknown" });
+    await notify(options, { kind: "unknown" });
+    return;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const parser = new BoundedSseParser();
+  let accepted = false;
+  let startedSeen = false;
+  let started: RuntimeExecution | null = null;
+  let notified = false;
+  const terminal = async (result: RuntimeResult) => {
+    if (notified) return;
+    notified = true;
+    await notify(options, result);
+  };
+  const stopWith = async (result: Extract<RuntimeResult, { kind: "conflict" } | { kind: "unknown" }>): Promise<boolean> => {
+    if (!accepted) acknowledge(result);
+    await terminal(result);
+    return true;
+  };
+  const process = async (event: ServerSentEvent): Promise<boolean> => {
+    let payload: unknown;
+    try { payload = JSON.parse(event.data) as unknown; } catch { return stopWith({ kind: "unknown" }); }
+    const name = eventName(event, payload);
+    if (name === "workflow_started") {
+      const candidate = startedIdentity(payload, binding.publishedWorkflowId);
+      if (candidate.kind !== "execution") return stopWith(candidate);
+      if (startedSeen) {
+        if (!started || candidate.execution.id !== started.id || candidate.execution.workflow_id !== started.workflow_id) return stopWith({ kind: "conflict" });
+        return false;
+      }
+      startedSeen = true;
+      started = candidate.execution;
+      try {
+        await options.onStarted?.(candidate.execution);
+      } catch {
+        acknowledge({ kind: "unknown" });
+        return false;
+      }
+      if (signal.aborted) {
+        acknowledge({ kind: "unknown" });
+        return true;
+      }
+      accepted = true;
+      acknowledge({ kind: "accepted", execution: candidate.execution });
+      return false;
+    }
+    if (["workflow_finished", "workflow_failed", "workflow_stopped"].includes(name ?? "")) {
+      const completed = terminalIdentity(payload, binding.publishedWorkflowId, started);
+      if (completed.kind !== "execution") return stopWith(completed);
+      await terminal(completed);
+      return true;
+    } else if (name === "error") {
+      await terminal({ kind: "unknown" });
+      return true;
+    }
+    return false;
+  };
+  try {
+    let stop = false;
+    for (;;) {
+      const { done, value } = await readUntilAbort(reader, signal);
+      if (done) break;
+      for (const event of parser.push(decoder.decode(value, { stream: true }))) {
+        if (await process(event)) { stop = true; break; }
+      }
+      if (stop) break;
+    }
+    if (!stop) {
+      for (const event of parser.push(decoder.decode())) {
+        if (await process(event)) { stop = true; break; }
+      }
+    }
+    if (!stop) for (const event of parser.finish()) {
+      if (await process(event)) break;
+    }
+  } catch { /* A stream loss is evidence to reconcile, never permission to replay. */ }
+  if (!accepted) acknowledge({ kind: "unknown" });
+  if (!notified) await terminal({ kind: "unknown" });
+  try { await reader.cancel(); } catch { /* The stream is already closed or aborted. */ }
+}
+
 export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: typeof fetch = fetch): WorkflowRuntime {
-  async function request(binding: BookletBinding, path: string, input?: RuntimeInput): Promise<RuntimeResult> {
+  async function retrieveRequest(binding: BookletBinding, path: string): Promise<RuntimeResult> {
     try {
       const response = await fetcher(`${config.baseUrl}/v1${path}`, {
-        method: input ? "POST" : "GET", redirect: "error", cache: "no-store",
-        headers: { Authorization: `Bearer ${binding.apiKey}`, ...(input ? { "Content-Type": "application/json" } : {}) },
-        ...(input ? { body: runtimeBody(input) } : {}),
+        method: "GET", redirect: "error", cache: "no-store",
+        headers: { Authorization: `Bearer ${binding.apiKey}` },
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) {
-        // A rejected request is useful only before a callback claim. The caller
-        // still reads persisted state before classifying the operation.
-        return { kind: input && [400, 401, 403, 404, 422].includes(response.status) ? "rejected" : "unknown" };
+        return { kind: "unknown" };
       }
       const raw = await readResponse(response);
-      const outer = input ? z.object({ data: execution }).safeParse(raw) : execution.safeParse(raw);
-      if (!outer.success) return { kind: "unknown" };
-      const value = "data" in outer.data ? outer.data.data : outer.data;
-      return { kind: "execution", execution: value };
+      const parsed = execution.safeParse(raw);
+      return parsed.success ? { kind: "execution", execution: parsed.data } : { kind: "unknown" };
     } catch { return { kind: "unknown" }; }
   }
+
+  async function startRequest(binding: BookletBinding, input: z.infer<typeof runtimeInputSchema>, options: WorkflowStartOptions): Promise<RuntimeResult> {
+    const remainingDeadline = options.deadlineAtMs === undefined ? undefined : options.deadlineAtMs - Date.now();
+    const streamDeadline = Number.isFinite(remainingDeadline) && remainingDeadline !== undefined
+      ? Math.max(0, remainingDeadline)
+      : DEFAULT_STREAM_DEADLINE_MS;
+    if (streamDeadline === 0) return { kind: "unknown" };
+
+    const controller = new AbortController();
+    let readerStarted = false;
+    let resolveAcknowledgement: (result: RuntimeResult) => void = () => undefined;
+    let acknowledged = false;
+    const acknowledgement = new Promise<RuntimeResult>((resolve) => { resolveAcknowledgement = resolve; });
+    const acknowledge = (result: RuntimeResult) => {
+      if (acknowledged) return;
+      acknowledged = true;
+      resolveAcknowledgement(result);
+    };
+    const acknowledgementTimer = setTimeout(() => {
+      controller.abort();
+      acknowledge({ kind: "unknown" });
+    }, Math.min(START_ACKNOWLEDGEMENT_MS, streamDeadline));
+    const deadlineTimer = setTimeout(() => controller.abort(), streamDeadline);
+    try {
+      const response = await fetcher(`${config.baseUrl}/v1/workflows/run`, {
+        method: "POST", redirect: "error", cache: "no-store",
+        headers: { Authorization: `Bearer ${binding.apiKey}`, "Content-Type": "application/json" },
+        body: runtimeBody(input), signal: controller.signal,
+      });
+      if (!response.ok) {
+        const result: RuntimeResult = [400, 401, 403, 404, 422].includes(response.status) ? { kind: "rejected" } : { kind: "unknown" };
+        acknowledge(result);
+        return result;
+      }
+      // Keep consuming to the supplied operation deadline. Do not abort a
+      // successfully acknowledged provider execution just because its ID is known.
+      readerStarted = true;
+      void readWorkflowStream(response, binding, options, controller.signal, acknowledge)
+        .finally(() => clearTimeout(deadlineTimer));
+      const result = await acknowledgement;
+      clearTimeout(acknowledgementTimer);
+      return result;
+    } catch {
+      acknowledge({ kind: "unknown" });
+      return { kind: "unknown" };
+    } finally {
+      if (acknowledged) clearTimeout(acknowledgementTimer);
+      if (!readerStarted) clearTimeout(deadlineTimer);
+    }
+  }
+
   return {
-    start(binding, input) {
+    start(binding, input, options = {}) {
       const checked = runtimeInputSchema.safeParse(input);
       // Reject malformed reference selections before any POST. A caller must
       // inspect persisted state before deciding whether an unknown POST ran.
-      return checked.success ? request(binding, "/workflows/run", checked.data) : Promise.resolve({ kind: "rejected" });
+      return checked.success ? startRequest(binding, checked.data, options) : Promise.resolve({ kind: "rejected" });
     },
     async retrieve(binding, workflowRunId) {
       const checked = opaqueIdSchema.parse(workflowRunId);
-      // GET can be retried safely; POST never is. No provider execution occurs here.
-      let result = await request(binding, `/workflows/run/${checked}`);
-      for (let retry = 0; retry < 2 && result.kind === "unknown"; retry++) result = await request(binding, `/workflows/run/${checked}`);
-      return result;
+      // The dispatcher owns recovery. A transport read is one observation, not
+      // an implicit retry loop that obscures the operation's evidence.
+      return retrieveRequest(binding, `/workflows/run/${checked}`);
     },
   };
 }

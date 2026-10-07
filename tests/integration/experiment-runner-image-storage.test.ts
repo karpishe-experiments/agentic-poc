@@ -17,6 +17,8 @@ class MemoryStore implements AssetStore {
   public readonly files = new Map<string, Uint8Array>();
   public failPut = false;
   public afterPut?: () => Promise<void>;
+  public existsCalls = 0;
+  public getCalls = 0;
   async put(uri: string, content: Uint8Array, mimeType: string) {
     if (this.failPut) throw new Error("private store error");
     if (this.files.has(uri)) throw new Error("exists");
@@ -24,8 +26,8 @@ class MemoryStore implements AssetStore {
     await this.afterPut?.();
     return { uri, mimeType, byteLength: content.byteLength };
   }
-  async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
-  async exists(uri: string) { return this.files.has(uri); }
+  async get(uri: string) { this.getCalls++; const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
+  async exists(uri: string) { this.existsCalls++; return this.files.has(uri); }
 }
 
 async function setup(options: { skipPrepare?: boolean } = {}) {
@@ -59,7 +61,11 @@ describe("experiment image storage", () => {
     expect(await env.store.get(saved.asset!.uri)).toEqual(Uint8Array.from(env.bytes));
     expect(JSON.parse(saved.asset!.metadataJson!)).toMatchObject({ sourceVersionIds: [env.sourceVersionId], inputFingerprint: env.identity.inputFingerprint, workflowRunId: env.identity.workflowRunId });
     expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "queued", activeOperationId: null, counters: { logicalImage: 1, payableImage: 0 } });
+    env.store.existsCalls = 0;
+    env.store.getCalls = 0;
     expect((await env.storage().complete({ identity: env.identity, content: env.bytes })).reused).toBe(true);
+    expect(env.store.existsCalls).toBe(0);
+    expect(env.store.getCalls).toBe(1);
     const different = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#ff0000" } }).png().toBuffer();
     await expect(env.storage().complete({ identity: env.identity, content: different })).rejects.toMatchObject({ code: "conflict" });
     expect(env.store.files.size).toBe(1);
@@ -165,5 +171,12 @@ describe("experiment image storage", () => {
     const env = await setup(); await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
     await expect(env.storage().complete({ identity: env.identity, content: new Uint8Array(MAX_EXPERIMENT_IMAGE_BYTES + 1) })).rejects.toMatchObject({ code: "too_large" });
     expect((await env.repository.getOperation(env.operationId))?.imageCompletionClaim).toBeUndefined();
+  });
+
+  it("checks the active image identity before decoding invalid callback bytes", async () => {
+    const env = await setup();
+    await expect(env.storage().complete({ identity: env.identity, content: new Uint8Array([1]) })).rejects.toMatchObject({ code: "invalid_state" });
+    expect((await env.repository.getOperation(env.operationId))?.imageCompletionClaim).toBeUndefined();
+    expect(env.store.files.size).toBe(0);
   });
 });

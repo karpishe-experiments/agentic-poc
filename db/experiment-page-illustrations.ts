@@ -12,6 +12,7 @@ import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-ill
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, pageId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -58,7 +59,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
   const { database, store } = input;
   const now = input.now ?? Date.now;
 
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, attempt?: VerificationAttempt) {
     const options = { session };
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Page illustration run was not found.");
@@ -74,7 +75,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     const configuration = savedConfigurationSchema.parse(json(run.configurationJson, "Saved run configuration is malformed."));
     const managerBinding = configuration.find((item) => item.role === "manager" && item.taskId === null);
     const imageBinding = configuration.find((item) => item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
-    const sources = await verifyCurrentPageIllustrationSources(database, session, run, value.pageId, store);
+    const sources = await verifyCurrentPageIllustrationSources(database, session, run, value.pageId, store, { attempt });
     const operation = await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J13" ||
       operation.subjectKind !== "page" || operation.subjectId !== value.pageId || operation.mode !== "simulated" || operation.state !== "succeeded" ||
@@ -163,7 +164,6 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
 
   async function decodedOutputEvidence(uri: string, expected: { sha256: string; byteLength: number; width: number; height: number }) {
     try {
-      if (!await store.exists(uri)) invalid("Saved page illustration bytes are missing.");
       const bytes = await store.get(uri);
       const decoded = await validateExperimentImage(bytes);
       if (decoded.byteLength !== expected.byteLength || decoded.sha256 !== expected.sha256 || decoded.width !== expected.width ||
@@ -182,16 +182,17 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     if (decoded.output.mimeType !== evidence.output.mimeType) invalid("Saved page illustration MIME evidence is inconsistent.");
   }
 
-  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession) {
+  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession, attempt?: VerificationAttempt) {
     const runId = opaqueIdSchema.parse(identity.runId), versionId = opaqueIdSchema.parse(identity.versionId);
     const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
     const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
     if (!version || !artifact || artifact.taskId !== "J13" || artifact.subjectKind !== "page" || artifact.currentVersionId !== version._id ||
       version.createdBy !== "application") invalid("Page illustration approval requires the current assembled version.");
     const content = validateSavedPageIllustrationPackage(json(version.contentJson, "Saved page illustration package is malformed."));
-    const checked = await load({ runId, pageId: content.pageId, imageOperationId: content.operationId }, session, true);
+    const checked = await load({ runId, pageId: content.pageId, imageOperationId: content.operationId }, session, true, attempt);
     if (checked.current?._id !== versionId) conflict("Page illustration approval target changed.");
-    await verifyBytes(checked.bytes);
+    // load already decodes and verifies the exact final original. Do not repeat
+    // that GET/decode in the same read-only verification attempt.
   }
 
   async function assemble(raw: unknown) {
