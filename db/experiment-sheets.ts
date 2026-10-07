@@ -10,6 +10,7 @@ import { finalCharacterListSchema, finalLocationListSchema } from "@/lib/contrac
 import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { assembleReferenceSheet } from "@/lib/experiment-runner/reference-assembly";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftSheetVersionId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const metadataSchema = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().positive(),
@@ -40,10 +41,10 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     const recoveredPagination = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
-        workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
-        // The manager has null taskId; this only admits read-only source
-        // verification for its exact active book operation after GET recovery.
-        $or: [{ role: "specialist", taskId: "J11" },
+        mode: "simulated", providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+        // A late authenticated callback may precede terminal publication GET.
+        // This permits source reads only, not assembly or replacement dispatch.
+        $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
@@ -119,18 +120,18 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         canonical(edges.map((edge) => edge.upstreamVersionId).sort()) !== canonical([...dependencies].sort())) conflict("Existing sheet assembly uses different or incomplete evidence.");
     }
     return { run, artifact, draft, current, assembled, dependencies,
-      bytes: { uri: asset.uri, sha256: metadata.sha256, byteLength: metadata.byteLength } };
+      bytes: { assetId: asset._id, uri: asset.uri, sha256: metadata.sha256, byteLength: metadata.byteLength } };
   }
-  async function verifyBytes(evidence: { uri: string; sha256: string; byteLength: number }) {
+  async function verifyBytes(evidence: { assetId?: string; uri: string; sha256: string; byteLength: number }, attempt?: VerificationAttempt) {
     try {
-      if (!await store.exists(evidence.uri)) invalid("Saved sheet bytes are missing.");
-      const bytes = await store.get(evidence.uri);
+      const bytes = attempt ? await attempt.read(evidence) : await store.get(evidence.uri);
       if (bytes.byteLength !== evidence.byteLength || createHash("sha256").update(bytes).digest("hex") !== evidence.sha256) invalid("Saved sheet bytes are corrupt.");
     } catch { invalid("Sheet storage verification failed."); }
   }
   // Runs in the caller's approval transaction. No nested transaction, assembly,
   // reservation or stage change is permitted here.
-  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession) {
+  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession,
+    verification?: { verifyBytes?: boolean; attempt?: VerificationAttempt }) {
     const runId = opaqueIdSchema.parse(identity.runId), versionId = opaqueIdSchema.parse(identity.versionId);
     const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
     const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
@@ -140,7 +141,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     if (!("build" in content)) invalid("Sheet assembly has no image evidence.");
     const checked = await load({ runId, draftSheetVersionId: version.sourceVersionId, imageOperationId: content.build.operationId }, session, true);
     if (checked.current._id !== versionId) conflict("Sheet approval target changed.");
-    await verifyBytes(checked.bytes);
+    if (verification?.verifyBytes !== false) await verifyBytes(checked.bytes, verification?.attempt);
   }
   async function assemble(raw: unknown) {
     const value = inputSchema.parse(raw);

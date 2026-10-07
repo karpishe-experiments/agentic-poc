@@ -135,6 +135,27 @@ Failed/stopped runtime observations are classified against the persisted claim.
 Claimed uncertain work retains its active operation for late completion and
 GET-only recovery; terminal runtime status alone does not permit replacement.
 
+The async correction sends one streaming POST per saved dispatch marker. It
+validates the start identity and durably saves the workflow run ID before returning
+accepted/running. The managed reader remains active until terminal output or the
+original ten-minute operation deadline; start acknowledgement has a 30-second
+bound. Persisted five-second observation slots limit application-key GET recovery
+to one attempt per cycle, including after restart. Unknown and expired uncertain
+work retain the single-experiment lane. Pause stops new dispatch, not observation.
+Matching terminal evidence reconciles the latest operation without replay or
+deadline extension; a terminal failure preserves any saved callback result.
+
+Callback authorization passes its freshly verified image request to context
+construction. Fixture access and pre-upload checks validate current identity and
+source approvals without downloading references. Image admission and final
+acceptance still verify complete original bytes. Independent metadata reads are
+batched, with MongoDB commands serial inside transactions. Source and immutable
+byte reuse lasts only within one verification attempt and is rebuilt on retry;
+each consumer still verifies its metadata and dependency relationship. Storage
+uses one client and checked GETs instead of equivalent HEAD/GET pairs. Sanitized
+diagnostics record IDs, phases, elapsed time, instrumented counts and outcomes.
+These contracts do not establish live callback performance or M3 acceptance.
+
 Every legacy-profile booklet has eight ordered artifact records:
 
 ```text

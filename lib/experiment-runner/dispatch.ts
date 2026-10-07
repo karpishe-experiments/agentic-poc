@@ -184,11 +184,21 @@ export function createExperimentDispatcher(deps: {
     }) });
   }
 
-  async function reconcile(run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult) {
+  async function reconcile(run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult, observed = false) {
     const identity = { runId: run._id, operationId: operation._id, parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: now() };
     const current = await repository.getOperation(operation._id);
     if (!current) return;
     const binding = bindingFor(operation, run);
+    if (result.kind === "conflict") {
+      await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+      return;
+    }
+    if (result.kind === "accepted") {
+      await repository.recordDispatchIdentity({ ...identity, workflowRunId: result.execution.id });
+      // Start identity is not terminal result evidence. Leave the existing
+      // publication/materialization gate closed until runtime GET reconciliation.
+      return;
+    }
     if (result.kind === "execution") {
       const execution = result.execution;
       if (execution.workflow_id !== binding.publishedWorkflowId || (current.workflowRunId && current.workflowRunId !== execution.id)) {
@@ -196,6 +206,14 @@ export function createExperimentDispatcher(deps: {
         return;
       }
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id });
+      if (current.state === "succeeded" &&
+          (execution.status === "failed" || execution.status === "stopped")) {
+        // Retain callback output, but conflicting terminal evidence requires
+        // inspection. It is neither success nor permission to replay.
+        await repository.recordTerminalConflict({ ...identity, workflowRunId: execution.id,
+          workflowId: execution.workflow_id, status: execution.status });
+        return;
+      }
       const imageCompletion = operation.role === "image" ? runtimeImageCompletion(execution) : null;
       const completion = runtimeCompletion(execution);
       const imageClarification = operation.role === "image" && operation.taskId === "J13" && completion?.result.kind === "clarification";
@@ -237,8 +255,9 @@ export function createExperimentDispatcher(deps: {
           return;
         }
       }
-      if (operation.role !== "image" || execution.status === "succeeded") {
-        await repository.verifyDispatchPublication({ ...identity, workflowRunId: execution.id, workflowId: execution.workflow_id });
+      if (execution.status === "succeeded") {
+        await repository.verifyDispatchPublication({ ...identity, workflowRunId: execution.id, workflowId: execution.workflow_id,
+          terminalSucceeded: execution.status === "succeeded" });
       }
       if (completion) {
         if (completion.runId !== run._id || completion.operationId !== operation._id || completion.workflowRunId !== execution.id || completion.parentWorkflowRunId !== operation.parentWorkflowRunId || completion.inputFingerprint !== operation.inputFingerprint) {
@@ -258,8 +277,10 @@ export function createExperimentDispatcher(deps: {
     } else if (current.state !== "succeeded") {
       await repository.recordDispatchOutcome({ ...identity, category: result.kind === "rejected" ? "observed_failure" : "unknown_outcome" });
     } else if (!current.verifiedWorkflowId) {
+      if (observed) return;
+      if (!current.workflowRunId || !await repository.beginObservation(current._id, now())) return;
       const recovered = current.workflowRunId ? await runtime.retrieve(binding, current.workflowRunId) : { kind: "unknown" as const };
-      if (recovered.kind === "execution") await reconcile(run, current, recovered);
+      if (recovered.kind === "execution") await reconcile(run, current, recovered, true);
       else await repository.blockRun({ runId: run._id, category: "unknown_outcome", nowMs: now() });
       return;
     }
@@ -325,17 +346,23 @@ export function createExperimentDispatcher(deps: {
       if (operation?.dispatchStartedAtMs != null) {
         const binding = bindingFor(operation, run);
         // A retained ID is the only read-back path. Never POST after the marker.
-        await reconcile(run, operation, operation.workflowRunId ? await runtime.retrieve(binding, operation.workflowRunId) : { kind: "unknown" });
+        if (operation.workflowRunId) {
+          if (!await repository.beginObservation(operation._id, now())) return "waiting";
+          await reconcile(run, operation, await runtime.retrieve(binding, operation.workflowRunId), true);
+        } else {
+          await reconcile(run, operation, { kind: "unknown" });
+        }
         return "waiting";
       }
-      if (run.pauseRequested || run.status === "paused") return "waiting";
-      if (run.status === "blocked") return "blocked";
+      if (operation && (run.pauseRequested || run.status === "paused")) return "waiting";
+      if (run.status === "blocked" && (operation || run.safeFailure !== "unknown_outcome")) return "blocked";
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
         const latest = (await repository.listOperations(runId)).at(-1);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
           const binding = bindingFor(latest, run);
-          await reconcile(run, latest, latest.workflowRunId ? await runtime.retrieve(binding, latest.workflowRunId) : { kind: "unknown" });
+          if (latest.workflowRunId && !await repository.beginObservation(latest._id, now())) return "waiting";
+          await reconcile(run, latest, latest.workflowRunId ? await runtime.retrieve(binding, latest.workflowRunId) : { kind: "unknown" }, true);
           run = (await repository.getRun(runId))!;
           if (run.status === "blocked") return "blocked";
           if (!(await repository.getOperation(latest._id))?.verifiedWorkflowId) return "waiting";
@@ -345,6 +372,7 @@ export function createExperimentDispatcher(deps: {
           run = (await repository.getRun(runId))!;
           if (run.status === "blocked") return "blocked";
         }
+        if (run.pauseRequested || run.status === "paused") return "waiting";
         const view = await context.getRunView(runId);
         if (!view || !view.nextNarrativeTask) return "waiting";
         let evaluationRole: "tester" | "judge" | null = null;
@@ -469,26 +497,57 @@ export function createExperimentDispatcher(deps: {
       const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
-      await reconcile(run, operation, await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated",
-        ...(referenceFileIds ? { referenceFileIds } : {}) }));
+      const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated",
+        ...(referenceFileIds ? { referenceFileIds } : {}) }, {
+        deadlineAtMs: operation.deadlineAtMs ?? operation.dispatchStartedAtMs! + 600_000,
+        onStarted: async (execution) => {
+          // Persist identity before returning to the dispatcher. Callback-first
+          // claims remain valid only when both paths identify the same run.
+          const identity = { runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now(), workflowRunId: execution.id };
+          try { await repository.recordDispatchIdentity(identity); }
+          catch (error) {
+            if (error instanceof ExperimentRepositoryError && error.code === "conflict") {
+              await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+            }
+            throw error;
+          }
+        },
+        onTerminal: async (terminal) => {
+          if (terminal.kind === "conflict") {
+            await mutate(() => repository.blockRun({ runId, category: "definite_failure", nowMs: now() }));
+          } else {
+            // Wake observation; never accept a stream's outputs directly and
+            // never create a replacement POST when the reader is lost.
+            await repository.requestObservation(operation!._id);
+          }
+        },
+      });
+      if ((await repository.getRun(runId))?.safeFailure === "definite_failure") return "blocked";
+      await reconcile(run, operation, result);
       return "advanced";
     });
   }
 
   async function cycle() {
     const runs = (await repository.listRuns()).reverse();
+    async function unresolved(run: ExperimentRunDocument) {
+      const operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) :
+        (await repository.listOperations(run._id)).at(-1);
+      return operation?.dispatchStartedAtMs != null &&
+        (run.activeOperationId === operation._id || operation.state === "succeeded" && !operation.verifiedWorkflowId)
+        ? operation : null;
+    }
     // Reconcile retained workflow IDs before admitting another persona's POST.
     for (const run of runs) {
-      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") continue;
-      if (!run.activeOperationId) continue;
-      const operation = await repository.getOperation(run.activeOperationId);
-      if (!operation?.workflowRunId || operation.dispatchStartedAtMs == null ||
-          now() >= (operation.deadlineAtMs ?? operation.dispatchStartedAtMs + 600_000)) continue;
+      const operation = await unresolved(run);
+      if (!operation) continue;
+      // Unresolved work retains the single-experiment lane even after expiry,
+      // without an ID, or after a conflicting publication. Never admit a new
+      // persona merely because the old observation deadline elapsed.
+      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") return "waiting" as const;
       await advance(run._id);
       const currentRun = await repository.getRun(run._id);
-      const current = currentRun?.activeOperationId ? await repository.getOperation(currentRun.activeOperationId) : null;
-      if (current?.workflowRunId && current.dispatchStartedAtMs != null &&
-          now() < (current.deadlineAtMs ?? current.dispatchStartedAtMs + 600_000)) return "waiting" as const;
+      if (currentRun && await unresolved(currentRun)) return "waiting" as const;
     }
     for (const run of runs) {
       if (run.status === "completed" || run.status === "failed" || (run.status === "paused" && !run.activeOperationId)) continue;

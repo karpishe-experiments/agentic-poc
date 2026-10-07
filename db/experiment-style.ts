@@ -9,6 +9,7 @@ import { experimentImageRequestSchema, imageRequestFingerprint } from "@/lib/con
 import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { styleSampleRequests, type StyleSampleSources } from "@/lib/experiment-runner/reference-requests";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftStyleVersionId: opaqueIdSchema,
   sampleOperationIds: z.array(opaqueIdSchema).length(2).refine((ids) => new Set(ids).size === 2) });
@@ -32,14 +33,16 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     const options = { session };
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Style run was not found.");
-    // Managers retain null taskId; only the exact active, publication-verified
-    // unknown operation may read J11/J12 sources during GET recovery.
+    // The original authenticated callback can precede terminal publication GET.
+    // Only the exact dispatched unknown claim may read its current sources;
+    // completed source images and subsequent dispatch still require publication.
     const recovered = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
-        workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
-        $or: [{ role: "specialist", taskId: "J11" },
-          { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" }, { role: "tester" },
+        mode: "simulated", providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+        $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
+          { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
+          { role: "tester", taskId: null, subjectKind: "book", subjectId: run.bookletId },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
     // The original image callback can arrive before publication GET readback.
@@ -62,9 +65,10 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     if (current._id === draft._id ? artifact.state !== "draft" : current.sourceVersionId !== draft._id || current.createdBy !== "application") conflict("Style draft is no longer the assembly target.");
     const proposal = parseReferenceProposal("J08", "proposal", json(draft.contentJson)).content;
     const versions: string[] = [];
+    const narrativeSources = await database.collections.artifacts.find({ bookletId: run.bookletId,
+      experimentRunId: run._id, taskId: { $in: [...tasks] }, subjectKind: "book", subjectId: run.bookletId }, options).toArray();
     for (const taskId of tasks) {
-      const sources = await database.collections.artifacts.find({ bookletId: run.bookletId,
-        experimentRunId: run._id, taskId, subjectKind: "book", subjectId: run.bookletId }, options).toArray();
+      const sources = narrativeSources.filter((source) => source.taskId === taskId);
       if (sources.length !== 1 || sources[0].state !== "approved" || !sources[0].currentVersionId) conflict("Style narrative sources are not current and approved.");
       versions.push(sources[0].currentVersionId);
     }
@@ -111,7 +115,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         prompt: request.prompt, stylePromptModuleHash: proposal.stylePromptModuleHash,
         operationId: operation._id, assetId: asset._id, sourceVersionIds: request.sourceVersionIds,
       } });
-      assets.push({ uri: asset.uri, sha256: metadata.sha256, byteLength: metadata.byteLength });
+      assets.push({ assetId: asset._id, uri: asset.uri, sha256: metadata.sha256, byteLength: metadata.byteLength });
     }
     const assembled = parseReferenceProposal("J08", "assembled", { ...definition, draftStyleVersionId: draft._id, samples });
     if (current._id !== draft._id) {
@@ -156,7 +160,8 @@ export function createExperimentStyleAssembly(input: { database: Database; store
       return { reused: false, version };
     });
   }
-  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession) {
+  async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession,
+    verification?: { verifyBytes?: boolean; attempt?: VerificationAttempt }) {
     const version = await database.collections.artifact_versions.findOne({ _id: opaqueIdSchema.parse(identity.versionId) }, { session });
     const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
     if (!version || !artifact || artifact.currentVersionId !== version._id || artifact.taskId !== "J08" ||
@@ -165,10 +170,10 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     const checked = await load({ runId: opaqueIdSchema.parse(identity.runId), draftStyleVersionId: version.sourceVersionId,
       sampleOperationIds: content.samples.map((sample) => sample.build.operationId) }, session, true);
     if (checked.current._id !== version._id) conflict("Style approval target changed.");
+    if (verification?.verifyBytes === false) return;
     for (const asset of checked.assets) {
       try {
-        if (!await store.exists(asset.uri)) invalid("Saved style sample bytes are missing.");
-        const bytes = await store.get(asset.uri);
+        const bytes = verification?.attempt ? await verification.attempt.read(asset) : await store.get(asset.uri);
         if (bytes.byteLength !== asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) invalid("Saved style sample bytes are corrupt.");
       } catch { invalid("Style sample storage verification failed."); }
     }

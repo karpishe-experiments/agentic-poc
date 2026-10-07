@@ -53,7 +53,9 @@ describe("J13 fixture and original-image storage source checks", () => {
     if (!saved.asset) throw new Error("Completed image has no saved asset.");
     expect(saved.asset.kind).toBe("page_source");
     expect(await env.store.get(saved.asset.uri)).toEqual(env.content);
-    expect(verifySources).toHaveBeenCalledTimes(3);
+    expect(verifySources).toHaveBeenCalledTimes(4);
+    expect(verifySources.mock.calls.slice(0, 3).every((call) => call[5]?.verifyBytes === false)).toBe(true);
+    expect(verifySources.mock.calls[3]?.[5]?.verifyBytes).toBe(true);
     expect(verifySources.mock.calls.every((call) => call[4] === env.store)).toBe(true);
     expect((await env.storage.complete({ identity: env.identity, content: env.content })).reused).toBe(true);
     expect(await env.database.collections.assets.countDocuments({ _id: env.operationId })).toBe(1);
