@@ -43,7 +43,7 @@ async function setup(persona: Persona = "playful_kid") {
     retrieve: vi.fn<WorkflowRuntime["retrieve"]>(async (_binding, id) => saved.has(id) ? { kind: "execution", execution: saved.get(id)! } : { kind: "unknown" }),
   };
   const dispatcher = () => createExperimentDispatcher({ database, config, runtime, mutate: async (fn) => fn(), now: () => clock++ });
-  return { database, repository, context, runId, runtime, dispatcher, next: () => clock++ };
+  return { database, repository, context, runId, runtime, dispatcher, next: () => clock++, elapse: (milliseconds: number) => { clock += milliseconds; } };
 }
 
 describe("sequential simulated dispatch and read-only recovery", () => {
@@ -152,6 +152,11 @@ describe("sequential simulated dispatch and read-only recovery", () => {
 
     firstExecution = { ...firstExecution!, status: "succeeded", outputs: { booklet_result: JSON.stringify(firstEnvelope!) } };
     await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    expect(env.runtime.start).toHaveBeenCalledTimes(1);
+    env.elapse(5_000);
+    await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(2);
     expect(env.runtime.start).toHaveBeenCalledTimes(2);
     expect(vi.mocked(env.runtime.start).mock.calls[1][1].runId).toBe(secondRunId);
   });
@@ -175,7 +180,7 @@ describe("sequential simulated dispatch and read-only recovery", () => {
     expect((await second.repository.getRun(second.runId))?.status).toBe("blocked");
     expect((await second.repository.listOperations(second.runId))[0].state).toBe("succeeded");
   });
-  it("does not poll a definite blocker or an expired unknown blocker with a started operation", async () => {
+  it("does not poll a definite publication blocker or dispatch another persona", async () => {
     const env = await setup();
     env.runtime.start = vi.fn<WorkflowRuntime["start"]>(async (_binding, input) => {
       const workflowRunId = randomUUID();
@@ -190,9 +195,26 @@ describe("sequential simulated dispatch and read-only recovery", () => {
     await env.dispatcher().cycle();
     expect(env.runtime.retrieve).not.toHaveBeenCalled();
 
-    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { safeFailure: "unknown_outcome" } });
+    expect(env.runtime.start).toHaveBeenCalledTimes(1);
+  });
+  it("observes an expired unknown workflow by its original ID without releasing the persona lane", async () => {
+    const env = await setup();
+    await env.repository.createRun({ runId: randomUUID(), bookletId: randomUUID(), persona: "enthusiast_parent", mode: "simulated",
+      configuration: configurationSnapshot(config, "enthusiast_parent"), nowMs: env.next() });
+    env.runtime.start = vi.fn<WorkflowRuntime["start"]>(async (_binding, input) => {
+      await env.repository.claimOperation({ runId: env.runId, operationId: input.operationId, workflowRunId: randomUUID(),
+        parentWorkflowRunId: input.parentWorkflowRunId, nowMs: env.next() });
+      return { kind: "unknown" };
+    });
+    await env.dispatcher().advance(env.runId);
+    const run = (await env.repository.getRun(env.runId))!;
+    const operation = (await env.repository.getOperation(run.activeOperationId!))!;
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
     await env.database.collections.experiment_operations.updateOne({ _id: operation._id }, { $set: { deadlineAtMs: 0 } });
     await env.dispatcher().cycle();
-    expect(env.runtime.retrieve).not.toHaveBeenCalled();
+    expect(env.runtime.retrieve).toHaveBeenCalledExactlyOnceWith(vi.mocked(env.runtime.start).mock.calls[0][0], operation.workflowRunId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(1);
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
+    expect(await env.repository.getOperation(operation._id)).toMatchObject({ deadlineAtMs: 0, workflowRunId: operation.workflowRunId });
   });
 });

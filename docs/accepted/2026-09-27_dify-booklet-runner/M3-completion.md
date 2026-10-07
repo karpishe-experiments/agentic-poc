@@ -1340,11 +1340,11 @@ failed/stopped Dify result as a definite inspection blocker, including previousl
 unknown outcomes. The transaction requires the latest saved operation, exact run
 ID and publication; it preserves output and never replays.
 Its sixteen-case focused selection passed. Final publication review must include this
-correction. No new staging release is deployed. Read-only inspection still finds
-the previous Kid tester operation unknown. The operator has now authorized its
+correction. No new staging release is deployed. Before reconciliation, read-only
+inspection found the previous Kid tester operation unknown. The operator authorized its
 backup-protected staging reconciliation and future staging reconciliations in this
-session, with exact-record verification, retained data and no replay. Execution
-remains pending before live acceptance.
+session, with exact-record verification, retained data and no replay. This
+reconciliation is complete, as recorded below; live acceptance remains pending.
 
 [PR #158](https://github.com/karpishe-experiments/agentic-poc/pull/158) publishes the
 reviewed async candidate. CI `37613399435` passed typecheck/lint but found a late
@@ -1359,6 +1359,40 @@ regression in selected reference-byte verification. Digest/length mismatches
 remain rejected, but must retain the corrupt-byte diagnostic instead of being
 reported as unavailable storage. The attempt-scoped verifier now distinguishes
 an evidence mismatch from a storage-read failure; no verification is removed.
+
+The operator's root preview and apply passed on 2026-10-07 for tester operation
+`5b37da71-2167-4f2e-a826-9ba143373bb9` and owning run
+`0748fbca-7fec-4265-80f6-94ec0813620e`. Application-key GET confirmed that workflow
+`0a794c0e-884a-4e2d-8e49-5c338fd8cf6b` failed under the expected publication
+`dd1cf687-2c2c-45bc-9c1e-10fffa820909`, with no saved callback result. The
+exact-record transaction now retains the operation as failed and the run as a
+definite-failure blocker at revision 311, clears its active pointer and preserves
+Pause off, counters, generation evidence and saved data. No workflow was replayed.
+
+The verified backup is
+`staging-tester-reconciliation-20261007T123825Z-455054`: archive 371714 bytes,
+SHA-256 `b7e17d0af3b12687c901319ec3a11a0a7dde0e497c5bbe1869ca9ac63e26f0b3`,
+with 65 assets. The same staging release
+`7ba44bb074571986a99d7b881996e0d689895428` restarted healthy. Final read-back
+confirmed maintenance off, zero active mutations and no other active/uncertain
+work. No deployment, reset, Cloud or production change occurred. The
+[readiness register](EXECUTION.md#b-authorization-register) has no remaining
+manual action for this reconciliation. Do not repeat the repair. Uninterrupted
+successor acceptance and the async candidate release remain separate gates.
+
+CI `37616296644` passed 245 tests before a stale orchestration polling fixture
+failed. The fixture expects another observation without advancing the injected
+clock through the new five-second slot. This does not establish a runtime defect
+or a passing candidate. The operator approved the focused fixture correction on
+2026-10-07 after the implementation workflow's two-cycle stop. The fixtures now
+advance their injected clock before expecting another GET, assert no immediate
+extra GET/POST, and separately verify expired unknown recovery through its
+original ID without releasing the persona lane or extending the deadline.
+All 13 orchestration cases passed in 23.38 seconds; focused lint and standard
+typecheck in the clean candidate snapshot passed. Its 23 affected code/test inputs
+match the working candidate; ignored stale output checkouts are not inputs.
+Runtime source and limits are unchanged. Required corrected-head CI remains a
+publication gate. PR #158 remains unmerged; no async candidate is deployed.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
