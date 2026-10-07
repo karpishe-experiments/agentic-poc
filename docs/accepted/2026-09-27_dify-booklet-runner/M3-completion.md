@@ -1157,13 +1157,31 @@ cover, while the dispatcher accepted only omission or an empty array. The saved
 image operation `0213da53-31c4-4147-bf59-7914d815218c` remains succeeded; no replay
 or in-place acceptance repair occurred. Counters were 38 logical text requests,
 6 logical image requests and zero payable calls. Full completion is not proved.
-The local correction accepts null only for an empty expected-reference list;
-nonempty references still require exact ordered identities. Publication and live
-verification of this correction remain pending. Four focused integration cases
+The reviewed correction accepts null only for an empty expected-reference list;
+nonempty references still require exact ordered identities. PRs #154 and #155
+merged this correction into master and staging. Deploy `37510610960` failed
+before backup or release switching: drain retained one running generation item.
+The prior staging release remains selected. Four focused integration cases
 passed without retries (51.05 seconds): omitted/null cover output recovers without
 replay, and reversed/null required-reference output blocks without another image
 dispatch. Focused lint passed. The initial sandbox test launch failed with
 `spawn EPERM`; the same focused command passed outside the sandbox.
+
+The staging inspection identifies item `9ab7d95a-c722-4e06-bc9d-6ee2a75c070f`
+and job `575b5f2e-4637-4a63-afe6-39ee515be532` as stale bookkeeping for the
+blocked run above. Its J13 operation is succeeded, but page materialization did
+not finish. The user approved failing only these two bookkeeping records after
+a verified staging backup. Preserve the failed run, saved operation/result,
+assets, Cloud and production; do not replay generation. The retained deployment
+journal is at `draining`, with an empty backup ID. Backup, exact repair and
+deployment resume are not yet verified.
+
+The local prevention correction closes eligible running item/job bookkeeping
+inside `blockRun` only for a definite failure and exact terminal J13 evidence.
+Eight focused checks passed; focused lint and clean-candidate typecheck passed.
+The corrected unit fixture passed six checks. Independent code review passed.
+Unknown outcomes and missing evidence remain untouched. Publication and live
+verification of this prevention correction remain pending.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.

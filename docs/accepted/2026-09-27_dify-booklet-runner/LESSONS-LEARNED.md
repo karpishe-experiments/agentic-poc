@@ -256,3 +256,17 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [snapshot producer](../../../lib/experiment-runner/config.ts) and
   [configuration regression tests](../../../tests/unit/experiment-runner-config.test.ts).
 - **Promotion target:** Documentation for versioned capability configuration.
+
+### Provider completion is not job completion
+
+- **Context:** An image callback succeeds before reference read-back or page
+  materialization fails.
+- **Observation:** A succeeded J13 operation can coexist with a blocked run and
+  a stale running generation item. The deployment drain correctly refuses that
+  running bookkeeping record. Focused regression checks cover this boundary.
+- **Guidance:** Close eligible item/job bookkeeping transactionally when the
+  owning run becomes definitely blocked. Preserve provider results and assets;
+  never turn unknown evidence into a terminal result or replay it to clear drain.
+- **Evidence:** [terminal bookkeeping helper](../../../db/experiment-page-batch-failure.ts)
+  and [reference read-back regression](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+- **Promotion target:** Documentation for multi-stage external-operation jobs.
