@@ -321,6 +321,12 @@ describe("automatic saved J08 sample dispatch", () => {
     await env.dispatcher().advance(env.runId);
     expect((await env.repository.getRun(env.runId))!.status).toBe("blocked");
     expect((await env.repository.getRun(env.runId))!.safeFailure).toBe("definite_failure");
+    const batchItems = await env.database.collections.generation_items.find({ status: "running" }).toArray();
+    expect(batchItems).toHaveLength(0);
+    const failedItems = await env.database.collections.generation_items.find({ status: "failed" }).toArray();
+    expect(failedItems).toHaveLength(1);
+    expect(JSON.parse(failedItems[0].errorJson!)).toMatchObject({ code: "experiment_run_blocked", runId: env.runId });
+    expect((await env.database.collections.generation_jobs.findOne({ _id: failedItems[0].jobId }))!.status).toBe("failed");
     expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
     expect(vi.mocked(env.runtime.start).mock.calls.length).toBe(before + 1);
   }, 120_000);
