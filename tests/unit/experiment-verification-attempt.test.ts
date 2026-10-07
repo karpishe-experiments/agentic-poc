@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { createVerificationAttempt, ImageEvidenceMismatch } from "@/lib/experiment-runner/verification-attempt";
 import type { AssetStore } from "@/lib/assets/asset-store";
 
 describe("transaction-attempt byte evidence", () => {
@@ -15,10 +15,17 @@ describe("transaction-attempt byte evidence", () => {
     expect(await attempt.read(evidence)).toEqual(bytes);
     expect(get).toHaveBeenCalledTimes(1);
     await expect(attempt.read({ ...evidence, byteLength: 4 })).rejects.toThrow("length");
+    await expect(attempt.read({ ...evidence, byteLength: 4 })).rejects.toBeInstanceOf(ImageEvidenceMismatch);
     await expect(attempt.read({ ...evidence, sha256: "0".repeat(64) })).rejects.toThrow("digest");
     expect(get).toHaveBeenCalledTimes(2);
     await createVerificationAttempt(store).read(evidence);
     expect(get).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not misclassify a storage failure as corrupt bytes", async () => {
+    const failure = new Error("storage unavailable");
+    const attempt = createVerificationAttempt({ get: vi.fn().mockRejectedValue(failure) } as unknown as AssetStore);
+    await expect(attempt.read({ uri: "image", sha256: "0".repeat(64), byteLength: 3 })).rejects.toBe(failure);
   });
 
   it("does not retain failed source verification or share it with another attempt", async () => {

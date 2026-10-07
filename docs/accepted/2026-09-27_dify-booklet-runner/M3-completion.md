@@ -1354,6 +1354,12 @@ only the exact dispatched, claimed Simulated text operation to read its current
 sources before terminal GET. Completed source-image publication, approvals,
 dependencies, bytes and the next-dispatch publication gate stay unchanged.
 
+CI `37614794809` passed the late-callback cases, then exposed an error-category
+regression in selected reference-byte verification. Digest/length mismatches
+remain rejected, but must retain the corrupt-byte diagnostic instead of being
+reported as unavailable storage. The attempt-scoped verifier now distinguishes
+an evidence mismatch from a storage-read failure; no verification is removed.
+
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
 page-specific approvals, reports and no PDF requirement. Typecheck/lint/focused

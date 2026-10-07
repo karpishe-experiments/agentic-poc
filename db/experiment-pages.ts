@@ -17,7 +17,7 @@ import { pageSourceRequest, withPageImageRevisions } from "@/lib/experiment-runn
 import { pageImageRevisionsSchema } from "@/lib/contracts/experiment-image";
 import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
-import { createVerificationAttempt, type VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { createVerificationAttempt, ImageEvidenceMismatch, type VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { countVerificationQuery } from "@/lib/experiment-runner/diagnostics";
 
 type Verification = { verifyBytes?: boolean; attempt?: VerificationAttempt };
@@ -352,7 +352,9 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     // and final acceptance always use the default complete byte verification.
     if (verification.verifyBytes === false) continue;
     let bytes: Uint8Array;
-    try { bytes = await attempt.read({ ...metadata, assetId: asset._id, uri: asset.uri }); } catch { return reject("J13 selected sheet bytes are unavailable."); }
+    try { bytes = await attempt.read({ ...metadata, assetId: asset._id, uri: asset.uri }); }
+    catch (error) { return reject(error instanceof ImageEvidenceMismatch
+      ? "J13 selected sheet bytes are corrupt or saved evidence differs." : "J13 selected sheet bytes are unavailable."); }
     let decoded: Awaited<ReturnType<typeof validateExperimentImage>>;
     try { decoded = await validateExperimentImage(bytes); } catch { return reject("J13 selected sheet bytes are corrupt."); }
     if (metadata.byteLength !== decoded.byteLength || metadata.sha256 !== decoded.sha256 ||
