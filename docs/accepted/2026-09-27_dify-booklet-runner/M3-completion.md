@@ -1341,8 +1341,18 @@ unknown outcomes. The transaction requires the latest saved operation, exact run
 ID and publication; it preserves output and never replays.
 Its sixteen-case focused selection passed. Final publication review must include this
 correction. No new staging release is deployed. Read-only inspection still finds
-the previous Kid tester operation unknown; exact backup-protected reconciliation
-approval is pending before live acceptance.
+the previous Kid tester operation unknown. The operator has now authorized its
+backup-protected staging reconciliation and future staging reconciliations in this
+session, with exact-record verification, retained data and no replay. Execution
+remains pending before live acceptance.
+
+[PR #158](https://github.com/karpishe-experiments/agentic-poc/pull/158) publishes the
+reviewed async candidate. CI `37613399435` passed typecheck/lint but found a late
+J11 callback regression: read-only source recovery still required terminal
+publication evidence on the current unknown operation. The correction permits
+only the exact dispatched, claimed Simulated text operation to read its current
+sources before terminal GET. Completed source-image publication, approvals,
+dependencies, bytes and the next-dispatch publication gate stay unchanged.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,

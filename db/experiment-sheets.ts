@@ -41,10 +41,10 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     const recoveredPagination = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
-        workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
-        // The manager has null taskId; this only admits read-only source
-        // verification for its exact active book operation after GET recovery.
-        $or: [{ role: "specialist", taskId: "J11" },
+        mode: "simulated", providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+        // A late authenticated callback may precede terminal publication GET.
+        // This permits source reads only, not assembly or replacement dispatch.
+        $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;

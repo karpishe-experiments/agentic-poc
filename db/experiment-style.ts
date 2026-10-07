@@ -33,14 +33,16 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     const options = { session };
     const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Style run was not found.");
-    // Managers retain null taskId; only the exact active, publication-verified
-    // unknown operation may read J11/J12 sources during GET recovery.
+    // The original authenticated callback can precede terminal publication GET.
+    // Only the exact dispatched unknown claim may read its current sources;
+    // completed source images and subsequent dispatch still require publication.
     const recovered = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
-        workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null },
-        $or: [{ role: "specialist", taskId: "J11" },
-          { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" }, { role: "tester" },
+        mode: "simulated", providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+        $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
+          { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
+          { role: "tester", taskId: null, subjectKind: "book", subjectId: run.bookletId },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
     // The original image callback can arrive before publication GET readback.

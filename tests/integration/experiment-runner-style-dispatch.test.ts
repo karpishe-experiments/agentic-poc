@@ -1350,6 +1350,7 @@ describe("automatic saved J08 sample dispatch", () => {
     const operation = (await env.repository.getOperation(run.activeOperationId!))!;
     expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
     expect(operation).toMatchObject({ role: "specialist", taskId: "J11", state: "unknown", reservationCount: 1 });
+    expect(operation.verifiedWorkflowId ?? null).toBeNull(); // start identity is not terminal publication evidence
     const starts = vi.mocked(env.runtime.start).mock.calls.length;
     expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
     expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
@@ -1360,6 +1361,7 @@ describe("automatic saved J08 sample dispatch", () => {
       workflowRunId: operation.workflowRunId!, inputFingerprint: operation.inputFingerprint, result },
       parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: env.next() });
     expect((await env.repository.getOperation(operation._id))?.state).toBe("succeeded");
+    expect((await env.repository.getOperation(operation._id))?.verifiedWorkflowId ?? null).toBeNull();
     expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
     env.faults({});
     env.elapse(5_000);
