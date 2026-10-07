@@ -2,7 +2,7 @@ import { z } from "zod";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
-import type { ArtifactDocument, ExperimentRunDocument } from "@/db/documents";
+import type { ApprovalDocument, ArtifactDocument, ArtifactVersionDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
@@ -17,6 +17,8 @@ import { configuredPageIllustrationTask, nextPageIllustrationWork } from "@/lib/
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
 import { experimentPageBatchSchema, type ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
+import type { ExperimentImageRequest } from "@/lib/contracts/experiment-image";
+import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 type NextTask = ExperimentTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
@@ -26,9 +28,8 @@ function deny(message: string): never { throw new ExperimentRepositoryError("con
 export function createExperimentContextService(database: Database, options: { store?: () => AssetStore } = {}) {
   const { experiment_runs: runs, experiment_operations: operations, experiment_delegations: delegations, artifacts, artifact_versions: versions, approvals, messages, booklets } = database.collections;
 
-  async function projectArtifact(artifact: ArtifactDocument) {
-    const rows = await versions.find({ artifactId: artifact._id }).sort({ versionNumber: 1 }).toArray();
-    const approvalRows = await approvals.find({ experimentRunId: artifact.experimentRunId, artifactVersionId: { $in: rows.map((row) => row._id) } }).toArray();
+  function projectArtifact(artifact: ArtifactDocument,
+    rows: ArtifactVersionDocument[], approvalRows: ApprovalDocument[]) {
     const approvalByVersion = new Map(approvalRows.map((row) => [row.artifactVersionId, row]));
     return {
       id: artifact._id, taskId: artifact.taskId as ExperimentTask, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId,
@@ -208,7 +209,12 @@ export function createExperimentContextService(database: Database, options: { st
       ...(configuredPageIllustrationTask(run.configurationJson) ? [{ taskId: "J13" as const, subjectKind: "page" as const }] : []),
     ] }).sort({ taskId: 1, subjectId: 1 }).toArray();
     if (new Set(artifactRows.map((row) => `${row.taskId}:${row.subjectKind}:${row.subjectId}`)).size !== artifactRows.length) deny("Run has duplicate task subject artifacts.");
-    const currentArtifacts = await Promise.all(artifactRows.map(projectArtifact));
+    const versionRows = await versions.find({ artifactId: { $in: artifactRows.map((row) => row._id) } })
+      .sort({ versionNumber: 1 }).toArray();
+    const approvalRows = await approvals.find({ experimentRunId: run._id,
+      artifactVersionId: { $in: versionRows.map((row) => row._id) } }).toArray();
+    const currentArtifacts = artifactRows.map((artifact) => projectArtifact(artifact,
+      versionRows.filter((row) => row.artifactId === artifact._id), approvalRows));
     const batchRows = configuredPageIllustrationTask(run.configurationJson) ? await database.collections.generation_jobs.find({
       bookletId: run.bookletId, jobType: "dify_pages",
     }).sort({ createdAtMs: -1, _id: -1 }).toArray() : [];
@@ -300,13 +306,18 @@ export function createExperimentContextService(database: Database, options: { st
     });
   }
 
-  async function getOperationContext(raw: unknown) {
+  async function getOperationContext(raw: unknown, claimedImageRequest?: ExperimentImageRequest) {
     const identity = contextIdentity.parse(raw);
     const run = await runs.findOne({ _id: identity.runId });
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     if (operation.role === "image") {
-      const imageRequest = await createExperimentImageRepository(database, options).authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
+      // Only the authorize handler passes fresh evidence returned by its claim.
+      // Standalone context requests perform a new current-source check.
+      if (claimedImageRequest && (imageRequestFingerprint(claimedImageRequest) !== operation.inputFingerprint ||
+          JSON.stringify(claimedImageRequest.sourceVersionIds) !== JSON.stringify(operation.dependencyVersionIds))) deny("Claimed image request differs from saved identity.");
+      const imageRequest = claimedImageRequest ?? await createExperimentImageRepository(database, options)
+        .authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
       return { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest,
         ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId) } : {}) };
     }

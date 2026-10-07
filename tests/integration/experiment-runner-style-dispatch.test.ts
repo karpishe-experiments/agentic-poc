@@ -234,9 +234,121 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
       paginationTerminal = value.paginationTerminal ?? null;
       omitImageUpload = value.omitUpload ?? false; wrongImageDigest = value.wrongDigest ?? false;
       pauseBeforeClaim = value.beforeClaim ?? false; acknowledgement = value.acknowledgement ?? "normal";
-    }, next: () => clock++ };
+    }, next: () => clock++, elapse: (ms: number) => { clock += ms; } };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it.each((["failed", "stopped"] as const).flatMap((status) =>
+    [false, true].flatMap((unknown) => (["image", "tester"] as const).map((role) => ({ status, unknown, role })))))
+  ("retains callback-completed $role output after runtime $status with unknown=$unknown", async ({ status, unknown, role }) => {
+    const env = await setup("playful_kid", 13);
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await env.database.collections.experiment_operations.updateOne({ _id: operation._id }, {
+      $set: { role, verifiedWorkflowId: null, nextObservationAtMs: null },
+    });
+    if (unknown) await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, {
+      $set: { status: "blocked", safeFailure: "unknown_outcome" },
+    });
+    const binding = env.config.bindings.find((item) => item.role === role &&
+      (role === "image" || item.persona === "playful_kid"))!;
+    await expect(env.repository.recordTerminalConflict({ runId: env.runId, operationId: operation._id,
+      workflowRunId: operation.workflowRunId!, parentWorkflowRunId: operation.parentWorkflowRunId,
+      workflowId: randomUUID(), status, nowMs: env.next() })).rejects.toThrow("Terminal conflict differs");
+    vi.mocked(env.runtime.retrieve).mockResolvedValue({ kind: "execution", execution: {
+      id: operation.workflowRunId!, workflow_id: binding.publishedWorkflowId, status, outputs: {},
+    } });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().cycle()).toBe("waiting");
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "definite_failure" });
+    expect(await env.repository.getOperation(operation._id)).toMatchObject({ state: "succeeded", resultJson: operation.resultJson });
+    await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+  });
+  it("recovers callback-completed unknown work through its saved ID and preserves Pause", async () => {
+    const env = await setup("playful_kid", 13);
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    await env.database.collections.experiment_operations.updateOne({ _id: operation._id }, {
+      $set: { verifiedWorkflowId: null, nextObservationAtMs: null, deadlineAtMs: 1 },
+    });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, {
+      $set: { status: "blocked", safeFailure: "unknown_outcome", activeOperationId: null, pauseRequested: true },
+    });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const retrieve = vi.mocked(env.runtime.retrieve).getMockImplementation()!;
+    vi.mocked(env.runtime.retrieve).mockImplementationOnce(async (binding, id) => {
+      const result = await retrieve(binding, id);
+      return result.kind === "execution" ? { kind: "execution", execution: {
+        ...result.execution, status: "running", outputs: {} } } : result;
+    });
+    await env.dispatcher().cycle();
+    expect((await env.repository.getRun(env.runId))?.safeFailure).toBe("unknown_outcome");
+    expect((await env.repository.getOperation(operation._id))?.verifiedWorkflowId).toBeNull();
+    env.elapse(5_000);
+    await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(2);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    expect((await env.repository.getOperation(operation._id))?.verifiedWorkflowId).toBeTruthy();
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "paused", safeFailure: null,
+      pauseRequested: true, activeOperationId: null });
+  });
+  it.each([false, true].flatMap((paused) => (["image", "tester"] as const).map((role) => ({ paused, role }))))("retains the callback-first lane and one GET per slot for $role when paused=$paused", async ({ paused, role }) => {
+    const env = await setup("playful_kid", 13);
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    // Recreate the persisted callback-first window without another submission.
+    await env.database.collections.experiment_operations.updateOne({ _id: operation._id }, {
+      $set: { role, verifiedWorkflowId: null, nextObservationAtMs: null },
+    });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, {
+      $set: { activeOperationId: null, status: paused ? "paused" : "queued", pauseRequested: paused },
+    });
+    const secondRunId = randomUUID();
+    await env.repository.createRun({ runId: secondRunId, bookletId: randomUUID(), persona: "enthusiast_parent",
+      mode: "simulated", configuration: configurationSnapshot(env.config, "enthusiast_parent"), nowMs: env.next() });
+    vi.mocked(env.runtime.retrieve).mockResolvedValue({ kind: "unknown" });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().cycle()).toBe("waiting");
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    expect(await env.dispatcher().cycle()).toBe("waiting");
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    env.elapse(5_000);
+    expect(await env.dispatcher().cycle()).toBe("waiting");
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(2);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    expect((await env.repository.getOperation(operation._id))?.verifiedWorkflowId).toBeNull();
+  });
+  it("persists async identity before returning and observes it after restart without another POST", async () => {
+    const env = await setup("playful_kid", 6);
+    const workflowRunId = randomUUID();
+    let operationId = "", workflowId = "";
+    vi.mocked(env.runtime.start).mockImplementationOnce(async (binding, input, options) => {
+      operationId = input.operationId; workflowId = binding.publishedWorkflowId;
+      const execution: RuntimeExecution = { id: workflowRunId, workflow_id: workflowId, status: "running" };
+      await options?.onStarted?.(execution);
+      expect((await env.repository.getOperation(operationId))?.workflowRunId).toBe(workflowRunId);
+      return { kind: "accepted", execution };
+    });
+    vi.mocked(env.runtime.retrieve).mockImplementation(async () => ({ kind: "execution", execution: {
+      id: workflowRunId, workflow_id: workflowId, status: "running" } }));
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    expect((await env.repository.getOperation(operationId))?.reservationCount).toBe(0);
+    const deadline = (await env.repository.getOperation(operationId))?.deadlineAtMs;
+    await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
+    env.elapse(5_000);
+    await env.dispatcher().cycle();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(2);
+    expect(env.runtime.start).toHaveBeenCalledTimes(1);
+    expect((await env.repository.getOperation(operationId))?.deadlineAtMs).toBe(deadline);
+    env.elapse(600_000);
+    await env.dispatcher().cycle();
+    expect((await env.repository.getRun(env.runId))?.safeFailure).toBe("unknown_outcome");
+    expect(env.runtime.start).toHaveBeenCalledTimes(1);
+  });
   it("automatically completes generation and separate reports, recovering a lost judge response without replay", async () => {
     const env = await setup("playful_kid", 18, true);
     env.faults({ lostJudge: true });
@@ -716,8 +828,23 @@ describe("automatic saved J08 sample dispatch", () => {
       expect(input.referenceFileIds ?? []).toEqual(acknowledgements.map((item) => item.uploadFileId));
     }
     expect((await env.repository.getRun(env.runId))?.counters).toMatchObject({ payableText: 0, payableImage: 0 });
+    const versionReads = vi.spyOn(env.database.collections.artifact_versions, "find");
+    const originalByteReads = vi.spyOn(env.store, "get");
+    const storageHeads = vi.spyOn(env.store, "exists");
     const completedEvidence = await withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
       (await env.repository.getRun(env.runId))!, env.store));
+    const currentIds = (await env.database.collections.artifacts.find({ experimentRunId: env.runId }).toArray())
+      .map((artifact) => artifact.currentVersionId!);
+    expect(versionReads.mock.calls.filter(([filter]) => {
+      const ids = (filter as { _id?: { $in?: string[] } })._id?.$in;
+      return ids?.length === currentIds.length && currentIds.every((id) => ids.includes(id));
+    })).toHaveLength(1);
+    versionReads.mockRestore();
+    // Each immutable original is read once per attempt. Shared references used
+    // by several pages do not add downloads, and verification needs no HEAD.
+    expect(originalByteReads).toHaveBeenCalledTimes(expected + (persona === "professional_creator" ? 6 : 5));
+    expect(storageHeads).not.toHaveBeenCalled();
+    originalByteReads.mockRestore(); storageHeads.mockRestore();
     expect(completedEvidence.finalPages).toHaveLength(expected);
     expect(completedEvidence.referenceAssetIds).toHaveLength(persona === "professional_creator" ? 6 : 5);
     expect(new Set([...completedEvidence.finalAssetIds, ...completedEvidence.referenceAssetIds]).size).toBe(persona === "playful_kid" ? 9 : persona === "enthusiast_parent" ? 11 : 15);
@@ -807,6 +934,10 @@ describe("automatic saved J08 sample dispatch", () => {
       await env.database.collections.artifacts.deleteOne({ _id: extraId });
       const draftList = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J03" });
       const version = await env.database.collections.artifact_versions.findOne({ _id: draftList!.currentVersionId! });
+      await env.database.collections.artifact_versions.updateOne({ _id: version!._id }, { $set: { artifactId: randomUUID() } });
+      await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+        (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("approval evidence");
+      await env.database.collections.artifact_versions.updateOne({ _id: version!._id }, { $set: { artifactId: version!.artifactId } });
       await env.database.collections.artifact_versions.updateOne({ _id: version!._id }, { $set: { dependencyVersionIdsJson: "[]" } });
       await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
         (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("dependency edges");
@@ -1219,6 +1350,7 @@ describe("automatic saved J08 sample dispatch", () => {
     const operation = (await env.repository.getOperation(run.activeOperationId!))!;
     expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
     expect(operation).toMatchObject({ role: "specialist", taskId: "J11", state: "unknown", reservationCount: 1 });
+    expect(operation.verifiedWorkflowId ?? null).toBeNull(); // start identity is not terminal publication evidence
     const starts = vi.mocked(env.runtime.start).mock.calls.length;
     expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
     expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
@@ -1229,8 +1361,10 @@ describe("automatic saved J08 sample dispatch", () => {
       workflowRunId: operation.workflowRunId!, inputFingerprint: operation.inputFingerprint, result },
       parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: env.next() });
     expect((await env.repository.getOperation(operation._id))?.state).toBe("succeeded");
+    expect((await env.repository.getOperation(operation._id))?.verifiedWorkflowId ?? null).toBeNull();
     expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
     env.faults({});
+    env.elapse(5_000);
     await env.dispatcher().advance(env.runId);
     expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.taskId === "J11")).toHaveLength(1);
   });
@@ -1548,6 +1682,7 @@ describe("automatic saved J08 sample dispatch", () => {
     });
     expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
     env.faults({});
+    env.elapse(5_000);
     await env.dispatcher().advance(env.runId);
     expect((await env.repository.getRun(env.runId))?.safeFailure).toBeNull();
     expect(await env.repository.getOperation(operation._id)).toMatchObject({ state: "succeeded",
@@ -1587,6 +1722,7 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(await env.dispatcher().advance(env.runId)).toBe("waiting");
     expect((await env.repository.getRun(env.runId))?.status).not.toBe("blocked");
     env.faults({});
+    env.elapse(5_000);
     for (let step = 0; step < 10; step++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
     expect(env.runtime.retrieve).toHaveBeenCalledTimes(2);
     expect((await env.context.getRunView(env.runId))?.nextNarrativeTask).toBe("slice_complete");

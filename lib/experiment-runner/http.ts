@@ -6,6 +6,7 @@ import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
 import { experimentPageBatchSchema } from "@/lib/contracts/experiment-page-batches";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
+import { diagnosticAssetStore, measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { ExperimentImageValidationError, MAX_EXPERIMENT_IMAGE_BYTES } from "@/lib/experiment-runner/image-validation";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
@@ -129,14 +130,20 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
   const mutate = deps.mutate ?? runTrackedMutation;
   const store = deps.store ?? createAssetStore;
   const admit = deps.admit ?? assertMutationsAllowed;
-  function services() { const db = database(); return { repository: createExperimentRepository(db, { store }), context: createExperimentContextService(db, { store }) }; }
+  function services() {
+    const db = database();
+    // One client for this callback, never a cross-request verification cache.
+    const callbackStore = diagnosticAssetStore(store());
+    return { repository: createExperimentRepository(db, { store: () => callbackStore }),
+      context: createExperimentContextService(db, { store: () => callbackStore }) };
+  }
   async function run(operation: () => Promise<Response>) { try { return await operation(); } catch (error) { return safeError(error); } }
   return {
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;
       const input = imageQuery(request);
       await admit();
-      await createExperimentImageRepository(database(), { store }).authorizeFixture(input);
+      await measurePhase(input, "fixture_authorization", () => createExperimentImageRepository(database(), { store }).authorizeFixture(input));
       const rgb = Buffer.from(input.inputFingerprint.slice(0, 6), "hex");
       const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: rgb[0], g: rgb[1], b: rgb[2] } } }).png().toBuffer();
       return new Response(new Uint8Array(bytes), { headers: { ...headers, "Content-Type": "image/png", "X-Content-Type-Options": "nosniff" } });
@@ -145,7 +152,8 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const denied = toolAuth(request, config()); if (denied) return denied;
       const input = imageQuery(request);
       const content = await boundedBytes(request, MAX_EXPERIMENT_IMAGE_BYTES);
-      const completed = await mutate(() => createExperimentImageStorage({ database: database(), store: store() }).complete({ identity: input, content }));
+      const completed = await measurePhase(input, "image_callback", () => mutate(() => createExperimentImageStorage({
+        database: database(), store: diagnosticAssetStore(store()) }).complete({ identity: input, content })));
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
     list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
@@ -201,13 +209,16 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       }
       if (action === "context") return data(await context.getOperationContext(body));
       if (action === "authorize") {
-        const claim = await mutate(() => repository.claimOperation({ ...body, nowMs: Date.now() }));
-        return data({ started: claim.started, reason: claim.reason ?? null, role: claim.operation.role, taskId: claim.operation.taskId, subjectKind: claim.operation.subjectKind, subjectId: claim.operation.subjectId, mode: claim.operation.mode, inputFingerprint: claim.operation.inputFingerprint, context: claim.started ? await context.getOperationContext(body) : null });
+        return measurePhase(body, "authorization", async () => {
+          const claim = await measurePhase(body, "claim", () => mutate(() => repository.claimOperation({ ...body, nowMs: Date.now() })));
+          const operationContext = claim.started ? await measurePhase(body, "context", () => context.getOperationContext(body, claim.imageRequest)) : null;
+          return data({ started: claim.started, reason: claim.reason ?? null, role: claim.operation.role, taskId: claim.operation.taskId, subjectKind: claim.operation.subjectKind, subjectId: claim.operation.subjectId, mode: claim.operation.mode, inputFingerprint: claim.operation.inputFingerprint, context: operationContext });
+        });
       }
       if (action === "result") {
         const parsed = result.parse(body);
         const envelope = resultEnvelopeSchema.parse({ runId: parsed.runId, operationId: parsed.operationId, workflowRunId: parsed.workflowRunId, inputFingerprint: parsed.inputFingerprint, result: parsed.result });
-        const completed = await mutate(() => repository.completeOperation({ envelope, parentWorkflowRunId: parsed.parentWorkflowRunId, nowMs: Date.now() }));
+        const completed = await measurePhase(body, "result_finalization", () => mutate(() => repository.completeOperation({ envelope, parentWorkflowRunId: parsed.parentWorkflowRunId, nowMs: Date.now() })));
         return data({ reused: completed.reused, state: completed.operation.state, materialization: resultSummary(completed.operation.materializationJson) });
       }
       const parsed = failure.parse(body);

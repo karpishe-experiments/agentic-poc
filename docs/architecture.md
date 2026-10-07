@@ -292,7 +292,12 @@ Live full-booklet acceptance is still incomplete; the candidate is not ready for
 publication.
 The read-only generation verifier derives completion evidence from the current
 run revision, exact approved artifact sets, dependency edges and retained image
-bytes. It does not change run status. The pure advisory report contract checks
+bytes. It does not change run status. Verification loads current version,
+approval and dependency evidence with batched, serial transaction
+reads. Each page assembly verifier checks its sources and bytes once in the
+completion walk; completion does not repeat that same page-source walk first.
+These changes do not cache verification across transactions or relax validity.
+The pure advisory report contract checks
 run/configuration/version identity, finding targets and explicit missing evidence.
 Visual assessment requires every final page and cover; monetary availability
 must match actual, estimated or absent cost evidence. Independent judge
@@ -402,12 +407,37 @@ legacy initialization and execution.
 
 `lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
-application-key transport. A transactional dispatch marker precedes each single
-POST. Callback authorization reserves once. A retained workflow-run ID permits
-GET-only recovery; unknown work without an ID blocks instead of replaying.
+application-key transport. A transactional dispatch marker and ten-minute
+deadline precede each single streaming POST. The transport validates
+`workflow_started`, validates publication and awaits durable run-ID persistence, then returns
+accepted/running while retaining the stream reader until completion or deadline.
+Connection/start acknowledgement is bounded to 30 seconds. Callback authorization
+reserves once without extending the original deadline. A persisted five-second
+observation slot bounds application-key GET recovery to one attempt per cycle,
+including after restart; there is no nested transport retry loop. Unknown work
+with a completed callback remains observable until terminal evidence. A matching
+terminal success clears only its latest operation's unknown blocker and preserves
+Pause. A matching terminal failure creates an inspection blocker without changing
+the callback result or permitting replay.
+Unknown work without an ID and expired uncertain work retain the single-experiment lane instead
+of permitting another POST or persona. No external queue or service is added.
 Published workflow identities and the saved configuration snapshot must match.
 Three unchanged progress observations block the run. Pause prevents admission
 but does not cancel in-flight work; an authorized result can still be stored.
+
+Callback authorization returns its fresh verified image request to context
+construction without repeating the same source walk. Synthetic fixture access and
+pre-upload checks verify active identity, fingerprint and current source/approval
+lineage without reference downloads; image admission and final acceptance retain
+complete original-byte verification. Evaluation batches independent artifact
+metadata reads. Shared source and byte evidence lasts only within the current
+read-only transaction attempt and is recreated on retry; consumers still check
+their own expected metadata and dependency relationship. Callback storage uses
+one client and checked GETs instead of redundant HEAD/GET pairs where equivalent.
+Sanitized phase diagnostics report IDs, timing, instrumented query/storage counts
+and outcome, never credentials or creative content. These local changes do not
+establish deployed callback latency; live proof is required by
+[M3](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#latency-and-asynchronous-completion-correction).
 
 With the runner enabled, `/experiments/booklet-runs` shows saved work through the configured slice,
 warnings, exact version approvals, limits and Pause/Resume. Only Simulated runs

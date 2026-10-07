@@ -48,9 +48,10 @@ describe("booklet runner HTTP persistence", () => {
     const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
     const repository = createExperimentRepository(database);
     const [runId, bookletId, operationId, workflowRunId] = ids;
-    await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs: 1 });
-    await repository.prepareOperation({ operationId, runId, expectedRevision: 0, role: "manager", taskId: null, subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: 2 });
-    await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: 3 });
+    const nowMs = Date.now();
+    await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs });
+    await repository.prepareOperation({ operationId, runId, expectedRevision: 0, role: "manager", taskId: null, subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: nowMs + 1 });
+    await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: nowMs + 2 });
     const http = createBookletRunnerHttp({ database: () => database, config: () => config, mutate: async (operation) => {
       const claimed = await operation();
       await repository.pause({ runId, expectedRevision: (await repository.getRun(runId))!.revision, nowMs: Date.now() });
@@ -65,9 +66,10 @@ describe("booklet runner HTTP persistence", () => {
     const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
     const repository = createExperimentRepository(database);
     const runId = ids[0]; const bookletId = ids[1]; const operationId = ids[2]; const workflowRunId = ids[3];
-    await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs: 1 });
-    await repository.prepareOperation({ operationId, runId, expectedRevision: 0, role: "manager", taskId: null, subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: 2 });
-    await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: 3 });
+    const nowMs = Date.now();
+    await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs });
+    await repository.prepareOperation({ operationId, runId, expectedRevision: 0, role: "manager", taskId: null, subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: nowMs + 1 });
+    await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: nowMs + 2 });
     const http = createBookletRunnerHttp({ database: () => database, config: () => config, mutate: (operation) => operation() });
     const identity = { runId, operationId, workflowRunId, parentWorkflowRunId: null };
     const callback = (action: "authorize" | "result", body: unknown) => http.tool(new Request(`http://localhost:3000/${action}`, { method: "POST", headers: { "x-booklet-tool-key": "x".repeat(32) }, body: JSON.stringify(body) }), action);

@@ -1173,15 +1173,100 @@ blocked run above. Its J13 operation is succeeded, but page materialization did
 not finish. The user approved failing only these two bookkeeping records after
 a verified staging backup. Preserve the failed run, saved operation/result,
 assets, Cloud and production; do not replay generation. The retained deployment
-journal is at `draining`, with an empty backup ID. Backup, exact repair and
-deployment resume are not yet verified.
+journal was at `draining`, with an empty backup ID. The user subsequently
+approved reconciliation of three additional historical operations and their
+owning paused runs. On 2026-10-07, runtime-key GETs proved two terminal failures
+and one successful tester execution with a mismatched saved publication.
+The exact-target repair retained successful results/materialization and recorded
+provider status, prior operation state, publication identities and backup ID in
+`maintenanceReconciliationJson`. It did not label the mismatched publication
+verified, reopen failed runs or replay generation.
+
+The operator's repair passed with verified backup
+`staging-approved-reconciliation-20261007T083649Z-4008958`: archive SHA-256
+`1256b30c03b6c96968e8784990e3b91d1e61c6295959155f7fba7a0bf1ebe2d0`,
+56 referenced assets, and the complete staging collection inventory. The normal
+maintenance-idle postcheck passed. The prior app restarted healthy and admission
+reopened with zero active mutations. Saved data, assets, Cloud and production
+were preserved. Read-only status
+[37595401356](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37595401356)
+confirmed the unchanged retained deployment target. Maintenance resume
+[37595520504](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37595520504)
+passed in 3m33s. It completed retained request `37510610960-1`, deployed staging
+`0a8ceb4a7b23ef1a0fef62a6fba29790b4acb950` with immutable image
+`sha256:772a7607f69303d46c43851cd8b4f823341953680910d9cb82151cf8f19fcbed`,
+and retained normal release backup `staging-20261007T084407Z-0adf5dd0b58a1ba4`.
+[Check 37596067024](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37596067024)
+passed in 21 seconds. The null-cover correction is deployed and healthy;
+the prevention fix and linked successor acceptance remain separate checkpoints.
 
 The local prevention correction closes eligible running item/job bookkeeping
 inside `blockRun` only for a definite failure and exact terminal J13 evidence.
 Eight focused checks passed; focused lint and clean-candidate typecheck passed.
 The corrected unit fixture passed six checks. Independent code review passed.
-Unknown outcomes and missing evidence remain untouched. Publication and live
-verification of this prevention correction remain pending.
+Unknown outcomes and missing evidence remain untouched. Frozen publication
+validation passed 108 files/822 tests, full lint, clean-candidate typecheck and
+12 agent fixtures. Two consecutive independent publication reviews passed.
+[PR #156](https://github.com/karpishe-experiments/agentic-poc/pull/156) merged as
+`e6c2880a2b60954c44fb5482b3fa5aabee744b3b` after
+[Validate 37591306685](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37591306685)
+passed in 8m12s. The same issue branch is refreshed and pushed. This prevention
+fix subsequently deployed to staging through the selective five-file carry in
+[PR #157](https://github.com/karpishe-experiments/agentic-poc/pull/157).
+[Validate 37596807036](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37596807036)
+passed in 9m43s. Release `7ba44bb074571986a99d7b881996e0d689895428` passed
+[Deploy 37598051484](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37598051484)
+in 7m34s and
+[Check 37598968090](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37598968090).
+The deployment retained backup `staging-20261007T090930Z-88ccce34fab4bb73`
+and immutable image
+`sha256:0d2f9a51e33a3bec93d0c75533bc44c00c20b438b5ad1b579aab4467fea63972`.
+Read-only Community MCP checks matched all eighteen retained publication IDs
+and graph hashes; none has a Workflow Tool binding. No configuration changed.
+One browser submission created linked Simulated Kid successor
+`0748fbca-7fec-4265-80f6-94ec0813620e`, booklet
+`8e75243d-44fa-4268-8af1-3eb2e2ef5923`, from failed predecessor
+`743163ae-d179-49de-82d7-382fa8bd1941`. Its first saved tester decision grants
+J01–J13, with zero payable calls. Full successor completion and the Parent/Creator
+campaign remain unverified; the failed predecessor remains retained.
+
+The successor subsequently saved and approved its cover and all three story
+pages. Generation verification completed with 46/120 logical text requests,
+9/12 logical image requests and zero payable calls. Evaluation remains pending.
+Tester operation `5b37da71-2167-4f2e-a826-9ba143373bb9` is retained as an unknown
+Booklet outcome. Read-only Community MCP inspection of Dify run
+`0a794c0e-884a-4e2d-8e49-5c338fd8cf6b` confirmed a terminal failure at
+`authorize` ("Reserve once in Booklet"): the read operation timed out after
+30.021055 seconds. The identity node passed; no feedback simulation node ran;
+Dify reported zero tokens. No replay or in-place acceptance repair occurred.
+The authorization endpoint also constructs evaluation context and performs full
+generation verification. Repeated source and byte verification in that path is
+a performance hypothesis, not yet a measured cause. Inspect that path before
+choosing a correction; retain all validity and approval checks.
+
+The local correction batches current version, approval and dependency-edge reads
+into three serial transaction commands. It retains exact artifact ownership,
+run/booklet approval scope and dependency membership checks. Completion also
+uses the page assembly verifier's existing source checks rather than repeating
+the same source walk immediately before that verifier. Image byte verification
+is unchanged. The initial batching candidate passed three focused persona cases
+(76 skipped, 110.40 seconds), focused lint and independent read-only review.
+The final duplicate-walk candidate passed the same three persona cases
+(76 skipped, 138.98 seconds), standard typecheck in a clean candidate snapshot,
+focused lint and whitespace checks. Those timings include whole local simulated
+journeys and are not a callback latency benchmark. Publication-wide checks and
+final independent reviews remain pending. Neither correction is deployed; live
+latency and full completion remain unverified. No request timeout or automatic
+retry setting changed.
+
+Read-only node timings for this successor's successful Page 1 image workflow
+`132cc880-58bd-4dea-b435-1ce3865b43e7` locate most of its 51.71818 seconds in
+Booklet HTTP calls: authorization 16.516749 seconds, fixture download 8.054455
+seconds and binary upload 26.108658 seconds. The identity, preparation and
+acknowledgement code nodes each took less than 0.2 seconds. This trace does not
+support attributing that page's latency to fake image generation or sandbox code.
+The current completion correction targets evaluation checks; it does not claim
+to resolve those separate image callback costs.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.
@@ -1194,6 +1279,129 @@ fixtures; this does not prove live Dify completion. Standard typecheck passed in
 clean main and staging candidate worktrees; focused lint passed. The root checkout
 typecheck was contaminated by temporary worktree sources and stale Next.js types,
 so it is not reported as a pass.
+
+## Latency and asynchronous completion correction
+
+Complete this correction before the next M3 acceptance campaign. The approved
+scope is callbacks, the existing transport and dispatcher, and additive operation
+observation fields. Do not add a queue, service, collection or alternate runner.
+Public callback contracts, request limits, publication checks and single-persona
+sequencing stay unchanged. No paid call, reset or production change is authorized.
+
+| Checkpoint | Decision and verification | Exit evidence |
+| --- | --- | --- |
+| Optimize measured callbacks | Time authorization, claim, context, source checks, decode, storage and finalization using sanitized run/operation IDs and counts. Batch independent metadata reads; keep MongoDB transaction commands serial. Reuse source evidence and immutable bytes only within one transaction attempt, keyed by identity and digest. Rebuild evidence on retry. Return the verified image request from the claim instead of repeating its source walk. Synthetic fixture access validates current claim, fingerprint, sources and approvals without downloading references. Reject invalid upload identity/lease before decode or storage; retain exclusive writes, original-byte readback and full source bytes at final acceptance. | Focused stale-source, ownership, claim, corrupt-byte and callback regression checks; bounded query/storage counts. Compare Dify node timing with server spans. Inspect transaction retry, storage latency and connection reuse before assigning remaining delay to a cause. |
+| Observe asynchronous execution | Submit exactly one streaming POST. Parse bounded SSE, including chunk splits, multiple events, CRLF and comments; reject malformed events. Validate the workflow run/publication identity at `workflow_started` and durably save the run ID, including matching callback-first claims. Return accepted/running, not success. Terminal GET evidence gates publication acceptance. Retain a managed reader until terminal output or the original deadline. Reconcile callbacks and one app-key GET per five-second observation cycle; terminal stream events can request immediate observation. Never repeat POST automatically. | Model-free execution lasting more than 30 seconds; early saved ID; stream-loss and restart recovery of that same operation without another submission. Local mocks do not meet this live gate. |
+| Review, release and accept | Freeze one candidate; run final affected validation and two consecutive clean independent reviews, required CI and the authorized staging delivery process. Reconcile active/uncertain work before deployment. Preserve failed runs and saved assets. Check collaboration memory/health, recent OOM/restarts and Engine.IO; reuse the existing 1536 MiB correction if healthy. Start a linked Kid successor, then Parent and Creator only after success. | Kid finishes generation, tester feedback and judge assessment without repair and with zero payable calls. Healthy callback p95 must be below five seconds; none may exceed ten seconds. Record cold-start timing separately. Retain exact release/configuration/run IDs and timing evidence. |
+
+Connection/start acknowledgement remains bounded to 30 seconds. The original
+operation deadline is ten minutes for this Simulated implementation; claim,
+polling, restart and reconnection must not extend it. Dify callback timeout
+settings remain unchanged. A timeout is not proof of execution failure. Stream
+loss with a saved ID permits GET recovery; without an ID, inspect callback state
+and retain an unresolved outcome as unknown. Reconcile terminal Dify failure
+against any completed or late callback. Pause stops new work, not reconciliation.
+Expired or unidentified uncertain work retains the single-experiment lane until
+its outcome is resolved; it does not permit replacement or another persona.
+
+Use focused transport, callback and recovery tests during implementation. Cover
+delayed completion, malformed/wrong identities, duplicate callbacks, stale
+approvals, concurrent claims, source changes, corrupt/missing bytes, restart,
+deadline expiry and Pause/Resume. Use injected latency and call counts rather than
+fragile wall-clock assertions. Keep MongoDB files serial. Run one representative
+full journey while editing and all three personas at the final affected
+checkpoint. Reuse unchanged results; do not repeat the broad local suite by
+default. Required CI and live acceptance remain mandatory.
+
+Current evidence: the previous broad candidate completed with exit code 0
+(108 files/822 tests); its Windows MongoDB shutdown warning was not a failing
+exit. New async changes invalidate affected transport/recovery checks, not those
+unrelated assertions. The callback correction is local and not deployed.
+[Community check 37607695900](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37607695900)
+passed read-only service readiness and Engine.IO on 2026-10-07; it does not by
+itself prove current memory/restart/OOM observations. Live callback targets,
+long-running recovery and uninterrupted acceptance remain pending in the
+[readiness register](EXECUTION.md#b-authorization-register).
+
+The local correction now passes 53 focused transport, dispatch, image-storage
+and HTTP checks (the corrected HTTP fixture passed seven checks separately),
+sixteen focused async recovery/lane checks, and 12 agent fixtures. The affected
+completion suite passed 78 cases; its two polling-clock fixtures subsequently
+passed in the focused rerun. Earlier three-persona completion checks verified
+one GET per required image and no verification HEAD calls. Standard typecheck
+and lint pass in a clean candidate snapshot; generated local worktrees are not
+validation inputs. Publication requires two clean independent reviews and CI.
+At start acknowledgement, publication is validated but only the run ID is saved.
+Terminal GET evidence still gates publication acceptance and materialization.
+These local results do not establish the live callback performance targets.
+The final three-persona completion selection passed three cases in 89.32 seconds.
+The last correction classifies callback-completed text or image work with a
+failed/stopped Dify result as a definite inspection blocker, including previously
+unknown outcomes. The transaction requires the latest saved operation, exact run
+ID and publication; it preserves output and never replays.
+Its sixteen-case focused selection passed. Final publication review must include this
+correction. No new staging release is deployed. Before reconciliation, read-only
+inspection found the previous Kid tester operation unknown. The operator authorized its
+backup-protected staging reconciliation and future staging reconciliations in this
+session, with exact-record verification, retained data and no replay. This
+reconciliation is complete, as recorded below; live acceptance remains pending.
+
+[PR #158](https://github.com/karpishe-experiments/agentic-poc/pull/158) publishes the
+reviewed async candidate. CI `37613399435` passed typecheck/lint but found a late
+J11 callback regression: read-only source recovery still required terminal
+publication evidence on the current unknown operation. The correction permits
+only the exact dispatched, claimed Simulated text operation to read its current
+sources before terminal GET. Completed source-image publication, approvals,
+dependencies, bytes and the next-dispatch publication gate stay unchanged.
+
+CI `37614794809` passed the late-callback cases, then exposed an error-category
+regression in selected reference-byte verification. Digest/length mismatches
+remain rejected, but must retain the corrupt-byte diagnostic instead of being
+reported as unavailable storage. The attempt-scoped verifier now distinguishes
+an evidence mismatch from a storage-read failure; no verification is removed.
+
+The operator's root preview and apply passed on 2026-10-07 for tester operation
+`5b37da71-2167-4f2e-a826-9ba143373bb9` and owning run
+`0748fbca-7fec-4265-80f6-94ec0813620e`. Application-key GET confirmed that workflow
+`0a794c0e-884a-4e2d-8e49-5c338fd8cf6b` failed under the expected publication
+`dd1cf687-2c2c-45bc-9c1e-10fffa820909`, with no saved callback result. The
+exact-record transaction now retains the operation as failed and the run as a
+definite-failure blocker at revision 311, clears its active pointer and preserves
+Pause off, counters, generation evidence and saved data. No workflow was replayed.
+
+The verified backup is
+`staging-tester-reconciliation-20261007T123825Z-455054`: archive 371714 bytes,
+SHA-256 `b7e17d0af3b12687c901319ec3a11a0a7dde0e497c5bbe1869ca9ac63e26f0b3`,
+with 65 assets. The same staging release
+`7ba44bb074571986a99d7b881996e0d689895428` restarted healthy. Final read-back
+confirmed maintenance off, zero active mutations and no other active/uncertain
+work. No deployment, reset, Cloud or production change occurred. The
+[readiness register](EXECUTION.md#b-authorization-register) has no remaining
+manual action for this reconciliation. Do not repeat the repair. Uninterrupted
+successor acceptance and the async candidate release remain separate gates.
+
+CI `37616296644` passed 245 tests before a stale orchestration polling fixture
+failed. The fixture expects another observation without advancing the injected
+clock through the new five-second slot. This does not establish a runtime defect
+or a passing candidate. The operator approved the focused fixture correction on
+2026-10-07 after the implementation workflow's two-cycle stop. The fixtures now
+advance their injected clock before expecting another GET, assert no immediate
+extra GET/POST, and separately verify expired unknown recovery through its
+original ID without releasing the persona lane or extending the deadline.
+All 13 orchestration cases passed in 23.38 seconds; focused lint and standard
+typecheck in the clean candidate snapshot passed. Its 23 affected code/test inputs
+match the working candidate; ignored stale output checkouts are not inputs.
+Runtime source and limits are unchanged. Required corrected-head CI remains a
+publication gate. PR #158 remains unmerged; no async candidate is deployed.
+
+Corrected-head CI `37625019731` passed typecheck, lint, agent checks and 525 tests
+before the Pause-after-authorization HTTP fixture failed. That fixture created
+its dispatch at millisecond 3 but invoked authorization with the current wall
+clock. The preserved original deadline therefore correctly treated it as expired.
+Both HTTP authorization fixtures now create their operations on the handler's
+wall-clock timeline, without changing assertions or runtime deadlines. All three
+HTTP cases passed in 6.35 seconds with the CI fake-provider environment; focused
+lint passed. New-head CI and live acceptance remain required.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
