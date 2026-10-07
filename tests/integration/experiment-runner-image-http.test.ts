@@ -50,7 +50,7 @@ async function setup() {
 describe("experiment image HTTP callbacks", () => {
   it("authorizes through the ordinary callback, downloads and saves one fixture", async () => {
     const env = await setup();
-    await env.repository.beginDispatch({ runId: env.runId, operationId: env.operationId, parentWorkflowRunId: null, nowMs: 3 });
+    await env.repository.beginDispatch({ runId: env.runId, operationId: env.operationId, parentWorkflowRunId: null, nowMs: Date.now() });
     const identity = { runId: env.runId, operationId: env.operationId, workflowRunId: env.workflowRunId, parentWorkflowRunId: null };
     const authorize = () => env.http.tool(new Request("http://localhost:3000/api/experiments/booklet-tools/authorize", { method: "POST", headers: key, body: JSON.stringify(identity) }), "authorize");
     const authorization = await authorize();

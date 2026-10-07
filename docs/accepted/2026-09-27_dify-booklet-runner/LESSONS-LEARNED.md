@@ -222,8 +222,13 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   the outcome transaction. Retain uncertain claimed operations and their identities;
   inspect the saved result before any replacement execution. Reuse expensive source
   verification only within one transaction attempt, never across requests or retries.
+  Batch independent evidence reads while keeping Mongo transaction commands serial.
+  Avoid calling a source verifier twice when the downstream assembly verifier
+  already enforces the same sources and final bytes. Preserve ownership, approval
+  scope, dependency membership and corrupt-byte rejection in focused regressions.
 - **Evidence:** [outcome transaction](../../../db/experiment-repository.ts),
   [pagination completion](../../../db/experiment-narrative.ts), and
+  [generation verification](../../../db/experiment-completion.ts),
   [retained live failure](M3-completion.md#j11-dify-preparation-package).
 - **Promotion target:** Documentation; verify the callback and runtime recovery
   interfaces before applying this pattern to another integration.
@@ -270,3 +275,16 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [terminal bookkeeping helper](../../../db/experiment-page-batch-failure.ts)
   and [reference read-back regression](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
 - **Promotion target:** Documentation for multi-stage external-operation jobs.
+
+### Keep observation separate from submission and callback completion
+
+- **Context:** An external workflow can outlive an HTTP request or finish its
+  callback before its terminal acknowledgement reaches the application.
+- **Observation:** Focused async tests prove saved-ID recovery after restart,
+  one GET per observation slot, Pause preservation and retained lane ownership
+  after callback-first completion. No second POST is required.
+- **Guidance:** Save identity early, retain the original deadline, and reconcile
+  terminal evidence before releasing the lane. A timeout does not authorize replay.
+- **Evidence:** [transport tests](../../../tests/unit/experiment-runner-transport.test.ts)
+  and [recovery tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+- **Promotion target:** Documentation for asynchronous external-operation recovery.

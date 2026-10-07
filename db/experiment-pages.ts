@@ -17,6 +17,10 @@ import { pageSourceRequest, withPageImageRevisions } from "@/lib/experiment-runn
 import { pageImageRevisionsSchema } from "@/lib/contracts/experiment-image";
 import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
+import { createVerificationAttempt, type VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { countVerificationQuery } from "@/lib/experiment-runner/diagnostics";
+
+type Verification = { verifyBytes?: boolean; attempt?: VerificationAttempt };
 
 // Pure preparation for the existing completion transaction. The application
 // allocates page identities; a specialist's supplied pageId is discarded by
@@ -40,9 +44,11 @@ function canonical(value: unknown): string { return JSON.stringify(value, (_key,
 // Called inside each J11 admission, completion and approval transaction. This
 // read validates current identities and approval records. Sheet verification
 // also checks assembly lineage and reads original bytes without a new claim.
-export async function verifyCurrentPaginationSources(database: Database, session: ClientSession, run: ExperimentRunDocument, store: AssetStore): Promise<{
+export async function verifyCurrentPaginationSources(database: Database, session: ClientSession, run: ExperimentRunDocument, store: AssetStore,
+  verification: Verification = {}): Promise<{
   versionIds: string[]; targets: SheetTarget[]; references: Reference[]; manuscriptUnitIds: string[]; manuscriptUnits: ReturnType<typeof storedManuscriptSchema.parse>["units"];
 }> {
+  const attempt = verification.attempt ?? createVerificationAttempt(store);
   const projection: PaginationSource[] = [];
   const contents = new Map<string, unknown>();
   for (const taskId of fixedTasks) {
@@ -58,8 +64,9 @@ export async function verifyCurrentPaginationSources(database: Database, session
       state: artifact.state, currentVersionId: version._id });
     contents.set(taskId, JSON.parse(version.contentJson) as unknown);
   }
-  await createExperimentStyleAssembly({ database, store }).verifyVersion({ runId: run._id,
-    versionId: projection.find((item) => item.taskId === "J08")!.currentVersionId! }, session);
+  const styleId = projection.find((item) => item.taskId === "J08")!.currentVersionId!;
+  await attempt.once(`style:${verification.verifyBytes !== false}:${run._id}:${styleId}`, () => createExperimentStyleAssembly({ database, store })
+    .verifyVersion({ runId: run._id, versionId: styleId }, session, { ...verification, attempt }));
   const source = (taskId: "J06" | "J07" | "J08") => ({ versionId: projection.find((item) => item.taskId === taskId)!.currentVersionId!, content: contents.get(taskId) });
   const targets = referenceSheetTargets({ characters: source("J06"), locations: source("J07"), style: source("J08") });
   const references: Reference[] = [];
@@ -72,7 +79,8 @@ export async function verifyCurrentPaginationSources(database: Database, session
     const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
       artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
     if (!version || !approval || version.createdBy !== "application") reject("J11 sheet approval evidence is incomplete.");
-    await createExperimentSheetAssembly({ database, store }).verifyVersion({ runId: run._id, versionId: version._id }, session);
+    await attempt.once(`sheet:${verification.verifyBytes !== false}:${run._id}:${version._id}`, () => createExperimentSheetAssembly({ database, store })
+      .verifyVersion({ runId: run._id, versionId: version._id }, session, { ...verification, attempt }));
     const content = parseReferenceProposal(target.taskId, "assembled", JSON.parse(version.contentJson)).content;
     if (!("build" in content)) reject("J11 sheet image is missing.");
     projection.push({ bookletId: run.bookletId, runId: run._id, taskId: target.taskId, subjectKind: target.subjectKind,
@@ -105,12 +113,16 @@ export function validatePaginationRouting(layout: StoredPageLayout, sources: Awa
 // J12 reads only the selected page's sheet bytes. J11's full source set is
 // checked through saved identities, approvals and dependency edges.
 export async function verifyCurrentPageBibleSources(database: Database, session: ClientSession, run: ExperimentRunDocument,
-  pageId: string, store: AssetStore) {
+  pageId: string, store: AssetStore, verification: Verification = {}) {
+  const attempt = verification.attempt ?? createVerificationAttempt(store);
+  countVerificationQuery();
   // Batch independent reads, but keep commands serial on the transaction session.
   const books = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
     taskId: { $in: ["J11", "J05", "J08"] }, subjectKind: "book", subjectId: run.bookletId }, { session }).toArray();
   const bookIds = books.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+  countVerificationQuery();
   const bookVersions = await database.collections.artifact_versions.find({ _id: { $in: bookIds } }, { session }).toArray();
+  countVerificationQuery();
   const bookApprovals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
     artifactVersionId: { $in: bookIds }, action: "approve", scope: "artifact" }, { session }).toArray();
   const book = (taskId: "J11" | "J05" | "J08") => {
@@ -132,14 +144,18 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
   const savedDependencies = JSON.parse(layoutVersion.dependencyVersionIdsJson) as unknown;
   if (!Array.isArray(savedDependencies) || savedDependencies.some((item) => typeof item !== "string") ||
       new Set(savedDependencies).size !== savedDependencies.length) reject("J11 dependencies are malformed.");
+  countVerificationQuery();
   const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: layoutVersion._id }, { session }).toArray();
   const edgeIds = edges.map((edge) => edge.upstreamVersionId);
   if (edgeIds.length !== savedDependencies.length || new Set(edgeIds).size !== edgeIds.length ||
       !savedDependencies.every((item) => edgeIds.includes(item))) reject("J11 dependency edges differ from its saved sources.");
   if (!savedDependencies.includes(manuscriptVersion._id) || !savedDependencies.includes(styleVersion._id)) reject("J11 manuscript or style source changed.");
   const approvedUpstream = new Map<string, { taskId?: string; subjectKind?: string; subjectId?: string }>();
+  countVerificationQuery();
   const upstreamVersions = await database.collections.artifact_versions.find({ _id: { $in: savedDependencies } }, { session }).toArray();
+  countVerificationQuery();
   const upstreamArtifacts = await database.collections.artifacts.find({ _id: { $in: upstreamVersions.map((version) => version.artifactId) } }, { session }).toArray();
+  countVerificationQuery();
   const upstreamApprovals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
     artifactVersionId: { $in: savedDependencies }, action: "approve", scope: "artifact" }, { session }).toArray();
   const versionsById = new Map(upstreamVersions.map((version) => [version._id, version]));
@@ -152,7 +168,8 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
         artifact.state !== "approved" || artifact.currentVersionId !== versionId) reject("J11 has a stale or unapproved source.");
     approvedUpstream.set(versionId, artifact);
   }
-  await createExperimentStyleAssembly({ database, store }).verifyVersion({ runId: run._id, versionId: styleVersion._id }, session);
+  await attempt.once(`style:${verification.verifyBytes !== false}:${run._id}:${styleVersion._id}`, () => createExperimentStyleAssembly({ database, store })
+    .verifyVersion({ runId: run._id, versionId: styleVersion._id }, session, { ...verification, attempt }));
   const references = new Map<string, Reference>();
   for (const panel of page.panels) for (const ref of panel.sheetReferences) {
     const key = `${ref.subjectKind}:${ref.subjectId}`;
@@ -171,7 +188,8 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
     if (!version || version.createdBy !== "application") reject("J12 requires assembled sheet references.");
     const content = parseReferenceProposal(source.taskId as "J09" | "J10", "assembled", JSON.parse(version.contentJson) as unknown).content;
     if (!("build" in content) || content.build.assetId !== ref.assetId) reject("J11 page sheet asset differs from its approved version.");
-    await createExperimentSheetAssembly({ database, store }).verifyVersion({ runId: run._id, versionId: ref.artifactVersionId }, session);
+    await attempt.once(`sheet:${verification.verifyBytes !== false}:${run._id}:${ref.artifactVersionId}`, () => createExperimentSheetAssembly({ database, store })
+      .verifyVersion({ runId: run._id, versionId: ref.artifactVersionId }, session, { ...verification, attempt }));
   }
   return { layout, page, layoutVersionId: layoutVersion._id, manuscriptVersionId: manuscriptVersion._id,
     styleVersionId: styleVersion._id, versionIds: [layoutVersion._id, manuscriptVersion._id, styleVersion._id,
@@ -232,8 +250,9 @@ function imageMetadata(raw: string): StoredImageMetadata {
 // invocation rechecks the selected, currently approved J12 page and only the
 // sheet assets that its approved panel routing selects.
 export async function verifyCurrentPageIllustrationSources(database: Database, session: ClientSession,
-  run: ExperimentRunDocument, pageId: string, store: AssetStore) {
-  const sources = await verifyCurrentPageBibleSources(database, session, run, pageId, store);
+  run: ExperimentRunDocument, pageId: string, store: AssetStore, verification: Verification = {}) {
+  const attempt = verification.attempt ?? createVerificationAttempt(store);
+  const sources = await verifyCurrentPageBibleSources(database, session, run, pageId, store, { ...verification, attempt });
   const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
     taskId: "J12", subjectKind: "page", subjectId: pageId }, { session }).toArray();
   const artifact = rows.length === 1 ? rows[0] : null;
@@ -321,13 +340,19 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     width: number;
     height: number;
   }>;
+  countVerificationQuery();
+  const assets = await database.collections.assets.find({ _id: { $in: request.references.map((reference) => reference.assetId) },
+    bookletId: run.bookletId }, { session }).toArray();
   for (const reference of request.references) {
-    const asset = await database.collections.assets.findOne({ _id: reference.assetId, bookletId: run.bookletId }, { session });
+    const asset = assets.find((item) => item._id === reference.assetId);
     if (!asset) reject("J13 selected sheet asset is missing.");
     if (!asset.metadataJson) reject("Saved sheet asset metadata is missing.");
     const metadata = imageMetadata(asset.metadataJson);
+    // Fixture creation needs current lineage, not reference bytes. Admission
+    // and final acceptance always use the default complete byte verification.
+    if (verification.verifyBytes === false) continue;
     let bytes: Uint8Array;
-    try { bytes = await store.get(asset.uri); } catch { return reject("J13 selected sheet bytes are unavailable."); }
+    try { bytes = await attempt.read({ ...metadata, assetId: asset._id, uri: asset.uri }); } catch { return reject("J13 selected sheet bytes are unavailable."); }
     let decoded: Awaited<ReturnType<typeof validateExperimentImage>>;
     try { decoded = await validateExperimentImage(bytes); } catch { return reject("J13 selected sheet bytes are corrupt."); }
     if (metadata.byteLength !== decoded.byteLength || metadata.sha256 !== decoded.sha256 ||

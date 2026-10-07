@@ -18,6 +18,31 @@ async function setup() {
 }
 
 describe("experiment dispatch persistence", () => {
+  it("does not authorize a new claim at or after the original operation deadline", async () => {
+    const { repository, dispatch, claim } = await setup();
+    const sent = await repository.beginDispatch(dispatch);
+    await repository.recordDispatchIdentity(claim);
+    for (const nowMs of [sent.operation.deadlineAtMs!, sent.operation.deadlineAtMs! + 1]) {
+      expect(await repository.claimOperation({ ...claim, nowMs })).toMatchObject({ started: false, reason: "blocked" });
+    }
+    expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+    expect((await repository.getRun(runId))?.activeOperationId).toBe(operationId);
+    expect((await repository.beginDispatch(dispatch)).dispatched).toBe(false);
+  });
+  it("retains the original dispatch deadline and five-second observation slot across restart", async () => {
+    const { repository, dispatch, claim } = await setup();
+    const sent = await repository.beginDispatch(dispatch);
+    expect(sent.operation.deadlineAtMs).toBe(dispatch.nowMs + 600_000);
+    await repository.recordDispatchIdentity(claim);
+    expect(await repository.beginObservation(operationId, 10)).not.toBeNull();
+    expect(await repository.beginObservation(operationId, 11)).toBeNull();
+    expect(await repository.beginObservation(operationId, 5009)).toBeNull();
+    expect(await repository.beginObservation(operationId, 5010)).not.toBeNull();
+    const started = await repository.claimOperation({ ...claim, nowMs: 6000 });
+    expect(started.operation.deadlineAtMs).toBe(dispatch.nowMs + 600_000);
+    expect((await repository.getRun(runId))?.counters.steps).toBe(1);
+  });
+
   it("admits one concurrent dispatch and saves returned identity before claim", async () => {
     const { repository, dispatch, claim } = await setup();
     const attempts = await Promise.allSettled([repository.beginDispatch(dispatch), repository.beginDispatch(dispatch)]);

@@ -1211,8 +1211,62 @@ validation passed 108 files/822 tests, full lint, clean-candidate typecheck and
 `e6c2880a2b60954c44fb5482b3fa5aabee744b3b` after
 [Validate 37591306685](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37591306685)
 passed in 8m12s. The same issue branch is refreshed and pushed. This prevention
-fix is not yet deployed to staging; it is separate from the retained null-cover
-correction deployment being resumed.
+fix subsequently deployed to staging through the selective five-file carry in
+[PR #157](https://github.com/karpishe-experiments/agentic-poc/pull/157).
+[Validate 37596807036](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37596807036)
+passed in 9m43s. Release `7ba44bb074571986a99d7b881996e0d689895428` passed
+[Deploy 37598051484](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37598051484)
+in 7m34s and
+[Check 37598968090](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37598968090).
+The deployment retained backup `staging-20261007T090930Z-88ccce34fab4bb73`
+and immutable image
+`sha256:0d2f9a51e33a3bec93d0c75533bc44c00c20b438b5ad1b579aab4467fea63972`.
+Read-only Community MCP checks matched all eighteen retained publication IDs
+and graph hashes; none has a Workflow Tool binding. No configuration changed.
+One browser submission created linked Simulated Kid successor
+`0748fbca-7fec-4265-80f6-94ec0813620e`, booklet
+`8e75243d-44fa-4268-8af1-3eb2e2ef5923`, from failed predecessor
+`743163ae-d179-49de-82d7-382fa8bd1941`. Its first saved tester decision grants
+J01–J13, with zero payable calls. Full successor completion and the Parent/Creator
+campaign remain unverified; the failed predecessor remains retained.
+
+The successor subsequently saved and approved its cover and all three story
+pages. Generation verification completed with 46/120 logical text requests,
+9/12 logical image requests and zero payable calls. Evaluation remains pending.
+Tester operation `5b37da71-2167-4f2e-a826-9ba143373bb9` is retained as an unknown
+Booklet outcome. Read-only Community MCP inspection of Dify run
+`0a794c0e-884a-4e2d-8e49-5c338fd8cf6b` confirmed a terminal failure at
+`authorize` ("Reserve once in Booklet"): the read operation timed out after
+30.021055 seconds. The identity node passed; no feedback simulation node ran;
+Dify reported zero tokens. No replay or in-place acceptance repair occurred.
+The authorization endpoint also constructs evaluation context and performs full
+generation verification. Repeated source and byte verification in that path is
+a performance hypothesis, not yet a measured cause. Inspect that path before
+choosing a correction; retain all validity and approval checks.
+
+The local correction batches current version, approval and dependency-edge reads
+into three serial transaction commands. It retains exact artifact ownership,
+run/booklet approval scope and dependency membership checks. Completion also
+uses the page assembly verifier's existing source checks rather than repeating
+the same source walk immediately before that verifier. Image byte verification
+is unchanged. The initial batching candidate passed three focused persona cases
+(76 skipped, 110.40 seconds), focused lint and independent read-only review.
+The final duplicate-walk candidate passed the same three persona cases
+(76 skipped, 138.98 seconds), standard typecheck in a clean candidate snapshot,
+focused lint and whitespace checks. Those timings include whole local simulated
+journeys and are not a callback latency benchmark. Publication-wide checks and
+final independent reviews remain pending. Neither correction is deployed; live
+latency and full completion remain unverified. No request timeout or automatic
+retry setting changed.
+
+Read-only node timings for this successor's successful Page 1 image workflow
+`132cc880-58bd-4dea-b435-1ce3865b43e7` locate most of its 51.71818 seconds in
+Booklet HTTP calls: authorization 16.516749 seconds, fixture download 8.054455
+seconds and binary upload 26.108658 seconds. The identity, preparation and
+acknowledgement code nodes each took less than 0.2 seconds. This trace does not
+support attributing that page's latency to fake image generation or sandbox code.
+The current completion correction targets evaluation checks; it does not claim
+to resolve those separate image callback costs.
 
 The saved-output correction routes booklet inspection through
 `/experiments/booklet-runs/<runId>` and the existing authenticated detail API.
@@ -1225,6 +1279,70 @@ fixtures; this does not prove live Dify completion. Standard typecheck passed in
 clean main and staging candidate worktrees; focused lint passed. The root checkout
 typecheck was contaminated by temporary worktree sources and stale Next.js types,
 so it is not reported as a pass.
+
+## Latency and asynchronous completion correction
+
+Complete this correction before the next M3 acceptance campaign. The approved
+scope is callbacks, the existing transport and dispatcher, and additive operation
+observation fields. Do not add a queue, service, collection or alternate runner.
+Public callback contracts, request limits, publication checks and single-persona
+sequencing stay unchanged. No paid call, reset or production change is authorized.
+
+| Checkpoint | Decision and verification | Exit evidence |
+| --- | --- | --- |
+| Optimize measured callbacks | Time authorization, claim, context, source checks, decode, storage and finalization using sanitized run/operation IDs and counts. Batch independent metadata reads; keep MongoDB transaction commands serial. Reuse source evidence and immutable bytes only within one transaction attempt, keyed by identity and digest. Rebuild evidence on retry. Return the verified image request from the claim instead of repeating its source walk. Synthetic fixture access validates current claim, fingerprint, sources and approvals without downloading references. Reject invalid upload identity/lease before decode or storage; retain exclusive writes, original-byte readback and full source bytes at final acceptance. | Focused stale-source, ownership, claim, corrupt-byte and callback regression checks; bounded query/storage counts. Compare Dify node timing with server spans. Inspect transaction retry, storage latency and connection reuse before assigning remaining delay to a cause. |
+| Observe asynchronous execution | Submit exactly one streaming POST. Parse bounded SSE, including chunk splits, multiple events, CRLF and comments; reject malformed events. Validate the workflow run/publication identity at `workflow_started` and durably save the run ID, including matching callback-first claims. Return accepted/running, not success. Terminal GET evidence gates publication acceptance. Retain a managed reader until terminal output or the original deadline. Reconcile callbacks and one app-key GET per five-second observation cycle; terminal stream events can request immediate observation. Never repeat POST automatically. | Model-free execution lasting more than 30 seconds; early saved ID; stream-loss and restart recovery of that same operation without another submission. Local mocks do not meet this live gate. |
+| Review, release and accept | Freeze one candidate; run final affected validation and two consecutive clean independent reviews, required CI and the authorized staging delivery process. Reconcile active/uncertain work before deployment. Preserve failed runs and saved assets. Check collaboration memory/health, recent OOM/restarts and Engine.IO; reuse the existing 1536 MiB correction if healthy. Start a linked Kid successor, then Parent and Creator only after success. | Kid finishes generation, tester feedback and judge assessment without repair and with zero payable calls. Healthy callback p95 must be below five seconds; none may exceed ten seconds. Record cold-start timing separately. Retain exact release/configuration/run IDs and timing evidence. |
+
+Connection/start acknowledgement remains bounded to 30 seconds. The original
+operation deadline is ten minutes for this Simulated implementation; claim,
+polling, restart and reconnection must not extend it. Dify callback timeout
+settings remain unchanged. A timeout is not proof of execution failure. Stream
+loss with a saved ID permits GET recovery; without an ID, inspect callback state
+and retain an unresolved outcome as unknown. Reconcile terminal Dify failure
+against any completed or late callback. Pause stops new work, not reconciliation.
+Expired or unidentified uncertain work retains the single-experiment lane until
+its outcome is resolved; it does not permit replacement or another persona.
+
+Use focused transport, callback and recovery tests during implementation. Cover
+delayed completion, malformed/wrong identities, duplicate callbacks, stale
+approvals, concurrent claims, source changes, corrupt/missing bytes, restart,
+deadline expiry and Pause/Resume. Use injected latency and call counts rather than
+fragile wall-clock assertions. Keep MongoDB files serial. Run one representative
+full journey while editing and all three personas at the final affected
+checkpoint. Reuse unchanged results; do not repeat the broad local suite by
+default. Required CI and live acceptance remain mandatory.
+
+Current evidence: the previous broad candidate completed with exit code 0
+(108 files/822 tests); its Windows MongoDB shutdown warning was not a failing
+exit. New async changes invalidate affected transport/recovery checks, not those
+unrelated assertions. The callback correction is local and not deployed.
+[Community check 37607695900](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37607695900)
+passed read-only service readiness and Engine.IO on 2026-10-07; it does not by
+itself prove current memory/restart/OOM observations. Live callback targets,
+long-running recovery and uninterrupted acceptance remain pending in the
+[readiness register](EXECUTION.md#b-authorization-register).
+
+The local correction now passes 53 focused transport, dispatch, image-storage
+and HTTP checks (the corrected HTTP fixture passed seven checks separately),
+sixteen focused async recovery/lane checks, and 12 agent fixtures. The affected
+completion suite passed 78 cases; its two polling-clock fixtures subsequently
+passed in the focused rerun. Earlier three-persona completion checks verified
+one GET per required image and no verification HEAD calls. Standard typecheck
+and lint pass in a clean candidate snapshot; generated local worktrees are not
+validation inputs. Publication requires two clean independent reviews and CI.
+At start acknowledgement, publication is validated but only the run ID is saved.
+Terminal GET evidence still gates publication acceptance and materialization.
+These local results do not establish the live callback performance targets.
+The final three-persona completion selection passed three cases in 89.32 seconds.
+The last correction classifies callback-completed text or image work with a
+failed/stopped Dify result as a definite inspection blocker, including previously
+unknown outcomes. The transaction requires the latest saved operation, exact run
+ID and publication; it preserves output and never replays.
+Its sixteen-case focused selection passed. Final publication review must include this
+correction. No new staging release is deployed. Read-only inspection still finds
+the previous Kid tester operation unknown; exact backup-protected reconciliation
+approval is pending before live acceptance.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,

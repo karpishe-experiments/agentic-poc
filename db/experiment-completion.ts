@@ -11,9 +11,10 @@ import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment-page-illustrations";
 import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
-import { verifyCurrentPageIllustrationSources, verifyCurrentPaginationSources } from "@/db/experiment-pages";
+import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 function incomplete(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
 
@@ -22,6 +23,7 @@ function incomplete(message: string): never { throw new ExperimentRepositoryErro
 export async function verifyExperimentGeneration(database: Database, session: ClientSession,
   inputRun: ExperimentRunDocument, store: AssetStore, reportOperationId?: string,
   phase: "completion" | "context" = "completion") {
+  const attempt = createVerificationAttempt(store);
   const run = await database.collections.experiment_runs.findOne({ _id: inputRun._id }, { session });
   if (!run || run.revision !== inputRun.revision || run.configurationHash !== inputRun.configurationHash) incomplete("Generation run evidence changed before verification.");
   if (reportOperationId) {
@@ -54,15 +56,22 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   const currentVersionIds = new Set(artifacts.map((artifact) => artifact.currentVersionId!));
   const contents = new Map<string, unknown>();
   const warnings: { versionId: string; warnings: unknown }[] = [];
+  // Batch independent evidence reads. Keep commands serial on this transaction
+  // session; per-artifact queries make the evaluation callback scale with pages.
+  const versionIds = [...currentVersionIds];
+  const versions = await database.collections.artifact_versions.find({ _id: { $in: versionIds } }, { session }).toArray();
+  const approvals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    artifactVersionId: { $in: versionIds }, action: "approve", scope: "artifact" }, { session }).toArray();
+  const dependencyEdges = await database.collections.artifact_dependencies.find({ downstreamVersionId: { $in: versionIds } }, { session }).toArray();
+  const versionsById = new Map(versions.map((version) => [version._id, version]));
+  const approvedVersionIds = new Set(approvals.map((approval) => approval.artifactVersionId));
   for (const artifact of artifacts) {
-    const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId!, artifactId: artifact._id }, { session });
-    const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-      artifactVersionId: artifact.currentVersionId!, action: "approve", scope: "artifact" }, { session });
-    if (!version || !approval) incomplete("Current artifact version or approval evidence is missing.");
+    const version = versionsById.get(artifact.currentVersionId!);
+    if (!version || version.artifactId !== artifact._id || !approvedVersionIds.has(artifact.currentVersionId!)) incomplete("Current artifact version or approval evidence is missing.");
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as unknown;
     if (!Array.isArray(dependencies) || dependencies.some((id) => typeof id !== "string") ||
         new Set(dependencies).size !== dependencies.length) incomplete("Artifact dependencies are malformed.");
-    const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: version._id }, { session }).toArray();
+    const edges = dependencyEdges.filter((edge) => edge.downstreamVersionId === version._id);
     if (edges.length !== dependencies.length || new Set(edges.map((edge) => edge.upstreamVersionId)).size !== edges.length ||
         edges.some((edge) => !dependencies.includes(edge.upstreamVersionId))) incomplete("Artifact dependency edges differ from saved sources.");
     for (const dependency of dependencies as string[]) {
@@ -79,7 +88,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     const rows = artifacts.filter((artifact) => artifact.taskId === task);
     if (rows.length !== 1 || rows[0].subjectKind !== "book" || rows[0].subjectId !== run.bookletId) incomplete("Book artifact identities are ambiguous.");
   }
-  const pagination = await verifyCurrentPaginationSources(database, session, run, store);
+  const pagination = await verifyCurrentPaginationSources(database, session, run, store, { attempt });
   const sheets = artifacts.filter((artifact) => artifact.taskId === "J09" || artifact.taskId === "J10");
   if (sheets.length !== pagination.targets.length || pagination.targets.some((target) =>
       sheets.filter((artifact) => artifact.taskId === target.taskId && artifact.subjectKind === target.subjectKind &&
@@ -95,9 +104,10 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   }
   const assembly = createExperimentPageIllustrationAssembly({ database, store });
   for (const page of layout.pages) {
-    await verifyCurrentPageIllustrationSources(database, session, run, page.pageId, store);
     const artifact = artifacts.find((item) => item.taskId === "J13" && item.subjectId === page.pageId)!;
-    await assembly.verifyVersion({ runId: run._id, versionId: artifact.currentVersionId! }, session);
+    // verifyVersion loads the exact current page and checks its approved sources,
+    // reference bytes and final bytes. Do not repeat that same source walk here.
+    await assembly.verifyVersion({ runId: run._id, versionId: artifact.currentVersionId! }, session, attempt);
     const content = validateSavedPageIllustrationPackage(contents.get(artifact._id));
     finalPages.push({ pageId: page.pageId, pageIndex: page.pageIndex, versionId: artifact.currentVersionId!, assetId: content.assetId });
   }

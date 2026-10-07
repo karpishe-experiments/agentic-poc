@@ -18,6 +18,7 @@ import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits
 import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-page-illustrations";
 import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
+import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -26,12 +27,13 @@ const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z
 const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), parentWorkflowRunId: opaqueIdSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const dispatchInput = claimInput.omit({ workflowRunId: true });
-const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema });
+const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema, terminalSucceeded: z.boolean().optional() });
 const completeInput = z.strictObject({ envelope: resultEnvelopeSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const failInput = claimInput.extend({ category: z.enum(["unknown_outcome", "definite_failure"]) });
 const outcomeInput = dispatchInput.extend({ category: z.enum(["unknown_outcome", "definite_failure", "observed_failure", "paused"]) });
 const progressInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, fingerprint64: fingerprint, nowMs: time });
 const blockInput = z.strictObject({ runId: opaqueIdSchema, category: z.enum(["unknown_outcome", "definite_failure"]), nowMs: time });
+const terminalConflictInput = claimInput.extend({ workflowId: opaqueIdSchema, status: z.enum(["failed", "stopped"]) });
 
 export class ExperimentRepositoryError extends Error {
   constructor(public readonly code: "invalid_input" | "not_found" | "conflict" | "stale_revision" | "invalid_state" | "invalid_result", message: string) {
@@ -86,7 +88,7 @@ export function createExperimentRepository(database: Database, options: { store?
     operation: ExperimentOperationDocument,
     parentWorkflowRunId: string | null,
     phase: "prepare" | "dispatch" | "claim",
-  ): Promise<{ expectedTargetVersionId: string | null }> {
+  ): Promise<{ expectedTargetVersionId: string | null; imageRequest: z.infer<typeof experimentImageRequestSchema> }> {
     if (!isJ13Image(operation) || run.mode !== "simulated" || operation.mode !== "simulated" ||
         !operation.imageRequestJson || !options.store || !configuredPageIllustrationTask(run.configurationJson)) {
       throw new ExperimentRepositoryError("invalid_state", "J13 requires the enabled simulated final-page profile and retained source verification.");
@@ -102,7 +104,8 @@ export function createExperimentRepository(database: Database, options: { store?
     if (request.kind !== "page_source" || imageRequestFingerprint(request) !== operation.inputFingerprint) {
       throw new ExperimentRepositoryError("conflict", "J13 request differs from its saved fingerprint.");
     }
-    const sources = await verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId, options.store());
+    const sources = await measurePhase({ runId: run._id, operationId: operation._id }, "source_verification",
+      () => verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId, options.store!()));
     if (!sameJson(request, sources.request.request) || !sameJson(operation.dependencyVersionIds, sources.request.request.sourceVersionIds)) {
       throw new ExperimentRepositoryError("conflict", "J13 current page sources differ from its saved request.");
     }
@@ -160,7 +163,7 @@ export function createExperimentRepository(database: Database, options: { store?
     if (operation.parentWorkflowRunId !== requiredParent) {
       throw new ExperimentRepositoryError("conflict", "J13 manager parent differs from the saved operation.");
     }
-    return { expectedTargetVersionId };
+    return { expectedTargetVersionId, imageRequest: sources.request.request };
   }
 
   async function getRun(runId: string) { return runs.findOne({ _id: parse(opaqueIdSchema, runId) }); }
@@ -302,7 +305,9 @@ export function createExperimentRepository(database: Database, options: { store?
           throw new ExperimentRepositoryError("conflict", "J13 replacement target changed before dispatch.");
         }
       }
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", dispatchStartedAtMs: null }, { $set: { dispatchStartedAtMs: input.nowMs, parentWorkflowRunId: input.parentWorkflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", dispatchStartedAtMs: null }, { $set: {
+        dispatchStartedAtMs: input.nowMs, deadlineAtMs: input.nowMs + 600_000,
+        parentWorkflowRunId: input.parentWorkflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Dispatch was recorded concurrently.");
       // Touch the run in the same transaction so Pause cannot race admission.
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id, pauseRequested: false }, { $set: { updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
@@ -311,7 +316,8 @@ export function createExperimentRepository(database: Database, options: { store?
     });
   }
 
-  async function claimOperation(raw: unknown): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked"; operation: ExperimentOperationDocument }> {
+  async function claimOperation(raw: unknown): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked";
+    operation: ExperimentOperationDocument; imageRequest?: z.infer<typeof experimentImageRequestSchema> }> {
     const input = parse(claimInput, raw);
     return withMongoTransaction(database, async (session) => {
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
@@ -320,15 +326,22 @@ export function createExperimentRepository(database: Database, options: { store?
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
       if (operation.state !== "prepared") return { started: false, reason: "already_started", operation };
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
+      if (operation.deadlineAtMs != null && input.nowMs >= operation.deadlineAtMs) {
+        // An unclaimed late callback cannot admit new provider work. Keep its
+        // uncertain dispatch identity and lane for observation, not replacement.
+        return { started: false, reason: "blocked", operation };
+      }
       if (run.pauseRequested || run.status === "paused") return { started: false, reason: "paused", operation };
       if (run.status !== "queued" && run.status !== "running") return { started: false, reason: "blocked", operation };
+      let imageRequest: z.infer<typeof experimentImageRequestSchema> | undefined;
       if (operation.imageRequestJson && !isJ13Image(operation)) {
-        const imageRequest = experimentImageRequestSchema.parse(JSON.parse(operation.imageRequestJson) as unknown);
+        imageRequest = experimentImageRequestSchema.parse(JSON.parse(operation.imageRequestJson) as unknown);
         if (operation.role !== "image" || imageRequestFingerprint(imageRequest) !== operation.inputFingerprint) throw new ExperimentRepositoryError("invalid_state", "Saved image request differs from its operation.");
         await assertCurrentImageSources(database, session, run, imageRequest);
       }
       if (isJ13Image(operation)) {
         const admission = await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "claim");
+        imageRequest = admission.imageRequest;
         if (operation.expectedTargetVersionId !== admission.expectedTargetVersionId) {
           throw new ExperimentRepositoryError("conflict", "J13 replacement target changed before claim.");
         }
@@ -343,11 +356,13 @@ export function createExperimentRepository(database: Database, options: { store?
       const isPayable = run.mode === "real" || run.mode === "balanced" && operation.providerKind === "text";
       const counters = { ...run.counters, [logical]: run.counters[logical] + 1, steps: run.counters.steps + 1 };
       if (isPayable) counters[payable] = run.counters[payable] + 1;
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared" }, { $set: { state: "started", workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId, deadlineAtMs: input.nowMs + 600_000, reservationCount: 1, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared" }, { $set: { state: "started", workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,
+        deadlineAtMs: operation.deadlineAtMs ?? (operation.dispatchStartedAtMs ?? input.nowMs) + 600_000,
+        reservationCount: 1, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation was claimed concurrently.");
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "running", counters, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
-      return { started: true, operation: updated };
+      return { started: true, operation: updated, ...(imageRequest ? { imageRequest } : {}) };
     });
   }
 
@@ -376,6 +391,16 @@ export function createExperimentRepository(database: Database, options: { store?
       const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
       const expected = configuration.find((item) => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
       if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
+      if (input.terminalSucceeded && operation.state === "succeeded" && !run.activeOperationId &&
+          run.status === "blocked" && run.safeFailure === "unknown_outcome") {
+        const latest = await operations.findOne({ runId: run._id }, { session, sort: { createdAtMs: -1 } });
+        if (latest?._id === operation._id) {
+          await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: null,
+            status: "blocked", safeFailure: "unknown_outcome" }, { $set: {
+              status: run.pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs,
+            }, $inc: { revision: 1 } }, { session });
+        }
+      }
       if (operation.verifiedWorkflowId) return operation;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: input.workflowRunId, verifiedWorkflowId: null }, { $set: { verifiedWorkflowId: input.workflowId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Publication verification changed concurrently.");
@@ -457,6 +482,31 @@ export function createExperimentRepository(database: Database, options: { store?
     });
   }
 
+  async function recordTerminalConflict(raw: unknown): Promise<ExperimentRunDocument> {
+    const input = parse(terminalConflictInput, raw);
+    return withMongoTransaction(database, async (session) => {
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: run._id }, { session }), "Operation");
+      const latest = await operations.findOne({ runId: run._id }, { session, sort: { createdAtMs: -1 } });
+      const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
+      const binding = configuration.find((item) => item.role === operation.role && item.taskId ===
+        (operation.role === "image" ? null : operation.taskId));
+      if (run.activeOperationId || latest?._id !== operation._id || operation.state !== "succeeded" ||
+          operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId ||
+          operation.parentWorkflowRunId !== input.parentWorkflowRunId || binding?.publishedWorkflowId !== input.workflowId) {
+        throw new ExperimentRepositoryError("conflict", "Terminal conflict differs from retained callback evidence.");
+      }
+      if (run.status === "completed" || run.status === "failed") throw new ExperimentRepositoryError("invalid_state", "Terminal run cannot be blocked.");
+      if (run.status === "blocked" && run.safeFailure === "definite_failure") return run;
+      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null }, {
+        $set: { status: "blocked", safeFailure: "definite_failure", updatedAtMs: input.nowMs }, $inc: { revision: 1 },
+      }, { session, returnDocument: "after" });
+      if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed before terminal conflict.");
+      await failTerminalPageBatchItems(database, updated, session, input.nowMs);
+      return updated;
+    });
+  }
+
   async function completeOperation(raw: unknown): Promise<{ operation: ExperimentOperationDocument; reused: boolean }> {
     const input = parse(completeInput, raw);
     const { envelope } = input;
@@ -521,5 +571,19 @@ export function createExperimentRepository(database: Database, options: { store?
     });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, getOperation, listOperations };
+  async function beginObservation(operationId: string, nowMs: number) {
+    // One bounded GET per five-second cycle, including after process restart.
+    // Taking this observation slot does not alter dispatch, deadline or budgets.
+    const operation = await operations.findOneAndUpdate({ _id: opaqueIdSchema.parse(operationId),
+      dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+      $or: [{ nextObservationAtMs: { $exists: false } }, { nextObservationAtMs: null }, { nextObservationAtMs: { $lte: nowMs } }] },
+    { $set: { nextObservationAtMs: time.parse(nowMs) + 5_000 } }, { returnDocument: "after" });
+    return operation;
+  }
+  async function requestObservation(operationId: string) {
+    await operations.updateOne({ _id: opaqueIdSchema.parse(operationId), workflowRunId: { $ne: null },
+      dispatchStartedAtMs: { $ne: null } }, { $set: { nextObservationAtMs: 0 } });
+  }
+
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, beginObservation, requestObservation };
 }
