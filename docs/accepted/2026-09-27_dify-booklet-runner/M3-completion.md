@@ -1394,6 +1394,15 @@ match the working candidate; ignored stale output checkouts are not inputs.
 Runtime source and limits are unchanged. Required corrected-head CI remains a
 publication gate. PR #158 remains unmerged; no async candidate is deployed.
 
+Corrected-head CI `37625019731` passed typecheck, lint, agent checks and 525 tests
+before the Pause-after-authorization HTTP fixture failed. That fixture created
+its dispatch at millisecond 3 but invoked authorization with the current wall
+clock. The preserved original deadline therefore correctly treated it as expired.
+Both HTTP authorization fixtures now create their operations on the handler's
+wall-clock timeline, without changing assertions or runtime deadlines. All three
+HTTP cases passed in 6.35 seconds with the CI fake-provider environment; focused
+lint passed. New-head CI and live acceptance remain required.
+
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
 page-specific approvals, reports and no PDF requirement. Typecheck/lint/focused
