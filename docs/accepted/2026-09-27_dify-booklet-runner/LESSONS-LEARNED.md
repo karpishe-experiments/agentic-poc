@@ -288,3 +288,17 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [transport tests](../../../tests/unit/experiment-runner-transport.test.ts)
   and [recovery tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
 - **Promotion target:** Documentation for asynchronous external-operation recovery.
+
+### Completion acknowledgements must cover every admitted task
+
+- **Context:** A callback saves a valid manager result before constructing its
+  allowlisted response summary.
+- **Observation:** J13 was accepted by the manager and repository, but the summary
+  allowed only text-specialist task IDs. Response validation could therefore
+  return HTTP 400 after the completion transaction succeeded.
+- **Guidance:** Keep acknowledgement fields aligned with the admitted result
+  domain. Test first completion and duplicate completion at the HTTP boundary,
+  not only repository persistence. Do not relax admission checks to fix a response.
+- **Evidence:** [callback summary](../../../lib/experiment-runner/http.ts) and
+  [J13 acknowledgement regression](../../../tests/unit/experiment-runner-http.test.ts).
+- **Promotion target:** Documentation for external completion callbacks.
