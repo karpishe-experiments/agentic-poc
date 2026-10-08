@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import type { ConfigState } from "@/lib/experiment-runner/config";
+import * as repositoryModule from "@/db/experiment-repository";
+import type { Database } from "@/db/client";
+import type { AssetStore } from "@/lib/assets/asset-store";
 
 const disabled: ConfigState = { enabled: false, reason: "disabled" };
 const invalid: ConfigState = { enabled: false, reason: "invalid" };
@@ -9,6 +12,32 @@ const request = (headers: Record<string, string> = {}, body = "{}") => new Reque
 const imageUrl = "http://localhost:3000/api/experiments/booklet-tools/image?runId=00000000-0000-4000-8000-000000000001&operationId=00000000-0000-4000-8000-000000000002&workflowRunId=00000000-0000-4000-8000-000000000003&inputFingerprint=" + "a".repeat(64);
 
 describe("booklet runner HTTP boundary", () => {
+  it("acknowledges saved J13 manager delegation and duplicate completion", async () => {
+    const runId = "00000000-0000-4000-8000-000000000001";
+    const operationId = "00000000-0000-4000-8000-000000000002";
+    const workflowRunId = "00000000-0000-4000-8000-000000000003";
+    const completeOperation = vi.fn().mockResolvedValueOnce({ reused: false, operation: {
+      state: "succeeded", materializationJson: JSON.stringify({ delegatedTaskId: "J13", privateField: "not-returned" }),
+    } }).mockResolvedValueOnce({ reused: true, operation: {
+      state: "succeeded", materializationJson: JSON.stringify({ delegatedTaskId: "J13" }),
+    } });
+    const factory = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => ({ mode: "simulated" }), completeOperation,
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled,
+        database: () => ({ collections: {} } as Database), store: () => ({} as AssetStore),
+        mutate: (operation) => operation() });
+      const payload = { runId, operationId, workflowRunId, parentWorkflowRunId: null,
+        inputFingerprint: "a".repeat(64), result: { kind: "delegate", payload: { taskId: "J13", subjectKind: "page", subjectId: runId } } };
+      for (const reused of [false, true]) {
+        const response = await http.tool(request({ "x-booklet-tool-key": "x".repeat(32) }, JSON.stringify(payload)), "result");
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ data: { reused, state: "succeeded", materialization: { delegatedTaskId: "J13" } } });
+      }
+      expect(completeOperation).toHaveBeenCalledTimes(2);
+    } finally { factory.mockRestore(); }
+  });
   it("returns bounded disabled and invalid setup responses without connecting to MongoDB", async () => {
     const off = createBookletRunnerHttp({ config: () => disabled, database: () => { throw new Error("unexpected database access"); } });
     expect((await off.tool(request(), "authorize")).status).toBe(404);

@@ -1403,6 +1403,176 @@ wall-clock timeline, without changing assertions or runtime deadlines. All three
 HTTP cases passed in 6.35 seconds with the CI fake-provider environment; focused
 lint passed. New-head CI and live acceptance remain required.
 
+### Current correction checkpoint — 2026-10-07
+
+PR #158 merged the fixture and async corrections into master. PR #159 carried
+the reviewed correction into staging without importing unrelated master changes.
+Staging CI `37628407850` passed 114 files and 896 tests. Deploy
+[`37629970008`](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37629970008)
+and Check
+[`37630937592`](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37630937592)
+passed for `ad49196d9f78148c85ba186f7ba07647647382ff`. The deployment retained
+backup `staging-20261007T134203Z-48105390ec18c8ea` and selected image digest
+`a5a1db2f176b6c0d23c53d35177f5cb8422983401f3673d1561fa1942cbeb170`.
+Earlier failed-CI and undeployed-candidate statements above describe superseded
+checkpoints, not the current release.
+
+Disposable app `issue65_m3_async_recovery_probe`
+(`17fc8851-9c0c-4a85-a4b4-babb47489860`) reuses the manager graph with four
+sequential ten-second code delays after authorization. The corrected graph passed
+server-default validation with no issues and matches the independently reviewed
+node data. The browser editor changed only its connections because the pinned
+MCP draft-sync request is incompatible with Community 1.17.1. Publication
+`fe32380f-24d4-4a0f-8d6a-3a2eb77c67c7` was read back with hash
+`f90de73ff7f9ad4c92ea86077c5f9cf7306024503904c0581d8148f23253624b`.
+The operator prepared the API key privately on 2026-10-08. Separate encrypted
+temporary settings preserve the normal eighteen-binding file; validation confirms
+only the manager app, publication and key differ. Execution remains pending.
+Protected staging activation
+[`37748617266`](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37748617266)
+passed with verified backup `staging-20261008T081545Z-8874004239362335` and the
+same application image. The first probe under that binding failed as recorded
+below; it did not restart staging or prove recovery.
+The private handoff is in the
+[readiness register](EXECUTION.md#b-authorization-register).
+
+The operator's root readiness check passed on 2026-10-08. The installed manager
+app and publication match the temporary probe, with eighteen bindings. Staging
+reported maintenance off, zero active mutations, no uncertain operations, no
+runnable runs and zero running legacy work items. Collaboration reported healthy,
+1536 MiB, no OOM and zero restarts; local and public Engine.IO handshakes passed.
+This is operator-supplied host evidence, not a new Codex host inspection. It clears
+the readiness handoff only; no workflow or restart ran. The controlled recovery
+test must recheck these guards immediately before its single submission.
+
+The controlled restart helper passed eight focused offline orchestration checks,
+Bash/Python/Node syntax checks and two consecutive independent clean reviews on
+2026-10-08. Its reviewed SHA-256 is
+`B9D33A23CDE9A5C86415B325DFBB47DF587C68FB186A79909809DCD83074ED30`.
+The Windows copy-only handoff passed PowerShell parsing and independent review.
+It checks the readiness and controller hashes and copies complete Bash functions;
+it does not execute host changes. The controller requires durable Pause, the exact
+staging release/container, healthy restart and post-restart Booklet GET
+reconciliation of the unchanged operation ID and deadline. Handled failures make
+one exact-run Pause/read-back attempt; they never repeat workflow submission.
+These are local helper checks, not live recovery proof. The operator handoff and
+normal-binding restoration remain pending in the readiness register. That helper
+is superseded for execution: its publication and request identity must be updated
+for a linked successor before another submission.
+
+The operator's first probe created run
+`048c607f-87ae-4e71-87da-01f4d4b79c2c`. The tester succeeded; manager operation
+`30c890b0-4ba6-4887-90ea-a609b04713b9` failed. Its Dify run
+`fd9fa18e-c3e5-4be6-b98f-17ef2bd952a0` rejected the authorization callback with
+HTTP 401 in 0.117 seconds, but the probe then spent approximately 40.77 seconds
+in delay nodes before failing. No restart occurred. The retained run is blocked
+and paused, with no active operation and zero payable calls.
+
+The operator saved the existing callback key privately. On 2026-10-08, the probe
+was corrected to validate authorization before entering its delay chain; rejected
+or paused work bypasses the delays. Four focused graph checks and two independent
+clean reviews passed. Browser editing changed only three connections; MCP readback
+confirmed all thirteen nodes unchanged and all twelve connections matched the
+reviewed candidate. Publication `977605b6-23b8-4302-8b5d-f904d2880111` was read back;
+the corrected draft hash is
+`4e93da8bdbf44f3c9edae97666bbb464d6967a25e7b5574f6d50a415b20c8a3e`.
+The secret variable remains present. Its value was not displayed or independently
+authenticated by this graph check. No workflow ran under this new publication.
+This graph readback does not establish staging activation or live recovery.
+Activation and successor preparation are recorded below; live recovery remains
+unproven.
+
+The corrected temporary binding was prepared in a separate encrypted v3 file and
+activated by [rotation 37759093276](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37759093276).
+The rotation succeeded with verified backup
+`staging-20261008T094800Z-d0e67cb3f022820f`, retaining the same staging release and
+application image. The successor controller passed nine focused offline tests,
+Bash syntax checks, PowerShell parsing and two consecutive clean independent
+reviews. Its SHA-256 is
+`4F10C1A7AEC3FCD8DC703F4C1AE38052D23089976CF123B617401E168D04C300`;
+the matching readiness helper is
+`559104C21D7D5D5BA439DBB7727849D30C62AC4299E81337D71318CACF1C9C55`.
+It uses request `89a5bf8b-6f9b-4fe8-8438-8c7769489436`, links the failed predecessor,
+and stops promptly on definite manager failure. No successor workflow has started.
+The operator's second probe passed installed-binding, idle and collaboration
+checks and created run `329e8407-22e3-44c4-88c8-a8b44341611e`. Manager operation
+`5d4e8dc5-88bb-43e1-b776-2aca351e138b` was claimed once and durably paused. The
+controller failed before restart because JSON omitted the not-yet-set optional
+publication field and Python indexed that absent key. This is a controller defect,
+not a workflow timeout. MCP later retrieved its original Dify execution
+`45a8915b-3c8a-4c27-823b-7ca6efcc125d`: succeeded in 43.85756 seconds, zero tokens.
+This proves long-running workflow completion, not application restart recovery.
+The controller now emits null for the optional field and handles its omission;
+ten focused offline tests pass, including that regression. The previous controller
+hash is stale and must not be executed. The operator's subsequent read-only
+inspection confirmed both tester and manager operations succeeded, with saved
+results and verified publications. The run remains paused with no active operation
+and zero payable calls. This clears the saved-result inspection handoff; it does
+not prove restart recovery. Preserve this paused probe without replay or in-place
+repair.
+Recovery proof and normal-binding restoration remain pending.
+
+The corrected next one-shot controller passed ten offline orchestration tests,
+two mocked tests of its actual Node admission path, syntax checks and two
+consecutive clean independent reviews. The admission tests reject six changed
+prior-probe conditions before any POST. Controller SHA-256:
+`CC317739FD562F3572DB40EC7B5E7868D1E7F11955E2D0ACCAF2E84EBE209B80`.
+The hash-checked Windows copy helper is
+`EAB30EF88EFD0F959D1EF54B443E7BF93EED65ABBCEBFCDB5F576DA860AC5F08`.
+Request `dbb934e4-cd90-4c47-ac3b-f3dc26ff93e9` is a new one-shot identity, not a
+replay of either earlier probe. It retains the original terminal failed run as
+predecessor and verifies the second paused probe's saved result before submission.
+The same reviewed publication and staging binding remain installed; no new
+credentials or application deployment are required. The root recovery handoff
+passed in operator-supplied root output on 2026-10-08. Run
+`9b8766bd-3253-4ffc-84d8-3252323fd3de` retained manager operation
+`b8e1a0a5-ae0e-44a3-8ae3-85bc4039ff82` and Dify run
+`6a3bf4e9-62a1-4212-9cbe-aee055405198` across the staging application restart.
+The manager retained one reservation and deadline `1791454800686`; it completed
+with a saved result and verified publication after Booklet's post-restart
+observation. Dify elapsed time was 43.809128 seconds. Pause stayed saved and
+payable counters stayed zero. Container StartedAt changed from
+`2026-10-08T09:49:43.2658313Z` to `2026-10-08T10:10:10.172831962Z`.
+The operator reported PASS without controller POST replay. This establishes
+same-operation application-restart recovery; it does not complete persona
+acceptance or prove campaign callback latency. Normal-binding restoration was
+completed separately as [rotation 37761873704](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37761873704),
+with verified backup `staging-20261008T101219Z-35bbabd4a2f107f6` and unchanged
+application image. Runtime normal-binding readback and persona acceptance remain
+pending at that checkpoint. Subsequent operator readback confirmed the idle host,
+eighteen normal bindings, manager app `46572ccb-d954-45e5-b73d-90fd0995cdb6`
+and publication `7425dbd8-efc5-48a7-8fe6-687b574d740f`. Chrome control then
+read the staging runner successfully after the operator reopened it. The earlier
+client-side block's cause was not established; no protection was bypassed.
+Linked Simulated Kid successor `88a58434-be3f-4936-8f09-dd02efa29c9a`
+reached approved J12 work, then blocked at manager J13 acknowledgement, with
+predecessor `0748fbca-7fec-4265-80f6-94ec0813620e`. Retain this failed run.
+Early trace samples show manager authorization/save at 0.833/0.417 seconds,
+and first image authorization/download/upload at 0.843/0.558/3.234 seconds.
+These samples do not establish full-run callback p95 or completed acceptance.
+
+The J13 manager workflow `68d411a1-fed7-49de-bd59-ed6590db6f95` authorized
+in 2.599 seconds and received HTTP 400 from save in 3.137 seconds. This was
+not a timeout. Repository materialization emits `delegatedTaskId: "J13"`, but
+the HTTP response summary accepted only J01–J12. The candidate correction uses
+the existing thirteen-task schema for that response field; page-only admission,
+source verification and text-specialist scope are unchanged. Twelve focused HTTP
+unit tests pass, including saved J13 acknowledgement, duplicate completion and
+response-field filtering. Live correction and linked-successor acceptance remain
+pending. No credential inventory change is required: names, storage and consumers
+are unchanged.
+
+The dispatcher compares its current configuration snapshot with the saved run
+before observation. Therefore application-restart proof requires a controlled
+temporary probe-manager binding, not an isolated process with mismatched bindings.
+Drain and reconcile before changing bindings, retain the normal configuration,
+stop new probe dispatch after its single operation, recover that same operation
+without POST replay, then drain and restore/read back normal bindings before Kid
+acceptance. Do not count a paused authorization or standalone Dify execution as
+successful runner recovery. Application-restart recovery passed as recorded above;
+full-campaign callback performance, campaign-time
+collaboration health and uninterrupted Kid → Parent → Creator remain unproven.
+
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
 page-specific approvals, reports and no PDF requirement. Typecheck/lint/focused
