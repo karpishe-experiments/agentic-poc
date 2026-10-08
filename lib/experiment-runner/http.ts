@@ -13,7 +13,7 @@ import { createAssetStore } from "@/lib/assets/create-asset-store";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import sharp from "sharp";
 import { configurationSnapshot, readBookletRunnerConfig, validToolKey, type ConfigState } from "@/lib/experiment-runner/config";
-import { createRunInputSchema, specialistTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
+import { createRunInputSchema, experimentTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/deployment-control";
@@ -49,7 +49,7 @@ const materialization = z.object({
   artifactId: opaqueIdSchema.optional(), versionId: opaqueIdSchema.optional(), approvalId: opaqueIdSchema.nullable().optional(),
   questionId: opaqueIdSchema.optional(), delegationId: opaqueIdSchema.optional(), revokedDelegationId: opaqueIdSchema.optional(),
   reviewGroupId: opaqueIdSchema.nullable().optional(), approvalIds: z.array(opaqueIdSchema).optional(),
-  answeredQuestionId: opaqueIdSchema.optional(), delegatedTaskId: specialistTaskSchema.optional(),
+  answeredQuestionId: opaqueIdSchema.optional(), delegatedTaskId: experimentTaskSchema.optional(),
   warnings: z.array(z.object({ field: z.string(), message: z.string() })).optional(),
 }).strip();
 function resultSummary(json: string | null): unknown {
