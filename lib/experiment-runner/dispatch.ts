@@ -358,14 +358,17 @@ export function createExperimentDispatcher(deps: {
       if (run.status === "blocked" && (operation || run.safeFailure !== "unknown_outcome")) return "blocked";
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
-        const latest = (await repository.listOperations(runId)).at(-1);
+        let latest = (await repository.listOperations(runId)).at(-1);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
           const binding = bindingFor(latest, run);
           if (latest.workflowRunId && !await repository.beginObservation(latest._id, now())) return "waiting";
           await reconcile(run, latest, latest.workflowRunId ? await runtime.retrieve(binding, latest.workflowRunId) : { kind: "unknown" }, true);
           run = (await repository.getRun(runId))!;
           if (run.status === "blocked") return "blocked";
-          if (!(await repository.getOperation(latest._id))?.verifiedWorkflowId) return "waiting";
+          // Reconciliation persists publication evidence. Admission must use that
+          // refreshed record, not the callback-completed snapshot read above.
+          latest = (await repository.getOperation(latest._id)) ?? undefined;
+          if (!latest?.verifiedWorkflowId) return "waiting";
         }
         if (latest?.state === "succeeded" && run.progressOperationId !== latest._id) {
           await observeProgress(runId, latest);

@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Reload authorization evidence after asynchronous reconciliation
+
+- **Context:** A callback completes before terminal publication readback.
+- **Observation:** The dispatcher persisted verified publication evidence but
+  passed its earlier, unverified manager snapshot to dependent page admission.
+  The focused callback-first J13 regression failed before the reload and passed
+  afterward, with one dependent image submission and no manager replay.
+- **Guidance:** Reload the exact operation after reconciliation before dependent
+  admission. Do not weaken publication checks to accept a stale snapshot.
+- **Evidence:** [dispatcher](../../../lib/experiment-runner/dispatch.ts) and
+  [callback-first regression](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+- **Promotion target:** Documentation for asynchronous operation recovery.
+
 ### Bind the active publication, not a matching history entry
 
 - **Context:** Application-key execution on Dify Community 1.17.1.
