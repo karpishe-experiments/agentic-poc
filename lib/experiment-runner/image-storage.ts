@@ -36,15 +36,11 @@ export function createExperimentImageStorage(input: { database: Database; store:
     const uri = `experiments/${run.bookletId}/${run._id}/${claim.operation._id}/attempt-${claim.operation.attempt}/image.${validatedImage.extension}`;
     try {
       await measurePhase(raw.identity, "image_storage", async () => {
-        if (await input.store.exists(uri)) {
-          if (hash(await input.store.get(uri)) !== validatedImage.sha256) storageFailure();
-        } else {
-          try { await input.store.put(uri, bytes, validatedImage.mimeType); }
-          catch {
-            // An exclusive-write collision can be another completion or a retained
-            // store result after an interrupted response. Verify before reuse.
-            if (!await input.store.exists(uri) || hash(await input.store.get(uri)) !== validatedImage.sha256) storageFailure();
-          }
+        try { await input.store.put(uri, bytes, validatedImage.mimeType); }
+        catch {
+          // put is exclusive. A collision or lost acknowledgement is recoverable
+          // only when the checked GET below proves the original bytes survived.
+          // An unrelated write/read failure still fails closed.
         }
         if (hash(await input.store.get(uri)) !== validatedImage.sha256) storageFailure();
       });
