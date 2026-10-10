@@ -4,6 +4,7 @@ import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
+import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
@@ -45,6 +46,36 @@ async function setup() {
 }
 
 describe("J13 fixture and original-image storage source checks", () => {
+  it("rolls back the early lease write when claim source verification fails", async () => {
+    const env = await setup();
+    verifySources.mockRejectedValue(new Error("Sources changed before claim."));
+    await expect(env.images.claim({ ...env.identity,
+      validatedImage: await validateExperimentImage(env.content), claimId: id(900), nowMs: 3,
+    })).rejects.toThrow("Sources changed before claim.");
+    const operation = await env.database.collections.experiment_operations.findOne({ _id: env.operationId });
+    expect(operation?.imageCompletionClaim).toBeUndefined();
+    expect(operation?.imageCompletionDigest).toBeUndefined();
+    expect(operation?.state).toBe("started");
+  });
+
+  it("keeps observation writes out of the final source verification transaction", async () => {
+    const env = await setup();
+    const repository = createExperimentRepository(env.database);
+    let finalChecks = 0;
+    verifySources.mockImplementation(async (...args) => {
+      if (args[5]?.verifyBytes !== false) {
+        finalChecks++;
+        expect(await repository.beginObservation(env.operationId, 4)).toBeNull();
+        await repository.requestObservation(env.operationId);
+      }
+      return { request: { request: env.request }, attachments: [], warnings: [] };
+    });
+    const saved = await env.storage.complete({ identity: env.identity, content: env.content });
+    expect(saved.operation.state).toBe("succeeded");
+    expect(finalChecks).toBe(1);
+    expect(await repository.beginObservation(env.operationId, 5)).not.toBeNull();
+  });
+
   it("uses the supplied original asset store at fixture, claim and finalization", async () => {
     const env = await setup();
     expect(await env.images.authorizeFixture(env.identity)).toEqual(env.request);

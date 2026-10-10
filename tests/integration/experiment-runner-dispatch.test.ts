@@ -14,10 +14,23 @@ async function setup() {
   await repository.prepareOperation({ runId, operationId, expectedRevision: 0, role: "manager", taskId: null, subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: 2 });
   const dispatch = { runId, operationId, parentWorkflowRunId: null, nowMs: 3 };
   const claim = { ...dispatch, workflowRunId };
-  return { repository, dispatch, claim };
+  return { database, repository, dispatch, claim };
 }
 
 describe("experiment dispatch persistence", () => {
+  it("does not write observation timestamps during an active image completion lease", async () => {
+    const { database, repository, dispatch, claim } = await setup();
+    await repository.beginDispatch(dispatch);
+    await repository.recordDispatchIdentity(claim);
+    await database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: {
+      imageCompletionClaim: { id: id(799), digest: "b".repeat(64), expiresAtMs: 100 }, nextObservationAtMs: 7,
+    } });
+    expect(await repository.beginObservation(operationId, 99)).toBeNull();
+    await repository.requestObservation(operationId);
+    expect((await repository.getOperation(operationId))?.nextObservationAtMs).toBe(7);
+    expect(await repository.beginObservation(operationId, 100)).not.toBeNull();
+    expect((await repository.getOperation(operationId))?.deadlineAtMs).toBe(600_003);
+  });
   it("does not authorize a new claim at or after the original operation deadline", async () => {
     const { repository, dispatch, claim } = await setup();
     const sent = await repository.beginDispatch(dispatch);

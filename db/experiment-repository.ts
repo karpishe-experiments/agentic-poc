@@ -576,13 +576,16 @@ export function createExperimentRepository(database: Database, options: { store?
     // Taking this observation slot does not alter dispatch, deadline or budgets.
     const operation = await operations.findOneAndUpdate({ _id: opaqueIdSchema.parse(operationId),
       dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+      // Observation writes must not repeatedly invalidate the callback's source
+      // verification transaction. An expired upload lease remains observable.
+      $and: [{ $or: [{ imageCompletionClaim: null }, { "imageCompletionClaim.expiresAtMs": { $lte: nowMs } }] }],
       $or: [{ nextObservationAtMs: { $exists: false } }, { nextObservationAtMs: null }, { nextObservationAtMs: { $lte: nowMs } }] },
     { $set: { nextObservationAtMs: time.parse(nowMs) + 5_000 } }, { returnDocument: "after" });
     return operation;
   }
   async function requestObservation(operationId: string) {
     await operations.updateOne({ _id: opaqueIdSchema.parse(operationId), workflowRunId: { $ne: null },
-      dispatchStartedAtMs: { $ne: null } }, { $set: { nextObservationAtMs: 0 } });
+      dispatchStartedAtMs: { $ne: null }, imageCompletionClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
   return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, beginObservation, requestObservation };

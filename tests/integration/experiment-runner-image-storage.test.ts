@@ -56,6 +56,8 @@ describe("experiment image storage", () => {
     await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toMatchObject({ code: "invalid_state" });
     await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
     const saved = await env.storage().complete({ identity: env.identity, content: env.bytes });
+    expect(env.store.existsCalls).toBe(0);
+    expect(env.store.getCalls).toBe(1);
     expect(saved.reused).toBe(false);
     expect(saved.asset).toMatchObject({ _id: env.operationId, mimeType: "image/png", width: 3, height: 2 });
     expect(await env.store.get(saved.asset!.uri)).toEqual(Uint8Array.from(env.bytes));
@@ -69,6 +71,32 @@ describe("experiment image storage", () => {
     const different = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#ff0000" } }).png().toBuffer();
     await expect(env.storage().complete({ identity: env.identity, content: different })).rejects.toMatchObject({ code: "conflict" });
     expect(env.store.files.size).toBe(1);
+  });
+
+  it("verifies retained bytes with one GET after an exclusive-write collision", async () => {
+    const env = await setup();
+    await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const uri = `experiments/${id(2)}/${env.runId}/${env.operationId}/attempt-1/image.png`;
+    env.store.files.set(uri, Uint8Array.from(env.bytes));
+    const saved = await env.storage().complete({ identity: env.identity, content: env.bytes });
+    expect(saved.asset!.uri).toBe(uri);
+    expect(env.store.existsCalls).toBe(0);
+    expect(env.store.getCalls).toBe(1);
+    expect((await env.repository.getRun(env.runId))?.counters.logicalImage).toBe(1);
+  });
+
+  it("rejects conflicting retained bytes without overwriting them", async () => {
+    const env = await setup();
+    await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const uri = `experiments/${id(2)}/${env.runId}/${env.operationId}/attempt-1/image.png`;
+    const retained = new Uint8Array([1, 2, 3]);
+    env.store.files.set(uri, retained);
+    await expect(env.storage().complete({ identity: env.identity, content: env.bytes }))
+      .rejects.toMatchObject({ code: "invalid_state" });
+    expect(env.store.files.get(uri)).toEqual(retained);
+    expect(env.store.existsCalls).toBe(0);
+    expect(env.store.getCalls).toBe(1);
+    expect(await env.database.collections.assets.countDocuments()).toBe(0);
   });
 
   it("allows one concurrent completion claim and preserves an expired claim digest", async () => {
