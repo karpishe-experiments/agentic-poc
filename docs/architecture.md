@@ -414,7 +414,10 @@ accepted/running while retaining the stream reader until completion or deadline.
 Connection/start acknowledgement is bounded to 30 seconds. Callback authorization
 reserves once without extending the original deadline. A persisted five-second
 observation slot bounds application-key GET recovery to one attempt per cycle,
-including after restart; there is no nested transport retry loop. Unknown work
+including after restart; there is no nested transport retry loop. Observation
+timestamp writes wait while an image completion lease is active, so polling does
+not invalidate its source-verification transaction. Expired leases remain
+observable, and completion clears the lease without extending the deadline. Unknown work
 with a completed callback remains observable until terminal evidence. A matching
 terminal success clears only its latest operation's unknown blocker and preserves
 Pause. A matching terminal failure creates an inspection blocker without changing
