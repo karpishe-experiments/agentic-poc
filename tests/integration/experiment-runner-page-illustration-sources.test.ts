@@ -12,6 +12,8 @@ import type { Persona } from "@/lib/contracts/experiment-runner";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { id, paginationSources } from "@/tests/helpers/pagination-fixtures";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 vi.mock("@/db/experiment-style", () => ({ createExperimentStyleAssembly: () => ({ verifyVersion: async () => undefined }) }));
 vi.mock("@/db/experiment-sheets", () => ({ createExperimentSheetAssembly: () => ({ verifyVersion: async () => undefined }) }));
@@ -113,14 +115,34 @@ async function setup(persona: Persona = "playful_kid", pageIndex = 1) {
 }
 
 describe("J13 selected page source verification", () => {
+  it("hydrates shared metadata with seven serial reads once per attempt", async () => {
+    const env = await setup();
+    const runRead = vi.spyOn(env.database.collections.experiment_runs, "findOne");
+    const reads = [env.database.collections.artifacts, env.database.collections.artifact_versions,
+      env.database.collections.approvals, env.database.collections.artifact_dependencies,
+      env.database.collections.experiment_operations, env.database.collections.assets]
+      .map((collection) => vi.spyOn(collection, "find"));
+    await env.database.client.withSession(async (session) => {
+      const attempt = createVerificationAttempt(env.store);
+      const first = await verificationMetadata(env.database, session, env.runId, attempt);
+      expect(await verificationMetadata(env.database, session, env.runId, attempt)).toBe(first);
+      expect(runRead).toHaveBeenCalledTimes(1);
+      for (const read of reads) expect(read).toHaveBeenCalledTimes(1);
+      await verificationMetadata(env.database, session, env.runId, createVerificationAttempt(env.store));
+      expect(runRead).toHaveBeenCalledTimes(2);
+      for (const read of reads) expect(read).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("batches shared approval reads without dropping current-source checks", async () => {
     const env = await setup();
     const versions = vi.spyOn(env.database.collections.artifact_versions, "find");
     const approvals = vi.spyOn(env.database.collections.approvals, "find");
     await env.verify();
-    const isBatch = (value: unknown) => value !== null && typeof value === "object" && "$in" in value;
-    expect(versions.mock.calls.filter(([query]) => isBatch((query as { _id?: unknown })._id))).toHaveLength(2);
-    expect(approvals.mock.calls.filter(([query]) => isBatch((query as { artifactVersionId?: unknown }).artifactVersionId))).toHaveLength(2);
+    expect(versions).toHaveBeenCalledTimes(1);
+    expect(versions.mock.calls[0]?.[0]).toMatchObject({ artifactId: { $in: expect.any(Array) } });
+    expect(approvals).toHaveBeenCalledTimes(1);
+    expect(approvals.mock.calls[0]?.[0]).toMatchObject({ experimentRunId: env.runId, action: "approve", scope: "artifact" });
     await env.database.collections.approvals.deleteOne({ artifactVersionId: id(1) });
     await expect(env.verify()).rejects.toThrow("stale or unapproved source");
   });

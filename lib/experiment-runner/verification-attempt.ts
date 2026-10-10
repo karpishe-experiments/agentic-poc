@@ -9,7 +9,14 @@ export class ImageEvidenceMismatch extends Error {}
 export function createVerificationAttempt(store: AssetStore) {
   const bytes = new Map<string, Uint8Array>();
   const checked = new Set<string>();
+  const metadata = new Map<string, unknown>();
   return {
+    async metadata<T>(key: string, load: () => Promise<T>): Promise<T> {
+      if (metadata.has(key)) return metadata.get(key) as T;
+      const value = await load();
+      metadata.set(key, value);
+      return value;
+    },
     async once(key: string, work: () => Promise<unknown>) {
       if (checked.has(key)) return;
       await work();

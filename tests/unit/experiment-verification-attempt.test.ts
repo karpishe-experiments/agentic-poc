@@ -4,6 +4,18 @@ import { createVerificationAttempt, ImageEvidenceMismatch } from "@/lib/experime
 import type { AssetStore } from "@/lib/assets/asset-store";
 
 describe("transaction-attempt byte evidence", () => {
+  it("loads metadata once per attempt, retries failed loads and does not share snapshots", async () => {
+    const attempt = createVerificationAttempt({} as AssetStore);
+    const load = vi.fn().mockRejectedValueOnce(new Error("unavailable")).mockResolvedValue({ revision: 1 });
+    await expect(attempt.metadata("run", load)).rejects.toThrow("unavailable");
+    expect(await attempt.metadata("run", load)).toEqual({ revision: 1 });
+    expect(await attempt.metadata("run", load)).toEqual({ revision: 1 });
+    expect(load).toHaveBeenCalledTimes(2);
+    load.mockResolvedValue({ revision: 2 });
+    expect(await createVerificationAttempt({} as AssetStore).metadata("run", load)).toEqual({ revision: 2 });
+    expect(load).toHaveBeenCalledTimes(3);
+  });
+
   it("reads an immutable asset once, checks every consumer, and rereads on the next attempt", async () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const get = vi.fn(async () => bytes);
