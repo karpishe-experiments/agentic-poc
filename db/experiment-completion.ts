@@ -15,6 +15,7 @@ import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
 
 function incomplete(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
 
@@ -46,7 +47,8 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
       (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.");
-  const artifacts = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId }, { session }).toArray();
+  const metadata = await verificationMetadata(database, session, run._id, attempt);
+  const artifacts = metadata.artifacts;
   const tasks = Array.from({ length: 13 }, (_, index) => `J${String(index + 1).padStart(2, "0")}`);
   if (tasks.some((task) => !artifacts.some((artifact) => artifact.taskId === task)) ||
       artifacts.some((artifact) => !artifact.taskId || !tasks.includes(artifact.taskId) || artifact.state !== "approved" || !artifact.currentVersionId)) {
@@ -58,11 +60,9 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   const warnings: { versionId: string; warnings: unknown }[] = [];
   // Batch independent evidence reads. Keep commands serial on this transaction
   // session; per-artifact queries make the evaluation callback scale with pages.
-  const versionIds = [...currentVersionIds];
-  const versions = await database.collections.artifact_versions.find({ _id: { $in: versionIds } }, { session }).toArray();
-  const approvals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
-    artifactVersionId: { $in: versionIds }, action: "approve", scope: "artifact" }, { session }).toArray();
-  const dependencyEdges = await database.collections.artifact_dependencies.find({ downstreamVersionId: { $in: versionIds } }, { session }).toArray();
+  const versions = metadata.versions;
+  const approvals = metadata.approvals;
+  const dependencyEdges = metadata.edges;
   const versionsById = new Map(versions.map((version) => [version._id, version]));
   const approvedVersionIds = new Set(approvals.map((approval) => approval.artifactVersionId));
   for (const artifact of artifacts) {
@@ -77,7 +77,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     for (const dependency of dependencies as string[]) {
       if (currentVersionIds.has(dependency)) continue;
       const originatingDraft = version.createdBy === "application" && ["J08", "J09", "J10"].includes(artifact.taskId!) &&
-        version.sourceVersionId === dependency && await database.collections.artifact_versions.findOne({ _id: dependency, artifactId: artifact._id }, { session });
+        version.sourceVersionId === dependency && versions.some((item) => item._id === dependency && item.artifactId === artifact._id);
       if (!originatingDraft) incomplete("Artifact depends on a superseded source.");
     }
     evidence.push({ artifactId: artifact._id, versionId: version._id, pageId: artifact.subjectKind === "page" ? artifact.subjectId ?? null : null });

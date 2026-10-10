@@ -46,6 +46,27 @@ async function setup() {
 }
 
 describe("J13 fixture and original-image storage source checks", () => {
+  it("keeps preflight bounded and rejects a competing lease before source verification", async () => {
+    const env = await setup();
+    await env.images.preflight({ ...env.identity, nowMs: 3 });
+    expect(verifySources).not.toHaveBeenCalled();
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operationId }, {
+      $set: { imageCompletionClaim: { id: id(900), digest: "a".repeat(64), expiresAtMs: 100 } },
+    });
+    await expect(env.images.preflight({ ...env.identity, nowMs: 3 })).rejects.toMatchObject({ code: "conflict" });
+    expect(verifySources).not.toHaveBeenCalled();
+    expect(env.store.put).not.toHaveBeenCalled();
+  });
+
+  it("rejects finalization with an invalid lease before source verification", async () => {
+    const env = await setup();
+    await expect(env.images.finalize({ ...env.identity, nowMs: 3, claimId: id(900),
+      validatedImage: await validateExperimentImage(env.content), uri: "wrong-path",
+    })).rejects.toMatchObject({ code: "conflict" });
+    expect(verifySources).not.toHaveBeenCalled();
+    expect(await env.database.collections.assets.countDocuments({ _id: env.operationId })).toBe(0);
+  });
+
   it("rolls back the early lease write when claim source verification fails", async () => {
     const env = await setup();
     verifySources.mockRejectedValue(new Error("Sources changed before claim."));
@@ -84,9 +105,9 @@ describe("J13 fixture and original-image storage source checks", () => {
     if (!saved.asset) throw new Error("Completed image has no saved asset.");
     expect(saved.asset.kind).toBe("page_source");
     expect(await env.store.get(saved.asset.uri)).toEqual(env.content);
-    expect(verifySources).toHaveBeenCalledTimes(4);
-    expect(verifySources.mock.calls.slice(0, 3).every((call) => call[5]?.verifyBytes === false)).toBe(true);
-    expect(verifySources.mock.calls[3]?.[5]?.verifyBytes).toBe(true);
+    expect(verifySources).toHaveBeenCalledTimes(3);
+    expect(verifySources.mock.calls.slice(0, 2).every((call) => call[5]?.verifyBytes === false)).toBe(true);
+    expect(verifySources.mock.calls[2]?.[5]?.verifyBytes).toBe(true);
     expect(verifySources.mock.calls.every((call) => call[4] === env.store)).toBe(true);
     expect((await env.storage.complete({ identity: env.identity, content: env.content })).reused).toBe(true);
     expect(await env.database.collections.assets.countDocuments({ _id: env.operationId })).toBe(1);

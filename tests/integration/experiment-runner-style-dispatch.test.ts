@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { MongoServerError } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources, verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
+import * as pageVerification from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
 import { materializeNarrativeResult } from "@/db/experiment-narrative";
@@ -23,7 +24,7 @@ import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-tr
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
 const databases: Database[] = [];
-afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
+afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 class MemoryStore implements AssetStore {
   files = new Map<string, Uint8Array>();
   async put(uri: string, bytes: Uint8Array, mimeType: string) { this.files.set(uri, Uint8Array.from(bytes)); return { uri, mimeType, byteLength: bytes.byteLength }; }
@@ -720,7 +721,19 @@ describe("automatic saved J08 sample dispatch", () => {
       $set: { verifiedWorkflowId: null, nextObservationAtMs: null },
     });
     const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    const sourceChecks = vi.spyOn(pageVerification, "verifyCurrentPageIllustrationSources");
     expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    const transactionChecks = new Map<unknown, typeof sourceChecks.mock.calls>();
+    for (const call of sourceChecks.mock.calls) {
+      const calls = transactionChecks.get(call[1]) ?? [];
+      calls.push(call);
+      transactionChecks.set(call[1], calls);
+    }
+    const preparation = [...transactionChecks.values()].find((calls) => calls.length === 4);
+    expect(preparation).toBeDefined();
+    const attempt = preparation![0][5]?.attempt;
+    expect(attempt).toBeDefined();
+    expect(preparation!.every((call) => call[5]?.attempt === attempt)).toBe(true);
     expect(await env.repository.getOperation(manager._id)).toMatchObject({
       verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "manager")!.publishedWorkflowId,
     });
@@ -854,11 +867,11 @@ describe("automatic saved J08 sample dispatch", () => {
     const storageHeads = vi.spyOn(env.store, "exists");
     const completedEvidence = await withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
       (await env.repository.getRun(env.runId))!, env.store));
-    const currentIds = (await env.database.collections.artifacts.find({ experimentRunId: env.runId }).toArray())
-      .map((artifact) => artifact.currentVersionId!);
+    const artifactIds = (await env.database.collections.artifacts.find({ experimentRunId: env.runId }).toArray())
+      .map((artifact) => artifact._id);
     expect(versionReads.mock.calls.filter(([filter]) => {
-      const ids = (filter as { _id?: { $in?: string[] } })._id?.$in;
-      return ids?.length === currentIds.length && currentIds.every((id) => ids.includes(id));
+      const ids = (filter as { artifactId?: { $in?: string[] } }).artifactId?.$in;
+      return ids?.length === artifactIds.length && artifactIds.every((id) => ids.includes(id));
     })).toHaveLength(1);
     versionReads.mockRestore();
     // Each immutable original is read once per attempt. Shared references used

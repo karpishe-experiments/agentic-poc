@@ -1613,9 +1613,71 @@ Five-second observation writes target the same operation record as finalization.
 The candidate suppresses those writes during an active upload lease, retains
 expired-lease recovery, acquires the claim write before source verification in
 the same rollback-protected transaction, and removes redundant output HEAD/readback calls while
-preserving exclusive writes and digest verification. Focused regressions pass;
-review, publication and live callback performance proof remain pending. This is
+preserving exclusive writes and digest verification. Thirty-three focused
+integration tests pass, together with focused typecheck and lint. Two independent
+reviews and required CI passed; PR #164 merged the correction into master, and
+PR #165 carried the identical runtime changes to staging. Deployment passed;
+authenticated Check passed; live callback performance proof remains pending. This is
 not evidence that the timeout correction or M3 acceptance is complete.
+
+Operator evidence confirms backup-protected reconciliation of this exact image
+operation on 2026-10-10. Verified backup
+`staging-image-reconciliation-20261010T143636Z-2920077` has SHA-256
+`2f13f8506793dc8ba4a846fbaae12d9cc43095f1db61796922d316a849976b34`.
+Saved output, materialization and assets were retained; the conflicting operation
+was marked failed without replay. Final idle checks passed, the original release
+was healthy and admission reopened. Deploy `38060654175` targets staging commit
+`64e90003b8a2d33caf306ae312b1683fed40f98b` and passed. Its retained backup is
+`staging-20261010T144805Z-671d0c7943cdf222`. Authenticated Check `38061648620`
+passed. Linked Kid successor `1314c664-3e2b-492d-8e9a-18aa54f0add3` was
+submitted once with booklet `8c5e1ed3-c66f-4554-8721-7380938c8a72`. The live UI
+reached completed revision 311, with generation and evaluation complete, saved
+tester feedback and independent judge assessment, 47/120 logical text requests,
+9/12 logical image requests and zero payable requests. No repair or restart was
+performed during this run. Detailed current-artifact acceptance remains to be
+audited; callback performance does not pass the correction's target.
+
+Read-only Dify trace for this run's image operation
+`dafcc406-1bbb-403d-9e2e-461752b2dba5`, workflow
+`038241d8-44a7-4edb-abd9-c5f7ba8d87e0`, reports successful execution in
+49.538707 seconds with zero tokens. Authorization took 13.681328 seconds,
+fixture retrieval 7.995719 seconds and upload 26.231024 seconds. These node
+durations do not isolate database, transaction-retry or proxy time. Collect the
+existing allowlisted server phase records before assigning the remaining delay
+to a specific cause. Parent and Creator have not started.
+
+The next local correction removes upload preflight's duplicate metadata-source
+walk. Preflight retains identity, recoverability and competing-lease checks;
+claim still verifies current sources before storage, and finalization still
+verifies source bytes. Finalization rejects an invalid lease or path before its
+source walk. Eight focused page-image storage tests pass, including bounded
+preflight, invalid finalization lease, stale sources and changes during storage.
+This candidate is not deployed and does not establish callback performance.
+
+The operator's retained server output contains 288 phase records for this Kid.
+Authorization p95 is 12,785 ms (maximum 28,167); image callback p95/maximum is
+28,288 ms; result finalization p95 is 14,637 ms (maximum 28,800). Image storage
+p95 is 1,833 ms and decode maximum is 182 ms. For image operation `dafcc406…`,
+preflight took 7,867 ms, claim 7,950 ms, finalization 9,157 ms and storage 943 ms.
+Fixture authorization took 7,897 ms with zero reference-storage calls. The
+remaining delay therefore occurs in server verification, including metadata-only
+paths, not primarily in image decoding or output storage. Instrumented query
+counts are partial; do not treat them as total MongoDB commands. Evaluation
+context reached 27,415 ms with 32 instrumented queries and nine storage calls.
+
+The next candidate also batches pagination's six fixed book-source reads into
+three serial queries and batches its reference artifact/version/approval reads.
+Style sample assets use one batch query; sheet source artifacts and versions use
+one query each. The local candidate now shares seven serial metadata reads across
+page, style, sheet and completion verification within one transaction attempt.
+Each retry creates a fresh attempt. Per-consumer identity, ambiguity, approval,
+dependency and byte checks remain unchanged. Dispatch preparation shares that
+attempt across the selected page and its siblings. Its focused regression passes;
+source typecheck and focused lint pass. The three focused persona-completion
+cases pass (3 tests, 91 unrelated cases skipped; 69.56 seconds). Their old
+query-shape assertion now checks the single run-artifact batch; current approval,
+lineage, original-byte and no-HEAD assertions remain. Independent review and deployed timing
+proof remain pending. This is not evidence that the performance target passes.
 
 The dispatcher compares its current configuration snapshot with the saved run
 before observation. Therefore application-restart proof requires a controlled

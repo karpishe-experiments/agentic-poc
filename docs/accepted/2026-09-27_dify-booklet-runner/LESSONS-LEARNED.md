@@ -315,3 +315,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [callback summary](../../../lib/experiment-runner/http.ts) and
   [J13 acknowledgement regression](../../../tests/unit/experiment-runner-http.test.ts).
 - **Promotion target:** Documentation for external completion callbacks.
+
+### Share verification reads only within one transaction attempt
+
+- **Context:** Several consumers verify the same approved sources during one
+  callback, including every page at final completion.
+- **Observation:** Retained server timings showed metadata-only verification
+  taking several seconds. Focused tests prove that consumers can share seven
+  serial metadata reads and one read of each immutable original per attempt,
+  while still rejecting stale approvals and changed or corrupt sources.
+- **Guidance:** Share read evidence inside the transaction callback. Create fresh
+  evidence on retry, later requests and mutation phases. Keep per-consumer
+  ownership, currentness, lineage and byte checks; do not persist a validity flag.
+- **Evidence:** [verification metadata](../../../db/experiment-verification-metadata.ts),
+  [source tests](../../../tests/integration/experiment-runner-page-illustration-sources.test.ts)
+  and [completion tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+  Deployed latency improvement remains unverified.
+- **Promotion target:** Documentation for transactional external-workflow callbacks.

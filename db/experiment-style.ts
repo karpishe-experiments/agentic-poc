@@ -10,6 +10,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { styleSampleRequests, type StyleSampleSources } from "@/lib/experiment-runner/reference-requests";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftStyleVersionId: opaqueIdSchema,
   sampleOperationIds: z.array(opaqueIdSchema).length(2).refine((ids) => new Set(ids).size === 2) });
@@ -29,9 +30,9 @@ export function createExperimentStyleAssembly(input: { database: Database; store
   const { database, store } = input;
   const now = input.now ?? Date.now;
 
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, metadata?: VerificationMetadata) {
     const options = { session };
-    const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
+    const run = metadata?.run ?? await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Style run was not found.");
     // The original authenticated callback can precede terminal publication GET.
     // Only the exact dispatched unknown claim may read its current sources;
@@ -55,17 +56,17 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
     if (run.mode !== "simulated" || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");
-    const draft = await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
+    const draft = metadata ? metadata.versions.find((item) => item._id === value.draftStyleVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");
-    const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
+    const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
     if (!artifact || artifact.bookletId !== run.bookletId || artifact.experimentRunId !== run._id ||
       artifact.taskId !== "J08" || artifact.subjectKind !== "book" || artifact.subjectId !== run.bookletId || !artifact.currentVersionId) invalid("Style draft belongs to another target.");
-    const current = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, options);
+    const current = metadata ? metadata.versions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id) : await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, options);
     if (!current || artifact.state === "needs_review" || artifact.state === "rejected") conflict("Style target is stale.");
     if (current._id === draft._id ? artifact.state !== "draft" : current.sourceVersionId !== draft._id || current.createdBy !== "application") conflict("Style draft is no longer the assembly target.");
     const proposal = parseReferenceProposal("J08", "proposal", json(draft.contentJson)).content;
     const versions: string[] = [];
-    const narrativeSources = await database.collections.artifacts.find({ bookletId: run.bookletId,
+    const narrativeSources = metadata ? metadata.artifacts.filter((item) => item.subjectKind === "book" && item.subjectId === run.bookletId && tasks.includes(item.taskId as typeof tasks[number])) : await database.collections.artifacts.find({ bookletId: run.bookletId,
       experimentRunId: run._id, taskId: { $in: [...tasks] }, subjectKind: "book", subjectId: run.bookletId }, options).toArray();
     for (const taskId of tasks) {
       const sources = narrativeSources.filter((source) => source.taskId === taskId);
@@ -80,9 +81,10 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     // check its child identity above and the five current approved narrative inputs.
     await assertCurrentImageSources(database, session, run, {
       kind: "style_preview", prompt: "Assembly source check", styleVersionId: null, sourceVersionIds: versions,
-    });
-    const operations = await database.collections.experiment_operations.find({ _id: { $in: value.sampleOperationIds }, runId: run._id }, options).toArray();
+    }, metadata);
+    const operations = metadata ? metadata.operations.filter((item) => value.sampleOperationIds.includes(item._id)) : await database.collections.experiment_operations.find({ _id: { $in: value.sampleOperationIds }, runId: run._id }, options).toArray();
     if (operations.length !== 2) invalid("Both saved sample operations are required.");
+    const sampleAssets = metadata ? metadata.assets.filter((item) => value.sampleOperationIds.includes(item._id)) : await database.collections.assets.find({ _id: { $in: value.sampleOperationIds }, bookletId: run.bookletId }, options).toArray();
     const samples = [];
     const assets = [];
     const { samplePlan, ...definition } = proposal;
@@ -95,7 +97,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
       if (verificationOnly && !operation.verifiedWorkflowId) invalid("Style approval requires verified image publication.");
       const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));
       if (canonical(request) !== canonical(slot.request) || canonical(operation.dependencyVersionIds) !== canonical(request.sourceVersionIds)) conflict("Sample request differs from its saved style slot.");
-      const asset = await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
+      const asset = sampleAssets.find((item) => item._id === operation._id);
       if (!asset || asset.kind !== "style_preview" || !asset.width || !asset.height) invalid("Saved style sample asset is missing.");
       const metadata = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().positive(),
         operationId: opaqueIdSchema, attempt: z.number().int().positive(), workflowRunId: opaqueIdSchema,
@@ -121,7 +123,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     if (current._id !== draft._id) {
       if (canonical(json(current.contentJson)) !== canonical(assembled.content) ||
         canonical(json(current.dependencyVersionIdsJson)) !== canonical([draft._id, ...versions])) conflict("Existing style assembly uses different sample evidence.");
-      const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: current._id }, options).toArray();
+      const edges = metadata ? metadata.edges.filter((item) => item.downstreamVersionId === current._id) : await database.collections.artifact_dependencies.find({ downstreamVersionId: current._id }, options).toArray();
       if (canonical(edges.map((edge) => edge.upstreamVersionId).sort()) !== canonical([draft._id, ...versions].sort())) conflict("Saved style assembly dependencies are incomplete.");
     }
     return { run, artifact, draft, current, assets, assembled, sources: [draft._id, ...versions] };
@@ -162,13 +164,15 @@ export function createExperimentStyleAssembly(input: { database: Database; store
   }
   async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession,
     verification?: { verifyBytes?: boolean; attempt?: VerificationAttempt }) {
-    const version = await database.collections.artifact_versions.findOne({ _id: opaqueIdSchema.parse(identity.versionId) }, { session });
-    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
+    const versionId = opaqueIdSchema.parse(identity.versionId);
+    const metadata = verification?.attempt ? await verificationMetadata(database, session, opaqueIdSchema.parse(identity.runId), verification.attempt) : undefined;
+    const version = metadata ? metadata.versions.find((item) => item._id === versionId) : await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
+    const artifact = version ? (metadata ? metadata.artifacts.find((item) => item._id === version.artifactId) : await database.collections.artifacts.findOne({ _id: version.artifactId }, { session })) : null;
     if (!version || !artifact || artifact.currentVersionId !== version._id || artifact.taskId !== "J08" ||
         version.createdBy !== "application" || !version.sourceVersionId || artifact.state !== "approved") invalid("Current assembled style approval is missing.");
     const content = parseReferenceProposal("J08", "assembled", json(version.contentJson)).content;
     const checked = await load({ runId: opaqueIdSchema.parse(identity.runId), draftStyleVersionId: version.sourceVersionId,
-      sampleOperationIds: content.samples.map((sample) => sample.build.operationId) }, session, true);
+      sampleOperationIds: content.samples.map((sample) => sample.build.operationId) }, session, true, metadata);
     if (checked.current._id !== version._id) conflict("Style approval target changed.");
     if (verification?.verifyBytes === false) return;
     for (const asset of checked.assets) {
