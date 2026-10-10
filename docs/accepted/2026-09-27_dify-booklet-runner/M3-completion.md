@@ -1596,8 +1596,26 @@ publication recovery updates the database, but dependent page admission receives
 the earlier unverified manager object. Reloading that operation after recovery
 passes the regression, preserves the original manager identity and submits one
 page-image request. The test failed before the correction and passed afterward
-(one selected test, 93 skipped). This local correction still requires independent
-reviews, CI and staging deployment before another live acceptance successor.
+(one selected test, 93 skipped). This correction passed review and CI, merged
+through PR #162 with staging carrier PR #163, and deployed at
+`2cde9ba3688f7a42cb102914bcf59d0f2d5d8139`. Deploy `38044777414` and
+authenticated Check `38045336624` passed.
+
+Linked Kid successor `0b8807b6-7b3d-4c81-8639-f8d4b950211e` reached J13
+but blocked with zero payable requests. Preserve it as failed acceptance.
+Operator phase evidence for image operation
+`28c35def-50c1-486f-a165-225a9a0837b4` reports 60,708 ms upload callback:
+preflight 5,692 ms, claim 14,547 ms, storage 1,318 ms, decoding 37 ms and
+finalization 38,607 ms. Finalization accumulated 32 instrumented queries and
+20 reference-storage calls, consistent with four verification attempts. These
+counters do not identify every database query or prove the precise retry cause.
+Five-second observation writes target the same operation record as finalization.
+The candidate suppresses those writes during an active upload lease, retains
+expired-lease recovery, acquires the claim write before source verification in
+the same rollback-protected transaction, and removes redundant output HEAD/readback calls while
+preserving exclusive writes and digest verification. Focused regressions pass;
+review, publication and live callback performance proof remain pending. This is
+not evidence that the timeout correction or M3 acceptance is complete.
 
 The dispatcher compares its current configuration snapshot with the saved run
 before observation. Therefore application-restart proof requires a controlled

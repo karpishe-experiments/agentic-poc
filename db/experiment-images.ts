@@ -126,10 +126,13 @@ export function createExperimentImageRepository(database: Database, options: { s
         return { reused: true, operation, asset };
       }
       await assertRecoverable(run, operation, session);
-      await assertOperationSources(session, run, operation, request, false);
       if (operation.imageCompletionClaim && operation.imageCompletionClaim.expiresAtMs > input.nowMs) conflict("Image completion is already claimed.");
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, imageCompletionClaim: operation.imageCompletionClaim ?? null }, { $set: { imageCompletionDigest: input.validatedImage.sha256, imageCompletionClaim: { id: input.claimId, digest: input.validatedImage.sha256, expiresAtMs: input.nowMs + LEASE_MS }, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) conflict("Image completion claim changed concurrently.");
+      // Acquire the write before the expensive source walk. A competing observer
+      // then cannot force us to repeat that walk before committing this claim.
+      // Source failure aborts the transaction, including this lease write.
+      await assertOperationSources(session, run, operation, request, false);
       return { reused: false, operation: updated };
     });
   }
