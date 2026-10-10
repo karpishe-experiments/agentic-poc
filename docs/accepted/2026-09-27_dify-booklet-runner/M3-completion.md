@@ -1562,6 +1562,43 @@ response-field filtering. Live correction and linked-successor acceptance remain
 pending. No credential inventory change is required: names, storage and consumers
 are unchanged.
 
+The J13 acknowledgement correction was merged through PR #160 and carried to
+staging through PR #161. Deploy `37772643670` and authenticated Check
+`37773541053` passed for `1a5027ba0f009712d79112828173d6f59a4a730a`;
+backup `staging-20261008T115423Z-86b08aab0eeaf392` was retained. The linked Kid
+successor `12cce8da-9787-4293-8149-f51a73bfcd66` was created once but did not
+dispatch. Operator host evidence on 2026-10-10 confirmed revision 0, zero
+counters and no operation. The failed predecessor's latest manager operation
+`fa9d1c9a-51a4-4083-97d1-34e21474f479` retains saved output but no verified
+publication. The dispatcher therefore holds the single-experiment lane.
+Operator evidence on 2026-10-10 confirms exact-record reconciliation completed
+with verified backup `staging-manager-reconciliation-20261010T081641Z-1843019`
+(SHA-256 `5768a6e3b7709df6b8ae5e51ce7cdc2ea472ebba64bd57d484b1ec6a71f88690`).
+Saved data was preserved, the original release is healthy, admission is open,
+and final drain counts are zero. No replay or deployment occurred.
+
+The same successor was resumed once. It reached approved J12 work, then blocked
+at revision 222 before a page-image operation was submitted. Its latest manager
+operation `f6b7401c-eaa8-466b-93bd-bffee8e46bd5` has saved output. Dify run
+`72ea31ee-fd02-492c-a2dc-f88837a3a14f` succeeded in 6.835408 seconds with zero
+tokens. Authorization took 2.669448 seconds and save took 2.956669 seconds;
+both returned HTTP 200, including `delegatedTaskId: "J13"`. This verifies the
+acknowledgement correction, not full acceptance or callback p95. Counters are
+38 logical text requests, five logical image requests and zero payable requests.
+Preserve this failure. Diagnose the page-image admission/progress boundary before
+another successor; do not replay the manager or repair this run into acceptance.
+
+The operator's read-only boundary check confirms the manager publication is
+verified and `noProgressCount` is 1. Source verification rejects the already
+blocked run with `Style assembly requires idle simulated work`; this does not
+prove corrupt bytes. A focused regression reproduced a stale dispatcher snapshot:
+publication recovery updates the database, but dependent page admission receives
+the earlier unverified manager object. Reloading that operation after recovery
+passes the regression, preserves the original manager identity and submits one
+page-image request. The test failed before the correction and passed afterward
+(one selected test, 93 skipped). This local correction still requires independent
+reviews, CI and staging deployment before another live acceptance successor.
+
 The dispatcher compares its current configuration snapshot with the saved run
 before observation. Therefore application-restart proof requires a controlled
 temporary probe-manager binding, not an isolated process with mismatched bindings.

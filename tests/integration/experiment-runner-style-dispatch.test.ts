@@ -710,6 +710,27 @@ describe("automatic saved J08 sample dispatch", () => {
     expect((await verifySavedRevision()).request.request.revisions).toEqual(content.request.revisions);
   }, 120_000);
 
+  it("uses the refreshed manager publication after callback-first J13 recovery", async () => {
+    const env = await setup("playful_kid", 17, true);
+    await env.reachPageImageWithReferences();
+    const manager = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(manager).toMatchObject({ role: "manager", state: "succeeded" });
+    expect(JSON.parse(manager.resultJson!).payload.taskId).toBe("J13");
+    await env.database.collections.experiment_operations.updateOne({ _id: manager._id }, {
+      $set: { verifiedWorkflowId: null, nextObservationAtMs: null },
+    });
+    const posts = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    expect(await env.repository.getOperation(manager._id)).toMatchObject({
+      verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "manager")!.publishedWorkflowId,
+    });
+    expect(env.runtime.retrieve).toHaveBeenCalledWith(expect.objectContaining({ role: "manager" }), manager.workflowRunId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts + 1);
+    const image = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(image).toMatchObject({ role: "image", taskId: "J13", parentWorkflowRunId: manager.workflowRunId });
+    expect(await env.repository.getRun(env.runId)).not.toMatchObject({ status: "blocked" });
+  }, 120_000);
+
   it("blocks failed J13 assembly after a saved result instead of creating a replacement POST", async () => {
     const env = await setup("playful_kid", 17, true);
     await env.reachPageImageWithReferences();

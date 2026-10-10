@@ -422,6 +422,9 @@ the callback result or permitting replay.
 Unknown work without an ID and expired uncertain work retain the single-experiment lane instead
 of permitting another POST or persona. No external queue or service is added.
 Published workflow identities and the saved configuration snapshot must match.
+After callback-first publication recovery, the dispatcher reloads the saved
+operation before dependent admission; an earlier in-memory record is not proof
+of the current publication state.
 Three unchanged progress observations block the run. Pause prevents admission
 but does not cancel in-flight work; an authorized result can still be stored.
 
