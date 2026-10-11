@@ -772,9 +772,47 @@ dify_service_diagnostics() {
 import collections, json, sys
 counts = collections.Counter()
 for line in sys.stdin:
-    for term in ("timeout", "signal: killed", "out of memory", "permission denied", "permissionerror", "connection refused", "noauth", "wrongpass", "authenticationerror", "modulenotfounderror"):
+    for term in ("timeout", "signal: killed", "out of memory", "permission denied", "permissionerror", "connection refused", "noauth", "wrongpass", "authenticationerror", "modulenotfounderror", "memoryerror", "operationalerror", "programmingerror", "runtimeerror", "importerror", "attributeerror", "valueerror", "typeerror", "filenotfounderror", "traceback (most recent call last)", "running migrations", "migrations completed", "starting beat", "beat: starting"):
         if term in line.lower(): counts[term] += 1
 print("result: " + sys.argv[1] + "_errors " + json.dumps(dict(counts)))' "$service"
+}
+
+dify_staging_api_diagnostic() {
+  local container="$1" run_id="$2"
+  if ! timeout 20s docker exec -i -w /app "$container" node - "$run_id" 2>/dev/null <<'NODE'
+(async () => {
+  if (process.env.DEPLOYMENT_ENV !== '_staging') throw Error('TargetDiffers');
+  const password = process.env.ACCESS_GATE_PASSWORD;
+  const runId = process.argv[2];
+  if (!password || password.length < 16 || !/^[a-f0-9-]{36}$/.test(runId)) throw Error('ConfigurationInvalid');
+  const response = await fetch('https://booklet-staging.uniwares.co.uk/api/diagnostics/logs?limit=1&runId=' + runId, {
+    headers: {Authorization: 'Basic ' + Buffer.from('booklet:' + password).toString('base64')},
+    redirect: 'error', signal: AbortSignal.timeout(10_000),
+  });
+  if (response.status !== 200 || !response.headers.get('content-type')?.includes('application/json')) throw Error('ResponseInvalid');
+  const reader = response.body?.getReader();
+  if (!reader) throw Error('BodyMissing');
+  const chunks = []; let size = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 65_536) throw Error('BodyTooLarge');
+      chunks.push(Buffer.from(value));
+    }
+  } finally { await reader.cancel().catch(() => {}); }
+  const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if (!Array.isArray(body?.data?.events) || body.data.events.length > 1) throw Error('SchemaInvalid');
+  console.log('result: staging_api ' + JSON.stringify({authenticated:true,status:200,eventCount:body.data.events.length}));
+})().catch(() => {
+  // Never return fetch errors, headers, response bodies or credential material.
+  console.log('result: staging_api ' + JSON.stringify({authenticated:false,outcome:'unverified'}));
+});
+NODE
+  then
+    printf 'result: staging_api {"authenticated":false,"outcome":"unverified"}\n'
+  fi
 }
 
 dify_diagnostics_host() {
@@ -786,7 +824,7 @@ dify_diagnostics_host() {
   mapfile -t ids < <(docker ps -aq --filter label=com.docker.compose.project=booklet-dify)
   [[ "${#ids[@]}" -le 30 ]] || die 'Unexpected Dify container count'
   for container in "${ids[@]}"; do
-    records="$(timeout 10s docker inspect "$container" | jq -c '.[0] | {name:.Name,status:.State.Status,health:(.State.Health.Status // null),oomKilled:.State.OOMKilled,exitCode:.State.ExitCode,restarts:.RestartCount,memoryLimitBytes:.HostConfig.Memory}')"
+    records="$(timeout 10s docker inspect "$container" | jq -c '.[0] | {name:.Name,status:.State.Status,health:(.State.Health.Status // null),oomKilled:.State.OOMKilled,exitCode:.State.ExitCode,startedAt:.State.StartedAt,finishedAt:.State.FinishedAt,restarts:.RestartCount,memoryLimitBytes:.HostConfig.Memory}')"
     printf 'result: container %s\n' "$records"
   done
   if [[ "${#ids[@]}" -gt 0 ]]; then
@@ -798,6 +836,7 @@ dify_diagnostics_host() {
   mapfile -t ids < <(docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False)
   [[ "${#ids[@]}" == 1 ]] || die 'Expected one staging application'
   container="${ids[0]}"
+  dify_staging_api_diagnostic "$container" "$RUN_ID"
   printf 'result: staging_release %s\n' "$(< "$STATE/releases/staging/current")"
   timeout 45s docker exec -i -w /app "$container" node --import tsx - "$RUN_ID" <<'NODE'
 (async () => {
@@ -808,7 +847,11 @@ dify_diagnostics_host() {
     const runId = process.argv[2];
     const run = await db.collections.experiment_runs.findOne({_id: runId});
     if (!run) throw Error('RunNotFound');
-    const ops = await db.collections.experiment_operations.find({runId}, {projection: {_id:1,role:1,taskId:1,state:1,safeFailure:1,workflowRunId:1,verifiedWorkflowId:1,reservationCount:1,deadlineAtMs:1}}).sort({createdAtMs:1}).limit(301).toArray();
+    const ops = await db.collections.experiment_operations.aggregate([
+      {$match:{runId}}, {$sort:{createdAtMs:1,_id:1}}, {$limit:301},
+      {$project:{_id:1,role:1,taskId:1,state:1,safeFailure:1,workflowRunId:1,verifiedWorkflowId:1,reservationCount:1,deadlineAtMs:1,
+        resultSaved:{$eq:[{$type:'$resultJson'},'string']},materializationSaved:{$eq:[{$type:'$materializationJson'},'string']}}},
+    ]).toArray();
     if (ops.length > 300) throw Error('OperationLimit');
     console.log('result: run ' + JSON.stringify({id:run._id,status:run.status,revision:run.revision,activeOperationId:run.activeOperationId,safeFailure:run.safeFailure,counters:run.counters,operations:ops}));
   } finally { await db.client.close(); }

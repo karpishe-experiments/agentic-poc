@@ -1282,7 +1282,7 @@ so it is not reported as a pass.
 
 ## Latency and asynchronous completion correction
 
-Complete this correction before the next M3 acceptance campaign. The approved
+Apply the reviewed correction before the next M3 acceptance campaign. The approved
 scope is callbacks, the existing transport and dispatcher, and additive operation
 observation fields. Do not add a queue, service, collection or alternate runner.
 Public callback contracts, request limits, publication checks and single-persona
@@ -1292,7 +1292,7 @@ sequencing stay unchanged. No paid call, reset or production change is authorize
 | --- | --- | --- |
 | Optimize measured callbacks | Time authorization, claim, context, source checks, decode, storage and finalization using sanitized run/operation IDs and counts. Batch independent metadata reads; keep MongoDB transaction commands serial. Reuse source evidence and immutable bytes only within one transaction attempt, keyed by identity and digest. Rebuild evidence on retry. Return the verified image request from the claim instead of repeating its source walk. Synthetic fixture access validates current claim, fingerprint, sources and approvals without downloading references. Reject invalid upload identity/lease before decode or storage; retain exclusive writes, original-byte readback and full source bytes at final acceptance. | Focused stale-source, ownership, claim, corrupt-byte and callback regression checks; bounded query/storage counts. Compare Dify node timing with server spans. Inspect transaction retry, storage latency and connection reuse before assigning remaining delay to a cause. |
 | Observe asynchronous execution | Submit exactly one streaming POST. Parse bounded SSE, including chunk splits, multiple events, CRLF and comments; reject malformed events. Validate the workflow run/publication identity at `workflow_started` and durably save the run ID, including matching callback-first claims. Return accepted/running, not success. Terminal GET evidence gates publication acceptance. Retain a managed reader until terminal output or the original deadline. Reconcile callbacks and one app-key GET per five-second observation cycle; terminal stream events can request immediate observation. Never repeat POST automatically. | Model-free execution lasting more than 30 seconds; early saved ID; stream-loss and restart recovery of that same operation without another submission. Local mocks do not meet this live gate. |
-| Review, release and accept | Freeze one candidate; run final affected validation and two consecutive clean independent reviews, required CI and the authorized staging delivery process. Reconcile active/uncertain work before deployment. Preserve failed runs and saved assets. Check collaboration memory/health, recent OOM/restarts and Engine.IO; reuse the existing 1536 MiB correction if healthy. Start a linked Kid successor, then Parent and Creator only after success. | Kid finishes generation, tester feedback and judge assessment without repair and with zero payable calls. Healthy callback p95 must be below five seconds; none may exceed ten seconds. Record cold-start timing separately. Retain exact release/configuration/run IDs and timing evidence. |
+| Review, release and accept | Freeze one candidate; run final affected validation and two consecutive clean independent reviews, required CI and the authorized staging delivery process. Reconcile active/uncertain work before deployment. Preserve failed runs and saved assets. Check collaboration memory/health, recent OOM/restarts and Engine.IO; reuse the existing 1536 MiB correction if healthy. Reuse completed Kid evidence, then run Parent and Creator sequentially. | Each case finishes generation, tester feedback and judge assessment without repair and with zero payable calls. Callback p95 below five seconds and maximum below ten seconds are diagnostic targets, not completion gates, under the 2026-10-11 user amendment below. Record cold-start timing separately. Retain exact release/configuration/run IDs and timing evidence. |
 
 Connection/start acknowledgement remains bounded to 30 seconds. The original
 operation deadline is ten minutes for this Simulated implementation; claim,
@@ -1746,10 +1746,59 @@ full view on each two-second poll. Monitoring now uses the existing single-run
 detail page. This reduces requested views but does not prove the cause of the
 timing failure. The local dispatcher candidate batches latest-operation heads
 and preserves a fresh read after reconciliation; its performance is not yet
-verified live. Parent and Creator remain pending until the correction passes.
+verified live. Parent and Creator remain pending; the amendment below permits
+Parent after the reviewed deployment passes its health check.
 Reuse the existing
 43.809-second same-operation restart proof and healthy collaboration checks.
 No new keys, paid calls, reset or production changes are required.
+
+### Parent campaign amendment — 2026-10-11
+
+The deployment entry gate is satisfied: reviewed source `0926ab3` passed
+CI `38133793352` (110 files/866 tests) and two independent reviews. Staging
+carrier `5289831` passed CI `38134459754`; release
+`5cf84ecc263847a8583c1e3623153151149306e8` passed Deploy `38135107485` and
+Check `38135733238`. Do not repeat these checks unless their inputs change.
+
+The user relaxed the callback timing gate. Retain timings and investigate actual
+timeouts, but do not require another Kid run or a p95/maximum timing pass before
+Parent. The completed Kid remains functional evidence, not a latency success.
+Connection/start, callback and operation deadlines, request ceilings, source and
+approval verification, zero payable calls and no automatic replay stay unchanged.
+
+The deployed candidate contains the shared Kid fixes:
+batched scheduler reads, asynchronous identity/recovery, claim/source checks and
+the repaired sandbox limit. Source inspection confirmed the existing Parent
+contract: five story pages plus cover, a two-panel third story page, eleven
+baseline images and separate reports. The entry check is satisfied unless a
+configuration or release change invalidates it.
+Do not change the persona or published workflow without a measured contract defect.
+Monitor the focused run page rather than the expensive all-runs view.
+
+Allow at most three new simulated Parent runs in this campaign, including linked
+successors. Retain each failure; inspect its cause and uncertain work before a
+correction or successor. Stop after the third unsuccessful run and report the
+failure causes, saved run IDs and remaining blocker. Do not repair an acceptance
+run in place, reset data, invoke paid providers or start a fourth Parent run.
+If Parent succeeds, proceed to Creator under the existing model-free authority.
+
+Parent attempt 1 was submitted once through the staging UI as
+`f9bc2497-02f4-457e-88f3-940fdef2c980`, booklet
+`0eb921a1-4141-4cce-8f6d-aeff19c1c41f`. Initial focused-page observation reached
+revision 25, next task J03, five logical text calls and zero payable calls.
+This is progress evidence, not completed acceptance; inspect the same run before
+any further submission. Two Parent attempts remain only if this run fails.
+
+Automated diagnostics `38137313402` found attempt 1 blocked at revision 233,
+with unknown J12 operation `6714d921-1dee-4e39-93c1-e5ab11f26c13`, Dify run
+`a6fa5a3e-e2f4-4799-b912-8216aa419e14`. Authorization succeeded in 3.215 seconds
+and simulation code in 0.227 seconds, but the save node failed at 30.004 seconds.
+Booklet recorded finalization maximum 124386 ms; this does not establish that a
+result committed. Authorization p95/max was 2922/4090 ms, with the first claim
+3509 ms versus claim p95 549 ms. The measured bottleneck in this attempt is
+finalization, not credential checking. Retain the unknown operation and inspect
+saved output before reconciliation or a successor. No successor has started;
+counters remain 41 text, 5 images, 46 steps and zero payable calls.
 
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,

@@ -631,6 +631,14 @@ VPS deployment uses a persisted `deployment_control` record. Mutation entrypoint
 
 The VPS topology and operational sequence are documented in [the deployment runbook](deployment/runbook.md). Terraform owns Cloudflare R2, Tunnel, Access and DNS rules. The root-owned host dispatcher owns Compose releases and a persistent operation journal; host flock and GitHub concurrency serialize changes. See [deployment contracts](deployment/contracts.md) for scope and acceptance limits.
 
+The diagnostic candidate checks the staging-only diagnostic API from the existing
+staging container through its fixed public HTTPS origin. It reuses Basic
+authentication in memory, rejects redirects and bounds time/response size. It
+returns only authentication status and event count. No new route, authentication
+exception, credential store or production access is added. Scheduler observations
+remain fixed-category counts rather than arbitrary container logs. Live readback
+of this candidate remains pending.
+
 The temporary Dify trial adds optional host secrets and selects real mode only in staging. The application branch owns experiment availability, tool authorization, and approval checks. The host support is removed if Dify is rejected after the trial or replaced by the accepted long-term design if Dify is adopted. See the [experiment configuration](accepted/2026-09-16_agent-platform-decision/configuration.md).
 
 The Dify collaboration service uses the API runtime's 1536 MiB memory limit,
