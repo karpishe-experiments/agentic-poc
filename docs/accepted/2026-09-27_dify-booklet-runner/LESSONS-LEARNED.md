@@ -315,9 +315,12 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Observation:** A succeeded J13 operation can coexist with a blocked run and
   a stale running generation item. The deployment drain correctly refuses that
   running bookkeeping record. Focused regression checks cover this boundary.
+  Separate failure-path reproductions showed that dispatch outcomes and failure
+  callbacks also need the same cleanup, including idempotent terminal readback.
 - **Guidance:** Close eligible item/job bookkeeping transactionally when the
   owning run becomes definitely blocked. Preserve provider results and assets;
   never turn unknown evidence into a terminal result or replay it to clear drain.
+  Apply the invariant to each terminal-failure entry point, not only `blockRun`.
 - **Evidence:** [terminal bookkeeping helper](../../../db/experiment-page-batch-failure.ts)
   and [reference read-back regression](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
 - **Promotion target:** Documentation for multi-stage external-operation jobs.

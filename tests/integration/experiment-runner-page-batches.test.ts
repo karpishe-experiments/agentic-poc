@@ -44,6 +44,49 @@ async function prepareFirst(env: Awaited<ReturnType<typeof setup>>) {
   return { identity: { runId: id(1), jobId: id(8) }, binding: { runId: id(1), jobId: id(8), operationId: id(11), expectedRevision: 2 }, request };
 }
 describe("saved Dify page batch selection", () => {
+  it.each(["observed", "callback", "retained"])("closes terminal page bookkeeping after %s failure without replay", async (failure) => {
+    const env = await setup(); const { binding } = await prepareFirst(env);
+    await env.repository().bind(binding);
+    const repository = createExperimentRepository(env.database);
+    const identity = { runId: id(1), operationId: id(11), parentWorkflowRunId: id(12), workflowRunId: id(18), nowMs: 4 };
+    const dispatch = { runId: identity.runId, operationId: identity.operationId, parentWorkflowRunId: identity.parentWorkflowRunId, nowMs: identity.nowMs };
+    // Seed the persisted dispatch boundary; this test exercises failure bookkeeping,
+    // not source/upload admission (covered by the J13 journey tests).
+    await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: {
+      dispatchStartedAtMs: 3, deadlineAtMs: 600_003, workflowRunId: id(18),
+      state: failure === "callback" ? "started" : "prepared", reservationCount: failure === "callback" ? 1 : 0,
+    } });
+    if (failure === "retained") {
+      await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: { state: "failed", safeFailure: "definite_failure" } });
+      await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { status: "blocked", safeFailure: "definite_failure", activeOperationId: null } });
+    }
+    const fail = () => failure === "observed" ? repository.recordDispatchOutcome({ ...dispatch, category: "observed_failure" }) :
+      repository.failOperation({ ...identity, category: "definite_failure" });
+    await fail();
+    const first = await env.database.collections.generation_items.findOne({ jobId: id(8), position: 0 });
+    expect(first).toMatchObject({ status: "failed", finishedAtMs: 4 });
+    expect(JSON.parse(first!.errorJson!)).toMatchObject({ code: "experiment_run_blocked", operationId: id(11), runId: id(1) });
+    expect(await env.database.collections.generation_jobs.findOne({ _id: id(8) })).toMatchObject({ status: "failed", finishedAtMs: 4 });
+    expect(await env.database.collections.generation_items.findOne({ jobId: id(8), position: 1 })).toMatchObject({ status: "pending" });
+    await fail();
+    expect(await env.database.collections.generation_items.findOne({ _id: first!._id })).toEqual(first);
+    expect(await repository.getRun(id(1))).toMatchObject({ status: "blocked", activeOperationId: null, safeFailure: "definite_failure" });
+    expect((await repository.beginDispatch(dispatch)).dispatched).toBe(false);
+  });
+  it("keeps uncertain claimed page work running for same-operation recovery", async () => {
+    const env = await setup(); const { binding } = await prepareFirst(env);
+    await env.repository().bind(binding);
+    const repository = createExperimentRepository(env.database);
+    const identity = { runId: id(1), operationId: id(11), parentWorkflowRunId: id(12), workflowRunId: id(18), nowMs: 4 };
+    const dispatch = { runId: identity.runId, operationId: identity.operationId, parentWorkflowRunId: identity.parentWorkflowRunId, nowMs: identity.nowMs };
+    await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: {
+      dispatchStartedAtMs: 3, deadlineAtMs: 600_003, workflowRunId: id(18), state: "started", reservationCount: 1,
+    } });
+    await repository.recordDispatchOutcome({ ...dispatch, category: "observed_failure" });
+    expect(await repository.getOperation(id(11))).toMatchObject({ state: "unknown", reservationCount: 1 });
+    expect(await env.database.collections.generation_items.findOne({ jobId: id(8), position: 0 })).toMatchObject({ status: "running", finishedAtMs: null });
+    expect(await repository.getRun(id(1))).toMatchObject({ status: "blocked", activeOperationId: id(11), safeFailure: "unknown_outcome" });
+  });
   it("refreshes changed sources into one linked successor without rewriting retained items", async () => {
     const env = await setup();
     await env.repository().select({ jobId: id(8), expectedRevision: 0, batch: env.batch });

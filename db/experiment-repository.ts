@@ -468,7 +468,10 @@ export function createExperimentRepository(database: Database, options: { store?
       if (category === "paused") {
         if (operation.state !== "prepared" || operation.reservationCount !== 0) throw new ExperimentRepositoryError("invalid_state", "Only a verified unclaimed operation can close.");
       } else if (operation.state !== "prepared" && operation.state !== "started" && operation.state !== "unknown") {
-        if (operation.state === "failed" && operation.safeFailure === category) return operation;
+        if (operation.state === "failed" && operation.safeFailure === category) {
+          await failTerminalPageBatchItems(database, run, session, input.nowMs);
+          return operation;
+        }
         throw new ExperimentRepositoryError("invalid_state", "Operation cannot record this outcome.");
       }
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
@@ -478,8 +481,9 @@ export function createExperimentRepository(database: Database, options: { store?
       const imageFailureHistory = operation.role === "image" && safeFailure ? { imageFailureHistory: [...(operation.imageFailureHistory ?? []), { category: safeFailure, recordedAtMs: input.nowMs }] } : {};
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure, ...imageFailureHistory, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Outcome changed concurrently.");
-      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { status: category === "paused" ? run.pauseRequested ? "paused" : "queued" : "blocked", safeFailure, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
-      if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed before outcome.");
+      const changed = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { status: category === "paused" ? run.pauseRequested ? "paused" : "queued" : "blocked", safeFailure, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      if (!changed) throw new ExperimentRepositoryError("stale_revision", "Run changed before outcome.");
+      await failTerminalPageBatchItems(database, changed, session, input.nowMs);
       return updated;
     });
   }
@@ -629,7 +633,10 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Failure identity differs from the claim.");
       if (operation.state === "succeeded") throw new ExperimentRepositoryError("conflict", "Successful operation cannot fail.");
-      if (operation.state === "failed" && input.category === "definite_failure" && operation.safeFailure === input.category) return operation;
+      if (operation.state === "failed" && input.category === "definite_failure" && operation.safeFailure === input.category) {
+        await failTerminalPageBatchItems(database, run, session, input.nowMs);
+        return operation;
+      }
       if (operation.state === "unknown" && input.category === "unknown_outcome" && operation.safeFailure === input.category) return operation;
       if (operation.state !== "started" && operation.state !== "unknown") throw new ExperimentRepositoryError("invalid_state", "Operation has no active claim.");
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
@@ -637,8 +644,9 @@ export function createExperimentRepository(database: Database, options: { store?
       const imageFailureHistory = operation.role === "image" ? { imageFailureHistory: [...(operation.imageFailureHistory ?? []), { category: input.category, recordedAtMs: input.nowMs }] } : {};
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure: input.category, ...imageFailureHistory, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation failure changed concurrently.");
-      const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
-      if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
+      const changed = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, activeOperationId: state === "unknown" ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      if (!changed) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
+      await failTerminalPageBatchItems(database, changed, session, input.nowMs);
       return updated;
     });
   }

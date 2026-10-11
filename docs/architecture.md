@@ -362,7 +362,10 @@ The local blocked-run correction fails running `dify_pages` item/job bookkeeping
 only for a definitely blocked owning run and an exact retained terminal J13
 operation. It preserves provider results, assets and operation state. Unknown,
 missing or nonterminal evidence remains unresolved; deployment drain must not
-ignore it. This correction is not yet deployed.
+ignore it. The candidate also invokes this helper in the dispatch-outcome and
+failure-callback transactions, including idempotent terminal-failure readback.
+An unclaimed definite failure must not leave its page item counted as running;
+unknown claimed work remains unresolved. This extension is not yet deployed.
 
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
