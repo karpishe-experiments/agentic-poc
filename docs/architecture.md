@@ -416,8 +416,15 @@ reserves once without extending the original deadline. A persisted five-second
 observation slot bounds application-key GET recovery to one attempt per cycle,
 including after restart; there is no nested transport retry loop. Observation
 timestamp writes wait while an image completion lease is active, so polling does
-not invalidate its source-verification transaction. Expired leases remain
-observable, and completion clears the lease without extending the deadline.
+not invalidate its source-verification transaction. Text and clarification saves
+also acquire a persisted 60-second `resultFinalizationClaim` before starting the
+materialization transaction. Both observation-slot and wake writes skip that
+lease. Completion checks the exact lease and its elapsed lifetime, clears it in
+the same commit, and releases it on a handled failure. A process interruption
+leaves an expiring lease; it does not permit another workflow POST. Expired leases
+remain observable without extending the operation deadline. Each materialization
+transaction attempt emits a sanitized `result_transaction` diagnostic event;
+attempt outcomes are not proof of commit or authorization.
 The local upload-preflight correction checks saved identity, recoverability and
 lease availability without repeating the source walk. Claim verifies current
 sources before storage; finalization validates its lease and derived path before
@@ -441,6 +448,10 @@ Published workflow identities and the saved configuration snapshot must match.
 After callback-first publication recovery, the dispatcher reloads the saved
 operation before dependent admission; an earlier in-memory record is not proof
 of the current publication state.
+Stage projection batches current sheet-source versions/approvals and Page Bible
+sibling versions/approvals. Each consumer still checks exact ownership, approved
+state and current source identities. Reads remain serial on the Mongo session;
+no verification cache survives a transaction attempt.
 The dispatcher candidate reads latest-operation heads for all saved runs in one
 batch instead of retrieving each complete history during the lane scan. It keeps
 the timestamp/ID ordering, separately reads an active operation, and refreshes
@@ -637,7 +648,7 @@ authentication in memory, rejects redirects and bounds time/response size. It
 returns only authentication status and event count. No new route, authentication
 exception, credential store or production access is added. Scheduler observations
 remain fixed-category counts rather than arbitrary container logs. Live readback
-of this candidate remains pending.
+passed in diagnostics `38138400115` and `38141274006`: authenticated HTTP 200.
 
 The temporary Dify trial adds optional host secrets and selects real mode only in staging. The application branch owns experiment availability, tool authorization, and approval checks. The host support is removed if Dify is rejected after the trial or replaced by the accepted long-term design if Dify is adopted. See the [experiment configuration](accepted/2026-09-16_agent-platform-decision/configuration.md).
 

@@ -1800,6 +1800,49 @@ finalization, not credential checking. Retain the unknown operation and inspect
 saved output before reconciliation or a successor. No successor has started;
 counters remain 41 text, 5 images, 46 steps and zero payable calls.
 
+### Parent finalization correction — 2026-10-11
+
+Fresh automated diagnostics `38141274006` confirm attempt 1 is still blocked at
+the same operation, with neither result nor materialization saved. It also
+verifies protected API access (HTTP 200) and the repaired scheduler at 1536 MiB,
+zero restarts and zero cgroup OOM counters. Do not repeat the scheduler repair or
+ask for another API credential. Its verified baseline is in the
+[Community runbook](../../deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
+
+A focused MongoDB overlap reproduction failed before the correction: polling
+wrote the operation after the callback's transaction snapshot and caused two
+full materialization attempts instead of one. The candidate acquires an optional
+60-second persisted result-finalization lease before source/materialization
+reads. Observation and wake writes skip a live lease; commit clears it, handled
+failure releases it, and process interruption permits expiry-based observation.
+The original operation deadline, saved workflow identity, one reservation,
+source/approval checks and no-replay rules remain unchanged. Per-attempt
+`result_transaction` events expose repeated work without creative content or
+credentials. These events are available in structured application diagnostics;
+the existing host phase-summary allowlist is unchanged.
+
+Code inspection also found nine serial queries for three sheet sources and two
+point reads per approved Page Bible sibling during stage projection. The candidate
+batches each independent metadata group on the same session and preserves each
+consumer's ownership/current-version/approval checks. It adds no persistent
+verification cache. This removes avoidable round trips; live improvement remains
+unverified until the reviewed correction is deployed and a successor completes.
+
+Local validation: four finalization regressions plus the existing dispatch and
+repository files passed (25 tests, 35.82 seconds). Eight affected J12/report cases
+passed after stage-read batching (53.33 seconds), including all three personas,
+unchanged point-read counts as accepted siblings accumulate, source rechecks on
+retry, revocation and one full completion. Standard local typecheck is blocked by stale
+`.next` route types and ignored `output` source copies. The current-source check
+excluding those paths passed after the batching change; clean CI must verify
+standard typecheck. No broad local suite or paid workflow ran.
+
+Next: finish affected validation and two clean independent reviews, publish and
+deploy the reviewed candidate, reconcile the exact blocked attempt with a verified
+backup, then run a linked Parent successor (attempt 2/3). Creator follows Parent
+success. Retain the failed run and all assets. No new private handoff is identified.
+Credential inventory impact: none; this correction adds no credential or consumer.
+
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
 page-specific approvals, reports and no PDF requirement. Typecheck/lint/focused

@@ -1135,10 +1135,18 @@ describe("automatic saved J08 sample dispatch", () => {
     const env = await pageBibleEnvironment(persona);
     const run = (await env.repository.getRun(env.runId))!;
     await env.testerDecision({ kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J12"], subjectId: run.bookletId } } });
+    const versions = vi.spyOn(env.database.collections.artifact_versions, "findOne");
+    const approvals = vi.spyOn(env.database.collections.approvals, "findOne");
+    const pointReads: number[] = [];
     for (const page of env.layout.pages) {
+      versions.mockClear(); approvals.mockClear();
       const result = await env.produce(page.pageIndex);
       expect(result.completed.reused).toBe(false);
+      pointReads.push(versions.mock.calls.length + approvals.mock.calls.length);
     }
+    // Later pages must not add point lookups for each already approved sibling.
+    expect(new Set(pointReads).size).toBe(1);
+    versions.mockRestore(); approvals.mockRestore();
     const artifacts = await env.database.collections.artifacts.find({ experimentRunId: env.runId, taskId: "J12" }).sort({ subjectId: 1 }).toArray();
     expect(artifacts).toHaveLength(env.layout.pages.length);
     expect(new Set(artifacts.map((item) => item.subjectId))).toEqual(new Set(env.layout.pages.map((page) => page.pageId)));

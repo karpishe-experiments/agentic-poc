@@ -206,7 +206,9 @@ container's existing `ACCESS_GATE_PASSWORD` in memory, refuses redirects, bounds
 the response, and returns only authentication outcome and event count. No new
 secret, local `.env` copy or operator credential entry is required. A failed check
 reports `unverified`; it does not establish that the endpoint is unavailable.
-This path remains pending deployment and live verification.
+Infrastructure synchronization `38138324124` installed this path. Diagnostics
+`38138400115` and `38141274006` verified authenticated HTTP 200. This verifies
+automated endpoint access, not unrestricted log access or full M3 completion.
 
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,

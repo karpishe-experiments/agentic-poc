@@ -4,6 +4,22 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Keep observation writes out of callback finalization transactions
+
+- **Context:** An asynchronous runner polls the same operation that a callback
+  reads and updates inside a MongoDB snapshot transaction.
+- **Observation:** The focused overlap test made one observation write after the
+  callback's snapshot read. The complete materialization ran twice.
+  A persisted finalization lease suppressed both observation and wake writes;
+  the same test then materialized once with unchanged identity and reservation.
+- **Guidance:** Coordinate observers with long saves through a bounded persisted
+  lease. Preserve expiry recovery and original deadlines. Recreate source checks
+  on genuine transaction retries; do not weaken validation or replay execution.
+- **Evidence:** [Focused finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts).
+  This proves the conflict mechanism locally, not the complete cause of a live
+  timeout. Compare live callback and transaction-attempt timings after deployment.
+- **Promotion target:** Documentation for asynchronous persistence.
+
 ### Correlate container snapshots with kernel OOM evidence
 
 - **Context:** A Dify scheduler restarts during its Flask migration subprocess.
