@@ -535,16 +535,19 @@ export function createExperimentDispatcher(deps: {
 
   async function cycle() {
     const runs = (await repository.listRuns()).reverse();
-    async function unresolved(run: ExperimentRunDocument) {
+    const heads = new Map((await repository.listOperationHeads(runs.map((run) => run._id)))
+      .map((operation) => [operation.runId, operation]));
+    type Head = Awaited<ReturnType<typeof repository.listOperationHeads>>[number];
+    async function unresolved(run: ExperimentRunDocument, head?: Head | null) {
       const operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) :
-        (await repository.listOperations(run._id)).at(-1);
+        head === undefined ? (await repository.listOperationHeads([run._id]))[0] : head;
       return operation?.dispatchStartedAtMs != null &&
         (run.activeOperationId === operation._id || operation.state === "succeeded" && !operation.verifiedWorkflowId)
         ? operation : null;
     }
     // Reconcile retained workflow IDs before admitting another persona's POST.
     for (const run of runs) {
-      const operation = await unresolved(run);
+      const operation = await unresolved(run, heads.get(run._id) ?? null);
       if (!operation) continue;
       // Unresolved work retains the single-experiment lane even after expiry,
       // without an ID, or after a conflicting publication. Never admit a new
@@ -552,6 +555,8 @@ export function createExperimentDispatcher(deps: {
       if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") return "waiting" as const;
       await advance(run._id);
       const currentRun = await repository.getRun(run._id);
+      // Re-read after observation. The cycle's initial heads are not evidence
+      // for state changed by a callback or reconciliation during this pass.
       if (currentRun && await unresolved(currentRun)) return "waiting" as const;
     }
     for (const run of runs) {
