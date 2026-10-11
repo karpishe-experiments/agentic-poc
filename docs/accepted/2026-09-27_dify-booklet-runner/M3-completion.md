@@ -1716,8 +1716,17 @@ The endpoint rejects unauthenticated access with HTTP 401; authenticated public
 readback remains unverified because Chrome blocks direct API navigation locally.
 Repair preview `38129788190` stopped before mutation on Compose's string-valued
 byte count. The bounded correction normalizes that value and tests numeric/string
-forms, wrong limits and malformed values. Live repair remains pending.
-Verify the resulting limit/health, then run one linked Kid successor. Parent and
+forms, wrong limits and malformed values. PR #171 merged that correction at
+`c8f84321ce9d5a1fa2e5ccc37fb037c53510060b`; CI `38130086632` and Infrastructure
+apply `38130242627` passed. Repair preview `38130439691` and apply `38130490623`
+passed. Diagnostics `38130594784` verified the healthy 1024 MiB sandbox, zero
+restarts/OOM counters and 11,480 MiB available host memory. Collaboration remained
+healthy at 1536 MiB. A high historical `worker_beat` restart count is a separate
+unresolved diagnostic observation, not proof of an OOM cause.
+One linked Kid successor `fd21423e-0c6f-4303-80c8-9205900e5656` was submitted
+through the staging UI, with booklet `75e0b53e-af6f-4bd9-8c06-f80bb596b326`.
+Its predecessor is `390e8f0b-440a-4ebe-8a57-d23a80d5c8bb`. Acceptance remains
+in progress; do not resubmit this run. Parent and
 Creator follow only after an uninterrupted Kid completion. Reuse the existing
 43.809-second same-operation restart proof and healthy collaboration checks.
 No new keys, paid calls, reset or production changes are required.

@@ -2,6 +2,31 @@
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
 
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+timeout() { shift; "$@"; }
+docker() {
+  case "$1" in
+    ps) [[ "${missing:-false}" == true ]] || printf "fixture-container\n";;
+    exec) [[ "${racing:-false}" != true ]] || return 1; printf "oom 2\ncredential=do-not-print\noom 2 secret\n";;
+    logs) printf "PermissionError: credential=do-not-print\nWRONGPASS credential=do-not-print\n";;
+    *) return 1;;
+  esac
+}
+for service in sandbox worker_beat; do
+  output="$(dify_service_diagnostics "$service")"
+  [[ "$output" == *"result: ${service}_memory oom 2"* ]]
+  [[ "$output" == *"\"permissionerror\": 1"* && "$output" == *"\"wrongpass\": 1"* ]]
+  [[ "$output" != *do-not-print* && "$output" != *"oom 2 secret"* ]]
+done
+racing=true
+output="$(dify_service_diagnostics worker_beat)"
+[[ "$output" == *"result: worker_beat_memory unavailable"* && "$output" == *worker_beat_errors* ]]
+missing=true
+[[ -z "$(dify_service_diagnostics worker_beat)" ]]
+if (dify_service_diagnostics arbitrary) >/dev/null 2>&1; then exit 1; fi
+' _ "$script"
+
 diagnostic_fixture="$(mktemp -d)"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"
