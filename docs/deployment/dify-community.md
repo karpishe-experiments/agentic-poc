@@ -144,7 +144,16 @@ internal keys on update: encrypted data depends on them.
 ### Enable the Community admin API
 
 The admin API key is a separate, powerful console bearer credential. The pinned
-Dify release defaults it to disabled. Use the installed host-local action from a
+Dify release defaults it to disabled. The live instance is enabled as of
+2026-10-11. The protected host setting, API service recreation, and Dify
+readiness passed; a developer machine received HTTP 200 for an authenticated
+console read, while a separate invalid-key request received HTTP 401. The host
+operation journal is idle. No VPS service is recorded as configured or verified as an
+admin API client. See [PR #168](https://github.com/karpishe-experiments/agentic-poc/pull/168)
+and the [current infrastructure apply](https://github.com/karpishe-experiments/agentic-poc/actions/runs/38122080367)
+for reviewed code and host synchronization evidence.
+
+For a new installation or guarded recheck, use the installed host-local action from a
 private interactive root terminal on the VPS after Infrastructure has synchronized
 the reviewed `master` script. This action holds the shared host lock, retains a
 host operation journal, checks for active Dify work, and recreates only `api` and
@@ -170,6 +179,22 @@ It does not prove a bearer request from a developer machine. Verify one scoped,
 non-billable console read from each intended client privately before recording
 remote access as working. Keep the password-manager copy available to approved
 developer and VPS clients; do not use a Booklet runtime or Dify app key for this.
+
+From a private Bash terminal on a client that has received the key through the
+approved private handoff, run this read-only check. It passes the key to curl on
+standard input, keeps it out of shell history and command arguments, and prints
+only the HTTP status and content type. The workspace ID is not a secret. HTTP 200
+with `application/json` confirms this client can authenticate. Check each
+intended VPS service separately before recording its access as working.
+
+```bash
+read -rsp 'Dify admin key: ' dify_admin_key; echo
+printf 'header = "Authorization: Bearer %s"\n' "$dify_admin_key" |
+  curl --config - -sS -o /dev/null -w 'HTTP %{http_code} %{content_type}\n' \
+    -H 'X-WORKSPACE-ID: ffac910f-2786-490e-90d8-07243d49741b' \
+    'https://dify.uniwares.co.uk/console/api/features'
+unset dify_admin_key
+```
 
 If apply stops, inspect the retained operation journal and container state
 privately. Repeat the same local apply action to resume this operation. If it
