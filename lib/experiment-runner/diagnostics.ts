@@ -5,6 +5,22 @@ type Identity = { runId: string; operationId?: string };
 type Counters = { queryCount: number; storageCallCount: number };
 const current = new AsyncLocalStorage<Counters>();
 
+export type DiagnosticEvent = Identity & Counters & {
+  event: "booklet_callback_phase"; timestamp: string; phase: string;
+  elapsedMs: number; outcome: "succeeded" | "failed";
+};
+type DiagnosticBuffer = { startedAt: string; dropped: number; events: DiagnosticEvent[] };
+// Next.js can bundle the handler and runner separately within the same process.
+const bufferKey = Symbol.for("booklet.diagnostics");
+const processState = globalThis as typeof globalThis & { [bufferKey]?: DiagnosticBuffer };
+const buffer = processState[bufferKey] ??= { startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(), dropped: 0, events: [] };
+
+export function recentDiagnostics(runId: string | undefined, limit: number) {
+  const matching = runId ? buffer.events.filter(event => event.runId === runId) : buffer.events;
+  return { processStartedAt: buffer.startedAt, truncated: buffer.dropped > 0 || matching.length > limit,
+    events: matching.slice(-limit).map(event => ({ ...event })) };
+}
+
 export function countVerificationQuery(count = 1) {
   const counters = current.getStore();
   if (counters) counters.queryCount += count;
@@ -27,7 +43,7 @@ export function diagnosticAssetStore(store: AssetStore): AssetStore {
 export async function measurePhase<T>(identity: Identity, phase: string, work: () => Promise<T>): Promise<T> {
   const start = performance.now();
   const counters = { queryCount: 0, storageCallCount: 0 };
-  let outcome = "failed";
+  let outcome: DiagnosticEvent["outcome"] = "failed";
   try {
     const result = await current.run(counters, work);
     outcome = "succeeded";
@@ -38,8 +54,11 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
       parent.queryCount += counters.queryCount;
       parent.storageCallCount += counters.storageCallCount;
     }
-    console.info(JSON.stringify({ event: "booklet_callback_phase", runId: identity.runId,
+    const event: DiagnosticEvent = { event: "booklet_callback_phase", timestamp: new Date().toISOString(), runId: identity.runId,
       ...(identity.operationId ? { operationId: identity.operationId } : {}), phase,
-      elapsedMs: Math.round(performance.now() - start), ...counters, outcome }));
+      elapsedMs: Math.round(performance.now() - start), ...counters, outcome };
+    buffer.events.push(event);
+    if (buffer.events.length > 5000) { buffer.events.shift(); buffer.dropped++; }
+    console.info(JSON.stringify(event));
   }
 }
