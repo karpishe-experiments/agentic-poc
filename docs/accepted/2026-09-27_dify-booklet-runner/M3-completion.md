@@ -1690,6 +1690,25 @@ successful runner recovery. Application-restart recovery passed as recorded abov
 full-campaign callback performance, campaign-time
 collaboration health and uninterrupted Kid → Parent → Creator remain unproven.
 
+### Automated diagnostic candidate
+
+Kid `390e8f0b-440a-4ebe-8a57-d23a80d5c8bb` is blocked at J07. Its Dify
+identity code node failed after 15.014 seconds with `timeout` and `signal: killed`,
+before authorization/reservation. This does not prove an OOM cause. The retained
+14-event phase groups show authorization p95/max 3906 ms, claim 2753 ms,
+context 3471 ms and result finalization 4442 ms. Later image callbacks and full
+completion remain unverified.
+
+The next candidate adds authenticated staging phase diagnostics and restricted
+host/run diagnostics through Dify operations. It raises only the Python sandbox
+target from 256 to 1024 MiB, with live capacity and idle-work guards. See the
+[operating procedure](../../deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
+These changes are not yet deployed. Collect live diagnostics before repair,
+verify the resulting limit/health, then run one linked Kid successor. Parent and
+Creator follow only after an uninterrupted Kid completion. Reuse the existing
+43.809-second same-operation restart proof and healthy collaboration checks.
+No new keys, paid calls, reset or production changes are required.
+
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
 page-specific approvals, reports and no PDF requirement. Typecheck/lint/focused

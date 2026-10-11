@@ -47,7 +47,7 @@ services:
       - /var/lib/kids-booklet/dify/redis:/data
   sandbox:
     image: langgenius/dify-sandbox@sha256:750e1111426ef31a9217b81c98cccfb750f17b182af3221102e420afa9f0928e
-    mem_limit: 256m
+    mem_limit: 1024m
     volumes:
       - /var/lib/kids-booklet/dify/sandbox/dependencies:/dependencies
       - /var/lib/kids-booklet/dify/sandbox/conf:/conf

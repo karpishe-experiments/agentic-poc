@@ -14,6 +14,7 @@ ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION='
 GENERATE_PASSWORD=false
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 SECRET_NAME=''
+RUN_ID=''
 COMPOSE_SECRET_FILE=''
 ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTPUT=''
 ROOT=/opt/kids-booklet
@@ -40,7 +41,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-diagnostics, dify-repair-sandbox, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -58,6 +59,7 @@ Options:
   --commit FULL_SHA --confirmation kids_booklet  required for index retirement apply
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
+  --run-id UUID                     optional staging run for dify-diagnostics
   --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE/DIFY_BOOKLET_RUNNER bundle
   --generate-password               generate and display ACCESS_GATE_PASSWORD once
   --help
@@ -79,7 +81,7 @@ parse_arguments() {
       --help) usage; exit 0 ;;
       --apply) APPLY=true; shift ;;
       --generate-password) GENERATE_PASSWORD=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -89,6 +91,7 @@ parse_arguments() {
           --image-digest) IMAGE_DIGEST="$value";; --backup-id) BACKUP_ID="$value";; --confirmation) CONFIRMATION="$value";;
           --vps-host) VPS_HOST="$value";; --vps-user) VPS_USER="$value";; --commit) COMMIT="$value";; --request-id) REQUEST_ID="$value";;
           --secret-name) SECRET_NAME="$value";;
+          --run-id) RUN_ID="$value";;
           --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
           --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
@@ -100,7 +103,8 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ -z "$RUN_ID" || ( "$ACTION" == dify-diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]] || die 'Run ID requires dify-diagnostics and a lowercase UUID'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
@@ -147,7 +151,7 @@ validate_arguments() {
       die 'Index retirement creates its own pre-change backup'
     fi
   fi
-  case "$ACTION" in status|check|dify-check|dify-idle|dify-discover|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  case "$ACTION" in status|check|dify-check|dify-idle|dify-discover|dify-diagnostics|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
     [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
     [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
@@ -197,6 +201,7 @@ host_call() {
   [[ -z "$BACKUP_ID" ]] || remote+=(--backup-id "$BACKUP_ID")
   [[ -z "$CONFIRMATION" ]] || remote+=(--confirmation "$CONFIRMATION")
   [[ -z "$REQUEST_ID" ]] || remote+=(--request-id "$REQUEST_ID")
+  [[ -z "$RUN_ID" ]] || remote+=(--run-id "$RUN_ID")
   [[ "$APPLY" == false ]] || remote+=(--apply)
   printf -v remote_command ' %s' "${remote[@]}"
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command"
@@ -551,7 +556,7 @@ dify_service_records_are_ready() {
   ' >/dev/null
 }
 dify_install_preflight() {
-  local cpu_count memory_mib available_mib free_gib expected_host
+  local cpu_count memory_mib available_mib free_gib expected_host required_available_mib=4096
   for name in docker curl tar sha256sum jq python3 awk df nproc flock ss stat readlink install hostname uname sort; do need_command "$name"; done
   [[ -f "$ROOT/dify/release.json" && -f "$ROOT/dify/compose.override.yml" ]] || die 'Reviewed Dify release artifacts have not been synchronized to the host'
   jq -e '.release == "1.17.1" and (.source_commit | test("^[a-f0-9]{40}$")) and (.source_archive_sha256 | test("^[a-f0-9]{64}$"))' "$ROOT/dify/release.json" >/dev/null || die 'Invalid Dify release manifest'
@@ -568,7 +573,9 @@ dify_install_preflight() {
   if [[ ! -f "$DIFY_DATA/current" ]]; then
     [[ "$available_mib" -ge 8192 && "$free_gib" -ge 60 ]] || die 'Shared-host available RAM or disk is below the initial Dify installation checkpoint'
   else
-    [[ "$available_mib" -ge 4096 && "$free_gib" -ge 20 ]] || die 'Insufficient headroom to resume or verify Dify installation'
+    # This targeted repair adds 768 MiB; leave at least 2 GiB for the shared host.
+    [[ "$ACTION" != dify-repair-sandbox ]] || required_available_mib=2816
+    [[ "$available_mib" -ge "$required_available_mib" && "$free_gib" -ge 20 ]] || die 'Insufficient headroom to resume or verify Dify installation'
   fi
   docker compose version --short | awk -F. '{exit !($1 > 2 || ($1 == 2 && $2 >= 28))}' || die 'Docker Compose 2.28 or newer is required for port overrides'
   if [[ ! -f "$DIFY_DATA/current" && "$(ss -lnt '( sport = :3300 )' | wc -l)" -gt 1 ]]; then
@@ -745,6 +752,100 @@ dify_repair_collaboration_host() {
 dify_check_host() {
   [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Dify 1.17.1 is not recorded as installed'
   dify_verify_services
+}
+
+dify_diagnostic_identity() {
+  [[ "$(hostname -f)" == "$(jq -er '.host_observation.hostname' "$CONFIG_FILE")" ]] || die 'Diagnostic host identity differs'
+  for command in docker jq timeout python3; do need_command "$command"; done
+}
+dify_diagnostics_host() {
+  dify_diagnostic_identity
+  printf 'result: host %s\n' "$(python3 -c 'import json; m={k:int(v.split()[0]) for k,v in (line.split(":",1) for line in open("/proc/meminfo"))}; print(json.dumps({k:m[k]//1024 for k in ["MemTotal","MemAvailable","SwapTotal","SwapFree"]}))')"
+  printf 'result: disk %s\n' "$(df -Pk "$STATE" | awk 'NR==2 {printf "availableKiB=%s usedPercent=%s", $4, $5}')"
+  show_operation_status
+  local ids=() container records
+  mapfile -t ids < <(docker ps -aq --filter label=com.docker.compose.project=booklet-dify)
+  [[ "${#ids[@]}" -le 30 ]] || die 'Unexpected Dify container count'
+  for container in "${ids[@]}"; do
+    records="$(timeout 10s docker inspect "$container" | jq -c '.[0] | {name:.Name,status:.State.Status,health:(.State.Health.Status // null),oomKilled:.State.OOMKilled,restarts:.RestartCount,memoryLimitBytes:.HostConfig.Memory}')"
+    printf 'result: container %s\n' "$records"
+  done
+  if [[ "${#ids[@]}" -gt 0 ]]; then
+    timeout 15s docker stats --no-stream --format 'result: resources {{.Name}} cpu={{.CPUPerc}} memory={{.MemUsage}} pids={{.PIDs}}' "${ids[@]}"
+  fi
+  container="$(docker ps -q --filter label=com.docker.compose.project=booklet-dify --filter label=com.docker.compose.service=sandbox)"
+  if [[ -n "$container" ]]; then
+    timeout 10s docker exec "$container" sh -c 'if [ -r /sys/fs/cgroup/memory.events ]; then cat /sys/fs/cgroup/memory.events; fi' |
+      awk '/^(low|high|max|oom|oom_kill|oom_group_kill) [0-9]+$/ {print "result: sandbox_memory " $0}'
+    timeout 15s docker logs --since 2h --tail 2000 "$container" 2>&1 | python3 -c '
+import collections, json, sys
+counts = collections.Counter()
+for line in sys.stdin:
+    for term in ("timeout", "signal: killed", "out of memory", "permission denied", "connection refused"):
+        if term in line.lower(): counts[term] += 1
+print("result: sandbox_errors " + json.dumps(dict(counts)))'
+  fi
+  [[ -n "$RUN_ID" ]] || return 0
+  mapfile -t ids < <(docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False)
+  [[ "${#ids[@]}" == 1 ]] || die 'Expected one staging application'
+  container="${ids[0]}"
+  printf 'result: staging_release %s\n' "$(< "$STATE/releases/staging/current")"
+  timeout 45s docker exec -i -w /app "$container" node --import tsx - "$RUN_ID" <<'NODE'
+(async () => {
+  if (process.env.DEPLOYMENT_ENV !== '_staging') throw Error('UnexpectedTarget');
+  const {getDatabase} = require('./db/client.ts');
+  const db = getDatabase();
+  try {
+    const runId = process.argv[2];
+    const run = await db.collections.experiment_runs.findOne({_id: runId});
+    if (!run) throw Error('RunNotFound');
+    const ops = await db.collections.experiment_operations.find({runId}, {projection: {_id:1,role:1,taskId:1,state:1,safeFailure:1,workflowRunId:1,verifiedWorkflowId:1,reservationCount:1,deadlineAtMs:1}}).sort({createdAtMs:1}).limit(301).toArray();
+    if (ops.length > 300) throw Error('OperationLimit');
+    console.log('result: run ' + JSON.stringify({id:run._id,status:run.status,revision:run.revision,activeOperationId:run.activeOperationId,safeFailure:run.safeFailure,counters:run.counters,operations:ops}));
+  } finally { await db.client.close(); }
+})().catch(() => {console.error('error: staging run diagnostic failed');process.exitCode=1;});
+NODE
+  timeout 20s docker logs --since 24h --tail 20000 "$container" 2>&1 | python3 -c '
+import collections, json, math, sys
+groups = collections.defaultdict(list)
+for line in sys.stdin:
+    try: row = json.loads(line[line.index("{"):])
+    except (ValueError, TypeError): continue
+    if not isinstance(row, dict): continue
+    if row.get("event") != "booklet_callback_phase" or row.get("runId") != sys.argv[1]: continue
+    if row.get("phase") not in ("authorization","claim","context","source_verification","fixture_authorization","image_callback","image_claim","image_decode","image_finalize","image_preflight","image_storage","result_finalization"): continue
+    value = row.get("elapsedMs")
+    if isinstance(value, (int,float)) and math.isfinite(value) and value >= 0: groups[row["phase"]].append(value)
+for phase, values in sorted(groups.items()):
+    print("result: timings " + json.dumps({"phase":phase,"count":len(values),"firstMs":values[0],"p95Ms":sorted(values)[math.ceil(len(values)*.95)-1],"maxMs":max(values)}))
+print("result: timing_scope " + json.dumps({"windowHours":24,"tailLines":20000,"recordCount":sum(map(len,groups.values()))}))' "$RUN_ID"
+}
+dify_sandbox_is_ready() {
+  local container
+  container="$(dify_compose ps -q sandbox)"
+  [[ -n "$container" ]] && docker inspect "$container" | jq -e 'length==1 and .[0].State.Status=="running" and .[0].State.Health.Status=="healthy" and .[0].HostConfig.Memory==1073741824' >/dev/null
+}
+dify_sandbox_preflight() {
+  dify_diagnostic_identity
+  dify_install_preflight
+  dify_validate_compose
+  private_temp
+  dify_compose config --format json > "$TEMP_DIR/sandbox-compose.json"
+  jq -e '.services.sandbox.mem_limit == 1073741824' "$TEMP_DIR/sandbox-compose.json" >/dev/null || die 'Reviewed sandbox configuration must specify 1024 MiB'
+  local available
+  available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  [[ "$available" -ge 2883584 ]] || die 'Sandbox increase requires 2816 MiB available memory (768 MiB increase plus 2 GiB headroom)'
+}
+dify_repair_sandbox_host() {
+  dify_sandbox_preflight
+  if dify_sandbox_is_ready; then printf 'exists: sandbox has 1024 MiB and is healthy\n'; save_success ''; return; fi
+  dify_idle_host
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate sandbox >/dev/null
+  dify_verify_services
+  dify_sandbox_is_ready || die 'Sandbox memory or health verification failed'
+  printf 'verified: sandbox has 1024 MiB and is healthy\n'
+  save_success ''
 }
 dify_idle_host() {
   local workflow_count agent_count=0 key record status
@@ -1005,6 +1106,7 @@ host_run() {
   if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
   if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
   if [[ "$ACTION" == dify-repair-collaboration ]]; then dify_repair_collaboration_host; return; fi
+  if [[ "$ACTION" == dify-repair-sandbox ]]; then dify_repair_sandbox_host; return; fi
   [[ "$ACTION" != dify-enable-admin-api ]] || die 'Resume Dify admin API setup from the private VPS terminal with its local apply action'
   run_lifecycle
 }
@@ -1041,11 +1143,17 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
   if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
   if [[ "$ACTION" == dify-idle ]]; then dify_idle_host; exit 0; fi
+  if [[ "$ACTION" == dify-diagnostics ]]; then dify_diagnostics_host; exit 0; fi
+  if [[ "$ACTION" == dify-repair-sandbox && "$APPLY" == false ]]; then
+    dify_sandbox_preflight
+    printf 'would update: Dify Python sandbox only, 1024 MiB; apply requires idle work\n'
+    exit 0
+  fi
   if [[ "$ACTION" == dify-install && "$APPLY" == false ]]; then
     dify_install_preflight
     if [[ -f "$DIFY_DATA/current" ]]; then printf 'exists: pinned Dify 1.17.1 installation\n'; else printf 'would create: pinned Dify 1.17.1 installation\n'; fi
@@ -2622,7 +2730,7 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-diagnostics && "$ACTION" != dify-repair-sandbox && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac

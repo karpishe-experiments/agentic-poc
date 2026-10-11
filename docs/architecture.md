@@ -457,6 +457,12 @@ Sanitized phase diagnostics report IDs, timing, instrumented query/storage count
 and outcome, never credentials or creative content. These local changes do not
 establish deployed callback latency; live proof is required by
 [M3](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#latency-and-asynchronous-completion-correction).
+The staging-only `/api/diagnostics/logs` endpoint uses the existing Basic gate
+and returns bounded structured phase events, including failed outcomes, not raw
+logs or exception bodies. Its process-local 5000-event buffer is shared across
+Next.js bundles and clears on restart. The restricted Dify operations diagnostics
+action provides host/container state and bounded retained callback summaries;
+see [the operating runbook](deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
 
 With the runner enabled, `/experiments/booklet-runs` shows saved work through the configured slice,
 warnings, exact version approvals, limits and Pause/Resume. Only Simulated runs

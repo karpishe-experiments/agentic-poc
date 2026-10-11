@@ -72,6 +72,7 @@ no values and does not prove live access.
 | Need | Action |
 | --- | --- |
 | Verify an environment | Run **Check deployment** on its environment branch |
+| Inspect Dify host state and staging runner timings | Run **Dify operations** with `action=diagnostics`, Apply off, and an optional staging run UUID; see [diagnostics and sandbox repair](dify-community.md#automated-diagnostics-and-sandbox-memory) |
 | Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; inspect the Infrastructure preview; explicitly run **Infrastructure** with `apply=true`; then release each affected environment |
 | Create a backup | Run **Maintenance** with `action=backup`; retain the exact `backupId` from the summary |
 | Restore | Run **Maintenance** with `action=restore`, the exact `backup_id`, and confirmation `kids_booklet` or `kids_booklet_prod` |

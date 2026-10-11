@@ -136,6 +136,32 @@ Booklet containers and workflow content. Inspect the retained operation journal
 before resume after an interruption. Verify the public WebSocket and editor
 afterward; local socket readiness alone does not prove the Tunnel path.
 
+### Automated diagnostics and sandbox memory
+
+Execution machine: GitHub Actions, using the existing restricted VPS access.
+Synchronize the reviewed dispatcher and override through Infrastructure first.
+In **Dify operations**, select `diagnostics`, leave Apply off, and optionally
+enter the staging run UUID. The sanitized summary contains host capacity,
+container state/limits, sandbox memory/error counters, and saved run state and
+callback timings when a run is selected. It does not expose raw application
+logs, credentials or creative content. Timing coverage is bounded to 24 hours
+and 20,000 container log lines; absence of records is not a performance pass.
+
+For a memory repair, select `repair-sandbox` with Apply off for preview, then
+Apply at the authorized checkpoint. The reviewed target is 1024 MiB, not an
+unlimited container. Apply requires at least 2816 MiB available memory and
+verified idle Dify work. It recreates only the Python sandbox and verifies its
+health and exact limit. If a guard fails, inspect `diagnostics` and `status`;
+do not bypass the guard or repeat a workflow POST. After interruption, inspect
+the retained journal before using `resume`. This repair does not establish
+that memory pressure caused a code-node timeout; compare cgroup counters and
+live successor behavior. Live repair verification is pending.
+
+For recent Booklet callback events, use the authenticated staging endpoint
+`GET /api/diagnostics/logs?runId=<UUID>&limit=200`. It uses the existing Booklet
+login, returns no raw exception text, and clears its bounded buffer on restart.
+Use workflow diagnostics for retained container timing summaries.
+
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,
 or credential-bearing logs in Actions summaries. Do not replace generated

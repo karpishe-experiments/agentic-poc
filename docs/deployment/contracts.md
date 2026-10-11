@@ -47,7 +47,7 @@ infer their presence from `.env.example`.
 | Name / variable | Storage | Current consumer and purpose |
 | --- | --- | --- |
 | `MONGODB_URI` | Protected host override; corresponding Atlas application user | MongoDB connection, including database password, for durable Booklet data and recovery; environment-scoped user |
-| `ACCESS_GATE_PASSWORD` | Protected host override | Booklet Basic HTTP gate with fixed username `booklet`; at least 16 characters; dedicated Dify tool routes use their own key |
+| `ACCESS_GATE_PASSWORD` | Protected host override | Booklet Basic HTTP gate, including staging diagnostic logs, with fixed username `booklet`; at least 16 characters; dedicated Dify tool routes use their own key |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Protected host override | S3-compatible R2 access for assets, diagnostics and Booklet backup/restore; separate from Terraform-state and Dify-backup keys |
 | `OPENAI_API_KEY` | Protected host override | Legacy application model/image execution; enabled Dify runner does not require it in the app schema, but deployment still requires a nonempty value |
 | `GEMINI_API_KEY` | Optional private local environment; no managed deployment provision path | Gemini image provider sends `x-goog-api-key`; conditional on selecting that provider, not required for simulated Dify workflows |
@@ -157,7 +157,7 @@ authenticated access; use read-only workspace checks.
 
 | Name / variable mapping | Storage | Consumer and purpose |
 | --- | --- | --- |
-| `DEPLOY_SSH_PRIVATE_KEY` | GitHub repository secret; bootstrap copy `/var/lib/kids-booklet/deploy-key` | Actions SSH to restricted VPS deployment account |
+| `DEPLOY_SSH_PRIVATE_KEY` | GitHub repository secret; bootstrap copy `/var/lib/kids-booklet/deploy-key` | Actions SSH to restricted VPS deployment account, including read-only Dify host/run diagnostics |
 | `DEPLOY_SSH_HOST_KEY` | GitHub repository secret; source is VPS public host key | Pin VPS identity; public trust material, not a private key |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`; mapped to `TUNNEL_SERVICE_TOKEN_ID`, `TUNNEL_SERVICE_TOKEN_SECRET` | GitHub repository secrets; sensitive Terraform state; temporary operator environment | Cloudflare Access authorization for Tunnel SSH |
 | `CLOUDFLARE_API_TOKEN`; Terraform alias `TF_VAR_cloudflare_api_token` | GitHub repository secret; temporary operator credential session | Cloudflare discovery and infrastructure management; never app container credentials |
@@ -216,6 +216,25 @@ readiness requires an Engine.IO open packet through the local proxy, not just
 running containers. `dify-repair-collaboration` is preview-by-default; apply checks
 headroom and idle records, uses the shared lock/journal, and recreates only
 `api_websocket`. It preserves credentials, data and Booklet releases.
+
+The Dify operations workflow's read-only `diagnostics` action uses the existing
+restricted SSH account and deployment credentials. An optional staging run UUID
+selects saved run/operation state and callback timing summaries. Output includes
+host memory/disk, container limits/health/restarts, sandbox cgroup memory counters
+where available, and counts of recognized sandbox errors, not raw logs.
+`dify-repair-sandbox` previews a 1024 MiB Python sandbox limit. Apply requires
+idle Dify work and at least 2816 MiB available memory, then uses the shared
+lock/journal to recreate only `sandbox`. Other limits, data and releases remain
+unchanged. A killed process alone does not prove an OOM event.
+
+`GET /api/diagnostics/logs` reuses `ACCESS_GATE_PASSWORD` with the ordinary Basic
+gate and is available only in `_staging`. It retains at most 5000 structured
+callback phase events in process memory; responses contain at most 500 events
+and use `Cache-Control: no-store`. Optional `runId` and `limit` select records.
+Restart clears the buffer. The host diagnostic action can read bounded retained
+container timing logs after restart. This adds consumers of existing credentials,
+not new secrets, storage or transfer copies. Live provision/use remains pending
+until the reviewed candidate is deployed and checked.
 
 The pinned Community release and override are in `deploy/dify/`. They are a
 candidate until resolved Compose, image pulls, startup, and restoration pass
