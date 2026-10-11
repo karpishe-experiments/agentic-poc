@@ -16,16 +16,23 @@ RUN_ID=""; ACTION=dify-repair-sandbox; DIFY_DATA="$2"
 dify_diagnostic_identity() { :; }
 dify_install_preflight() { :; }
 dify_validate_compose() { :; }
-dify_compose() { printf "{\"services\":{\"sandbox\":{\"mem_limit\":1073741824}}}\n"; }
+memory_json=1073741824
+dify_compose() { printf "{\"services\":{\"sandbox\":{\"mem_limit\":%s}}}\n" "$memory_json"; }
 awk() { printf "2883583\n"; }
 if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
 awk() { printf "2883584\n"; }
 dify_sandbox_preflight
+memory_json=\"1073741824\"
+dify_sandbox_preflight
+memory_json=\"268435456\"
+if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
+memory_json=\"invalid\"
+if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
 dify_sandbox_is_ready() { [[ -f "$DIFY_DATA/healthy" ]]; }
 dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
 set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
 dify_compose() {
-  if [[ "$1" == config ]]; then printf "{\"services\":{\"sandbox\":{\"mem_limit\":1073741824}}}\n"; return; fi
+  if [[ "$1" == config ]]; then printf "{\"services\":{\"sandbox\":{\"mem_limit\":\"1073741824\"}}}\n"; return; fi
   printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; touch "$DIFY_DATA/healthy";
 }
 dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }

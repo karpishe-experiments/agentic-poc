@@ -1703,8 +1703,21 @@ The next candidate adds authenticated staging phase diagnostics and restricted
 host/run diagnostics through Dify operations. It raises only the Python sandbox
 target from 256 to 1024 MiB, with live capacity and idle-work guards. See the
 [operating procedure](../../deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
-These changes are not yet deployed. Collect live diagnostics before repair,
-verify the resulting limit/health, then run one linked Kid successor. Parent and
+PR #169 merged the reviewed package at `f79caeaf50c65f0254632504e70f898ac9fcb5eb`.
+CI `38128921349` passed 864 tests and both Linux deployment shell suites.
+Staging release `0e6404fa0496c1d8c0046095d4b0573d5a01ef3d` passed Deploy
+`38128901344` and Check `38129502663`, with pre-release backup
+`staging-20261011T094038Z-f732da8409366423`. Infrastructure `38129671204`
+synchronized the dispatcher with zero Terraform changes. Automated diagnostics
+`38129774127` passed: 11,454 MiB available memory, sandbox cgroup `oom=0`
+and `oom_kill=0`. The old run has no timing records in the new container;
+the retained earlier samples above remain the available evidence.
+The endpoint rejects unauthenticated access with HTTP 401; authenticated public
+readback remains unverified because Chrome blocks direct API navigation locally.
+Repair preview `38129788190` stopped before mutation on Compose's string-valued
+byte count. The bounded correction normalizes that value and tests numeric/string
+forms, wrong limits and malformed values. Live repair remains pending.
+Verify the resulting limit/health, then run one linked Kid successor. Parent and
 Creator follow only after an uninterrupted Kid completion. Reuse the existing
 43.809-second same-operation restart proof and healthy collaboration checks.
 No new keys, paid calls, reset or production changes are required.

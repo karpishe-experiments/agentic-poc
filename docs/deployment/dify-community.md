@@ -155,7 +155,9 @@ health and exact limit. If a guard fails, inspect `diagnostics` and `status`;
 do not bypass the guard or repeat a workflow POST. After interruption, inspect
 the retained journal before using `resume`. This repair does not establish
 that memory pressure caused a code-node timeout; compare cgroup counters and
-live successor behavior. Live repair verification is pending.
+live successor behavior. Compose serializes byte limits as decimal JSON strings;
+the preflight normalizes the value before comparing the exact byte count.
+Live repair verification is pending.
 
 For recent Booklet callback events, use the authenticated staging endpoint
 `GET /api/diagnostics/logs?runId=<UUID>&limit=200`. It uses the existing Booklet

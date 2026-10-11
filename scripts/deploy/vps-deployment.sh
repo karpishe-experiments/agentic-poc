@@ -831,7 +831,7 @@ dify_sandbox_preflight() {
   dify_validate_compose
   private_temp
   dify_compose config --format json > "$TEMP_DIR/sandbox-compose.json"
-  jq -e '.services.sandbox.mem_limit == 1073741824' "$TEMP_DIR/sandbox-compose.json" >/dev/null || die 'Reviewed sandbox configuration must specify 1024 MiB'
+  jq -e '(.services.sandbox.mem_limit | tonumber) == 1073741824' "$TEMP_DIR/sandbox-compose.json" >/dev/null || die 'Reviewed sandbox configuration must specify 1024 MiB'
   local available
   available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
   [[ "$available" -ge 2883584 ]] || die 'Sandbox increase requires 2816 MiB available memory (768 MiB increase plus 2 GiB headroom)'
