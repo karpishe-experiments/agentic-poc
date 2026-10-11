@@ -758,6 +758,25 @@ dify_diagnostic_identity() {
   [[ "$(hostname -f)" == "$(jq -er '.host_observation.hostname' "$CONFIG_FILE")" ]] || die 'Diagnostic host identity differs'
   for command in docker jq timeout python3; do need_command "$command"; done
 }
+dify_service_diagnostics() {
+  local service="$1" container
+  [[ "$service" == sandbox || "$service" == worker_beat ]] || die 'Unsupported diagnostic service'
+  container="$(docker ps -aq --filter label=com.docker.compose.project=booklet-dify --filter "label=com.docker.compose.service=$service")"
+  [[ -n "$container" ]] || return 0
+  # A restart can race exec. Report the gap without exposing Docker errors.
+  if ! timeout 10s docker exec "$container" sh -c 'if [ -r /sys/fs/cgroup/memory.events ]; then cat /sys/fs/cgroup/memory.events; else exit 1; fi' 2>/dev/null |
+    awk -v service="$service" '/^(low|high|max|oom|oom_kill|oom_group_kill) [0-9]+$/ {print "result: " service "_memory " $0}'; then
+    printf 'result: %s_memory unavailable\n' "$service"
+  fi
+  timeout 15s docker logs --since 2h --tail 2000 "$container" 2>&1 | python3 -c '
+import collections, json, sys
+counts = collections.Counter()
+for line in sys.stdin:
+    for term in ("timeout", "signal: killed", "out of memory", "permission denied", "permissionerror", "connection refused", "noauth", "wrongpass", "authenticationerror", "modulenotfounderror"):
+        if term in line.lower(): counts[term] += 1
+print("result: " + sys.argv[1] + "_errors " + json.dumps(dict(counts)))' "$service"
+}
+
 dify_diagnostics_host() {
   dify_diagnostic_identity
   printf 'result: host %s\n' "$(python3 -c 'import json; m={k:int(v.split()[0]) for k,v in (line.split(":",1) for line in open("/proc/meminfo"))}; print(json.dumps({k:m[k]//1024 for k in ["MemTotal","MemAvailable","SwapTotal","SwapFree"]}))')"
@@ -767,24 +786,14 @@ dify_diagnostics_host() {
   mapfile -t ids < <(docker ps -aq --filter label=com.docker.compose.project=booklet-dify)
   [[ "${#ids[@]}" -le 30 ]] || die 'Unexpected Dify container count'
   for container in "${ids[@]}"; do
-    records="$(timeout 10s docker inspect "$container" | jq -c '.[0] | {name:.Name,status:.State.Status,health:(.State.Health.Status // null),oomKilled:.State.OOMKilled,restarts:.RestartCount,memoryLimitBytes:.HostConfig.Memory}')"
+    records="$(timeout 10s docker inspect "$container" | jq -c '.[0] | {name:.Name,status:.State.Status,health:(.State.Health.Status // null),oomKilled:.State.OOMKilled,exitCode:.State.ExitCode,restarts:.RestartCount,memoryLimitBytes:.HostConfig.Memory}')"
     printf 'result: container %s\n' "$records"
   done
   if [[ "${#ids[@]}" -gt 0 ]]; then
     timeout 15s docker stats --no-stream --format 'result: resources {{.Name}} cpu={{.CPUPerc}} memory={{.MemUsage}} pids={{.PIDs}}' "${ids[@]}"
   fi
-  container="$(docker ps -q --filter label=com.docker.compose.project=booklet-dify --filter label=com.docker.compose.service=sandbox)"
-  if [[ -n "$container" ]]; then
-    timeout 10s docker exec "$container" sh -c 'if [ -r /sys/fs/cgroup/memory.events ]; then cat /sys/fs/cgroup/memory.events; fi' |
-      awk '/^(low|high|max|oom|oom_kill|oom_group_kill) [0-9]+$/ {print "result: sandbox_memory " $0}'
-    timeout 15s docker logs --since 2h --tail 2000 "$container" 2>&1 | python3 -c '
-import collections, json, sys
-counts = collections.Counter()
-for line in sys.stdin:
-    for term in ("timeout", "signal: killed", "out of memory", "permission denied", "connection refused"):
-        if term in line.lower(): counts[term] += 1
-print("result: sandbox_errors " + json.dumps(dict(counts)))'
-  fi
+  dify_service_diagnostics sandbox
+  dify_service_diagnostics worker_beat
   [[ -n "$RUN_ID" ]] || return 0
   mapfile -t ids < <(docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False)
   [[ "${#ids[@]}" == 1 ]] || die 'Expected one staging application'

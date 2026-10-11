@@ -142,7 +142,7 @@ Execution machine: GitHub Actions, using the existing restricted VPS access.
 Synchronize the reviewed dispatcher and override through Infrastructure first.
 In **Dify operations**, select `diagnostics`, leave Apply off, and optionally
 enter the staging run UUID. The sanitized summary contains host capacity,
-container state/limits, sandbox memory/error counters, and saved run state and
+container state/limits/exit codes, sandbox and scheduler memory/error counters, and saved run state and
 callback timings when a run is selected. It does not expose raw application
 logs, credentials or creative content. Timing coverage is bounded to 24 hours
 and 20,000 container log lines; absence of records is not a performance pass.
@@ -157,7 +157,17 @@ the retained journal before using `resume`. This repair does not establish
 that memory pressure caused a code-node timeout; compare cgroup counters and
 live successor behavior. Compose serializes byte limits as decimal JSON strings;
 the preflight normalizes the value before comparing the exact byte count.
-Live repair verification is pending.
+Live repair `38130490623` passed on 2026-10-11 after preview `38130439691`.
+Diagnostics `38130594784` read back a healthy sandbox with exactly 1073741824
+bytes, zero restarts and zero OOM counters, with 11,480 MiB available host memory.
+The collaboration service remained healthy at 1536 MiB. This verifies the repair,
+not the cause of the earlier timeout or full Booklet acceptance. The diagnostic
+snapshot also shows a high `worker_beat` restart count. Diagnostics `38131206144`
+showed 48 additional restarts in about ten minutes. The cause remains unverified;
+do not describe this as an OOM without supporting counters or logs.
+The diagnostics candidate adds bounded scheduler error-category counts and
+cgroup counters. A restart racing the counter read reports `unavailable`;
+this is an observation gap, not a zero or a health pass. Raw log text is never returned.
 
 For recent Booklet callback events, use the authenticated staging endpoint
 `GET /api/diagnostics/logs?runId=<UUID>&limit=200`. It uses the existing Booklet

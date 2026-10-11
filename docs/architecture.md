@@ -461,7 +461,8 @@ The staging-only `/api/diagnostics/logs` endpoint uses the existing Basic gate
 and returns bounded structured phase events, including failed outcomes, not raw
 logs or exception bodies. Its process-local 5000-event buffer is shared across
 Next.js bundles and clears on restart. The restricted Dify operations diagnostics
-action provides host/container state and bounded retained callback summaries;
+action provides host/container state, exit codes, allowlisted sandbox/scheduler
+memory and error-category counters, and bounded retained callback summaries;
 see [the operating runbook](deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
 
 With the runner enabled, `/experiments/booklet-runs` shows saved work through the configured slice,
