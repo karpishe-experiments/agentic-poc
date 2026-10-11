@@ -339,7 +339,21 @@ export function createExperimentRepository(database: Database, options: { store?
   async function claimOperation(raw: unknown): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked";
     operation: ExperimentOperationDocument; imageRequest?: z.infer<typeof experimentImageRequestSchema> }> {
     const input = parse(claimInput, raw);
-    return withMongoTransaction(database, async (session) => {
+    const startedAt = performance.now();
+    const nowMs = () => input.nowMs + Math.floor(performance.now() - startedAt);
+    const claimId = randomUUID();
+    const claimed = await operations.findOneAndUpdate({ _id: input.operationId, runId: input.runId,
+      state: "prepared", reservationCount: 0,
+      $and: [
+        { $or: [{ workflowRunId: null }, { workflowRunId: input.workflowRunId }] },
+        { $or: [{ dispatchStartedAtMs: null }, { parentWorkflowRunId: input.parentWorkflowRunId }] },
+        { $or: [{ authorizationClaim: null }, { "authorizationClaim.expiresAtMs": { $lte: input.nowMs } }] },
+      ],
+    }, { $set: { authorizationClaim: { id: claimId, expiresAtMs: input.nowMs + 60_000 } } }, { returnDocument: "after" });
+    let committed = false;
+    try {
+      const completed = await withMongoTransaction<Awaited<ReturnType<typeof claimOperation>>>(database, async (session) => measurePhase(
+        { runId: input.runId, operationId: input.operationId }, "authorization_transaction", async () => {
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs != null && operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Claim parent differs from dispatch.");
@@ -353,6 +367,8 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.pauseRequested || run.status === "paused") return { started: false, reason: "paused", operation };
       if (run.status !== "queued" && run.status !== "running") return { started: false, reason: "blocked", operation };
+      const lease = operation.authorizationClaim;
+      if (!claimed || lease?.id !== claimId || lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Authorization is already active or its lease expired.");
       let imageRequest: z.infer<typeof experimentImageRequestSchema> | undefined;
       if (operation.imageRequestJson && !isJ13Image(operation)) {
         imageRequest = experimentImageRequestSchema.parse(JSON.parse(operation.imageRequestJson) as unknown);
@@ -366,6 +382,8 @@ export function createExperimentRepository(database: Database, options: { store?
           throw new ExperimentRepositoryError("conflict", "J13 replacement target changed before claim.");
         }
       }
+      if (lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Authorization lease expired before reservation.");
+      if (operation.deadlineAtMs != null && nowMs() >= operation.deadlineAtMs) return { started: false, reason: "blocked", operation };
       const logical = operation.providerKind === "text" ? "logicalText" : "logicalImage";
       const payable = operation.providerKind === "text" ? "payableText" : "payableImage";
       const limit = operation.providerKind === "text" ? run.limits.text : run.limits.image;
@@ -376,14 +394,20 @@ export function createExperimentRepository(database: Database, options: { store?
       const isPayable = run.mode === "real" || run.mode === "balanced" && operation.providerKind === "text";
       const counters = { ...run.counters, [logical]: run.counters[logical] + 1, steps: run.counters.steps + 1 };
       if (isPayable) counters[payable] = run.counters[payable] + 1;
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared" }, { $set: { state: "started", workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", "authorizationClaim.id": claimId }, { $set: { state: "started", authorizationClaim: null, workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,
         deadlineAtMs: operation.deadlineAtMs ?? (operation.dispatchStartedAtMs ?? input.nowMs) + 600_000,
         reservationCount: 1, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation was claimed concurrently.");
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "running", counters, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       return { started: true, operation: updated, ...(imageRequest ? { imageRequest } : {}) };
-    });
+      }));
+      committed = completed.started;
+      return completed;
+    } finally {
+      if (claimed && !committed) await operations.updateOne({ _id: input.operationId, "authorizationClaim.id": claimId },
+        { $set: { authorizationClaim: null } }).catch(() => undefined);
+    }
   }
 
   async function recordDispatchIdentity(raw: unknown): Promise<ExperimentOperationDocument> {
@@ -626,7 +650,8 @@ export function createExperimentRepository(database: Database, options: { store?
       dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
       // Observation writes must not repeatedly invalidate the callback's source
       // verification transaction. An expired upload lease remains observable.
-      $and: [{ $or: [{ imageCompletionClaim: null }, { "imageCompletionClaim.expiresAtMs": { $lte: nowMs } }] },
+      $and: [{ $or: [{ authorizationClaim: null }, { "authorizationClaim.expiresAtMs": { $lte: nowMs } }] },
+        { $or: [{ imageCompletionClaim: null }, { "imageCompletionClaim.expiresAtMs": { $lte: nowMs } }] },
         { $or: [{ resultFinalizationClaim: null }, { "resultFinalizationClaim.expiresAtMs": { $lte: nowMs } }] }],
       $or: [{ nextObservationAtMs: { $exists: false } }, { nextObservationAtMs: null }, { nextObservationAtMs: { $lte: nowMs } }] },
     { $set: { nextObservationAtMs: time.parse(nowMs) + 5_000 } }, { returnDocument: "after" });
@@ -634,7 +659,7 @@ export function createExperimentRepository(database: Database, options: { store?
   }
   async function requestObservation(operationId: string) {
     await operations.updateOne({ _id: opaqueIdSchema.parse(operationId), workflowRunId: { $ne: null },
-      dispatchStartedAtMs: { $ne: null }, imageCompletionClaim: null, resultFinalizationClaim: null }, { $set: { nextObservationAtMs: 0 } });
+      dispatchStartedAtMs: { $ne: null }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
   return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, listOperationHeads, beginObservation, requestObservation };

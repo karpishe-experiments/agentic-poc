@@ -12,6 +12,8 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   callback's snapshot read. The complete materialization ran twice.
   A persisted finalization lease suppressed both observation and wake writes;
   the same test then materialized once with unchanged identity and reservation.
+  A second overlap reproduction confirmed the same retry mechanism before the
+  authorization reservation. Coordinate that transaction separately as well.
 - **Guidance:** Coordinate observers with long saves through a bounded persisted
   lease. Preserve expiry recovery and original deadlines. Recreate source checks
   on genuine transaction retries; do not weaken validation or replay execution.

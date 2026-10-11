@@ -1843,6 +1843,59 @@ backup, then run a linked Parent successor (attempt 2/3). Creator follows Parent
 success. Retain the failed run and all assets. No new private handoff is identified.
 Credential inventory impact: none; this correction adds no credential or consumer.
 
+### Parent attempt 2 and authorization coordination — 2026-10-11
+
+The result-finalization correction merged through PRs #177/#178. Main Validate
+`38142698568` passed 111 selected test files; staging Validate `38142880818`
+passed. Deploy `38143675334` and Check `38144271798` passed for staging release
+`c04d7512dfaa3156eb3b81331625d1a0af4f7faf`, image digest
+`sha256:ddb944691949ed1ff020dc5d4f2fb9873bcddc260f13a7485195889d1fed70cd`.
+The deployment backup is `staging-20261011T133803Z-2f6419b8582e008d`.
+
+Before deployment, verified backup `staging-20261011T131136Z-43da4385d46ec962`
+protected exact reconciliation of attempt 1's unknown J12 operation. The existing
+authenticated failure API recorded terminal failure after application-key GET
+verified Dify failure, exact publication and zero tokens. Browser readback showed
+blocked revision 234 with no active operation. No replay or data reset occurred.
+
+Linked Parent attempt 2 is `92272a97-f96d-4634-8cba-3524a3fa2b51`, booklet
+`e47d908d-85d7-46e2-8971-d713587a3fd1`. All six J12 Page Bibles saved without
+repair. It then blocked in J13 at revision 310: 48 text calls, 8 simulated images,
+56 steps and zero payable calls. Preserve this failed run; one of the authorized
+three Parent attempts remains. Creator has not started.
+
+Diagnostics `38146942852` and the Dify node trace identify the new blocker:
+image operation `c8c0e121-d3cf-41bc-8023-79cfdae8e291`, workflow
+`bbd3a736-6777-4088-8627-557999d7f001`, failed during authorization's HTTP
+callback after 30.028 seconds. Its reservation remains zero; no result or
+materialization is saved. The application recorded authorization/claim maximum
+35.045 seconds. Result finalization now has p95 8.364 seconds and maximum
+8.376 seconds, compared with attempt 1's maximum 124.386 seconds. Authorization
+p95 is 17.653 seconds; context p95 is 4.315 seconds. These measurements are
+diagnostic, not a relaxed claim of full completion.
+
+A second focused MongoDB reproduction confirms that observation writes also
+restart the authorization snapshot transaction. The candidate adds a separate
+60-second `authorizationClaim`, suppresses observation/wake writes while live,
+checks expiry before reservation and releases only its own lease. It retains
+current source checks, the original deadline and single reservation. Expiry and
+Pause do not authorize another workflow POST. Structured
+`authorization_transaction` diagnostics expose individual attempts; the host
+phase-summary allowlist remains unchanged.
+
+Affected local validation passed: 30 authorization/finalization, repository and
+dispatch regressions (39.16 seconds); 22 focused J13/completion/recovery cases
+(235.26 seconds); current-source typecheck and focused lint. MongoDB files ran
+serially. After removing the redundant post-commit cleanup write, two representative
+full-completion/failed-image cases passed again (22.36 seconds). Reuse unrelated
+passing checks; required clean CI remains mandatory.
+Credential inventory impact: none; no credential storage or consumer changed.
+
+Next: two clean independent reviews, CI and reviewed
+staging deployment, then linked Parent attempt 3/3. Do not start a fourth Parent
+run. If attempt 3 fails, stop and explain the measured cause. Creator follows
+Parent success. No new credential, private handoff or paid authority is needed.
+
 Exit: all cases have the required current simulated packages corresponding to
 9/11/15 baseline images, all thirteen responsibilities,
 page-specific approvals, reports and no PDF requirement. Typecheck/lint/focused
