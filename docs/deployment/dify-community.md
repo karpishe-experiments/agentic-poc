@@ -161,10 +161,23 @@ Live repair `38130490623` passed on 2026-10-11 after preview `38130439691`.
 Diagnostics `38130594784` read back a healthy sandbox with exactly 1073741824
 bytes, zero restarts and zero OOM counters, with 11,480 MiB available host memory.
 The collaboration service remained healthy at 1536 MiB. This verifies the repair,
-not the cause of the earlier timeout or full Booklet acceptance. The diagnostic
-snapshot also shows a high `worker_beat` restart count. Diagnostics `38131206144`
-showed 48 additional restarts in about ten minutes. The cause remains unverified;
-do not describe this as an OOM without supporting counters or logs.
+not the cause of the earlier timeout or full Booklet acceptance. The operator's 2026-10-11 kernel log confirms memory-cgroup OOM kills of
+`flask upgrade-db` in `worker_beat` at the old 256 MiB limit. A running-container
+snapshot with `oomKilled=false` and zero current counters did not exclude these
+kills; correlate kernel events with the exact container ID before diagnosing.
+
+The candidate `repair-scheduler` operation raises only `worker_beat` to 1536 MiB,
+matching the other API-image services. Synchronize the reviewed dispatcher and
+Compose override through Infrastructure, then select `repair-scheduler` with
+Apply off in Dify operations. Apply requires an idle Dify workspace and 3328 MiB
+available host RAM (1280 MiB increase plus 2 GiB headroom). It uses the shared lock
+and journal and recreates only `worker_beat`. It requires a beat startup log from
+the current container start, then 120 seconds with the same container ID, start
+time and restart count, followed by the existing Dify readiness checks. This
+proves bounded startup stability, not successful execution of every periodic task.
+Inspect `status` after an interruption before `resume`. A running scheduler that
+already has the reviewed limit is verified without recreation. Live repair and
+acceptance remain pending; do not treat the candidate as deployed.
 The diagnostics candidate adds bounded scheduler error-category counts and
 cgroup counters. The diagnostic candidate also counts fixed startup/exception
 categories and records container start/finish times. It never returns arbitrary

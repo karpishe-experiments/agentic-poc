@@ -42,8 +42,8 @@ describe("deployment contracts", () => {
   it("keeps Community host operations manual, serialized, and branch-fresh", () => {
     const workflow = readFileSync(".github/workflows/dify-operations.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("options: [check, idle, diagnostics, repair-sandbox, install, repair-broker, repair-collaboration, status, resume]");
-    expect(workflow).toContain('[[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox)$ && "$APPLY" == true ]]');
+    expect(workflow).toContain("options: [check, idle, diagnostics, repair-sandbox, repair-scheduler, install, repair-broker, repair-collaboration, status, resume]");
+    expect(workflow).toContain('[[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox|repair-scheduler)$ && "$APPLY" == true ]]');
     expect(workflow).toContain('if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then');
     expect(workflow).toContain('"$ACTION" == diagnostics && "$RUN_ID" =~ ^[a-f0-9]');
     expect(workflow).toContain('[[ -z "$RUN_ID" ]] || args+=(--run-id "$RUN_ID")');

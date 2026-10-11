@@ -41,7 +41,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, dify-discover, dify-check, dify-idle, dify-diagnostics, dify-repair-sandbox, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-diagnostics, dify-repair-sandbox, dify-repair-scheduler, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -103,7 +103,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$RUN_ID" || ( "$ACTION" == dify-diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]] || die 'Run ID requires dify-diagnostics and a lowercase UUID'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
@@ -575,6 +575,7 @@ dify_install_preflight() {
   else
     # This targeted repair adds 768 MiB; leave at least 2 GiB for the shared host.
     [[ "$ACTION" != dify-repair-sandbox ]] || required_available_mib=2816
+    [[ "$ACTION" != dify-repair-scheduler ]] || required_available_mib=3328
     [[ "$available_mib" -ge "$required_available_mib" && "$free_gib" -ge 20 ]] || die 'Insufficient headroom to resume or verify Dify installation'
   fi
   docker compose version --short | awk -F. '{exit !($1 > 2 || ($1 == 2 && $2 >= 28))}' || die 'Docker Compose 2.28 or newer is required for port overrides'
@@ -899,6 +900,70 @@ dify_repair_sandbox_host() {
   printf 'verified: sandbox has 1024 MiB and is healthy\n'
   save_success ''
 }
+dify_scheduler_preflight() {
+  dify_diagnostic_identity
+  dify_install_preflight
+  dify_validate_compose
+  private_temp
+  dify_compose config --format json > "$TEMP_DIR/scheduler-compose.json"
+  jq -e '(.services.worker_beat.mem_limit | tonumber) == 1610612736' "$TEMP_DIR/scheduler-compose.json" >/dev/null || die 'Reviewed scheduler configuration must specify 1536 MiB'
+  local available
+  available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  [[ "$available" -ge 3407872 ]] || die 'Scheduler increase requires 3328 MiB available memory (1280 MiB increase plus 2 GiB headroom)'
+}
+
+dify_scheduler_snapshot() {
+  local container
+  container="$(dify_compose ps -q worker_beat)" || return 1
+  [[ -n "$container" ]] || return 1
+  timeout 10s docker inspect "$container" | jq -cer '
+    select(length == 1) | .[0] |
+    select(.State.Status == "running" and .HostConfig.Memory == 1610612736) |
+    {id:.Id,startedAt:.State.StartedAt,restarts:.RestartCount}'
+}
+
+dify_scheduler_has_started() {
+  local snapshot="$1"
+  # Use only this start interval. Return a predicate, never raw log text.
+  timeout 15s docker logs --since "$(jq -r .startedAt <<< "$snapshot")" --tail 2000 "$(jq -r .id <<< "$snapshot")" 2>&1 |
+    python3 -c 'import sys; found = any("beat: starting" in line.lower() for line in sys.stdin.read().splitlines()); sys.exit(0 if found else 1)'
+}
+
+dify_verify_scheduler() {
+  local initial current attempt started=false
+  initial="$(dify_scheduler_snapshot)" || die 'Scheduler is not running with the reviewed memory limit'
+  for ((attempt=0; attempt<36; attempt++)); do
+    current="$(dify_scheduler_snapshot)" || die 'Scheduler stopped during startup'
+    [[ "$current" == "$initial" ]] || die 'Scheduler restarted during startup'
+    if dify_scheduler_has_started "$initial"; then started=true; break; fi
+    sleep 5
+  done
+  [[ "$started" == true ]] || die 'Scheduler did not report beat startup within the bounded check'
+  for ((attempt=0; attempt<24; attempt++)); do
+    sleep 5
+    current="$(dify_scheduler_snapshot)" || die 'Scheduler stopped during stability check'
+    [[ "$current" == "$initial" ]] || die 'Scheduler restarted during stability check'
+  done
+  printf 'verified: worker_beat reached beat startup with 1536 MiB and no restarts for 120 seconds\n'
+}
+
+dify_repair_scheduler_host() {
+  dify_scheduler_preflight
+  if dify_scheduler_snapshot >/dev/null; then
+    dify_verify_scheduler
+    dify_verify_services
+    printf 'exists: scheduler already has the reviewed memory limit and is stable\n'
+    save_success ''
+    return
+  fi
+  dify_idle_host
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate worker_beat >/dev/null
+  dify_verify_scheduler
+  dify_verify_services
+  save_success ''
+}
+
 dify_idle_host() {
   local workflow_count agent_count=0 key record status
   [[ -f "$DIFY_ENV" && -f "$DIFY_DATA/current" ]] || die 'Dify is not installed or configured'
@@ -1159,6 +1224,7 @@ host_run() {
   if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
   if [[ "$ACTION" == dify-repair-collaboration ]]; then dify_repair_collaboration_host; return; fi
   if [[ "$ACTION" == dify-repair-sandbox ]]; then dify_repair_sandbox_host; return; fi
+  if [[ "$ACTION" == dify-repair-scheduler ]]; then dify_repair_scheduler_host; return; fi
   [[ "$ACTION" != dify-enable-admin-api ]] || die 'Resume Dify admin API setup from the private VPS terminal with its local apply action'
   run_lifecycle
 }
@@ -1195,12 +1261,17 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
   if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
   if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
   if [[ "$ACTION" == dify-idle ]]; then dify_idle_host; exit 0; fi
   if [[ "$ACTION" == dify-diagnostics ]]; then dify_diagnostics_host; exit 0; fi
+  if [[ "$ACTION" == dify-repair-scheduler && "$APPLY" == false ]]; then
+    dify_scheduler_preflight
+    printf 'would update: Dify worker_beat only, 1536 MiB; apply requires idle work and verifies 120 seconds of scheduler stability\n'
+    exit 0
+  fi
   if [[ "$ACTION" == dify-repair-sandbox && "$APPLY" == false ]]; then
     dify_sandbox_preflight
     printf 'would update: Dify Python sandbox only, 1024 MiB; apply requires idle work\n'
@@ -2782,7 +2853,7 @@ main() {
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-diagnostics && "$ACTION" != dify-repair-sandbox && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-diagnostics && "$ACTION" != dify-repair-sandbox && "$ACTION" != dify-repair-scheduler && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac

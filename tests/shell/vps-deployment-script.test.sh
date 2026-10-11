@@ -2,6 +2,79 @@
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
 
+# Run each scheduler outcome in a strict child shell, including expected failures.
+for scheduler_case in success existing low-memory wrong-limit idle-busy restart stopped never-started; do
+  scheduler_fixture="$(mktemp -d)"
+  if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -s -- "$script" "$scheduler_case" "$scheduler_fixture" <<'SCHEDULER'
+set -euo pipefail
+source "$1"
+scenario="$2"; fixture="$3"; tick=0; repaired=false
+parse_arguments --action dify-repair-scheduler --environment dify
+validate_arguments
+dify_diagnostic_identity() { :; }
+dify_install_preflight() { :; }
+dify_validate_compose() { :; }
+awk() { if [[ "$scenario" == low-memory ]]; then echo 3407871; else echo 3407872; fi; }
+timeout() { shift; "$@"; }
+sleep() { tick=$((tick + 1)); }
+dify_compose() {
+  case "$1" in
+    config)
+      if [[ "$scenario" == wrong-limit ]]; then
+        printf '{"services":{"worker_beat":{"mem_limit":"268435456"}}}\n'
+      else
+        printf '{"services":{"worker_beat":{"mem_limit":"1610612736"}}}\n'
+      fi;;
+    ps) echo scheduler;;
+    up) printf '%s\n' "$*" >> "$fixture/events"; repaired=true;;
+    *) exit 22;;
+  esac
+}
+docker() {
+  case "$1" in
+    inspect)
+      local memory=268435456 restarts=0 status=running
+      if [[ "$repaired" == true || "$scenario" == existing ]]; then memory=1610612736; fi
+      if [[ "$tick" -ge 5 && "$scenario" == restart ]]; then restarts=1; fi
+      if [[ "$tick" -ge 5 && "$scenario" == stopped ]]; then status=exited; fi
+      printf '[{"Id":"scheduler","State":{"Status":"%s","StartedAt":"2026-10-11T12:00:00Z"},"RestartCount":%s,"HostConfig":{"Memory":%s}}]\n' "$status" "$restarts" "$memory";;
+    logs)
+      [[ "$*" == *"--since 2026-10-11T12:00:00Z"* ]] || exit 23
+      if [[ "$scenario" != never-started && "$tick" -ge 2 ]]; then echo 'beat: Starting...'; fi
+      echo 'private-log-do-not-print';;
+    *) exit 24;;
+  esac
+}
+dify_idle_host() {
+  [[ "$scenario" != idle-busy ]] || die 'Dify work is active'
+  echo idle >> "$fixture/events"
+}
+set_step() { echo "step:$1" >> "$fixture/events"; }
+dify_verify_services() { echo ready >> "$fixture/events"; }
+save_success() { echo complete >> "$fixture/events"; }
+dify_repair_scheduler_host > "$fixture/output"
+[[ "$tick" -eq 26 ]]
+! grep -q private-log "$fixture/output"
+if [[ "$scenario" == existing ]]; then
+  ! grep -q 'up\|idle\|step:' "$fixture/events"
+else
+  [[ "$(head -n 1 "$fixture/events")" == idle ]]
+  grep -Fxq 'up -d --no-deps --force-recreate worker_beat' "$fixture/events"
+fi
+[[ "$(tail -n 1 "$fixture/events")" == complete ]]
+SCHEDULER
+  then
+    [[ "$scheduler_case" == success || "$scheduler_case" == existing ]] || exit 1
+  else
+    [[ "$scheduler_case" != success && "$scheduler_case" != existing ]] || exit 1
+    if [[ -f "$scheduler_fixture/events" ]]; then
+      ! grep -q complete "$scheduler_fixture/events"
+      case "$scheduler_case" in low-memory|wrong-limit|idle-busy) ! grep -q '^up ' "$scheduler_fixture/events";; esac
+    fi
+  fi
+  rm -rf "$scheduler_fixture"
+done
+
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"
 timeout() { shift; "$@"; }

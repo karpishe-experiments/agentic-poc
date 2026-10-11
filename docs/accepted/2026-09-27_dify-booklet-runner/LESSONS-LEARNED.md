@@ -4,6 +4,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Correlate container snapshots with kernel OOM evidence
+
+- **Context:** A Dify scheduler restarts during its Flask migration subprocess.
+- **Observation:** Kernel events identified memory-cgroup OOM kills in the exact
+  scheduler container, despite a running snapshot with `oomKilled=false` and
+  zero sampled cgroup counters. The configured limit was 256 MiB.
+- **Guidance:** Identify the killed process and container in kernel records before
+  excluding OOM. Verify application startup and a stable restart count after a
+  repair; a momentary running state does not establish recovery.
+- **Evidence:** Operator kernel output from 2026-10-11 and the
+  [Community runbook](../../deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
+  The candidate repair still requires live verification.
+- **Promotion target:** Documentation for container failure diagnosis.
+
 ### Reload authorization evidence after asynchronous reconciliation
 
 - **Context:** A callback completes before terminal publication readback.

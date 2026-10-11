@@ -31,7 +31,8 @@ services:
       - /var/lib/kids-booklet/dify/app/storage:/app/api/storage
   worker_beat:
     image: langgenius/dify-api@sha256:ceede5b903afaa20348f7ad80ebf847379dc56d886a99b9ec6a08913dacd7732
-    mem_limit: 256m
+    # The Flask migration subprocess exceeded 256 MiB before beat could start.
+    mem_limit: 1536m
   web:
     image: langgenius/dify-web@sha256:6353fe8e04481aaef873ef7317507bfa9ac862572118fd037563a71bff9f4d08
     mem_limit: 512m
