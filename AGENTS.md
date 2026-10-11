@@ -174,6 +174,22 @@ For the Kids Booklet POC, `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md` rema
 - For generative UI, make agent state visible, actions understandable, errors recoverable, and fallback behavior deterministic where practical.
 - Store legal and legal-research documentation in `docs/legal/`.
 
+### Credential documentation
+
+- Maintain the canonical inventory in
+  [docs/deployment/contracts.md](docs/deployment/contracts.md#variables-and-secrets).
+  In each implementation change that adds, renames, removes, rotates or changes
+  credential storage or use, update its names/aliases, owner, environment/profile,
+  protected storage and transfer copies, consumers, purpose and required,
+  conditional, legacy/inert or deferred status.
+- Follow its [maintenance procedure](docs/deployment/contracts.md#maintaining-the-inventory)
+  before review/publication. Keep runtime schemas, Dify bindings, preparation
+  helpers, workflow inputs and operating guidance aligned. Report the inventory
+  impact in task/PR evidence, including a reason when no inventory update is needed.
+- Document metadata only. Never commit secret values or private credential files.
+  Distinguish implemented storage from verified live provision/use. These rules
+  do not authorize credential access, rotation, deployment, spending or deletion.
+
 ## Verification
 
 - Run the relevant build, type checks, lint checks, and focused tests when they exist.

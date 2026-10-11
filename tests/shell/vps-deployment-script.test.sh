@@ -326,6 +326,77 @@ if sync_host_configuration; then exit 1; else test "$?" = 42; fi
 test "$calls" = 1
 ' _ "$script"
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; ACTION=dify-install; ENVIRONMENT=dify; VPS_USER=kids-booklet-deploy; APPLY=true; validate_arguments' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_ENV="$(mktemp)"
+trap '\''rm -f "$DIFY_ENV"'\'' EXIT
+chmod 600 "$DIFY_ENV"
+printf "SECRET_KEY=retained\n" > "$DIFY_ENV"
+[[ "$(dify_admin_api_state)" == "would update: Dify admin API configuration" ]]
+printf "ADMIN_API_KEY_ENABLE=true\nADMIN_API_KEY=%064d\n" 0 >> "$DIFY_ENV"
+[[ "$(dify_admin_api_state)" == "exists: Dify admin API configuration is enabled with a generated-format key" ]]
+printf "ADMIN_API_KEY=duplicate\n" >> "$DIFY_ENV"
+if dify_admin_api_state >/dev/null 2>&1; then exit 1; fi
+' _ "$script"
+admin_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+fixture="$2"
+ROOT="$fixture/root"; STATE="$fixture/state"; DIFY_DATA="$fixture/data"; DIFY_ENV="$fixture/runtime.env"
+mkdir -p "$ROOT" "$STATE/operations" "$DIFY_DATA"
+printf "1.17.1\n" > "$DIFY_DATA/current"
+printf "SECRET_KEY=retained\n" > "$DIFY_ENV"; chmod 600 "$DIFY_ENV"
+printf "%064d" 0 > "$fixture/key"; chmod 600 "$fixture/key"
+require_root() { :; }
+need_command() { :; }
+load_config() { :; }
+dify_install_preflight() { :; }
+dify_idle_host() { printf "idle\n" >> "$fixture/events"; }
+dify_prompt_admin_api_key() { ADMIN_API_KEY_FILE="$fixture/key"; }
+dify_admin_api_active() { [[ -f "$fixture/active" ]]; }
+dify_compose() {
+  [[ "$1" == up ]] || return 1
+  [[ ! -f "$fixture/fail-restart" ]] || return 17
+  touch "$fixture/active"
+  printf "restart\n" >> "$fixture/events"
+}
+dify_verify_services() { [[ -f "$fixture/active" ]]; }
+APPLY=true; ENVIRONMENT=dify
+touch "$fixture/fail-restart"
+if (set -e; dify_enable_admin_api_host >/dev/null 2>&1); then exit 1; fi
+[[ "$(jq -r .step "$STATE/operation.json")" == restarting ]]
+systemctl() { return 99; }
+[[ "$(show_operation_status)" == *"repeat its local apply action to resume"* ]]
+grep -Fxq SECRET_KEY=retained "$DIFY_ENV"
+grep -Fxq ADMIN_API_KEY_ENABLE=true "$DIFY_ENV"
+grep -Fxq SECRET_KEY=retained "$fixture/runtime.env.admin-api-before-enable"
+! grep -q ADMIN_API_KEY "$fixture/runtime.env.admin-api-before-enable"
+rm "$fixture/fail-restart"
+dify_enable_admin_api_host >/dev/null
+[[ ! -f "$STATE/operation.json" ]]
+[[ -f "$STATE/operations/$REQUEST_ID.json" ]]
+[[ "$(jq -r .step "$STATE/operations/$REQUEST_ID.json")" == complete ]]
+[[ "$(grep -c ^restart$ "$fixture/events")" == 1 ]]
+rm "$fixture/active"
+printf "SECRET_KEY=retained\n" > "$DIFY_ENV"
+dify_idle_host() { return 1; }
+if (set -e; dify_enable_admin_api_host >/dev/null 2>&1); then exit 1; fi
+[[ ! -f "$STATE/operation.json" ]]
+printf '\''{"requestId":"other","action":"deploy","environment":"staging","step":"queued"}\n'\'' > "$STATE/operation.json"
+if (set -e; dify_enable_admin_api_host >/dev/null 2>&1); then exit 1; fi
+[[ "$(jq -r .action "$STATE/operation.json")" == deploy ]]
+' _ "$script" "$admin_fixture"
+rm -rf "$admin_fixture"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_ENV="$(mktemp)"; trap '\''rm -f "$DIFY_ENV"'\'' EXIT
+printf "ADMIN_API_KEY_ENABLE=true\nADMIN_API_KEY=%064d\n" 0 > "$DIFY_ENV"
+running_key="$(printf "%064d" 0)"
+dify_compose() { ADMIN_API_KEY_ENABLE=true ADMIN_API_KEY="$running_key" python3 -c "$6"; }
+dify_admin_api_active
+running_key="$(printf "%064d" 1)"
+if dify_admin_api_active; then exit 1; fi
+' _ "$script"
 idle_result="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"
 TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"

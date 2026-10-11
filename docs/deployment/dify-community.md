@@ -141,7 +141,52 @@ The protected runtime environment is root-owned, mode 600, at
 or credential-bearing logs in Actions summaries. Do not replace generated
 internal keys on update: encrypted data depends on them.
 
+### Enable the Community admin API
+
+The admin API key is a separate, powerful console bearer credential. The pinned
+Dify release defaults it to disabled. Use the installed host-local action from a
+private interactive root terminal on the VPS after Infrastructure has synchronized
+the reviewed `master` script. This action holds the shared host lock, retains a
+host operation journal, checks for active Dify work, and recreates only `api` and
+`api_websocket`. It does not update Booklet or Cloud Dify.
+
+Generate a 32-byte hexadecimal key in a private terminal and retain it in the
+team's password manager. Do not place the key in chat, shell command arguments,
+GitHub secrets, a workflow input, or a repository file. The setup prompt hides
+input; paste the key there. Do not run the apply command through Actions or the
+restricted deploy SSH dispatcher because neither provides this private prompt.
+
+```bash
+sudo /opt/kids-booklet/vps-deployment.sh --action dify-enable-admin-api --environment dify
+sudo /opt/kids-booklet/vps-deployment.sh --action dify-enable-admin-api --environment dify --apply
+```
+
+Preview reports `exists` or `would update` without printing the key. Apply
+retains the prior protected file as
+`/etc/kids-booklet/dify/runtime.env.admin-api-before-enable`, atomically updates
+`runtime.env`, restarts the two API services, checks Dify readiness, and confirms
+that the API container received an enabled flag and a correctly formatted key.
+It does not prove a bearer request from a developer machine. Verify one scoped,
+non-billable console read from each intended client privately before recording
+remote access as working. Keep the password-manager copy available to approved
+developer and VPS clients; do not use a Booklet runtime or Dify app key for this.
+
+If apply stops, inspect the retained operation journal and container state
+privately. Repeat the same local apply action to resume this operation. If it
+stopped before configuration replacement, enter the same key again. If it
+stopped after replacement, the action recreates the API services when the
+running service has not loaded the setting. A different key conflicts with
+the retained candidate and requires administrator inspection. The retained
+pre-enable file is a recovery copy, not an instruction to replace the current
+file without inspecting the failure.
+
 ## Credential inventory
+
+The complete [canonical inventory](contracts.md#variables-and-secrets) records
+Booklet runner keys, internal Dify variable names, developer sessions, deployment
+credentials and deferred backup credentials. Keep it current with the
+[maintenance procedure](contracts.md#maintaining-the-inventory); the table below
+summarizes Community provisioning ownership.
 
 | Setting | Purpose and owner | Protected location and provision method | Verification |
 | --- | --- | --- | --- |
