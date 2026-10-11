@@ -13,6 +13,7 @@ import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, pageId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -61,7 +62,8 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
 
   async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, attempt?: VerificationAttempt) {
     const options = { session };
-    const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
+    const snapshot = verificationOnly && attempt ? await verificationMetadata(database, session, value.runId, attempt) : undefined;
+    const run = snapshot?.run ?? await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Page illustration run was not found.");
     const recovery = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
@@ -76,13 +78,15 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     const managerBinding = configuration.find((item) => item.role === "manager" && item.taskId === null);
     const imageBinding = configuration.find((item) => item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
     const sources = await verifyCurrentPageIllustrationSources(database, session, run, value.pageId, store, { attempt });
-    const operation = await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
+    const operation = snapshot ? snapshot.operations.find((item) => item._id === value.imageOperationId) : await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J13" ||
       operation.subjectKind !== "page" || operation.subjectId !== value.pageId || operation.mode !== "simulated" || operation.state !== "succeeded" ||
       operation.reservationCount !== 1 || !operation.workflowRunId || !operation.verifiedWorkflowId || !operation.parentWorkflowRunId || operation.imageCompletionClaim) {
       invalid("Page illustration operation is not a completed authorized J13 image.");
     }
-    const manager = await database.collections.experiment_operations.findOne({ runId: run._id, role: "manager", taskId: null, mode: "simulated", reservationCount: 1,
+    const manager = snapshot ? snapshot.operations.find((item) => item.role === "manager" && item.taskId === null && item.mode === "simulated" && item.reservationCount === 1 &&
+      item.subjectKind === "book" && item.subjectId === run.bookletId && item.providerKind === "text" && item.workflowRunId === operation.parentWorkflowRunId &&
+      item.state === "succeeded" && item.verifiedWorkflowId != null) : await database.collections.experiment_operations.findOne({ runId: run._id, role: "manager", taskId: null, mode: "simulated", reservationCount: 1,
       subjectKind: "book", subjectId: run.bookletId, providerKind: "text", workflowRunId: operation.parentWorkflowRunId,
       state: "succeeded", verifiedWorkflowId: { $ne: null } }, options);
     if (!manager) invalid("Page illustration operation has no verified manager parent.");
@@ -95,7 +99,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     if (request.kind !== "page_source" || canonical(request) !== canonical(sources.request.request) || imageRequestFingerprint(request) !== operation.inputFingerprint ||
       canonical(operation.dependencyVersionIds) !== canonical(sources.request.request.sourceVersionIds)) conflict("Page illustration operation request or sources differ from current approved evidence.");
     const acknowledgements = acknowledgementSchema.parse(json(operation.referenceUploadsJson, "Saved page reference uploads are malformed."));
-    const asset = await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
+    const asset = snapshot ? snapshot.assets.find((item) => item._id === operation._id) : await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
     if (!asset || asset.kind !== "page_source" || !asset.metadataJson || asset.width === null || asset.height === null) invalid("Saved page illustration asset is missing.");
     const metadata = assetMetadataSchema.parse(json(asset.metadataJson, "Saved page illustration metadata is malformed."));
     const decodedOutput = await decodedOutputEvidence(asset.uri, { sha256: metadata.sha256, byteLength: metadata.byteLength,
@@ -113,11 +117,11 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
       canonical(summarySchema.parse(json(operation.materializationJson, "Saved page materialization is malformed."))) !== canonical(expectedSummary)) {
       conflict("Saved page illustration lineage is inconsistent.");
     }
-    const artifact = (await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    const artifact = snapshot ? snapshot.artifacts.filter((item) => item.taskId === "J13" && item.subjectKind === "page" && item.subjectId === value.pageId) : (await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
       taskId: "J13", subjectKind: "page", subjectId: value.pageId }, options).toArray());
     if (artifact.length > 1) invalid("Page illustration target is ambiguous.");
     const target = artifact[0] ?? null;
-    const current = target?.currentVersionId ? await database.collections.artifact_versions.findOne({ _id: target.currentVersionId, artifactId: target._id }, options) : null;
+    const current = target?.currentVersionId ? (snapshot ? snapshot.versions.find((item) => item._id === target.currentVersionId && item.artifactId === target._id) : await database.collections.artifact_versions.findOne({ _id: target.currentVersionId, artifactId: target._id }, options)) : null;
     if (target?.currentVersionId && !current) conflict("Page illustration target version is missing.");
     const prior = current ? (() => {
       try { return validateSavedPageIllustrationPackage(json(current.contentJson, "Saved page illustration package is malformed.")); }
@@ -152,7 +156,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     if (prior && prior.operationId === operation._id && canonical(prior) !== canonical(packageContent)) conflict("Existing page illustration uses different evidence.");
     if (current) {
       const dependencies = json(current.dependencyVersionIdsJson, "Saved page illustration dependencies are malformed.");
-      const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: current._id }, options).toArray();
+      const edges = snapshot ? snapshot.edges.filter((item) => item.downstreamVersionId === current._id) : await database.collections.artifact_dependencies.find({ downstreamVersionId: current._id }, options).toArray();
       if (canonical(dependencies) !== canonical(prior!.sourceVersionIds) || edges.length !== prior!.sourceVersionIds.length ||
         new Set(edges.map((edge) => edge.upstreamVersionId)).size !== edges.length || !prior!.sourceVersionIds.every((id) => edges.some((edge) => edge.upstreamVersionId === id))) {
         conflict("Saved page illustration dependencies are incomplete.");
@@ -184,8 +188,9 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
 
   async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession, attempt?: VerificationAttempt) {
     const runId = opaqueIdSchema.parse(identity.runId), versionId = opaqueIdSchema.parse(identity.versionId);
-    const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
-    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
+    const snapshot = attempt ? await verificationMetadata(database, session, runId, attempt) : undefined;
+    const version = snapshot ? snapshot.versions.find((item) => item._id === versionId) : await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
+    const artifact = version ? (snapshot ? snapshot.artifacts.find((item) => item._id === version.artifactId) : await database.collections.artifacts.findOne({ _id: version.artifactId }, { session })) : null;
     if (!version || !artifact || artifact.taskId !== "J13" || artifact.subjectKind !== "page" || artifact.currentVersionId !== version._id ||
       version.createdBy !== "application") invalid("Page illustration approval requires the current assembled version.");
     const content = validateSavedPageIllustrationPackage(json(version.contentJson, "Saved page illustration package is malformed."));

@@ -18,7 +18,7 @@ import { pageImageRevisionsSchema } from "@/lib/contracts/experiment-image";
 import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt, ImageEvidenceMismatch, type VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { countVerificationQuery } from "@/lib/experiment-runner/diagnostics";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
 
 type Verification = { verifyBytes?: boolean; attempt?: VerificationAttempt };
 
@@ -49,16 +49,19 @@ export async function verifyCurrentPaginationSources(database: Database, session
   versionIds: string[]; targets: SheetTarget[]; references: Reference[]; manuscriptUnitIds: string[]; manuscriptUnits: ReturnType<typeof storedManuscriptSchema.parse>["units"];
 }> {
   const attempt = verification.attempt ?? createVerificationAttempt(store);
+  const metadata = await verificationMetadata(database, session, run._id, attempt);
   const projection: PaginationSource[] = [];
   const contents = new Map<string, unknown>();
+  const books = metadata.artifacts.filter((item) => item.subjectKind === "book" && item.subjectId === run.bookletId && fixedTasks.includes(item.taskId as typeof fixedTasks[number]));
+  const bookIds = books.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+  const bookVersions = metadata.versions.filter((item) => bookIds.includes(item._id));
+  const bookApprovals = metadata.approvals;
   for (const taskId of fixedTasks) {
-    const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
-      taskId, subjectKind: "book", subjectId: run.bookletId }, { session }).toArray();
+    const rows = books.filter((artifact) => artifact.taskId === taskId);
     const artifact = rows.length === 1 ? rows[0] : null;
     if (!artifact || artifact.state !== "approved" || !artifact.currentVersionId) reject(`J11 requires approved ${taskId}.`);
-    const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, { session });
-    const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-      artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
+    const version = bookVersions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id);
+    const approval = bookApprovals.find((item) => item.artifactVersionId === artifact.currentVersionId);
     if (!version || !approval) reject(`J11 ${taskId} approval evidence is incomplete.`);
     projection.push({ bookletId: run.bookletId, runId: run._id, taskId, subjectKind: "book", subjectId: run.bookletId,
       state: artifact.state, currentVersionId: version._id });
@@ -70,14 +73,16 @@ export async function verifyCurrentPaginationSources(database: Database, session
   const source = (taskId: "J06" | "J07" | "J08") => ({ versionId: projection.find((item) => item.taskId === taskId)!.currentVersionId!, content: contents.get(taskId) });
   const targets = referenceSheetTargets({ characters: source("J06"), locations: source("J07"), style: source("J08") });
   const references: Reference[] = [];
+  const sheets = metadata.artifacts.filter((item) => targets.some((target) => target.taskId === item.taskId && target.subjectKind === item.subjectKind && target.subjectId === item.subjectId));
+  const sheetIds = sheets.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+  const sheetVersions = metadata.versions.filter((item) => sheetIds.includes(item._id));
+  const sheetApprovals = metadata.approvals;
   for (const target of targets) {
-    const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
-      taskId: target.taskId, subjectKind: target.subjectKind, subjectId: target.subjectId }, { session }).toArray();
+    const rows = sheets.filter((artifact) => artifact.taskId === target.taskId && artifact.subjectKind === target.subjectKind && artifact.subjectId === target.subjectId);
     const artifact = rows.length === 1 ? rows[0] : null;
     if (!artifact || artifact.state !== "approved" || !artifact.currentVersionId) reject("J11 requires every approved reference sheet.");
-    const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, { session });
-    const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-      artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
+    const version = sheetVersions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id);
+    const approval = sheetApprovals.find((item) => item.artifactVersionId === artifact.currentVersionId);
     if (!version || !approval || version.createdBy !== "application") reject("J11 sheet approval evidence is incomplete.");
     await attempt.once(`sheet:${verification.verifyBytes !== false}:${run._id}:${version._id}`, () => createExperimentSheetAssembly({ database, store })
       .verifyVersion({ runId: run._id, versionId: version._id }, session, { ...verification, attempt }));
@@ -115,16 +120,12 @@ export function validatePaginationRouting(layout: StoredPageLayout, sources: Awa
 export async function verifyCurrentPageBibleSources(database: Database, session: ClientSession, run: ExperimentRunDocument,
   pageId: string, store: AssetStore, verification: Verification = {}) {
   const attempt = verification.attempt ?? createVerificationAttempt(store);
-  countVerificationQuery();
+  const metadata = await verificationMetadata(database, session, run._id, attempt);
   // Batch independent reads, but keep commands serial on the transaction session.
-  const books = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
-    taskId: { $in: ["J11", "J05", "J08"] }, subjectKind: "book", subjectId: run.bookletId }, { session }).toArray();
+  const books = metadata.artifacts.filter((item) => item.subjectKind === "book" && item.subjectId === run.bookletId && ["J11", "J05", "J08"].includes(item.taskId ?? ""));
   const bookIds = books.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
-  countVerificationQuery();
-  const bookVersions = await database.collections.artifact_versions.find({ _id: { $in: bookIds } }, { session }).toArray();
-  countVerificationQuery();
-  const bookApprovals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
-    artifactVersionId: { $in: bookIds }, action: "approve", scope: "artifact" }, { session }).toArray();
+  const bookVersions = metadata.versions.filter((item) => bookIds.includes(item._id));
+  const bookApprovals = metadata.approvals;
   const book = (taskId: "J11" | "J05" | "J08") => {
     const rows = books.filter((artifact) => artifact.taskId === taskId);
     const artifact = rows.length === 1 ? rows[0] : null;
@@ -144,20 +145,15 @@ export async function verifyCurrentPageBibleSources(database: Database, session:
   const savedDependencies = JSON.parse(layoutVersion.dependencyVersionIdsJson) as unknown;
   if (!Array.isArray(savedDependencies) || savedDependencies.some((item) => typeof item !== "string") ||
       new Set(savedDependencies).size !== savedDependencies.length) reject("J11 dependencies are malformed.");
-  countVerificationQuery();
-  const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: layoutVersion._id }, { session }).toArray();
+  const edges = metadata.edges.filter((item) => item.downstreamVersionId === layoutVersion._id);
   const edgeIds = edges.map((edge) => edge.upstreamVersionId);
   if (edgeIds.length !== savedDependencies.length || new Set(edgeIds).size !== edgeIds.length ||
       !savedDependencies.every((item) => edgeIds.includes(item))) reject("J11 dependency edges differ from its saved sources.");
   if (!savedDependencies.includes(manuscriptVersion._id) || !savedDependencies.includes(styleVersion._id)) reject("J11 manuscript or style source changed.");
   const approvedUpstream = new Map<string, { taskId?: string; subjectKind?: string; subjectId?: string }>();
-  countVerificationQuery();
-  const upstreamVersions = await database.collections.artifact_versions.find({ _id: { $in: savedDependencies } }, { session }).toArray();
-  countVerificationQuery();
-  const upstreamArtifacts = await database.collections.artifacts.find({ _id: { $in: upstreamVersions.map((version) => version.artifactId) } }, { session }).toArray();
-  countVerificationQuery();
-  const upstreamApprovals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
-    artifactVersionId: { $in: savedDependencies }, action: "approve", scope: "artifact" }, { session }).toArray();
+  const upstreamVersions = metadata.versions.filter((item) => savedDependencies.includes(item._id));
+  const upstreamArtifacts = metadata.artifacts;
+  const upstreamApprovals = metadata.approvals;
   const versionsById = new Map(upstreamVersions.map((version) => [version._id, version]));
   const artifactsById = new Map(upstreamArtifacts.map((artifact) => [artifact._id, artifact]));
   const approvedIds = new Set(upstreamApprovals.map((approval) => approval.artifactVersionId));
@@ -252,14 +248,13 @@ function imageMetadata(raw: string): StoredImageMetadata {
 export async function verifyCurrentPageIllustrationSources(database: Database, session: ClientSession,
   run: ExperimentRunDocument, pageId: string, store: AssetStore, verification: Verification = {}) {
   const attempt = verification.attempt ?? createVerificationAttempt(store);
+  const metadata = await verificationMetadata(database, session, run._id, attempt);
   const sources = await verifyCurrentPageBibleSources(database, session, run, pageId, store, { ...verification, attempt });
-  const rows = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
-    taskId: "J12", subjectKind: "page", subjectId: pageId }, { session }).toArray();
+  const rows = metadata.artifacts.filter((item) => item.taskId === "J12" && item.subjectKind === "page" && item.subjectId === pageId);
   const artifact = rows.length === 1 ? rows[0] : null;
   if (!artifact || artifact.state !== "approved" || !artifact.currentVersionId) reject("J13 requires the current approved J12 page.");
-  const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, { session });
-  const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-    artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
+  const version = metadata.versions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id);
+  const approval = metadata.approvals.find((item) => item.artifactVersionId === artifact.currentVersionId);
   if (!version || !approval) reject("J13 J12 approval evidence is incomplete.");
 
   const pageBible = JSON.parse(version.contentJson) as unknown;
@@ -272,12 +267,12 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
   const dependencies = JSON.parse(version.dependencyVersionIdsJson) as unknown;
   if (!Array.isArray(dependencies) || dependencies.some((item) => typeof item !== "string") ||
       canonical(dependencies) !== canonical(parsed.dependencyVersionIds)) reject("J12 dependencies differ from its selected sources.");
-  const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: version._id }, { session }).toArray();
+  const edges = metadata.edges.filter((item) => item.downstreamVersionId === version._id);
   if (edges.length !== parsed.dependencyVersionIds.length || new Set(edges.map((edge) => edge.upstreamVersionId)).size !== edges.length ||
       !parsed.dependencyVersionIds.every((id) => edges.some((edge) => edge.upstreamVersionId === id))) {
     reject("J12 dependency edges differ from its selected sources.");
   }
-  const style = await database.collections.artifact_versions.findOne({ _id: sources.styleVersionId }, { session });
+  const style = metadata.versions.find((item) => item._id === sources.styleVersionId);
   if (!style) reject("J13 approved style source is missing.");
   const request = pageSourceRequest({ persona: run.persona, pageId, layout: sources.layout,
     layoutVersionId: sources.layoutVersionId, manuscriptVersionId: sources.manuscriptVersionId,
@@ -285,12 +280,10 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     approvedVisualStyle: JSON.parse(style.contentJson) as unknown });
   const baseRequest = request.request;
 
-  const illustrations = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
-    taskId: "J13", subjectKind: "page", subjectId: pageId }, { session }).toArray();
+  const illustrations = metadata.artifacts.filter((item) => item.taskId === "J13" && item.subjectKind === "page" && item.subjectId === pageId);
   if (illustrations.length > 1) reject("J13 page image target is ambiguous.");
   const illustration = illustrations[0];
-  const currentImage = illustration?.currentVersionId ? await database.collections.artifact_versions.findOne({
-    _id: illustration.currentVersionId, artifactId: illustration._id }, { session }) : null;
+  const currentImage = illustration?.currentVersionId ? metadata.versions.find((item) => item._id === illustration.currentVersionId && item.artifactId === illustration._id) : null;
   if (illustration?.currentVersionId && !currentImage) reject("J13 current image version is missing.");
   const packageContent = currentImage ? validateSavedPageIllustrationPackage(JSON.parse(currentImage.contentJson)) : null;
   if (packageContent && (packageContent.runId !== run._id || packageContent.pageId !== pageId)) reject("J13 current package belongs to another page.");
@@ -340,9 +333,7 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     width: number;
     height: number;
   }>;
-  countVerificationQuery();
-  const assets = await database.collections.assets.find({ _id: { $in: request.references.map((reference) => reference.assetId) },
-    bookletId: run.bookletId }, { session }).toArray();
+  const assets = metadata.assets;
   for (const reference of request.references) {
     const asset = assets.find((item) => item._id === reference.assetId);
     if (!asset) reject("J13 selected sheet asset is missing.");

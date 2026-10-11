@@ -417,7 +417,20 @@ observation slot bounds application-key GET recovery to one attempt per cycle,
 including after restart; there is no nested transport retry loop. Observation
 timestamp writes wait while an image completion lease is active, so polling does
 not invalidate its source-verification transaction. Expired leases remain
-observable, and completion clears the lease without extending the deadline. Unknown work
+observable, and completion clears the lease without extending the deadline.
+The local upload-preflight correction checks saved identity, recoverability and
+lease availability without repeating the source walk. Claim verifies current
+sources before storage; finalization validates its lease and derived path before
+the full source-and-byte verification. Evidence is not reused across these
+transactions. This correction is not yet deployed.
+The local metadata correction loads run-scoped artifacts, retained versions,
+approvals, dependencies, operations and asset metadata through seven serial
+queries per verification attempt. Page, style, sheet and generation verification
+reuse those records within that attempt only. Each consumer still checks exact
+current identities, ownership and lineage; original-byte verification is unchanged.
+Retries and later callbacks create a new attempt. Assembly mutation phases keep
+fresh reads. This candidate has not established live callback latency.
+Unknown work
 with a completed callback remains observable until terminal evidence. A matching
 terminal success clears only its latest operation's unknown blocker and preserves
 Pause. A matching terminal failure creates an inspection blocker without changing
