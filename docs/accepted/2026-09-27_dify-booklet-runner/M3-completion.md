@@ -1891,8 +1891,33 @@ full-completion/failed-image cases passed again (22.36 seconds). Reuse unrelated
 passing checks; required clean CI remains mandatory.
 Credential inventory impact: none; no credential storage or consumer changed.
 
-Next: two clean independent reviews, CI and reviewed
-staging deployment, then linked Parent attempt 3/3. Do not start a fourth Parent
+The authorization correction passed two consecutive independent reviews and
+merged through PRs #179/#180 after main CI `38148268340` and staging CI
+`38148442965` passed. Reviewed main commit is
+`a022e7678e36402e8a960aaaeca13a80a6005b12`; the staging candidate is
+`e6f0575478ba2353a4d32c6a36d642152c9d426d`.
+Deploy `38149230374` failed with journal request `38149230374-1` retained at
+`draining`, before backup or release replacement. Diagnostics `38150452444`
+confirmed the prior release remains selected, Parent attempt 2 has no active
+operation, and its failed image operation still has zero reservations and no
+saved result. The exact drain blocker is not yet verified. Do not resume blindly
+or start a successor. A read-only VPS check must identify the retained running
+records; the current automated diagnostic does not expose drain counts/items.
+
+Local prevention checks found a separate gap: dispatch-outcome and failure-callback
+transactions did not invoke the existing terminal page-batch cleanup helper.
+Three focused terminal-failure reproductions left their owned page item running;
+the unknown-outcome control correctly remained unresolved. The candidate now
+closes exact terminal bookkeeping in those transactions and on idempotent
+terminal-failure readback. It preserves operation state/results, assets, pending
+siblings and unknown work. All 37 affected page-batch/dispatch tests passed
+(46.65 seconds, serial files, process exit zero), with focused typecheck/lint and
+whitespace. This is local prevention evidence, not proof of the live drain cause.
+No API, credential, request-limit or provider behavior changes are included.
+
+Next: identify and reconcile the exact drain blocker under the existing
+backup-protected authorization, resume the retained deployment and verify health,
+then linked Parent attempt 3/3. Do not start a fourth Parent
 run. If attempt 3 fails, stop and explain the measured cause. Creator follows
 Parent success. No new credential, private handoff or paid authority is needed.
 
