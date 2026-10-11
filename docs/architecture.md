@@ -441,6 +441,12 @@ Published workflow identities and the saved configuration snapshot must match.
 After callback-first publication recovery, the dispatcher reloads the saved
 operation before dependent admission; an earlier in-memory record is not proof
 of the current publication state.
+The dispatcher candidate reads latest-operation heads for all saved runs in one
+batch instead of retrieving each complete history during the lane scan. It keeps
+the timestamp/ID ordering, separately reads an active operation, and refreshes
+the head after reconciliation. Completed runs with unverified latest execution
+still retain the lane. This read optimization does not change stored evidence,
+authorization, deadlines or callback verification; live latency remains unproven.
 Three unchanged progress observations block the run. Pause prevents admission
 but does not cancel in-flight work; an authorized result can still be stored.
 

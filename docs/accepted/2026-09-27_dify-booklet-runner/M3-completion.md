@@ -1725,9 +1725,29 @@ healthy at 1536 MiB. A high historical `worker_beat` restart count is a separate
 unresolved diagnostic observation, not proof of an OOM cause.
 One linked Kid successor `fd21423e-0c6f-4303-80c8-9205900e5656` was submitted
 through the staging UI, with booklet `75e0b53e-af6f-4bd9-8c06-f80bb596b326`.
-Its predecessor is `390e8f0b-440a-4ebe-8a57-d23a80d5c8bb`. Acceptance remains
-in progress; do not resubmit this run. Parent and
-Creator follow only after an uninterrupted Kid completion. Reuse the existing
+Its predecessor is `390e8f0b-440a-4ebe-8a57-d23a80d5c8bb`. This Kid completed
+generation and evaluation without repair at revision 311: 47 logical text calls,
+9 logical image calls, 56 steps and zero payable calls. Both tester feedback and
+judge assessment are saved. Diagnostics `38132946615` independently read back
+the completed state and 56 operation records. Do not resubmit this run.
+
+The latency gate failed. The 288 retained phase records show authorization
+p95/max 7083/9346 ms, image callback p95/max 12945 ms, and result finalization
+p95/max 7731/11211 ms. Image storage maximum was 1349 ms; decode maximum was
+80 ms. Dify image run `c39c2bac-abd4-41ec-bd06-630a5d01df9f` confirms
+7.423 seconds in authorization, 2.987 seconds in fixture download and
+13.925 seconds in upload; its code nodes took less than 0.25 seconds each.
+Sandbox and collaboration health remain verified. The scheduler restart loop
+remains unresolved; its current zero memory counters do not establish its cause.
+
+Code inspection found two avoidable read patterns: each scheduling cycle loads
+every saved run's complete operation history, and the all-runs UI rebuilds every
+full view on each two-second poll. Monitoring now uses the existing single-run
+detail page. This reduces requested views but does not prove the cause of the
+timing failure. The local dispatcher candidate batches latest-operation heads
+and preserves a fresh read after reconciliation; its performance is not yet
+verified live. Parent and Creator remain pending until the correction passes.
+Reuse the existing
 43.809-second same-operation restart proof and healthy collaboration checks.
 No new keys, paid calls, reset or production changes are required.
 
