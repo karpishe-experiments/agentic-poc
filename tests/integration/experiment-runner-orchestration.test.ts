@@ -47,6 +47,41 @@ async function setup(persona: Persona = "playful_kid") {
 }
 
 describe("sequential simulated dispatch and read-only recovery", () => {
+  it("batches idle operation heads without loading historical results per run", async () => {
+    const env = await setup();
+    await env.dispatcher().advance(env.runId);
+    const run = (await env.repository.getRun(env.runId))!;
+    const operation = (await env.repository.listOperations(env.runId))[0];
+    await env.database.collections.experiment_runs.updateOne({ _id: run._id }, { $set: { status: "completed" } });
+    for (let index = 0; index < 20; index++) {
+      const runId = randomUUID();
+      await env.database.collections.experiment_runs.insertOne({ ...run, _id: runId, bookletId: randomUUID(), status: "completed" });
+      await env.database.collections.experiment_operations.insertOne({ ...operation, _id: randomUUID(), runId, idempotencyKey: randomUUID() });
+    }
+    const aggregate = vi.spyOn(env.database.collections.experiment_operations, "aggregate");
+    const history = vi.spyOn(env.database.collections.experiment_operations, "find");
+    const single = vi.spyOn(env.database.collections.experiment_operations, "findOne");
+    expect(await env.dispatcher().cycle()).toBe("idle");
+    expect(aggregate).toHaveBeenCalledTimes(1);
+    expect(history).not.toHaveBeenCalled();
+    expect(single).not.toHaveBeenCalled();
+    expect(env.runtime.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("selects exact run heads with the history tie-break and excludes result bodies", async () => {
+    const env = await setup();
+    await env.dispatcher().advance(env.runId);
+    const operation = (await env.repository.listOperations(env.runId))[0];
+    const laterId = "ffffffff-ffff-4fff-bfff-ffffffffffff";
+    await env.database.collections.experiment_operations.insertOne({ ...operation, _id: laterId, attempt: operation.attempt + 1, idempotencyKey: randomUUID(),
+      state: "succeeded", verifiedWorkflowId: null, resultJson: "private retained result" });
+    const heads = await env.repository.listOperationHeads([env.runId, randomUUID()]);
+    expect(heads).toEqual([{ _id: laterId, runId: env.runId, state: "succeeded",
+      dispatchStartedAtMs: operation.dispatchStartedAtMs, verifiedWorkflowId: null }]);
+    expect(await env.repository.listOperationHeads([])).toEqual([]);
+    expect((await env.repository.listOperations(env.runId)).at(-1)?._id).toBe(laterId);
+  });
+
   const expandedConfig = () => ({ ...config, bindings: [
     ...config.bindings.map((binding) => ({ ...binding, publishedWorkflowId: randomUUID() })),
     ...(["J03", "J04", "J05", "J06", "J07"] as const).map((taskId) => ({ role: "specialist" as const, taskId, persona: null, appId: randomUUID(), publishedWorkflowId: randomUUID(), toolProviderId: null, apiKey: "private-runtime-key" })),

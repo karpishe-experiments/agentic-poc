@@ -41,6 +41,9 @@ export class ExperimentRepositoryError extends Error {
   }
 }
 
+type OperationHead = Pick<ExperimentOperationDocument,
+  "_id" | "runId" | "state" | "dispatchStartedAtMs" | "verifiedWorkflowId">;
+
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) throw new ExperimentRepositoryError("invalid_input", "Experiment input is invalid.");
@@ -170,6 +173,23 @@ export function createExperimentRepository(database: Database, options: { store?
   async function listRuns() { return runs.find().sort({ createdAtMs: -1, _id: -1 }).toArray(); }
   async function getOperation(operationId: string) { return operations.findOne({ _id: parse(opaqueIdSchema, operationId) }); }
   async function listOperations(runId: string) { return operations.find({ runId: parse(opaqueIdSchema, runId) }).sort({ createdAtMs: 1, _id: 1 }).toArray(); }
+  async function listOperationHeads(runIds: string[]): Promise<OperationHead[]> {
+    const ids = runIds.map((id) => parse(opaqueIdSchema, id));
+    if (!ids.length) return [];
+    // Scheduling needs only the latest operation's lane evidence, not every
+    // saved result. Keep the same timestamp/ID tie-break as listOperations.
+    return operations.aggregate<OperationHead>([
+      { $match: { runId: { $in: ids } } },
+      { $project: { _id: 1, runId: 1, state: 1, createdAtMs: 1,
+        dispatchStartedAtMs: 1, verifiedWorkflowId: 1 } },
+      { $sort: { runId: -1, createdAtMs: -1, _id: -1 } },
+      { $group: { _id: "$runId", operation: { $first: {
+        _id: "$_id", runId: "$runId", state: "$state",
+        dispatchStartedAtMs: "$dispatchStartedAtMs", verifiedWorkflowId: "$verifiedWorkflowId",
+      } } } },
+      { $replaceWith: "$operation" },
+    ]).toArray();
+  }
 
   async function createRun(raw: unknown): Promise<ExperimentRunDocument> {
     const input = parse(createInput, raw);
@@ -588,5 +608,5 @@ export function createExperimentRepository(database: Database, options: { store?
       dispatchStartedAtMs: { $ne: null }, imageCompletionClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, beginObservation, requestObservation };
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
 }
