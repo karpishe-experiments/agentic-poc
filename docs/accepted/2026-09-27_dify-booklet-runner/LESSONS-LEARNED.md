@@ -15,7 +15,8 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   repair; a momentary running state does not establish recovery.
 - **Evidence:** Operator kernel output from 2026-10-11 and the
   [Community runbook](../../deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
-  The candidate repair still requires live verification.
+  The 1536 MiB repair passed startup and stability verification; subsequent
+  readback showed 409.3 MiB usage, zero restarts and zero OOM counters.
 - **Promotion target:** Documentation for container failure diagnosis.
 
 ### Reload authorization evidence after asynchronous reconciliation

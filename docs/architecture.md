@@ -646,11 +646,11 @@ a bounded healthcheck, and local Engine.IO readiness verification. Its targeted
 repair uses the shared operation lock and journal and recreates only that service
 after an idle check; it does not change Booklet release state or Dify data.
 
-The candidate scheduler repair sets `worker_beat` to 1536 MiB after kernel
+The scheduler repair sets `worker_beat` to 1536 MiB after kernel
 logs confirmed migration subprocess OOM kills at 256 MiB. It uses the same lock,
 journal and idle guard, recreates only that service, and checks beat startup plus
 120 seconds without a restart. See the [Community runbook](deployment/dify-community.md#automated-diagnostics-and-sandbox-memory)
-for deployment prerequisites and live-verification status.
+for deployment prerequisites and the verified live recovery.
 
 Issue #69 prepares a separate Dify Community stack on the same VPS. The pinned
 upstream Compose release and repository override keep its databases, networks,
