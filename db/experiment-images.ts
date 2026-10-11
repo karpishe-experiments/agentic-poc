@@ -10,6 +10,7 @@ import { verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
 import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-illustration-tasks";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
+import type { VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const time = z.number().int().nonnegative();
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
@@ -30,12 +31,13 @@ function requestFor(operation: ExperimentOperationDocument): ExperimentImageRequ
   catch { return invalid("Saved image request is invalid."); }
 }
 
-export async function assertCurrentImageSources(database: Database, session: ClientSession, run: ExperimentRunDocument, request: ExperimentImageRequest): Promise<void> {
-  const versions = await database.collections.artifact_versions.find({ _id: { $in: request.sourceVersionIds } }, { session }).toArray();
+export async function assertCurrentImageSources(database: Database, session: ClientSession, run: ExperimentRunDocument, request: ExperimentImageRequest, metadata?: VerificationMetadata): Promise<void> {
+  if (metadata && (metadata.run._id !== run._id || metadata.run.bookletId !== run.bookletId)) conflict("Image source metadata belongs to another run.");
+  const versions = metadata ? metadata.versions.filter((item) => request.sourceVersionIds.includes(item._id)) : await database.collections.artifact_versions.find({ _id: { $in: request.sourceVersionIds } }, { session }).toArray();
   const versionById = new Map(versions.map((version) => [version._id, version]));
-  const artifacts = await database.collections.artifacts.find({ _id: { $in: versions.map((version) => version.artifactId) } }, { session }).toArray();
+  const artifacts = metadata ? metadata.artifacts : await database.collections.artifacts.find({ _id: { $in: versions.map((version) => version.artifactId) } }, { session }).toArray();
   const artifactById = new Map(artifacts.map((artifact) => [artifact._id, artifact]));
-  const approvals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+  const approvals = metadata ? metadata.approvals : await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
     artifactVersionId: { $in: request.sourceVersionIds }, scope: "artifact", action: "approve" }, { session }).toArray();
   const approvedIds = new Set(approvals.map((approval) => approval.artifactVersionId));
   for (const sourceId of request.sourceVersionIds) {
@@ -105,10 +107,12 @@ export function createExperimentImageRepository(database: Database, options: { s
   async function preflight(raw: unknown): Promise<void> {
     const input = preflightSchema.parse(raw);
     await withMongoTransaction(database, async (session) => {
-      const { operation, run, request } = await checked(input, session);
+      const { operation, run } = await checked(input, session);
       if (operation.state === "succeeded") return;
       await assertRecoverable(run, operation, session);
-      await assertOperationSources(session, run, operation, request, false);
+      // Reject identity/state/lease conflicts before decoding. The claim checks
+      // current sources before any storage write; repeating that walk here adds
+      // latency without preserving evidence across the two transactions.
       if (operation.imageCompletionClaim && operation.imageCompletionClaim.expiresAtMs > input.nowMs) {
         conflict("Image completion is already claimed.");
       }
@@ -148,11 +152,11 @@ export function createExperimentImageRepository(database: Database, options: { s
         return { reused: true, operation, asset: saved };
       }
       await assertRecoverable(run, operation, session);
-      await assertOperationSources(session, run, operation, request);
       const lease = operation.imageCompletionClaim;
       if (!lease || lease.id !== input.claimId || lease.digest !== input.validatedImage.sha256 || lease.expiresAtMs <= input.nowMs || operation.imageCompletionDigest !== input.validatedImage.sha256) conflict("Image completion claim expired or changed.");
       const expectedUri = `experiments/${run.bookletId}/${run._id}/${operation._id}/attempt-${operation.attempt}/image.${input.validatedImage.extension}`;
       if (input.uri !== expectedUri) conflict("Image storage path is not derived from this operation.");
+      await assertOperationSources(session, run, operation, request);
       const metadata = { request, sha256: input.validatedImage.sha256, byteLength: input.validatedImage.byteLength, operationId: operation._id, attempt: operation.attempt, workflowRunId: operation.workflowRunId, parentWorkflowRunId: operation.parentWorkflowRunId, inputFingerprint: operation.inputFingerprint, sourceVersionIds: request.sourceVersionIds };
       const asset = { _id: operation._id, schemaVersion: "2", bookletId: run.bookletId, kind: request.kind, uri: expectedUri, mimeType: input.validatedImage.mimeType, width: input.validatedImage.width, height: input.validatedImage.height, sourceAssetId: null, metadataJson: JSON.stringify(metadata), createdAtMs: input.nowMs };
       await assets.insertOne(asset, { session });

@@ -26,6 +26,7 @@ import { createReferenceTransport, type ReferenceUploadResult } from "@/lib/expe
 import { verifyReferenceReadback } from "@/lib/experiment-runner/reference-readback";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -61,9 +62,10 @@ export function createExperimentDispatcher(deps: {
     }
     const assetStore = store();
     const sources = await withMongoTransaction(deps.database, async (session) => {
-      const selected = await verifyCurrentPageIllustrationSources(deps.database, session, run, work.subjectId, assetStore);
+      const attempt = createVerificationAttempt(assetStore);
+      const selected = await verifyCurrentPageIllustrationSources(deps.database, session, run, work.subjectId, assetStore, { attempt });
       for (const page of selected.layout.pages) {
-        if (page.pageId !== work.subjectId) await verifyCurrentPageIllustrationSources(deps.database, session, run, page.pageId, assetStore);
+        if (page.pageId !== work.subjectId) await verifyCurrentPageIllustrationSources(deps.database, session, run, page.pageId, assetStore, { attempt });
       }
       return selected;
     });

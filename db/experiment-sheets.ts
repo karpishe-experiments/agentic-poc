@@ -11,6 +11,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { assembleReferenceSheet } from "@/lib/experiment-runner/reference-assembly";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftSheetVersionId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const metadataSchema = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().positive(),
@@ -31,9 +32,9 @@ function json(raw: string | null | undefined): unknown {
 export function createExperimentSheetAssembly(input: { database: Database; store: AssetStore; now?: () => number }) {
   const { database, store } = input;
   const now = input.now ?? Date.now;
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, metadata?: VerificationMetadata) {
     const options = { session };
-    const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
+    const run = metadata?.run ?? await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Sheet run was not found.");
     const recoveredApproval = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
@@ -56,9 +57,9 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
     if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
-    const draft = await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
+    const draft = metadata ? metadata.versions.find((item) => item._id === value.draftSheetVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
-    const artifact = await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
+    const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
     if (!artifact || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId ||
       (artifact.taskId !== "J09" && artifact.taskId !== "J10") || !artifact.currentVersionId) invalid("Sheet draft belongs to another target.");
     const task = artifact.taskId;
@@ -67,18 +68,21 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     const subjectKind = task === "J09" ? "character" : "location";
     const subjectId = "characterId" in proposal ? proposal.characterId : proposal.locationId;
     if (artifact.subjectKind !== subjectKind || artifact.subjectId !== subjectId) invalid("Sheet subject differs from its saved artifact.");
-    const current = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, options);
+    const current = metadata ? metadata.versions.find((item) => item._id === artifact.currentVersionId && item.artifactId === artifact._id) : await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, options);
     if (!current || artifact.state === "needs_review" || artifact.state === "rejected") conflict("Sheet target is stale.");
     if (current._id === draft._id ? artifact.state !== "draft" : current.sourceVersionId !== draft._id || current.createdBy !== "application") conflict("Sheet draft is no longer the assembly target.");
     const sourceIds = [proposal.finalListVersionId, proposal.styleVersionId];
     if (canonical(json(draft.dependencyVersionIdsJson)) !== canonical(sourceIds)) conflict("Sheet draft dependencies differ.");
-    for (const [index, taskId] of ([task === "J09" ? "J06" : "J07", "J08"] as const).entries()) {
-      const sources = await database.collections.artifacts.find({ bookletId: run.bookletId, experimentRunId: run._id,
-        taskId, subjectKind: "book", subjectId: run.bookletId }, options).toArray();
+    const sourceTasks = [task === "J09" ? "J06" : "J07", "J08"] as const;
+    const sourceArtifacts = metadata ? metadata.artifacts.filter((item) => item.subjectKind === "book" && item.subjectId === run.bookletId && sourceTasks.includes(item.taskId as typeof sourceTasks[number])) : await database.collections.artifacts.find({ bookletId: run.bookletId, experimentRunId: run._id,
+      taskId: { $in: [...sourceTasks] }, subjectKind: "book", subjectId: run.bookletId }, options).toArray();
+    for (const [index, taskId] of sourceTasks.entries()) {
+      const sources = sourceArtifacts.filter((artifact) => artifact.taskId === taskId);
       if (sources.length !== 1 || sources[0].currentVersionId !== sourceIds[index] || sources[0].state !== "approved") conflict("Sheet sources are not current and approved.");
     }
-    const finalList = await database.collections.artifact_versions.findOne({ _id: proposal.finalListVersionId }, options);
-    const styleVersion = await database.collections.artifact_versions.findOne({ _id: proposal.styleVersionId }, options);
+    const sourceVersions = metadata ? metadata.versions.filter((item) => sourceIds.includes(item._id)) : await database.collections.artifact_versions.find({ _id: { $in: sourceIds } }, options).toArray();
+    const finalList = sourceVersions.find((version) => version._id === proposal.finalListVersionId);
+    const styleVersion = sourceVersions.find((version) => version._id === proposal.styleVersionId);
     if (!finalList || !styleVersion) invalid("Saved sheet source content is missing.");
     const style = parseReferenceProposal("J08", "assembled", json(styleVersion.contentJson)).content;
     if (style.stylePromptModule !== proposal.stylePromptModule || style.stylePromptModuleHash !== proposal.stylePromptModuleHash) conflict("Sheet style differs from the approved module.");
@@ -91,36 +95,36 @@ export function createExperimentSheetAssembly(input: { database: Database; store
       if (!location?.sheetRequired) invalid("Location is not an eligible sheet subject.");
       if (canonical(location.stableAnchors) !== canonical(proposal.stableAnchors) || canonical(location.requiredFeatures) !== canonical(proposal.requiredFeatures)) conflict("Sheet anchors or features differ from approved facts.");
     } else invalid("Sheet target type differs.");
-    const operation = await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
+    const operation = metadata ? metadata.operations.find((item) => item._id === value.imageOperationId) : await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== task ||
       operation.subjectKind !== subjectKind || operation.subjectId !== subjectId || operation.mode !== "simulated" ||
       operation.state !== "succeeded" || operation.reservationCount !== 1 || !operation.workflowRunId || operation.imageCompletionClaim) invalid("Sheet operation is not a completed authorized image.");
     if (verificationOnly && !operation.verifiedWorkflowId) invalid("Sheet approval requires verified image publication.");
     const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));
-    await assertCurrentImageSources(database, session, run, request);
+    await assertCurrentImageSources(database, session, run, request, metadata);
     if (canonical(operation.dependencyVersionIds) !== canonical(sourceIds)) conflict("Sheet operation dependencies differ.");
-    const asset = await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
+    const asset = metadata ? metadata.assets.find((item) => item._id === operation._id) : await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
     if (!asset || asset.kind !== "reference" || !asset.width || !asset.height) invalid("Saved sheet asset is missing.");
-    const metadata = metadataSchema.parse(json(asset.metadataJson));
+    const assetMetadata = metadataSchema.parse(json(asset.metadataJson));
     const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as Record<string, string | undefined>)[asset.mimeType];
-    const result = { assetId: asset._id, sha256: metadata.sha256, uri: asset.uri };
+    const result = { assetId: asset._id, sha256: assetMetadata.sha256, uri: asset.uri };
     if (!extension || asset.uri !== `experiments/${run.bookletId}/${run._id}/${operation._id}/attempt-${operation.attempt}/image.${extension}` ||
-      metadata.operationId !== operation._id || metadata.attempt !== operation.attempt || metadata.workflowRunId !== operation.workflowRunId ||
-      metadata.parentWorkflowRunId !== operation.parentWorkflowRunId || metadata.inputFingerprint !== operation.inputFingerprint ||
-      canonical(metadata.request) !== canonical(request) || canonical(metadata.sourceVersionIds) !== canonical(sourceIds) ||
-      operation.resultDigest !== metadata.sha256 || operation.imageCompletionDigest !== metadata.sha256 ||
+      assetMetadata.operationId !== operation._id || assetMetadata.attempt !== operation.attempt || assetMetadata.workflowRunId !== operation.workflowRunId ||
+      assetMetadata.parentWorkflowRunId !== operation.parentWorkflowRunId || assetMetadata.inputFingerprint !== operation.inputFingerprint ||
+      canonical(assetMetadata.request) !== canonical(request) || canonical(assetMetadata.sourceVersionIds) !== canonical(sourceIds) ||
+      operation.resultDigest !== assetMetadata.sha256 || operation.imageCompletionDigest !== assetMetadata.sha256 ||
       canonical(json(operation.resultJson)) !== canonical(result) || canonical(json(operation.materializationJson)) !== canonical(result)) conflict("Saved sheet lineage is inconsistent.");
     const assembled = assembleReferenceSheet(task, proposal, { operationId: operation._id, assetId: asset._id,
       inputFingerprint: operation.inputFingerprint, request });
     const dependencies = [draft._id, ...sourceIds];
     if (current._id !== draft._id) {
-      const edges = await database.collections.artifact_dependencies.find({ downstreamVersionId: current._id }, options).toArray();
+      const edges = metadata ? metadata.edges.filter((item) => item.downstreamVersionId === current._id) : await database.collections.artifact_dependencies.find({ downstreamVersionId: current._id }, options).toArray();
       if (canonical(json(current.contentJson)) !== canonical(assembled.content) ||
         canonical(json(current.dependencyVersionIdsJson)) !== canonical(dependencies) ||
         canonical(edges.map((edge) => edge.upstreamVersionId).sort()) !== canonical([...dependencies].sort())) conflict("Existing sheet assembly uses different or incomplete evidence.");
     }
     return { run, artifact, draft, current, assembled, dependencies,
-      bytes: { assetId: asset._id, uri: asset.uri, sha256: metadata.sha256, byteLength: metadata.byteLength } };
+      bytes: { assetId: asset._id, uri: asset.uri, sha256: assetMetadata.sha256, byteLength: assetMetadata.byteLength } };
   }
   async function verifyBytes(evidence: { assetId?: string; uri: string; sha256: string; byteLength: number }, attempt?: VerificationAttempt) {
     try {
@@ -133,13 +137,14 @@ export function createExperimentSheetAssembly(input: { database: Database; store
   async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession,
     verification?: { verifyBytes?: boolean; attempt?: VerificationAttempt }) {
     const runId = opaqueIdSchema.parse(identity.runId), versionId = opaqueIdSchema.parse(identity.versionId);
-    const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
-    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId }, { session }) : null;
+    const metadata = verification?.attempt ? await verificationMetadata(database, session, runId, verification.attempt) : undefined;
+    const version = metadata ? metadata.versions.find((item) => item._id === versionId) : await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
+    const artifact = version ? (metadata ? metadata.artifacts.find((item) => item._id === version.artifactId) : await database.collections.artifacts.findOne({ _id: version.artifactId }, { session })) : null;
     if (!version || !artifact || artifact.currentVersionId !== versionId || version.createdBy !== "application" ||
         !version.sourceVersionId || (artifact.taskId !== "J09" && artifact.taskId !== "J10")) invalid("Sheet approval requires the current assembled version.");
     const content = parseReferenceProposal(artifact.taskId, "assembled", json(version.contentJson)).content;
     if (!("build" in content)) invalid("Sheet assembly has no image evidence.");
-    const checked = await load({ runId, draftSheetVersionId: version.sourceVersionId, imageOperationId: content.build.operationId }, session, true);
+    const checked = await load({ runId, draftSheetVersionId: version.sourceVersionId, imageOperationId: content.build.operationId }, session, true, metadata);
     if (checked.current._id !== versionId) conflict("Sheet approval target changed.");
     if (verification?.verifyBytes !== false) await verifyBytes(checked.bytes, verification?.attempt);
   }
