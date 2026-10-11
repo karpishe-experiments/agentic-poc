@@ -63,6 +63,12 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 
 ## Routine operations
 
+Use the [canonical credential inventory](contracts.md#variables-and-secrets) for
+names, protected locations, consumers and purposes. Follow its
+[maintenance procedure](contracts.md#maintaining-the-inventory) when implementation
+or credential setup changes. Verify provision privately; the inventory contains
+no values and does not prove live access.
+
 | Need | Action |
 | --- | --- |
 | Verify an environment | Run **Check deployment** on its environment branch |

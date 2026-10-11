@@ -24,7 +24,7 @@ DIFY_DATA="$STATE/dify"
 DIFY_ENV="$SECRETS/dify/runtime.env"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEMP_DIR='' ATLAS_PLAN_FILE=''
+TEMP_DIR='' ATLAS_PLAN_FILE='' ADMIN_API_KEY_FILE=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
 ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}" ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}" ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
@@ -40,7 +40,7 @@ trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, dify-repair-collaboration, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
          clear-credential-session, host-dispatch, host-run
 Options:
@@ -100,7 +100,7 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
@@ -250,15 +250,19 @@ show_operation_status() {
   if [[ -f "$STATE/operation.json" ]]; then
     jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"
     if [[ "$(jq -r '.environment // ""' "$STATE/operation.json")" == dify ]]; then
-      local request_id active_state unit_result exit_status
-      request_id="$(jq -er .requestId "$STATE/operation.json")"
-      active_state="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$request_id.service")"
-      unit_result="$(systemctl show --property=Result --value "kids-booklet-operation-$request_id.service")"
-      exit_status="$(systemctl show --property=ExecMainStatus --value "kids-booklet-operation-$request_id.service")"
-      [[ "$active_state" =~ ^(active|activating|deactivating|reloading|failed|inactive)$ ]] || die 'Dify operation unit returned an unknown active state'
-      [[ "$unit_result" =~ ^(success|exit-code|timeout|signal|core-dump|watchdog|start-limit-hit|resources|oom-kill|protocol|)$ ]] || die 'Dify operation unit returned an unknown result'
-      [[ "$exit_status" =~ ^[0-9]+$ ]] || die 'Dify operation unit returned an invalid exit status'
-      printf 'result: Dify operation unit active=%s result=%s exit=%s\n' "$active_state" "${unit_result:-unset}" "$exit_status"
+      if [[ "$(jq -r .action "$STATE/operation.json")" == dify-enable-admin-api ]]; then
+        printf 'result: Dify admin API operation uses the private VPS terminal; repeat its local apply action to resume\n'
+      else
+        local request_id active_state unit_result exit_status
+        request_id="$(jq -er .requestId "$STATE/operation.json")"
+        active_state="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$request_id.service")"
+        unit_result="$(systemctl show --property=Result --value "kids-booklet-operation-$request_id.service")"
+        exit_status="$(systemctl show --property=ExecMainStatus --value "kids-booklet-operation-$request_id.service")"
+        [[ "$active_state" =~ ^(active|activating|deactivating|reloading|failed|inactive)$ ]] || die 'Dify operation unit returned an unknown active state'
+        [[ "$unit_result" =~ ^(success|exit-code|timeout|signal|core-dump|watchdog|start-limit-hit|resources|oom-kill|protocol|)$ ]] || die 'Dify operation unit returned an unknown result'
+        [[ "$exit_status" =~ ^[0-9]+$ ]] || die 'Dify operation unit returned an invalid exit status'
+        printf 'result: Dify operation unit active=%s result=%s exit=%s\n' "$active_state" "${unit_result:-unset}" "$exit_status"
+      fi
       if [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]]; then
         dify_service_records | jq -c -r '
           [.[] | {service:.Service,state:.State,health:(.Health // ""),exitCode:(.ExitCode // null)}]
@@ -851,6 +855,128 @@ dify_repair_broker_host() {
   printf 'verified: Dify API broker authentication succeeds after service recreation\n'
   save_success ''
 }
+dify_admin_api_state() {
+  python3 - "$DIFY_ENV" <<'PY'
+from pathlib import Path
+import os
+import re
+import sys
+
+path = Path(sys.argv[1])
+if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o777 != 0o600 or path.stat().st_uid != os.geteuid():
+    raise SystemExit("Dify runtime configuration is not a protected owner-only file")
+text = path.read_text()
+def setting(name):
+    matches = re.findall(rf"(?m)^{name}=(.*)$", text)
+    if len(matches) > 1:
+        raise SystemExit(f"Dify runtime configuration duplicates {name}")
+    return matches[0] if matches else None
+
+enabled = setting("ADMIN_API_KEY_ENABLE")
+key = setting("ADMIN_API_KEY")
+if enabled == "true" and key and re.fullmatch(r"[a-f0-9]{64}", key):
+    print("exists: Dify admin API configuration is enabled with a generated-format key")
+elif enabled in (None, "false") and key in (None, ""):
+    print("would update: Dify admin API configuration")
+else:
+    raise SystemExit("Dify admin API configuration has unexpected state; inspect privately")
+PY
+}
+dify_admin_api_active() {
+  dify_compose exec -T api python -c 'import os, re, sys; text = sys.stdin.read(); keys = re.findall(r"(?m)^ADMIN_API_KEY=(.*)$", text); assert os.environ.get("ADMIN_API_KEY_ENABLE") == "true" and len(keys) == 1 and re.fullmatch("[a-f0-9]{64}", keys[0]) and os.environ.get("ADMIN_API_KEY") == keys[0]' < "$DIFY_ENV" >/dev/null 2>&1
+}
+dify_prompt_admin_api_key() {
+  local admin_key
+  [[ -t 0 && -t 1 ]] || die 'Admin API setup requires a private interactive VPS terminal'
+  IFS= read -r -s -p 'Paste the 64-character Dify admin API key: ' admin_key
+  printf '\n' >&2
+  [[ "$admin_key" =~ ^[a-f0-9]{64}$ ]] || die 'Admin API key must be 32 random bytes encoded as lowercase hexadecimal'
+  private_temp
+  ADMIN_API_KEY_FILE="$TEMP_DIR/admin-api-key"
+  printf '%s' "$admin_key" > "$ADMIN_API_KEY_FILE"
+  admin_key=''; unset admin_key
+}
+dify_admin_api_environment() {
+  python3 - "$DIFY_ENV" "$ADMIN_API_KEY_FILE" <<'PY'
+from pathlib import Path
+import os
+import re
+import sys
+
+path, key_path = map(Path, sys.argv[1:])
+text = path.read_text()
+key = key_path.read_text()
+if not re.fullmatch(r"[a-f0-9]{64}", key):
+    raise SystemExit("Admin API key has an invalid format")
+backup = path.with_name("runtime.env.admin-api-before-enable")
+candidate = path.with_name("runtime.env.admin-api-next")
+settings = {}
+for name in ("ADMIN_API_KEY_ENABLE", "ADMIN_API_KEY"):
+    matches = re.findall(rf"(?m)^{name}=(.*)$", text)
+    if len(matches) > 1:
+        raise SystemExit("Admin API settings changed after preview; inspect privately")
+    settings[name] = matches[0] if matches else None
+if settings["ADMIN_API_KEY_ENABLE"] not in (None, "false") or settings["ADMIN_API_KEY"] not in (None, ""):
+    raise SystemExit("Admin API settings changed after preview; inspect privately")
+if backup.is_symlink() or (backup.exists() and (backup.stat().st_mode & 0o777 != 0o600 or backup.read_text() != text)):
+    raise SystemExit("Protected admin API backup differs from the current pre-enable configuration")
+if not backup.exists():
+    with backup.open("x") as file:
+        file.write(text)
+    backup.chmod(0o600)
+text = re.sub(r"(?m)^ADMIN_API_KEY(?:_ENABLE)?=.*\n?", "", text)
+updated = text.rstrip("\n") + "\nADMIN_API_KEY_ENABLE=true\nADMIN_API_KEY=" + key + "\n"
+if candidate.is_symlink() or (candidate.exists() and (candidate.stat().st_mode & 0o777 != 0o600 or candidate.read_text() != updated)):
+    raise SystemExit("Protected admin API candidate differs from this request; inspect privately")
+if not candidate.exists():
+    with candidate.open("x") as file:
+        file.write(updated)
+    candidate.chmod(0o600)
+os.replace(candidate, path)
+print("updated: protected Dify admin API configuration")
+PY
+}
+dify_enable_admin_api_host() {
+  require_root
+  need_command flock; need_command python3; need_command docker
+  CONFIG_FILE="$ROOT/config.json"; load_config
+  dify_install_preflight
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Pinned Dify installation is not recorded'
+  if [[ "$APPLY" == false ]]; then dify_admin_api_state; return; fi
+  exec 9>"$STATE/operation.lock"
+  flock -n 9 || die 'Another host operation is running'
+  local state
+  state="$(dify_admin_api_state)"
+  if [[ -f "$STATE/operation.json" ]]; then
+    jq -e '.action == "dify-enable-admin-api" and .environment == "dify" and (.step == "queued" or .step == "configuring" or .step == "configured" or .step == "restarting")' "$STATE/operation.json" >/dev/null || die 'Another unresolved host operation exists; inspect its status first'
+    REQUEST_ID="$(jq -er .requestId "$STATE/operation.json")"
+    printf 'exists: resuming Dify admin API operation %s\n' "$REQUEST_ID"
+  else
+    if [[ "$state" == exists:* ]] && dify_admin_api_active; then
+      dify_verify_services
+      printf 'exists: Dify admin API settings are active in the API service\n'
+      return
+    fi
+    dify_idle_host
+    if [[ "$state" != exists:* ]]; then dify_prompt_admin_api_key; fi
+    REQUEST_ID="${REQUEST_ID:-$(date +%s)-$$}"
+    [[ ! -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Request ID already completed'
+    jq -n --arg requestId "$REQUEST_ID" '{requestId:$requestId,action:"dify-enable-admin-api",environment:"dify",image:"",commit:"",backupId:"",confirmation:"",step:"queued"}' > "$STATE/operation.json"
+  fi
+  dify_idle_host
+  if [[ "$state" != exists:* ]]; then
+    [[ -n "$ADMIN_API_KEY_FILE" ]] || dify_prompt_admin_api_key
+    set_step configuring
+    dify_admin_api_environment
+    set_step configured
+  fi
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate api api_websocket >/dev/null
+  dify_verify_services
+  dify_admin_api_active || die 'Dify API process did not receive admin API configuration'
+  printf 'verified: Dify admin API settings reached the API service; complete a private bearer request before claiming authentication works\n'
+  save_success ''
+}
 host_run() {
   require_root; need_command flock; need_command docker; need_command jq
   exec 9>"$STATE/operation.lock"
@@ -879,6 +1005,7 @@ host_run() {
   if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
   if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
   if [[ "$ACTION" == dify-repair-collaboration ]]; then dify_repair_collaboration_host; return; fi
+  [[ "$ACTION" != dify-enable-admin-api ]] || die 'Resume Dify admin API setup from the private VPS terminal with its local apply action'
   run_lifecycle
 }
 dify_discover_host() {
@@ -2482,6 +2609,7 @@ main() {
     setup) setup_host;;
     atlas-reconcile) reconcile_atlas;;
     finalize) finalize_repository;;
+    dify-enable-admin-api) dify_enable_admin_api_host;;
     rotate-secrets)
       if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
         if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
