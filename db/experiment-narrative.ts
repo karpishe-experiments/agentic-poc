@@ -38,12 +38,18 @@ function enabled(run: ExperimentRunDocument, task: unknown): task is SpecialistT
 }
 
 export async function currentSheetTargets(database: Database, session: ClientSession, run: ExperimentRunDocument) {
+  const artifacts = await database.collections.artifacts.find({ bookletId: run.bookletId, experimentRunId: run._id,
+    subjectKind: "book", subjectId: run.bookletId, taskId: { $in: ["J06", "J07", "J08"] } }, { session }).toArray();
+  const ids = artifacts.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+  const versions = await database.collections.artifact_versions.find({ _id: { $in: ids } }, { session }).toArray();
+  const approvals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+    artifactVersionId: { $in: ids }, action: "approve", scope: "artifact" }, { session }).toArray();
   async function source(taskId: "J06" | "J07" | "J08") {
-    const rows = await database.collections.artifacts.find(targetQuery(run, taskId), { session }).toArray();
+    const rows = artifacts.filter((artifact) => artifact.taskId === taskId);
     const artifact = rows.length === 1 ? rows[0] : null;
     if (!artifact || artifact.state !== "approved" || !artifact.currentVersionId) conflict("Sheet sources are not current and approved.");
-    const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, { session });
-    const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId, artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
+    const version = versions.find((version) => version._id === artifact.currentVersionId && version.artifactId === artifact._id);
+    const approval = approvals.find((approval) => approval.artifactVersionId === artifact.currentVersionId);
     if (!version || !approval) conflict("Sheet sources have incomplete saved approvals.");
     return { versionId: version._id, content: JSON.parse(version.contentJson) as unknown };
   }
@@ -68,14 +74,19 @@ async function updateStage(database: Database, session: ClientSession, run: Expe
         const layout = parseStoredPageLayout(run.persona, JSON.parse(layoutVersion.contentJson));
         const bibles = await database.collections.artifacts.find({ experimentRunId: run._id, bookletId: run.bookletId,
           taskId: "J12", subjectKind: "page" }, { session }).toArray();
+        // Stage projection reads every accepted sibling. Batch its metadata so
+        // saving each new page does not add two round trips per earlier page.
+        const bibleIds = bibles.flatMap((artifact) => artifact.currentVersionId ? [artifact.currentVersionId] : []);
+        const versions = await database.collections.artifact_versions.find({ _id: { $in: bibleIds } }, { session }).toArray();
+        const approvals = await database.collections.approvals.find({ experimentRunId: run._id, bookletId: run.bookletId,
+          artifactVersionId: { $in: bibleIds }, action: "approve", scope: "artifact" }, { session }).toArray();
         let accepted = 0;
         for (const page of layout.pages) {
           const matches = bibles.filter((item) => item.subjectId === page.pageId);
           const artifact = matches.length === 1 ? matches[0] : null;
           if (!artifact || artifact.state !== "approved" || !artifact.currentVersionId) continue;
-          const version = await database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId, artifactId: artifact._id }, { session });
-          const approval = await database.collections.approvals.findOne({ experimentRunId: run._id, bookletId: run.bookletId,
-            artifactVersionId: artifact.currentVersionId, action: "approve", scope: "artifact" }, { session });
+          const version = versions.find((version) => version._id === artifact.currentVersionId && version.artifactId === artifact._id);
+          const approval = approvals.find((approval) => approval.artifactVersionId === artifact.currentVersionId);
           if (!version || !approval) continue;
           try {
             const parsed = parsePageBibleForLayout({ persona: run.persona, pageId: page.pageId, layout,

@@ -166,7 +166,7 @@ not the cause of the earlier timeout or full Booklet acceptance. The operator's 
 snapshot with `oomKilled=false` and zero current counters did not exclude these
 kills; correlate kernel events with the exact container ID before diagnosing.
 
-The candidate `repair-scheduler` operation raises only `worker_beat` to 1536 MiB,
+The `repair-scheduler` operation raises only `worker_beat` to 1536 MiB,
 matching the other API-image services. Synchronize the reviewed dispatcher and
 Compose override through Infrastructure, then select `repair-scheduler` with
 Apply off in Dify operations. Apply requires an idle Dify workspace and 3328 MiB
@@ -176,8 +176,20 @@ the current container start, then 120 seconds with the same container ID, start
 time and restart count, followed by the existing Dify readiness checks. This
 proves bounded startup stability, not successful execution of every periodic task.
 Inspect `status` after an interruption before `resume`. A running scheduler that
-already has the reviewed limit is verified without recreation. Live repair and
-acceptance remain pending; do not treat the candidate as deployed.
+already has the reviewed limit is verified without recreation.
+
+Live repair [38139804937](https://github.com/karpishe-experiments/agentic-poc/actions/runs/38139804937)
+passed on 2026-10-11 after preview `38139756746` and Infrastructure synchronization
+`38139657415` of reviewed merge `3b017f839d60e56b4f7d4ef5e7c77aea91263e44`.
+Terraform changed no resources. Independent diagnostics
+[38140083268](https://github.com/karpishe-experiments/agentic-poc/actions/runs/38140083268)
+read back `worker_beat` running for over four minutes with exactly 1610612736
+bytes, zero restarts and zero cgroup OOM counters. Its logs contain one migration
+startup and one beat startup. Sampled usage was 409.3 MiB and available host memory
+was 11,159 MiB. The other Dify containers retained their prior start times.
+Status `38140132764` confirmed an idle host operation journal.
+This establishes recovery of the startup restart loop, not verification of every
+periodic task or full Booklet acceptance.
 The diagnostics candidate adds bounded scheduler error-category counts and
 cgroup counters. The diagnostic candidate also counts fixed startup/exception
 categories and records container start/finish times. It never returns arbitrary
@@ -194,7 +206,9 @@ container's existing `ACCESS_GATE_PASSWORD` in memory, refuses redirects, bounds
 the response, and returns only authentication outcome and event count. No new
 secret, local `.env` copy or operator credential entry is required. A failed check
 reports `unverified`; it does not establish that the endpoint is unavailable.
-This path remains pending deployment and live verification.
+Infrastructure synchronization `38138324124` installed this path. Diagnostics
+`38138400115` and `38141274006` verified authenticated HTTP 200. This verifies
+automated endpoint access, not unrestricted log access or full M3 completion.
 
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,

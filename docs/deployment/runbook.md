@@ -19,15 +19,15 @@ calls. J12/J13, final images and full-booklet simulation remain pending; see
 
 | Checkpoint | Verified state |
 | --- | --- |
-| Infrastructure | Run `38122080367` synchronized reviewed `master` commit `032a20599f18abcc8cc193675d00a7f1de2ff01e`; Terraform changed no resources. The Dify admin API host action is installed; see the [Community runbook](dify-community.md#enable-the-community-admin-api) for live activation and client verification. |
+| Infrastructure | Run `38139657415` synchronized reviewed `master` merge `3b017f839d60e56b4f7d4ef5e7c77aea91263e44`; Terraform changed no resources. Scheduler repair `38139804937` passed; diagnostics `38140083268` verified 1536 MiB, zero restarts and zero OOM counters. See the [Community runbook](dify-community.md#automated-diagnostics-and-sandbox-memory). |
 | Staging | Release `0fb4c3d0d0996b38e7a8c03ffebf81793ddf1fe0`; Deploy `37356864220` and Check `37357833756` passed. Sixteen model-free bindings activated through `37348239296` with backup `staging-20261005T172539Z-9163268c683d14ee`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
 
-For the confirmed Dify scheduler OOM loop, use the candidate targeted repair and
+For Dify scheduler OOM recovery, use the targeted repair and
 verification checkpoint in the [Community runbook](dify-community.md#automated-diagnostics-and-sandbox-memory)
-after reviewed host synchronization. Its live recovery remains pending.
+after reviewed host synchronization. The latest scheduler recovery is verified.
 
 This table records the accepted baseline. Use current workflow summaries and host state for later releases.
 
