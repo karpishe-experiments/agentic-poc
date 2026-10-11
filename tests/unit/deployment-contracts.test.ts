@@ -42,8 +42,11 @@ describe("deployment contracts", () => {
   it("keeps Community host operations manual, serialized, and branch-fresh", () => {
     const workflow = readFileSync(".github/workflows/dify-operations.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("options: [check, idle, install, repair-broker, repair-collaboration, status, resume]");
-    expect(workflow).toContain('[[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration)$ && "$APPLY" == true ]]');
+    expect(workflow).toContain("options: [check, idle, diagnostics, repair-sandbox, install, repair-broker, repair-collaboration, status, resume]");
+    expect(workflow).toContain('[[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox)$ && "$APPLY" == true ]]');
+    expect(workflow).toContain('if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then');
+    expect(workflow).toContain('"$ACTION" == diagnostics && "$RUN_ID" =~ ^[a-f0-9]');
+    expect(workflow).toContain('[[ -z "$RUN_ID" ]] || args+=(--run-id "$RUN_ID")');
     expect(workflow).toContain('[[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"');
     expect(workflow).toContain('args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")');
     expect(workflow).toContain("Resume requires apply.");
@@ -77,6 +80,8 @@ describe("deployment contracts", () => {
     expect(collaboration).toContain("mem_limit: 1536m");
     expect(collaboration).toContain('"http://localhost:5001/health"');
     expect(collaboration).toContain("timeout: 6s");
+    const sandbox = override.split("  sandbox:\n")[1].split("  ssrf_proxy:\n")[0];
+    expect(sandbox).toContain("mem_limit: 1024m");
   });
 
   it("pins the planned restic backup binary without enabling an unverified drain", () => {
