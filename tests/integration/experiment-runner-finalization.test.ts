@@ -19,7 +19,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function setup() {
+async function setup(claimImmediately = true) {
   database = await createTestDatabase({ seedAgents: false });
   const repository = createExperimentRepository(database);
   await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs: 1 });
@@ -28,12 +28,76 @@ async function setup() {
   const claim = { runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: 3 };
   await repository.beginDispatch(claimWithoutWorkflow(claim));
   await repository.recordDispatchIdentity(claim);
-  await repository.claimOperation(claim);
+  if (claimImmediately) await repository.claimOperation(claim);
   const completion = { envelope: { runId, operationId, workflowRunId,
     inputFingerprint: "a".repeat(64), result: { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: bookletId } } },
   parentWorkflowRunId: null, nowMs: 5 };
-  return { repository, completion };
+  return { repository, completion, claim };
 }
+
+it("does not repeat authorization when observation overlaps the claim transaction", async () => {
+  const { repository, claim } = await setup(false);
+  const collection = database!.collections.experiment_runs;
+  const read = collection.findOne.bind(collection);
+  const reads = vi.spyOn(collection, "findOne").mockImplementationOnce(async (...args) => {
+    const run = await read(...args);
+    await repository.beginObservation(operationId, 4);
+    await repository.requestObservation(operationId);
+    return run;
+  });
+  const result = await repository.claimOperation(claim);
+  expect(result.started).toBe(true);
+  expect(reads).toHaveBeenCalledTimes(1);
+  reads.mockRestore();
+  expect(result.operation).toMatchObject({ workflowRunId, reservationCount: 1, deadlineAtMs: 600_003, authorizationClaim: null });
+  expect((await repository.getRun(runId))?.counters.steps).toBe(1);
+});
+
+it("recovers an expired authorization lease without another reservation or deadline", async () => {
+  const { repository, claim } = await setup(false);
+  await database!.collections.experiment_operations.updateOne({ _id: operationId }, { $set: {
+    authorizationClaim: { id: id(909), expiresAtMs: 100 }, nextObservationAtMs: 4,
+  } });
+  const restarted = createExperimentRepository(database!);
+  expect(await restarted.beginObservation(operationId, 99)).toBeNull();
+  await restarted.requestObservation(operationId);
+  await expect(restarted.claimOperation({ ...claim, nowMs: 99 })).rejects.toMatchObject({ code: "conflict" });
+  expect(await restarted.getOperation(operationId)).toMatchObject({ reservationCount: 0,
+    nextObservationAtMs: 4, authorizationClaim: { id: id(909), expiresAtMs: 100 } });
+  expect(await restarted.beginObservation(operationId, 100)).not.toBeNull();
+  expect((await restarted.claimOperation({ ...claim, nowMs: 101 })).operation).toMatchObject({
+    workflowRunId, reservationCount: 1, deadlineAtMs: 600_003, authorizationClaim: null,
+  });
+  expect((await repository.getRun(runId))?.counters.steps).toBe(1);
+});
+
+it("releases authorization coordination on Pause without admitting a request", async () => {
+  const { repository, claim } = await setup(false);
+  const run = (await repository.getRun(runId))!;
+  await repository.pause({ runId, expectedRevision: run.revision, nowMs: 4 });
+  expect(await repository.claimOperation({ ...claim, nowMs: 5 })).toMatchObject({ started: false, reason: "paused" });
+  expect(await repository.getOperation(operationId)).toMatchObject({ state: "prepared", authorizationClaim: null, reservationCount: 0 });
+  expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+});
+
+it("does not reserve after authorization coordination expires during source work", async () => {
+  const { repository, claim } = await setup(false);
+  vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(60_000);
+  await expect(repository.claimOperation(claim)).rejects.toMatchObject({ code: "conflict" });
+  expect(await repository.getOperation(operationId)).toMatchObject({ state: "prepared",
+    authorizationClaim: null, reservationCount: 0, deadlineAtMs: 600_003 });
+  expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+});
+
+it("rechecks the original operation deadline before saving an authorization reservation", async () => {
+  const { repository, claim } = await setup(false);
+  await database!.collections.experiment_operations.updateOne({ _id: operationId }, { $set: { deadlineAtMs: 10 } });
+  vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(8);
+  expect(await repository.claimOperation(claim)).toMatchObject({ started: false, reason: "blocked" });
+  expect(await repository.getOperation(operationId)).toMatchObject({ state: "prepared",
+    authorizationClaim: null, reservationCount: 0, deadlineAtMs: 10 });
+  expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+});
 
 it("does not restart text finalization when polling overlaps its transaction", async () => {
   const { repository, completion } = await setup();
