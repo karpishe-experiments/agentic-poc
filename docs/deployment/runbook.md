@@ -19,7 +19,7 @@ calls. J12/J13, final images and full-booklet simulation remain pending; see
 
 | Checkpoint | Verified state |
 | --- | --- |
-| Infrastructure | Run `37307131902` synchronized reviewed `master` commit `4a8ad276fdb5ec7fd5701a9f7cf6ec7b1addb6bf`; Terraform reported no changes. |
+| Infrastructure | Run `38122080367` synchronized reviewed `master` commit `032a20599f18abcc8cc193675d00a7f1de2ff01e`; Terraform changed no resources. The Dify admin API host action is installed; see the [Community runbook](dify-community.md#enable-the-community-admin-api) for live activation and client verification. |
 | Staging | Release `0fb4c3d0d0996b38e7a8c03ffebf81793ddf1fe0`; Deploy `37356864220` and Check `37357833756` passed. Sixteen model-free bindings activated through `37348239296` with backup `staging-20261005T172539Z-9163268c683d14ee`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
@@ -36,7 +36,7 @@ This table records the accepted baseline. Use current workflow summaries and hos
 | Staging hostname | `booklet-staging.uniwares.co.uk` |
 | Production hostname | `booklet.uniwares.co.uk` |
 | Deployment hostname | `srv1-deploy.uniwares.co.uk` |
-| Dify hostname | `dify.uniwares.co.uk` (public bootstrap explicitly approved; create the first administrator immediately after activation) |
+| Dify hostname | `dify.uniwares.co.uk`; current administration state is in the [Community runbook](dify-community.md#enable-the-community-admin-api) |
 | Atlas project | `6a869d84e65675f845fa22eb` |
 | Atlas cluster | `kids-booklet`, Ireland (`eu-west-1`) |
 | Staging database | `kids_booklet` |
@@ -72,6 +72,7 @@ no values and does not prove live access.
 | Need | Action |
 | --- | --- |
 | Verify an environment | Run **Check deployment** on its environment branch |
+| Inspect Dify host state and staging runner timings | Run **Dify operations** with `action=diagnostics`, Apply off, and an optional staging run UUID; see [diagnostics and sandbox repair](dify-community.md#automated-diagnostics-and-sandbox-memory) |
 | Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; inspect the Infrastructure preview; explicitly run **Infrastructure** with `apply=true`; then release each affected environment |
 | Create a backup | Run **Maintenance** with `action=backup`; retain the exact `backupId` from the summary |
 | Restore | Run **Maintenance** with `action=restore`, the exact `backup_id`, and confirmation `kids_booklet` or `kids_booklet_prod` |

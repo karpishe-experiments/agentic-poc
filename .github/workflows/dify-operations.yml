@@ -6,7 +6,11 @@ on:
         description: Pinned Community operation
         type: choice
         required: true
-        options: [check, idle, install, repair-broker, repair-collaboration, status, resume]
+        options: [check, idle, diagnostics, repair-sandbox, install, repair-broker, repair-collaboration, status, resume]
+      run_id:
+        description: Optional staging run UUID for diagnostics
+        type: string
+        required: false
       apply:
         description: Apply installation, repair or resume (otherwise preview/read-only)
         type: boolean
@@ -17,6 +21,7 @@ concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
 jobs:
   dify:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Verify reviewed branch and inputs
@@ -24,6 +29,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ACTION: ${{ inputs.action }}
           APPLY: ${{ inputs.apply }}
+          RUN_ID: ${{ inputs.run_id }}
           VPS_HOST: ${{ vars.VPS_HOST }}
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           DEPLOY_SSH_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
@@ -31,9 +37,10 @@ jobs:
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|install|repair-broker|repair-collaboration|status|resume)$ ]]
-          if [[ "$ACTION" =~ ^(check|idle|status)$ ]]; then
-            [[ "$APPLY" != true ]] || { printf 'Check, idle and status are read-only; clear apply.\n' >&2; exit 1; }
+          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|diagnostics|repair-sandbox|install|repair-broker|repair-collaboration|status|resume)$ ]]
+          [[ -z "$RUN_ID" || ( "$ACTION" == diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]]
+          if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then
+            [[ "$APPLY" != true ]] || { printf 'Check, idle, status and diagnostics are read-only; clear apply.\n' >&2; exit 1; }
           elif [[ "$ACTION" == resume ]]; then
             [[ "$APPLY" == true ]] || { printf 'Resume requires apply.\n' >&2; exit 1; }
           fi
@@ -52,6 +59,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ACTION: ${{ inputs.action }}
           APPLY: ${{ inputs.apply }}
+          RUN_ID: ${{ inputs.run_id }}
           VPS_HOST: ${{ vars.VPS_HOST }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
@@ -62,7 +70,8 @@ jobs:
           operation="dify-$ACTION"
           [[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"
           args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")
-          if [[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration)$ && "$APPLY" == true ]]; then
+          [[ -z "$RUN_ID" ]] || args+=(--run-id "$RUN_ID")
+          if [[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox)$ && "$APPLY" == true ]]; then
             args+=(--request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --apply)
           elif [[ "$ACTION" == resume ]]; then
             args+=(--apply)
@@ -80,7 +89,7 @@ jobs:
           {
             printf '## Dify Community operation\n\n'
             printf '| Action | Mode | Commit | Request / recovery target | Outcome |\n| --- | --- | --- | --- | --- |\n'
-            mode=preview; if [[ "$ACTION" =~ ^(check|idle|status)$ ]]; then mode=read-only; elif [[ "$APPLY" == true ]]; then mode=apply; fi
+            mode=preview; if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then mode=read-only; elif [[ "$APPLY" == true ]]; then mode=apply; fi
             request_display="$REQUEST_ID"
             [[ "$ACTION" != resume ]] || request_display='retained host journal'
             # Markdown backticks are literal delimiters.
@@ -93,7 +102,7 @@ jobs:
             else
               printf 'No sanitized result was produced; inspect the failed step.\n'
             fi
-            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker|repair-collaboration)$ && "$APPLY" == true ]]; then
+            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox)$ && "$APPLY" == true ]]; then
               # Markdown backticks are literal delimiters.
               # shellcheck disable=SC2016
               printf '\nInspect the host operation journal for request `%s` before resuming or retrying.\n' "$REQUEST_ID"

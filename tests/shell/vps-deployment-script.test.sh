@@ -1,6 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+
+diagnostic_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+parse_arguments --action dify-diagnostics --environment dify --run-id 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb
+validate_arguments
+[[ "$RUN_ID" == 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb ]]
+APPLY=true
+if (validate_arguments) >/dev/null 2>&1; then exit 1; fi
+APPLY=false; RUN_ID="../../etc/passwd"
+if (validate_arguments) >/dev/null 2>&1; then exit 1; fi
+RUN_ID=""; ACTION=dify-repair-sandbox; DIFY_DATA="$2"
+dify_diagnostic_identity() { :; }
+dify_install_preflight() { :; }
+dify_validate_compose() { :; }
+dify_compose() { printf "{\"services\":{\"sandbox\":{\"mem_limit\":1073741824}}}\n"; }
+awk() { printf "2883583\n"; }
+if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
+awk() { printf "2883584\n"; }
+dify_sandbox_preflight
+dify_sandbox_is_ready() { [[ -f "$DIFY_DATA/healthy" ]]; }
+dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
+set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
+dify_compose() {
+  if [[ "$1" == config ]]; then printf "{\"services\":{\"sandbox\":{\"mem_limit\":1073741824}}}\n"; return; fi
+  printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; touch "$DIFY_DATA/healthy";
+}
+dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }
+save_success() { printf "complete\n" >> "$DIFY_DATA/events"; }
+dify_repair_sandbox_host >/dev/null
+grep -Fxq "compose:up -d --no-deps --force-recreate sandbox" "$DIFY_DATA/events"
+[[ "$(head -n 1 "$DIFY_DATA/events")" == idle ]]
+before="$(wc -l < "$DIFY_DATA/events")"
+dify_repair_sandbox_host >/dev/null
+[[ "$(wc -l < "$DIFY_DATA/events")" == "$((before + 1))" ]]
+' _ "$script" "$diagnostic_fixture"
+rm -r -- "$diagnostic_fixture"
 grep -Fq '"$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then' "$script"
 grep -Fq 'values["CELERY_BROKER_URL"] = f"redis://:{values['"'"'REDIS_PASSWORD'"'"']}@redis:6379/1"' "$script"
 broker_fixture="$(mktemp -d)"
