@@ -9,7 +9,7 @@ docker() {
   case "$1" in
     ps) [[ "${missing:-false}" == true ]] || printf "fixture-container\n";;
     exec) [[ "${racing:-false}" != true ]] || return 1; printf "oom 2\ncredential=do-not-print\noom 2 secret\n";;
-    logs) printf "PermissionError: credential=do-not-print\nWRONGPASS credential=do-not-print\n";;
+    logs) printf "PermissionError: credential=do-not-print\nWRONGPASS credential=do-not-print\nOperationalError: credential=do-not-print\nTraceback (most recent call last): credential=do-not-print\nbeat: Starting credential=do-not-print\n";;
     *) return 1;;
   esac
 }
@@ -17,6 +17,7 @@ for service in sandbox worker_beat; do
   output="$(dify_service_diagnostics "$service")"
   [[ "$output" == *"result: ${service}_memory oom 2"* ]]
   [[ "$output" == *"\"permissionerror\": 1"* && "$output" == *"\"wrongpass\": 1"* ]]
+  [[ "$output" == *"\"operationalerror\": 1"* && "$output" == *"\"beat: starting\": 1"* ]]
   [[ "$output" != *do-not-print* && "$output" != *"oom 2 secret"* ]]
 done
 racing=true
@@ -25,6 +26,44 @@ output="$(dify_service_diagnostics worker_beat)"
 missing=true
 [[ -z "$(dify_service_diagnostics worker_beat)" ]]
 if (dify_service_diagnostics arbitrary) >/dev/null 2>&1; then exit 1; fi
+' _ "$script"
+
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+timeout() { shift; "$@"; }
+export DEPLOYMENT_ENV=_staging ACCESS_GATE_PASSWORD=fixture-password-do-not-print
+docker() {
+  local code
+  code=$(</dev/stdin)
+  DIAG_CASE="$diag_case" node -e '"'"'
+    global.fetch = async (url, options) => {
+      if (url !== "https://booklet-staging.uniwares.co.uk/api/diagnostics/logs?limit=1&runId=390e8f0b-440a-4ebe-8a57-d23a80d5c8bb" ||
+          options.headers.Authorization !== "Basic " + Buffer.from("booklet:" + process.env.ACCESS_GATE_PASSWORD).toString("base64") ||
+          options.redirect !== "error") throw Error("fixture-password-do-not-print");
+      const mode = process.env.DIAG_CASE;
+      if (mode === "network") throw Error("fixture-password-do-not-print");
+      return new Response(mode === "large" ? "x".repeat(65537) : mode === "malformed" ? "fixture-password-do-not-print" :
+        JSON.stringify({data:{events:mode === "many" ? [{},{}] : []}}),
+        {status:mode === "denied" ? 401 : 200, headers:{"content-type":"application/json"}});
+    };
+    eval(process.argv[1]);
+  '"'"' "$code" 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb
+}
+for diag_case in success denied network malformed large many; do
+  output="$(dify_staging_api_diagnostic fixture-container 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb)"
+  [[ "$output" != *fixture-password-do-not-print* ]]
+  if [[ "$diag_case" == success ]]; then
+    [[ "$output" == *"\"authenticated\":true"* && "$output" == *"\"eventCount\":0"* ]]
+  else
+    [[ "$output" == *"\"authenticated\":false"* ]]
+  fi
+done
+docker() { printf "fixture-password-do-not-print\n" >&2; return 1; }
+output="$(dify_staging_api_diagnostic fixture-container 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb 2>&1)"
+[[ "$output" == '"'"'result: staging_api {"authenticated":false,"outcome":"unverified"}'"'"' ]]
+timeout() { return 124; }
+output="$(dify_staging_api_diagnostic fixture-container 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb)"
+[[ "$output" == '"'"'result: staging_api {"authenticated":false,"outcome":"unverified"}'"'"' ]]
 ' _ "$script"
 
 diagnostic_fixture="$(mktemp -d)"

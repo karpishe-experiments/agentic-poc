@@ -47,7 +47,7 @@ infer their presence from `.env.example`.
 | Name / variable | Storage | Current consumer and purpose |
 | --- | --- | --- |
 | `MONGODB_URI` | Protected host override; corresponding Atlas application user | MongoDB connection, including database password, for durable Booklet data and recovery; environment-scoped user |
-| `ACCESS_GATE_PASSWORD` | Protected host override | Booklet Basic HTTP gate, including staging diagnostic logs, with fixed username `booklet`; at least 16 characters; dedicated Dify tool routes use their own key |
+| `ACCESS_GATE_PASSWORD` | Protected host override | Booklet Basic HTTP gate, including staging diagnostic logs, with fixed username `booklet`; at least 16 characters; the host diagnostic candidate consumes the existing staging container value in memory for a bounded public API check (live use pending); no additional storage or transfer copy; dedicated Dify tool routes use their own key |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Protected host override | S3-compatible R2 access for assets, diagnostics and Booklet backup/restore; separate from Terraform-state and Dify-backup keys |
 | `OPENAI_API_KEY` | Protected host override | Legacy application model/image execution; enabled Dify runner does not require it in the app schema, but deployment still requires a nonempty value |
 | `GEMINI_API_KEY` | Optional private local environment; no managed deployment provision path | Gemini image provider sends `x-goog-api-key`; conditional on selecting that provider, not required for simulated Dify workflows |
@@ -232,7 +232,13 @@ gate and is available only in `_staging`. It retains at most 5000 structured
 callback phase events in process memory; responses contain at most 500 events
 and use `Cache-Control: no-store`. Optional `runId` and `limit` select records.
 Restart clears the buffer. The host diagnostic action can read bounded retained
-container timing logs after restart. This adds consumers of existing credentials,
+container timing logs after restart. The host diagnostic candidate also checks
+the public staging API using the existing container credential, without returning
+headers or response content. It reports only success/event count or `unverified`;
+live verification remains pending. Scheduler diagnostics count fixed exception
+and startup categories, not arbitrary log messages. Saved operation diagnostics
+return result/materialization presence booleans, never their content.
+This adds consumers of existing credentials,
 not new secrets, storage or transfer copies. Live provision/use remains pending
 until the reviewed candidate is deployed and checked.
 

@@ -166,13 +166,22 @@ snapshot also shows a high `worker_beat` restart count. Diagnostics `38131206144
 showed 48 additional restarts in about ten minutes. The cause remains unverified;
 do not describe this as an OOM without supporting counters or logs.
 The diagnostics candidate adds bounded scheduler error-category counts and
-cgroup counters. A restart racing the counter read reports `unavailable`;
+cgroup counters. The diagnostic candidate also counts fixed startup/exception
+categories and records container start/finish times. It never returns arbitrary
+traceback text. A restart racing the counter read reports `unavailable`;
 this is an observation gap, not a zero or a health pass. Raw log text is never returned.
 
 For recent Booklet callback events, use the authenticated staging endpoint
 `GET /api/diagnostics/logs?runId=<UUID>&limit=200`. It uses the existing Booklet
 login, returns no raw exception text, and clears its bounded buffer on restart.
 Use workflow diagnostics for retained container timing summaries.
+With a staging run selected, the diagnostic candidate also checks this endpoint
+through the public HTTPS origin from the staging container. It uses that
+container's existing `ACCESS_GATE_PASSWORD` in memory, refuses redirects, bounds
+the response, and returns only authentication outcome and event count. No new
+secret, local `.env` copy or operator credential entry is required. A failed check
+reports `unverified`; it does not establish that the endpoint is unavailable.
+This path remains pending deployment and live verification.
 
 The protected runtime environment is root-owned, mode 600, at
 `/etc/kids-booklet/dify/runtime.env`. Never print it, `docker compose config`,
