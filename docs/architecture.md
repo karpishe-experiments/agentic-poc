@@ -425,6 +425,13 @@ leaves an expiring lease; it does not permit another workflow POST. Expired leas
 remain observable without extending the operation deadline. Each materialization
 transaction attempt emits a sanitized `result_transaction` diagnostic event;
 attempt outcomes are not proof of commit or authorization.
+Authorization source checks use a separate persisted 60-second
+`authorizationClaim` before the reservation transaction. Observation-slot and wake
+writes skip its live lease. The transaction checks ownership and elapsed expiry
+before saving the single reservation; Pause, validation failure and expiry retain
+the existing admission and no-replay rules. Handled exits clear only their own
+lease; process interruption allows expiry-based observation. Each transaction
+attempt emits `authorization_transaction`, not proof of request admission.
 The local upload-preflight correction checks saved identity, recoverability and
 lease availability without repeating the source walk. Claim verifies current
 sources before storage; finalization validates its lease and derived path before
