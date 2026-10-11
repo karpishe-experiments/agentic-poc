@@ -66,6 +66,9 @@ export type ExperimentOperationDocument = BaseDocument & {
   referenceUploadJournalJson?: string | null;
   imageCompletionDigest?: string | null;
   imageCompletionClaim?: { id: string; digest: string; expiresAtMs: number } | null;
+  // Suppress observer writes during text/clarification materialization. This is
+  // an expiring save lease, not another workflow or provider reservation.
+  resultFinalizationClaim?: { id: string; expiresAtMs: number } | null;
   imageFailureHistory?: { category: "unknown_outcome" | "definite_failure"; recordedAtMs: number }[];
   reservationCount: number; deadlineAtMs: number | null;
   resultJson: string | null; resultDigest: string | null; warningsJson: string;
