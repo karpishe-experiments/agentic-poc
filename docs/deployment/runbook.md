@@ -25,6 +25,10 @@ calls. J12/J13, final images and full-booklet simulation remain pending; see
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
 
+For the confirmed Dify scheduler OOM loop, use the candidate targeted repair and
+verification checkpoint in the [Community runbook](dify-community.md#automated-diagnostics-and-sandbox-memory)
+after reviewed host synchronization. Its live recovery remains pending.
+
 This table records the accepted baseline. Use current workflow summaries and host state for later releases.
 
 ## Configuration and access

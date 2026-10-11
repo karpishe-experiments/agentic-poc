@@ -6,7 +6,7 @@ on:
         description: Pinned Community operation
         type: choice
         required: true
-        options: [check, idle, diagnostics, repair-sandbox, install, repair-broker, repair-collaboration, status, resume]
+        options: [check, idle, diagnostics, repair-sandbox, repair-scheduler, install, repair-broker, repair-collaboration, status, resume]
       run_id:
         description: Optional staging run UUID for diagnostics
         type: string
@@ -37,7 +37,7 @@ jobs:
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|diagnostics|repair-sandbox|install|repair-broker|repair-collaboration|status|resume)$ ]]
+          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|diagnostics|repair-sandbox|repair-scheduler|install|repair-broker|repair-collaboration|status|resume)$ ]]
           [[ -z "$RUN_ID" || ( "$ACTION" == diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]]
           if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then
             [[ "$APPLY" != true ]] || { printf 'Check, idle, status and diagnostics are read-only; clear apply.\n' >&2; exit 1; }
@@ -71,7 +71,7 @@ jobs:
           [[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"
           args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")
           [[ -z "$RUN_ID" ]] || args+=(--run-id "$RUN_ID")
-          if [[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox)$ && "$APPLY" == true ]]; then
+          if [[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox|repair-scheduler)$ && "$APPLY" == true ]]; then
             args+=(--request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --apply)
           elif [[ "$ACTION" == resume ]]; then
             args+=(--apply)
@@ -102,7 +102,7 @@ jobs:
             else
               printf 'No sanitized result was produced; inspect the failed step.\n'
             fi
-            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox)$ && "$APPLY" == true ]]; then
+            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox|repair-scheduler)$ && "$APPLY" == true ]]; then
               # Markdown backticks are literal delimiters.
               # shellcheck disable=SC2016
               printf '\nInspect the host operation journal for request `%s` before resuming or retrying.\n' "$REQUEST_ID"
