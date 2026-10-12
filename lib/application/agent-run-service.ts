@@ -10,6 +10,7 @@ import { RecoverableApplicationError } from "@/lib/application/application-error
 import { executionTargetKeyForSkill, type ExecutionBatch } from "@/lib/contracts/execution";
 import { cardResponseSchema, validateCardResponseValue, type GenUICard } from "@/lib/contracts/cards";
 import { skillContextSchema, skillIdSchema } from "@/lib/contracts/skills";
+import { assertOperationBudget, RECONCILIATION_RESERVE_MS, withOperationBudget } from "@/lib/operations/budget";
 
 const readyInputSchema = z.object({ kind: z.literal("text"), skillId: skillIdSchema, skillInput: z.unknown(), context: skillContextSchema, subjectKind: z.literal("text"), subjectId: z.string().min(1) });
 type AgentRunCard = Extract<GenUICard, { family: "agent_run" }>;
@@ -32,7 +33,7 @@ export class AgentRunService {
     this.materializer = dependencies.materializer ?? new TextResultMaterializer({ database });
   }
 
-  public async recoverInterrupted(): Promise<string[]> {
+  public async recoverInterrupted(recoveredBatchIds?: readonly string[]): Promise<string[]> {
     return this.execution.recoverInterrupted(
       ({ canonicalInput, agent, executionBatchId, executionItemId }) => this.execute(canonicalInput, agent, executionBatchId, executionItemId),
       async (batchId) => {
@@ -40,6 +41,7 @@ export class AgentRunService {
         if (batch) await this.completeOrShowResults(batch.bookletId, batch.cardId, batchId);
       },
       (batch) => !batch || !(batch.canonicalInput && typeof batch.canonicalInput === "object" && "kind" in batch.canonicalInput && (batch.canonicalInput as { kind?: unknown }).kind === "image"),
+      recoveredBatchIds,
     );
   }
   private result(summary: string): CardResult { return { kind: "saved", duplicate: false, followupRequired: false, summary, refreshRequired: true }; }
@@ -60,7 +62,7 @@ export class AgentRunService {
     return pool.candidates.map((candidate) => ({ agentId: candidate.agentId, agentVersionId: candidate.id, displayName: candidate.displayName, purpose: candidate.purpose, profileSummary: `${candidate.profileId} · ${candidate.modelId}`, eligible: true }));
   }
 
-  private async project(bookletId: string, card: AgentRunCard, state: AgentRunCard["payload"]["state"], batchId: string | null, ready?: { input?: unknown | null; schemaVersion?: string | null; workflowFingerprint?: unknown | null; previousBatchId?: string | null }) {
+  private async project(bookletId: string, card: AgentRunCard, state: AgentRunCard["payload"]["state"], batchId: string | null, ready?: { input?: unknown | null; schemaVersion?: string | null; workflowFingerprint?: unknown | null; previousBatchId?: string | null }, expectedCurrent?: { batchId: string; state: "running" | "results" }, finalization?: { ownerId: string; deadlineAtMs: number }) {
     const status = batchId ? await this.execution.status(batchId) : null;
     const names = new Map(card.payload.candidates.map((candidate) => [candidate.agentId, candidate.displayName]));
     const hasFailedItems = (status?.items ?? []).some((item) => item.status === "failed");
@@ -86,16 +88,20 @@ export class AgentRunService {
         selectionMode: status?.batch.selectionMode ?? null,
       },
     };
-    await this.repositories.conversation.updateAgentRunProjection({
+    if (finalization) {
+      if (!batchId || !expectedCurrent || expectedCurrent.state !== "running") return false;
+      return this.repositories.execution.completeMaterialization({ batchId, ownerId: finalization.ownerId, deadlineAtMs: finalization.deadlineAtMs, bookletId, card: next, expectedCard: { cardId: card.cardId, state: "running" }, now: Date.now() });
+    }
+    return this.repositories.conversation.updateAgentRunProjection({
       bookletId,
       card: next,
       readyInput: ready?.input,
       readyInputSchemaVersion: ready?.schemaVersion,
       readyWorkflowFingerprint: ready?.workflowFingerprint,
       readyPreviousBatchId: ready?.previousBatchId,
+      expectedCurrent,
       updatedAtMs: Date.now(),
     });
-    return next;
   }
 
   private execute(canonicalInput: unknown, agent: Parameters<CandidateExecutionService["executeText"]>[0]["agent"], executionBatchId?: string, executionItemId?: string) {
@@ -105,37 +111,58 @@ export class AgentRunService {
 
   private async completeOrShowResults(bookletId: string, cardId: string, batchId: string) {
     const [card, status] = await Promise.all([this.repositories.conversation.getCard(bookletId, cardId), this.execution.status(batchId)]);
-    if (!card || card.family !== "agent_run" || !status) return;
+    if (!card || card.family !== "agent_run" || card.payload.batchId !== batchId || !status) return;
+    if (card.payload.state !== "running" && !(card.payload.state === "results" && status.batch.selectedItemId)) return;
+    if (status.batch.materializationUnresolvedReason) return;
+    const expectedCurrent = { batchId, state: card.payload.state as "running" | "results" };
     const successful = status.items.filter((item) => item.status === "succeeded" && item.canonicalResult !== null);
+    if (status.batch.selectedItemId && status.batch.selectionMode && status.batch.selectionResponseId) {
+      // Resume the retained selection even for an explicit multi-agent pool.
+      // A saved artifact cannot be relabelled as another candidate's output.
+      await this.materializeSelection(bookletId, card, status.batch, status.batch.selectedItemId, status.batch.selectionResponseId, status.batch.selectionMode, expectedCurrent);
+      return;
+    }
     if (status.batch.resultChoicePolicy === "implicit_sole" && successful.length === 1) {
       try {
-        await this.materializeSelection(bookletId, card, status.batch, successful[0]!.id, randomUUID(), "implicit_sole");
+        await this.materializeSelection(bookletId, card, status.batch, successful[0]!.id, randomUUID(), "implicit_sole", expectedCurrent);
         return;
       } catch {
         if ((await this.execution.status(batchId))?.batch.status === "completed") return;
         // Keep a recoverable result card when a valid candidate needs a different creator decision.
       }
     }
-    await this.project(bookletId, card, "results", batchId);
+    await this.project(bookletId, card, "results", batchId, undefined, expectedCurrent);
   }
 
-  private async materializeSelection(bookletId: string, card: AgentRunCard, batch: ExecutionBatch, itemId: string, responseId: string, mode: "implicit_sole" | "explicit") {
+  private async materializeSelection(bookletId: string, card: AgentRunCard, batch: ExecutionBatch, itemId: string, responseId: string, mode: "implicit_sole" | "explicit", expectedCurrent?: { batchId: string; state: "running" | "results" }) {
     const status = await this.execution.status(batch.id);
     const item = status?.items.find((candidate) => candidate.id === itemId && candidate.status === "succeeded");
     if (!item || item.canonicalResult === null) throw new Error("execution_result_invalid");
-    const selected = await this.repositories.execution.markSelected({ batchId: batch.id, itemId, responseId, mode, now: Date.now() });
+    const materializationOwnerId = randomUUID();
+    const materializationStartedAtMs = Date.now();
+    const materializationDeadlineAtMs = materializationStartedAtMs + RECONCILIATION_RESERVE_MS;
+    const selected = await this.repositories.execution.markSelected({ batchId: batch.id, itemId, responseId, mode, ownerId: materializationOwnerId, deadlineAtMs: materializationDeadlineAtMs, expectedCard: expectedCurrent ? { bookletId, cardId: card.cardId, state: expectedCurrent.state } : undefined, now: materializationStartedAtMs });
     if (!selected) throw new Error("execution_action_conflict");
+    const projectionExpected = expectedCurrent ? { batchId: batch.id, state: "running" as const } : undefined;
     try {
       const input = readyInputSchema.parse(batch.canonicalInput);
-    const materialized = await this.materializer.materialize({ bookletId, skillId: input.skillId, result: item.canonicalResult, sourceExecutionBatchId: batch.id });
-    await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: randomUUID(), narration: materialized.narration, card: materialized.card, createdAtMs: Date.now() });
-      await this.project(bookletId, { ...card, status: "submitted" }, "completed", batch.id);
-    await this.repositories.execution.completeMaterialization({ batchId: batch.id, now: Date.now() });
+      await withOperationBudget(materializationDeadlineAtMs, async () => {
+        const materialized = await this.materializer.materialize({ bookletId, skillId: input.skillId, result: item.canonicalResult, sourceExecutionBatchId: batch.id });
+        assertOperationBudget();
+        await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: randomUUID(), narration: materialized.narration, card: materialized.card, createdAtMs: Date.now() });
+        assertOperationBudget();
+        if (!await this.project(bookletId, { ...card, status: "submitted" }, "completed", batch.id, undefined, projectionExpected, { ownerId: materializationOwnerId, deadlineAtMs: materializationDeadlineAtMs })) throw new Error("execution_projection_stale");
+        assertOperationBudget();
+      });
     } catch (error) {
       const latest = await this.execution.status(batch.id);
       if (latest?.batch.status === "materializing") {
-        await this.repositories.database.collections.execution_batches.updateOne({ _id: batch.id, status: "materializing" }, { $set: { status: "results", materializationStatus: "failed", selectedItemId: null, selectionMode: null, selectionResponseId: null, updatedAtMs: Date.now() } });
-        await this.project(bookletId, card, "results", batch.id);
+        const collections = this.repositories.database.collections;
+        const savedOutput = await collections.artifact_versions.findOne({ sourceExecutionBatchId: batch.id })
+          ?? await collections.quality_reviews.findOne({ bookletId, sourceExecutionBatchId: batch.id });
+        const retained = batch.selectedItemId || savedOutput ? {} : { selectedItemId: null, selectionMode: null, selectionResponseId: null };
+        await this.repositories.database.collections.execution_batches.updateOne({ _id: batch.id, status: "materializing", materializationOwnerId }, { $set: { status: "results", materializationStatus: "failed", ...retained, materializationOwnerId: null, materializationStartedAtMs: null, materializationDeadlineAtMs: null, updatedAtMs: Date.now() } });
+        await this.project(bookletId, card, "results", batch.id, undefined, projectionExpected);
       }
       throw error;
     }
@@ -181,7 +208,7 @@ export class AgentRunService {
     if (response.action !== "select_agent_result" || card.payload.state !== "results" || !card.payload.batchId) throw new Error("execution_action_invalid");
     const status = await this.execution.status(card.payload.batchId);
     if (!status || status.batch.status !== "results" || status.items.some((item) => item.status === "queued" || item.status === "running")) throw new Error("execution_batch_not_terminal");
-    await this.materializeSelection(bookletId, card, status.batch, z.string().uuid().parse(response.value), response.responseId, "explicit");
+    await this.materializeSelection(bookletId, card, status.batch, z.string().uuid().parse(response.value), response.responseId, "explicit", { batchId: status.batch.id, state: "results" });
     return this.result("The selected agent result was saved.");
   }
 
@@ -227,7 +254,7 @@ export class AgentRunService {
     if (!artifact || artifact.currentVersionId !== version._id) this.restartStale();
     await this.assertCurrentDependencies(version._id);
   }
-  private async readyFromBatch(bookletId: string, card: AgentRunCard, batch: ExecutionBatch, createNewCard: boolean): Promise<AgentRunCard> {
+  private async readyFromBatch(bookletId: string, card: AgentRunCard, batch: ExecutionBatch, createNewCard: boolean, expectedCurrent?: { batchId: string; state: "results" }): Promise<AgentRunCard> {
     const input = readyInputSchema.parse(batch.canonicalInput);
     const targetKey = executionTargetKeyForSkill(input.skillId);
     const pool = await this.pools.resolve(targetKey);
@@ -253,7 +280,7 @@ export class AgentRunService {
     if (createNewCard) {
       await this.repositories.conversation.persistAssistantCard({ bookletId, messageId: randomUUID(), narration: "Choose agents to run this step again.", card: next, createdAtMs: Date.now(), readyInput: ready.input, readyInputSchemaVersion: ready.schemaVersion, readyWorkflowFingerprint: ready.workflowFingerprint, readyPreviousBatchId: ready.previousBatchId });
     } else {
-      await this.repositories.conversation.updateAgentRunProjection({ bookletId, card: next, readyInput: ready.input, readyInputSchemaVersion: ready.schemaVersion, readyWorkflowFingerprint: ready.workflowFingerprint, readyPreviousBatchId: ready.previousBatchId, updatedAtMs: Date.now() });
+      if (!await this.repositories.conversation.updateAgentRunProjection({ bookletId, card: next, readyInput: ready.input, readyInputSchemaVersion: ready.schemaVersion, readyWorkflowFingerprint: ready.workflowFingerprint, readyPreviousBatchId: ready.previousBatchId, expectedCurrent, updatedAtMs: Date.now() })) throw new Error("execution_action_conflict");
     }
     if (pool.candidates.length === 1) {
       await this.start(bookletId, next.cardId, { cardId: next.cardId, responseId: randomUUID(), action: "run_agents", value: [pool.candidates[0]!.agentId] });
@@ -267,7 +294,7 @@ export class AgentRunService {
     if (response.action !== "change_agents" || card.payload.state !== "results" || !card.payload.batchId) throw new Error("execution_action_invalid");
     const batch = await this.repositories.execution.getBatch(card.payload.batchId);
     if (!batch || batch.status !== "results") throw new Error("execution_batch_not_terminal");
-    await this.readyFromBatch(bookletId, card, batch, false);
+    await this.readyFromBatch(bookletId, card, batch, false, { batchId: batch.id, state: "results" });
     return this.result("Choose agents for the next execution.");
   }
 

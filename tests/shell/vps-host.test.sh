@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -14,6 +14,11 @@ fi
 export VPS_DEPLOYMENT_LIBRARY_ONLY=true
 # shellcheck source=../../scripts/deploy/vps-deployment.sh
 source scripts/deploy/vps-deployment.sh
+REAL_MAINTENANCE="$(declare -f maintenance)"
+REAL_COMPOSE="$(declare -f compose)"
+REAL_DRAIN_SUPPORT="$(declare -f verify_drain_support)"
+# Stub the external timer but keep the wrapped function calls in this shell.
+timeout() { while [[ "$1" == --* ]]; do shift; done; shift; "$@"; }
 TEMP_DIR="$(mktemp -d)"
 ROOT="$TEMP_DIR/root" STATE="$TEMP_DIR/state" SECRETS="$TEMP_DIR/secrets"
 ENVIRONMENT=staging COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -40,7 +45,246 @@ maintenance() { printf 'maintenance %s\n' "$*" >> "$CALLS"; }
 docker() { printf 'docker %s\n' "$*" >> "$CALLS"; }
 verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
+verify_drain_support() { :; }
 case "$1" in
+  bootstrap-preview|bootstrap-backup-failed|bootstrap-repair|bootstrap-candidate)
+    scenario="$1"
+    require_root() { :; }
+    dify_diagnostic_identity() { :; }
+    cleanup() { :; }
+    original="$STATE/releases/staging/c04d7512dfaa3156eb3b81331625d1a0af4f7faf"
+    mv "$STATE/releases/staging/old" "$original"
+    printf '%s\n' "$original" > "$STATE/releases/staging/current"
+    printf '{"requestId":"38149230374-1","step":"draining","privateEvidence":"preserve-original"}\n' > "$STATE/operation.json"
+    cp "$STATE/operation.json" "$TEMP_DIR/original.json"
+    staging_bootstrap_guard() { :; }
+    verify_artifact_retirement_release() { :; }
+    flock() { :; }
+    legacy_staging_node() { printf 'legacy %s\n' "$2" >> "$CALLS"; }
+    maintenance() { printf 'maintenance %s\n' "$*" >> "$CALLS"; [[ "$scenario" != bootstrap-backup-failed || "$2:${3:-}" != recovery:backup ]]; }
+    ACTION=staging-bootstrap-reconcile REQUEST_ID=38149230374-1 CONFIRMATION=kids_booklet
+    if [[ "$scenario" == bootstrap-preview ]]; then
+      APPLY=false
+      staging_bootstrap_reconcile_host
+      cmp -s "$STATE/operation.json" "$TEMP_DIR/original.json"
+      [[ ! -e "$STATE/staging-bootstrap.json" && "$(< "$CALLS")" == 'legacy inspect' ]]
+    elif [[ "$scenario" == bootstrap-backup-failed ]]; then
+      if (staging_bootstrap_reconcile_host); then exit 1; fi
+      cmp -s "$STATE/operation.json" "$TEMP_DIR/original.json"
+      grep -q '^legacy reopen$' "$CALLS"
+      ! grep -q '^legacy repair$' "$CALLS"
+      [[ ! -e "$STATE/staging-bootstrap.json" ]]
+    else
+      staging_bootstrap_reconcile_host
+      [[ ! -e "$STATE/operation.json" ]]
+      cmp -s "$STATE/operations/38149230374-1.json" "$TEMP_DIR/original.json"
+      jq -e --arg image "$IMAGE_DIGEST" --arg commit "$COMMIT" '.phase=="reconciled-maintenance" and .superseded==true and .image==$image and .commit==$commit' "$STATE/staging-bootstrap.json" >/dev/null
+      ! grep -q '^legacy reopen$' "$CALLS"
+      grep -q '^legacy verify-backup$' "$CALLS"
+      if [[ "$scenario" == bootstrap-candidate ]]; then
+        ACTION=deploy REQUEST_ID=new-request
+        bootstrap_ready_for_deploy "$original"
+        if (COMMIT=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; bootstrap_ready_for_deploy "$original"); then exit 1; fi
+        prepare_release() {
+          mkdir -p "$STATE/releases/staging/$COMMIT"
+          cp "$original/image.json" "$STATE/releases/staging/$COMMIT/image.json"
+          cp "$original/manifest.sha256" "$STATE/releases/staging/$COMMIT/manifest.sha256"
+        }
+        verify_release_capacity() { :; }
+        jq -n --arg request "$REQUEST_ID" '{requestId:$request}' > "$STATE/operation.json"
+        run_lifecycle
+        [[ ! -e "$STATE/staging-bootstrap.json" && -f "$STATE/operations/bootstrap-new-request.json" ]]
+        cmp -s "$STATE/operations/38149230374-1.json" "$TEMP_DIR/original.json"
+        ! grep -q 'deployment-control drain\|wait-for-deployment-drain' "$CALLS"
+      fi
+    fi;;
+  backup-verify)
+    ACTION=backup-verify COMMIT=old BACKUP_ID=exact-backup
+    require_root() { :; }
+    dify_diagnostic_identity() { :; }
+    flock() { :; }
+    backup_verify_host
+    grep -q 'recovery verify$' "$CALLS"
+    [[ "$(< "$STATE/operation.json")" == '{"requestId":"test"}' ]]
+    if (IMAGE_DIGEST=ghcr.io/example/kids@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; backup_verify_host); then exit 1; fi;;
+  operation-progress)
+    jq '.step="pulling"' "$STATE/operation.json" > "$STATE/operation.next.json"; mv "$STATE/operation.next.json" "$STATE/operation.json"
+    systemctl() { if [[ "$SECONDS" -lt 65 ]]; then echo active; else echo inactive; fi; }
+    sleep() { SECONDS=$((SECONDS + 5)); }
+    SECONDS=0
+    jq -n '{requestId:"test",step:"complete"}' > "$STATE/operations/test.json"
+    wait_operation > "$TEMP_DIR/progress"
+    [[ "$(grep -c 'operation progress request=test phase=pulling' "$TEMP_DIR/progress")" -eq 3 ]];;
+  operation-output-inspection)
+    jq -n '{requestId:"test",step:"restoring",backupId:"exact-backup",private:"never-print"}' > "$STATE/operation.json"
+    docker() {
+      case "$1" in ps) echo aaaaaaaaaaaa;; inspect) jq -n --arg image "$IMAGE_DIGEST" '[{State:{Status:"running",Health:{Status:"healthy"}},Config:{Image:$image,Env:["SECRET=never-print"]}}]';; *) return 1;; esac
+    }
+    result="$(operation_output_inspection "$STATE/operation.json")"
+    [[ "$result" == *'"verification":"readback_required"'* && "$result" == *'"selectedImageMatches":true'* && "$result" == *'"health":"healthy"'* && "$result" != *never-print* ]]
+    jq -e '.step=="restoring" and .backupId=="exact-backup"' "$STATE/operation.json" >/dev/null;;
+  operation-compose-bounds)
+    eval "$REAL_COMPOSE"
+    timeout() { printf '%s\n' "$*" >> "$CALLS"; }
+    compose "$STATE/releases/staging/old" up -d --no-deps app
+    grep -q '^--kill-after=5s 180s docker compose .* up -d --no-deps app$' "$CALLS"
+    jq -e '.command=="compose-up" and .commandDeadlineAt-.commandStartedAt==180' "$STATE/operation.json" >/dev/null;;
+  drain-bootstrap)
+    eval "$REAL_DRAIN_SUPPORT"
+    supported=false
+    docker() {
+      case "$1" in ps) echo aaaaaaaaaaaa;; inspect) echo "$IMAGE_DIGEST";; exec) [[ "$supported" == true ]];; *) return 1;; esac
+    }
+    if (verify_drain_support "$STATE/releases/staging/old") > "$TEMP_DIR/bootstrap" 2>&1; then exit 1; fi
+    grep -q 'explicit reviewed bootstrap is required' "$TEMP_DIR/bootstrap"
+    ! grep -q 'maintenance\|compose' "$CALLS"
+    supported=true
+    verify_drain_support "$STATE/releases/staging/old";;
+  operation-control)
+    flock() { :; }
+    jq -n '{requestId:"test",action:"restore",environment:"staging",step:"restoring",backupId:"exact-backup",private:"never-print"}' > "$STATE/operation.json"
+    systemctl() {
+      case "$*" in *LoadState*) echo loaded;; *ActiveState*) echo inactive;; *ExecMainStatus*) echo 143;; *Result*) echo signal;; stop*) return 0;; *) return 1;; esac
+    }
+    result="$(operation_status_host)"
+    [[ "$result" == *'"outcome":"interrupted"'* && "$result" != *never-print* ]]
+    APPLY=false
+    result="$(operation_stop_host)"
+    [[ "$result" == *'would update: stop exact operation test'* ]]
+    jq -e '.step=="restoring" and .backupId=="exact-backup" and .stopRequestedAt==null' "$STATE/operation.json" >/dev/null
+    APPLY=true
+    operation_output_inspection() { printf 'inspection\n' >> "$CALLS"; }
+    systemctl() {
+      case "$*" in *LoadState*) echo loaded;; *ActiveState*) echo inactive;; *ExecMainStatus*) echo 143;; *Result*) echo signal;; stop*) printf 'stop\n' >> "$CALLS";; *) return 1;; esac
+    }
+    result="$(operation_stop_host)"
+    [[ "$(grep -E '^(inspection|stop)$' "$CALLS" | head -n 2)" == $'inspection\nstop' ]]
+    jq -e '.step=="restoring" and .backupId=="exact-backup" and (.stopRequestedAt|type)=="number"' "$STATE/operation.json" >/dev/null
+    [[ "$result" == *'outputs and retained phase require reconciliation'* ]]
+    ! grep -q '^compose\|^maintenance' "$CALLS"
+    : > "$CALLS"
+    operation_output_inspection() { return 1; }
+    if (operation_stop_host) > "$TEMP_DIR/inspection-failure" 2>&1; then exit 1; fi
+    grep -q 'Pre-stop output inspection unresolved; no stop sent' "$TEMP_DIR/inspection-failure"
+    ! grep -q '^stop$' "$CALLS";;
+  operation-stop-guard)
+    jq -n '{requestId:"test",action:"deploy",environment:"staging",step:"backup"}' > "$STATE/operation.json"
+    systemctl() { echo "systemctl $*" >> "$CALLS"; return 1; }
+    if (REQUEST_ID=other; operation_stop_host) >/dev/null 2>&1; then exit 1; fi
+    if (ENVIRONMENT=prod; operation_stop_host) >/dev/null 2>&1; then exit 1; fi
+    test ! -s "$CALLS"
+    systemctl() { case "$*" in *LoadState*) echo loaded;; *ActiveState*) echo active;; *Result*) echo success;; *ExecMainStatus*) echo 0;; stop*) return 124;; esac; }
+    if (operation_stop_host) >/dev/null 2>&1; then exit 1; fi
+    jq -e '.step=="backup" and .stopRequestedAt==null' "$STATE/operation.json" >/dev/null
+    systemctl() { echo not-found; }
+    if (operation_status_host) >/dev/null 2>&1; then exit 1; fi
+    mv "$STATE/operation.json" "$STATE/operations/test.json"
+    result="$(operation_status_host)"
+    [[ "$result" == *'"state":"unavailable"'* && "$result" == *'"outcome":"archived"'* ]]
+    result="$(operation_stop_host)"
+    [[ "$result" == *'no stop sent'* ]]
+    systemctl() { return 1; }
+    result="$(operation_status_host)"
+    [[ "$result" == *'"state":"unavailable"'* ]];;
+  operation-control-bounds)
+    # Zero is the disabled-budget sentinel, not an expired absolute deadline.
+    SECONDS=10
+    CONTROL_DEADLINE_SECONDS=$((SECONDS + 2))
+    timeout() { printf '%s\n' "$*" >> "$CALLS"; }
+    control_timeout 55 echo bounded
+    grep -Eq '^--kill-after=1s [12]s echo bounded$' "$CALLS"
+    : > "$CALLS"
+    CONTROL_DEADLINE_SECONDS=$SECONDS
+    if control_timeout 55 echo never; then exit 1; fi
+    test ! -s "$CALLS";;
+  operation-oneoff-guard)
+    docker() {
+      if [[ "$1" == inspect ]]; then
+        jq -n '[{Config:{Labels:{"uk.co.uniwares.booklet.request":"different","uk.co.uniwares.booklet.environment":"staging","com.docker.compose.project":"kids-booklet-staging","com.docker.compose.oneoff":"True"}}}]'
+      else printf '%s\n' "$*" >> "$CALLS"; fi
+    }
+    if stop_owned_oneoff aaaaaaaaaaaa 10; then exit 1; fi
+    test ! -s "$CALLS"
+    docker() {
+      if [[ "$1" == inspect ]]; then
+        jq -n '[{Config:{Labels:{"uk.co.uniwares.booklet.request":"test","uk.co.uniwares.booklet.environment":"staging","com.docker.compose.project":"kids-booklet-staging","com.docker.compose.oneoff":"True"}}}]'
+      else printf '%s\n' "$*" >> "$CALLS"; fi
+    }
+    stop_owned_oneoff aaaaaaaaaaaa 10
+    grep -Fxq 'stop --time 5 aaaaaaaaaaaa' "$CALLS"
+    grep -Fxq 'rm aaaaaaaaaaaa' "$CALLS"
+    # Named daemon-owned containers must not look absent after inspect failure.
+    docker() {
+      case "$1" in
+        inspect) return 1;;
+        ps) [[ "$*" == 'ps -aq --filter name=^/booklet-operation-staging-test$' ]] || return 1; echo aaaaaaaaaaaa;;
+        *) return 1;;
+      esac
+    }
+    if stop_owned_oneoff booklet-operation-staging-test 10; then exit 1; fi
+    # A failed removal still requires exact-name absence verification.
+    container_present=true
+    docker() {
+      case "$1" in
+        inspect) jq -n '[{Config:{Labels:{"uk.co.uniwares.booklet.request":"test","uk.co.uniwares.booklet.environment":"staging","com.docker.compose.project":"kids-booklet-staging","com.docker.compose.oneoff":"True"}}}]';;
+        stop) return 0;;
+        rm) return 1;;
+        ps) [[ "$*" == 'ps -aq --filter name=^/booklet-operation-staging-test$' ]] || return 1; if [[ "$container_present" == true ]]; then echo aaaaaaaaaaaa; fi;;
+        *) return 1;;
+      esac
+    }
+    if stop_owned_oneoff booklet-operation-staging-test 10; then exit 1; fi
+    container_present=false
+    stop_owned_oneoff booklet-operation-staging-test 10
+    docker() { case "$1" in inspect) return 1;; ps) return 0;; *) return 1;; esac; }
+    stop_owned_oneoff booklet-operation-staging-test 10;;
+  operation-unit-bounds)
+    date() { echo 1000; }
+    jq -n '{requestId:"test",action:"deploy",environment:"staging",step:"queued"}' > "$STATE/operation.json"
+    systemd-run() { printf '%s\n' "$*" >> "$CALLS"; }
+    start_operation_unit
+    grep -q 'RuntimeMaxSec=2700.*TimeoutStopSec=60.*KillMode=control-group.*ExecStopPost=.*host-cleanup --request-id test --environment staging --apply' "$CALLS"
+    [[ "$(operation_runtime_seconds restore)" == 3600 && "$(operation_runtime_seconds backup)" == 1800 ]]
+    [[ "$(operation_runtime_seconds dify-repair-sandbox)" == 300 ]];;
+  operation-budget)
+    clock=1000
+    date() { echo "$clock"; }
+    jq -n '{requestId:"test",action:"deploy",environment:"staging",step:"queued"}' > "$STATE/operation.json"
+    [[ "$(ensure_operation_budget)" == 2700 ]]
+    clock=3600
+    [[ "$(ensure_operation_budget)" == 100 ]]
+    [[ "$(remaining_operation_seconds 1800)" == 100 ]]
+    jq -e '.budgetStartedAtSeconds==1000 and .budgetDeadlineAtSeconds==3700' "$STATE/operation.json" >/dev/null
+    clock=3700
+    if remaining_operation_seconds 1800 >/dev/null 2>&1; then exit 1; fi
+    if ensure_operation_budget >/dev/null 2>&1; then exit 1; fi
+    jq -e '.budgetDeadlineAtSeconds==3700' "$STATE/operation.json" >/dev/null;;
+  operation-maintenance-bounds)
+    eval "$REAL_MAINTENANCE"
+    # shellcheck disable=SC2120
+    compose() { printf '%s bound=%s\n' "$*" "$COMPOSE_TIMEOUT_SECONDS" >> "$CALLS"; return "${COMPOSE_EXIT:-0}"; }
+    stop_owned_oneoff() { printf 'owned-cleanup %s\n' "$*" >> "$CALLS"; }
+    maintenance "$STATE/releases/staging/old" recovery backup
+    maintenance "$STATE/releases/staging/old" recovery restore
+    maintenance "$STATE/releases/staging/old" wait-for-deployment-drain
+    DEPLOYMENT_URL=https://staging.example.com maintenance "$STATE/releases/staging/old" check-deployment-readiness
+    grep -q 'uk.co.uniwares.booklet.request=test.*DRAIN_TIMEOUT_MS=300000.*bound=1800' "$CALLS"
+    grep -q 'recovery.ts restore bound=3600' "$CALLS"
+    grep -q 'wait-for-deployment-drain.ts bound=300' "$CALLS"
+    grep -q 'DEPLOYMENT_URL=https://staging.example.com.*check-deployment-readiness.ts bound=180' "$CALLS"
+    if COMPOSE_EXIT=124 maintenance "$STATE/releases/staging/old" recovery restore >/dev/null 2>&1; then exit 1; fi
+    grep -q 'owned-cleanup booklet-operation-staging-test-' "$CALLS"
+    jq -e '.command=="recovery" and .commandDeadlineAt-.commandStartedAt==3600' "$STATE/operation.json" >/dev/null;;
+  operation-client-timeout)
+    jq '.step="draining"' "$STATE/operation.json" > "$STATE/operation.next.json"; mv "$STATE/operation.next.json" "$STATE/operation.json"
+    systemctl() { echo active; }
+    sleep() { SECONDS=$((SECONDS + 300)); }
+    status=0
+    wait_operation > "$TEMP_DIR/wait-result" || status=$?
+    [[ "$status" == 124 ]]
+    grep -q 'client wait expired, no stop or replay sent' "$TEMP_DIR/wait-result"
+    test -f "$STATE/operation.json"
+    ! grep -q 'updated:' "$TEMP_DIR/wait-result";;
   index-finalize-before|index-finalize-after|index-admission-race|index-drain-resume)
     ACTION=retire-staging-artifact-index CONFIRMATION=kids_booklet
     verify_artifact_retirement_release() { :; }
@@ -96,7 +340,7 @@ case "$1" in
     calls="$(cat "$CALLS")"
     [[ "$calls" == *'--verify-backup'*'--apply'*'up -d'*'verify '*'deployment-control disable'* ]]
     if [[ "$1" == index-retirement ]]; then
-      [[ "$calls" == *'--preview'*'deployment-control enable'*'wait-for-deployment-drain'*'stop '*'--preview'*'recovery backup'*'--verify-backup'* ]]
+      [[ "$calls" == *'--preview'*'deployment-control drain'*'wait-for-deployment-drain'*'stop '*'--preview'*'recovery backup'*'--verify-backup'* ]]
     else
       ! grep -q 'recovery backup' "$CALLS"
       jq -e '.backupId=="staging-before-index"' "$STATE/operations/test.json" >/dev/null
@@ -122,7 +366,7 @@ case "$1" in
     test -f "$STATE/operations/test.json"
     test ! -f "$STATE/operation.json"
     calls="$(cat "$CALLS")"
-    [[ "$calls" == *'deployment-control enable'*'wait-for-deployment-drain'*'stop '*'recovery backup'*'initialize-deployment'*'up -d'*'verify '*'deployment-control disable'* ]]
+    [[ "$calls" == *'deployment-control drain'*'wait-for-deployment-drain'*'stop '*'recovery backup'*'initialize-deployment'*'up -d'*'verify '*'deployment-control disable'* ]]
     grep -q "$COMMIT" "$STATE/releases/staging/current";;
   first-release)
     rm "$STATE/releases/staging/current"
@@ -144,10 +388,12 @@ prepare_release() {
   printf 'candidate manifest\n' > "$STATE/releases/staging/$COMMIT/manifest.sha256"
 }
 docker() { :; }
+timeout() { while [[ "$1" == --* ]]; do shift; done; shift; "$@"; }
 compose() { printf 'compose %s\n' "$*" >> "$FIXTURE/failure-calls"; }
 maintenance() { printf 'maintenance %s\n' "$*" >> "$FIXTURE/failure-calls"; }
 stop_application() { printf 'stop %s\n' "$*" >> "$FIXTURE/failure-calls"; }
 verify_application() { [[ "$1" == */old ]]; }
+verify_drain_support() { :; }
 run_lifecycle
 CHILD
     export FIXTURE="$TEMP_DIR"
@@ -176,6 +422,12 @@ CHILD
     [[ "$result" == *'updated: backup staging'* ]]
     result_json="${result##*result: }"
     jq -e '.requestId=="test" and .action=="backup" and .environment=="staging" and .backupId=="staging-backup" and .step=="complete"' <<< "$result_json" >/dev/null;;
+  operation-result-failed)
+    jq -n '{requestId:"test",action:"backup",environment:"staging",step:"complete"}' > "$STATE/operations/test.json"
+    systemctl() { printf 'failed\n'; }
+    if (wait_operation) > "$TEMP_DIR/wait-result" 2>&1; then exit 1; fi
+    grep -q 'Operation unit failed' "$TEMP_DIR/wait-result"
+    ! grep -q '^updated:' "$TEMP_DIR/wait-result";;
   secret-rotation)
     ACTION=rotate-secrets
     mkdir -p "$STATE/releases/staging/release-a"

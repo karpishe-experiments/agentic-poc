@@ -13,6 +13,12 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
+  it("counts unresolved lifecycle outcomes even when the local attempt is terminal", () => {
+    const drain = readFileSync("scripts/wait-for-deployment-drain.ts", "utf8");
+    expect(drain).toContain('{ "lifecycle.unresolved": true }');
+    expect(drain).toContain("await reconcileInterruptedMutations()");
+    expect(drain).toContain("await finishDraining()");
+  });
   it("keeps runner setup staging-only and disabled by default", () => {
     const workflow = readFileSync(".github/workflows/dify-tool-key.yml", "utf8");
     expect(workflow).toContain("- DIFY_BOOKLET_RUNNER");

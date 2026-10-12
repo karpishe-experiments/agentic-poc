@@ -1,10 +1,11 @@
 import type { Collection, Db } from "mongodb";
 import type { MongoDocumentMap } from "@/db/documents";
+import { boundedCollection } from "@/db/bounded-collection";
 
 export type MongoCollections = { [Name in keyof MongoDocumentMap]: Collection<MongoDocumentMap[Name]> };
 
 export function createCollectionHandles(database: Db): MongoCollections {
-  return {
+  const collections: MongoCollections = {
     experiment_runs: database.collection("experiment_runs"), experiment_operations: database.collection("experiment_operations"),
     experiment_delegations: database.collection("experiment_delegations"),
     booklets: database.collection("booklets"), artifacts: database.collection("artifacts"), artifact_versions: database.collection("artifact_versions"),
@@ -16,4 +17,12 @@ export function createCollectionHandles(database: Db): MongoCollections {
     execution_preferences: database.collection("execution_preferences"), execution_batches: database.collection("execution_batches"), execution_items: database.collection("execution_items"),
     deployment_control: database.collection("deployment_control"),
   };
+  function bind<Name extends keyof MongoCollections>(name: Name) {
+    // Each name keeps its original typed collection interface.
+    const collection = database.collection<MongoDocumentMap[Name]>(name);
+    Object.defineProperty(collections, name, { value: boundedCollection(collection,
+      (timeoutMS) => database.collection<MongoDocumentMap[Name]>(name, { timeoutMS })), enumerable: true });
+  }
+  for (const name of Object.keys(collections) as (keyof MongoCollections)[]) bind(name);
+  return collections;
 }

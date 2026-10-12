@@ -65,7 +65,10 @@ describe("generation diagnostics", () => {
     const card = genUICardSchema.parse(await repositories.conversation.getActiveCard(booklet.id));
     if (card.family !== "agent_run" || !card.payload.batchId) throw new Error("Expected failed Agent run card.");
     const executionItems = await repositories.execution.getItems(card.payload.batchId);
-    expect(executionItems).toContainEqual(expect.objectContaining({ status: "failed", safeError: expect.objectContaining({ message: "simulated provider connection reset" }) }));
+    expect(executionItems).toContainEqual(expect.objectContaining({ status: "failed", safeError: expect.objectContaining({
+      message: "The candidate failed before its outcome could be confirmed.",
+    }) }));
+    expect(JSON.stringify(executionItems)).not.toContain("simulated provider connection reset");
   });
   it("resumes a failed image item before retrying every failed candidate", async () => {
     const database = await createTestDatabase();

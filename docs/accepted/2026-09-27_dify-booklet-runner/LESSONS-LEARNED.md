@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Retain deterministic continuation after output completion
+
+- **Context:** Image output is saved before the final artifact and review card.
+- **Observation:** An in-memory callback can be lost after the completed batch
+  commits. Focused restart tests recover a persisted pending continuation without
+  another image-provider call and reject stale output that would replace newer work.
+- **Guidance:** Save pending continuation atomically with completion. Clear it
+  only after the required saved projections exist. Make finalization idempotent;
+  callback delivery alone is not proof that downstream bookkeeping finished.
+- **Evidence:** [Image recovery tests](../../../tests/integration/reference-generation.test.ts).
+  Live verification of this candidate remains pending.
+- **Promotion target:** Documentation for multi-stage saved-output recovery.
+
 ### Keep observation writes out of callback finalization transactions
 
 - **Context:** An asynchronous runner polls the same operation that a callback
@@ -250,6 +263,12 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   running. Record a finalization checkpoint before reopening admission; its resume
   must not replay stop, backup or mutation. Preserve the pre-change backup after
   the mutation checkpoint.
+- **Recovery extension:** Retain exact mutation owners across process interruption.
+  Release an interrupted owner only after its operation has verified terminal
+  evidence. A lost stop acknowledgement remains history, not a permanent blocker
+  after verified completion. Keep unrelated or unidentified owners blocked.
+  The [drain ownership regressions](../../../tests/integration/deployment-drain-control.test.ts)
+  verify this behavior locally; live deployment proof remains pending.
 - **Evidence:** [Mongo ledger tests](../../../tests/integration/experiment-maintenance.test.ts)
   and [host interruption/race scenarios](../../../tests/shell/vps-host.test.sh).
   Focused local scenarios passed; complete Linux suites and live retirement remain
@@ -352,6 +371,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   [J13 acknowledgement regression](../../../tests/unit/experiment-runner-http.test.ts).
 - **Promotion target:** Documentation for external completion callbacks.
 
+### Test bounded Mongo cursors across batches
+
+- **Context:** The MongoDB 7.5 driver uses client-side timeouts in transactions.
+- **Observation:** Session-only cursor timeouts caused an invalid `maxTimeMS`
+  on `getMore`, blocking a valid two-page selection after its image was saved.
+- **Guidance:** Give transactional find/aggregate cursors a supported
+  collection-level timeout default. Do not override transaction command timeouts
+  or use driver internals. Force multiple batches in regression tests.
+- **Evidence:** [cursor adapter](../../../db/bounded-collection.ts) and
+  [multi-batch regression](../../../tests/integration/bounded-mongo-cursors.test.ts).
+- **Promotion target:** Documentation for bounded MongoDB transaction reads;
+  recheck this driver-specific behavior when upgrading MongoDB dependencies.
+
 ### Share verification reads only within one transaction attempt
 
 - **Context:** Several consumers verify the same approved sources during one
@@ -368,3 +400,16 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   and [completion tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
   Deployed latency improvement remains unverified.
 - **Promotion target:** Documentation for transactional external-workflow callbacks.
+
+### Isolate lease clocks from database-driver clocks
+
+- **Context:** Integration tests advance elapsed time to prove authorization and
+  finalization expiry without waiting for a real lease.
+- **Observation:** Mocking global `performance.now()` also advanced MongoDB's I/O
+  timeout clock, producing a driver timeout before the intended lease assertion.
+- **Guidance:** Inject the repository's elapsed-time source. Keep the production
+  monotonic default and the driver's clock independent. Use one clock domain for
+  a fixture's persisted deadline and its HTTP handler.
+- **Evidence:** [finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts)
+  and [repository clock](../../../db/experiment-repository.ts).
+- **Promotion target:** Documentation for deterministic integration-test clocks.

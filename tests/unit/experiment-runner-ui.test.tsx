@@ -1,14 +1,43 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { BookletRunner } from "@/components/experiments/booklet-runner";
 
 const run = { runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
-let fetchMock: ReturnType<typeof vi.fn>;
-beforeEach(() => { fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 })); vi.stubGlobal("fetch", fetchMock); vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("00000000-0000-4000-8000-000000000010") }); });
+let fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>();
+beforeEach(() => {
+  fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 }));
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    const response = await fetchMock(url, options) as Response;
+    if (!url.includes("/summaries?")) return response;
+    const body = await response.clone().json();
+    return Array.isArray(body.data) ? new Response(JSON.stringify({ data: { runs: body.data, hasMore: false } }), { status: response.status }) : response;
+  });
+  vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("00000000-0000-4000-8000-000000000010") });
+});
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("polls unresolved blocked summaries and stops after terminal recovery", async () => {
+    vi.useFakeTimers();
+    let active = true;
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ data: [{ ...run, status: "blocked",
+      activeOperationId: active ? "operation-1" : null }] })));
+    render(<BookletRunner />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const initial = fetchMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(initial);
+    active = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    const terminal = fetchMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(fetchMock.mock.calls).toHaveLength(terminal);
+    expect(fetchMock.mock.calls.every(([url]) => url.includes("/summaries?"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(terminal);
+  });
   it.each([false, true])("saves selected page order without resuming or replaying after uncertain response=%s", async (lost) => {
     const pageSelection = { schemaVersion: "2", runId: run.runId, configurationHash: "a".repeat(64), layoutVersionId: "layout",
       pages: [{ pageId: "page-1", pageIndex: 1, pageBibleVersionId: "bible-1", previousPageVersionId: null },
@@ -30,7 +59,7 @@ describe("booklet runner inspector", () => {
     const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
     expect(writes).toHaveLength(1);
     expect(writes[0][0]).toBe(`/api/experiments/booklet-runs/${run.runId}/pages`);
-    expect(JSON.parse(writes[0][1].body)).toMatchObject({ expectedRevision: 2, batch: { selection: "selected_batch",
+    expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({ expectedRevision: 2, batch: { selection: "selected_batch",
       pages: [{ pageId: "page-3", pageBibleVersionId: "bible-3" }, { pageId: "page-1", pageBibleVersionId: "bible-1" }] } });
     if (lost) expect(screen.getByRole("alert").textContent).toContain("No automatic retry");
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
@@ -74,7 +103,7 @@ describe("booklet runner inspector", () => {
     await screen.findByText("Kite Rescue", { exact: false });
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     await waitFor(() => expect(writes).toBe(2));
-    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(options.body).expectedRevision)).toEqual([2, 4]);
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(String(options?.body)).expectedRevision)).toEqual([2, 4]);
     expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith(run.runId) && options?.cache === "no-store")).toBe(true);
   });
   it("does not repeat a control already applied in the read-back state", async () => {
@@ -122,8 +151,8 @@ describe("booklet runner inspector", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry pending creation" }));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(2));
     for (const [, options] of fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")) {
-      expect(options.headers["Idempotency-Key"]).toBe("00000000-0000-4000-8000-000000000010");
-      expect(JSON.parse(options.body)).toEqual({ persona: "playful_kid", mode: "simulated", predecessorRunId: run.runId });
+      expect(new Headers(options?.headers).get("Idempotency-Key")).toBe("00000000-0000-4000-8000-000000000010");
+      expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "simulated", predecessorRunId: run.runId });
     }
   });
   it("shows saved artifacts, decisions, limits and a bounded narrative slice", async () => {
@@ -146,7 +175,7 @@ describe("booklet runner inspector", () => {
     render(<BookletRunner />);
     await screen.findByText("Kite Rescue", { exact: false });
     fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
-    await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => url === "/api/experiments/booklet-runs" && options?.method === "POST" && options?.headers?.["Idempotency-Key"] === "00000000-0000-4000-8000-000000000010" && options?.body === JSON.stringify({ persona: "playful_kid", mode: "simulated" }))).toBe(true));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => url === "/api/experiments/booklet-runs" && options?.method === "POST" && new Headers(options?.headers).get("Idempotency-Key") === "00000000-0000-4000-8000-000000000010" && options?.body === JSON.stringify({ persona: "playful_kid", mode: "simulated" }))).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/pause") && options?.body === JSON.stringify({ expectedRevision: 2 }))).toBe(true));
   });
@@ -158,7 +187,9 @@ describe("booklet runner inspector", () => {
     expect(await screen.findByRole("button", { name: "Retry pending creation" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("The run could not be created.");
     expect(screen.getByRole("alert").textContent).not.toContain("Connection lost");
-    await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method !== "POST").length).toBeGreaterThan(1), { timeout: 3500 });
+    // Empty/terminal pages do not keep polling. Manual Refresh stays available.
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method !== "POST").length).toBeGreaterThan(1));
     expect(screen.getByRole("alert").textContent).toContain("Retry will use the same request key.");
     view.unmount();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method !== "POST").length).toBeGreaterThan(0);

@@ -57,7 +57,7 @@ infer their presence from `.env.example`.
 
 | Name / field | Storage | Current consumer and purpose |
 | --- | --- | --- |
-| Manager application key: `DIFY_BOOKLET_BINDINGS_JSON[].apiKey`, role `manager` | Dify app API-key store; staging host override and private preparation copies below | Booklet submits the manager workflow and retrieves its existing run/result with Bearer authentication |
+| Manager application key: `DIFY_BOOKLET_BINDINGS_JSON[].apiKey`, role `manager` | Dify app API-key store; staging host override and private preparation copies below | Booklet submits the manager workflow and retrieves its existing run/result with Bearer authentication; the bounded-operation candidate also stops the exact persisted task using this same application key |
 | Twelve specialist application keys: same field, role `specialist`, `taskId` `J01` through `J12` | Same stores; one independent key per app | Execute/recover specialist workflows |
 | Three tester application keys: same field, role `tester`, personas `playful_kid`, `enthusiast_parent`, `professional_creator` | Same stores; one independent key per tester app | Execute/recover external creator-persona workflows |
 | Image application key: same field, role `image` | Same stores | Execute/recover the generic image workflow, including J13 final-page illustrations; J13 has no separate specialist key |
@@ -70,11 +70,28 @@ key. Earlier profiles have 6, 11, 13, 15, 16 or 17 bindings. Do not create separ
 environment-variable names for individual keys: identify each by role/task/persona
 in the binding array. Booklet's saved run-configuration schema omits `apiKey`.
 
+The bounded-operation candidate uses each role's existing application key for
+exact-task cancellation and subsequent run lookup. It does not use the Dify
+administration credential for runtime stop. Inspect/stop browser and CLI actions
+use the existing Booklet Basic gate. The new VPS operation-control workflow uses
+the existing pinned deployment SSH and Cloudflare Access credentials. No new
+credential or storage directory is introduced. Private preparation adds the
+encrypted partial copies described below. Live stop use remains
+unverified until the model-free staging probes pass.
+
 Preparation scripts retain DPAPI-encrypted files under
 `%LOCALAPPDATA%\DifyWf-Community-Codex`, outside Git. The final profile uses
 `issue65-m3-j13-bindings.dpapi.xml` and `issue65-m3-j13-settings.dpapi.xml`;
 earlier M1/M2/M3/J12 files may retain previous keys. DPAPI copies depend on the
 Windows user/machine context; do not treat them as portable recovery copies.
+The local Windows operator owns conditional preparation checkpoints
+`issue65-m3-j12-bindings.partial.dpapi.xml` and
+`issue65-m3-j13-bindings.partial.dpapi.xml` in that same protected directory.
+`prepare-dify-booklet-j12-keys.ps1` saves validated bindings incrementally and
+resumes only a matching profile, source and application identity. It removes the
+partial copy after saving the complete profile; an interrupted preparation retains
+it privately for resume. These copies are implemented, not verified live provision
+of new credentials, and are never uploaded or committed.
 The disposable async recovery probe retains its API key in
 `issue65-async-probe-key.dpapi.xml`. Separate versioned
 `issue65-async-probe-settings-v*.dpapi.xml` transfer copies reuse the callback key

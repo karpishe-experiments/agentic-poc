@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { AssetStore } from "@/lib/assets/asset-store";
 
 type Identity = { runId: string; operationId?: string };
-type Counters = { queryCount: number; storageCallCount: number };
+type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number };
 const current = new AsyncLocalStorage<Counters>();
 
 export type DiagnosticEvent = Identity & Counters & {
@@ -29,6 +29,10 @@ export function countVerificationStorageCall() {
   const counters = current.getStore();
   if (counters) counters.storageCallCount++;
 }
+export function countTransactionAttempt() {
+  const counters = current.getStore();
+  if (counters) counters.transactionAttempts++;
+}
 
 export function diagnosticAssetStore(store: AssetStore): AssetStore {
   return {
@@ -42,7 +46,7 @@ export function diagnosticAssetStore(store: AssetStore): AssetStore {
 // counters cover instrumented verification work, not all application queries.
 export async function measurePhase<T>(identity: Identity, phase: string, work: () => Promise<T>): Promise<T> {
   const start = performance.now();
-  const counters = { queryCount: 0, storageCallCount: 0 };
+  const counters = { queryCount: 0, storageCallCount: 0, transactionAttempts: 0 };
   let outcome: DiagnosticEvent["outcome"] = "failed";
   try {
     const result = await current.run(counters, work);
@@ -53,6 +57,7 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
     if (parent) {
       parent.queryCount += counters.queryCount;
       parent.storageCallCount += counters.storageCallCount;
+      parent.transactionAttempts += counters.transactionAttempts;
     }
     const event: DiagnosticEvent = { event: "booklet_callback_phase", timestamp: new Date().toISOString(), runId: identity.runId,
       ...(identity.operationId ? { operationId: identity.operationId } : {}), phase,

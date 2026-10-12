@@ -15,6 +15,8 @@ GENERATE_PASSWORD=false
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 SECRET_NAME=''
 RUN_ID=''
+COMPOSE_TIMEOUT_SECONDS=300
+CONTROL_DEADLINE_SECONDS=0
 COMPOSE_SECRET_FILE=''
 ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTPUT=''
 ROOT=/opt/kids-booklet
@@ -43,7 +45,7 @@ usage() {
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
 Actions: discover-config, dify-discover, dify-check, dify-idle, dify-diagnostics, dify-repair-sandbox, dify-repair-scheduler, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
          restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
-         clear-credential-session, host-dispatch, host-run
+         clear-credential-session, operation-status, operation-stop, backup-verify, staging-bootstrap-reconcile, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
   --zone HOSTNAME                    required for discover-config
@@ -59,6 +61,7 @@ Options:
   --commit FULL_SHA --confirmation kids_booklet  required for index retirement apply
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
+                                   required exact retained/completed ID for operation-status/operation-stop
   --run-id UUID                     optional staging run for dify-diagnostics
   --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE/DIFY_BOOKLET_RUNNER bundle
   --generate-password               generate and display ACCESS_GATE_PASSWORD once
@@ -103,12 +106,12 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run|host-cleanup)$ ]] || die 'Select a supported --action'
   [[ -z "$RUN_ID" || ( "$ACTION" == dify-diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]] || die 'Run ID requires dify-diagnostics and a lowercase UUID'
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
   if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
     [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
-  elif [[ "$ENVIRONMENT" == dify && "$ACTION" != host-run && "$ACTION" != resume && "$ACTION" != status ]]; then
+  elif [[ "$ENVIRONMENT" == dify && "$ACTION" != host-run && "$ACTION" != host-cleanup && "$ACTION" != resume && "$ACTION" != status && "$ACTION" != operation-status && "$ACTION" != operation-stop ]]; then
     die 'Booklet operation cannot target Dify'
   fi
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
@@ -136,6 +139,16 @@ validate_arguments() {
     deploy) [[ -n "$ENVIRONMENT" && -n "$IMAGE_DIGEST" && -n "$COMMIT" ]] || die 'Deploy requires environment, image digest and commit';;
     check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
   esac
+  if [[ "$ACTION" == operation-status || "$ACTION" == operation-stop ]]; then
+    [[ -n "$REQUEST_ID" && -n "$ENVIRONMENT" ]] || die 'Operation control requires an exact request ID and environment'
+  fi
+  if [[ "$ACTION" == backup-verify ]]; then
+    [[ "$ENVIRONMENT" =~ ^(staging|prod)$ && -n "$BACKUP_ID" && -n "$COMMIT" && -n "$IMAGE_DIGEST" ]] || die 'Backup verification requires exact Booklet environment, backup ID, deployed commit and image digest'
+  fi
+  if [[ "$ACTION" == staging-bootstrap-reconcile ]]; then
+    [[ "$ENVIRONMENT" == staging && "$REQUEST_ID" == 38149230374-1 && -n "$COMMIT" && -n "$IMAGE_DIGEST" && "$COMMIT" != c04d7512dfaa3156eb3b81331625d1a0af4f7faf ]] || die 'Bootstrap requires exact historical staging request and a separate reviewed candidate commit/image'
+    [[ "$APPLY" == false || "$CONFIRMATION" == kids_booklet ]] || die 'Bootstrap apply requires --confirmation kids_booklet'
+  fi
   if [[ "$ACTION" == restore ]]; then
     [[ -n "$BACKUP_ID" ]] || die 'Restore requires backup ID'
     local expected=kids_booklet; [[ "$ENVIRONMENT" != prod ]] || expected=kids_booklet_prod
@@ -151,7 +164,7 @@ validate_arguments() {
       die 'Index retirement creates its own pre-change backup'
     fi
   fi
-  case "$ACTION" in status|check|dify-check|dify-idle|dify-discover|dify-diagnostics|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  case "$ACTION" in status|operation-status|backup-verify|check|dify-check|dify-idle|dify-discover|dify-diagnostics|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
     [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
     [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
@@ -204,7 +217,9 @@ host_call() {
   [[ -z "$RUN_ID" ]] || remote+=(--run-id "$RUN_ID")
   [[ "$APPLY" == false ]] || remote+=(--apply)
   printf -v remote_command ' %s' "${remote[@]}"
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command"
+  local -a bound=()
+  case "$ACTION" in operation-status) bound=(timeout --kill-after=1s 30s);; operation-stop) bound=(timeout --kill-after=1s 60s);; backup-verify) bound=(timeout --kill-after=5s 1825s);; staging-bootstrap-reconcile) bound=(timeout --kill-after=5s 2365s);; esac
+  "${bound[@]}" ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command"
 }
 require_root() { [[ "$EUID" -eq 0 ]] || die 'This operation requires root on the VPS'; }
 validate_host_capacity() {
@@ -221,7 +236,15 @@ verify_release_capacity() {
 }
 compose() {
   local release="$1"; shift
-  docker compose --project-name "kids-booklet-$ENVIRONMENT" --env-file "$release/runtime.env" -f "$release/compose.yml" -f "$release/environment.yml" -f "${COMPOSE_SECRET_FILE:-$SECRETS/$ENVIRONMENT/secrets.json}" -f "$release/image.json" "$@"
+  local -a bound=()
+  local seconds="$COMPOSE_TIMEOUT_SECONDS"
+  if [[ "${1:-}" == up ]]; then
+    [[ "$seconds" -gt 0 && "$seconds" -lt 180 ]] || seconds=180
+    seconds="$(remaining_operation_seconds "$seconds")" || return 124
+    record_operation_command compose-up "$seconds"
+  fi
+  if [[ "$seconds" -gt 0 ]]; then bound=(timeout --kill-after=5s "${seconds}s"); fi
+  "${bound[@]}" docker compose --project-name "kids-booklet-$ENVIRONMENT" --env-file "$release/runtime.env" -f "$release/compose.yml" -f "$release/environment.yml" -f "${COMPOSE_SECRET_FILE:-$SECRETS/$ENVIRONMENT/secrets.json}" -f "$release/image.json" "$@"
 }
 maintenance() {
   local release="$1" command="$2"; shift 2
@@ -229,7 +252,414 @@ maintenance() {
   release_image="$(jq -er .services.app.image "$release/image.json")"
   local full_asset_backup=false
   [[ "$ACTION" != reset-staging || "$command" != recovery ]] || full_asset_backup=true
-  compose "$release" run --rm --no-deps -T -e RUNNER_ENABLED=false -e "BACKUP_ALL_ASSETS=$full_asset_backup" -e "RELEASE_IMAGE_DIGEST=$release_image" -e "BACKUP_ID=$BACKUP_ID" -e "CONFIRM_DATABASE=$CONFIRMATION" app node --import tsx "scripts/$command.ts" "$@"
+  local phase_seconds=300 status=0 name="booklet-operation-${ENVIRONMENT}-${REQUEST_ID:-local}-$$-$RANDOM"
+  case "$command:${1:-}" in
+    recovery:backup|recovery:verify) phase_seconds=1800;; recovery:restore) phase_seconds=3600;;
+    check-deployment-readiness:*) phase_seconds=180;;
+  esac
+  # Cleanup may reopen the original service after a failed drain. It is not a
+  # new lifecycle phase and must remain possible after the work budget expires.
+  if [[ "$command:${1:-}" != deployment-control:disable ]]; then phase_seconds="$(remaining_operation_seconds "$phase_seconds")" || return 124; fi
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    local control_remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$control_remaining" -gt 0 ]] || return 124
+    [[ "$phase_seconds" -le "$control_remaining" ]] || phase_seconds="$control_remaining"
+  fi
+  record_operation_command "$command" "$phase_seconds"
+  if COMPOSE_TIMEOUT_SECONDS="$phase_seconds" compose "$release" run --rm --no-deps -T --name "$name" \
+    --label "uk.co.uniwares.booklet.request=${REQUEST_ID:-local}" --label "uk.co.uniwares.booklet.environment=$ENVIRONMENT" \
+    -e RUNNER_ENABLED=false -e "DRAIN_TIMEOUT_MS=$(((phase_seconds < 300 ? phase_seconds : 300) * 1000))" -e "DEPLOYMENT_URL=${DEPLOYMENT_URL:-}" -e "BACKUP_ALL_ASSETS=$full_asset_backup" -e "RELEASE_IMAGE_DIGEST=$release_image" -e "BACKUP_ID=$BACKUP_ID" -e "CONFIRM_DATABASE=$CONFIRMATION" app node --import tsx "scripts/$command.ts" "$@"; then
+    return 0
+  else status=$?; fi
+  # Killing the Compose client does not stop its daemon-owned container. Stop
+  # only this named/labelled one-off; never infer that its writes failed.
+  stop_owned_oneoff "$name" 20 || printf 'error: Owned maintenance container remains unverified; inspect before resume\n' >&2
+  printf 'error: Maintenance command %s stopped (exit=%s); inspect retained phase and outputs before resume\n' "$command" "$status" >&2
+  return "$status"
+}
+record_operation_command() {
+  [[ -n "$REQUEST_ID" && -f "$STATE/operation.json" ]] || return 0
+  local started; started="$(date +%s)"
+  jq --arg id "$REQUEST_ID" --arg command "$1" --argjson started "$started" --argjson seconds "$2" \
+    'if .requestId==$id then .command=$command | .commandStartedAt=$started | .commandDeadlineAt=($started+$seconds) else error("Operation changed") end' \
+    "$STATE/operation.json" > "$STATE/operation.next.json"
+  mv "$STATE/operation.next.json" "$STATE/operation.json"
+}
+stop_owned_oneoff() {
+  local name="$1" seconds="$2" record filter
+  [[ "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || return 1
+  filter="name=^/${name//./[.]}$"
+  [[ ! "$name" =~ ^[a-f0-9]{12,64}$ ]] || filter="id=$name"
+  if ! record="$(control_timeout 5 docker inspect "$name" 2>/dev/null)"; then
+    record="$(control_timeout 5 docker ps -aq --filter "$filter")" || return 1
+    [[ -z "$record" ]]; return
+  fi
+  jq -e --arg id "${REQUEST_ID:-local}" --arg environment "$ENVIRONMENT" '
+    length==1 and .[0].Config.Labels["uk.co.uniwares.booklet.request"]==$id and
+    .[0].Config.Labels["uk.co.uniwares.booklet.environment"]==$environment and
+    .[0].Config.Labels["com.docker.compose.project"]==("kids-booklet-"+$environment) and
+    .[0].Config.Labels["com.docker.compose.oneoff"]=="True"' <<< "$record" >/dev/null || return 1
+  control_timeout "$seconds" docker stop --time 5 "$name" >/dev/null 2>&1 || return 1
+  # --rm can remove the container between stop acknowledgement and this call.
+  if ! control_timeout 5 docker rm "$name" >/dev/null 2>&1; then
+    record="$(control_timeout 5 docker ps -aq --filter "$filter")" || return 1
+    [[ -z "$record" ]] || return 1
+  fi
+}
+control_timeout() {
+  local seconds="$1" remaining; shift
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$remaining" -gt 0 ]] || return 124
+    [[ "$seconds" -le "$remaining" ]] || seconds="$remaining"
+  fi
+  timeout --kill-after=1s "${seconds}s" "$@"
+}
+operation_runtime_seconds() {
+  case "$1" in restore) echo 3600;; backup) echo 1800;; deploy|dify-install|rollback|rotate-secrets|reset-staging|retire-staging-artifact-index) echo 2700;; *) echo 300;; esac
+}
+# Explicit compatibility bridge for one reviewed historical staging blocker.
+# It never changes the original request's image, commit, phase or byte evidence.
+legacy_staging_node() {
+  local release="$1" mode="$2" seconds=45 status=0
+  [[ "$mode" != verify-backup ]] || seconds=1800
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    local remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$remaining" -gt 0 ]] || return 124
+    [[ "$seconds" -le "$remaining" ]] || seconds="$remaining"
+  fi
+  local name="booklet-operation-staging-bootstrap-$$-$RANDOM"
+  if COMPOSE_TIMEOUT_SECONDS="$seconds" compose "$release" run --rm --no-deps -T --name "$name" \
+    --label uk.co.uniwares.booklet.request=local --label uk.co.uniwares.booklet.environment=staging \
+    -e RUNNER_ENABLED=false -e "BOOTSTRAP_MODE=$mode" -e "BACKUP_ID=$BACKUP_ID" \
+    -e "RELEASE_IMAGE_DIGEST=$(jq -er .services.app.image "$release/image.json")" \
+    app node --import tsx - 2>/dev/null <<'NODE'
+(async () => {
+  if (process.env.DEPLOYMENT_ENV !== '_staging' || process.env.RUNNER_ENABLED !== 'false') throw Error('TargetDiffers');
+  const {getDatabase, withMongoTransaction} = require('./db/client.ts');
+  const mode = process.env.BOOTSTRAP_MODE;
+  if (mode === 'verify-backup') {
+    const {getServerEnv} = require('./lib/config/env.ts');
+    const {createObjectStoreClient} = require('./lib/assets/create-object-store-client.ts');
+    const {RecoveryStorage} = require('./scripts/recovery-storage.ts');
+    const env = getServerEnv(), client = createObjectStoreClient(env);
+    try {
+      const manifest = await new RecoveryStorage(client, env.RECOVERY_BUCKET).verifiedCompletedBackup(
+        process.env.BACKUP_ID, env.MONGODB_DATABASE, '_staging', process.env.RELEASE_IMAGE_DIGEST);
+      console.log(JSON.stringify({verified:true,backupId:manifest.backupId,assetCount:manifest.assets.length}));
+    } finally { client.destroy(); }
+    return;
+  }
+  const db = getDatabase(), options = {};
+  const runId='92272a97-f96d-4634-8cba-3524a3fa2b51', operationId='c8c0e121-d3cf-41bc-8023-79cfdae8e291';
+  const itemId='354d337a-4e9f-42ab-a8ec-0c327a45748a', jobId='1a258e4b-aa34-454c-8f04-ada32b4c808f';
+  const reason='reviewed exact staging bootstrap 38149230374-1';
+  async function inspect(session, repaired=false) {
+    const opts=session ? {session} : options;
+    const run=await db.collections.experiment_runs.findOne({_id:runId},opts);
+    const op=await db.collections.experiment_operations.findOne({_id:operationId,runId},opts);
+    const item=await db.collections.generation_items.findOne({_id:itemId,jobId},opts);
+    const job=await db.collections.generation_jobs.findOne({_id:jobId},opts);
+    if (!run || !op || !item || !job || run.mode!=='simulated' || run.status!=='blocked' || run.safeFailure!=='definite_failure' ||
+        run.activeOperationId!=null || run.counters?.payableText!==0 || run.counters?.payableImage!==0 || job.bookletId!==run.bookletId || job.jobType!=='dify_pages' || JSON.parse(job.inputJson).runId!==runId ||
+        JSON.parse(item.resultJson).operationId!==operationId || item.itemKey!==op.subjectId || op.subjectKind!=='page' ||
+        op.role!=='image' || op.taskId!=='J13' || op.state!=='failed' || op.safeFailure!=='definite_failure' || op.reservationCount!==0 ||
+        op.resultJson!=null || op.materializationJson!=null || op.imageCompletionClaim!=null || op.imageCompletionDigest!=null ||
+        op.workflowRunId!=='bbd3a736-6777-4088-8627-557999d7f001' ||
+        item.status!==(repaired?'failed':'running') || job.status!==(repaired?'failed':'running')) throw Error('EvidenceDiffers');
+    const counts={};
+    for (const name of ['generation_items','execution_items','model_calls']) counts[name]=await db.collections[name].countDocuments(
+      {status:'running',...(name==='generation_items'?{_id:{$ne:itemId}}:{})},opts);
+    counts.followups=await db.collections.card_responses.countDocuments({followupStatus:'running'},opts);
+    counts.operations=await db.collections.experiment_operations.countDocuments({$or:[
+      {state:{$in:['prepared','started','unknown']}},
+      {state:'succeeded',dispatchStartedAtMs:{$ne:null},verifiedWorkflowId:null}
+    ]},opts);
+    counts.runs=await db.collections.experiment_runs.countDocuments({$or:[
+      {status:{$in:['queued','running','pausing']}}, {activeOperationId:{$ne:null}},
+      {preparation:{$ne:null},$or:[{'preparation.outcome':{$ne:'failed'}},{'preparation.unresolved':true}]}
+    ]},opts);
+    const control=await db.collections.deployment_control.findOne({environment:'_staging'},opts);
+    if (!control || control.activeMutations!==0 || (control.interruptedMutations??0)!==0 || Object.values(counts).some(Boolean)) throw Error('OtherWorkRemains');
+    return {control,op,counts};
+  }
+  try {
+    if (mode==='reopen') {
+      const changed=await db.collections.deployment_control.updateOne({environment:'_staging',maintenance:true,reason},
+        {$set:{maintenance:false,reason:null,updatedAtMs:Date.now()}});
+      if (changed.modifiedCount!==1) throw Error('AdmissionChanged');
+      console.log(JSON.stringify({admission:'open'})); return;
+    }
+    const initial=await inspect(null,mode==='final');
+    if (mode==='inspect' || mode==='close') {
+      const {readBookletRunnerConfig}=require('./lib/experiment-runner/config.ts');
+      const {createWorkflowRuntime}=require('./lib/experiment-runner/transport.ts');
+      const state=readBookletRunnerConfig(); if (!state.enabled) throw Error('BindingInvalid');
+      const binding=state.config.bindings.find(b=>b.role==='image' && b.taskId===null);
+      const saved=JSON.parse((await db.collections.experiment_runs.findOne({_id:runId})).configurationJson).find(b=>b.role==='image');
+      if (!binding || binding.appId!==saved.appId || binding.publishedWorkflowId!==saved.publishedWorkflowId) throw Error('PublicationDiffers');
+      const result=await createWorkflowRuntime(state.config).retrieve(binding,initial.op.workflowRunId,{deadlineAtMs:Date.now()+10000});
+      if (result.kind!=='execution' || result.execution.status!=='failed' || result.execution.id!==initial.op.workflowRunId ||
+          result.execution.workflow_id!==binding.publishedWorkflowId) throw Error('RemoteOutcomeUnverified');
+    }
+    if (mode==='close') {
+      const changed=await db.collections.deployment_control.updateOne({environment:'_staging',maintenance:false,activeMutations:0,
+        updatedAtMs:initial.control.updatedAtMs},{$set:{maintenance:true,reason,updatedAtMs:Date.now()}});
+      if (changed.modifiedCount!==1) throw Error('AdmissionRace');
+      try { const checked=await inspect(); if (!checked.control.maintenance || checked.control.reason!==reason) throw Error('AdmissionRace'); }
+      catch (error) {
+        await db.collections.deployment_control.updateOne({environment:'_staging',maintenance:true,reason},{$set:{maintenance:false,reason:null,updatedAtMs:Date.now()}});
+        throw error;
+      }
+    } else if (mode==='repair') {
+      await withMongoTransaction(db,async session=>{
+        const checked=await inspect(session); if (!checked.control.maintenance || checked.control.reason!==reason) throw Error('AdmissionChanged');
+        const now=Date.now(), errorJson=JSON.stringify({code:'experiment_run_blocked',runId,operationId,backupId:process.env.BACKUP_ID});
+        const item=await db.collections.generation_items.updateOne({_id:itemId,jobId,status:'running'},{$set:{status:'failed',errorJson,finishedAtMs:now}},{session});
+        const job=await db.collections.generation_jobs.updateOne({_id:jobId,jobType:'dify_pages',status:'running'},{$set:{status:'failed',errorJson,finishedAtMs:now,updatedAtMs:now}},{session});
+        if (item.modifiedCount!==1 || job.modifiedCount!==1) throw Error('EvidenceRace');
+      });
+    } else if (!['inspect','idle','final'].includes(mode)) throw Error('ModeInvalid');
+    if (['idle','final'].includes(mode) && (!initial.control.maintenance || initial.control.reason!==reason)) throw Error('AdmissionChanged');
+    console.log(JSON.stringify({verified:true,mode,runId,operationId,itemId,jobId,counts:initial.counts}));
+  } finally { await db.close(); }
+})().catch(()=>{ console.error('error: Exact staging bootstrap check failed; inspect retained checkpoint without replay'); process.exitCode=1; });
+NODE
+  then return 0; else status=$?; fi
+  stop_owned_oneoff "$name" 20 || printf 'error: Bootstrap one-off remains unverified; inspect before resume\n' >&2
+  return "$status"
+}
+backup_verify_host() {
+  require_root
+  dify_diagnostic_identity
+  exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+  local release; read -r release < "$STATE/releases/$ENVIRONMENT/current"
+  [[ "$release" == "$STATE/releases/$ENVIRONMENT/$COMMIT" && ! -L "$release" ]] || die 'Selected backup verification release changed'
+  [[ "$(jq -er .services.app.image "$release/image.json")" == "$IMAGE_DIGEST" ]] || die 'Selected backup verification image changed'
+  # A fresh read-only command has its own finite budget, not the failed request's
+  # expired execution budget. Do not rewrite the retained operation journal.
+  local REQUEST_ID='' CONTROL_DEADLINE_SECONDS=$((SECONDS + 1820))
+  if [[ "$ENVIRONMENT" == staging && "$COMMIT" == c04d7512dfaa3156eb3b81331625d1a0af4f7faf ]]; then
+    # This exact legacy image has verifiedCompletedBackup but predates the CLI
+    # verify command. Use that installed read-only implementation directly.
+    legacy_staging_node "$release" verify-backup
+  else
+    maintenance "$release" recovery verify
+  fi
+  printf 'result: backup verified %s %s\n' "$ENVIRONMENT" "$BACKUP_ID"
+}
+staging_bootstrap_guard() {
+  local release="$STATE/releases/staging/c04d7512dfaa3156eb3b81331625d1a0af4f7faf" ids=() running_image records
+  [[ "$(< "$STATE/releases/staging/current")" == "$release" ]] || die 'Historical staging release changed'
+  [[ "$(jq -er .services.app.image "$release/image.json")" == "$(jq -er .image "$CONFIG_FILE")@sha256:ddb944691949ed1ff020dc5d4f2fb9873bcddc260f13a7485195889d1fed70cd" ]] || die 'Historical staging image changed'
+  [[ "$(timeout 5s systemctl show kids-booklet-operation-38149230374-1.service --property=ActiveState --value)" =~ ^(failed|inactive)$ ]] || die 'Historical deployment service is active or unverified'
+  jq -e --arg release "$release" '.requestId=="38149230374-1" and .action=="deploy" and .environment=="staging" and .step=="draining" and .commit=="e6f0575478ba2353a4d32c6a36d642152c9d426d" and .priorRelease==$release and (.backupId // "")==""' "$STATE/operation.json" >/dev/null || die 'Historical deployment journal differs'
+  verify_artifact_retirement_release "$release" c04d7512dfaa3156eb3b81331625d1a0af4f7faf
+  records="$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False)" || die 'Historical staging container status is unavailable'
+  [[ -z "$records" ]] || mapfile -t ids <<< "$records"
+  [[ "${#ids[@]}" -le 1 && ( "${1:-}" == allow-stopped || "${#ids[@]}" -eq 1 ) ]] || die 'Historical staging container count differs'
+  if [[ "${#ids[@]}" -eq 1 ]]; then
+    running_image="$(timeout 10s docker inspect --format '{{.Config.Image}}' "${ids[0]}")"
+    [[ "$running_image" == "$(jq -er .services.app.image "$release/image.json")" ]] || die 'Historical running staging image differs'
+  fi
+}
+staging_bootstrap_reconcile_host() (
+  require_root
+  dify_diagnostic_identity
+  local release="$STATE/releases/staging/c04d7512dfaa3156eb3b81331625d1a0af4f7faf" marker="$STATE/staging-bootstrap.json"
+  exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+  staging_bootstrap_guard
+  [[ ! -e "$marker" && ! -e "$STATE/operations/38149230374-1.json" ]] || die 'Bootstrap checkpoint already exists; inspect before any new attempt'
+  printf 'result: bootstrap old request=38149230374-1 commit=c04d7512dfaa3156eb3b81331625d1a0af4f7faf image=sha256:ddb944691949ed1ff020dc5d4f2fb9873bcddc260f13a7485195889d1fed70cd\n'
+  printf 'result: bootstrap candidate commit=%s image=%s\n' "$COMMIT" "$IMAGE_DIGEST"
+  local REQUEST_ID='' CONTROL_DEADLINE_SECONDS=$((SECONDS + 2100))
+  legacy_staging_node "$release" inspect
+  [[ "$APPLY" == true ]] || { printf 'would update: exact staging page bookkeeping after verified backup; retain maintenance for separate reviewed deployment\n'; return; }
+  [[ -n "$BACKUP_ID" ]] || BACKUP_ID="staging-bootstrap-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+  # Failure before repair restores original admission. Once repair begins its
+  # outcome can be uncertain; retain maintenance and durable checkpoint instead.
+  local closed=false repaired=false
+  trap 'if [[ "$closed" == true && "$repaired" == false ]]; then CONTROL_DEADLINE_SECONDS=$((SECONDS + 240)); compose "$release" up -d --no-deps app && verify_application "$release" && legacy_staging_node "$release" reopen || printf "error: Original admission remains unverified; inspect bootstrap checkpoint\n" >&2; fi; cleanup' EXIT
+  legacy_staging_node "$release" close
+  closed=true
+  stop_application "$release"
+  legacy_staging_node "$release" idle
+  if ! maintenance "$release" recovery backup || ! legacy_staging_node "$release" verify-backup; then
+    die 'Bootstrap backup failed; no repair started; bounded original admission recovery follows'
+  fi
+  staging_bootstrap_guard allow-stopped
+  jq -n --arg oldRequest 38149230374-1 --arg oldRelease "$release" --arg oldImage "$(jq -er .services.app.image "$release/image.json")" \
+    --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg backupId "$BACKUP_ID" --arg journalHash "$(sha256sum "$STATE/operation.json" | awk '{print $1}')" \
+    '{oldRequest:$oldRequest,oldRelease:$oldRelease,oldImage:$oldImage,commit:$commit,image:$image,backupId:$backupId,originalJournalSha256:$journalHash,phase:"repairing-maintenance"}' > "$marker"
+  repaired=true
+  legacy_staging_node "$release" repair
+  legacy_staging_node "$release" final
+  staging_bootstrap_guard allow-stopped
+  # Preserve byte-for-byte evidence; supersession metadata is separate.
+  cp --no-clobber "$STATE/operation.json" "$STATE/operations/38149230374-1.json"
+  cmp -s "$STATE/operation.json" "$STATE/operations/38149230374-1.json" || die 'Historical journal archive differs'
+  jq '.phase="reconciled-maintenance" | .superseded=true' "$marker" > "$marker.next"; mv "$marker.next" "$marker"
+  rm "$STATE/operation.json"
+  closed=false
+  printf 'updated: exact staging bookkeeping repaired; backup=%s; admission remains closed for separately identified reviewed deployment\n' "$BACKUP_ID"
+)
+bootstrap_ready_for_deploy() {
+  local release="$1" marker="$STATE/staging-bootstrap.json" backup
+  [[ "$ENVIRONMENT" == staging && "$ACTION" == deploy ]] || die 'Bootstrap maintenance only permits its separately reviewed staging deployment'
+  jq -e --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg release "$release" \
+    '.phase=="reconciled-maintenance" and .superseded==true and .oldRequest=="38149230374-1" and .oldRelease==$release and .commit==$commit and .image==$image and (.backupId|test("^[a-zA-Z0-9_-]{1,160}$"))' "$marker" >/dev/null || die 'Bootstrap candidate or maintenance checkpoint differs'
+  [[ -f "$STATE/operations/38149230374-1.json" ]] || die 'Original bootstrap journal archive is missing'
+  [[ "$(jq -er .originalJournalSha256 "$marker")" == "$(sha256sum "$STATE/operations/38149230374-1.json" | awk '{print $1}')" ]] || die 'Original bootstrap journal archive changed'
+  [[ "$(jq -er .oldImage "$marker")" == "$(jq -er .services.app.image "$release/image.json")" ]] || die 'Bootstrap selected old image differs'
+  verify_artifact_retirement_release "$release" c04d7512dfaa3156eb3b81331625d1a0af4f7faf
+  backup="$(jq -er .backupId "$marker")"
+  # Observe current state through the old runtime without rewriting the new
+  # request journal or changing its original phase budget.
+  (local REQUEST_ID='' BACKUP_ID="$backup"; legacy_staging_node "$release" final)
+}
+remaining_operation_seconds() {
+  local maximum="$1" deadline remaining
+  if [[ -n "$REQUEST_ID" && -f "$STATE/operation.json" ]]; then
+    deadline="$(jq -er --arg id "$REQUEST_ID" 'select(.requestId==$id) | .budgetDeadlineAtSeconds // 0' "$STATE/operation.json")" || return 1
+    if [[ "$deadline" -gt 0 ]]; then
+      remaining=$((deadline - $(date +%s)))
+      [[ "$remaining" -gt 0 ]] || { printf 'error: Original operation budget expired; inspect output before any new attempt\n' >&2; return 124; }
+      [[ "$maximum" -le "$remaining" ]] || maximum="$remaining"
+    fi
+  fi
+  printf '%s\n' "$maximum"
+}
+ensure_operation_budget() {
+  local started runtime
+  started="$(date +%s)"; runtime="$(operation_runtime_seconds "$(jq -er .action "$STATE/operation.json")")"
+  # Legacy journals receive one budget when first adopted. Later resumes retain
+  # this exact deadline; a new systemd activation must not reset it.
+  jq --arg id "$REQUEST_ID" --argjson started "$started" --argjson runtime "$runtime" '
+    if .requestId!=$id then error("Operation changed")
+    elif .budgetDeadlineAtSeconds!=null then .
+    else .budgetStartedAtSeconds=$started | .budgetDeadlineAtSeconds=($started+$runtime) end' \
+    "$STATE/operation.json" > "$STATE/operation.next.json"
+  mv "$STATE/operation.next.json" "$STATE/operation.json"
+  remaining_operation_seconds "$runtime"
+}
+start_operation_unit() {
+  local runtime
+  runtime="$(ensure_operation_budget)" || return 1
+  # The daemon owns one-off containers, not the Compose client process group.
+  # ExecStopPost performs exact-label cleanup after normal exit, timeout or stop.
+  systemd-run --unit="kids-booklet-operation-$REQUEST_ID" --property=Type=exec --property=UMask=0077 \
+    --property="RuntimeMaxSec=$runtime" --property=TimeoutStopSec=60 --property=KillMode=control-group \
+    --property="ExecStopPost=$ROOT/vps-deployment.sh --action host-cleanup --request-id $REQUEST_ID --environment $ENVIRONMENT --apply" \
+    "$ROOT/vps-deployment.sh" --action host-run --request-id "$REQUEST_ID" --apply
+}
+cleanup_operation_oneoffs() {
+  [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] || return 0
+  local ids id deadline=$((SECONDS + 35)) remaining
+  ids="$(control_timeout 5 docker ps -aq --filter "label=uk.co.uniwares.booklet.request=$REQUEST_ID" \
+    --filter "label=uk.co.uniwares.booklet.environment=$ENVIRONMENT" \
+    --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.oneoff=True')" || return 1
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    [[ "$id" =~ ^[a-f0-9]{12,64}$ ]] || return 1
+    remaining=$((deadline - SECONDS)); [[ "$remaining" -gt 10 ]] || return 1
+    stop_owned_oneoff "$id" "$((remaining - 10))" || return 1
+  done <<< "$ids"
+}
+host_cleanup() {
+  require_root
+  [[ "$APPLY" == true && -n "$REQUEST_ID" && -n "$ENVIRONMENT" ]] || die 'Host cleanup requires an exact unit request'
+  # Do not change operation phase, admission, release pointers or saved output.
+  # A missing journal can mean successful completion; labels still limit cleanup.
+  cleanup_operation_oneoffs || die 'Owned one-off cleanup is incomplete; inspect exact request before resume'
+}
+operation_control_journal() {
+  local file="$STATE/operations/$REQUEST_ID.json"
+  if [[ -f "$STATE/operation.json" ]] && jq -e --arg id "$REQUEST_ID" '.requestId==$id' "$STATE/operation.json" >/dev/null; then file="$STATE/operation.json"; fi
+  [[ -f "$file" ]] || die 'Exact operation request was not found'
+  jq -e --arg id "$REQUEST_ID" --arg environment "$ENVIRONMENT" '.requestId==$id and .environment==$environment' "$file" >/dev/null || die 'Operation belongs to another environment'
+  printf '%s\n' "$file"
+}
+operation_status_host() {
+  local file state result exit_status load_state
+  [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]] || CONTROL_DEADLINE_SECONDS=$((SECONDS + 30))
+  file="$(operation_control_journal)" || return 1
+  load_state="$(control_timeout 5 systemctl show --property=LoadState --value "kids-booklet-operation-$REQUEST_ID.service" 2>/dev/null)" || load_state=unavailable
+  if [[ "$load_state" == not-found || "$load_state" == unavailable ]]; then
+    [[ "$file" != "$STATE/operation.json" ]] || die 'Active operation service is unavailable; inspect retained request before resume'
+    jq -c '{requestId,action,environment,step,stepUpdatedAtSeconds,backupId,image,commit,command,commandStartedAt,commandDeadlineAt,budgetStartedAtSeconds,budgetDeadlineAtSeconds,stopRequestedAt,
+      service:{state:"unavailable",result:null,exitStatus:null},outcome:"archived"}' "$file" | sed 's/^/result: operation /'
+    return
+  fi
+  [[ "$load_state" == loaded ]] || die 'Operation service returned unsupported load state'
+  state="$(control_timeout 5 systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation service status is unavailable'
+  result="$(control_timeout 5 systemctl show --property=Result --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation service result is unavailable'
+  exit_status="$(control_timeout 5 systemctl show --property=ExecMainStatus --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation service exit status is unavailable'
+  [[ "$state" =~ ^(active|activating|deactivating|reloading|failed|inactive)$ && "$result" =~ ^(success|exit-code|timeout|signal|core-dump|watchdog|start-limit-hit|resources|oom-kill|protocol|)$ && "$exit_status" =~ ^[0-9]+$ ]] || die 'Operation service returned unsupported status'
+  jq -c --arg state "$state" --arg result "$result" --arg exit "$exit_status" \
+    '{requestId,action,environment,step,stepUpdatedAtSeconds,backupId,image,commit,command,commandStartedAt,commandDeadlineAt,budgetStartedAtSeconds,budgetDeadlineAtSeconds,stopRequestedAt,
+      service:{state:$state,result:$result,exitStatus:($exit|tonumber)},
+      outcome:(if .step=="complete" and $state=="inactive" and $result=="success" then "complete" elif $state=="active" or $state=="activating" or $state=="deactivating" or $state=="reloading" then "running" else "interrupted" end)}' "$file" |
+    sed 's/^/result: operation /'
+}
+operation_stop_host() {
+  local file state stop_deadline
+  CONTROL_DEADLINE_SECONDS=$((SECONDS + 60))
+  file="$(operation_control_journal)" || return 1
+  operation_status_host || return 1
+  [[ "$file" == "$STATE/operation.json" ]] || { printf 'exists: operation is archived; inspect its outcome; no stop sent\n'; return; }
+  [[ "$APPLY" == true ]] || { printf 'would update: stop exact operation %s; preserve its phase, outputs and maintenance\n' "$REQUEST_ID"; return; }
+  # Inspect completed phase evidence before interrupting its owner. Reserve the
+  # remaining control budget for stop delivery and the post-stop race check.
+  stop_deadline="$CONTROL_DEADLINE_SECONDS"
+  CONTROL_DEADLINE_SECONDS=$((SECONDS + 15))
+  if ! operation_output_inspection "$file"; then
+    CONTROL_DEADLINE_SECONDS="$stop_deadline"
+    die 'Pre-stop output inspection unresolved; no stop sent; phase and maintenance retained'
+  fi
+  CONTROL_DEADLINE_SECONDS="$stop_deadline"
+  # Do not wait for the host lock while its owner is the process being stopped.
+  # Only root-created exact-request units are addressable through this action.
+  if ! control_timeout 45 systemctl stop "kids-booklet-operation-$REQUEST_ID.service"; then
+    die 'Stop acknowledgement timed out; operation may still be stopping. Inspect exact status; do not resume'
+  fi
+  state="$(control_timeout 5 systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")"
+  [[ "$state" == failed || "$state" == inactive ]] || die 'Operation remains active; no state change permitted'
+  exec 8>"$STATE/operation.lock"; flock -n 8 || die 'Host lock remains owned; inspect exact status before reconciliation'
+  cleanup_operation_oneoffs || die 'Owned maintenance containers remain; no state change permitted'
+  operation_output_inspection "$file" || die 'Stopped request output inspection incomplete; phase and maintenance retained'
+  # Completion may race the stop request. Never overwrite a different/new journal.
+  if [[ -f "$STATE/operation.json" ]]; then
+    jq --arg id "$REQUEST_ID" --argjson stopped "$(date +%s)" \
+      'if .requestId==$id then .stopRequestedAt=$stopped else error("Operation changed") end' "$STATE/operation.json" > "$STATE/operation.next.json"
+    mv "$STATE/operation.next.json" "$STATE/operation.json"
+  fi
+  flock -u 8
+  operation_status_host
+  printf 'updated: exact operation stopped; outputs and retained phase require reconciliation before resume\n'
+}
+operation_output_inspection() {
+  local file="$1" selected='' expected='' records='[]' ids=''
+  if [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]]; then
+    if [[ -f "$STATE/releases/$ENVIRONMENT/current" ]]; then
+      read -r selected < "$STATE/releases/$ENVIRONMENT/current"
+      [[ "$selected" == "$STATE/releases/$ENVIRONMENT/"* && "$selected" != *'/../'* ]] || return 1
+      expected="$(jq -er '.services.app.image' "$selected/image.json")" || return 1
+      [[ "$expected" =~ ^ghcr.io/[a-z0-9_./-]+@sha256:[a-f0-9]{64}$ ]] || return 1
+    fi
+    ids="$(control_timeout 5 docker ps -aq --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" \
+      --filter 'label=com.docker.compose.service=app' --filter 'label=com.docker.compose.oneoff=False')" || return 1
+    if [[ -n "$ids" ]]; then
+      local -a containers=(); mapfile -t containers <<< "$ids"
+      [[ "${#containers[@]}" -eq 1 && "${containers[0]}" =~ ^[a-f0-9]{12,64}$ ]] || return 1
+      records="$(control_timeout 5 docker inspect "${containers[0]}" 2>/dev/null)" || return 1
+    fi
+  fi
+  jq -cn --argjson journal "$(jq '{requestId,step,backupId,priorRelease,image}' "$file")" --arg selected "$selected" --arg expected "$expected" --argjson records "$records" '
+    {requestId:$journal.requestId,phase:$journal.step,selectedRelease:$selected,expectedImage:$expected,
+      backup:{id:($journal.backupId // ""),verification:(if ($journal.backupId // "")=="" then "not_recorded" else "readback_required" end)},
+      application:[$records[] | {state:.State.Status,health:(.State.Health.Status // "unknown"),
+        selectedImageMatches:(.Config.Image==$expected)}],
+      next:"Inspect backup completion and application readiness before resume; admission unchanged"}' | sed 's/^/result: operation outputs /'
 }
 prepare_staging_reset_profile() {
   local release="$1"
@@ -248,7 +678,7 @@ prepare_staging_reset_profile() {
   fi
 }
 set_step() {
-  jq --arg step "$1" '.step=$step' "$STATE/operation.json" > "$STATE/operation.next.json"
+  jq --arg step "$1" --argjson updated "$(date +%s)" '.step=$step | .stepUpdatedAtSeconds=$updated' "$STATE/operation.json" > "$STATE/operation.next.json"
   mv "$STATE/operation.next.json" "$STATE/operation.json"
 }
 show_operation_status() {
@@ -275,6 +705,8 @@ show_operation_status() {
         '
       fi
     fi
+  elif [[ -f "$STATE/staging-bootstrap.json" ]]; then
+    jq -c '{step:"bootstrap-maintenance",oldRequest,commit,image,backupId,phase,superseded}' "$STATE/staging-bootstrap.json"
   else
     printf '{"step":"idle"}\n'
   fi
@@ -332,19 +764,39 @@ prepare_release() {
   validate_compose "$release"
 }
 stop_application() {
-  compose "$1" stop --timeout 60 app
-  [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Old application or maintenance container is still running'
+  local seconds
+  seconds="$(remaining_operation_seconds 60)" || return 124
+  COMPOSE_TIMEOUT_SECONDS="$seconds" compose "$1" stop --timeout 50 app
+  [[ -z "$(timeout 5s docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Old application or maintenance container is still running'
 }
 verify_application() {
   local release="$1" url
   url="https://$(jq -r --arg e "$ENVIRONMENT" '.environments[$e].APP_HOSTNAME' "$CONFIG_FILE")"
-  compose "$release" run --rm --no-deps -T -e RUNNER_ENABLED=false -e "DEPLOYMENT_URL=$url" app node --import tsx scripts/check-deployment-readiness.ts
+  DEPLOYMENT_URL="$url" maintenance "$release" check-deployment-readiness
 }
 drain_application() {
-  maintenance "$1" deployment-control enable deployment
+  verify_drain_support "$1"
+  maintenance "$1" deployment-control drain deployment
   if ! maintenance "$1" wait-for-deployment-drain; then
     maintenance "$1" deployment-control disable
     die 'Drain timed out; original application continues with normal admission'
+  fi
+}
+verify_drain_support() {
+  local release="$1" id image expected
+  expected="$(jq -er .services.app.image "$release/image.json")"
+  id="$(timeout 5s docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" \
+    --filter 'label=com.docker.compose.service=app' --filter 'label=com.docker.compose.oneoff=False')"
+  [[ "$id" =~ ^[a-f0-9]{12,64}$ ]] || die 'Drain bootstrap requires exactly one running selected application'
+  image="$(timeout 5s docker inspect --format '{{.Config.Image}}' "$id")"
+  [[ "$image" == "$expected" ]] || die 'Drain bootstrap selected image differs from running application'
+  if ! timeout --kill-after=1s 10s docker exec -w /app "$id" node -e '
+    const fs=require("node:fs");
+    const script=fs.readFileSync("scripts/deployment-control.ts","utf8");
+    const control=fs.readFileSync("lib/application/deployment-control.ts","utf8");
+    if(!script.includes("setDrainingMode") || !control.includes("export async function finishDraining") || !control.includes("export async function setDrainingMode")) process.exit(78);
+  ' >/dev/null 2>&1; then
+    die 'Selected image lacks two-stage drain support; explicit reviewed bootstrap is required. No maintenance fallback or deployment performed'
   fi
 }
 save_success() {
@@ -357,20 +809,26 @@ save_success() {
   mv "$STATE/operation.json" "$STATE/operations/$REQUEST_ID.json"
 }
 run_lifecycle() {
-  local current='' candidate='' previous=''
+  local current='' candidate='' previous='' bootstrapped=false
   [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || read -r current < "$STATE/releases/$ENVIRONMENT/current"
   case "$ACTION" in
     retire-staging-artifact-index) retire_staging_artifact_index_host; return;;
     deploy)
+      if [[ -e "$STATE/staging-bootstrap.json" ]]; then bootstrap_ready_for_deploy "$current"; bootstrapped=true; fi
       prepare_release
       candidate="$STATE/releases/$ENVIRONMENT/$COMMIT"
       record_release_metadata "$candidate" "$current"
       verify_release_capacity
       # Anonymous pull: a private GHCR package must fail before maintenance begins.
       private_temp; mkdir -p "$TEMP_DIR/docker"
-      DOCKER_CONFIG="$TEMP_DIR/docker" docker pull "$IMAGE_DIGEST"
+      set_step pulling
+      local pull_seconds
+      pull_seconds="$(remaining_operation_seconds 1800)"
+      record_operation_command pull "$pull_seconds"
+      DOCKER_CONFIG="$TEMP_DIR/docker" timeout --kill-after=5s "${pull_seconds}s" docker pull "$IMAGE_DIGEST"
       if [[ -n "$current" ]]; then
-        set_step draining; drain_application "$current"
+        set_step draining
+        if [[ "$bootstrapped" == true ]]; then bootstrap_ready_for_deploy "$current"; else drain_application "$current"; fi
         set_step stopping; stop_application "$current"
         set_step backup; ensure_backup_id; maintenance "$current" recovery backup
       fi
@@ -385,12 +843,13 @@ run_lifecycle() {
           set_step recovering-previous
           compose "$current" up -d --no-deps app
           verify_application "$current"
-          maintenance "$current" deployment-control disable
+          if [[ "$bootstrapped" == false ]]; then maintenance "$current" deployment-control disable; fi
         fi
         die 'Readiness failed; database was not restored. Inspect and resume the operation'
       fi
       maintenance "$candidate" deployment-control disable
-      save_success "$candidate" true ;;
+      save_success "$candidate" true
+      if [[ "$bootstrapped" == true ]]; then mv "$STATE/staging-bootstrap.json" "$STATE/operations/bootstrap-$REQUEST_ID.json"; fi ;;
     backup|restore|reset-staging|rollback|rotate-secrets)
       [[ -n "$current" ]] || die 'Environment has no recorded release'
       record_release_metadata "$current" "$current"
@@ -406,7 +865,7 @@ run_lifecycle() {
       set_step stopping; stop_application "$current"
       if [[ "$ACTION" != restore ]]; then set_step backup; ensure_backup_id; maintenance "$current" recovery backup; fi
       case "$ACTION" in
-        restore) maintenance "$current" recovery restore;;
+        restore) set_step restoring; maintenance "$current" recovery restore;;
         reset-staging)
           set_step resetting
           if [[ -f "$SECRETS/staging/secrets.reset.json" ]]; then COMPOSE_SECRET_FILE="$SECRETS/staging/secrets.reset.json"; fi
@@ -453,7 +912,7 @@ verify_artifact_retirement_release() {
   (cd "$release" && sha256sum -c manifest.sha256 >/dev/null) || die 'Index retirement release manifest changed'
   image="$(jq -er .services.app.image "$release/image.json")"
   [[ "$image" == "$(jq -r .image "$CONFIG_FILE")"@sha256:* && "$image" =~ @sha256:[a-f0-9]{64}$ ]] || die 'Index retirement image repository or digest is invalid'
-  revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
+  revision="$(timeout 10s docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
   [[ "$revision" == "$expected_commit" ]] || die 'Index retirement image revision differs from the release'
 }
 verify_artifact_retirement_rollback() {
@@ -818,6 +1277,13 @@ NODE
 
 dify_diagnostics_host() {
   dify_diagnostic_identity
+  local dispatcher_hash=unavailable
+  [[ ! -f "$ROOT/vps-deployment.sh" ]] || dispatcher_hash="$(sha256sum "$ROOT/vps-deployment.sh" | awk '{print $1}')"
+  printf 'result: dispatcher %s\n' "$dispatcher_hash"
+  printf 'result: dispatcher_capabilities operation-status operation-stop backup-verify bounded-units staging-bootstrap-reconcile\n'
+  if [[ -f "$STATE/staging-bootstrap.json" ]]; then
+    printf 'result: bootstrap_checkpoint %s\n' "$(jq -c '{oldRequest,oldRelease,oldImage,commit,image,backupId,phase,superseded}' "$STATE/staging-bootstrap.json")"
+  fi
   printf 'result: host %s\n' "$(python3 -c 'import json; m={k:int(v.split()[0]) for k,v in (line.split(":",1) for line in open("/proc/meminfo"))}; print(json.dumps({k:m[k]//1024 for k in ["MemTotal","MemAvailable","SwapTotal","SwapFree"]}))')"
   printf 'result: disk %s\n' "$(df -Pk "$STATE" | awk 'NR==2 {printf "availableKiB=%s usedPercent=%s", $4, $5}')"
   show_operation_status
@@ -850,11 +1316,17 @@ dify_diagnostics_host() {
     if (!run) throw Error('RunNotFound');
     const ops = await db.collections.experiment_operations.aggregate([
       {$match:{runId}}, {$sort:{createdAtMs:1,_id:1}}, {$limit:301},
-      {$project:{_id:1,role:1,taskId:1,state:1,safeFailure:1,workflowRunId:1,verifiedWorkflowId:1,reservationCount:1,deadlineAtMs:1,
+      {$project:{_id:1,role:1,taskId:1,state:1,safeFailure:1,workflowRunId:1,workflowTaskId:1,verifiedWorkflowId:1,reservationCount:1,deadlineAtMs:1,
+        remoteStatus:1,dispatchStartedAtMs:1,updatedAtMs:1,
+        'lifecycle.startedAtMs':1,'lifecycle.lastProgressAtMs':1,'lifecycle.ownerId':1,'lifecycle.phase':1,
+        'lifecycle.attemptOutcome':1,'lifecycle.unresolved':1,'lifecycle.endedAtMs':1,'lifecycle.timeoutAtMs':1,'lifecycle.recoveredAtMs':1,
+        'lifecycle.stop.requestedAtMs':1,'lifecycle.stop.reason':1,'lifecycle.stop.delivery':1,
+        referenceUploadsSaved:{$eq:[{$type:'$referenceUploadsJson'},'string']},referenceUploadJournalSaved:{$eq:[{$type:'$referenceUploadJournalJson'},'string']},
         resultSaved:{$eq:[{$type:'$resultJson'},'string']},materializationSaved:{$eq:[{$type:'$materializationJson'},'string']}}},
     ]).toArray();
     if (ops.length > 300) throw Error('OperationLimit');
-    console.log('result: run ' + JSON.stringify({id:run._id,status:run.status,revision:run.revision,activeOperationId:run.activeOperationId,safeFailure:run.safeFailure,counters:run.counters,operations:ops}));
+    console.log('result: run ' + JSON.stringify({id:run._id,status:run.status,revision:run.revision,activeOperationId:run.activeOperationId,safeFailure:run.safeFailure,counters:run.counters,
+      preparation:run.preparation ? {ownerId:run.preparation.ownerId,startedAtMs:run.preparation.startedAtMs,deadlineAtMs:run.preparation.deadlineAtMs,outcome:run.preparation.outcome,unresolved:run.preparation.unresolved}:null,operations:ops}));
   } finally { await db.client.close(); }
 })().catch(() => {console.error('error: staging run diagnostic failed');process.exitCode=1;});
 NODE
@@ -866,7 +1338,7 @@ for line in sys.stdin:
     except (ValueError, TypeError): continue
     if not isinstance(row, dict): continue
     if row.get("event") != "booklet_callback_phase" or row.get("runId") != sys.argv[1]: continue
-    if row.get("phase") not in ("authorization","claim","context","source_verification","fixture_authorization","image_callback","image_claim","image_decode","image_finalize","image_preflight","image_storage","result_finalization"): continue
+    if row.get("phase") not in ("authorization","claim","context","source_verification","fixture_authorization","image_callback","image_claim","image_decode","image_finalize","image_preflight","image_storage","result_finalization","authorization_transaction","result_transaction"): continue
     value = row.get("elapsedMs")
     if isinstance(value, (int,float)) and math.isfinite(value) and value >= 0: groups[row["phase"]].append(value)
 for phase, values in sorted(groups.items()):
@@ -1207,6 +1679,9 @@ host_run() {
   COMMIT="$(jq -r .commit "$STATE/operation.json")"
   BACKUP_ID="$(jq -r .backupId "$STATE/operation.json")"
   CONFIRMATION="$(jq -r .confirmation "$STATE/operation.json")"
+  if [[ "$ACTION" == restore && "$(jq -r .step "$STATE/operation.json")" == restoring ]]; then
+    die 'Restore may have changed data; reconcile the exact backup and output before any new restore. Do not replay restoration blindly'
+  fi
   if [[ "$ACTION" == reset-staging ]]; then
     case "$(jq -r .step "$STATE/operation.json")" in
       resetting|reset-verifying) die 'Reset may have changed data; inspect the backup and database before explicit restore. Do not replay reset';;
@@ -1261,12 +1736,19 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|backup-verify|staging-bootstrap-reconcile|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|operation-status|operation-stop|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
+  if [[ "$ACTION" == operation-status ]]; then operation_status_host; exit 0; fi
+  if [[ "$ACTION" == operation-stop ]]; then operation_stop_host; exit 0; fi
+  if [[ "$ACTION" == backup-verify ]]; then backup_verify_host; exit 0; fi
+  if [[ "$ACTION" == staging-bootstrap-reconcile ]]; then staging_bootstrap_reconcile_host; exit 0; fi
   if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
   if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
   if [[ "$ACTION" == dify-idle ]]; then dify_idle_host; exit 0; fi
   if [[ "$ACTION" == dify-diagnostics ]]; then dify_diagnostics_host; exit 0; fi
+  if [[ -e "$STATE/staging-bootstrap.json" ]]; then
+    [[ "$ACTION" == deploy && "$ENVIRONMENT" == staging ]] || die 'Retained bootstrap maintenance requires its exact separate staging deployment; inspect status'
+  fi
   if [[ "$ACTION" == dify-repair-scheduler && "$APPLY" == false ]]; then
     dify_scheduler_preflight
     printf 'would update: Dify worker_beat only, 1536 MiB; apply requires idle work and verifies 120 seconds of scheduler stability\n'
@@ -1427,11 +1909,17 @@ host_dispatch() {
     # Retry the exact recorded operation. In particular, never clear maintenance
     # over a partially restored database merely because the old image starts.
     REQUEST_ID="$old_id"
+    local remaining
+    remaining="$(ensure_operation_budget)" || die 'Original operation budget expired; reconcile outputs before a new approved attempt'
     flock -u 9
     if systemctl cat "kids-booklet-operation-$old_id.service" >/dev/null 2>&1; then
+      local unit_bound
+      unit_bound="$(systemctl show --property=RuntimeMaxUSec --value "kids-booklet-operation-$old_id.service")"
+      [[ -n "$unit_bound" && "$unit_bound" != infinity ]] || die 'Legacy operation unit has no runtime bound; inspect and replace the inactive unit before resume'
+      systemctl set-property --runtime "kids-booklet-operation-$old_id.service" "RuntimeMaxSec=${remaining}s"
       systemctl restart "kids-booklet-operation-$old_id.service"
     else
-      systemd-run --unit="kids-booklet-operation-$old_id" --property=Type=exec --property=UMask=0077 "$ROOT/vps-deployment.sh" --action host-run --request-id "$old_id" --apply
+      start_operation_unit
     fi
     wait_operation
     exit 0
@@ -1453,16 +1941,31 @@ host_dispatch() {
   [[ ! -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Request ID already completed'
   jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg environment "$ENVIRONMENT" --arg image "$IMAGE_DIGEST" --arg commit "$COMMIT" --arg backupId "$BACKUP_ID" --arg confirmation "$CONFIRMATION" '{requestId:$requestId,action:$action,environment:$environment,image:$image,commit:$commit,backupId:$backupId,confirmation:$confirmation,step:"queued"}' > "$STATE/operation.json"
   flock -u 9
-  systemd-run --unit="kids-booklet-operation-$REQUEST_ID" --property=Type=exec --property=UMask=0077 "$ROOT/vps-deployment.sh" --action host-run --request-id "$REQUEST_ID" --apply
+  start_operation_unit
   wait_operation
 }
 wait_operation() {
-  local active completed_journal
+  local active completed_journal started=$SECONDS previous='' last_progress=$SECONDS
   while :; do
-    active="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")"
-    case "$active" in active|activating|reloading|deactivating) sleep 5;; *) break;; esac
+    active="$(timeout 5s systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation status unavailable; request may still be running'
+    case "$active" in active|activating|reloading|deactivating) :;; inactive|failed) break;; *) die 'Operation service returned an unsupported state';; esac
+    if [[ -f "$STATE/operation.json" ]]; then
+      local phase
+      phase="$(jq -er --arg id "$REQUEST_ID" 'select(.requestId==$id) | .step' "$STATE/operation.json")" || die 'Operation journal changed; inspect exact request'
+      if [[ "$phase" != "$previous" || "$((SECONDS - last_progress))" -ge 30 ]]; then
+        printf 'result: operation progress request=%s phase=%s elapsedSeconds=%s\n' "$REQUEST_ID" "$phase" "$((SECONDS - started))"
+        previous="$phase"
+        last_progress=$SECONDS
+      fi
+    fi
+    sleep 5
+    if [[ "$((SECONDS - started))" -ge 300 ]]; then
+      printf 'result: operation still running request=%s service=%s; client wait expired, no stop or replay sent\n' "$REQUEST_ID" "$active"
+      return 124
+    fi
   done
   completed_journal="$STATE/operations/$REQUEST_ID.json"
+  [[ "$active" != failed ]] || die 'Operation unit failed; inspect exact request and owned cleanup even if completion output was saved'
   [[ -f "$completed_journal" ]] || die 'Operation failed; journal retained. Use status and resume'
   printf 'updated: %s %s\n' "$ACTION" "$ENVIRONMENT"
   printf 'result: '
@@ -2827,11 +3330,13 @@ main() {
     access-check) access_check;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
+    host-cleanup) CONFIG_FILE="$ROOT/config.json"; load_config; host_cleanup;;
     credential-session) start_credential_session;;
     clear-credential-session) clear_credential_session;;
-    status)
+    status|operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile)
       if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
-        CONFIG_FILE="$ROOT/config.json"; load_config; show_operation_status
+        CONFIG_FILE="$ROOT/config.json"; load_config
+        case "$ACTION" in operation-status) operation_status_host;; operation-stop) operation_stop_host;; backup-verify) backup_verify_host;; staging-bootstrap-reconcile) staging_bootstrap_reconcile_host;; *) show_operation_status;; esac
       else
         if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
         [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'

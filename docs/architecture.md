@@ -4,6 +4,20 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+The issue #65 recovery candidate adds retained mutation ownership to the existing
+deployment-control document. A mutation has an ID, process identity and optional
+run/operation identities. Startup retains dead-process owners for evidence-based
+reconciliation; unidentifiable legacy counts remain explicit drain blockers.
+Counter cleanup cannot release another mutation. The run list uses a paginated
+metadata API; selected-run detail retains artifact and byte-verification paths.
+Active list rows poll every five seconds. Terminal pages stop automatic polling
+and retain manual Refresh. These candidate changes are not yet verified live.
+
+Bounded transactional find/aggregate cursors inherit a collection-level timeout
+default. This avoids the installed MongoDB 7.5 driver's invalid `getMore` timeout
+option while retaining operation cancellation and the transaction deadline.
+Writes retain the transaction timeout; no command-level override is added.
+
 Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser renders a persisted workspace and uses Vercel AI SDK UI for chat transport. Route handlers call deterministic application services, which are the only owners of workflow state, durable IDs, artifact versions, approvals, jobs, assets, and exports. OpenAI Agents SDK agents may route or author validated proposals, but they cannot persist data or advance the workflow directly.
 
 ```mermaid
@@ -358,6 +372,21 @@ The legacy worker's restart recovery and
 active/runnable projections select only `references`, `pages` and `export`.
 Dify recovery must reconcile the retained operation ledger, not reset uncertain
 items to pending. Batch generation does not replace per-page approval.
+The recovery candidate reconciles interrupted legacy follow-ups, jobs and
+execution batches before launching either service's recovered work. Both services
+reuse that one batch-ID set; a second sweep must not revoke newly acquired
+materialization ownership. Selection claims the current card and batch atomically,
+and stale terminal projections cannot replace a newer selection. Finalization
+commits the completed card, saved message projection and owned batch in one
+transaction. Recovery of an older partial commit requires the exact selected
+candidate and retained materialized output. It resumes only deterministic
+bookkeeping, not provider execution. Image completion also saves a pending
+continuation marker. Startup discovers that marker after a crash; finalization
+clears it only after the current artifact and review card are saved. Repeated
+finalization reuses matching outputs and cannot replace a newer job result.
+An older completed text card without exact materialization proof becomes an
+inspectable unresolved result. Recovery retains its selected candidate and
+response identity, blocks automatic replay, and offers only an explicit team change.
 The local blocked-run correction fails running `dify_pages` item/job bookkeeping
 only for a definitely blocked owning run and an exact retained terminal J13
 operation. It preserves provider results, assets and operation state. Unknown,
@@ -410,8 +439,10 @@ legacy initialization and execution.
 
 `lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-module configuration, browser
 run APIs, six exact machine callback routes, a sequential dispatcher and bounded
-application-key transport. A transactional dispatch marker and ten-minute
-deadline precede each single streaming POST. The transport validates
+application-key transport. The bounded-operation candidate starts a persisted
+five-minute deadline before active preparation; queued time is excluded. Normal
+work uses at most 270 seconds and reserves 30 seconds for reconciliation. A
+transactional dispatch marker precedes each single streaming POST. The transport validates
 `workflow_started`, validates publication and awaits durable run-ID persistence, then returns
 accepted/running while retaining the stream reader until completion or deadline.
 Connection/start acknowledgement is bounded to 30 seconds. Callback authorization
@@ -428,6 +459,18 @@ leaves an expiring lease; it does not permit another workflow POST. Expired leas
 remain observable without extending the operation deadline. Each materialization
 transaction attempt emits a sanitized `result_transaction` diagnostic event;
 attempt outcomes are not proof of commit or authorization.
+
+The candidate records the Dify task ID separately from its workflow run ID.
+Authenticated Inspect/reconcile and Stop operation actions use the same bounded
+coordinator as deadline handling. It checks saved output and remote status before
+stopping the exact task. A stop acknowledgement is not proof of termination.
+Stop intent is durable before delivery; uncertain delivery is not automatically
+repeated. Failed attempts retain unresolved identities and prevent replay. Late
+verified output retains attempt history and pauses the recovered run.
+MongoDB transaction retries share the remaining budget; collection operations,
+storage requests and body reads have shorter bounds. Process heartbeat and
+operation progress are separate observations. These changes require staging
+probe verification before the remaining Parent attempt; they are not a live claim.
 Authorization source checks use a separate persisted 60-second
 `authorizationClaim` before the reservation transaction. Observation-slot and wake
 writes skip its live lease. The transaction checks ownership and elapsed expiry
