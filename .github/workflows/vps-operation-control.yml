@@ -73,8 +73,8 @@ jobs:
           set -euo pipefail
           {
             printf '## VPS operation control\n\n'
-            printf 'Target: `%s`; action: `%s`; workflow outcome: %s.\n\n' "$TARGET" "$OPERATION" "$OUTCOME"
-            if [[ "$REQUEST" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]]; then printf 'Exact host request: `%s`.\n\n' "$REQUEST"; fi
+            printf 'Target: \x60%s\x60; action: \x60%s\x60; workflow outcome: %s.\n\n' "$TARGET" "$OPERATION" "$OUTCOME"
+            if [[ "$REQUEST" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]]; then printf 'Exact host request: \x60%s\x60.\n\n' "$REQUEST"; fi
             if [[ -s "$RUNNER_TEMP/operation-control.txt" ]]; then
               printf '```text\n'
               grep -E '^(result: operation |result: backup verified |result: bootstrap (old|candidate) |exists: operation |would update: (stop exact operation|exact staging page bookkeeping) |updated: (exact operation stopped|exact staging bookkeeping repaired))' "$RUNNER_TEMP/operation-control.txt" || true
