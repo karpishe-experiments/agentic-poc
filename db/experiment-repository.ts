@@ -84,7 +84,8 @@ function isJ13Image(operation: Pick<ExperimentOperationDocument, "role" | "taskI
   return operation.role === "image" && operation.taskId === "J13" && operation.subjectKind === "page" && operation.providerKind === "image";
 }
 
-export function createExperimentRepository(database: Database, options: { store?: () => AssetStore } = {}) {
+export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number } = {}) {
+  const elapsedNow = options.elapsedNow ?? (() => performance.now());
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
 
@@ -370,8 +371,8 @@ export function createExperimentRepository(database: Database, options: { store?
   async function claimOperation(raw: unknown): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked";
     operation: ExperimentOperationDocument; imageRequest?: z.infer<typeof experimentImageRequestSchema> }> {
     const input = parse(claimInput, raw);
-    const startedAt = performance.now();
-    const nowMs = () => input.nowMs + Math.floor(performance.now() - startedAt);
+    const startedAt = elapsedNow();
+    const nowMs = () => input.nowMs + Math.floor(elapsedNow() - startedAt);
     const claimId = randomUUID();
     const claimed = await operations.findOneAndUpdate({ _id: input.operationId, runId: input.runId,
       state: "prepared", reservationCount: 0,
@@ -595,8 +596,8 @@ export function createExperimentRepository(database: Database, options: { store?
   async function completeOperation(raw: unknown): Promise<{ operation: ExperimentOperationDocument; reused: boolean }> {
     const input = parse(completeInput, raw);
     const { envelope } = input;
-    const startedAt = performance.now();
-    const nowMs = () => input.nowMs + Math.floor(performance.now() - startedAt);
+    const startedAt = elapsedNow();
+    const nowMs = () => input.nowMs + Math.floor(elapsedNow() - startedAt);
     const claimId = randomUUID();
     // Acquire outside the long transaction so observers see the lease before
     // snapshot/source reads. A process interruption leaves it recoverable after

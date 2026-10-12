@@ -21,7 +21,7 @@ Keep historical run identities and failures; do not repeat completed private set
 
 | Checkpoint | Current result | Remaining work |
 | --- | --- | --- |
-| Recovery candidate | Local implementation is complete pending final review. Five-minute operation budgets, exact stop/inspection, two-stage drain, retained mutation owners, atomic legacy materialization, encrypted setup resume, probe preflight and paginated UI observation are implemented in the working tree. | Finish affected correction checks and two consecutive clean independent reviews. No live success is claimed. |
+| Recovery candidate | Implementation is committed through `a5ee96a`; final validation corrections pass locally. Five-minute budgets, stop/inspection, two-stage drain, retained mutation owners, atomic materialization, setup resume, probe preflight and paginated observation are implemented. | Complete two final independent reviews, publish the corrections and require green Linux CI. No live success is claimed. |
 | Staging transition | Retained request `38149230374-1` and the exact stale Parent item/job remain the known live blocker. The installed application lacks the new drain contract. | Synchronize the reviewed dispatcher, use the explicit backup-protected legacy bootstrap, then deploy the compatible reviewed candidate. Preserve the original journal and checkpoint. |
 | Model-free proof | Earlier 43.8-second same-operation restart recovery and collaboration health remain valid baseline evidence. | Prove stall, stop, restart, output recovery and active-callback drain against the new lifecycle candidate. |
 | Persona acceptance | Kid functional acceptance is retained. Parent attempts 1/3 and 2/3 failed and remain saved. | Run Parent 3/3 only after the probes pass. Stop if it fails; Creator follows Parent success. No paid calls. |
@@ -49,6 +49,21 @@ The two-file local run passed 104 of 109 tests in 581 seconds. All five remainin
 failures passed after this correction; the multi-batch cursor regression and six
 budget unit tests also passed. Typecheck and focused lint passed. These local
 results do not replace the pending required CI or live lifecycle probes.
+
+The final local failure-collection pass reused the two completed application files
+from CI `38274683098` and ran the other 118 selected files serially with no retries.
+It finished in 611 seconds: 850 tests passed and eight failed. The complete
+reference-generation file passed with its selectable-card wait. The eight failures
+were stale ten-minute expectations, a global clock mock that also expired MongoDB
+I/O, a synthetic-epoch operation tested through a wall-clock HTTP handler, and an
+expectation of an unsanitized provider error. Corrections retain five-minute
+deadlines and sanitized diagnostics. Repository elapsed-time injection isolates
+lease tests from the driver clock; the production default is unchanged.
+All 39 focused finalization, image HTTP, diagnostic, repository and lifecycle tests
+then passed. Typecheck and focused lint passed. The other passing files are reused;
+required Linux host suites and live lifecycle probes remain pending.
+Credential inventory impact: none; these corrections change no credential names,
+storage, transfers or consumers.
 
 Local checks for this increment: preparation/dispatch regression passed 26 cases;
 the final interrupted-owner drain regression passed 13 cases serially. Probe

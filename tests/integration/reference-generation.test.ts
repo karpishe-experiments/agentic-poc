@@ -174,6 +174,13 @@ describe("reference generation", () => {
     expect(ready.payload.candidates).toHaveLength(2);
     await agentRuns.start(booklet.id, cardId, { cardId, responseId: "00000000-0000-4000-8000-000000000766", action: "run_agents", value: ready.payload.candidates.map((candidate) => candidate.agentId) });
     const batch = await eventually(async () => (await database.collections.execution_batches.findOne({ cardId, status: "results" })) ?? null);
+    // Batch completion precedes its asynchronous card projection. Wait for the
+    // selectable UI boundary before simulating interrupted materialization.
+    await eventually(async () => {
+      const card = await repositories.conversation.getCard(booklet.id, cardId);
+      return card?.family === "agent_run" && card.payload.state === "results" &&
+        card.allowedActions.includes("select_agent_result") ? card : null;
+    });
     const candidates = await repositories.execution.getItems(batch._id);
     const [savedCandidate, otherCandidate] = candidates.filter((candidate) => candidate.status === "succeeded");
     if (!savedCandidate?.candidateAssetId || !otherCandidate?.candidateAssetId) throw new Error("Expected two saved image candidates.");

@@ -400,3 +400,16 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   and [completion tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
   Deployed latency improvement remains unverified.
 - **Promotion target:** Documentation for transactional external-workflow callbacks.
+
+### Isolate lease clocks from database-driver clocks
+
+- **Context:** Integration tests advance elapsed time to prove authorization and
+  finalization expiry without waiting for a real lease.
+- **Observation:** Mocking global `performance.now()` also advanced MongoDB's I/O
+  timeout clock, producing a driver timeout before the intended lease assertion.
+- **Guidance:** Inject the repository's elapsed-time source. Keep the production
+  monotonic default and the driver's clock independent. Use one clock domain for
+  a fixture's persisted deadline and its HTTP handler.
+- **Evidence:** [finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts)
+  and [repository clock](../../../db/experiment-repository.ts).
+- **Promotion target:** Documentation for deterministic integration-test clocks.
