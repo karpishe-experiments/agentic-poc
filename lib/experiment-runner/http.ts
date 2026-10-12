@@ -17,10 +17,15 @@ import { createRunInputSchema, experimentTaskSchema, resultEnvelopeSchema } from
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/deployment-control";
+import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
+import { readStreamChunk } from "@/lib/operations/read-stream";
+import { withOperationBudget } from "@/lib/operations/budget";
+import { checkProbeReadiness, probeIdentitySchema } from "@/lib/experiment-runner/probe-preflight";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
 const control = z.strictObject({ expectedRevision: z.number().int().nonnegative() });
+const operationControl = z.union([control.extend({ operationId: opaqueIdSchema }), control.extend({ preparationId: opaqueIdSchema })]);
 const pageSelection = control.extend({ batch: experimentPageBatchSchema });
 const failure = identity.extend({ category: z.enum(["definite_failure", "unknown_outcome"]) });
 const result = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/), result: resultEnvelopeSchema.shape.result });
@@ -61,10 +66,11 @@ async function boundedJson(request: Request, maxBytes: number): Promise<unknown>
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) throw new RangeError("Body limit");
   if (!request.body) throw new SyntaxError("Body required");
   const reader = request.body.getReader();
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]);
   const chunks: Uint8Array[] = [];
   let size = 0;
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader, signal);
     if (done) break;
     size += value.byteLength;
     if (size > maxBytes) { await reader.cancel(); throw new RangeError("Body limit"); }
@@ -83,10 +89,11 @@ async function boundedBytes(request: Request, maxBytes: number): Promise<Uint8Ar
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) throw new ExperimentImageValidationError("too_large");
   if (!request.body) throw new ExperimentImageValidationError("empty");
   const reader = request.body.getReader();
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]);
   const chunks: Uint8Array[] = [];
   let size = 0;
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader, signal);
     if (done) break;
     size += value.byteLength;
     if (size > maxBytes) { await reader.cancel(); throw new ExperimentImageValidationError("too_large"); }
@@ -137,12 +144,48 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     return { repository: createExperimentRepository(db, { store: () => callbackStore }),
       context: createExperimentContextService(db, { store: () => callbackStore }) };
   }
-  async function run(operation: () => Promise<Response>) { try { return await operation(); } catch (error) { return safeError(error); } }
+  async function run(operation: () => Promise<Response>) { try { return await withOperationBudget(Date.now() + 30_000, operation); } catch (error) { return safeError(error); } }
   return {
+    probePreflight(request: Request) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      if (!state.enabled) return reply(503, "runner_unavailable");
+      const query = new URL(request.url).searchParams;
+      const identity = probeIdentitySchema.parse({ appId: query.get("appId"), publication: query.get("publication") });
+      return data(await checkProbeReadiness(database(), state.config, identity));
+    }); },
+    summaries(request: Request) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      const query = new URL(request.url).searchParams;
+      const page = z.coerce.number().int().min(0).max(10000).parse(query.get("page") ?? 0);
+      const limit = z.coerce.number().int().min(1).max(50).parse(query.get("limit") ?? 20);
+      const rows = await database().collections.experiment_runs.find({}, { projection: {
+        _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
+        counters: 1, limits: 1, safeFailure: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
+        preparation: 1,
+      } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
+      return data({ runs: rows.slice(0, limit).map(row => ({ runId: row._id, bookletId: row.bookletId,
+        predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
+        revision: row.revision, pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
+        safeFailure: row.safeFailure, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
+        generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
+        preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
+          deadlineAtMs: row.preparation.deadlineAtMs, unresolved: row.preparation.unresolved ?? false } : null,
+      })), page, hasMore: rows.length > limit });
+    }); },
+    operationControl(request: Request, runId: string, action: "inspect" | "stop") { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
+      if (!state.enabled) return reply(503, "runner_unavailable");
+      const body = operationControl.parse(await boundedJson(request, 4096));
+      const dispatcher = createExperimentDispatcher({ database: database(), config: state.config, store });
+      await mutate(async () => { if ("preparationId" in body) await dispatcher.inspectPreparation({ runId: opaqueIdSchema.parse(runId), ...body, stop: action === "stop" });
+        else await dispatcher.inspect({ runId: opaqueIdSchema.parse(runId), ...body, ...(action === "stop" ? { stop: "manual" as const } : {}) }); },
+      { admitted: true, runId, ...("operationId" in body ? { operationId: body.operationId } : {}) });
+      return data(await services().context.getRunView(runId));
+    }); },
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;
       const input = imageQuery(request);
-      await admit();
+      await admit({ admitted: true });
       await measurePhase(input, "fixture_authorization", () => createExperimentImageRepository(database(), { store }).authorizeFixture(input));
       const rgb = Buffer.from(input.inputFingerprint.slice(0, 6), "hex");
       const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: rgb[0], g: rgb[1], b: rgb[2] } } }).png().toBuffer();
@@ -153,7 +196,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const input = imageQuery(request);
       const content = await boundedBytes(request, MAX_EXPERIMENT_IMAGE_BYTES);
       const completed = await measurePhase(input, "image_callback", () => mutate(() => createExperimentImageStorage({
-        database: database(), store: diagnosticAssetStore(store()) }).complete({ identity: input, content })));
+      database: database(), store: diagnosticAssetStore(store()) }).complete({ identity: input, content }), { admitted: true, runId: input.runId, operationId: input.operationId }));
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
     list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
@@ -173,14 +216,14 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
         if (prior.persona !== body.persona || prior.mode !== body.mode || prior.predecessorRunId !== (body.predecessorRunId ?? null)) return reply(409, "conflict");
         return data(await context.getRunView(prior._id), 200);
       }
-      const saved = await mutate(() => repository.createRun({ runId, bookletId, ...body, configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }));
+      const saved = await mutate(() => repository.createRun({ runId, bookletId, ...body, configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId });
       return data(await context.getRunView(saved._id), 201);
     }); },
     control(request: Request, runId: string, action: "pause" | "resume") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       const body = control.parse(await boundedJson(request, 4096));
       const { repository, context } = services();
-      const saved = await mutate(() => repository[action]({ runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() }));
+      const saved = await mutate(() => repository[action]({ runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() }), { runId });
       return data(await context.getRunView(saved._id));
     }); },
     selectPages(request: Request, runId: string) { return run(async () => {
@@ -192,7 +235,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       // The repository verifies every supplied source identity against current
       // saved approvals. Selection records intent; it never starts provider work.
       const selected = await mutate(() => createExperimentPageBatchRepository({ database: database(), store: store() })
-        .select({ ...body, jobId: stableUuid(key.data, `page-batch:${runId}`) }));
+        .select({ ...body, jobId: stableUuid(key.data, `page-batch:${runId}`) }), { runId });
       return data(selected);
     }); },
     tool(request: Request, action: "authorize" | "context" | "result" | "failure") { return run(async () => {
@@ -210,7 +253,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       if (action === "context") return data(await context.getOperationContext(body));
       if (action === "authorize") {
         return measurePhase(body, "authorization", async () => {
-          const claim = await measurePhase(body, "claim", () => mutate(() => repository.claimOperation({ ...body, nowMs: Date.now() })));
+          const claim = await measurePhase(body, "claim", () => mutate(() => repository.claimOperation({ ...body, nowMs: Date.now() }), { admitted: true, runId: body.runId, operationId: body.operationId }));
           const operationContext = claim.started ? await measurePhase(body, "context", () => context.getOperationContext(body, claim.imageRequest)) : null;
           return data({ started: claim.started, reason: claim.reason ?? null, role: claim.operation.role, taskId: claim.operation.taskId, subjectKind: claim.operation.subjectKind, subjectId: claim.operation.subjectId, mode: claim.operation.mode, inputFingerprint: claim.operation.inputFingerprint, context: operationContext });
         });
@@ -218,11 +261,11 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       if (action === "result") {
         const parsed = result.parse(body);
         const envelope = resultEnvelopeSchema.parse({ runId: parsed.runId, operationId: parsed.operationId, workflowRunId: parsed.workflowRunId, inputFingerprint: parsed.inputFingerprint, result: parsed.result });
-        const completed = await measurePhase(body, "result_finalization", () => mutate(() => repository.completeOperation({ envelope, parentWorkflowRunId: parsed.parentWorkflowRunId, nowMs: Date.now() })));
+        const completed = await measurePhase(body, "result_finalization", () => mutate(() => repository.completeOperation({ envelope, parentWorkflowRunId: parsed.parentWorkflowRunId, nowMs: Date.now() }), { admitted: true, runId: body.runId, operationId: body.operationId }));
         return data({ reused: completed.reused, state: completed.operation.state, materialization: resultSummary(completed.operation.materializationJson) });
       }
       const parsed = failure.parse(body);
-      const failed = await mutate(() => repository.failOperation({ ...parsed, nowMs: Date.now() }));
+      const failed = await mutate(() => repository.failOperation({ ...parsed, nowMs: Date.now() }), { admitted: true, runId: parsed.runId, operationId: parsed.operationId });
       return data({ state: failed.state });
     }); },
   };

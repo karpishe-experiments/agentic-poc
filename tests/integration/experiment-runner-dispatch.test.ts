@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Database } from "@/db/client";
+import { withMongoTransaction } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
+import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -18,6 +20,115 @@ async function setup() {
 }
 
 describe("experiment dispatch persistence", () => {
+  it("does not clear another controller's preparation while paused", async () => {
+    const { database, repository } = await setup();
+    await database.collections.experiment_operations.deleteMany({ runId });
+    await database.collections.experiment_runs.updateOne({ _id: runId }, { $set: { activeOperationId: null,
+      status: "paused", pauseRequested: true, preparation: { ownerId: id(760), startedAtMs: 1, deadlineAtMs: 300001 } } });
+    const dispatcher = createExperimentDispatcher({ database, config: { enabled: true, baseUrl: "https://dify.test",
+      publicOrigin: "https://booklet.test", callbackKey: "fixture", bindings: [] }, now: () => 10 });
+    expect(await dispatcher.advance(runId)).toBe("waiting");
+    expect((await repository.getRun(runId))?.preparation).toMatchObject({ ownerId: id(760), deadlineAtMs: 300001 });
+  });
+
+  it("fails expired undispatched preparation without creating remote uncertainty", async () => {
+    const { database, repository } = await setup();
+    const dispatcher = createExperimentDispatcher({ database, config: { enabled: true, baseUrl: "https://dify.test",
+      publicOrigin: "https://booklet.test", callbackKey: "fixture", bindings: [] }, now: () => 300003 });
+    expect(await dispatcher.advance(runId)).toBe("blocked");
+    expect(await repository.getOperation(operationId)).toMatchObject({ state: "failed", lifecycle: { unresolved: false } });
+    expect((await repository.getRun(runId))?.activeOperationId).toBeNull();
+  });
+
+  it("fences preparation stop by exact identity and run revision before submission", async () => {
+    const { database, repository } = await setup();
+    await database.collections.experiment_operations.deleteMany({ runId });
+    await database.collections.experiment_runs.updateOne({ _id: runId }, { $set: { activeOperationId: null,
+      preparation: { ownerId: id(760), startedAtMs: 1, deadlineAtMs: 300001 } } });
+    const dispatcher = createExperimentDispatcher({ database, config: { enabled: true, baseUrl: "https://dify.test",
+      publicOrigin: "https://booklet.test", callbackKey: "fixture", bindings: [] }, now: () => 10 });
+    const revision = (await repository.getRun(runId))!.revision;
+    await expect(dispatcher.inspectPreparation({ runId, preparationId: id(761), expectedRevision: revision, stop: true })).rejects.toMatchObject({ code: "conflict" });
+    await dispatcher.inspectPreparation({ runId, preparationId: id(760), expectedRevision: revision, stop: true });
+    expect(await repository.getRun(runId)).toMatchObject({ pauseRequested: true, status: "blocked",
+      preparation: { stopRequestedAtMs: 10, outcome: "failed", unresolved: true } });
+    expect(await database.collections.experiment_operations.countDocuments({ runId })).toBe(0);
+  });
+  it("starts the original budget at preparation and does not renew it at dispatch", async () => {
+    const { repository, dispatch } = await setup();
+    expect(await repository.getOperation(operationId)).toMatchObject({ deadlineAtMs: 300_002,
+      lifecycle: { startedAtMs: 2, phase: "preparing" } });
+    const sent = await repository.beginDispatch({ ...dispatch, nowMs: 120_000 });
+    expect(sent.operation).toMatchObject({ dispatchStartedAtMs: 120_000, deadlineAtMs: 300_002,
+      lifecycle: { startedAtMs: 2, phase: "dispatching" } });
+  });
+
+  it("saves the task ID after a callback claimed the run identity and rejects replacement", async () => {
+    const { repository, dispatch, claim } = await setup();
+    await repository.beginDispatch(dispatch);
+    await repository.claimOperation(claim);
+    const saved = await repository.recordDispatchIdentity({ ...claim, workflowTaskId: id(750) });
+    expect(saved).toMatchObject({ workflowRunId, workflowTaskId: id(750), reservationCount: 1 });
+    expect(await repository.recordDispatchIdentity({ ...claim, workflowTaskId: id(750) })).toMatchObject({ workflowTaskId: id(750) });
+    await expect(repository.recordDispatchIdentity({ ...claim, workflowTaskId: id(751) })).rejects.toMatchObject({ code: "conflict" });
+    expect((await repository.getOperation(operationId))?.workflowTaskId).toBe(id(750));
+    expect((await repository.getRun(runId))?.counters.steps).toBe(1);
+  });
+
+  it("closes only its exact unclaimed preparation without reserving or dispatching", async () => {
+    const { repository, dispatch } = await setup();
+    expect(await repository.failPreparation(runId, operationId, 10)).toMatchObject({
+      status: "blocked", activeOperationId: null, safeFailure: "definite_failure",
+    });
+    expect(await repository.getOperation(operationId)).toMatchObject({ state: "failed", reservationCount: 0,
+      lifecycle: { phase: "finished", attemptOutcome: "failed", unresolved: false } });
+    expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+    await expect(repository.beginDispatch(dispatch)).rejects.toMatchObject({ code: "invalid_state" });
+  });
+
+  it("refuses preparation cleanup after dispatch or ownership change", async () => {
+    const { database, repository, dispatch } = await setup();
+    await database.collections.experiment_runs.updateOne({ _id: runId }, { $set: { activeOperationId: id(752) } });
+    await expect(repository.failPreparation(runId, operationId, 10)).rejects.toMatchObject({ code: "conflict" });
+    await database.collections.experiment_runs.updateOne({ _id: runId }, { $set: { activeOperationId: operationId } });
+    await repository.beginDispatch(dispatch);
+    await expect(repository.failPreparation(runId, operationId, 11)).rejects.toMatchObject({ code: "conflict" });
+    expect((await repository.getOperation(operationId))?.state).toBe("prepared");
+  });
+
+  it.each(["started", "unknown", "malformed"])("retains %s reference upload preparation as uncertain without replay", async (state) => {
+    const { database, repository, dispatch } = await setup();
+    const journal = state === "malformed" ? "not-json" : JSON.stringify([{ assetId: id(753),
+      artifactVersionId: id(754), sha256: "b".repeat(64), state, uploadFileId: null }]);
+    await database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: { referenceUploadJournalJson: journal } });
+    expect(await repository.failPreparation(runId, operationId, 10)).toMatchObject({
+      status: "blocked", activeOperationId: operationId, safeFailure: "unknown_outcome",
+    });
+    expect(await repository.getOperation(operationId)).toMatchObject({ state: "unknown", reservationCount: 0,
+      referenceUploadJournalJson: journal, lifecycle: { unresolved: true, attemptOutcome: "failed" } });
+    await expect(repository.beginDispatch(dispatch)).rejects.toMatchObject({ code: "invalid_state" });
+    expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+  });
+
+  it.each(["draining", "maintenance"] as const)("does not admit a workflow while deployment is %s", async (field) => {
+    const { database, repository, dispatch } = await setup();
+    const environment = process.env.DEPLOYMENT_ENV ?? "local";
+    await database.collections.deployment_control.insertOne({ _id: `environment:${environment}`, schemaVersion: "1",
+      environment, maintenance: field === "maintenance", draining: field === "draining", activeMutations: 0,
+      reason: "fixture", updatedAtMs: 1 });
+    expect((await repository.beginDispatch(dispatch)).dispatched).toBe(false);
+    expect((await repository.getOperation(operationId))?.dispatchStartedAtMs).toBeUndefined();
+    expect((await repository.getRun(runId))?.counters.steps).toBe(0);
+  });
+
+  it("allows transactional insertMany without conflicting inherited timeout settings", async () => {
+    const { database } = await setup();
+    await withMongoTransaction(database, async (session) => {
+      await database.database.collection<{ _id: string }>("operation_bulk_fixture").insertMany([{ _id: "a" }, { _id: "b" }], { session });
+    });
+    expect(await database.database.collection("operation_bulk_fixture").countDocuments()).toBe(2);
+  });
+
   it("does not write observation timestamps during an active image completion lease", async () => {
     const { database, repository, dispatch, claim } = await setup();
     await repository.beginDispatch(dispatch);
@@ -29,7 +140,7 @@ describe("experiment dispatch persistence", () => {
     await repository.requestObservation(operationId);
     expect((await repository.getOperation(operationId))?.nextObservationAtMs).toBe(7);
     expect(await repository.beginObservation(operationId, 100)).not.toBeNull();
-    expect((await repository.getOperation(operationId))?.deadlineAtMs).toBe(600_003);
+    expect((await repository.getOperation(operationId))?.deadlineAtMs).toBe(300_002);
   });
   it("does not authorize a new claim at or after the original operation deadline", async () => {
     const { repository, dispatch, claim } = await setup();
@@ -45,14 +156,14 @@ describe("experiment dispatch persistence", () => {
   it("retains the original dispatch deadline and five-second observation slot across restart", async () => {
     const { repository, dispatch, claim } = await setup();
     const sent = await repository.beginDispatch(dispatch);
-    expect(sent.operation.deadlineAtMs).toBe(dispatch.nowMs + 600_000);
+    expect(sent.operation.deadlineAtMs).toBe(300_002);
     await repository.recordDispatchIdentity(claim);
     expect(await repository.beginObservation(operationId, 10)).not.toBeNull();
     expect(await repository.beginObservation(operationId, 11)).toBeNull();
     expect(await repository.beginObservation(operationId, 5009)).toBeNull();
     expect(await repository.beginObservation(operationId, 5010)).not.toBeNull();
     const started = await repository.claimOperation({ ...claim, nowMs: 6000 });
-    expect(started.operation.deadlineAtMs).toBe(dispatch.nowMs + 600_000);
+    expect(started.operation.deadlineAtMs).toBe(300_002);
     expect((await repository.getRun(runId))?.counters.steps).toBe(1);
   });
 

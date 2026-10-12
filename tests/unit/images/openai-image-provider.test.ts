@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import type { ImageRequest } from "@/lib/contracts/images";
 import { OpenAIImageProvider } from "@/lib/images/openai-image-provider";
+import { withOperationBudget } from "@/lib/operations/budget";
 
 const request: ImageRequest = {
   schemaVersion: "1",
@@ -132,5 +133,24 @@ describe("OpenAI image provider", () => {
 
     expect(generate.mock.calls[0]?.[0]).not.toHaveProperty("quality");
     expect(generate.mock.calls[0]?.[0]).not.toHaveProperty("input_fidelity");
+  });
+
+  it("passes the active operation abort signal to the provider request", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const generate = vi.fn(async (_input: unknown, options?: { signal?: AbortSignal }) => {
+      receivedSignal = options?.signal;
+      return await new Promise<never>((_resolve, reject) => {
+        receivedSignal?.addEventListener("abort", () => reject(receivedSignal?.reason), { once: true });
+      });
+    });
+    const client = { images: { generate } } as unknown as OpenAI;
+    const controller = new AbortController();
+    const pending = withOperationBudget(Date.now() + 1_000, () => new OpenAIImageProvider(client).execute(request), { signal: controller.signal });
+
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    controller.abort(new Error("operator cancelled"));
+
+    await expect(pending).rejects.toThrow("operator cancelled");
+    expect(receivedSignal?.aborted).toBe(true);
   });
 });

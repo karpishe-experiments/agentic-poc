@@ -737,7 +737,8 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(await env.repository.getOperation(manager._id)).toMatchObject({
       verifiedWorkflowId: env.config.bindings.find((binding) => binding.role === "manager")!.publishedWorkflowId,
     });
-    expect(env.runtime.retrieve).toHaveBeenCalledWith(expect.objectContaining({ role: "manager" }), manager.workflowRunId);
+    expect(env.runtime.retrieve).toHaveBeenCalledWith(expect.objectContaining({ role: "manager" }), manager.workflowRunId,
+      expect.objectContaining({ signal: expect.any(AbortSignal), deadlineAtMs: expect.any(Number) }));
     expect(env.runtime.start).toHaveBeenCalledTimes(posts + 1);
     const image = (await env.repository.listOperations(env.runId)).at(-1)!;
     expect(image).toMatchObject({ role: "image", taskId: "J13", parentWorkflowRunId: manager.workflowRunId });
@@ -772,7 +773,7 @@ describe("automatic saved J08 sample dispatch", () => {
     const run = (await env.repository.getRun(env.runId))!;
     expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
     const operation = (await env.repository.getOperation(run.activeOperationId!))!;
-    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "prepared", workflowRunId: null });
+    expect(operation).toMatchObject({ role: "image", taskId: "J13", state: "unknown", workflowRunId: null });
     expect(JSON.parse(operation.referenceUploadJournalJson!)[0].state).toBe("unknown");
     expect(await env.dispatcher().advance(env.runId)).toBe("blocked");
     expect(env.uploadReference).toHaveBeenCalledTimes(uploads);

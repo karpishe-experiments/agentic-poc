@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { select, parseDiff, deploymentTests, documentTest } from './selection.mjs';
+import { select, parseDiff, deploymentTests, documentTest, adaptAvailableSuites, acceptanceExclusions } from './selection.mjs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -24,14 +24,25 @@ if (command === 'select') {
   }
   const changes = base ? parseDiff(execFileSync('git', ['diff', '--name-status', '-z', '--find-renames', base, head, '--'], { encoding: 'utf8' })) : [];
   const selection = { mode, head, base, ...select(changes, mode === 'full') };
+  adaptAvailableSuites(selection, existsSync);
+  // Older release lines do not contain the optional specialty mockup suite.
+  // Existing mockup sources still require their configuration and must fail if it is missing.
+  if (selection.flags.mockup && !existsSync('vitest.mockup.config.ts') &&
+      !['tests/mockups', 'lib/mockups/specialty-management', 'components/mockups/specialty-management', 'app/mockups/specialty-management'].some(p => existsSync(p))) {
+    selection.flags.mockup = false;
+    selection.reasons.push({ path: 'vitest.mockup.config.ts', category: 'mockup suite absent on this branch' });
+  }
   writeFileSync(file, JSON.stringify(selection, null, 2));
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(selection.flags).map(([k,v]) => `${k}=${v}\n`).join(''));
   console.log(JSON.stringify(selection, null, 2));
 } else if (command === 'summary') {
   const selection = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
   const text = `## Validation\n\nOutcome: ${process.env.CI_OUTCOME}\n\n${selection ? `Mode: ${selection.mode}\n\nBase: ${selection.base ?? 'all checks'}\nHead: ${selection.head}\n\n${Object.entries(selection.flags).map(([k,v]) => `- ${k}: ${v ? 'selected' : 'skipped'}`).join('\n')}` : 'Selection failed before checks could run.'}\n\nProduction/container builds are performed during deployment. Browser checks perform discovery only.\n`;
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text);
-  else console.log(text);
+  const exclusions = selection ? acceptanceExclusions(selection) : [];
+  const policy = selection?.mode === 'pr' ? '\nPR policy: unit tests and selected contracts only; integration and persona campaigns require local focused verification or manual validation. No MongoDB startup.\n' : '';
+  const summary = text + policy + (exclusions.length ? `\nUnchanged acceptance journeys excluded from this scope (available in full mode):\n${exclusions.map(p => `- ${p}`).join('\n')}\n` : '');
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  else console.log(summary);
 } else if (command === 'contracts' || command === 'tests') {
   const s = JSON.parse(readFileSync(file, 'utf8'));
   for (const p of [...s.tests, ...s.mockupTests, ...s.browserTests]) if (!existsSync(p)) throw new Error(`Expected test missing: ${p}`);
@@ -39,7 +50,13 @@ if (command === 'select') {
   if (command === 'contracts') { if (pure.length) vitest(['--config', 'vitest.ci-contracts.config.ts', ...pure]); }
   else {
     const appTests = s.tests.filter(p => !pure.includes(p));
-    if (s.flags.app || appTests.length) vitest(appTests);
+    if (s.mode !== 'full') {
+      const unit = appTests.filter(p => p.startsWith('tests/unit/'));
+      if (s.flags.app || unit.length) vitest(['--config', 'vitest.unit.config.ts', ...(s.flags.app ? [] : unit), ...pure.flatMap(p => ['--exclude', p])]);
+      // Focused integration checks are deliberate, never an automatic PR campaign.
+      const integration = appTests.filter(p => p.startsWith('tests/integration/'));
+      if (s.mode === 'affected' && integration.length) vitest(integration);
+    } else if (s.flags.app || appTests.length) vitest([...(s.flags.app ? [] : appTests), ...acceptanceExclusions(s).flatMap(p => ['--exclude', p])]);
     if (s.flags.mockup || s.mockupTests.length) vitest(['--config', 'vitest.mockup.config.ts', ...s.mockupTests]);
     for (const config of ['playwright.config.ts', 'playwright.mockup.config.ts']) {
       const paths = s.browserTests.filter(p => p.startsWith('tests/mockups/') === config.includes('mockup'));

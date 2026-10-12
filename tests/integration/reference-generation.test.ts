@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/client";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import type { AssetStore, StoredAsset } from "@/lib/assets/asset-store";
@@ -6,6 +6,7 @@ import { ArtifactService } from "@/lib/application/artifact-service";
 import { BookletService } from "@/lib/application/booklet-service";
 import { GenerationService } from "@/lib/application/generation-service";
 import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
+import { CandidateExecutionService } from "@/lib/application/candidate-execution-service";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
 import { genUICardSchema } from "@/lib/contracts/cards";
 
@@ -75,6 +76,7 @@ describe("reference generation", () => {
     expect(executionItem).toMatchObject({ status: "succeeded" });
     expect(await assets.exists(selectedAsset!.uri)).toBe(true);
     expect(bible.currentVersion?.versionNumber).toBe(2);
+    await eventually(async () => await database.collections.execution_batches.countDocuments({ materializationContinuationPending: true }) === 0 ? true : null);
   });
 
   it("restarts a completed image run through a replacement job and promotes only the new selection", async () => {
@@ -131,12 +133,95 @@ describe("reference generation", () => {
     });
     expect(replacementBible.current.currentVersion?.versionNumber).toBeGreaterThan(firstBible.current.currentVersion?.versionNumber ?? 0);
     expect(await database.collections.generation_jobs.countDocuments({ bookletId: booklet.id, jobType: "references", status: "succeeded" })).toBe(2);
+
+    // A crash before the old batch acknowledgement must not let its saved
+    // continuation replace the newer restart result on a later recovery.
+    const firstBatch = await database.collections.execution_batches.findOne({ cardId: completedCard._id });
+    if (!firstBatch?.selectedItemId) throw new Error("Expected the first selected image candidate.");
+    await database.collections.execution_batches.updateOne({ _id: firstBatch._id }, { $set: { materializationContinuationPending: true } });
+    const execute = vi.spyOn(CandidateExecutionService.prototype, "executeImage");
+    execute.mockClear();
+    const staleRecovery = await repositories.execution.recoverInterrupted(Date.now());
+    expect(staleRecovery).toContain(firstBatch._id);
+    await imageRuns.recoverInterrupted(staleRecovery);
+    const afterStaleRecovery = await artifacts.get(booklet.id, "visual_bible");
+    expect((afterStaleRecovery.currentVersion?.content as { characters?: Array<{ currentReferenceAssetId: string | null }> } | undefined)?.characters?.[0]?.currentReferenceAssetId).toBe(replacementBible.assetId);
+    expect((await database.collections.execution_batches.findOne({ _id: firstBatch._id }))?.materializationContinuationPending).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
   });
+
+  it("retains the exact saved image selection after interrupted explicit materialization and rejects a mismatched replacement", async () => {
+    const database = await createTestDatabase(); databases.push(database);
+    const booklet = await new BookletService({ database }).create({ idea: "A rabbit finds a painted pebble." });
+    const repositories = (await import("@/db/repositories")).createRepositories(database);
+    const assets = new MemoryAssetStore();
+    const sourceAgent = await database.collections.agent_versions.findOne({ _id: "00000000-0000-4000-8000-00000000b201" });
+    if (!sourceAgent) throw new Error("Expected seeded reference image agent.");
+    const alternateAgentId = "00000000-0000-4000-8000-000000000761";
+    await database.collections.agent_definitions.insertOne({ _id: alternateAgentId, createdAtMs: Date.now(), createdBy: "test" });
+    await database.collections.agent_versions.insertOne({ ...sourceAgent, _id: "00000000-0000-4000-8000-000000000762", agentId: alternateAgentId, displayName: "Alternate Reference Image Agent", createdAtMs: Date.now(), updatedAtMs: Date.now(), createdBy: "test", updatedBy: "test" });
+    const jobId = "00000000-0000-4000-8000-000000000763";
+    const itemId = "00000000-0000-4000-8000-000000000764";
+    const request = { schemaVersion: "1" as const, operation: "generate" as const, model: "fake-image", prompt: "A friendly rabbit with a painted pebble.", promptPlan: { purpose: "reference", subject: "rabbit", action: "holds a pebble", location: "garden", visualStyle: "watercolor", continuityConstraints: [], preserve: [] }, geometry: "square_1_1" as const, quality: "low" as const, references: [], editTargetAssetId: null };
+    await repositories.jobs.createOrGet({ id: jobId, bookletId: booklet.id, jobType: "references", idempotencyKey: `interrupted-selection:${booklet.id}`, input: {}, items: [{ id: itemId, itemKey: "character:rabbit", position: 0, input: { item: { entityId: "00000000-0000-4000-8000-000000000765", kind: "character", name: "Rabbit", visualDetails: ["blue scarf"], continuityConstraints: ["keep the scarf blue"], referenceRequired: true }, request } }], createdAtMs: Date.now() });
+    const claimed = await repositories.jobs.claimNextPending(jobId, Date.now());
+    if (!claimed) throw new Error("Expected claimed reference item.");
+    let continuationCount = 0;
+    const agentRuns = new ImageAgentRunService({ database, repositories, assets, runtimeMode: "fake", onMaterialized: async () => { continuationCount += 1; } });
+    const cardId = await agentRuns.createReady({ bookletId: booklet.id, jobId, itemId: claimed.id, itemKey: claimed.itemKey, position: claimed.position, target: "reference", subjectLabel: "Rabbit", request });
+    const ready = await repositories.conversation.getCard(booklet.id, cardId);
+    if (!ready || ready.family !== "agent_run") throw new Error("Expected two-candidate image Agent Run card.");
+    expect(ready.payload.candidates).toHaveLength(2);
+    await agentRuns.start(booklet.id, cardId, { cardId, responseId: "00000000-0000-4000-8000-000000000766", action: "run_agents", value: ready.payload.candidates.map((candidate) => candidate.agentId) });
+    const batch = await eventually(async () => (await database.collections.execution_batches.findOne({ cardId, status: "results" })) ?? null);
+    // Batch completion precedes its asynchronous card projection. Wait for the
+    // selectable UI boundary before simulating interrupted materialization.
+    await eventually(async () => {
+      const card = await repositories.conversation.getCard(booklet.id, cardId);
+      return card?.family === "agent_run" && card.payload.state === "results" &&
+        card.allowedActions.includes("select_agent_result") ? card : null;
+    });
+    const candidates = await repositories.execution.getItems(batch._id);
+    const [savedCandidate, otherCandidate] = candidates.filter((candidate) => candidate.status === "succeeded");
+    if (!savedCandidate?.candidateAssetId || !otherCandidate?.candidateAssetId) throw new Error("Expected two saved image candidates.");
+    await database.collections.generation_items.updateOne({ _id: itemId, jobId }, { $set: { status: "running" } });
+    await repositories.jobs.completeItem({ jobId, itemId, primaryAssetId: savedCandidate.candidateAssetId, assets: [], result: { sourceAssetId: savedCandidate.candidateAssetId, request, provider: "fake", model: "fake-image", usage: null, executionBatchId: batch._id }, finishedAtMs: Date.now() });
+    const execute = vi.spyOn(CandidateExecutionService.prototype, "executeImage");
+    execute.mockClear();
+    await expect(agentRuns.select(booklet.id, cardId, { cardId, responseId: "00000000-0000-4000-8000-000000000767", action: "select_agent_result", value: otherCandidate.id })).rejects.toThrow("Saved generation output does not match the selected image candidate.");
+    expect((await repositories.jobs.getItems(jobId))[0]).toMatchObject({ status: "succeeded", assetId: savedCandidate.candidateAssetId, result: { sourceAssetId: savedCandidate.candidateAssetId, executionBatchId: batch._id } });
+    expect(await repositories.execution.getBatch(batch._id)).toMatchObject({ status: "results", selectedItemId: null, selectionMode: null });
+    const resultsCard = await repositories.conversation.getCard(booklet.id, cardId);
+    if (!resultsCard || resultsCard.family !== "agent_run") throw new Error("Expected results card after mismatch rejection.");
+    const selectedResponseId = "00000000-0000-4000-8000-000000000768";
+    await agentRuns.select(booklet.id, cardId, { cardId, responseId: selectedResponseId, action: "select_agent_result", value: savedCandidate.id });
+    await eventually(async () => (await repositories.execution.getBatch(batch._id))?.status === "completed" ? true : null);
+    const completedCard = await repositories.conversation.getCard(booklet.id, cardId);
+    if (!completedCard || completedCard.family !== "agent_run") throw new Error("Expected completed image Agent Run card.");
+    await database.collections.cards.updateOne({ _id: cardId, bookletId: booklet.id }, { $set: { status: "active", cardJson: JSON.stringify({ ...completedCard, status: "active", allowedActions: [], payload: { ...completedCard.payload, state: "running", selectedItemId: null, selectionMode: null } }), updatedAtMs: Date.now() } });
+    await database.collections.execution_batches.updateOne({ _id: batch._id }, { $set: { status: "materializing", materializationStatus: "running", materializationContinuationPending: false, selectedItemId: savedCandidate.id, selectionMode: "explicit", selectionResponseId: selectedResponseId, completedAtMs: null, updatedAtMs: Date.now() } });
+    const firstRecovery = await repositories.execution.recoverInterrupted(Date.now());
+    expect(firstRecovery).toContain(batch._id);
+    await agentRuns.recoverInterrupted(firstRecovery);
+    expect(await repositories.execution.getBatch(batch._id)).toMatchObject({ status: "completed", materializationStatus: "completed", selectedItemId: savedCandidate.id, selectionMode: "explicit", selectionResponseId: selectedResponseId, materializationContinuationPending: true });
+    expect(await repositories.conversation.getCard(booklet.id, cardId)).toMatchObject({ family: "agent_run", allowedActions: ["restart_with_agents"], payload: { state: "completed", selectedItemId: savedCandidate.id, selectionMode: "explicit" } });
+    expect((await repositories.jobs.getItems(jobId))[0]).toMatchObject({ status: "succeeded", assetId: savedCandidate.candidateAssetId, result: { sourceAssetId: savedCandidate.candidateAssetId, executionBatchId: batch._id } });
+    expect(continuationCount).toBe(1);
+    const secondRecovery = await repositories.execution.recoverInterrupted(Date.now());
+    expect(secondRecovery).toContain(batch._id);
+    await agentRuns.recoverInterrupted(secondRecovery);
+    expect(await repositories.execution.getBatch(batch._id)).toMatchObject({ status: "completed", selectedItemId: savedCandidate.id, materializationContinuationPending: true });
+    expect((await repositories.jobs.getItems(jobId))[0]?.assetId).toBe(savedCandidate.candidateAssetId);
+    expect(continuationCount).toBe(2);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("composes only the selected page candidate into the generation item", async () => {
     const database = await createTestDatabase(); databases.push(database);
     const booklet = await new BookletService({ database }).create({ idea: "A child discovers a garden book." });
     const repositories = (await import("@/db/repositories")).createRepositories(database);
     const assets = new MemoryAssetStore();
+    const generation = new GenerationService({ database, repositories, assets });
     const jobId = "00000000-0000-4000-8000-000000000751";
     const itemId = "00000000-0000-4000-8000-000000000752";
     const page = { schemaVersion: "1", pageId: "00000000-0000-4000-8000-000000000753", pageIndex: 0, kind: "cover", sceneAction: "A child opens a bright book.", characterIds: [], locationIds: [], incidentalVisualDetails: [], compositionIntent: "Keep the title clear.", continuityNotes: [], readerText: "A bright adventure begins.", lettering: [{ kind: "title", text: "A bright adventure begins.", speakerEntityId: null, delivery: "clear", placementHint: "top" }], relevantReferenceIds: [], textSafeRegion: { x: 0.1, y: 0.72, width: 0.8, height: 0.2 } };
@@ -144,7 +229,11 @@ describe("reference generation", () => {
     await repositories.jobs.createOrGet({ id: jobId, bookletId: booklet.id, jobType: "pages", idempotencyKey: `page-agent-run:${booklet.id}`, input: {}, items: [{ id: itemId, itemKey: "page:cover", position: 0, input: { page, geometry: "square_1_1", request } }], createdAtMs: Date.now() });
     const claimed = await repositories.jobs.claimNextPending(jobId, Date.now());
     let resumedJobId: string | null = null;
-    const agentRuns = new ImageAgentRunService({ database, repositories, assets, runtimeMode: "fake", onMaterialized: async (ready) => { resumedJobId = ready.jobId; } });
+    const agentRuns = new ImageAgentRunService({ database, repositories, assets, runtimeMode: "fake", onMaterialized: async (ready) => {
+      resumedJobId = ready.jobId;
+      if (ready.target === "reference") await generation.runReferenceJob(booklet.id, ready.jobId);
+      else await generation.runPageJob(booklet.id, ready.jobId);
+    } });
     await agentRuns.createReady({ bookletId: booklet.id, jobId, itemId: claimed!.id, itemKey: claimed!.itemKey, position: claimed!.position, target: "page", subjectLabel: "the cover", request, page });
     const completed = await eventually(async () => { const items = await repositories.jobs.getItems(jobId); return items[0]?.status === "succeeded" ? items[0] : null; });
     expect(completed.assetId).toBeTruthy();
@@ -153,10 +242,58 @@ describe("reference generation", () => {
     const composed = await repositories.assets.get(completed.assetId!);
     expect(composed).toMatchObject({ kind: "page_composed", sourceAssetId: result.sourceAssetId });
     expect(await assets.exists(composed!.uri)).toBe(true);
-    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" ? true : null);
+    // Job-item success precedes batch completion and its callback. Let the original
+    // materialization finish before simulating interruption, or it can overwrite
+    // the injected state and leave nothing for recovery to claim.
+    await eventually(async () => {
+      const batch = await repositories.execution.getBatch(result.executionBatchId);
+      return batch?.status === "completed" && resumedJobId === jobId ? true : null;
+    });
+    resumedJobId = null;
+    const interruptedItem = await database.collections.generation_items.findOne({ _id: itemId, jobId });
+    if (!interruptedItem?.executionCardId) throw new Error("Expected the saved image Agent Run card.");
+    const interruptedCard = await repositories.conversation.getCard(booklet.id, interruptedItem.executionCardId);
+    if (!interruptedCard || interruptedCard.family !== "agent_run") throw new Error("Expected the saved image Agent Run card.");
+    await database.collections.execution_batches.updateOne({ _id: result.executionBatchId }, { $set: { status: "materializing", materializationStatus: "running", completedAtMs: null, updatedAtMs: Date.now() } });
+    const historicalRecovery = await repositories.execution.recoverInterrupted(Date.now());
+    expect(historicalRecovery).toContain(result.executionBatchId);
+    expect(await repositories.execution.getBatch(result.executionBatchId)).toMatchObject({ status: "completed", materializationStatus: "completed" });
+    expect((await database.collections.execution_batches.findOne({ _id: result.executionBatchId }))?.materializationContinuationPending).toBe(true);
+    // A fresh recovery process must rediscover the durable continuation. It
+    // cannot rely on the first process's in-memory recovery list.
+    const freshHistoricalRecovery = await repositories.execution.recoverInterrupted(Date.now());
+    expect(freshHistoricalRecovery).toContain(result.executionBatchId);
+    expect(await agentRuns.recoverInterrupted(freshHistoricalRecovery)).toContain(result.executionBatchId);
+    await eventually(async () => resumedJobId === jobId ? true : null);
+    // This reduced fixture has no Page Plan to finalize. The callback cannot
+    // clear durable continuation state merely because it ran.
+    expect((await database.collections.execution_batches.findOne({ _id: result.executionBatchId }))?.materializationContinuationPending).toBe(true);
+    resumedJobId = null;
+    await database.collections.cards.updateOne({ _id: interruptedItem.executionCardId, bookletId: booklet.id }, { $set: { cardJson: JSON.stringify({ ...interruptedCard, status: "active", allowedActions: [], payload: { ...interruptedCard.payload, state: "running", batchId: result.executionBatchId, selectedItemId: null, selectionMode: null } }), status: "active", updatedAtMs: Date.now() } });
     await database.collections.execution_batches.updateOne({ _id: result.executionBatchId }, { $set: { status: "materializing", materializationStatus: "running", selectedItemId: (await repositories.execution.getItems(result.executionBatchId))[0]!.id } });
     expect(await agentRuns.recoverInterrupted()).toContain(result.executionBatchId);
-    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" ? true : null);
+    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" && resumedJobId === jobId ? true : null);
     expect((await repositories.jobs.getItems(jobId))[0]?.assetId).toBe(completed.assetId);
-    expect(resumedJobId).toBe(jobId);
+
+    // Startup reconciles legacy jobs before image recovery. A saved terminal
+    // candidate must reopen only its exact current item for materialization;
+    // it must not start another image request.
+    const savedItem = await database.collections.generation_items.findOne({ _id: itemId, jobId });
+    if (!savedItem?.executionCardId) throw new Error("Expected the saved image Agent Run card.");
+    const savedCard = await repositories.conversation.getCard(booklet.id, savedItem.executionCardId);
+    if (!savedCard || savedCard.family !== "agent_run") throw new Error("Expected the saved image Agent Run card.");
+    const runningCard = { ...savedCard, status: "active" as const, allowedActions: [], payload: { ...savedCard.payload, state: "running" as const, batchId: result.executionBatchId, selectedItemId: null, selectionMode: null } };
+    await database.collections.cards.updateOne({ _id: savedItem.executionCardId, bookletId: booklet.id }, { $set: { cardJson: JSON.stringify(runningCard), status: "active", updatedAtMs: Date.now() } });
+    await database.collections.execution_batches.updateOne({ _id: result.executionBatchId }, { $set: { status: "materializing", materializationStatus: "running", selectedItemId: (await repositories.execution.getItems(result.executionBatchId))[0]!.id, completedAtMs: null, updatedAtMs: Date.now() } });
+    await database.collections.generation_items.updateOne({ _id: itemId, jobId }, { $set: { status: "running", executionBatchId: result.executionBatchId, finishedAtMs: null } });
+    await database.collections.generation_jobs.updateOne({ _id: jobId }, { $set: { status: "running", finishedAtMs: null, updatedAtMs: Date.now() } });
+    const execute = vi.spyOn(CandidateExecutionService.prototype, "executeImage");
+    execute.mockClear();
+    const recoveredBatchIds = await repositories.execution.recoverInterrupted(Date.now());
+    expect(recoveredBatchIds).toContain(result.executionBatchId);
+    expect(await repositories.jobs.recoverInterrupted()).toBe(0);
+    expect(await database.collections.generation_items.findOne({ _id: itemId, jobId })).toMatchObject({ status: "waiting_for_selection", executionBatchId: result.executionBatchId });
+    expect(await agentRuns.recoverInterrupted(recoveredBatchIds)).toContain(result.executionBatchId);
+    await eventually(async () => (await repositories.execution.getBatch(result.executionBatchId))?.status === "completed" && (await repositories.jobs.getItems(jobId))[0]?.status === "succeeded" ? true : null);
+    expect(execute).not.toHaveBeenCalled();
   });});

@@ -1,0 +1,87 @@
+name: VPS operation control
+on:
+  workflow_dispatch:
+    inputs:
+      environment: {description: Exact operation target, type: choice, options: [staging, prod, dify], required: true}
+      action: {description: 'Inspect, stop, verify backup or reconcile exact staging bootstrap', type: choice, options: [operation-status, operation-stop, backup-verify, staging-bootstrap-reconcile], required: true}
+      request_id: {description: Exact retained or completed host request ID, required: true}
+      commit: {description: Backup selected commit or bootstrap NEW reviewed staging commit, required: false}
+      image_digest: {description: Backup selected image or bootstrap NEW reviewed staging image, required: false}
+      backup_id: {description: Exact backup ID for verification; optional new ID for bootstrap backup, required: false}
+      confirmation: {description: Bootstrap apply requires kids_booklet, required: false}
+      apply: {description: Apply exact stop or staging bootstrap; otherwise preview/read-only, type: boolean, default: false}
+permissions: {contents: read}
+# Control must remain available while the main host operation workflow is active.
+# The host dispatcher serializes journal writes after stopping the exact unit.
+concurrency: {group: 'vps-operation-control-${{ inputs.request_id }}', cancel-in-progress: false}
+defaults: {run: {shell: bash}}
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify reviewed control and exact target
+        env:
+          TARGET: ${{ inputs.environment }}
+          OPERATION: ${{ inputs.action }}
+          REQUEST: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == master ]]
+          [[ "$TARGET" =~ ^(staging|prod|dify)$ ]]
+          [[ "$OPERATION" =~ ^(operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile)$ ]]
+          [[ "$REQUEST" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]]
+          remote_sha="$(git ls-remote --heads origin refs/heads/master | awk '{print $1}')"
+          [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'Reviewed master moved; rerun control.\n' >&2; exit 1; }
+      - uses: ./.github/actions/vps-access
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+      - name: Control exact host request
+        env:
+          TARGET: ${{ inputs.environment }}
+          OPERATION: ${{ inputs.action }}
+          REQUEST: ${{ inputs.request_id }}
+          COMMIT: ${{ inputs.commit }}
+          IMAGE: ${{ inputs.image_digest }}
+          BACKUP: ${{ inputs.backup_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          APPLY: ${{ inputs.apply }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          remote_sha="$(git ls-remote --heads origin refs/heads/master | awk '{print $1}')"
+          [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'Reviewed master moved; rerun control.\n' >&2; exit 1; }
+          args=(--action "$OPERATION" --environment "$TARGET" --request-id "$REQUEST" --vps-host "$VPS_HOST")
+          [[ -z "$COMMIT" ]] || args+=(--commit "$COMMIT")
+          [[ -z "$IMAGE" ]] || args+=(--image-digest "$IMAGE")
+          [[ -z "$BACKUP" ]] || args+=(--backup-id "$BACKUP")
+          [[ -z "$CONFIRMATION" ]] || args+=(--confirmation "$CONFIRMATION")
+          if [[ "$OPERATION" =~ ^(operation-stop|staging-bootstrap-reconcile)$ && "$APPLY" == true ]]; then args+=(--apply); fi
+          bash scripts/deploy/vps-deployment.sh "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/operation-control.txt"
+      - name: Publish control summary
+        if: always()
+        env:
+          TARGET: ${{ inputs.environment }}
+          OPERATION: ${{ inputs.action }}
+          REQUEST: ${{ inputs.request_id }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          {
+            printf '## VPS operation control\n\n'
+            printf 'Target: \x60%s\x60; action: \x60%s\x60; workflow outcome: %s.\n\n' "$TARGET" "$OPERATION" "$OUTCOME"
+            if [[ "$REQUEST" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]]; then printf 'Exact host request: \x60%s\x60.\n\n' "$REQUEST"; fi
+            if [[ -s "$RUNNER_TEMP/operation-control.txt" ]]; then
+              printf '```text\n'
+              grep -E '^(result: operation |result: backup verified |result: bootstrap (old|candidate) |exists: operation |would update: (stop exact operation|exact staging page bookkeeping) |updated: (exact operation stopped|exact staging bookkeeping repaired))' "$RUNNER_TEMP/operation-control.txt" || true
+              printf '```\n'
+            fi
+            printf '\nStopping a process does not prove that its output failed. Inspect and reconcile the retained phase before resume.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

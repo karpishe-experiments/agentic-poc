@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { registerOwnedController } from "@/lib/operations/controllers";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import type { BookletBinding, BookletRunnerConfig } from "@/lib/experiment-runner/config";
@@ -10,6 +11,7 @@ const savedImageResult = z.strictObject({ runId: opaqueIdSchema, operationId: op
   sha256: z.string().regex(/^[a-f0-9]{64}$/) });
 const execution = z.object({
   id: opaqueIdSchema, workflow_id: opaqueIdSchema,
+  task_id: opaqueIdSchema.optional(),
   status: z.enum(["running", "succeeded", "failed", "stopped"]),
   outputs: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strip();
@@ -32,10 +34,17 @@ export type WorkflowStartOptions = {
   // The caller can pass the original operation deadline. It bounds the
   // detached reader; the first acknowledgement is always limited to 30s.
   deadlineAtMs?: number;
+  signal?: AbortSignal;
 };
+export type WorkflowRequestOptions = Pick<WorkflowStartOptions, "deadlineAtMs" | "signal">;
+export type WorkflowStopResult = { kind: "acknowledged" | "unknown" | "rejected" };
+export type WorkflowStopInput = { runId: string; taskId: string };
 export type WorkflowRuntime = {
   start(binding: BookletBinding, input: RuntimeInput, options?: WorkflowStartOptions): Promise<RuntimeResult>;
-  retrieve(binding: BookletBinding, workflowRunId: string): Promise<RuntimeResult>;
+  retrieve(binding: BookletBinding, workflowRunId: string, options?: WorkflowRequestOptions): Promise<RuntimeResult>;
+  // Optional while existing fixtures and unsupported providers do not expose
+  // Dify task cancellation. Callers must treat its absence as unsupported.
+  stop?: (binding: BookletBinding, input: WorkflowStopInput, options?: WorkflowRequestOptions) => Promise<WorkflowStopResult>;
 };
 
 const runtimeInputSchema = z.object({
@@ -65,17 +74,26 @@ function runtimeBody(input: z.infer<typeof runtimeInputSchema>): string {
 }
 
 // Do not return provider bodies, URLs or credentials to logs or browser clients.
-async function readResponse(response: Response): Promise<unknown> {
+async function readResponse(response: Response, signal: AbortSignal): Promise<unknown> {
   if (!response.body) throw new Error("Missing runtime response");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > 2_500_000) { await reader.cancel(); throw new Error("Runtime response limit"); }
-    chunks.push(value);
+  try {
+    for (;;) {
+      const { done, value } = await readUntilAbort(reader, signal);
+      if (done) {
+        if (signal.aborted) throw new Error("Runtime response aborted");
+        break;
+      }
+      size += value.byteLength;
+      if (size > 2_500_000) { await reader.cancel(); throw new Error("Runtime response limit"); }
+      chunks.push(value);
+    }
+  } finally {
+    if (signal.aborted) {
+      try { await reader.cancel(); } catch { /* The response was already closed. */ }
+    }
   }
   const bytes = new Uint8Array(size);
   let offset = 0;
@@ -84,7 +102,8 @@ async function readResponse(response: Response): Promise<unknown> {
 }
 
 const START_ACKNOWLEDGEMENT_MS = 30_000;
-const DEFAULT_STREAM_DEADLINE_MS = 10 * 60_000;
+const DEFAULT_STREAM_DEADLINE_MS = 5 * 60_000;
+const DEFAULT_REQUEST_DEADLINE_MS = 30_000;
 const MAX_SSE_EVENT_CHARS = 1_000_000;
 
 type ServerSentEvent = { event: string | null; data: string };
@@ -160,20 +179,29 @@ function eventName(event: ServerSentEvent, payload: unknown): string | null {
 
 type StreamIdentity = { kind: "execution"; execution: RuntimeExecution } | { kind: "conflict" } | { kind: "unknown" };
 
+function taskIdFrom(payload: { task_id?: string; data?: { task_id?: string } }): string | null | "conflict" {
+  const outer = payload.task_id;
+  const inner = payload.data?.task_id;
+  if (outer && inner && outer !== inner) return "conflict";
+  return outer ?? inner ?? null;
+}
+
 function startedIdentity(payload: unknown, publishedWorkflowId: string): StreamIdentity {
   const parsed = z.object({
     workflow_run_id: opaqueIdSchema.optional(),
     workflow_id: opaqueIdSchema.optional(),
-    data: z.object({ id: opaqueIdSchema.optional(), workflow_id: opaqueIdSchema.optional() }).passthrough().optional(),
+    task_id: opaqueIdSchema.optional(),
+    data: z.object({ id: opaqueIdSchema.optional(), workflow_id: opaqueIdSchema.optional(), task_id: opaqueIdSchema.optional() }).passthrough().optional(),
   }).passthrough().safeParse(payload);
   if (!parsed.success) return { kind: "unknown" };
   const id = parsed.data.workflow_run_id ?? parsed.data.data?.id;
   const workflowId = parsed.data.data?.workflow_id ?? parsed.data.workflow_id;
-  if (!id || !workflowId) return { kind: "unknown" };
+  const taskId = taskIdFrom(parsed.data);
+  if (!id || !workflowId || taskId === "conflict") return taskId === "conflict" ? { kind: "conflict" } : { kind: "unknown" };
   if (workflowId !== publishedWorkflowId ||
       parsed.data.workflow_run_id && parsed.data.data?.id && parsed.data.workflow_run_id !== parsed.data.data.id ||
       parsed.data.workflow_id && parsed.data.data?.workflow_id && parsed.data.workflow_id !== parsed.data.data.workflow_id) return { kind: "conflict" };
-  return { kind: "execution", execution: { id, workflow_id: workflowId, status: "running" } };
+  return { kind: "execution", execution: { id, workflow_id: workflowId, status: "running", ...(taskId ? { task_id: taskId } : {}) } };
 }
 
 function terminalIdentity(payload: unknown, publishedWorkflowId: string, started: RuntimeExecution | null): StreamIdentity {
@@ -182,7 +210,32 @@ function terminalIdentity(payload: unknown, publishedWorkflowId: string, started
   const parsed = execution.safeParse(candidate);
   if (!parsed.success || parsed.data.status === "running") return { kind: "unknown" };
   if (parsed.data.workflow_id !== publishedWorkflowId || !started || parsed.data.id !== started.id) return { kind: "conflict" };
-  return { kind: "execution", execution: parsed.data };
+  if (started.task_id && parsed.data.task_id && started.task_id !== parsed.data.task_id) return { kind: "conflict" };
+  return { kind: "execution", execution: {
+    ...parsed.data,
+    ...(parsed.data.task_id === undefined && started.task_id ? { task_id: started.task_id } : {}),
+  } };
+}
+
+type AbortScope = { signal: AbortSignal; timeoutMs: number; abort: () => void; dispose: () => void };
+
+function requestAbortScope(options: WorkflowRequestOptions, defaultTimeoutMs: number): AbortScope {
+  const requestedRemaining = options.deadlineAtMs === undefined ? defaultTimeoutMs : options.deadlineAtMs - Date.now();
+  const timeoutMs = Number.isFinite(requestedRemaining) ? Math.max(0, requestedRemaining) : defaultTimeoutMs;
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort();
+  if (options.signal?.aborted) abortFromCaller();
+  else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    timeoutMs,
+    abort: () => controller.abort(),
+    dispose: () => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abortFromCaller);
+    },
+  };
 }
 
 async function notify(options: WorkflowStartOptions, result: RuntimeResult): Promise<void> {
@@ -242,7 +295,8 @@ async function readWorkflowStream(
       const candidate = startedIdentity(payload, binding.publishedWorkflowId);
       if (candidate.kind !== "execution") return stopWith(candidate);
       if (startedSeen) {
-        if (!started || candidate.execution.id !== started.id || candidate.execution.workflow_id !== started.workflow_id) return stopWith({ kind: "conflict" });
+        if (!started || candidate.execution.id !== started.id || candidate.execution.workflow_id !== started.workflow_id ||
+          started.task_id && candidate.execution.task_id && started.task_id !== candidate.execution.task_id) return stopWith({ kind: "conflict" });
         return false;
       }
       startedSeen = true;
@@ -297,30 +351,36 @@ async function readWorkflowStream(
 }
 
 export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: typeof fetch = fetch): WorkflowRuntime {
-  async function retrieveRequest(binding: BookletBinding, path: string): Promise<RuntimeResult> {
+  async function retrieveRequest(binding: BookletBinding, path: string, options: WorkflowRequestOptions): Promise<RuntimeResult> {
+    const scope = requestAbortScope(options, DEFAULT_REQUEST_DEADLINE_MS);
+    if (scope.timeoutMs === 0 || scope.signal.aborted) {
+      scope.dispose();
+      return { kind: "unknown" };
+    }
     try {
       const response = await fetcher(`${config.baseUrl}/v1${path}`, {
         method: "GET", redirect: "error", cache: "no-store",
         headers: { Authorization: `Bearer ${binding.apiKey}` },
-        signal: AbortSignal.timeout(30_000),
+        signal: scope.signal,
       });
       if (!response.ok) {
         return { kind: "unknown" };
       }
-      const raw = await readResponse(response);
+      const raw = await readResponse(response, scope.signal);
       const parsed = execution.safeParse(raw);
       return parsed.success ? { kind: "execution", execution: parsed.data } : { kind: "unknown" };
-    } catch { return { kind: "unknown" }; }
+    } catch { return { kind: "unknown" }; } finally { scope.dispose(); }
   }
 
   async function startRequest(binding: BookletBinding, input: z.infer<typeof runtimeInputSchema>, options: WorkflowStartOptions): Promise<RuntimeResult> {
-    const remainingDeadline = options.deadlineAtMs === undefined ? undefined : options.deadlineAtMs - Date.now();
-    const streamDeadline = Number.isFinite(remainingDeadline) && remainingDeadline !== undefined
-      ? Math.max(0, remainingDeadline)
-      : DEFAULT_STREAM_DEADLINE_MS;
-    if (streamDeadline === 0) return { kind: "unknown" };
-
-    const controller = new AbortController();
+    const streamController = new AbortController();
+    const release = registerOwnedController(input.runId, streamController);
+    const scope = requestAbortScope({ ...options, signal: options.signal ? AbortSignal.any([options.signal, streamController.signal]) : streamController.signal }, DEFAULT_STREAM_DEADLINE_MS);
+    const dispose = () => { scope.dispose(); release(); };
+    if (scope.timeoutMs === 0 || scope.signal.aborted) {
+      dispose();
+      return { kind: "unknown" };
+    }
     let readerStarted = false;
     let resolveAcknowledgement: (result: RuntimeResult) => void = () => undefined;
     let acknowledged = false;
@@ -331,15 +391,16 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       resolveAcknowledgement(result);
     };
     const acknowledgementTimer = setTimeout(() => {
-      controller.abort();
+      scope.abort();
       acknowledge({ kind: "unknown" });
-    }, Math.min(START_ACKNOWLEDGEMENT_MS, streamDeadline));
-    const deadlineTimer = setTimeout(() => controller.abort(), streamDeadline);
+    }, Math.min(START_ACKNOWLEDGEMENT_MS, scope.timeoutMs));
+    const abortAcknowledgement = () => acknowledge({ kind: "unknown" });
+    scope.signal.addEventListener("abort", abortAcknowledgement, { once: true });
     try {
       const response = await fetcher(`${config.baseUrl}/v1/workflows/run`, {
         method: "POST", redirect: "error", cache: "no-store",
         headers: { Authorization: `Bearer ${binding.apiKey}`, "Content-Type": "application/json" },
-        body: runtimeBody(input), signal: controller.signal,
+        body: runtimeBody(input), signal: scope.signal,
       });
       if (!response.ok) {
         const result: RuntimeResult = [400, 401, 403, 404, 422].includes(response.status) ? { kind: "rejected" } : { kind: "unknown" };
@@ -349,8 +410,8 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       // Keep consuming to the supplied operation deadline. Do not abort a
       // successfully acknowledged provider execution just because its ID is known.
       readerStarted = true;
-      void readWorkflowStream(response, binding, options, controller.signal, acknowledge)
-        .finally(() => clearTimeout(deadlineTimer));
+      void readWorkflowStream(response, binding, options, scope.signal, acknowledge)
+        .finally(dispose);
       const result = await acknowledgement;
       clearTimeout(acknowledgementTimer);
       return result;
@@ -359,7 +420,8 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       return { kind: "unknown" };
     } finally {
       if (acknowledged) clearTimeout(acknowledgementTimer);
-      if (!readerStarted) clearTimeout(deadlineTimer);
+      if (!readerStarted) dispose();
+      scope.signal.removeEventListener("abort", abortAcknowledgement);
     }
   }
 
@@ -370,11 +432,31 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       // inspect persisted state before deciding whether an unknown POST ran.
       return checked.success ? startRequest(binding, checked.data, options) : Promise.resolve({ kind: "rejected" });
     },
-    async retrieve(binding, workflowRunId) {
+    async retrieve(binding, workflowRunId, options = {}) {
       const checked = opaqueIdSchema.parse(workflowRunId);
       // The dispatcher owns recovery. A transport read is one observation, not
       // an implicit retry loop that obscures the operation's evidence.
-      return retrieveRequest(binding, `/workflows/run/${checked}`);
+      return retrieveRequest(binding, `/workflows/run/${checked}`, options);
+    },
+    async stop(binding, input, options = {}) {
+      const taskId = opaqueIdSchema.safeParse(input.taskId);
+      const runId = opaqueIdSchema.safeParse(input.runId);
+      if (!taskId.success || !runId.success) return { kind: "rejected" };
+      const scope = requestAbortScope(options, DEFAULT_REQUEST_DEADLINE_MS);
+      if (scope.timeoutMs === 0 || scope.signal.aborted) {
+        scope.dispose();
+        return { kind: "unknown" };
+      }
+      try {
+        const response = await fetcher(`${config.baseUrl}/v1/workflows/tasks/${taskId.data}/stop`, {
+          method: "POST", redirect: "error", cache: "no-store",
+          headers: { Authorization: `Bearer ${binding.apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ user: `booklet-${runId.data}` }), signal: scope.signal,
+        });
+        void response.body?.cancel().catch(() => undefined);
+        if (response.ok) return { kind: "acknowledged" };
+        return [400, 401, 403, 404, 422].includes(response.status) ? { kind: "rejected" } : { kind: "unknown" };
+      } catch { return { kind: "unknown" }; } finally { scope.dispose(); }
     },
   };
 }

@@ -19,9 +19,9 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function setup(claimImmediately = true) {
+async function setup(claimImmediately = true, elapsedNow?: () => number) {
   database = await createTestDatabase({ seedAgents: false });
-  const repository = createExperimentRepository(database);
+  const repository = createExperimentRepository(database, { elapsedNow });
   await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs: 1 });
   await repository.prepareOperation({ runId, operationId, expectedRevision: 0, role: "manager", taskId: null,
     subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: 2 });
@@ -49,7 +49,7 @@ it("does not repeat authorization when observation overlaps the claim transactio
   expect(result.started).toBe(true);
   expect(reads).toHaveBeenCalledTimes(1);
   reads.mockRestore();
-  expect(result.operation).toMatchObject({ workflowRunId, reservationCount: 1, deadlineAtMs: 600_003, authorizationClaim: null });
+  expect(result.operation).toMatchObject({ workflowRunId, reservationCount: 1, deadlineAtMs: 300_002, authorizationClaim: null });
   expect((await repository.getRun(runId))?.counters.steps).toBe(1);
 });
 
@@ -66,7 +66,7 @@ it("recovers an expired authorization lease without another reservation or deadl
     nextObservationAtMs: 4, authorizationClaim: { id: id(909), expiresAtMs: 100 } });
   expect(await restarted.beginObservation(operationId, 100)).not.toBeNull();
   expect((await restarted.claimOperation({ ...claim, nowMs: 101 })).operation).toMatchObject({
-    workflowRunId, reservationCount: 1, deadlineAtMs: 600_003, authorizationClaim: null,
+    workflowRunId, reservationCount: 1, deadlineAtMs: 300_002, authorizationClaim: null,
   });
   expect((await repository.getRun(runId))?.counters.steps).toBe(1);
 });
@@ -81,18 +81,18 @@ it("releases authorization coordination on Pause without admitting a request", a
 });
 
 it("does not reserve after authorization coordination expires during source work", async () => {
-  const { repository, claim } = await setup(false);
-  vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(60_000);
+  const elapsedNow = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(60_000);
+  const { repository, claim } = await setup(false, elapsedNow);
   await expect(repository.claimOperation(claim)).rejects.toMatchObject({ code: "conflict" });
   expect(await repository.getOperation(operationId)).toMatchObject({ state: "prepared",
-    authorizationClaim: null, reservationCount: 0, deadlineAtMs: 600_003 });
+    authorizationClaim: null, reservationCount: 0, deadlineAtMs: 300_002 });
   expect((await repository.getRun(runId))?.counters.steps).toBe(0);
 });
 
 it("rechecks the original operation deadline before saving an authorization reservation", async () => {
-  const { repository, claim } = await setup(false);
+  const elapsedNow = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(8);
+  const { repository, claim } = await setup(false, elapsedNow);
   await database!.collections.experiment_operations.updateOne({ _id: operationId }, { $set: { deadlineAtMs: 10 } });
-  vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(8);
   expect(await repository.claimOperation(claim)).toMatchObject({ started: false, reason: "blocked" });
   expect(await repository.getOperation(operationId)).toMatchObject({ state: "prepared",
     authorizationClaim: null, reservationCount: 0, deadlineAtMs: 10 });
@@ -112,7 +112,7 @@ it("does not restart text finalization when polling overlaps its transaction", a
   const result = await repository.completeOperation(completion);
   expect(result.operation.state).toBe("succeeded");
   expect(materializeNarrativeResult).toHaveBeenCalledTimes(1);
-  expect(result.operation).toMatchObject({ workflowRunId, reservationCount: 1, deadlineAtMs: 600_003 });
+  expect(result.operation).toMatchObject({ workflowRunId, reservationCount: 1, deadlineAtMs: 300_002 });
   expect((await repository.getRun(runId))?.counters.steps).toBe(1);
   expect(result.operation.resultFinalizationClaim).toBeNull();
   expect((await repository.completeOperation(completion)).reused).toBe(true);
@@ -132,7 +132,7 @@ it("suppresses both observer writes during a retained lease and recovers after e
   expect((await restarted.getOperation(operationId))?.resultFinalizationClaim?.id).toBe(id(909));
   expect(await restarted.beginObservation(operationId, 100)).not.toBeNull();
   expect((await restarted.completeOperation({ ...completion, nowMs: 101 })).operation).toMatchObject({
-    state: "succeeded", workflowRunId, reservationCount: 1, deadlineAtMs: 600_003, resultFinalizationClaim: null,
+    state: "succeeded", workflowRunId, reservationCount: 1, deadlineAtMs: 300_002, resultFinalizationClaim: null,
   });
   expect((await repository.getRun(runId))?.counters.steps).toBe(1);
 });
@@ -155,8 +155,8 @@ it("rejects concurrent saves before materialization and releases the lease on va
 });
 
 it("does not commit a finalization whose lease expired during source work", async () => {
-  const { repository, completion } = await setup();
-  const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+  const clock = vi.fn().mockReturnValue(0);
+  const { repository, completion } = await setup(true, clock);
   const original = await vi.importActual<typeof import("@/db/experiment-narrative")>("@/db/experiment-narrative");
   vi.mocked(materializeNarrativeResult).mockImplementationOnce(async (...args) => {
     const result = await original.materializeNarrativeResult(...args);
@@ -165,7 +165,7 @@ it("does not commit a finalization whose lease expired during source work", asyn
   });
   await expect(repository.completeOperation(completion)).rejects.toMatchObject({ code: "conflict" });
   expect(await repository.getOperation(operationId)).toMatchObject({ state: "started", resultJson: null,
-    resultFinalizationClaim: null, workflowRunId, reservationCount: 1, deadlineAtMs: 600_003 });
+    resultFinalizationClaim: null, workflowRunId, reservationCount: 1, deadlineAtMs: 300_002 });
   expect((await repository.getRun(runId))?.activeDelegationId).toBeNull();
   expect(await database!.collections.experiment_delegations.countDocuments()).toBe(0);
 });

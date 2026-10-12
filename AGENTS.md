@@ -21,6 +21,13 @@ Project-local skills are copied under `.agents/skills` and pinned in `skills-loc
 - `compile-feature-spec` for turning rough experimental ideas into bounded specifications.
 - `asd-ste100` for unambiguous agent-authored technical prose without changing facts,
   uncertainty, conditions, or scope.
+- `difyctl` for the official Dify CLI's command discovery and inspected command
+  descriptors. Use it for Dify CLI operations, not Booklet runtime development.
+- `dify-operations` for Dify Cloud or Community configuration, testing,
+  publication, traces and recovery. Read the host-specific runbook and
+  capability matrix first; prefer local-stdio MCP, then the
+  official CLI where supported, then verified Codex browser automation. These
+  skills do not grant spending, deletion, deployment or broader access authority.
 
 Codex also provides maintained system skills that must not be copied into this repository:
 
@@ -52,12 +59,54 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 6. After Review passes, use `sync-docs-issues`; compose it with `capture-project-learnings` when verified work reveals durable knowledge.
 7. The core workflow may publish a reviewed branch and pull request. Merging, deployment, issue closure, and GitHub Project mutations remain outside that authority.
 
+### Repeated blocking reviews
+
+If more than three consecutive reviews each find a new defect or blocking issue,
+stop individual corrections and review the whole package. Identify why earlier
+reviews missed the blockers or why the corrections did not resolve them. Inspect
+shared assumptions, related paths and failure boundaries before correcting the
+package. Record the cause, correction and focused verification.
+
+After this package review, use the next two reviews to check whether the pattern
+continues. If both reviews again find a new defect or blocking issue, stop fixing
+and publishing. Report the findings, attempted corrections, remaining risks and
+a recommended next step to the user, then wait for instructions. A clean review
+breaks the consecutive-blocker sequence; required clean publication reviews still
+apply. This rule takes precedence over generic skill correction-cycle defaults.
+
 For issue-backed work, select one issue branch and keep all implementation,
 review corrections, deployment fixes, and follow-up changes for that issue on
 that branch. Do not create or switch to another working branch while the issue
 remains active unless the user explicitly requests the branch change. If the
 issue branch was already merged, update that same branch from `master` and open
 a follow-up pull request from it when more issue work is required.
+
+Every local branch must track its same-named counterpart on `origin`. The base
+branch is not the upstream tracking branch: a branch created from `origin/master`
+must not retain `origin/master` as its upstream. Create branches with `--no-track`,
+then use `git push --set-upstream origin <branch-name>` when publishing. If the
+counterpart already exists, set the upstream to `origin/<branch-name>`. Verify
+the branch and upstream after creation or correction. Until first publication,
+leave the upstream unset rather than tracking a differently named branch.
+
+## Computer and browser control authorization
+
+For developer Dify onboarding, follow `docs/dify-getting-started.md` and the linked
+capability runbook. Keep CLI and MCP authentication separate. Credential entry is
+a private user handoff; verify each interface with read-only workspace checks.
+Do not infer authenticated MCP access from CLI login or tool discovery.
+
+Before using any computer-use or Chrome/browser-control plugin, obtain explicit
+user authorization at least once per usage topic per chat session. This includes read-only inspection,
+tab discovery, screenshots, and interactive control. An explicit request to use
+the tool counts as authorization; a general task request does not.
+
+Authorization applies only to the approved topic and scope in that chat session.
+Obtain new authorization before using these plugins for a different topic. Do not
+carry authorization into another chat session. Do not ask again for the same topic and scope unless
+the user revokes authorization or an action-specific policy requires confirmation.
+Session authorization does not replace required confirmations or user handoffs
+for sensitive actions.
 
 ## Delegation and multi-agent work
 
@@ -140,9 +189,26 @@ For the Kids Booklet POC, `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md` rema
 - For generative UI, make agent state visible, actions understandable, errors recoverable, and fallback behavior deterministic where practical.
 - Store legal and legal-research documentation in `docs/legal/`.
 
+### Credential documentation
+
+- Maintain the canonical inventory in
+  [docs/deployment/contracts.md](docs/deployment/contracts.md#variables-and-secrets).
+  In each implementation change that adds, renames, removes, rotates or changes
+  credential storage or use, update its names/aliases, owner, environment/profile,
+  protected storage and transfer copies, consumers, purpose and required,
+  conditional, legacy/inert or deferred status.
+- Follow its [maintenance procedure](docs/deployment/contracts.md#maintaining-the-inventory)
+  before review/publication. Keep runtime schemas, Dify bindings, preparation
+  helpers, workflow inputs and operating guidance aligned. Report the inventory
+  impact in task/PR evidence, including a reason when no inventory update is needed.
+- Document metadata only. Never commit secret values or private credential files.
+  Distinguish implemented storage from verified live provision/use. These rules
+  do not authorize credential access, rotation, deployment, spending or deletion.
+
 ## Verification
 
 - Run the relevant build, type checks, lint checks, and focused tests when they exist.
+- Before pushing code, run relevant unit tests locally (`npm run test:unit`, with named files when suitable). Reuse unchanged passes. Run focused integration tests only when changed behavior needs that proof. Routine PR CI must remain lean: static checks, units and applicable contracts; do not add full integration or persona campaigns to ordinary PR checks. Manual full validation and live acceptance remain separate gates.
 - Add only the tests needed to demonstrate the experiment's success criteria.
 - Report what passed, what failed, and what was not run.
 

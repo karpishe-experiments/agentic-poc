@@ -11,7 +11,7 @@ import { styleSampleRequests, referenceSheetRequest } from "@/lib/experiment-run
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { configurationSnapshot, selectBinding, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createWorkflowRuntime, runtimeCompletion, runtimeImageCompletion, type RuntimeResult, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
-import { runTrackedMutation } from "@/lib/application/deployment-control";
+import { bindTrackedMutationOperation, runTrackedMutation } from "@/lib/application/deployment-control";
 import { configuredNarrativeTasks, currentApprovedSourceIds, isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
 import type { SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { configuredReferenceSheetTasks } from "@/lib/experiment-runner/reference-targets";
@@ -27,6 +27,9 @@ import { verifyReferenceReadback } from "@/lib/experiment-runner/reference-readb
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { createOperationCoordinator } from "@/lib/experiment-runner/lifecycle";
+import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, remainingOperationMs, withOperationBudget } from "@/lib/operations/budget";
+import { cancelOwnedControllers, withOwnedController } from "@/lib/operations/controllers";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -43,9 +46,19 @@ export function createExperimentDispatcher(deps: {
   const store = deps.store ?? createAssetStore;
   const repository = createExperimentRepository(deps.database, { store });
   const context = createExperimentContextService(deps.database, { store });
-  const runtime = deps.runtime ?? createWorkflowRuntime(deps.config);
+  const rawRuntime = deps.runtime ?? createWorkflowRuntime(deps.config);
   const mutate = deps.mutate ?? runTrackedMutation;
   const now = deps.now ?? Date.now;
+  const runtime: WorkflowRuntime = {
+    ...rawRuntime,
+    start: (binding, input, options) => rawRuntime.start(binding, input, { ...options, signal: operationSignal() ?? options?.signal }),
+    retrieve: (binding, workflowRunId, options) => rawRuntime.retrieve(binding, workflowRunId, {
+      ...options, signal: operationSignal() ?? options?.signal,
+      deadlineAtMs: Math.min(options?.deadlineAtMs ?? Infinity, now() + remainingOperationMs()),
+    }),
+  };
+  const ownerId = randomUUID();
+  const activeAdvances = new Set<string>();
   const uploadReference = deps.uploadReference ?? createReferenceTransport(deps.config).upload;
   const batches = () => createExperimentPageBatchRepository({ database: deps.database, store: store(), now });
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
@@ -196,7 +209,7 @@ export function createExperimentDispatcher(deps: {
       return;
     }
     if (result.kind === "accepted") {
-      await repository.recordDispatchIdentity({ ...identity, workflowRunId: result.execution.id });
+      await repository.recordDispatchIdentity({ ...identity, workflowRunId: result.execution.id, ...(result.execution.task_id ? { workflowTaskId: result.execution.task_id } : {}) });
       // Start identity is not terminal result evidence. Leave the existing
       // publication/materialization gate closed until runtime GET reconciliation.
       return;
@@ -207,7 +220,10 @@ export function createExperimentDispatcher(deps: {
         await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
         return;
       }
-      await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id });
+      await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id, ...(execution.task_id ? { workflowTaskId: execution.task_id } : {}) });
+      await deps.database.collections.experiment_operations.updateOne({ _id: operation._id, workflowRunId: execution.id,
+        remoteStatus: { $ne: execution.status }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null },
+      { $set: { remoteStatus: execution.status } });
       if (current.state === "succeeded" &&
           (execution.status === "failed" || execution.status === "stopped")) {
         // Retain callback output, but conflicting terminal evidence requires
@@ -223,7 +239,7 @@ export function createExperimentDispatcher(deps: {
         current.state === "prepared" && current.reservationCount === 0;
       if (operation.role === "image" && !unclaimedPause && !imageClarification) {
         if (execution.status === "running" && execution.outputs?.image_result === undefined) {
-          if (now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + 600_000)) {
+          if (now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + OPERATION_LIMIT_MS)) {
             if (current.state === "succeeded") await repository.blockRun({ runId: run._id, category: "unknown_outcome", nowMs: now() });
             else await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
           }
@@ -272,7 +288,7 @@ export function createExperimentDispatcher(deps: {
           await repository.recordDispatchOutcome({ ...identity, category: "paused" });
         } else if (execution.status === "failed" || execution.status === "stopped") {
           await repository.recordDispatchOutcome({ ...identity, category: "observed_failure" });
-        } else if (execution.status !== "running" || now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + 600_000)) {
+        } else if (execution.status !== "running" || now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + OPERATION_LIMIT_MS)) {
           await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
         }
       }
@@ -308,7 +324,10 @@ export function createExperimentDispatcher(deps: {
     if (saved) await observeProgress(run._id, saved);
   }
 
-  async function advance(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
+  const coordinator = createOperationCoordinator({ database: deps.database, runtime, now, binding: bindingFor,
+    reconcile: (run, operation, result) => reconcile(run, operation, result, true) });
+
+  async function advanceWork(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
     return mutate(async () => {
       let run = await repository.getRun(runId);
       if (!run || run.mode !== "simulated" || run.status === "completed" || run.status === "failed") return "blocked";
@@ -345,6 +364,7 @@ export function createExperimentDispatcher(deps: {
       }
       if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") return "blocked";
       let operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
+      if (operation) await bindTrackedMutationOperation(runId, operation._id);
       if (operation?.dispatchStartedAtMs != null) {
         const binding = bindingFor(operation, run);
         // A retained ID is the only read-back path. Never POST after the marker.
@@ -360,6 +380,8 @@ export function createExperimentDispatcher(deps: {
       if (run.status === "blocked" && (operation || run.safeFailure !== "unknown_outcome")) return "blocked";
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
+        const deployment = await deps.database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" });
+        if (deployment?.draining || deployment?.maintenance) return "waiting";
         let latest = (await repository.listOperations(runId)).at(-1);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
           const binding = bindingFor(latest, run);
@@ -488,27 +510,29 @@ export function createExperimentDispatcher(deps: {
           const uploads = await createExperimentReferenceUploads({ database: deps.database, store: store(), upload: uploadReference })
             .prepare({ runId, operationId: operation._id, parentWorkflowRunId }, binding);
           if (uploads.kind !== "ready") {
-            await repository.blockRun({ runId, category: uploads.kind === "unknown" ? "unknown_outcome" : "definite_failure", nowMs: now() });
+            await repository.failPreparation(runId, operation._id, now());
             return "blocked";
           }
           if (uploads.fileIds.length) referenceFileIds = uploads.fileIds;
         } catch (error) {
           const current = await repository.getRun(runId);
           if (error instanceof ExperimentRepositoryError && (current?.pauseRequested || current?.status === "paused")) return "waiting";
-          await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+          await repository.failPreparation(runId, operation._id, now());
           return "blocked";
         }
       }
+      await bindTrackedMutationOperation(runId, operation._id);
       const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
       const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated",
         ...(referenceFileIds ? { referenceFileIds } : {}) }, {
-        deadlineAtMs: operation.deadlineAtMs ?? operation.dispatchStartedAtMs! + 600_000,
+        deadlineAtMs: (operation.deadlineAtMs ?? operation.dispatchStartedAtMs! + OPERATION_LIMIT_MS) - RECONCILIATION_RESERVE_MS,
         onStarted: async (execution) => {
           // Persist identity before returning to the dispatcher. Callback-first
           // claims remain valid only when both paths identify the same run.
-          const identity = { runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now(), workflowRunId: execution.id };
+          const identity = { runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now(), workflowRunId: execution.id,
+            ...(execution.task_id ? { workflowTaskId: execution.task_id } : {}) };
           try { await repository.recordDispatchIdentity(identity); }
           catch (error) {
             if (error instanceof ExperimentRepositoryError && error.code === "conflict") {
@@ -530,7 +554,74 @@ export function createExperimentDispatcher(deps: {
       if ((await repository.getRun(runId))?.safeFailure === "definite_failure") return "blocked";
       await reconcile(run, operation, result);
       return "advanced";
-    });
+    }, { admitted: true, runId });
+  }
+
+  async function advanceOwned(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
+    let run = await repository.getRun(runId);
+    if (!run) return "blocked";
+    const operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
+    // Pause does not transfer a live preparation lease to another controller.
+    if (!operation && run.preparation && run.preparation.ownerId !== ownerId) {
+      if (now() < run.preparation.deadlineAtMs) return "waiting";
+      await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null, revision: run.revision, "preparation.ownerId": run.preparation.ownerId },
+        { $set: { status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed", "preparation.unresolved": true }, $inc: { revision: 1 } });
+      return "blocked";
+    }
+    if (operation?.deadlineAtMs && now() >= operation.deadlineAtMs - RECONCILIATION_RESERVE_MS) {
+      if (operation.dispatchStartedAtMs == null) {
+        await repository.failPreparation(runId, operation._id, now());
+        return "blocked";
+      }
+      if (operation.lifecycle?.attemptOutcome && !await repository.beginObservation(operation._id, now())) return "waiting";
+      await mutate(() => coordinator.inspect({ runId, operationId: operation!._id, stop: "deadline" }), { admitted: true, runId, operationId: operation._id });
+      return "waiting";
+    }
+    if (!operation && !run.pauseRequested && (run.status === "queued" || run.status === "running")) {
+      const deployment = await deps.database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" });
+      if (deployment?.maintenance || deployment?.draining) return "waiting";
+      if (!run.preparation) {
+        const preparation = { ownerId, startedAtMs: now(), deadlineAtMs: now() + OPERATION_LIMIT_MS };
+        const claimed = await deps.database.collections.experiment_runs.findOneAndUpdate({ _id: runId, revision: run.revision, activeOperationId: null, preparation: null }, { $set: { preparation } }, { returnDocument: "after" });
+        if (!claimed) return "waiting";
+        run = claimed;
+      }
+    }
+    const deadline = operation?.deadlineAtMs ?? run.preparation?.deadlineAtMs ?? now() + OPERATION_LIMIT_MS;
+    try {
+      const result = await withOwnedController(runId, (signal) => withOperationBudget(deadline - RECONCILIATION_RESERVE_MS, () => advanceWork(runId), { now, signal }));
+      if (!operation && run.preparation) await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null, "preparation.ownerId": ownerId },
+        { $set: result === "blocked" ? { "preparation.outcome": "failed", "preparation.unresolved": false } : { preparation: null } });
+      return result;
+    } catch (error) {
+      const current = await repository.getRun(runId);
+      if (!current?.activeOperationId && current?.preparation?.ownerId === ownerId && current.preparation.stopRequestedAtMs) {
+        await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null,
+          "preparation.ownerId": ownerId, "preparation.stopRequestedAtMs": current.preparation.stopRequestedAtMs },
+        { $set: { "preparation.unresolved": false, safeFailure: "definite_failure" } });
+        return "blocked";
+      }
+      if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || error.code === "conflict")) return "waiting";
+      const currentOperation = current?.activeOperationId ? await repository.getOperation(current.activeOperationId) : null;
+      const owned = currentOperation && (currentOperation._id === operation?._id || currentOperation.lifecycle?.ownerId === ownerId);
+      if (currentOperation && !owned) return "waiting";
+      if (currentOperation?.dispatchStartedAtMs != null) {
+        await mutate(() => coordinator.inspect({ runId, operationId: currentOperation._id,
+          ...(error instanceof OperationBudgetExpired || now() >= deadline - RECONCILIATION_RESERVE_MS ? { stop: "deadline" as const } : {}) }), { admitted: true, runId, operationId: currentOperation._id });
+      } else {
+        if (currentOperation) await repository.failPreparation(runId, currentOperation._id, now());
+        else await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+        if (run.preparation) await deps.database.collections.experiment_runs.updateOne({ _id: runId, "preparation.ownerId": ownerId }, { $set: { "preparation.outcome": "failed", "preparation.unresolved": false } });
+      }
+      return "blocked";
+    }
+  }
+
+  async function advance(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
+    if (activeAdvances.has(runId)) return "waiting";
+    activeAdvances.add(runId);
+    try { return await advanceOwned(runId); }
+    finally { activeAdvances.delete(runId); }
   }
 
   async function cycle() {
@@ -541,12 +632,17 @@ export function createExperimentDispatcher(deps: {
     async function unresolved(run: ExperimentRunDocument, head?: Head | null) {
       const operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) :
         head === undefined ? (await repository.listOperationHeads([run._id]))[0] : head;
-      return operation?.dispatchStartedAtMs != null &&
+      return operation && (operation.dispatchStartedAtMs != null || operation.state === "unknown") &&
         (run.activeOperationId === operation._id || operation.state === "succeeded" && !operation.verifiedWorkflowId)
         ? operation : null;
     }
     // Reconcile retained workflow IDs before admitting another persona's POST.
     for (const run of runs) {
+      if (run.preparation?.unresolved) return "waiting" as const;
+      if (run.preparation && !run.activeOperationId && run.preparation.outcome !== "failed") {
+        await advance(run._id);
+        return "waiting" as const;
+      }
       const operation = await unresolved(run, heads.get(run._id) ?? null);
       if (!operation) continue;
       // Unresolved work retains the single-experiment lane even after expiry,
@@ -565,12 +661,27 @@ export function createExperimentDispatcher(deps: {
       if (run.status === "blocked" && run.activeOperationId && !(await repository.getOperation(run.activeOperationId))?.workflowRunId) continue;
       if (run.status === "blocked" && run.activeOperationId) {
         const operation = await repository.getOperation(run.activeOperationId);
-        if (operation && now() >= (operation.deadlineAtMs ?? (operation.dispatchStartedAtMs ?? now()) + 600_000)) continue;
+        if (operation && now() >= (operation.deadlineAtMs ?? (operation.dispatchStartedAtMs ?? now()) + OPERATION_LIMIT_MS)) continue;
       }
       const outcome = await advance(run._id);
       if (outcome === "advanced") return outcome;
     }
     return "idle" as const;
   }
-  return { advance, cycle };
+  async function inspectPreparation(input: { runId: string; preparationId: string; expectedRevision: number; stop?: boolean }) {
+    const run = await repository.getRun(input.runId);
+    if (!run || run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
+    if (run.activeOperationId || run.preparation?.ownerId !== input.preparationId) throw new ExperimentRepositoryError("conflict", "Preparation ownership changed.");
+    if (!input.stop) return run.preparation;
+    // Incrementing revision fences an in-flight prepareOperation transaction.
+    const changed = await deps.database.collections.experiment_runs.updateOne({ _id: run._id, revision: run.revision,
+      activeOperationId: null, "preparation.ownerId": input.preparationId }, { $set: {
+      pauseRequested: true, status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed",
+      "preparation.unresolved": true, "preparation.stopRequestedAtMs": now(), updatedAtMs: now(),
+    }, $inc: { revision: 1 } });
+    if (!changed.modifiedCount) throw new ExperimentRepositoryError("stale_revision", "Preparation changed before stop.");
+    cancelOwnedControllers(run._id);
+    return (await repository.getRun(run._id))?.preparation;
+  }
+  return { advance, cycle, inspect: coordinator.inspect, inspectPreparation };
 }

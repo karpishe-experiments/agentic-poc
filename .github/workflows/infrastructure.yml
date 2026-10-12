@@ -35,6 +35,9 @@ jobs:
           for name in VPS_HOST DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_HOST_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID STAGING_HOSTNAME PROD_HOSTNAME DEPLOY_HOSTNAME R2_STATE_BUCKET R2_ENDPOINT R2_TERRAFORM_ACCESS_KEY_ID R2_TERRAFORM_SECRET_ACCESS_KEY; do
             [[ -n "${!name}" ]] || { printf 'Missing required configuration: %s\n' "$name" >&2; exit 1; }
           done
+          jq -e '.dify_hostname | strings | length > 0' infra/config/vps.json >/dev/null
+          jq -e '.dify_backup_bucket | strings | length > 0' infra/config/vps.json >/dev/null
+          jq -e '.dify_public_enabled == false or .dify_public_enabled == true' infra/config/vps.json >/dev/null
       - uses: hashicorp/setup-terraform@v3
         with: {terraform_version: 1.11.4, terraform_wrapper: false}
       - uses: ./.github/actions/vps-access
@@ -45,7 +48,7 @@ jobs:
         id: infrastructure
         run: |
           set -euo pipefail
-          bash scripts/deploy/vps-deployment.sh --action infrastructure --vps-host "$TARGET_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" ${{ (github.event_name == 'push' || inputs.apply) && '--apply' || '' }} 2>&1 | tee "$RUNNER_TEMP/infrastructure-output.txt"
+          bash scripts/deploy/vps-deployment.sh --action infrastructure --vps-host "$TARGET_HOST" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" ${{ inputs.apply && '--apply' || '' }} 2>&1 | tee "$RUNNER_TEMP/infrastructure-output.txt"
         env:
           TARGET_HOST: ${{ vars.VPS_HOST }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -63,7 +66,7 @@ jobs:
       - name: Publish infrastructure summary
         if: always()
         env:
-          MODE: ${{ (github.event_name == 'push' || inputs.apply) && 'apply' || 'preview' }}
+          MODE: ${{ inputs.apply && 'apply' || 'preview' }}
           OUTCOME: ${{ job.status }}
           REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |

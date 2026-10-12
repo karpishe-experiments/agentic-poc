@@ -12,6 +12,59 @@ const request = (headers: Record<string, string> = {}, body = "{}") => new Reque
 const imageUrl = "http://localhost:3000/api/experiments/booklet-tools/image?runId=00000000-0000-4000-8000-000000000001&operationId=00000000-0000-4000-8000-000000000002&workflowRunId=00000000-0000-4000-8000-000000000003&inputFingerprint=" + "a".repeat(64);
 
 describe("booklet runner HTTP boundary", () => {
+  it("retains exact mutation ownership for a failure callback", async () => {
+    const runId = "00000000-0000-4000-8000-000000000001";
+    const operationId = "00000000-0000-4000-8000-000000000002";
+    const failOperation = vi.fn().mockResolvedValue({ state: "failed" });
+    const factory = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => ({ mode: "simulated" }), failOperation,
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const ownership = vi.fn();
+    const mutate: typeof import("@/lib/application/deployment-control").runTrackedMutation = async (operation, options) => {
+      ownership(options); return operation();
+    };
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {} } as Database),
+        store: () => ({} as AssetStore), mutate });
+      const response = await http.tool(request({ "x-booklet-tool-key": "x".repeat(32) }, JSON.stringify({ runId, operationId,
+        workflowRunId: "00000000-0000-4000-8000-000000000003", parentWorkflowRunId: null, category: "definite_failure" })), "failure");
+      expect(response.status).toBe(200);
+      expect(ownership).toHaveBeenCalledWith({ admitted: true, runId, operationId });
+    } finally { factory.mockRestore(); }
+  });
+  it("pages summary metadata without constructing artifact or storage views", async () => {
+    const rows = [{ _id: "run-1", persona: "playful_kid", status: "completed", counters: {}, limits: {}, configurationJson: "private" },
+      { _id: "run-2" }];
+    const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) };
+    const find = vi.fn().mockReturnValue(cursor);
+    const store = vi.fn(() => { throw new Error("Summary must not read bytes"); });
+    const http = createBookletRunnerHttp({ config: () => enabled,
+      database: () => ({ collections: { experiment_runs: { find } } } as unknown as Database), store });
+    const response = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?page=2&limit=1"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { page: 2, hasMore: true, runs: [{ runId: "run-1" }] } });
+    expect(cursor.skip).toHaveBeenCalledWith(2);
+    expect(cursor.limit).toHaveBeenCalledWith(2);
+    expect(find.mock.calls[0][1].projection.configurationJson).toBeUndefined();
+    expect(store).not.toHaveBeenCalled();
+    expect((await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?limit=1000"))).status).toBe(400);
+    expect(find).toHaveBeenCalledTimes(1);
+  });
+  it("protects inspect and stop before reading operation state", async () => {
+    const database = vi.fn(() => { throw new Error("unexpected database access"); });
+    const http = createBookletRunnerHttp({ config: () => enabled, database });
+    const runId = "00000000-0000-4000-8000-000000000001";
+    for (const action of ["inspect", "stop"] as const) {
+      expect((await http.operationControl(request({ origin: "http://localhost:3001" }), runId, action)).status).toBe(403);
+      expect((await http.operationControl(request({ origin: "http://localhost:3000" }), runId, action)).status).toBe(400);
+      vi.stubEnv("DEPLOYMENT_ENV", "_staging");
+      vi.stubEnv("ACCESS_GATE_PASSWORD", "fixture-password-long-enough");
+      try {
+        expect((await http.operationControl(request({ origin: "http://localhost:3000" }), runId, action)).status).toBe(401);
+      } finally { vi.unstubAllEnvs(); }
+    }
+    expect(database).not.toHaveBeenCalled();
+  });
   it("acknowledges saved J13 manager delegation and duplicate completion", async () => {
     const runId = "00000000-0000-4000-8000-000000000001";
     const operationId = "00000000-0000-4000-8000-000000000002";

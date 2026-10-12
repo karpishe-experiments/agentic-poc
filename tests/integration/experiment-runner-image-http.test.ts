@@ -50,6 +50,11 @@ async function setup() {
 describe("experiment image HTTP callbacks", () => {
   it("authorizes through the ordinary callback, downloads and saves one fixture", async () => {
     const env = await setup();
+    // The HTTP handler uses wall time; keep this admitted operation in the same
+    // clock domain rather than the setup's synthetic epoch.
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operationId }, {
+      $set: { deadlineAtMs: Date.now() + 300_000 },
+    });
     await env.repository.beginDispatch({ runId: env.runId, operationId: env.operationId, parentWorkflowRunId: null, nowMs: Date.now() });
     const identity = { runId: env.runId, operationId: env.operationId, workflowRunId: env.workflowRunId, parentWorkflowRunId: null };
     const authorize = () => env.http.tool(new Request("http://localhost:3000/api/experiments/booklet-tools/authorize", { method: "POST", headers: key, body: JSON.stringify(identity) }), "authorize");
