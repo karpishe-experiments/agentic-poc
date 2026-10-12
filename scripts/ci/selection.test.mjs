@@ -59,14 +59,21 @@ test('mockup and deployment categories combine without full app', () => {
   assert.equal(s.flags.shell, true);
   assert.equal(s.flags.app, false);
 });
-test('shared and unknown paths retain broad coverage', () => {
+test('shared and unknown paths select application checks, not unrelated infrastructure', () => {
   assert.equal(pick('lib/config/env.ts').flags.app, true);
-  for (const p of ['proxy.ts', 'package-lock.json', 'unknown.config', '.github/workflows/validate.yml']) {
-    assert.equal(Object.values(pick(p).flags).every(Boolean), true);
+  for (const p of ['proxy.ts', 'package-lock.json', 'unknown.config']) {
+    const s = pick(p);
+    assert.equal(s.flags.app, true);
+    assert.equal(s.flags.terraform || s.flags.bootstrap || s.flags.shell, false);
   }
+  const tooling = pick('.github/workflows/validate.yml', 'scripts/ci/validate.mjs');
+  assert.equal(tooling.flags.selector && tooling.flags.workflow, true);
+  assert.equal(tooling.flags.app || tooling.flags.terraform || tooling.flags.shell, false);
 });
-test('full app deduplicates focused contracts', () => {
-  assert.deepEqual(pick('lib/application/booklet-service.ts', 'lib/dify-experiment/service.ts', '.github/workflows/deploy.yml').tests, []);
+test('application changes retain explicit focused tests for manual affected validation', () => {
+  const s = pick('lib/application/booklet-service.ts', 'tests/integration/booklets.test.ts');
+  assert.equal(s.flags.app, true);
+  assert.deepEqual(s.tests, ['tests/integration/booklets.test.ts']);
 });
 test('test changes and deleted tests select appropriate scope', () => {
   assert.deepEqual(pick('tests/unit/a.test.ts').tests, ['tests/unit/a.test.ts']);
@@ -125,5 +132,41 @@ test('runner fails on missing tests and stops after first failed command', () =>
     assert.match(result.stdout, /--bail=1/);
     assert.match(result.stdout, /--retry=0/);
     assert.doesNotMatch(result.stdout, /vitest.mockup/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('PR runner uses unit configuration without Mongo integration; affected runs explicit integration', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'ci-lean-'));
+  const cli = fileURLToPath(new URL('./validate.mjs', import.meta.url));
+  try {
+    const file = path.join(dir, 'selection.json');
+    mkdirSync(path.join(dir, 'node_modules/vitest'), { recursive: true });
+    writeFileSync(path.join(dir, 'node_modules/vitest/vitest.mjs'), 'console.log(JSON.stringify(process.argv.slice(2)));');
+    mkdirSync(path.join(dir, 'tests/integration'), { recursive: true });
+    writeFileSync(path.join(dir, 'tests/integration/example.test.ts'), '');
+    const s = pick('lib/application/example.ts', 'tests/integration/example.test.ts');
+    const invoke = mode => {
+      writeFileSync(file, JSON.stringify({ ...s, mode }));
+      return spawnSync(process.execPath, [cli, 'tests'], { cwd: dir, encoding: 'utf8', env: { ...process.env, CI_SELECTION_FILE: file } });
+    };
+    const pr = invoke('pr');
+    assert.equal(pr.status, 0);
+    assert.match(pr.stdout, /vitest.unit.config.ts/);
+    assert.doesNotMatch(pr.stdout, /example.test.ts/);
+    const affected = invoke('affected');
+    assert.equal(affected.status, 0);
+    assert.match(affected.stdout, /vitest.unit.config.ts/);
+    assert.match(affected.stdout, /tests\/integration\/example.test.ts/);
+    const full = invoke('full');
+    assert.equal(full.status, 0);
+    assert.doesNotMatch(full.stdout, /vitest.unit.config.ts/);
+    assert.doesNotMatch(full.stdout, /example.test.ts/);
+    writeFileSync(file, JSON.stringify({ ...pick('tests/integration/example.test.ts'), mode: 'pr' }));
+    const integrationOnly = spawnSync(process.execPath, [cli, 'tests'], { cwd: dir, encoding: 'utf8', env: { ...process.env, CI_SELECTION_FILE: file } });
+    assert.equal(integrationOnly.status, 0);
+    assert.equal(integrationOnly.stdout, '');
+    const config = readFileSync(new URL('../../vitest.unit.config.ts', import.meta.url), 'utf8');
+    assert.doesNotMatch(config, /globalSetup|global-mongodb/);
+    assert.match(config, /tests\/unit\/\*\*/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

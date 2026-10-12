@@ -48,7 +48,8 @@ export function select(changes, full = false) {
   if (full) all();
   for (const { path: p, deleted = false } of changes) {
     let category;
-    if (p.startsWith('scripts/ci/') || p === '.github/workflows/validate.yml' || /^(package(-lock)?\.json|tsconfig.*|eslint\.config.*|vitest.*|playwright.*)$/.test(p) || /^tests\/(helpers\/|global-)/.test(p)) { all(); category = 'full'; }
+    if (p.startsWith('scripts/ci/') || p === '.github/workflows/validate.yml') { flags.selector = flags.workflow = true; category = 'validation tooling'; }
+    else if (/^(package(-lock)?\.json|tsconfig.*|eslint\.config.*|vitest.*|playwright.*)$/.test(p) || /^tests\/(helpers\/|global-)/.test(p)) { app(); flags.selector = true; category = 'validation inputs'; }
     else if (p.startsWith('.agents/') || /\.md$/i.test(p) || /^(LICENSE|NOTICE)(\.|$)/.test(p) || p === 'skills-lock.json' || /^docs\/.*\.(png|jpg|jpeg|svg|webp|pdf)$/i.test(p)) category = 'documentation';
     else if (/^docs\/accepted\/2026-09-16_agent-platform-decision\/(tools.openapi.json|illustrate-panel.yml)$/.test(p)) { tests.add(documentTest); category = 'Dify documents'; }
     else if (/^(lib\/dify-experiment\/|lib\/contracts\/dify-experiment.ts$|app\/(api\/)?experiments\/dify\/|components\/dify-experiment\/|docs\/accepted\/2026-09-16_agent-platform-decision\/)/.test(p)) { flags.static = true; difyTests.forEach(t => tests.add(t)); category = 'Dify'; }
@@ -69,10 +70,10 @@ export function select(changes, full = false) {
     else if (/^\.github\/(workflows|actions)\//.test(p)) { flags.workflow = true; deploy(); category = 'workflow'; }
     else if (/^(Dockerfile|\.dockerignore|next\.config\.|scripts\/build)/.test(p)) { app(); deploy(); category = 'build inputs'; }
     else if (/^(app\/|components\/|lib\/|db\/|public\/|seeds\/)/.test(p)) { app(); category = 'shared application'; }
-    else { all(); category = 'full fallback'; }
+    else { app(); category = 'application fallback'; }
     reasons.push({ path: p, category });
   }
-  if (flags.app) tests.clear();
+  if (flags.app && full) tests.clear();
   if (flags.mockup) mockupTests.clear();
   flags.node = flags.static || flags.app || flags.mockup || flags.agent || tests.size > 0 || mockupTests.size > 0 || browserTests.size > 0;
   return { flags, tests: [...tests].sort(), mockupTests: [...mockupTests].sort(), browserTests: [...browserTests].sort(), reasons };

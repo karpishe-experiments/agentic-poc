@@ -208,6 +208,7 @@ For the Kids Booklet POC, `docs/accepted/2026-08-01_end-to-end-poc/PLAN.md` rema
 ## Verification
 
 - Run the relevant build, type checks, lint checks, and focused tests when they exist.
+- Before pushing code, run relevant unit tests locally (`npm run test:unit`, with named files when suitable). Reuse unchanged passes. Run focused integration tests only when changed behavior needs that proof. Routine PR CI must remain lean: static checks, units and applicable contracts; do not add full integration or persona campaigns to ordinary PR checks. Manual full validation and live acceptance remain separate gates.
 - Add only the tests needed to demonstrate the experiment's success criteria.
 - Report what passed, what failed, and what was not run.
 

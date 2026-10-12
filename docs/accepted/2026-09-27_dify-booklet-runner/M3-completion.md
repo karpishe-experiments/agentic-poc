@@ -21,7 +21,7 @@ Keep historical run identities and failures; do not repeat completed private set
 
 | Checkpoint | Current result | Remaining work |
 | --- | --- | --- |
-| Recovery candidate | Implementation is committed through `a5ee96a`; final validation corrections pass locally. Five-minute budgets, stop/inspection, two-stage drain, retained mutation owners, atomic materialization, setup resume, probe preflight and paginated observation are implemented. | Complete two final independent reviews, publish the corrections and require green Linux CI. No live success is claimed. |
+| Recovery candidate | Implementation and final corrections are committed through `cb98aae`. CI `38280232207` passed, including both full Linux host suites. Five-minute budgets, stop/inspection, two-stage drain, retained mutation owners, atomic materialization, setup resume, probe preflight and paginated observation are implemented. | Finish the requested lean PR-validation policy before staging transition. No live success is claimed. |
 | Staging transition | Retained request `38149230374-1` and the exact stale Parent item/job remain the known live blocker. The installed application lacks the new drain contract. | Synchronize the reviewed dispatcher, use the explicit backup-protected legacy bootstrap, then deploy the compatible reviewed candidate. Preserve the original journal and checkpoint. |
 | Model-free proof | Earlier 43.8-second same-operation restart recovery and collaboration health remain valid baseline evidence. | Prove stall, stop, restart, output recovery and active-callback drain against the new lifecycle candidate. |
 | Persona acceptance | Kid functional acceptance is retained. Parent attempts 1/3 and 2/3 failed and remain saved. | Run Parent 3/3 only after the probes pass. Stop if it fails; Creator follows Parent success. No paid calls. |
@@ -68,7 +68,12 @@ storage, transfers or consumers.
 Linux CI `38278889955` passed selected application tests, then exposed a shell
 test clock collision: an expired deadline of zero means disabled, not expired.
 The bounded-control fixture now starts its clock above zero. Runtime behavior is
-unchanged; both full Linux host suites still require a green CI result.
+unchanged. Follow-up CI `38280232207` passed, including both full Linux host suites.
+The later user-requested CI policy removes routine integration campaigns from PR
+checks; focused local regressions and manual full validation remain available.
+The unit-only configuration passed 80 files/537 tests in 96 seconds locally,
+without MongoDB startup. Selector regression checks cover PR deferral, explicit
+manual affected integration and retained full-suite execution.
 
 Local checks for this increment: preparation/dispatch regression passed 26 cases;
 the final interrupted-owner drain regression passed 13 cases serially. Probe

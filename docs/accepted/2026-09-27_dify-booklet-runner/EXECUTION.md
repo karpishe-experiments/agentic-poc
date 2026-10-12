@@ -218,7 +218,7 @@ Use the validation levels below. Do not start paid calls to debug basic schemas.
 | Level | When | Required checks |
 | --- | --- | --- |
 | Implementation loop | After a bounded slice or correction | Smallest relevant test files or named cases, focused lint and independent review of changed behavior. Immediately check persistence, authorization, recovery and provider-accounting regressions when those boundaries change. |
-| Local checkpoint | Before a work-in-progress commit | Reuse still-valid focused results/reviews; inspect the entire proposed commit, secrets/unexpected files, whitespace and affected documentation. Obtain review for any newly included behavior; no automatic broad-suite rerun. Label unfinished acceptance explicitly. |
+| Local checkpoint | Before a work-in-progress commit or push | Run relevant unit tests locally before pushing code; reuse unchanged passes. Inspect the entire proposed commit, secrets/unexpected files, whitespace and affected documentation. Obtain review for newly included behavior; run focused integration tests only when changed behavior needs that proof. No automatic broad-suite rerun. Label unfinished acceptance explicitly. |
 | Publication checkpoint | Frozen candidate before code/configuration publication | Typecheck, lint, plan/CI-selected affected suites, required agent checks and applicable browser/contracts checks; two consecutive clean independent reviews of the exact candidate and evidence. Required CI still runs. |
 
 For M0–M6, these levels govern when milestone verification commands run. Lists of
@@ -240,11 +240,11 @@ Do not repeat an unchanged deterministic failure or hide it with test retries.
 Do not run duplicate broad commands concurrently; keep MongoDB integration files
 serial. Run one broad local set per frozen candidate, not per small edit. Repeat
 broad checks when shared behavior, suite assumptions or other relevant inputs
-change; otherwise rerun affected checks only. PR/affected CI excludes the unchanged
-`experiment-runner-style-dispatch` and `experiment-runner-style-journey` acceptance
-files. A changed acceptance file still runs. Focused lifecycle, repository,
-authorization, storage and recovery tests remain in the normal application suite.
-Use Validate's existing `full` mode for all local simulated journeys at a release
+change; otherwise rerun affected checks only. Routine PR CI runs unit tests and
+selected contracts, not MongoDB integration or persona campaigns. Manual `affected`
+runs explicitly changed integration files; use local named regressions for other
+affected paths. See the [CI policy](../../../scripts/ci/README.md).
+Use Validate's existing `full` mode for all simulated journeys at a release
 checkpoint when their behavior changed and equivalent current evidence is absent.
 Required status checks and host suites remain unchanged.
 Live acceptance follows deployment; mocks or browser discovery alone

@@ -15,6 +15,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts --bail=1 --retry=0",
     "test:agent": "tsx scripts/test-agent-fixtures.ts",
     "smoke:agent:real": "tsx scripts/smoke-real-agent.ts",
     "test:e2e": "node --import tsx scripts/run-e2e.ts",

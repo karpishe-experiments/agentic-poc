@@ -39,7 +39,8 @@ if (command === 'select') {
   const selection = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
   const text = `## Validation\n\nOutcome: ${process.env.CI_OUTCOME}\n\n${selection ? `Mode: ${selection.mode}\n\nBase: ${selection.base ?? 'all checks'}\nHead: ${selection.head}\n\n${Object.entries(selection.flags).map(([k,v]) => `- ${k}: ${v ? 'selected' : 'skipped'}`).join('\n')}` : 'Selection failed before checks could run.'}\n\nProduction/container builds are performed during deployment. Browser checks perform discovery only.\n`;
   const exclusions = selection ? acceptanceExclusions(selection) : [];
-  const summary = text + (exclusions.length ? `\nUnchanged acceptance journeys excluded from this scope (available in full mode):\n${exclusions.map(p => `- ${p}`).join('\n')}\n` : '');
+  const policy = selection?.mode === 'pr' ? '\nPR policy: unit tests and selected contracts only; integration and persona campaigns require local focused verification or manual validation. No MongoDB startup.\n' : '';
+  const summary = text + policy + (exclusions.length ? `\nUnchanged acceptance journeys excluded from this scope (available in full mode):\n${exclusions.map(p => `- ${p}`).join('\n')}\n` : '');
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   else console.log(summary);
 } else if (command === 'contracts' || command === 'tests') {
@@ -49,7 +50,13 @@ if (command === 'select') {
   if (command === 'contracts') { if (pure.length) vitest(['--config', 'vitest.ci-contracts.config.ts', ...pure]); }
   else {
     const appTests = s.tests.filter(p => !pure.includes(p));
-    if (s.flags.app || appTests.length) vitest([...appTests, ...acceptanceExclusions(s).flatMap(p => ['--exclude', p])]);
+    if (s.mode !== 'full') {
+      const unit = appTests.filter(p => p.startsWith('tests/unit/'));
+      if (s.flags.app || unit.length) vitest(['--config', 'vitest.unit.config.ts', ...(s.flags.app ? [] : unit), ...pure.flatMap(p => ['--exclude', p])]);
+      // Focused integration checks are deliberate, never an automatic PR campaign.
+      const integration = appTests.filter(p => p.startsWith('tests/integration/'));
+      if (s.mode === 'affected' && integration.length) vitest(integration);
+    } else if (s.flags.app || appTests.length) vitest([...(s.flags.app ? [] : appTests), ...acceptanceExclusions(s).flatMap(p => ['--exclude', p])]);
     if (s.flags.mockup || s.mockupTests.length) vitest(['--config', 'vitest.mockup.config.ts', ...s.mockupTests]);
     for (const config of ['playwright.config.ts', 'playwright.mockup.config.ts']) {
       const paths = s.browserTests.filter(p => p.startsWith('tests/mockups/') === config.includes('mockup'));
