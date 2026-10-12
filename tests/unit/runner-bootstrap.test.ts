@@ -27,7 +27,7 @@ describe("runner bootstrap", () => {
     vi.doMock("@/db/client", () => ({ getDatabase: vi.fn().mockReturnValue({}) }));
     vi.doMock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true, config: {} }) }));
     vi.doMock("@/lib/experiment-runner/dispatch", () => ({ createExperimentDispatcher: () => ({ cycle }) }));
-    vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl: async () => ({ maintenance: false }) }));
+    vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl: async () => ({ maintenance: false }), reconcileEndedMutations: vi.fn().mockResolvedValue(undefined) }));
     vi.resetModules();
     const { ensureRunnerStarted: start, getRunnerStatus } = await import("@/lib/jobs/runner-bootstrap");
 
@@ -46,15 +46,47 @@ describe("runner bootstrap", () => {
     vi.doMock("@/db/client", () => ({ getDatabase: vi.fn().mockReturnValue({}) }));
     vi.doMock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true, config: {} }) }));
     vi.doMock("@/lib/experiment-runner/dispatch", () => ({ createExperimentDispatcher: () => ({ cycle }) }));
-    vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl }));
+    const reconcileEndedMutations = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl, reconcileEndedMutations }));
     vi.resetModules();
     const { ensureRunnerStarted: start, getRunnerStatus } = await import("@/lib/jobs/runner-bootstrap");
 
     expect(start()).toBe(true);
     await vi.advanceTimersByTimeAsync(500);
     expect(readDeploymentControl).toHaveBeenCalledTimes(2);
+    expect(reconcileEndedMutations).toHaveBeenCalledTimes(2);
     expect(cycle).toHaveBeenCalledOnce();
     expect(getRunnerStatus()).toMatchObject({ initialized: true, recovered: true, fatalError: null });
     expect(error).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconciles legacy jobs and execution batches once before launching either recovery handler", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("VITEST", "");
+    const order: string[] = [];
+    const repositories = {
+      conversation: { recoverInterruptedFollowups: vi.fn(async () => { order.push("followups"); return 0; }) },
+      jobs: {
+        recoverInterrupted: vi.fn(async () => { order.push("jobs"); return 0; }),
+        listRunnable: vi.fn(async () => []),
+      },
+      execution: { recoverInterrupted: vi.fn(async () => { order.push("execution"); return ["recovered-batch"]; }) },
+    };
+    vi.doMock("@/db/client", () => ({ getDatabase: vi.fn().mockReturnValue({}) }));
+    vi.doMock("@/db/repositories", () => ({ createRepositories: vi.fn().mockReturnValue(repositories) }));
+    vi.doMock("@/lib/experiment-runner/config", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/experiment-runner/config")>();
+      return { ...actual, readBookletRunnerConfig: () => ({ enabled: false, reason: "disabled" }) };
+    });
+    vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl: async () => ({ maintenance: false, draining: false }), reconcileEndedMutations: vi.fn().mockResolvedValue(undefined) }));
+    vi.doMock("@/lib/jobs/generation-diagnostics", () => ({ createGenerationDiagnostics: () => ({ record: vi.fn().mockResolvedValue(undefined) }), describeGenerationError: () => ({ message: "test" }) }));
+    vi.doMock("@/lib/application/generation-service", () => ({ GenerationService: class {} }));
+    vi.doMock("@/lib/application/agent-run-service", () => ({ AgentRunService: class { recoverInterrupted(ids: readonly string[]) { order.push(`text:${ids.join(",")}`); return Promise.resolve([]); } } }));
+    vi.doMock("@/lib/application/image-agent-run-service", () => ({ ImageAgentRunService: class { recoverInterrupted(ids: readonly string[]) { order.push(`image:${ids.join(",")}`); return Promise.resolve([]); } } }));
+    vi.resetModules();
+    const { ensureRunnerStarted: start } = await import("@/lib/jobs/runner-bootstrap");
+
+    expect(start()).toBe(true);
+    await vi.waitFor(() => expect(order).toEqual(["followups", "execution", "jobs", "text:recovered-batch", "image:recovered-batch"]));
   });
 });

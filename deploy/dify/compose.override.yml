@@ -1,0 +1,90 @@
+# Compose with the pinned Dify 1.17.1 upstream file as the first -f argument.
+# All service images are locked in release.json. Docker Compose 2.28+ is required
+# for !override to remove upstream's public nginx and plugin-debug ports.
+services:
+  init_permissions:
+    image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    mem_limit: 128m
+    volumes:
+      - /var/lib/kids-booklet/dify/app/storage:/app/api/storage
+  api:
+    image: langgenius/dify-api@sha256:ceede5b903afaa20348f7ad80ebf847379dc56d886a99b9ec6a08913dacd7732
+    mem_limit: 1536m
+    volumes:
+      - /var/lib/kids-booklet/dify/app/storage:/app/api/storage
+  api_websocket:
+    image: langgenius/dify-api@sha256:ceede5b903afaa20348f7ad80ebf847379dc56d886a99b9ec6a08913dacd7732
+    # Collaboration loads the API runtime; 384 MiB caused an observed OOM kill.
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:5001/health"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - /var/lib/kids-booklet/dify/app/storage:/app/api/storage
+  worker:
+    image: langgenius/dify-api@sha256:ceede5b903afaa20348f7ad80ebf847379dc56d886a99b9ec6a08913dacd7732
+    mem_limit: 1536m
+    volumes:
+      - /var/lib/kids-booklet/dify/app/storage:/app/api/storage
+  worker_beat:
+    image: langgenius/dify-api@sha256:ceede5b903afaa20348f7ad80ebf847379dc56d886a99b9ec6a08913dacd7732
+    # The Flask migration subprocess exceeded 256 MiB before beat could start.
+    mem_limit: 1536m
+  web:
+    image: langgenius/dify-web@sha256:6353fe8e04481aaef873ef7317507bfa9ac862572118fd037563a71bff9f4d08
+    mem_limit: 512m
+  db_postgres:
+    image: postgres@sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81
+    mem_limit: 1024m
+    volumes:
+      - /var/lib/kids-booklet/dify/postgres:/var/lib/postgresql/data
+  redis:
+    image: redis@sha256:b362b5dff9d14d961dc3352db4776aba6a8c53ca2661d7c74ad2c121f82cdaea
+    mem_limit: 256m
+    volumes:
+      - /var/lib/kids-booklet/dify/redis:/data
+  sandbox:
+    image: langgenius/dify-sandbox@sha256:750e1111426ef31a9217b81c98cccfb750f17b182af3221102e420afa9f0928e
+    mem_limit: 1024m
+    volumes:
+      - /var/lib/kids-booklet/dify/sandbox/dependencies:/dependencies
+      - /var/lib/kids-booklet/dify/sandbox/conf:/conf
+  local_sandbox:
+    image: langgenius/dify-agent-local-sandbox@sha256:f4d404c9dcdf80bd72f65e84c3f2bbd1f3404fd4b363db837176da8aaf771b1d
+    mem_limit: 512m
+    volumes:
+      - /var/lib/kids-booklet/dify/agent/home:/home/dify
+      - /var/lib/kids-booklet/dify/agent/workspace:/workspace
+  plugin_daemon:
+    image: langgenius/dify-plugin-daemon@sha256:34412a22d1e1d1a6c73727fef88cffbcdd9be7a21bf9ad3076b4bf5c1b88fd9b
+    mem_limit: 768m
+    ports: !override []
+    volumes:
+      - /var/lib/kids-booklet/dify/plugin_daemon:/app/storage
+  agent_backend:
+    image: langgenius/dify-agent-backend@sha256:a30c039bbead65d7fd8baf8c53fc867373f515c5721e46070ce03ed04c5f1e32
+    mem_limit: 768m
+  agent_ssrf_proxy:
+    image: ubuntu/squid@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
+    mem_limit: 128m
+  ssrf_proxy:
+    image: ubuntu/squid@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
+    mem_limit: 128m
+  nginx:
+    image: nginx@sha256:abe47724e466aeab9a345d8e46a221c2fa8953c7848bb4a3bd9976a7199f8cf2
+    mem_limit: 128m
+    ports: !override
+      - "127.0.0.1:3300:80"
+    volumes:
+      - /var/lib/kids-booklet/dify/nginx/ssl:/etc/ssl
+      - /var/lib/kids-booklet/dify/nginx/certbot/live:/etc/letsencrypt/live
+      - /var/lib/kids-booklet/dify/nginx/certbot/conf:/etc/letsencrypt
+      - /var/lib/kids-booklet/dify/nginx/certbot/www:/var/www/html
+  weaviate:
+    image: semitechnologies/weaviate@sha256:5c62e5cbce4c48fc770abcee71099d9de32aad3b44d12299611f8135ee412362
+    mem_limit: 1024m
+    volumes:
+      - /var/lib/kids-booklet/dify/weaviate:/var/lib/weaviate

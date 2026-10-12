@@ -2,11 +2,16 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { personaSchema } from "@/lib/contracts/experiment-runner";
+import { probeReadinessSchema } from "@/lib/experiment-runner/probe-preflight";
 
 const optionsSchema = z.object({
-  action: z.enum(["observe", "create", "pause", "resume"]),
+  action: z.enum(["observe", "create", "pause", "resume", "inspect", "stop"]),
   origin: z.string(),
   runId: opaqueIdSchema.optional(),
+  operationId: opaqueIdSchema.optional(),
+  preparationId: opaqueIdSchema.optional(),
+  probeAppId: opaqueIdSchema.optional(),
+  probePublication: opaqueIdSchema.optional(),
   requestId: opaqueIdSchema.optional(),
   persona: personaSchema.optional(),
   predecessorRunId: opaqueIdSchema.optional(),
@@ -14,13 +19,16 @@ const optionsSchema = z.object({
   apply: z.boolean(),
 });
 export type RunnerOptions = z.infer<typeof optionsSchema>;
-const help = "Usage: tsx scripts/experiment-runner.ts --action observe|create|pause|resume --origin <staging-or-loopback-origin> [--run-id <uuid>] [--persona <persona> --request-id <uuid> --predecessor-run-id <uuid>] [--expected-revision <number>] [--apply]\nMutations default to preview. Apply uses BOOKLET_RUNNER_PASSWORD privately; username is booklet. Only Simulated mode is supported. Observe without --run-id lists saved runs. No automatic request retries.";
+const help = "Usage: tsx scripts/experiment-runner.ts --action observe|create|pause|resume|inspect|stop --origin <staging-or-loopback-origin> [--run-id <uuid>] [--operation-id <uuid> | --preparation-id <uuid>] [--persona <persona> --request-id <uuid> --predecessor-run-id <uuid>] [--probe-app-id <uuid> --probe-publication <uuid>] [--expected-revision <number>] [--apply]\nMutations default to preview. Inspect and stop require exact run, operation or preparation, and revision. Probe create validates exact app/publication readiness before submission. Apply uses BOOKLET_RUNNER_PASSWORD privately; username is booklet. Only Simulated mode is supported. Observe without --run-id lists saved runs. No automatic request retries.";
 
 export function parseRunnerOptions(args: string[]): RunnerOptions {
   const raw: Record<string, unknown> = { apply: false };
   const names: Record<string, string> = {
     "--action": "action", "--origin": "origin", "--run-id": "runId", "--request-id": "requestId",
     "--persona": "persona", "--predecessor-run-id": "predecessorRunId", "--expected-revision": "expectedRevision",
+    "--operation-id": "operationId",
+    "--preparation-id": "preparationId",
+    "--probe-app-id": "probeAppId", "--probe-publication": "probePublication",
   };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -42,9 +50,11 @@ export function parseRunnerOptions(args: string[]): RunnerOptions {
   if (options.action === "create") {
     if (!options.persona || !options.requestId || options.runId || options.expectedRevision !== undefined) throw new Error(help);
   } else if (options.persona || options.requestId || options.predecessorRunId) throw new Error(help);
-  if (options.action === "pause" || options.action === "resume") {
+  if (options.action === "pause" || options.action === "resume" || options.action === "inspect" || options.action === "stop") {
     if (!options.runId || options.expectedRevision === undefined) throw new Error(help);
   } else if (options.expectedRevision !== undefined) throw new Error(help);
+  if ((options.action === "inspect" || options.action === "stop") !== !!(options.operationId || options.preparationId) || options.operationId && options.preparationId) throw new Error(help);
+  if (!!options.probeAppId !== !!options.probePublication || options.probeAppId && options.action !== "create") throw new Error(help);
   return options;
 }
 
@@ -55,7 +65,12 @@ const summarySchema = z.object({
   nextNarrativeTask: z.string().nullable(), activeOperationId: opaqueIdSchema.nullable(),
   safeFailure: z.string().nullable(), pauseRequested: z.boolean(),
   counters: z.object({ logicalText: z.number(), logicalImage: z.number(), payableText: z.literal(0), payableImage: z.literal(0), steps: z.number() }),
-  operationHistory: z.array(z.object({ id: opaqueIdSchema, role: z.string(), taskId: z.string().nullable(), state: z.string(), workflowRunId: opaqueIdSchema.nullable(), parentWorkflowRunId: opaqueIdSchema.nullable(), verifiedWorkflowId: opaqueIdSchema.nullable() })),
+  operationHistory: z.array(z.object({ id: opaqueIdSchema, role: z.string(), taskId: z.string().nullable(), state: z.string(), workflowRunId: opaqueIdSchema.nullable(), parentWorkflowRunId: opaqueIdSchema.nullable(), verifiedWorkflowId: opaqueIdSchema.nullable(),
+    workflowTaskId: opaqueIdSchema.nullable().optional(), deadlineAtMs: z.number().nullable().optional(), elapsedMs: z.number().optional(), remoteStatus: z.string().nullable().optional(),
+    lifecycle: z.object({ phase: z.string(), startedAtMs: z.number(), lastProgressAtMs: z.number(), attemptOutcome: z.enum(["succeeded", "failed"]).optional(), unresolved: z.boolean().optional(), timeoutAtMs: z.number().optional(),
+      stop: z.object({ requestedAtMs: z.number(), reason: z.enum(["manual", "deadline"]), delivery: z.enum(["pending", "acknowledged", "unknown", "rejected", "unsupported"]) }).optional(),
+    }).nullable().optional(),
+  })),
   currentArtifacts: z.array(z.object({ id: opaqueIdSchema, taskId: z.string(), state: z.string(), currentVersionId: opaqueIdSchema.nullable() })),
 });
 export async function executeRunner(options: RunnerOptions, deps: { password?: string; fetcher?: typeof fetch } = {}) {
@@ -63,11 +78,23 @@ export async function executeRunner(options: RunnerOptions, deps: { password?: s
   if (!deps.password) throw new Error("BOOKLET_RUNNER_PASSWORD is required privately. Do not paste it into chat or command arguments.");
   const suffix = options.action === "create" ? "" : options.runId ? `/${options.runId}${options.action === "observe" ? "" : `/${options.action}`}` : "";
   const headers: Record<string, string> = { Authorization: `Basic ${Buffer.from(`booklet:${deps.password}`).toString("base64")}`, Origin: options.origin };
+  if (options.probeAppId) {
+    const query = new URLSearchParams({ appId: options.probeAppId, publication: options.probePublication! });
+    try {
+      const response = await (deps.fetcher ?? fetch)(`${options.origin}/api/experiments/booklet-runs/preflight?${query}`, {
+        headers, redirect: "error", cache: "no-store", signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) throw new Error("Preflight rejected");
+      const envelope = await response.json() as { data?: unknown };
+      const readiness = probeReadinessSchema.parse(envelope.data);
+      if (readiness.appId !== options.probeAppId || readiness.publication !== options.probePublication) throw new Error("Preflight identity differs");
+    } catch { throw new Error("Probe preflight failed. No run was created. Verify exact publication, workspace secret presence and idle state."); }
+  }
   let body: string | undefined;
   if (options.action === "create") {
     headers["Idempotency-Key"] = options.requestId!;
     body = JSON.stringify({ persona: options.persona, mode: "simulated", ...(options.predecessorRunId ? { predecessorRunId: options.predecessorRunId } : {}) });
-  } else if (options.action !== "observe") body = JSON.stringify({ expectedRevision: options.expectedRevision });
+  } else if (options.action !== "observe") body = JSON.stringify({ expectedRevision: options.expectedRevision, ...(options.operationId ? { operationId: options.operationId } : {}), ...(options.preparationId ? { preparationId: options.preparationId } : {}) });
   if (body) headers["Content-Type"] = "application/json";
   let response: Response;
   try {

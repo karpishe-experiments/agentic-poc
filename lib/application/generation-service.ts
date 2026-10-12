@@ -14,9 +14,10 @@ import { serializeImagePrompt } from "@/lib/images/prompt-serializer";
 
 import { composePage } from "@/lib/composition/compose-page";
 import { SCHEMA_VERSION } from "@/lib/contracts/common";
-import type { GenUICard } from "@/lib/contracts/cards";
+import { genUICardSchema, type GenUICard } from "@/lib/contracts/cards";
 import { createGenerationDiagnostics, describeGenerationError, GenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
 import { pagePlanSchema } from "@/lib/contracts/artifacts";
+import { OPERATION_LIMIT_MS, withOperationBudget } from "@/lib/operations/budget";
 
 type ReferenceItem = {
   entityId: string;
@@ -98,12 +99,7 @@ export class GenerationService {
       if (options.retryItemId && item.id !== options.retryItemId) throw new Error("The requested failed reference is not the next pending item.");
       const input = item.input as { item: ReferenceItem; request: ImageRequest };
       const request = imageRequestSchema.parse(input.request);
-      await new ImageAgentRunService({
-        database: this.repositories.database,
-        repositories: this.repositories,
-        assets: await this.getAssetStore(),
-        onMaterialized: async () => { setTimeout(() => { void this.runReferenceJob(bookletId, jobId).catch(() => undefined); }, 0); },
-      }).createReady({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, position: item.position, target: "reference", subjectLabel: input.item.name, request, page: null });
+      await this.prepareImageAgent({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, position: item.position, startedAtMs: item.startedAtMs, target: "reference", subjectLabel: input.item.name, request, page: null, onMaterialized: async () => { setTimeout(() => { void this.runReferenceJob(bookletId, jobId).catch(() => undefined); }, 0); } });
     });
   }
   public startReferenceJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}): void {
@@ -195,12 +191,7 @@ export class GenerationService {
       const input = item.input as { page: Parameters<typeof composePage>[0]["page"]; geometry: "square_1_1" | "landscape_5_4" | "portrait_4_5"; request: ImageRequest };
       const request = imageRequestSchema.parse(input.request);
       const pageLabel = input.page as { kind?: string; pageIndex?: number };
-      await new ImageAgentRunService({
-        database: this.repositories.database,
-        repositories: this.repositories,
-        assets: await this.getAssetStore(),
-        onMaterialized: async () => { setTimeout(() => { void this.runPageJob(bookletId, jobId).catch(() => undefined); }, 0); },
-      }).createReady({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, position: item.position, target: "page", subjectLabel: pageLabel.kind === "cover" ? "the cover" : `page ${pageLabel.pageIndex ?? item.position}`, request, page: input.page });
+      await this.prepareImageAgent({ bookletId, jobId, itemId: item.id, itemKey: item.itemKey, position: item.position, startedAtMs: item.startedAtMs, target: "page", subjectLabel: pageLabel.kind === "cover" ? "the cover" : `page ${pageLabel.pageIndex ?? item.position}`, request, page: input.page, onMaterialized: async () => { setTimeout(() => { void this.runPageJob(bookletId, jobId).catch(() => undefined); }, 0); } });
     });
   }
   public startPageJob(bookletId: string, jobId: string, options: { retryItemId?: string } = {}): void {
@@ -217,15 +208,25 @@ export class GenerationService {
   private async finalizeReferences(bookletId: string, jobId: string) {
     const items = await this.repositories.jobs.getItems(jobId);
     if (!items.length || items.some((item) => item.status !== "succeeded" || !item.assetId)) return;
+    const job = await this.repositories.database.collections.generation_jobs.findOne({ _id: jobId, bookletId, jobType: "references" });
+    const jobInput = (() => { try { return job ? JSON.parse(job.inputJson) as unknown : null; } catch { return null; } })();
+    const sourceVersionId = jobInput && typeof jobInput === "object" && "visualBibleVersionId" in jobInput && typeof jobInput.visualBibleVersionId === "string" ? jobInput.visualBibleVersionId : null;
+    if (!job) return;
     const bible = await this.artifacts.get(bookletId, "visual_bible");
     if (!bible.currentVersion || !bible.currentVersion.content || typeof bible.currentVersion.content !== "object") return;
     const source = bible.currentVersion.content as { characters: Array<{ entityId: string; currentReferenceAssetId: string | null }>; locations: Array<{ entityId: string; currentReferenceAssetId: string | null }> };
     const byEntity = new Map(items.map((item) => [(item.input as { item: ReferenceItem }).item.entityId, item.assetId!]));
-    const revised = await this.artifacts.revise(bookletId, "visual_bible", {
+    const nextContent = {
       ...source,
       characters: source.characters.map((item) => ({ ...item, currentReferenceAssetId: byEntity.get(item.entityId) ?? item.currentReferenceAssetId })),
       locations: source.locations.map((item) => ({ ...item, currentReferenceAssetId: byEntity.get(item.entityId) ?? item.currentReferenceAssetId })),
-    }, { createdBy: "application" });
+    };
+    const outputsAlreadyCurrent = [...byEntity].every(([entityId, assetId]) => [...source.characters, ...source.locations].find((item) => item.entityId === entityId)?.currentReferenceAssetId === assetId);
+    // A saved old continuation must not replace a newer visual-bible revision.
+    // It can only finish the exact current output it already wrote, or the
+    // original job source version before another writer advanced the artifact.
+    if (!outputsAlreadyCurrent && (sourceVersionId ? bible.currentVersion.id !== sourceVersionId : true) && Date.parse(bible.currentVersion.createdAt) > job.createdAtMs) return;
+    const revised = outputsAlreadyCurrent ? bible : await this.artifacts.revise(bookletId, "visual_bible", nextContent, { createdBy: "application" });
     const content = revised.currentVersion?.content as { characters?: Array<{ entityId: string; name: string; currentReferenceAssetId: string | null }>; locations?: Array<{ entityId: string; name: string; currentReferenceAssetId: string | null }> } | undefined;
     const galleryItems = [...(content?.characters ?? []), ...(content?.locations ?? [])]
       .flatMap((entity) => entity.currentReferenceAssetId ? [{ assetId: entity.currentReferenceAssetId, label: entity.name, selected: false, regenerationTarget: { kind: "reference" as const, entityId: entity.entityId } }] : []);
@@ -241,13 +242,16 @@ export class GenerationService {
       allowedActions: ["approve_and_continue"],
       payload: { artifactType: "visual_bible", versionId: revised.currentVersion.id, items: galleryItems },
     };
-    await this.repositories.conversation.persistAssistantCard({
-      bookletId,
-      messageId: randomUUID(),
-      narration: "Canonical references are ready for review.",
-      card,
-      createdAtMs: Date.now(),
-    });
+    if (!await this.hasArtifactReviewCard(bookletId, "visual_bible", revised.currentVersion.id)) {
+      await this.repositories.conversation.persistAssistantCard({
+        bookletId,
+        messageId: randomUUID(),
+        narration: "Canonical references are ready for review.",
+        card,
+        createdAtMs: Date.now(),
+      });
+    }
+    await this.acknowledgeCompletedImageContinuations(bookletId, items);
   }
 
   private async haltForSavedFailure(jobId: string): Promise<boolean> {
@@ -266,8 +270,12 @@ export class GenerationService {
   private async finalizePages(bookletId: string, jobId: string) {
     const items = await this.repositories.jobs.getItems(jobId);
     if (!items.length || items.some((item) => item.status !== "succeeded" || !item.assetId)) return;
+    const job = await this.repositories.database.collections.generation_jobs.findOne({ _id: jobId, bookletId, jobType: "pages" });
+    const jobInput = (() => { try { return job ? JSON.parse(job.inputJson) as unknown : null; } catch { return null; } })();
+    const sourcePlanVersionId = jobInput && typeof jobInput === "object" && "pagePlanVersionId" in jobInput && typeof jobInput.pagePlanVersionId === "string" ? jobInput.pagePlanVersionId : null;
+    if (!job) return;
     const plan = await this.artifacts.get(bookletId, "page_plan");
-    if (!plan.currentVersion) return;
+    if (!plan.currentVersion || (sourcePlanVersionId ? plan.currentVersion.id !== sourcePlanVersionId : Date.parse(plan.currentVersion.createdAt) > job.createdAtMs)) return;
     const previous = await this.artifacts.get(bookletId, "final_pages");
     const existingByPageId = new Map(((previous.currentVersion?.content as { pages?: Array<{ pageId: string; pageIndex: number; sourceIllustrationAssetId: string; composedAssetId: string; readerText: string; lettering?: unknown[]; textSafeRegion: { x: number; y: number; width: number; height: number }; revisionNumber: number; acceptedQualityIssueIds: string[] }> } | undefined)?.pages ?? []).map((page) => [page.pageId, page]));
     const generatedByPageId = new Map(items.map((item) => {
@@ -277,9 +285,14 @@ export class GenerationService {
       return [source.page.pageId, { pageId: source.page.pageId, pageIndex: source.page.pageIndex, sourceIllustrationAssetId: result.sourceAssetId, composedAssetId: result.composedAssetId, readerText: source.page.readerText, lettering: source.page.lettering, textSafeRegion: source.page.textSafeRegion, revisionNumber: (previousPage?.revisionNumber ?? 0) + 1, acceptedQualityIssueIds: [] }] as const;
     }));
     const plannedPages = (plan.currentVersion.content as { pages: Array<{ pageId: string }> }).pages;
-    const pages = plannedPages.map((page) => generatedByPageId.get(page.pageId) ?? existingByPageId.get(page.pageId)).filter((page): page is NonNullable<typeof page> => Boolean(page));
+    const allOutputsAlreadyFinalized = plannedPages.every((page) => Boolean(generatedByPageId.get(page.pageId) ?? existingByPageId.get(page.pageId))) && [...generatedByPageId].every(([pageId, generated]) => {
+      const existing = existingByPageId.get(pageId);
+      return Boolean(existing && generated.sourceIllustrationAssetId === existing.sourceIllustrationAssetId && generated.composedAssetId === existing.composedAssetId);
+    });
+    const pages = plannedPages.map((page) => allOutputsAlreadyFinalized ? existingByPageId.get(page.pageId) : generatedByPageId.get(page.pageId) ?? existingByPageId.get(page.pageId)).filter((page): page is NonNullable<typeof page> => Boolean(page));
     if (pages.length !== plannedPages.length) return;
-    const revised = await this.artifacts.revise(bookletId, "final_pages", { schemaVersion: "1", pages }, { createdBy: "application" });
+    if (!allOutputsAlreadyFinalized && previous.currentVersion && Date.parse(previous.currentVersion.createdAt) > job.createdAtMs) return;
+    const revised = allOutputsAlreadyFinalized ? previous : await this.artifacts.revise(bookletId, "final_pages", { schemaVersion: "1", pages }, { createdBy: "application" });
     if (!revised.currentVersion) return;
     const card: GenUICard = {
       schemaVersion: SCHEMA_VERSION,
@@ -296,13 +309,37 @@ export class GenerationService {
         items: pages.map((page) => ({ assetId: page.composedAssetId, label: page.pageIndex === 0 ? "Cover" : `Story page ${page.pageIndex}`, selected: false, regenerationTarget: { kind: "page" as const, pageId: page.pageId } })),
       },
     };
-    await this.repositories.conversation.persistAssistantCard({
-      bookletId,
-      messageId: randomUUID(),
-      narration: "Every page is composed and ready for review.",
-      card,
-      createdAtMs: Date.now(),
+    if (!await this.hasArtifactReviewCard(bookletId, "final_pages", revised.currentVersion.id)) {
+      await this.repositories.conversation.persistAssistantCard({
+        bookletId,
+        messageId: randomUUID(),
+        narration: "Every page is composed and ready for review.",
+        card,
+        createdAtMs: Date.now(),
+      });
+    }
+    await this.acknowledgeCompletedImageContinuations(bookletId, items);
+  }
+
+  private async hasArtifactReviewCard(bookletId: string, artifactType: "visual_bible" | "final_pages", versionId: string): Promise<boolean> {
+    const rows = await this.repositories.database.collections.cards.find({ bookletId, family: "artifact_review" }).toArray();
+    return rows.some((row) => {
+      try {
+        const card = genUICardSchema.parse(JSON.parse(row.cardJson));
+        return card.family === "artifact_review" && card.payload.artifactType === artifactType && card.payload.versionId === versionId;
+      } catch { return false; }
     });
+  }
+
+  private async acknowledgeCompletedImageContinuations(bookletId: string, items: Awaited<ReturnType<Repositories["jobs"]["getItems"]>>): Promise<void> {
+    for (const item of items) {
+      const result = item.result;
+      const batchId = result && typeof result === "object" && "executionBatchId" in result && typeof result.executionBatchId === "string" ? result.executionBatchId : null;
+      if (!batchId) continue;
+      const batch = await this.repositories.execution.getBatch(batchId);
+      if (!batch || batch.bookletId !== bookletId || !batch.materializationContinuationPending || !batch.selectedItemId) continue;
+      if (!await this.repositories.execution.acknowledgeMaterializationContinuation({ batchId, bookletId, cardId: batch.cardId, selectedItemId: batch.selectedItemId, now: Date.now() })) throw new Error("materialization_continuation_stale");
+    }
   }
 
   private async recordItemFailure(input: { bookletId: string; jobId: string; itemId: string; itemKey: string; attempt: number; error: unknown }): Promise<void> {
@@ -315,6 +352,25 @@ export class GenerationService {
       attempt: input.attempt,
       error: describeGenerationError(input.error),
     });
+  }
+
+  private async prepareImageAgent(input: { bookletId: string; jobId: string; itemId: string; itemKey: string; position: number; startedAtMs: number; target: "reference" | "page"; subjectLabel: string; request: ImageRequest; page: unknown | null; onMaterialized: () => Promise<void> }): Promise<void> {
+    try {
+      await withOperationBudget(input.startedAtMs + OPERATION_LIMIT_MS, async () => {
+        const service = new ImageAgentRunService({ database: this.repositories.database, repositories: this.repositories, assets: await this.getAssetStore(), onMaterialized: input.onMaterialized });
+        await service.createReady(input);
+      });
+    } catch {
+      const dispatched = await this.repositories.database.collections.execution_batches.findOne({ subjectId: input.itemId, queuedAtMs: { $gte: input.startedAtMs } });
+      if (dispatched) return;
+      await this.repositories.jobs.failItem({
+        jobId: input.jobId,
+        itemId: input.itemId,
+        error: { kind: "execution", message: "Image preparation stopped before a candidate operation started." },
+        finishedAtMs: Date.now(),
+        haltJob: true,
+      });
+    }
   }
 
   private async getAssetStore(): Promise<AssetStore> {

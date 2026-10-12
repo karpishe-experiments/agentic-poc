@@ -14,14 +14,20 @@ ACTION='' APPLY=false ENVIRONMENT='' IMAGE_DIGEST='' BACKUP_ID='' CONFIRMATION='
 GENERATE_PASSWORD=false
 CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 SECRET_NAME=''
+RUN_ID=''
+COMPOSE_TIMEOUT_SECONDS=300
+CONTROL_DEADLINE_SECONDS=0
 COMPOSE_SECRET_FILE=''
 ZONE_NAME='' STAGING_HOSTNAME='' PROD_HOSTNAME='' DEPLOY_HOSTNAME='' CONFIG_OUTPUT=''
 ROOT=/opt/kids-booklet
 STATE=/var/lib/kids-booklet
 SECRETS=/etc/kids-booklet
+DIFY_RELEASE="$ROOT/dify/releases/1.17.1"
+DIFY_DATA="$STATE/dify"
+DIFY_ENV="$SECRETS/dify/runtime.env"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEMP_DIR='' ATLAS_PLAN_FILE=''
+TEMP_DIR='' ATLAS_PLAN_FILE='' ADMIN_API_KEY_FILE=''
 declare -A SEEN=()
 declare -A GENERATED_MONGODB_URI=()
 ATLAS_PUBLIC_KEY="${ATLAS_PUBLIC_KEY:-${ATLAS_ADMIN_PUBLIC_KEY:-}}" ATLAS_PRIVATE_KEY="${ATLAS_PRIVATE_KEY:-${ATLAS_ADMIN_PRIVATE_KEY:-}}" ATLAS_RESPONSE='' ATLAS_STATUS='' GITHUB_ADMIN_TOKEN="${GITHUB_ADMIN_TOKEN:-}"
@@ -32,14 +38,14 @@ SESSION_ACTIVE="${SESSION_ACTIVE:-false}" SESSION_RESTORE_ERREXIT="${SESSION_RES
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need_command() { command -v "$1" >/dev/null || die "Required command missing: $1"; }
-cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; CLOUDFLARE_API_TOKEN=''; AWS_ACCESS_KEY_ID=''; AWS_SECRET_ACCESS_KEY=''; unset ATLAS_PUBLIC_KEY ATLAS_PRIVATE_KEY ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_api_token AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET TUNNEL_SERVICE_TOKEN_ID TUNNEL_SERVICE_TOKEN_SECRET; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
+cleanup() { ATLAS_PUBLIC_KEY=''; ATLAS_PRIVATE_KEY=''; GITHUB_ADMIN_TOKEN=''; CLOUDFLARE_API_TOKEN=''; AWS_ACCESS_KEY_ID=''; AWS_SECRET_ACCESS_KEY=''; unset ATLAS_PUBLIC_KEY ATLAS_PRIVATE_KEY ATLAS_ADMIN_PUBLIC_KEY ATLAS_ADMIN_PRIVATE_KEY GITHUB_ADMIN_TOKEN GH_TOKEN CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_api_token AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET TUNNEL_SERVICE_TOKEN_ID TUNNEL_SERVICE_TOKEN_SECRET DIFY_TOOL_KEY DIFY_API_KEY; if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then rm -rf -- "$TEMP_DIR"; fi; }
 trap cleanup EXIT
 usage() {
   cat <<'HELP'
 Usage: bash scripts/deploy/vps-deployment.sh --action ACTION [named options] [--apply]
-Actions: discover-config, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
-         restore, rollback, rotate-secrets, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
-         clear-credential-session, host-dispatch, host-run
+Actions: discover-config, dify-discover, dify-check, dify-idle, dify-diagnostics, dify-repair-sandbox, dify-repair-scheduler, dify-install, dify-repair-broker, dify-repair-collaboration, dify-enable-admin-api, access-check, setup, finalize, status, infrastructure, deploy, check, backup,
+         restore, rollback, rotate-secrets, rotate-protected-dify-key, repair-first-activation-secrets, reset-staging, retire-staging-artifact-index, resume, atlas-reconcile, credential-session,
+         clear-credential-session, operation-status, operation-stop, backup-verify, staging-bootstrap-reconcile, host-dispatch, host-run
 Options:
   --config PATH                     non-secret JSON configuration
   --zone HOSTNAME                    required for discover-config
@@ -47,14 +53,17 @@ Options:
   --prod-hostname HOSTNAME           defaults to booklet.<zone> for discover-config
   --deploy-hostname HOSTNAME         defaults to deploy.<zone> for discover-config
   --write-config PATH                required output for discover-config; must be infra/config/vps.json
-  --environment staging|prod        target for application operations
+  --environment staging|prod|dify   target for application or Dify operations
   --image-digest ghcr.io/name@sha256:HEX  required for deploy
   --commit FULL_SHA                 required for deploy
   --backup-id ID --confirmation DB   required for restore
-  --confirmation kids_booklet       required for reset-staging or index retirement apply
+  --confirmation kids_booklet       required for reset-staging
+  --commit FULL_SHA --confirmation kids_booklet  required for index retirement apply
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
-  --secret-name NAME                repair or rotate only one application secret
+                                   required exact retained/completed ID for operation-status/operation-stop
+  --run-id UUID                     optional staging run for dify-diagnostics
+  --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE/DIFY_BOOKLET_RUNNER bundle
   --generate-password               generate and display ACCESS_GATE_PASSWORD once
   --help
 Preview is the default; only --apply permits remote mutations. status/check reject
@@ -75,7 +84,7 @@ parse_arguments() {
       --help) usage; exit 0 ;;
       --apply) APPLY=true; shift ;;
       --generate-password) GENERATE_PASSWORD=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -85,6 +94,7 @@ parse_arguments() {
           --image-digest) IMAGE_DIGEST="$value";; --backup-id) BACKUP_ID="$value";; --confirmation) CONFIRMATION="$value";;
           --vps-host) VPS_HOST="$value";; --vps-user) VPS_USER="$value";; --commit) COMMIT="$value";; --request-id) REQUEST_ID="$value";;
           --secret-name) SECRET_NAME="$value";;
+          --run-id) RUN_ID="$value";;
           --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
           --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
@@ -96,8 +106,14 @@ parse_arguments() {
   VPS_USER="${VPS_USER:-kids-booklet-deploy}"
 }
 validate_arguments() {
-  [[ "$ACTION" =~ ^(discover-config|access-check|setup|finalize|status|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run)$ ]] || die 'Select a supported --action'
-  [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod)$ ]] || die 'Invalid environment'
+  [[ "$ACTION" =~ ^(discover-config|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|dify-enable-admin-api|access-check|setup|finalize|status|operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile|infrastructure|infra-lock|infra-unlock|sync-host|deploy|check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|atlas-reconcile|credential-session|clear-credential-session|host-dispatch|host-run|host-cleanup)$ ]] || die 'Select a supported --action'
+  [[ -z "$RUN_ID" || ( "$ACTION" == dify-diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]] || die 'Run ID requires dify-diagnostics and a lowercase UUID'
+  [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" =~ ^(staging|prod|dify)$ ]] || die 'Invalid environment'
+  if [[ "$ACTION" == dify-* && "$ACTION" != dify-discover ]]; then
+    [[ "$ENVIRONMENT" == dify ]] || die 'Dify operation requires --environment dify'
+  elif [[ "$ENVIRONMENT" == dify && "$ACTION" != host-run && "$ACTION" != host-cleanup && "$ACTION" != resume && "$ACTION" != status && "$ACTION" != operation-status && "$ACTION" != operation-stop ]]; then
+    die 'Booklet operation cannot target Dify'
+  fi
   [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die 'Invalid SSH user'
   [[ -z "$VPS_HOST" || "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || die 'Invalid SSH hostname'
   [[ -z "$COMMIT" || "$COMMIT" =~ ^[a-f0-9]{40}$ ]] || die 'Commit must be a full SHA'
@@ -105,8 +121,11 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
-  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|GEMINI_API_KEY)$ ]] || die 'Invalid application secret name'
-  [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
+  [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY|DIFY_COMMUNITY_PROBE|DIFY_BOOKLET_RUNNER)$ ]] || die 'Invalid application secret name'
+  [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
+  if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE || "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
+    [[ "$ENVIRONMENT" == staging && "$ACTION" =~ ^(rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die 'Dify bundle is limited to staging rotation'
+  fi
   if [[ "$GENERATE_PASSWORD" == true ]]; then
     [[ "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets)$ ]] || die '--generate-password is only valid for application secret repair or rotation'
     [[ -z "$SECRET_NAME" || "$SECRET_NAME" == ACCESS_GATE_PASSWORD ]] || die '--generate-password conflicts with the selected secret name'
@@ -118,8 +137,18 @@ validate_arguments() {
   done
   case "$ACTION" in
     deploy) [[ -n "$ENVIRONMENT" && -n "$IMAGE_DIGEST" && -n "$COMMIT" ]] || die 'Deploy requires environment, image digest and commit';;
-    check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
+    check|backup|restore|rollback|rotate-secrets|rotate-protected-dify-key|repair-first-activation-secrets|stage-secrets|reset-staging|resume) [[ -n "$ENVIRONMENT" ]] || die 'Environment is required';;
   esac
+  if [[ "$ACTION" == operation-status || "$ACTION" == operation-stop ]]; then
+    [[ -n "$REQUEST_ID" && -n "$ENVIRONMENT" ]] || die 'Operation control requires an exact request ID and environment'
+  fi
+  if [[ "$ACTION" == backup-verify ]]; then
+    [[ "$ENVIRONMENT" =~ ^(staging|prod)$ && -n "$BACKUP_ID" && -n "$COMMIT" && -n "$IMAGE_DIGEST" ]] || die 'Backup verification requires exact Booklet environment, backup ID, deployed commit and image digest'
+  fi
+  if [[ "$ACTION" == staging-bootstrap-reconcile ]]; then
+    [[ "$ENVIRONMENT" == staging && "$REQUEST_ID" == 38149230374-1 && -n "$COMMIT" && -n "$IMAGE_DIGEST" && "$COMMIT" != c04d7512dfaa3156eb3b81331625d1a0af4f7faf ]] || die 'Bootstrap requires exact historical staging request and a separate reviewed candidate commit/image'
+    [[ "$APPLY" == false || "$CONFIRMATION" == kids_booklet ]] || die 'Bootstrap apply requires --confirmation kids_booklet'
+  fi
   if [[ "$ACTION" == restore ]]; then
     [[ -n "$BACKUP_ID" ]] || die 'Restore requires backup ID'
     local expected=kids_booklet; [[ "$ENVIRONMENT" != prod ]] || expected=kids_booklet_prod
@@ -129,10 +158,13 @@ validate_arguments() {
     [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset is staging-only and requires --confirmation kids_booklet'
   fi
   if [[ "$ACTION" == retire-staging-artifact-index ]]; then
-    [[ "$ENVIRONMENT" == staging && -n "$COMMIT" && -z "$BACKUP_ID" ]] || die 'Index retirement requires staging, exact commit and no supplied backup ID'
-    [[ "$APPLY" == false || "$CONFIRMATION" == kids_booklet ]] || die 'Index retirement apply requires --confirmation kids_booklet'
+    [[ "$ENVIRONMENT" == staging && -n "$COMMIT" ]] || die 'Index retirement requires staging and the exact deployed commit'
+    [[ "$APPLY" == false || "$CONFIRMATION" == kids_booklet ]] || die 'Index retirement requires --confirmation kids_booklet'
+    if [[ "$APPLY" == true && -n "$BACKUP_ID" && ! -f "$STATE/operation.json" ]]; then
+      die 'Index retirement creates its own pre-change backup'
+    fi
   fi
-  case "$ACTION" in status|check|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
+  case "$ACTION" in status|operation-status|backup-verify|check|dify-check|dify-idle|dify-discover|dify-diagnostics|access-check|credential-session|clear-credential-session) [[ "$APPLY" == false ]] || die "$ACTION rejects --apply";; esac
   if [[ "$ACTION" == discover-config ]]; then
     [[ -n "$ZONE_NAME" && -n "$CONFIG_OUTPUT" ]] || die 'discover-config requires --zone and --write-config'
     [[ -z "$STAGING_HOSTNAME" || "$STAGING_HOSTNAME" == "$ZONE_NAME" || "$STAGING_HOSTNAME" == *."$ZONE_NAME" ]] || die 'Staging hostname must be in the Cloudflare zone'
@@ -156,8 +188,11 @@ load_terraform_configuration() {
   TF_VAR_staging_hostname="$(jq -r .environments.staging.APP_HOSTNAME "$CONFIG_FILE")"
   TF_VAR_prod_hostname="$(jq -r .environments.prod.APP_HOSTNAME "$CONFIG_FILE")"
   TF_VAR_deploy_hostname="$(jq -r .deploy_hostname "$CONFIG_FILE")"
+  TF_VAR_dify_hostname="$(jq -er .dify_hostname "$CONFIG_FILE")"
+  TF_VAR_dify_backup_bucket="$(jq -er .dify_backup_bucket "$CONFIG_FILE")"
+  TF_VAR_dify_public_enabled="$(jq -er '.dify_public_enabled | if type == "boolean" then tostring else error("invalid Dify public switch") end' "$CONFIG_FILE")"
   R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
-  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname R2_STATE_BUCKET
+  export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname TF_VAR_dify_hostname TF_VAR_dify_backup_bucket TF_VAR_dify_public_enabled R2_STATE_BUCKET
   export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
   export TF_VAR_state_bucket="$R2_STATE_BUCKET"
 }
@@ -179,9 +214,12 @@ host_call() {
   [[ -z "$BACKUP_ID" ]] || remote+=(--backup-id "$BACKUP_ID")
   [[ -z "$CONFIRMATION" ]] || remote+=(--confirmation "$CONFIRMATION")
   [[ -z "$REQUEST_ID" ]] || remote+=(--request-id "$REQUEST_ID")
+  [[ -z "$RUN_ID" ]] || remote+=(--run-id "$RUN_ID")
   [[ "$APPLY" == false ]] || remote+=(--apply)
   printf -v remote_command ' %s' "${remote[@]}"
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command"
+  local -a bound=()
+  case "$ACTION" in operation-status) bound=(timeout --kill-after=1s 30s);; operation-stop) bound=(timeout --kill-after=1s 60s);; backup-verify) bound=(timeout --kill-after=5s 1825s);; staging-bootstrap-reconcile) bound=(timeout --kill-after=5s 2365s);; esac
+  "${bound[@]}" ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command"
 }
 require_root() { [[ "$EUID" -eq 0 ]] || die 'This operation requires root on the VPS'; }
 validate_host_capacity() {
@@ -198,21 +236,477 @@ verify_release_capacity() {
 }
 compose() {
   local release="$1"; shift
-  docker compose --project-name "kids-booklet-$ENVIRONMENT" --env-file "$release/runtime.env" -f "$release/compose.yml" -f "$release/environment.yml" -f "${COMPOSE_SECRET_FILE:-$SECRETS/$ENVIRONMENT/secrets.json}" -f "$release/image.json" "$@"
+  local -a bound=()
+  local seconds="$COMPOSE_TIMEOUT_SECONDS"
+  if [[ "${1:-}" == up ]]; then
+    [[ "$seconds" -gt 0 && "$seconds" -lt 180 ]] || seconds=180
+    seconds="$(remaining_operation_seconds "$seconds")" || return 124
+    record_operation_command compose-up "$seconds"
+  fi
+  if [[ "$seconds" -gt 0 ]]; then bound=(timeout --kill-after=5s "${seconds}s"); fi
+  "${bound[@]}" docker compose --project-name "kids-booklet-$ENVIRONMENT" --env-file "$release/runtime.env" -f "$release/compose.yml" -f "$release/environment.yml" -f "${COMPOSE_SECRET_FILE:-$SECRETS/$ENVIRONMENT/secrets.json}" -f "$release/image.json" "$@"
 }
 maintenance() {
   local release="$1" command="$2"; shift 2
   local release_image
   release_image="$(jq -er .services.app.image "$release/image.json")"
-  compose "$release" run --rm --no-deps -T -e RUNNER_ENABLED=false -e "RELEASE_IMAGE_DIGEST=$release_image" -e "BACKUP_ID=$BACKUP_ID" -e "CONFIRM_DATABASE=$CONFIRMATION" app node --import tsx "scripts/$command.ts" "$@"
+  local full_asset_backup=false
+  [[ "$ACTION" != reset-staging || "$command" != recovery ]] || full_asset_backup=true
+  local phase_seconds=300 status=0 name="booklet-operation-${ENVIRONMENT}-${REQUEST_ID:-local}-$$-$RANDOM"
+  case "$command:${1:-}" in
+    recovery:backup|recovery:verify) phase_seconds=1800;; recovery:restore) phase_seconds=3600;;
+    check-deployment-readiness:*) phase_seconds=180;;
+  esac
+  # Cleanup may reopen the original service after a failed drain. It is not a
+  # new lifecycle phase and must remain possible after the work budget expires.
+  if [[ "$command:${1:-}" != deployment-control:disable ]]; then phase_seconds="$(remaining_operation_seconds "$phase_seconds")" || return 124; fi
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    local control_remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$control_remaining" -gt 0 ]] || return 124
+    [[ "$phase_seconds" -le "$control_remaining" ]] || phase_seconds="$control_remaining"
+  fi
+  record_operation_command "$command" "$phase_seconds"
+  if COMPOSE_TIMEOUT_SECONDS="$phase_seconds" compose "$release" run --rm --no-deps -T --name "$name" \
+    --label "uk.co.uniwares.booklet.request=${REQUEST_ID:-local}" --label "uk.co.uniwares.booklet.environment=$ENVIRONMENT" \
+    -e RUNNER_ENABLED=false -e "DRAIN_TIMEOUT_MS=$(((phase_seconds < 300 ? phase_seconds : 300) * 1000))" -e "DEPLOYMENT_URL=${DEPLOYMENT_URL:-}" -e "BACKUP_ALL_ASSETS=$full_asset_backup" -e "RELEASE_IMAGE_DIGEST=$release_image" -e "BACKUP_ID=$BACKUP_ID" -e "CONFIRM_DATABASE=$CONFIRMATION" app node --import tsx "scripts/$command.ts" "$@"; then
+    return 0
+  else status=$?; fi
+  # Killing the Compose client does not stop its daemon-owned container. Stop
+  # only this named/labelled one-off; never infer that its writes failed.
+  stop_owned_oneoff "$name" 20 || printf 'error: Owned maintenance container remains unverified; inspect before resume\n' >&2
+  printf 'error: Maintenance command %s stopped (exit=%s); inspect retained phase and outputs before resume\n' "$command" "$status" >&2
+  return "$status"
+}
+record_operation_command() {
+  [[ -n "$REQUEST_ID" && -f "$STATE/operation.json" ]] || return 0
+  local started; started="$(date +%s)"
+  jq --arg id "$REQUEST_ID" --arg command "$1" --argjson started "$started" --argjson seconds "$2" \
+    'if .requestId==$id then .command=$command | .commandStartedAt=$started | .commandDeadlineAt=($started+$seconds) else error("Operation changed") end' \
+    "$STATE/operation.json" > "$STATE/operation.next.json"
+  mv "$STATE/operation.next.json" "$STATE/operation.json"
+}
+stop_owned_oneoff() {
+  local name="$1" seconds="$2" record filter
+  [[ "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || return 1
+  filter="name=^/${name//./[.]}$"
+  [[ ! "$name" =~ ^[a-f0-9]{12,64}$ ]] || filter="id=$name"
+  if ! record="$(control_timeout 5 docker inspect "$name" 2>/dev/null)"; then
+    record="$(control_timeout 5 docker ps -aq --filter "$filter")" || return 1
+    [[ -z "$record" ]]; return
+  fi
+  jq -e --arg id "${REQUEST_ID:-local}" --arg environment "$ENVIRONMENT" '
+    length==1 and .[0].Config.Labels["uk.co.uniwares.booklet.request"]==$id and
+    .[0].Config.Labels["uk.co.uniwares.booklet.environment"]==$environment and
+    .[0].Config.Labels["com.docker.compose.project"]==("kids-booklet-"+$environment) and
+    .[0].Config.Labels["com.docker.compose.oneoff"]=="True"' <<< "$record" >/dev/null || return 1
+  control_timeout "$seconds" docker stop --time 5 "$name" >/dev/null 2>&1 || return 1
+  # --rm can remove the container between stop acknowledgement and this call.
+  if ! control_timeout 5 docker rm "$name" >/dev/null 2>&1; then
+    record="$(control_timeout 5 docker ps -aq --filter "$filter")" || return 1
+    [[ -z "$record" ]] || return 1
+  fi
+}
+control_timeout() {
+  local seconds="$1" remaining; shift
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$remaining" -gt 0 ]] || return 124
+    [[ "$seconds" -le "$remaining" ]] || seconds="$remaining"
+  fi
+  timeout --kill-after=1s "${seconds}s" "$@"
+}
+operation_runtime_seconds() {
+  case "$1" in restore) echo 3600;; backup) echo 1800;; deploy|dify-install|rollback|rotate-secrets|reset-staging|retire-staging-artifact-index) echo 2700;; *) echo 300;; esac
+}
+# Explicit compatibility bridge for one reviewed historical staging blocker.
+# It never changes the original request's image, commit, phase or byte evidence.
+legacy_staging_node() {
+  local release="$1" mode="$2" seconds=45 status=0
+  [[ "$mode" != verify-backup ]] || seconds=1800
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    local remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$remaining" -gt 0 ]] || return 124
+    [[ "$seconds" -le "$remaining" ]] || seconds="$remaining"
+  fi
+  local name="booklet-operation-staging-bootstrap-$$-$RANDOM"
+  if COMPOSE_TIMEOUT_SECONDS="$seconds" compose "$release" run --rm --no-deps -T --name "$name" \
+    --label uk.co.uniwares.booklet.request=local --label uk.co.uniwares.booklet.environment=staging \
+    -e RUNNER_ENABLED=false -e "BOOTSTRAP_MODE=$mode" -e "BACKUP_ID=$BACKUP_ID" \
+    -e "RELEASE_IMAGE_DIGEST=$(jq -er .services.app.image "$release/image.json")" \
+    app node --import tsx - 2>/dev/null <<'NODE'
+(async () => {
+  if (process.env.DEPLOYMENT_ENV !== '_staging' || process.env.RUNNER_ENABLED !== 'false') throw Error('TargetDiffers');
+  const {getDatabase, withMongoTransaction} = require('./db/client.ts');
+  const mode = process.env.BOOTSTRAP_MODE;
+  if (mode === 'verify-backup') {
+    const {getServerEnv} = require('./lib/config/env.ts');
+    const {createObjectStoreClient} = require('./lib/assets/create-object-store-client.ts');
+    const {RecoveryStorage} = require('./scripts/recovery-storage.ts');
+    const env = getServerEnv(), client = createObjectStoreClient(env);
+    try {
+      const manifest = await new RecoveryStorage(client, env.RECOVERY_BUCKET).verifiedCompletedBackup(
+        process.env.BACKUP_ID, env.MONGODB_DATABASE, '_staging', process.env.RELEASE_IMAGE_DIGEST);
+      console.log(JSON.stringify({verified:true,backupId:manifest.backupId,assetCount:manifest.assets.length}));
+    } finally { client.destroy(); }
+    return;
+  }
+  const db = getDatabase(), options = {};
+  const runId='92272a97-f96d-4634-8cba-3524a3fa2b51', operationId='c8c0e121-d3cf-41bc-8023-79cfdae8e291';
+  const itemId='354d337a-4e9f-42ab-a8ec-0c327a45748a', jobId='1a258e4b-aa34-454c-8f04-ada32b4c808f';
+  const reason='reviewed exact staging bootstrap 38149230374-1';
+  async function inspect(session, repaired=false) {
+    const opts=session ? {session} : options;
+    const run=await db.collections.experiment_runs.findOne({_id:runId},opts);
+    const op=await db.collections.experiment_operations.findOne({_id:operationId,runId},opts);
+    const item=await db.collections.generation_items.findOne({_id:itemId,jobId},opts);
+    const job=await db.collections.generation_jobs.findOne({_id:jobId},opts);
+    if (!run || !op || !item || !job || run.mode!=='simulated' || run.status!=='blocked' || run.safeFailure!=='definite_failure' ||
+        run.activeOperationId!=null || run.counters?.payableText!==0 || run.counters?.payableImage!==0 || job.bookletId!==run.bookletId || job.jobType!=='dify_pages' || JSON.parse(job.inputJson).runId!==runId ||
+        JSON.parse(item.resultJson).operationId!==operationId || item.itemKey!==op.subjectId || op.subjectKind!=='page' ||
+        op.role!=='image' || op.taskId!=='J13' || op.state!=='failed' || op.safeFailure!=='definite_failure' || op.reservationCount!==0 ||
+        op.resultJson!=null || op.materializationJson!=null || op.imageCompletionClaim!=null || op.imageCompletionDigest!=null ||
+        op.workflowRunId!=='bbd3a736-6777-4088-8627-557999d7f001' ||
+        item.status!==(repaired?'failed':'running') || job.status!==(repaired?'failed':'running')) throw Error('EvidenceDiffers');
+    const counts={};
+    for (const name of ['generation_items','execution_items','model_calls']) counts[name]=await db.collections[name].countDocuments(
+      {status:'running',...(name==='generation_items'?{_id:{$ne:itemId}}:{})},opts);
+    counts.followups=await db.collections.card_responses.countDocuments({followupStatus:'running'},opts);
+    counts.operations=await db.collections.experiment_operations.countDocuments({$or:[
+      {state:{$in:['prepared','started','unknown']}},
+      {state:'succeeded',dispatchStartedAtMs:{$ne:null},verifiedWorkflowId:null}
+    ]},opts);
+    counts.runs=await db.collections.experiment_runs.countDocuments({$or:[
+      {status:{$in:['queued','running','pausing']}}, {activeOperationId:{$ne:null}},
+      {preparation:{$ne:null},$or:[{'preparation.outcome':{$ne:'failed'}},{'preparation.unresolved':true}]}
+    ]},opts);
+    const control=await db.collections.deployment_control.findOne({environment:'_staging'},opts);
+    if (!control || control.activeMutations!==0 || (control.interruptedMutations??0)!==0 || Object.values(counts).some(Boolean)) throw Error('OtherWorkRemains');
+    return {control,op,counts};
+  }
+  try {
+    if (mode==='reopen') {
+      const changed=await db.collections.deployment_control.updateOne({environment:'_staging',maintenance:true,reason},
+        {$set:{maintenance:false,reason:null,updatedAtMs:Date.now()}});
+      if (changed.modifiedCount!==1) throw Error('AdmissionChanged');
+      console.log(JSON.stringify({admission:'open'})); return;
+    }
+    const initial=await inspect(null,mode==='final');
+    if (mode==='inspect' || mode==='close') {
+      const {readBookletRunnerConfig}=require('./lib/experiment-runner/config.ts');
+      const {createWorkflowRuntime}=require('./lib/experiment-runner/transport.ts');
+      const state=readBookletRunnerConfig(); if (!state.enabled) throw Error('BindingInvalid');
+      const binding=state.config.bindings.find(b=>b.role==='image' && b.taskId===null);
+      const saved=JSON.parse((await db.collections.experiment_runs.findOne({_id:runId})).configurationJson).find(b=>b.role==='image');
+      if (!binding || binding.appId!==saved.appId || binding.publishedWorkflowId!==saved.publishedWorkflowId) throw Error('PublicationDiffers');
+      const result=await createWorkflowRuntime(state.config).retrieve(binding,initial.op.workflowRunId,{deadlineAtMs:Date.now()+10000});
+      if (result.kind!=='execution' || result.execution.status!=='failed' || result.execution.id!==initial.op.workflowRunId ||
+          result.execution.workflow_id!==binding.publishedWorkflowId) throw Error('RemoteOutcomeUnverified');
+    }
+    if (mode==='close') {
+      const changed=await db.collections.deployment_control.updateOne({environment:'_staging',maintenance:false,activeMutations:0,
+        updatedAtMs:initial.control.updatedAtMs},{$set:{maintenance:true,reason,updatedAtMs:Date.now()}});
+      if (changed.modifiedCount!==1) throw Error('AdmissionRace');
+      try { const checked=await inspect(); if (!checked.control.maintenance || checked.control.reason!==reason) throw Error('AdmissionRace'); }
+      catch (error) {
+        await db.collections.deployment_control.updateOne({environment:'_staging',maintenance:true,reason},{$set:{maintenance:false,reason:null,updatedAtMs:Date.now()}});
+        throw error;
+      }
+    } else if (mode==='repair') {
+      await withMongoTransaction(db,async session=>{
+        const checked=await inspect(session); if (!checked.control.maintenance || checked.control.reason!==reason) throw Error('AdmissionChanged');
+        const now=Date.now(), errorJson=JSON.stringify({code:'experiment_run_blocked',runId,operationId,backupId:process.env.BACKUP_ID});
+        const item=await db.collections.generation_items.updateOne({_id:itemId,jobId,status:'running'},{$set:{status:'failed',errorJson,finishedAtMs:now}},{session});
+        const job=await db.collections.generation_jobs.updateOne({_id:jobId,jobType:'dify_pages',status:'running'},{$set:{status:'failed',errorJson,finishedAtMs:now,updatedAtMs:now}},{session});
+        if (item.modifiedCount!==1 || job.modifiedCount!==1) throw Error('EvidenceRace');
+      });
+    } else if (!['inspect','idle','final'].includes(mode)) throw Error('ModeInvalid');
+    if (['idle','final'].includes(mode) && (!initial.control.maintenance || initial.control.reason!==reason)) throw Error('AdmissionChanged');
+    console.log(JSON.stringify({verified:true,mode,runId,operationId,itemId,jobId,counts:initial.counts}));
+  } finally { await db.close(); }
+})().catch(()=>{ console.error('error: Exact staging bootstrap check failed; inspect retained checkpoint without replay'); process.exitCode=1; });
+NODE
+  then return 0; else status=$?; fi
+  stop_owned_oneoff "$name" 20 || printf 'error: Bootstrap one-off remains unverified; inspect before resume\n' >&2
+  return "$status"
+}
+backup_verify_host() {
+  require_root
+  dify_diagnostic_identity
+  exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+  local release; read -r release < "$STATE/releases/$ENVIRONMENT/current"
+  [[ "$release" == "$STATE/releases/$ENVIRONMENT/$COMMIT" && ! -L "$release" ]] || die 'Selected backup verification release changed'
+  [[ "$(jq -er .services.app.image "$release/image.json")" == "$IMAGE_DIGEST" ]] || die 'Selected backup verification image changed'
+  # A fresh read-only command has its own finite budget, not the failed request's
+  # expired execution budget. Do not rewrite the retained operation journal.
+  local REQUEST_ID='' CONTROL_DEADLINE_SECONDS=$((SECONDS + 1820))
+  if [[ "$ENVIRONMENT" == staging && "$COMMIT" == c04d7512dfaa3156eb3b81331625d1a0af4f7faf ]]; then
+    # This exact legacy image has verifiedCompletedBackup but predates the CLI
+    # verify command. Use that installed read-only implementation directly.
+    legacy_staging_node "$release" verify-backup
+  else
+    maintenance "$release" recovery verify
+  fi
+  printf 'result: backup verified %s %s\n' "$ENVIRONMENT" "$BACKUP_ID"
+}
+staging_bootstrap_guard() {
+  local release="$STATE/releases/staging/c04d7512dfaa3156eb3b81331625d1a0af4f7faf" ids=() running_image records
+  [[ "$(< "$STATE/releases/staging/current")" == "$release" ]] || die 'Historical staging release changed'
+  [[ "$(jq -er .services.app.image "$release/image.json")" == "$(jq -er .image "$CONFIG_FILE")@sha256:ddb944691949ed1ff020dc5d4f2fb9873bcddc260f13a7485195889d1fed70cd" ]] || die 'Historical staging image changed'
+  [[ "$(timeout 5s systemctl show kids-booklet-operation-38149230374-1.service --property=ActiveState --value)" =~ ^(failed|inactive)$ ]] || die 'Historical deployment service is active or unverified'
+  jq -e --arg release "$release" '.requestId=="38149230374-1" and .action=="deploy" and .environment=="staging" and .step=="draining" and .commit=="e6f0575478ba2353a4d32c6a36d642152c9d426d" and .priorRelease==$release and (.backupId // "")==""' "$STATE/operation.json" >/dev/null || die 'Historical deployment journal differs'
+  verify_artifact_retirement_release "$release" c04d7512dfaa3156eb3b81331625d1a0af4f7faf
+  records="$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False)" || die 'Historical staging container status is unavailable'
+  [[ -z "$records" ]] || mapfile -t ids <<< "$records"
+  [[ "${#ids[@]}" -le 1 && ( "${1:-}" == allow-stopped || "${#ids[@]}" -eq 1 ) ]] || die 'Historical staging container count differs'
+  if [[ "${#ids[@]}" -eq 1 ]]; then
+    running_image="$(timeout 10s docker inspect --format '{{.Config.Image}}' "${ids[0]}")"
+    [[ "$running_image" == "$(jq -er .services.app.image "$release/image.json")" ]] || die 'Historical running staging image differs'
+  fi
+}
+staging_bootstrap_reconcile_host() (
+  require_root
+  dify_diagnostic_identity
+  local release="$STATE/releases/staging/c04d7512dfaa3156eb3b81331625d1a0af4f7faf" marker="$STATE/staging-bootstrap.json"
+  exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+  staging_bootstrap_guard
+  [[ ! -e "$marker" && ! -e "$STATE/operations/38149230374-1.json" ]] || die 'Bootstrap checkpoint already exists; inspect before any new attempt'
+  printf 'result: bootstrap old request=38149230374-1 commit=c04d7512dfaa3156eb3b81331625d1a0af4f7faf image=sha256:ddb944691949ed1ff020dc5d4f2fb9873bcddc260f13a7485195889d1fed70cd\n'
+  printf 'result: bootstrap candidate commit=%s image=%s\n' "$COMMIT" "$IMAGE_DIGEST"
+  local REQUEST_ID='' CONTROL_DEADLINE_SECONDS=$((SECONDS + 2100))
+  legacy_staging_node "$release" inspect
+  [[ "$APPLY" == true ]] || { printf 'would update: exact staging page bookkeeping after verified backup; retain maintenance for separate reviewed deployment\n'; return; }
+  [[ -n "$BACKUP_ID" ]] || BACKUP_ID="staging-bootstrap-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+  # Failure before repair restores original admission. Once repair begins its
+  # outcome can be uncertain; retain maintenance and durable checkpoint instead.
+  local closed=false repaired=false
+  trap 'if [[ "$closed" == true && "$repaired" == false ]]; then CONTROL_DEADLINE_SECONDS=$((SECONDS + 240)); compose "$release" up -d --no-deps app && verify_application "$release" && legacy_staging_node "$release" reopen || printf "error: Original admission remains unverified; inspect bootstrap checkpoint\n" >&2; fi; cleanup' EXIT
+  legacy_staging_node "$release" close
+  closed=true
+  stop_application "$release"
+  legacy_staging_node "$release" idle
+  if ! maintenance "$release" recovery backup || ! legacy_staging_node "$release" verify-backup; then
+    die 'Bootstrap backup failed; no repair started; bounded original admission recovery follows'
+  fi
+  staging_bootstrap_guard allow-stopped
+  jq -n --arg oldRequest 38149230374-1 --arg oldRelease "$release" --arg oldImage "$(jq -er .services.app.image "$release/image.json")" \
+    --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg backupId "$BACKUP_ID" --arg journalHash "$(sha256sum "$STATE/operation.json" | awk '{print $1}')" \
+    '{oldRequest:$oldRequest,oldRelease:$oldRelease,oldImage:$oldImage,commit:$commit,image:$image,backupId:$backupId,originalJournalSha256:$journalHash,phase:"repairing-maintenance"}' > "$marker"
+  repaired=true
+  legacy_staging_node "$release" repair
+  legacy_staging_node "$release" final
+  staging_bootstrap_guard allow-stopped
+  # Preserve byte-for-byte evidence; supersession metadata is separate.
+  cp --no-clobber "$STATE/operation.json" "$STATE/operations/38149230374-1.json"
+  cmp -s "$STATE/operation.json" "$STATE/operations/38149230374-1.json" || die 'Historical journal archive differs'
+  jq '.phase="reconciled-maintenance" | .superseded=true' "$marker" > "$marker.next"; mv "$marker.next" "$marker"
+  rm "$STATE/operation.json"
+  closed=false
+  printf 'updated: exact staging bookkeeping repaired; backup=%s; admission remains closed for separately identified reviewed deployment\n' "$BACKUP_ID"
+)
+bootstrap_ready_for_deploy() {
+  local release="$1" marker="$STATE/staging-bootstrap.json" backup
+  [[ "$ENVIRONMENT" == staging && "$ACTION" == deploy ]] || die 'Bootstrap maintenance only permits its separately reviewed staging deployment'
+  jq -e --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg release "$release" \
+    '.phase=="reconciled-maintenance" and .superseded==true and .oldRequest=="38149230374-1" and .oldRelease==$release and .commit==$commit and .image==$image and (.backupId|test("^[a-zA-Z0-9_-]{1,160}$"))' "$marker" >/dev/null || die 'Bootstrap candidate or maintenance checkpoint differs'
+  [[ -f "$STATE/operations/38149230374-1.json" ]] || die 'Original bootstrap journal archive is missing'
+  [[ "$(jq -er .originalJournalSha256 "$marker")" == "$(sha256sum "$STATE/operations/38149230374-1.json" | awk '{print $1}')" ]] || die 'Original bootstrap journal archive changed'
+  [[ "$(jq -er .oldImage "$marker")" == "$(jq -er .services.app.image "$release/image.json")" ]] || die 'Bootstrap selected old image differs'
+  verify_artifact_retirement_release "$release" c04d7512dfaa3156eb3b81331625d1a0af4f7faf
+  backup="$(jq -er .backupId "$marker")"
+  # Observe current state through the old runtime without rewriting the new
+  # request journal or changing its original phase budget.
+  (local REQUEST_ID='' BACKUP_ID="$backup"; legacy_staging_node "$release" final)
+}
+remaining_operation_seconds() {
+  local maximum="$1" deadline remaining
+  if [[ -n "$REQUEST_ID" && -f "$STATE/operation.json" ]]; then
+    deadline="$(jq -er --arg id "$REQUEST_ID" 'select(.requestId==$id) | .budgetDeadlineAtSeconds // 0' "$STATE/operation.json")" || return 1
+    if [[ "$deadline" -gt 0 ]]; then
+      remaining=$((deadline - $(date +%s)))
+      [[ "$remaining" -gt 0 ]] || { printf 'error: Original operation budget expired; inspect output before any new attempt\n' >&2; return 124; }
+      [[ "$maximum" -le "$remaining" ]] || maximum="$remaining"
+    fi
+  fi
+  printf '%s\n' "$maximum"
+}
+ensure_operation_budget() {
+  local started runtime
+  started="$(date +%s)"; runtime="$(operation_runtime_seconds "$(jq -er .action "$STATE/operation.json")")"
+  # Legacy journals receive one budget when first adopted. Later resumes retain
+  # this exact deadline; a new systemd activation must not reset it.
+  jq --arg id "$REQUEST_ID" --argjson started "$started" --argjson runtime "$runtime" '
+    if .requestId!=$id then error("Operation changed")
+    elif .budgetDeadlineAtSeconds!=null then .
+    else .budgetStartedAtSeconds=$started | .budgetDeadlineAtSeconds=($started+$runtime) end' \
+    "$STATE/operation.json" > "$STATE/operation.next.json"
+  mv "$STATE/operation.next.json" "$STATE/operation.json"
+  remaining_operation_seconds "$runtime"
+}
+start_operation_unit() {
+  local runtime
+  runtime="$(ensure_operation_budget)" || return 1
+  # The daemon owns one-off containers, not the Compose client process group.
+  # ExecStopPost performs exact-label cleanup after normal exit, timeout or stop.
+  systemd-run --unit="kids-booklet-operation-$REQUEST_ID" --property=Type=exec --property=UMask=0077 \
+    --property="RuntimeMaxSec=$runtime" --property=TimeoutStopSec=60 --property=KillMode=control-group \
+    --property="ExecStopPost=$ROOT/vps-deployment.sh --action host-cleanup --request-id $REQUEST_ID --environment $ENVIRONMENT --apply" \
+    "$ROOT/vps-deployment.sh" --action host-run --request-id "$REQUEST_ID" --apply
+}
+cleanup_operation_oneoffs() {
+  [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] || return 0
+  local ids id deadline=$((SECONDS + 35)) remaining
+  ids="$(control_timeout 5 docker ps -aq --filter "label=uk.co.uniwares.booklet.request=$REQUEST_ID" \
+    --filter "label=uk.co.uniwares.booklet.environment=$ENVIRONMENT" \
+    --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.oneoff=True')" || return 1
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    [[ "$id" =~ ^[a-f0-9]{12,64}$ ]] || return 1
+    remaining=$((deadline - SECONDS)); [[ "$remaining" -gt 10 ]] || return 1
+    stop_owned_oneoff "$id" "$((remaining - 10))" || return 1
+  done <<< "$ids"
+}
+host_cleanup() {
+  require_root
+  [[ "$APPLY" == true && -n "$REQUEST_ID" && -n "$ENVIRONMENT" ]] || die 'Host cleanup requires an exact unit request'
+  # Do not change operation phase, admission, release pointers or saved output.
+  # A missing journal can mean successful completion; labels still limit cleanup.
+  cleanup_operation_oneoffs || die 'Owned one-off cleanup is incomplete; inspect exact request before resume'
+}
+operation_control_journal() {
+  local file="$STATE/operations/$REQUEST_ID.json"
+  if [[ -f "$STATE/operation.json" ]] && jq -e --arg id "$REQUEST_ID" '.requestId==$id' "$STATE/operation.json" >/dev/null; then file="$STATE/operation.json"; fi
+  [[ -f "$file" ]] || die 'Exact operation request was not found'
+  jq -e --arg id "$REQUEST_ID" --arg environment "$ENVIRONMENT" '.requestId==$id and .environment==$environment' "$file" >/dev/null || die 'Operation belongs to another environment'
+  printf '%s\n' "$file"
+}
+operation_status_host() {
+  local file state result exit_status load_state
+  [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]] || CONTROL_DEADLINE_SECONDS=$((SECONDS + 30))
+  file="$(operation_control_journal)" || return 1
+  load_state="$(control_timeout 5 systemctl show --property=LoadState --value "kids-booklet-operation-$REQUEST_ID.service" 2>/dev/null)" || load_state=unavailable
+  if [[ "$load_state" == not-found || "$load_state" == unavailable ]]; then
+    [[ "$file" != "$STATE/operation.json" ]] || die 'Active operation service is unavailable; inspect retained request before resume'
+    jq -c '{requestId,action,environment,step,stepUpdatedAtSeconds,backupId,image,commit,command,commandStartedAt,commandDeadlineAt,budgetStartedAtSeconds,budgetDeadlineAtSeconds,stopRequestedAt,
+      service:{state:"unavailable",result:null,exitStatus:null},outcome:"archived"}' "$file" | sed 's/^/result: operation /'
+    return
+  fi
+  [[ "$load_state" == loaded ]] || die 'Operation service returned unsupported load state'
+  state="$(control_timeout 5 systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation service status is unavailable'
+  result="$(control_timeout 5 systemctl show --property=Result --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation service result is unavailable'
+  exit_status="$(control_timeout 5 systemctl show --property=ExecMainStatus --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation service exit status is unavailable'
+  [[ "$state" =~ ^(active|activating|deactivating|reloading|failed|inactive)$ && "$result" =~ ^(success|exit-code|timeout|signal|core-dump|watchdog|start-limit-hit|resources|oom-kill|protocol|)$ && "$exit_status" =~ ^[0-9]+$ ]] || die 'Operation service returned unsupported status'
+  jq -c --arg state "$state" --arg result "$result" --arg exit "$exit_status" \
+    '{requestId,action,environment,step,stepUpdatedAtSeconds,backupId,image,commit,command,commandStartedAt,commandDeadlineAt,budgetStartedAtSeconds,budgetDeadlineAtSeconds,stopRequestedAt,
+      service:{state:$state,result:$result,exitStatus:($exit|tonumber)},
+      outcome:(if .step=="complete" and $state=="inactive" and $result=="success" then "complete" elif $state=="active" or $state=="activating" or $state=="deactivating" or $state=="reloading" then "running" else "interrupted" end)}' "$file" |
+    sed 's/^/result: operation /'
+}
+operation_stop_host() {
+  local file state stop_deadline
+  CONTROL_DEADLINE_SECONDS=$((SECONDS + 60))
+  file="$(operation_control_journal)" || return 1
+  operation_status_host || return 1
+  [[ "$file" == "$STATE/operation.json" ]] || { printf 'exists: operation is archived; inspect its outcome; no stop sent\n'; return; }
+  [[ "$APPLY" == true ]] || { printf 'would update: stop exact operation %s; preserve its phase, outputs and maintenance\n' "$REQUEST_ID"; return; }
+  # Inspect completed phase evidence before interrupting its owner. Reserve the
+  # remaining control budget for stop delivery and the post-stop race check.
+  stop_deadline="$CONTROL_DEADLINE_SECONDS"
+  CONTROL_DEADLINE_SECONDS=$((SECONDS + 15))
+  if ! operation_output_inspection "$file"; then
+    CONTROL_DEADLINE_SECONDS="$stop_deadline"
+    die 'Pre-stop output inspection unresolved; no stop sent; phase and maintenance retained'
+  fi
+  CONTROL_DEADLINE_SECONDS="$stop_deadline"
+  # Do not wait for the host lock while its owner is the process being stopped.
+  # Only root-created exact-request units are addressable through this action.
+  if ! control_timeout 45 systemctl stop "kids-booklet-operation-$REQUEST_ID.service"; then
+    die 'Stop acknowledgement timed out; operation may still be stopping. Inspect exact status; do not resume'
+  fi
+  state="$(control_timeout 5 systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")"
+  [[ "$state" == failed || "$state" == inactive ]] || die 'Operation remains active; no state change permitted'
+  exec 8>"$STATE/operation.lock"; flock -n 8 || die 'Host lock remains owned; inspect exact status before reconciliation'
+  cleanup_operation_oneoffs || die 'Owned maintenance containers remain; no state change permitted'
+  operation_output_inspection "$file" || die 'Stopped request output inspection incomplete; phase and maintenance retained'
+  # Completion may race the stop request. Never overwrite a different/new journal.
+  if [[ -f "$STATE/operation.json" ]]; then
+    jq --arg id "$REQUEST_ID" --argjson stopped "$(date +%s)" \
+      'if .requestId==$id then .stopRequestedAt=$stopped else error("Operation changed") end' "$STATE/operation.json" > "$STATE/operation.next.json"
+    mv "$STATE/operation.next.json" "$STATE/operation.json"
+  fi
+  flock -u 8
+  operation_status_host
+  printf 'updated: exact operation stopped; outputs and retained phase require reconciliation before resume\n'
+}
+operation_output_inspection() {
+  local file="$1" selected='' expected='' records='[]' ids=''
+  if [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]]; then
+    if [[ -f "$STATE/releases/$ENVIRONMENT/current" ]]; then
+      read -r selected < "$STATE/releases/$ENVIRONMENT/current"
+      [[ "$selected" == "$STATE/releases/$ENVIRONMENT/"* && "$selected" != *'/../'* ]] || return 1
+      expected="$(jq -er '.services.app.image' "$selected/image.json")" || return 1
+      [[ "$expected" =~ ^ghcr.io/[a-z0-9_./-]+@sha256:[a-f0-9]{64}$ ]] || return 1
+    fi
+    ids="$(control_timeout 5 docker ps -aq --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" \
+      --filter 'label=com.docker.compose.service=app' --filter 'label=com.docker.compose.oneoff=False')" || return 1
+    if [[ -n "$ids" ]]; then
+      local -a containers=(); mapfile -t containers <<< "$ids"
+      [[ "${#containers[@]}" -eq 1 && "${containers[0]}" =~ ^[a-f0-9]{12,64}$ ]] || return 1
+      records="$(control_timeout 5 docker inspect "${containers[0]}" 2>/dev/null)" || return 1
+    fi
+  fi
+  jq -cn --argjson journal "$(jq '{requestId,step,backupId,priorRelease,image}' "$file")" --arg selected "$selected" --arg expected "$expected" --argjson records "$records" '
+    {requestId:$journal.requestId,phase:$journal.step,selectedRelease:$selected,expectedImage:$expected,
+      backup:{id:($journal.backupId // ""),verification:(if ($journal.backupId // "")=="" then "not_recorded" else "readback_required" end)},
+      application:[$records[] | {state:.State.Status,health:(.State.Health.Status // "unknown"),
+        selectedImageMatches:(.Config.Image==$expected)}],
+      next:"Inspect backup completion and application readiness before resume; admission unchanged"}' | sed 's/^/result: operation outputs /'
+}
+prepare_staging_reset_profile() {
+  local release="$1"
+  [[ "$ENVIRONMENT" == staging ]] || die 'Reset profile is staging-only'
+  # A prepared runner bundle selects the new initializer without opening admission.
+  if jq -e '.services.app.environment | has("DIFY_BOOKLET_BINDINGS_JSON")' "$SECRETS/staging/secrets.json" >/dev/null; then
+    [[ "$(jq -r .environments.staging.ASSETS_BUCKET "$CONFIG_FILE")" == kids-booklet-staging-assets ]] || die 'Reset asset bucket differs from the authorized target'
+    application_secret_override_is_valid "$SECRETS/staging/secrets.json" || die 'Reset requires valid prepared runner settings'
+    jq '.services.app.environment.DIFY_BOOKLET_RUNNER_ENABLED="true"' "$SECRETS/staging/secrets.json" > "$SECRETS/staging/secrets.reset.json"
+    chmod 600 "$SECRETS/staging/secrets.reset.json"
+    COMPOSE_SECRET_FILE="$SECRETS/staging/secrets.reset.json"
+    validate_compose "$release"
+    COMPOSE_SECRET_FILE=''
+  else
+    [[ ! -f "$SECRETS/staging/secrets.reset.json" ]] || die 'Retained reset settings require inspection before a legacy reset'
+  fi
 }
 set_step() {
-  jq --arg step "$1" '.step=$step' "$STATE/operation.json" > "$STATE/operation.next.json"
+  jq --arg step "$1" --argjson updated "$(date +%s)" '.step=$step | .stepUpdatedAtSeconds=$updated' "$STATE/operation.json" > "$STATE/operation.next.json"
   mv "$STATE/operation.next.json" "$STATE/operation.json"
 }
 show_operation_status() {
   if [[ -f "$STATE/operation.json" ]]; then
     jq '{requestId,action,environment,commit,backupId,backupHistory,configHash,priorRelease,step}' "$STATE/operation.json"
+    if [[ "$(jq -r '.environment // ""' "$STATE/operation.json")" == dify ]]; then
+      if [[ "$(jq -r .action "$STATE/operation.json")" == dify-enable-admin-api ]]; then
+        printf 'result: Dify admin API operation uses the private VPS terminal; repeat its local apply action to resume\n'
+      else
+        local request_id active_state unit_result exit_status
+        request_id="$(jq -er .requestId "$STATE/operation.json")"
+        active_state="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$request_id.service")"
+        unit_result="$(systemctl show --property=Result --value "kids-booklet-operation-$request_id.service")"
+        exit_status="$(systemctl show --property=ExecMainStatus --value "kids-booklet-operation-$request_id.service")"
+        [[ "$active_state" =~ ^(active|activating|deactivating|reloading|failed|inactive)$ ]] || die 'Dify operation unit returned an unknown active state'
+        [[ "$unit_result" =~ ^(success|exit-code|timeout|signal|core-dump|watchdog|start-limit-hit|resources|oom-kill|protocol|)$ ]] || die 'Dify operation unit returned an unknown result'
+        [[ "$exit_status" =~ ^[0-9]+$ ]] || die 'Dify operation unit returned an invalid exit status'
+        printf 'result: Dify operation unit active=%s result=%s exit=%s\n' "$active_state" "${unit_result:-unset}" "$exit_status"
+      fi
+      if [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]]; then
+        dify_service_records | jq -c -r '
+          [.[] | {service:.Service,state:.State,health:(.Health // ""),exitCode:(.ExitCode // null)}]
+          | "result: Dify services " + tojson
+        '
+      fi
+    fi
+  elif [[ -f "$STATE/staging-bootstrap.json" ]]; then
+    jq -c '{step:"bootstrap-maintenance",oldRequest,commit,image,backupId,phase,superseded}' "$STATE/staging-bootstrap.json"
   else
     printf '{"step":"idle"}\n'
   fi
@@ -251,7 +745,7 @@ validate_compose() {
   resolved="$TEMP_DIR/resolved-compose.json"
   compose "$release" config --format json > "$resolved"
   chmod 600 "$resolved"
-  application_secret_override_is_valid "$resolved" || die 'Resolved Compose secrets do not satisfy the application secret contract'
+  application_secret_override_is_valid "$resolved" resolved || die 'Resolved Compose secrets do not satisfy the application secret contract'
 }
 prepare_release() {
   local release="$STATE/releases/$ENVIRONMENT/$COMMIT"
@@ -270,19 +764,39 @@ prepare_release() {
   validate_compose "$release"
 }
 stop_application() {
-  compose "$1" stop --timeout 60 app
-  [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Old application or maintenance container is still running'
+  local seconds
+  seconds="$(remaining_operation_seconds 60)" || return 124
+  COMPOSE_TIMEOUT_SECONDS="$seconds" compose "$1" stop --timeout 50 app
+  [[ -z "$(timeout 5s docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.service=app')" ]] || die 'Old application or maintenance container is still running'
 }
 verify_application() {
   local release="$1" url
   url="https://$(jq -r --arg e "$ENVIRONMENT" '.environments[$e].APP_HOSTNAME' "$CONFIG_FILE")"
-  compose "$release" run --rm --no-deps -T -e RUNNER_ENABLED=false -e "DEPLOYMENT_URL=$url" app node --import tsx scripts/check-deployment-readiness.ts
+  DEPLOYMENT_URL="$url" maintenance "$release" check-deployment-readiness
 }
 drain_application() {
-  maintenance "$1" deployment-control enable deployment
+  verify_drain_support "$1"
+  maintenance "$1" deployment-control drain deployment
   if ! maintenance "$1" wait-for-deployment-drain; then
     maintenance "$1" deployment-control disable
     die 'Drain timed out; original application continues with normal admission'
+  fi
+}
+verify_drain_support() {
+  local release="$1" id image expected
+  expected="$(jq -er .services.app.image "$release/image.json")"
+  id="$(timeout 5s docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" \
+    --filter 'label=com.docker.compose.service=app' --filter 'label=com.docker.compose.oneoff=False')"
+  [[ "$id" =~ ^[a-f0-9]{12,64}$ ]] || die 'Drain bootstrap requires exactly one running selected application'
+  image="$(timeout 5s docker inspect --format '{{.Config.Image}}' "$id")"
+  [[ "$image" == "$expected" ]] || die 'Drain bootstrap selected image differs from running application'
+  if ! timeout --kill-after=1s 10s docker exec -w /app "$id" node -e '
+    const fs=require("node:fs");
+    const script=fs.readFileSync("scripts/deployment-control.ts","utf8");
+    const control=fs.readFileSync("lib/application/deployment-control.ts","utf8");
+    if(!script.includes("setDrainingMode") || !control.includes("export async function finishDraining") || !control.includes("export async function setDrainingMode")) process.exit(78);
+  ' >/dev/null 2>&1; then
+    die 'Selected image lacks two-stage drain support; explicit reviewed bootstrap is required. No maintenance fallback or deployment performed'
   fi
 }
 save_success() {
@@ -295,19 +809,26 @@ save_success() {
   mv "$STATE/operation.json" "$STATE/operations/$REQUEST_ID.json"
 }
 run_lifecycle() {
-  local current='' candidate='' previous=''
+  local current='' candidate='' previous='' bootstrapped=false
   [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || read -r current < "$STATE/releases/$ENVIRONMENT/current"
   case "$ACTION" in
+    retire-staging-artifact-index) retire_staging_artifact_index_host; return;;
     deploy)
+      if [[ -e "$STATE/staging-bootstrap.json" ]]; then bootstrap_ready_for_deploy "$current"; bootstrapped=true; fi
       prepare_release
       candidate="$STATE/releases/$ENVIRONMENT/$COMMIT"
       record_release_metadata "$candidate" "$current"
       verify_release_capacity
       # Anonymous pull: a private GHCR package must fail before maintenance begins.
       private_temp; mkdir -p "$TEMP_DIR/docker"
-      DOCKER_CONFIG="$TEMP_DIR/docker" docker pull "$IMAGE_DIGEST"
+      set_step pulling
+      local pull_seconds
+      pull_seconds="$(remaining_operation_seconds 1800)"
+      record_operation_command pull "$pull_seconds"
+      DOCKER_CONFIG="$TEMP_DIR/docker" timeout --kill-after=5s "${pull_seconds}s" docker pull "$IMAGE_DIGEST"
       if [[ -n "$current" ]]; then
-        set_step draining; drain_application "$current"
+        set_step draining
+        if [[ "$bootstrapped" == true ]]; then bootstrap_ready_for_deploy "$current"; else drain_application "$current"; fi
         set_step stopping; stop_application "$current"
         set_step backup; ensure_backup_id; maintenance "$current" recovery backup
       fi
@@ -322,15 +843,20 @@ run_lifecycle() {
           set_step recovering-previous
           compose "$current" up -d --no-deps app
           verify_application "$current"
-          maintenance "$current" deployment-control disable
+          if [[ "$bootstrapped" == false ]]; then maintenance "$current" deployment-control disable; fi
         fi
         die 'Readiness failed; database was not restored. Inspect and resume the operation'
       fi
       maintenance "$candidate" deployment-control disable
-      save_success "$candidate" true ;;
+      save_success "$candidate" true
+      if [[ "$bootstrapped" == true ]]; then mv "$STATE/staging-bootstrap.json" "$STATE/operations/bootstrap-$REQUEST_ID.json"; fi ;;
     backup|restore|reset-staging|rollback|rotate-secrets)
       [[ -n "$current" ]] || die 'Environment has no recorded release'
       record_release_metadata "$current" "$current"
+      if [[ "$ACTION" == reset-staging ]]; then
+        prepare_staging_reset_profile "$current"
+        maintenance "$current" read-staging-reset-readiness
+      fi
       if [[ "$ACTION" == rotate-secrets ]]; then
         [[ -f "$SECRETS/$ENVIRONMENT/secrets.pending.json" ]] || die 'No staged secret rotation found'
         COMPOSE_SECRET_FILE="$SECRETS/$ENVIRONMENT/secrets.pending.json"; validate_compose "$current"; COMPOSE_SECRET_FILE=''
@@ -339,8 +865,17 @@ run_lifecycle() {
       set_step stopping; stop_application "$current"
       if [[ "$ACTION" != restore ]]; then set_step backup; ensure_backup_id; maintenance "$current" recovery backup; fi
       case "$ACTION" in
-        restore) maintenance "$current" recovery restore;;
-        reset-staging) maintenance "$current" reset-staging-deployment; maintenance "$current" deployment-control enable reset;;
+        restore) set_step restoring; maintenance "$current" recovery restore;;
+        reset-staging)
+          set_step resetting
+          if [[ -f "$SECRETS/staging/secrets.reset.json" ]]; then COMPOSE_SECRET_FILE="$SECRETS/staging/secrets.reset.json"; fi
+          maintenance "$current" reset-staging-deployment
+          maintenance "$current" deployment-control enable reset
+          if [[ -n "$COMPOSE_SECRET_FILE" ]]; then
+            install -m 600 "$SECRETS/staging/secrets.json" "$SECRETS/staging/secrets.reset.previous.json"
+            install -m 600 "$COMPOSE_SECRET_FILE" "$SECRETS/staging/secrets.json"
+            COMPOSE_SECRET_FILE=''
+          fi;;
         rollback)
           [[ -f "$STATE/releases/$ENVIRONMENT/previous" ]] || die 'No previous release recorded'
           read -r previous < "$STATE/releases/$ENVIRONMENT/previous"
@@ -352,6 +887,7 @@ run_lifecycle() {
           install -m 600 "$SECRETS/$ENVIRONMENT/secrets.pending.json" "$SECRETS/$ENVIRONMENT/secrets.json"
           ;;
       esac
+      if [[ "$ACTION" == reset-staging ]]; then set_step reset-verifying; fi
       compose "$current" up -d --no-deps app
       if ! verify_application "$current"; then
         if [[ "$ACTION" == rotate-secrets && -f "$SECRETS/$ENVIRONMENT/secrets.previous.json" ]]; then
@@ -365,9 +901,771 @@ run_lifecycle() {
       fi
       maintenance "$current" deployment-control disable
       if [[ "$ACTION" == rotate-secrets ]]; then rm -f "$SECRETS/$ENVIRONMENT/secrets.pending.json" "$SECRETS/$ENVIRONMENT/secrets.previous.json"; fi
+      if [[ "$ACTION" == reset-staging ]]; then rm -f "$SECRETS/staging/secrets.reset.json"; fi
       if [[ "$ACTION" == rollback ]]; then save_success "$current" true; else save_success "$current"; fi ;;
     *) die 'Unsupported host lifecycle operation';;
   esac
+}
+verify_artifact_retirement_release() {
+  local release="$1" expected_commit="$2" image revision
+  [[ "$release" == "$STATE/releases/staging/$expected_commit" && "$expected_commit" =~ ^[a-f0-9]{40}$ && -d "$release" && ! -L "$release" ]] || die 'Index retirement release path is invalid'
+  (cd "$release" && sha256sum -c manifest.sha256 >/dev/null) || die 'Index retirement release manifest changed'
+  image="$(jq -er .services.app.image "$release/image.json")"
+  [[ "$image" == "$(jq -r .image "$CONFIG_FILE")"@sha256:* && "$image" =~ @sha256:[a-f0-9]{64}$ ]] || die 'Index retirement image repository or digest is invalid'
+  revision="$(timeout 10s docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
+  [[ "$revision" == "$expected_commit" ]] || die 'Index retirement image revision differs from the release'
+}
+verify_artifact_retirement_rollback() {
+  local previous commit image pair
+  [[ -f "$STATE/releases/staging/previous" ]] || die 'Index retirement requires a verified compatible rollback release'
+  read -r previous < "$STATE/releases/staging/previous"
+  commit="${previous##*/}"
+  verify_artifact_retirement_release "$previous" "$commit"
+  image="$(jq -er .services.app.image "$previous/image.json")"
+  pair="$commit:${image##*@}"
+  # Exact reviewed startup-compatibility evidence from PR #114, #120 and #126.
+  # Unknown pairs require a reviewed table update, never a pointer rewrite.
+  case "$pair" in
+    ae2a2f767a2da8ef9e0bc372bd26199ee0c75e3e:sha256:4a2a97daa4075aad90ad1837b0ed6a1298aa37ec445322f0cac68c236e28119d|fac55e0730e0a7e297a2fbdf28fb888b87baf57a:sha256:959dee0035f80890b4851ed27f2652bc5ee9617cb2e692fae2c0069350d7c571|d88dfe308b809e019123f554fa5f43cbcf097c91:sha256:ee85f85aec0111fc488297faf507ef90ee593442c5d0d973f2b358443e26263c) :;;
+    *) die 'Rollback release lacks reviewed absent-legacy-index compatibility evidence';;
+  esac
+}
+retire_staging_artifact_index_host() {
+  local current checkpoint saved_image rollback_release rollback_image
+  [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet && -n "$COMMIT" ]] || die 'Index retirement requires the exact staging confirmation and commit'
+  [[ -f "$STATE/releases/staging/current" ]] || die 'Index retirement requires a deployed staging release'
+  read -r current < "$STATE/releases/staging/current"
+  verify_artifact_retirement_release "$current" "$COMMIT"
+  verify_artifact_retirement_rollback
+  checkpoint="$(jq -r '.step // "queued"' "$STATE/operation.json")"
+  saved_image="$(jq -r '.image // ""' "$STATE/operation.json")"
+  [[ -z "$saved_image" || "$saved_image" == "$(jq -er .services.app.image "$current/image.json")" ]] || die 'Retained index operation refers to a different release image'
+  record_release_metadata "$current" "$current"
+  read -r rollback_release < "$STATE/releases/staging/previous"
+  rollback_image="$(jq -er .services.app.image "$rollback_release/image.json")"
+  jq --arg release "$rollback_release" --arg image "$rollback_image" '.rollbackRelease=$release | .rollbackImage=$image' "$STATE/operation.json" > "$STATE/operation.next.json"
+  mv "$STATE/operation.next.json" "$STATE/operation.json"
+  if [[ "$checkpoint" == draining ]]; then
+    # No stop/removal checkpoint was reached. A crash may have bypassed the
+    # compensating ledger check, so make callback reconciliation possible first.
+    [[ -n "$(docker ps -q --filter 'label=com.docker.compose.project=kids-booklet-staging' --filter 'label=com.docker.compose.service=app' --filter 'label=com.docker.compose.oneoff=False' --filter 'status=running')" ]] || die 'Interrupted drain has no running original application; inspect host state before resume'
+    maintenance "$current" deployment-control disable
+    set_step reconciliation-required
+    checkpoint=reconciliation-required
+  fi
+  case "$checkpoint" in
+    index-finalizing)
+      # A crash may occur on either side of reopening admission. Do not stop
+      # the already-ready app or replay the backup/removal in either case.
+      verify_application "$current"
+      maintenance "$current" deployment-control disable
+      save_success "$current"
+      return;;
+    complete)
+      # Admission may already be open. Finalize the completed journal only.
+      verify_application "$current"
+      save_success "$current"
+      return;;
+    backup-verified|retiring-index|index-verified|index-restarting)
+      [[ -n "$BACKUP_ID" ]] || die 'Retained index operation lost its pre-change backup'
+      stop_application "$current"
+      maintenance "$current" retire-staging-artifact-index --verify-backup;;
+    *)
+      # Reject unresolved work while callbacks can still complete it.
+      maintenance "$current" retire-staging-artifact-index --preview
+      set_step draining; drain_application "$current"
+      if ! maintenance "$current" retire-staging-artifact-index --preview; then
+        maintenance "$current" deployment-control disable
+        set_step reconciliation-required
+        die 'Experiment work appeared during admission closure; original service remains running. Reconcile before resume'
+      fi
+      set_step stopping; stop_application "$current"
+      maintenance "$current" retire-staging-artifact-index --preview
+      set_step backup; ensure_backup_id; maintenance "$current" recovery backup
+      maintenance "$current" retire-staging-artifact-index --verify-backup
+      set_step backup-verified;;
+  esac
+  # Persist before removal: resume accepts absence and never replaces this backup.
+  verify_artifact_retirement_release "$current" "$COMMIT"
+  verify_artifact_retirement_rollback
+  set_step retiring-index
+  maintenance "$current" retire-staging-artifact-index --apply
+  set_step index-verified
+  set_step index-restarting
+  compose "$current" up -d --no-deps app
+  verify_application "$current"
+  set_step index-finalizing
+  maintenance "$current" deployment-control disable
+  save_success "$current"
+}
+dify_compose() {
+  docker compose --project-name booklet-dify --env-file "$DIFY_ENV" -f "$DIFY_RELEASE/docker/docker-compose.yaml" -f "$ROOT/dify/compose.override.yml" "$@"
+}
+dify_service_records() {
+  dify_compose ps --all --format json | jq -sc '
+    if length == 1 and (.[0] | type) == "array" then .[0] else . end
+  '
+}
+dify_service_records_are_ready() {
+  jq -e '
+    length > 0 and all(.[];
+      (.Service == "init_permissions" and .State == "exited" and .ExitCode == 0) or
+      (.Service != "init_permissions" and .State == "running" and ((.Health // "") == "" or .Health == "healthy"))
+    )
+  ' >/dev/null
+}
+dify_install_preflight() {
+  local cpu_count memory_mib available_mib free_gib expected_host required_available_mib=4096
+  for name in docker curl tar sha256sum jq python3 awk df nproc flock ss stat readlink install hostname uname sort; do need_command "$name"; done
+  [[ -f "$ROOT/dify/release.json" && -f "$ROOT/dify/compose.override.yml" ]] || die 'Reviewed Dify release artifacts have not been synchronized to the host'
+  jq -e '.release == "1.17.1" and (.source_commit | test("^[a-f0-9]{40}$")) and (.source_archive_sha256 | test("^[a-f0-9]{64}$"))' "$ROOT/dify/release.json" >/dev/null || die 'Invalid Dify release manifest'
+  expected_host="$(jq -er '.host_observation.hostname | select(type == "string" and length > 0)' "$CONFIG_FILE")"
+  [[ "$(hostname -f)" == "$expected_host" && "$(uname -m)" == x86_64 ]] || die 'Dify target host or architecture differs from the recorded capacity observation'
+  if [[ ! -f "$DIFY_DATA/current" ]]; then
+    jq -e '.dify_public_enabled == false' "$CONFIG_FILE" >/dev/null || die 'Initial Dify installation requires the public Tunnel route to remain in maintenance'
+  fi
+  cpu_count="$(nproc)"
+  memory_mib="$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)"
+  available_mib="$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)"
+  free_gib="$(df -Pk "$STATE" | awk 'NR==2 {print int($4 / 1048576)}')"
+  [[ "$cpu_count" -ge 4 && "$memory_mib" -ge 15000 ]] || die 'Shared-host CPU or RAM is below the measured Dify installation checkpoint'
+  if [[ ! -f "$DIFY_DATA/current" ]]; then
+    [[ "$available_mib" -ge 8192 && "$free_gib" -ge 60 ]] || die 'Shared-host available RAM or disk is below the initial Dify installation checkpoint'
+  else
+    # This targeted repair adds 768 MiB; leave at least 2 GiB for the shared host.
+    [[ "$ACTION" != dify-repair-sandbox ]] || required_available_mib=2816
+    [[ "$ACTION" != dify-repair-scheduler ]] || required_available_mib=3328
+    [[ "$available_mib" -ge "$required_available_mib" && "$free_gib" -ge 20 ]] || die 'Insufficient headroom to resume or verify Dify installation'
+  fi
+  docker compose version --short | awk -F. '{exit !($1 > 2 || ($1 == 2 && $2 >= 28))}' || die 'Docker Compose 2.28 or newer is required for port overrides'
+  if [[ ! -f "$DIFY_DATA/current" && "$(ss -lnt '( sport = :3300 )' | wc -l)" -gt 1 ]]; then
+    [[ -n "$(docker ps -q --filter 'label=com.docker.compose.project=booklet-dify' --filter 'label=com.docker.compose.service=nginx')" ]] || die 'Port 3300 is already listening outside the Dify installation'
+  fi
+}
+dify_prepare_directories() {
+  local path
+  install -d -m 755 "$ROOT/dify/releases" "$DIFY_DATA"
+  install -d -m 700 "$SECRETS/dify"
+  for path in app/storage postgres redis sandbox/dependencies sandbox/conf agent/home agent/workspace plugin_daemon nginx/ssl nginx/certbot/live nginx/certbot/conf nginx/certbot/www weaviate; do
+    install -d -m 755 "$DIFY_DATA/$path"
+  done
+}
+dify_prepare_persistent_files() {
+  local sandbox_config="$DIFY_RELEASE/docker/volumes/sandbox/conf/config.yaml"
+  [[ -f "$sandbox_config" && ! -L "$sandbox_config" ]] || die 'Pinned Dify sandbox configuration is missing'
+  if [[ ! -e "$DIFY_DATA/sandbox/conf/config.yaml" && ! -L "$DIFY_DATA/sandbox/conf/config.yaml" ]]; then
+    install -m 644 "$sandbox_config" "$DIFY_DATA/sandbox/conf/config.yaml"
+    printf 'created: pinned Dify sandbox configuration\n'
+  fi
+  [[ -f "$DIFY_DATA/sandbox/conf/config.yaml" && ! -L "$DIFY_DATA/sandbox/conf/config.yaml" ]] || die 'Persistent Dify sandbox configuration is not a regular file'
+  chown -R 1000:1000 "$DIFY_DATA/agent/home" "$DIFY_DATA/agent/workspace"
+}
+dify_prepare_release() {
+  local source_url source_hash archive prepared
+  source_url="$(jq -er .source_archive "$ROOT/dify/release.json")"
+  source_hash="$(jq -er .source_archive_sha256 "$ROOT/dify/release.json")"
+  [[ "$source_url" == 'https://github.com/langgenius/dify/archive/8387590ace4a094de812b7847fc6a4c3a27cd52b.tar.gz' ]] || die 'Dify source URL differs from the reviewed release'
+  if [[ -d "$DIFY_RELEASE" ]]; then
+    [[ -f "$DIFY_RELEASE/docker/docker-compose.yaml" && -f "$DIFY_RELEASE/source-archive.sha256" && "$(<"$DIFY_RELEASE/source-archive.sha256")" == "$source_hash" ]] || die 'Existing Dify release directory has unverified or incomplete contents'
+    return
+  fi
+  private_temp
+  archive="$TEMP_DIR/dify.tar.gz"
+  curl -fsSL --retry 4 --retry-all-errors --retry-delay 2 --max-time 180 "$source_url" --output "$archive"
+  printf '%s  %s\n' "$source_hash" "$archive" | sha256sum --check --status || die 'Dify source archive checksum mismatch'
+  prepared="$TEMP_DIR/release"
+  mkdir -m 700 "$prepared"
+  tar -xzf "$archive" --strip-components=1 -C "$prepared"
+  [[ -f "$prepared/docker/docker-compose.yaml" && -f "$prepared/docker/.env.example" ]] || die 'Pinned Dify source is missing its Compose or environment template'
+  printf '%s\n' "$source_hash" > "$prepared/source-archive.sha256"
+  mv "$prepared" "$DIFY_RELEASE"
+  printf 'created: verified Dify 1.17.1 release files\n'
+}
+dify_prepare_environment() {
+  local candidate
+  [[ -f "$DIFY_ENV" ]] || {
+    private_temp
+    candidate="$TEMP_DIR/dify-runtime.env"
+    python3 - "$DIFY_RELEASE/docker/.env.example" "$candidate" "$(jq -er .dify_hostname "$CONFIG_FILE")" <<'PY'
+from pathlib import Path
+import base64
+import os
+import re
+import secrets
+import sys
+
+source, destination, hostname = sys.argv[1:]
+text = Path(source).read_text()
+origin = f"https://{hostname}"
+values = {
+    "SECRET_KEY": secrets.token_urlsafe(48),
+    "DB_PASSWORD": secrets.token_hex(32),
+    "REDIS_PASSWORD": secrets.token_hex(32),
+    "WEAVIATE_API_KEY": secrets.token_hex(32),
+    "CODE_EXECUTION_API_KEY": secrets.token_hex(32),
+    "PLUGIN_DAEMON_KEY": secrets.token_hex(32),
+    "PLUGIN_DIFY_INNER_API_KEY": secrets.token_hex(32),
+    "DIFY_AGENT_API_TOKEN": secrets.token_hex(32),
+    "DIFY_AGENT_LOCAL_SANDBOX_AUTH_TOKEN": secrets.token_hex(32),
+    "DIFY_AGENT_SERVER_SECRET_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("="),
+    "CONSOLE_API_URL": origin,
+    "CONSOLE_WEB_URL": origin,
+    "SERVICE_API_URL": origin,
+    "TRIGGER_URL": origin,
+    "APP_API_URL": origin,
+    "APP_WEB_URL": origin,
+    "FILES_URL": origin,
+    "NEXT_PUBLIC_SOCKET_URL": f"wss://{hostname}",
+    "CELERY_WORKER_AMOUNT": "1",
+    "WEAVIATE_AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED": "false",
+    "WEAVIATE_AUTHENTICATION_APIKEY_USERS": "booklet-dify",
+    "WEAVIATE_AUTHORIZATION_ADMINLIST_USERS": "booklet-dify",
+    "COMPOSE_PROFILES": "weaviate,postgresql,collaboration",
+    "FORCE_VERIFYING_SIGNATURE": "true",
+}
+values["SANDBOX_API_KEY"] = values["CODE_EXECUTION_API_KEY"]
+values["WEAVIATE_AUTHENTICATION_APIKEY_ALLOWED_KEYS"] = values["WEAVIATE_API_KEY"]
+values["CELERY_BROKER_URL"] = f"redis://:{values['REDIS_PASSWORD']}@redis:6379/1"
+for key, value in values.items():
+    pattern = rf"(?m)^{re.escape(key)}=.*$"
+    text, count = re.subn(pattern, lambda _: f"{key}={value}", text)
+    if count != 1:
+        raise SystemExit(f"Dify environment template is missing or duplicates {key}")
+text += "\nOPENAPI_ENABLED=true\nENABLE_OAUTH_BEARER=true\nOPENAPI_KNOWN_CLIENT_IDS=difyctl,difywf\nDIFY_AGENT_REDIS_PREFIX=dify-agent\n"
+Path(destination).write_text(text)
+PY
+    install -m 600 "$candidate" "$DIFY_ENV"
+    printf 'created: protected Dify runtime configuration\n'
+  }
+  [[ -f "$DIFY_ENV" && ! -L "$DIFY_ENV" && "$(stat -c %a "$DIFY_ENV")" == 600 && "$(stat -c %u "$DIFY_ENV")" == 0 ]] || die 'Dify runtime configuration must be a root-owned mode-600 file'
+  if [[ -L "$DIFY_RELEASE/docker/.env" ]]; then
+    [[ "$(readlink "$DIFY_RELEASE/docker/.env")" == "$DIFY_ENV" ]] || die 'Dify release environment link targets another file'
+  elif [[ ! -e "$DIFY_RELEASE/docker/.env" ]]; then
+    ln -s "$DIFY_ENV" "$DIFY_RELEASE/docker/.env"
+  else
+    die 'Dify release contains an unexpected environment file'
+  fi
+}
+dify_validate_compose() {
+  local resolved
+  private_temp
+  resolved="$TEMP_DIR/dify-compose.json"
+  dify_compose config --format json > "$resolved"
+  chmod 600 "$resolved"
+  jq -e --slurpfile release "$ROOT/dify/release.json" '
+    ([.services | to_entries[] | {key, value: .value.image}] | from_entries) == $release[0].images and
+    (.services.plugin_daemon.ports // [] | length == 0) and
+    (.services.nginx.ports | length == 1 and .[0].host_ip == "127.0.0.1" and (.[0].published | tostring) == "3300" and .[0].target == 80) and
+    ([.services | to_entries[] | select(.key != "nginx") | .value.ports[]?] | length == 0)
+  ' "$resolved" >/dev/null || die 'Resolved Dify Compose configuration has unpinned images or exposed internal ports'
+}
+dify_socket_responds() {
+  # Validate the Engine.IO open packet without printing its session identifier.
+  curl -fsS --max-time 8 'http://127.0.0.1:3300/socket.io/?EIO=4&transport=polling' 2>/dev/null |
+    python3 -c 'import json, sys; body = sys.stdin.read(4097); assert len(body) <= 4096 and body.startswith("0"); assert json.loads(body[1:]).get("sid")' >/dev/null 2>&1
+}
+dify_verify_services() {
+  local expected_services actual_services records deadline
+  [[ -f "$DIFY_ENV" && -f "$DIFY_RELEASE/docker/docker-compose.yaml" ]] || die 'Dify configuration or release files are missing'
+  dify_validate_compose
+  expected_services="$(dify_compose config --services | sort)"
+  [[ -n "$expected_services" ]] || die 'Resolved Dify service set is empty'
+  deadline=$((SECONDS + 180))
+  while ((SECONDS < deadline)); do
+    records="$(dify_service_records)"
+    actual_services="$(jq -r '.[].Service' <<< "$records" | sort)"
+    if [[ "$actual_services" == "$expected_services" ]] &&
+      dify_service_records_are_ready <<< "$records" &&
+      curl -fsS --max-time 15 --output /dev/null http://127.0.0.1:3300/ && dify_socket_responds; then
+      printf 'verified: Dify 1.17.1 responds on localhost:3300 with selected containers running and collaboration socket ready\n'
+      return
+    fi
+    sleep 3
+  done
+  printf 'failed: Dify readiness state %s\n' "$(jq -c '[.[] | {service:.Service,state:.State,health:(.Health // ""),exitCode:(.ExitCode // null)}]' <<< "$records")" >&2
+  die 'Dify did not become ready within 180 seconds'
+}
+dify_collaboration_is_ready() {
+  local container
+  container="$(dify_compose ps -q api_websocket)" || return 1
+  [[ -n "$container" ]] || return 1
+  docker inspect "$container" | jq -e 'length == 1 and .[0].HostConfig.Memory == 1610612736 and .[0].State.Health.Status == "healthy"' >/dev/null || return 1
+  dify_socket_responds
+}
+dify_repair_collaboration_host() {
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Pinned Dify installation is not recorded'
+  dify_install_preflight || return 1
+  dify_validate_compose || return 1
+  dify_idle_host || return 1
+  if dify_collaboration_is_ready; then
+    printf 'exists: Dify collaboration has the reviewed memory limit and responds\n'
+    save_success ''
+    return
+  fi
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate api_websocket >/dev/null || return 1
+  dify_verify_services || return 1
+  dify_collaboration_is_ready || die 'Dify collaboration memory, health or socket check failed'
+  printf 'verified: Dify collaboration repaired with 1536 MiB and a responsive socket\n'
+  save_success ''
+}
+dify_check_host() {
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Dify 1.17.1 is not recorded as installed'
+  dify_verify_services
+}
+
+dify_diagnostic_identity() {
+  [[ "$(hostname -f)" == "$(jq -er '.host_observation.hostname' "$CONFIG_FILE")" ]] || die 'Diagnostic host identity differs'
+  for command in docker jq timeout python3; do need_command "$command"; done
+}
+dify_service_diagnostics() {
+  local service="$1" container
+  [[ "$service" == sandbox || "$service" == worker_beat ]] || die 'Unsupported diagnostic service'
+  container="$(docker ps -aq --filter label=com.docker.compose.project=booklet-dify --filter "label=com.docker.compose.service=$service")"
+  [[ -n "$container" ]] || return 0
+  # A restart can race exec. Report the gap without exposing Docker errors.
+  if ! timeout 10s docker exec "$container" sh -c 'if [ -r /sys/fs/cgroup/memory.events ]; then cat /sys/fs/cgroup/memory.events; else exit 1; fi' 2>/dev/null |
+    awk -v service="$service" '/^(low|high|max|oom|oom_kill|oom_group_kill) [0-9]+$/ {print "result: " service "_memory " $0}'; then
+    printf 'result: %s_memory unavailable\n' "$service"
+  fi
+  timeout 15s docker logs --since 2h --tail 2000 "$container" 2>&1 | python3 -c '
+import collections, json, sys
+counts = collections.Counter()
+for line in sys.stdin:
+    for term in ("timeout", "signal: killed", "out of memory", "permission denied", "permissionerror", "connection refused", "noauth", "wrongpass", "authenticationerror", "modulenotfounderror", "memoryerror", "operationalerror", "programmingerror", "runtimeerror", "importerror", "attributeerror", "valueerror", "typeerror", "filenotfounderror", "traceback (most recent call last)", "running migrations", "migrations completed", "starting beat", "beat: starting"):
+        if term in line.lower(): counts[term] += 1
+print("result: " + sys.argv[1] + "_errors " + json.dumps(dict(counts)))' "$service"
+}
+
+dify_staging_api_diagnostic() {
+  local container="$1" run_id="$2"
+  if ! timeout 20s docker exec -i -w /app "$container" node - "$run_id" 2>/dev/null <<'NODE'
+(async () => {
+  if (process.env.DEPLOYMENT_ENV !== '_staging') throw Error('TargetDiffers');
+  const password = process.env.ACCESS_GATE_PASSWORD;
+  const runId = process.argv[2];
+  if (!password || password.length < 16 || !/^[a-f0-9-]{36}$/.test(runId)) throw Error('ConfigurationInvalid');
+  const response = await fetch('https://booklet-staging.uniwares.co.uk/api/diagnostics/logs?limit=1&runId=' + runId, {
+    headers: {Authorization: 'Basic ' + Buffer.from('booklet:' + password).toString('base64')},
+    redirect: 'error', signal: AbortSignal.timeout(10_000),
+  });
+  if (response.status !== 200 || !response.headers.get('content-type')?.includes('application/json')) throw Error('ResponseInvalid');
+  const reader = response.body?.getReader();
+  if (!reader) throw Error('BodyMissing');
+  const chunks = []; let size = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 65_536) throw Error('BodyTooLarge');
+      chunks.push(Buffer.from(value));
+    }
+  } finally { await reader.cancel().catch(() => {}); }
+  const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if (!Array.isArray(body?.data?.events) || body.data.events.length > 1) throw Error('SchemaInvalid');
+  console.log('result: staging_api ' + JSON.stringify({authenticated:true,status:200,eventCount:body.data.events.length}));
+})().catch(() => {
+  // Never return fetch errors, headers, response bodies or credential material.
+  console.log('result: staging_api ' + JSON.stringify({authenticated:false,outcome:'unverified'}));
+});
+NODE
+  then
+    printf 'result: staging_api {"authenticated":false,"outcome":"unverified"}\n'
+  fi
+}
+
+dify_diagnostics_host() {
+  dify_diagnostic_identity
+  local dispatcher_hash=unavailable
+  [[ ! -f "$ROOT/vps-deployment.sh" ]] || dispatcher_hash="$(sha256sum "$ROOT/vps-deployment.sh" | awk '{print $1}')"
+  printf 'result: dispatcher %s\n' "$dispatcher_hash"
+  printf 'result: dispatcher_capabilities operation-status operation-stop backup-verify bounded-units staging-bootstrap-reconcile\n'
+  if [[ -f "$STATE/staging-bootstrap.json" ]]; then
+    printf 'result: bootstrap_checkpoint %s\n' "$(jq -c '{oldRequest,oldRelease,oldImage,commit,image,backupId,phase,superseded}' "$STATE/staging-bootstrap.json")"
+  fi
+  printf 'result: host %s\n' "$(python3 -c 'import json; m={k:int(v.split()[0]) for k,v in (line.split(":",1) for line in open("/proc/meminfo"))}; print(json.dumps({k:m[k]//1024 for k in ["MemTotal","MemAvailable","SwapTotal","SwapFree"]}))')"
+  printf 'result: disk %s\n' "$(df -Pk "$STATE" | awk 'NR==2 {printf "availableKiB=%s usedPercent=%s", $4, $5}')"
+  show_operation_status
+  local ids=() container records
+  mapfile -t ids < <(docker ps -aq --filter label=com.docker.compose.project=booklet-dify)
+  [[ "${#ids[@]}" -le 30 ]] || die 'Unexpected Dify container count'
+  for container in "${ids[@]}"; do
+    records="$(timeout 10s docker inspect "$container" | jq -c '.[0] | {name:.Name,status:.State.Status,health:(.State.Health.Status // null),oomKilled:.State.OOMKilled,exitCode:.State.ExitCode,startedAt:.State.StartedAt,finishedAt:.State.FinishedAt,restarts:.RestartCount,memoryLimitBytes:.HostConfig.Memory}')"
+    printf 'result: container %s\n' "$records"
+  done
+  if [[ "${#ids[@]}" -gt 0 ]]; then
+    timeout 15s docker stats --no-stream --format 'result: resources {{.Name}} cpu={{.CPUPerc}} memory={{.MemUsage}} pids={{.PIDs}}' "${ids[@]}"
+  fi
+  dify_service_diagnostics sandbox
+  dify_service_diagnostics worker_beat
+  [[ -n "$RUN_ID" ]] || return 0
+  mapfile -t ids < <(docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False)
+  [[ "${#ids[@]}" == 1 ]] || die 'Expected one staging application'
+  container="${ids[0]}"
+  dify_staging_api_diagnostic "$container" "$RUN_ID"
+  printf 'result: staging_release %s\n' "$(< "$STATE/releases/staging/current")"
+  timeout 45s docker exec -i -w /app "$container" node --import tsx - "$RUN_ID" <<'NODE'
+(async () => {
+  if (process.env.DEPLOYMENT_ENV !== '_staging') throw Error('UnexpectedTarget');
+  const {getDatabase} = require('./db/client.ts');
+  const db = getDatabase();
+  try {
+    const runId = process.argv[2];
+    const run = await db.collections.experiment_runs.findOne({_id: runId});
+    if (!run) throw Error('RunNotFound');
+    const ops = await db.collections.experiment_operations.aggregate([
+      {$match:{runId}}, {$sort:{createdAtMs:1,_id:1}}, {$limit:301},
+      {$project:{_id:1,role:1,taskId:1,state:1,safeFailure:1,workflowRunId:1,workflowTaskId:1,verifiedWorkflowId:1,reservationCount:1,deadlineAtMs:1,
+        remoteStatus:1,dispatchStartedAtMs:1,updatedAtMs:1,
+        'lifecycle.startedAtMs':1,'lifecycle.lastProgressAtMs':1,'lifecycle.ownerId':1,'lifecycle.phase':1,
+        'lifecycle.attemptOutcome':1,'lifecycle.unresolved':1,'lifecycle.endedAtMs':1,'lifecycle.timeoutAtMs':1,'lifecycle.recoveredAtMs':1,
+        'lifecycle.stop.requestedAtMs':1,'lifecycle.stop.reason':1,'lifecycle.stop.delivery':1,
+        referenceUploadsSaved:{$eq:[{$type:'$referenceUploadsJson'},'string']},referenceUploadJournalSaved:{$eq:[{$type:'$referenceUploadJournalJson'},'string']},
+        resultSaved:{$eq:[{$type:'$resultJson'},'string']},materializationSaved:{$eq:[{$type:'$materializationJson'},'string']}}},
+    ]).toArray();
+    if (ops.length > 300) throw Error('OperationLimit');
+    console.log('result: run ' + JSON.stringify({id:run._id,status:run.status,revision:run.revision,activeOperationId:run.activeOperationId,safeFailure:run.safeFailure,counters:run.counters,
+      preparation:run.preparation ? {ownerId:run.preparation.ownerId,startedAtMs:run.preparation.startedAtMs,deadlineAtMs:run.preparation.deadlineAtMs,outcome:run.preparation.outcome,unresolved:run.preparation.unresolved}:null,operations:ops}));
+  } finally { await db.client.close(); }
+})().catch(() => {console.error('error: staging run diagnostic failed');process.exitCode=1;});
+NODE
+  timeout 20s docker logs --since 24h --tail 20000 "$container" 2>&1 | python3 -c '
+import collections, json, math, sys
+groups = collections.defaultdict(list)
+for line in sys.stdin:
+    try: row = json.loads(line[line.index("{"):])
+    except (ValueError, TypeError): continue
+    if not isinstance(row, dict): continue
+    if row.get("event") != "booklet_callback_phase" or row.get("runId") != sys.argv[1]: continue
+    if row.get("phase") not in ("authorization","claim","context","source_verification","fixture_authorization","image_callback","image_claim","image_decode","image_finalize","image_preflight","image_storage","result_finalization","authorization_transaction","result_transaction"): continue
+    value = row.get("elapsedMs")
+    if isinstance(value, (int,float)) and math.isfinite(value) and value >= 0: groups[row["phase"]].append(value)
+for phase, values in sorted(groups.items()):
+    print("result: timings " + json.dumps({"phase":phase,"count":len(values),"firstMs":values[0],"p95Ms":sorted(values)[math.ceil(len(values)*.95)-1],"maxMs":max(values)}))
+print("result: timing_scope " + json.dumps({"windowHours":24,"tailLines":20000,"recordCount":sum(map(len,groups.values()))}))' "$RUN_ID"
+}
+dify_sandbox_is_ready() {
+  local container
+  container="$(dify_compose ps -q sandbox)"
+  [[ -n "$container" ]] && docker inspect "$container" | jq -e 'length==1 and .[0].State.Status=="running" and .[0].State.Health.Status=="healthy" and .[0].HostConfig.Memory==1073741824' >/dev/null
+}
+dify_sandbox_preflight() {
+  dify_diagnostic_identity
+  dify_install_preflight
+  dify_validate_compose
+  private_temp
+  dify_compose config --format json > "$TEMP_DIR/sandbox-compose.json"
+  jq -e '(.services.sandbox.mem_limit | tonumber) == 1073741824' "$TEMP_DIR/sandbox-compose.json" >/dev/null || die 'Reviewed sandbox configuration must specify 1024 MiB'
+  local available
+  available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  [[ "$available" -ge 2883584 ]] || die 'Sandbox increase requires 2816 MiB available memory (768 MiB increase plus 2 GiB headroom)'
+}
+dify_repair_sandbox_host() {
+  dify_sandbox_preflight
+  if dify_sandbox_is_ready; then printf 'exists: sandbox has 1024 MiB and is healthy\n'; save_success ''; return; fi
+  dify_idle_host
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate sandbox >/dev/null
+  dify_verify_services
+  dify_sandbox_is_ready || die 'Sandbox memory or health verification failed'
+  printf 'verified: sandbox has 1024 MiB and is healthy\n'
+  save_success ''
+}
+dify_scheduler_preflight() {
+  dify_diagnostic_identity
+  dify_install_preflight
+  dify_validate_compose
+  private_temp
+  dify_compose config --format json > "$TEMP_DIR/scheduler-compose.json"
+  jq -e '(.services.worker_beat.mem_limit | tonumber) == 1610612736' "$TEMP_DIR/scheduler-compose.json" >/dev/null || die 'Reviewed scheduler configuration must specify 1536 MiB'
+  local available
+  available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  [[ "$available" -ge 3407872 ]] || die 'Scheduler increase requires 3328 MiB available memory (1280 MiB increase plus 2 GiB headroom)'
+}
+
+dify_scheduler_snapshot() {
+  local container
+  container="$(dify_compose ps -q worker_beat)" || return 1
+  [[ -n "$container" ]] || return 1
+  timeout 10s docker inspect "$container" | jq -cer '
+    select(length == 1) | .[0] |
+    select(.State.Status == "running" and .HostConfig.Memory == 1610612736) |
+    {id:.Id,startedAt:.State.StartedAt,restarts:.RestartCount}'
+}
+
+dify_scheduler_has_started() {
+  local snapshot="$1"
+  # Use only this start interval. Return a predicate, never raw log text.
+  timeout 15s docker logs --since "$(jq -r .startedAt <<< "$snapshot")" --tail 2000 "$(jq -r .id <<< "$snapshot")" 2>&1 |
+    python3 -c 'import sys; found = any("beat: starting" in line.lower() for line in sys.stdin.read().splitlines()); sys.exit(0 if found else 1)'
+}
+
+dify_verify_scheduler() {
+  local initial current attempt started=false
+  initial="$(dify_scheduler_snapshot)" || die 'Scheduler is not running with the reviewed memory limit'
+  for ((attempt=0; attempt<36; attempt++)); do
+    current="$(dify_scheduler_snapshot)" || die 'Scheduler stopped during startup'
+    [[ "$current" == "$initial" ]] || die 'Scheduler restarted during startup'
+    if dify_scheduler_has_started "$initial"; then started=true; break; fi
+    sleep 5
+  done
+  [[ "$started" == true ]] || die 'Scheduler did not report beat startup within the bounded check'
+  for ((attempt=0; attempt<24; attempt++)); do
+    sleep 5
+    current="$(dify_scheduler_snapshot)" || die 'Scheduler stopped during stability check'
+    [[ "$current" == "$initial" ]] || die 'Scheduler restarted during stability check'
+  done
+  printf 'verified: worker_beat reached beat startup with 1536 MiB and no restarts for 120 seconds\n'
+}
+
+dify_repair_scheduler_host() {
+  dify_scheduler_preflight
+  if dify_scheduler_snapshot >/dev/null; then
+    dify_verify_scheduler
+    dify_verify_services
+    printf 'exists: scheduler already has the reviewed memory limit and is stable\n'
+    save_success ''
+    return
+  fi
+  dify_idle_host
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate worker_beat >/dev/null
+  dify_verify_scheduler
+  dify_verify_services
+  save_success ''
+}
+
+dify_idle_host() {
+  local workflow_count agent_count=0 key record status
+  [[ -f "$DIFY_ENV" && -f "$DIFY_DATA/current" ]] || die 'Dify is not installed or configured'
+  grep -Fxq 'DIFY_AGENT_REDIS_PREFIX=dify-agent' "$DIFY_ENV" || die 'Dify Agent Redis prefix differs from the reviewed idle contract'
+  need_command jq
+  workflow_count="$(dify_compose exec -T db_postgres sh -c 'psql -X -A -t -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh "SELECT count(*) FROM workflow_runs WHERE status = 'running'")" || die 'Cannot inspect Dify workflow activity'
+  [[ "$workflow_count" =~ ^[0-9]+$ ]] || die 'Dify workflow activity returned an invalid count'
+  private_temp
+  dify_compose exec -T redis redis-cli -n 2 --raw --scan --pattern 'dify-agent:runs:*:record' > "$TEMP_DIR/dify-agent-keys" || die 'Cannot enumerate Dify Agent run records'
+  while IFS= read -r key; do
+    [[ "$key" =~ ^dify-agent:runs:[a-f0-9-]+:record$ ]] || die 'Dify Agent run key differs from the reviewed contract'
+    record="$(dify_compose exec -T redis redis-cli -n 2 --raw GET "$key")" || die 'Cannot inspect a Dify Agent run record'
+    status="$(jq -er '.status | select(. == "running" or . == "succeeded" or . == "failed" or . == "cancelled")' <<< "$record")" || die 'Dify Agent run record has an unknown status'
+    [[ "$status" != running ]] || agent_count=$((agent_count + 1))
+  done < "$TEMP_DIR/dify-agent-keys"
+  printf 'exists: Dify active workflows=%s active New Agent runs=%s\n' "$workflow_count" "$agent_count"
+  [[ "$workflow_count" == 0 && "$agent_count" == 0 ]] || die 'Dify still has active work; defer maintenance'
+  printf 'verified: no active Dify workflow or New Agent records at the observation point\n'
+}
+dify_install_host() {
+  dify_install_preflight
+  if [[ -f "$DIFY_DATA/current" ]]; then
+    dify_check_host
+    save_success ''
+    return
+  fi
+  set_step preparing
+  dify_prepare_directories
+  dify_prepare_release
+  dify_prepare_persistent_files
+  dify_prepare_environment
+  dify_validate_compose
+  set_step pulling
+  jq -r '.images[]' "$ROOT/dify/release.json" | sort -u | while IFS= read -r image; do docker pull "$image" >/dev/null; done
+  set_step starting
+  dify_compose up -d >/dev/null
+  dify_verify_services
+  printf '%s\n' 1.17.1 > "$DIFY_DATA/current.next"
+  mv "$DIFY_DATA/current.next" "$DIFY_DATA/current"
+  save_success ''
+}
+dify_broker_environment() {
+  local mode="$1"
+  python3 - "$DIFY_ENV" "$mode" <<'PY'
+from pathlib import Path
+import os
+import re
+import sys
+
+path, mode = Path(sys.argv[1]), sys.argv[2]
+if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o777 != 0o600 or path.stat().st_uid != os.geteuid():
+    raise SystemExit("Dify runtime configuration is not a protected owner-only file")
+text = path.read_text()
+def value(name):
+    matches = re.findall(rf"(?m)^{re.escape(name)}=(.*)$", text)
+    if len(matches) != 1:
+        raise SystemExit(f"Dify runtime configuration has missing or duplicate {name}")
+    return matches[0]
+password = value("REDIS_PASSWORD")
+if not re.fullmatch(r"[a-f0-9]{64}", password):
+    raise SystemExit("Dify Redis password differs from the generated format")
+current = value("CELERY_BROKER_URL")
+expected = f"redis://:{password}@redis:6379/1"
+if current == expected:
+    print("exists: Dify Celery broker credential matches Redis")
+elif current != "redis://:difyai123456@redis:6379/1":
+    raise SystemExit("Dify Celery broker differs from the known first-install mismatch; inspect privately")
+elif mode == "preview":
+    print("would update: Dify Celery broker credential")
+elif mode == "apply":
+    backup = path.with_name("runtime.env.broker-before-repair")
+    candidate = path.with_name("runtime.env.broker-next")
+    if backup.exists() or backup.is_symlink():
+        raise SystemExit("Protected Dify broker backup already exists; inspect before retry")
+    if candidate.exists() or candidate.is_symlink():
+        raise SystemExit("Protected Dify broker candidate already exists; inspect before retry")
+    backup.write_text(text)
+    backup.chmod(0o600)
+    corrected, count = re.subn(r"(?m)^CELERY_BROKER_URL=.*$", lambda _: f"CELERY_BROKER_URL={expected}", text)
+    if count != 1:
+        raise SystemExit("Dify runtime configuration has an ambiguous broker setting")
+    candidate.write_text(corrected)
+    candidate.chmod(0o600)
+    os.replace(candidate, path)
+    print("updated: Dify Celery broker credential")
+else:
+    raise SystemExit("Invalid Dify broker operation mode")
+PY
+}
+dify_api_broker_authenticates() {
+  dify_compose exec -T api python -c 'import os, redis; assert redis.Redis.from_url(os.environ["CELERY_BROKER_URL"]).ping()' >/dev/null 2>&1
+}
+dify_repair_broker_host() {
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Pinned Dify installation is not recorded'
+  dify_idle_host
+  if [[ "$(dify_broker_environment preview)" == 'exists: Dify Celery broker credential matches Redis' ]] && dify_api_broker_authenticates; then
+    printf 'exists: Dify API Celery broker authentication already succeeds\n'
+    save_success ''
+    return
+  fi
+  set_step repairing
+  dify_broker_environment apply
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate api worker worker_beat >/dev/null
+  dify_verify_services
+  dify_api_broker_authenticates || die 'Dify API cannot authenticate to its Celery broker'
+  printf 'verified: Dify API broker authentication succeeds after service recreation\n'
+  save_success ''
+}
+dify_admin_api_state() {
+  python3 - "$DIFY_ENV" <<'PY'
+from pathlib import Path
+import os
+import re
+import sys
+
+path = Path(sys.argv[1])
+if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o777 != 0o600 or path.stat().st_uid != os.geteuid():
+    raise SystemExit("Dify runtime configuration is not a protected owner-only file")
+text = path.read_text()
+def setting(name):
+    matches = re.findall(rf"(?m)^{name}=(.*)$", text)
+    if len(matches) > 1:
+        raise SystemExit(f"Dify runtime configuration duplicates {name}")
+    return matches[0] if matches else None
+
+enabled = setting("ADMIN_API_KEY_ENABLE")
+key = setting("ADMIN_API_KEY")
+if enabled == "true" and key and re.fullmatch(r"[a-f0-9]{64}", key):
+    print("exists: Dify admin API configuration is enabled with a generated-format key")
+elif enabled in (None, "false") and key in (None, ""):
+    print("would update: Dify admin API configuration")
+else:
+    raise SystemExit("Dify admin API configuration has unexpected state; inspect privately")
+PY
+}
+dify_admin_api_active() {
+  dify_compose exec -T api python -c 'import os, re, sys; text = sys.stdin.read(); keys = re.findall(r"(?m)^ADMIN_API_KEY=(.*)$", text); assert os.environ.get("ADMIN_API_KEY_ENABLE") == "true" and len(keys) == 1 and re.fullmatch("[a-f0-9]{64}", keys[0]) and os.environ.get("ADMIN_API_KEY") == keys[0]' < "$DIFY_ENV" >/dev/null 2>&1
+}
+dify_prompt_admin_api_key() {
+  local admin_key
+  [[ -t 0 && -t 1 ]] || die 'Admin API setup requires a private interactive VPS terminal'
+  IFS= read -r -s -p 'Paste the 64-character Dify admin API key: ' admin_key
+  printf '\n' >&2
+  [[ "$admin_key" =~ ^[a-f0-9]{64}$ ]] || die 'Admin API key must be 32 random bytes encoded as lowercase hexadecimal'
+  private_temp
+  ADMIN_API_KEY_FILE="$TEMP_DIR/admin-api-key"
+  printf '%s' "$admin_key" > "$ADMIN_API_KEY_FILE"
+  admin_key=''; unset admin_key
+}
+dify_admin_api_environment() {
+  python3 - "$DIFY_ENV" "$ADMIN_API_KEY_FILE" <<'PY'
+from pathlib import Path
+import os
+import re
+import sys
+
+path, key_path = map(Path, sys.argv[1:])
+text = path.read_text()
+key = key_path.read_text()
+if not re.fullmatch(r"[a-f0-9]{64}", key):
+    raise SystemExit("Admin API key has an invalid format")
+backup = path.with_name("runtime.env.admin-api-before-enable")
+candidate = path.with_name("runtime.env.admin-api-next")
+settings = {}
+for name in ("ADMIN_API_KEY_ENABLE", "ADMIN_API_KEY"):
+    matches = re.findall(rf"(?m)^{name}=(.*)$", text)
+    if len(matches) > 1:
+        raise SystemExit("Admin API settings changed after preview; inspect privately")
+    settings[name] = matches[0] if matches else None
+if settings["ADMIN_API_KEY_ENABLE"] not in (None, "false") or settings["ADMIN_API_KEY"] not in (None, ""):
+    raise SystemExit("Admin API settings changed after preview; inspect privately")
+if backup.is_symlink() or (backup.exists() and (backup.stat().st_mode & 0o777 != 0o600 or backup.read_text() != text)):
+    raise SystemExit("Protected admin API backup differs from the current pre-enable configuration")
+if not backup.exists():
+    with backup.open("x") as file:
+        file.write(text)
+    backup.chmod(0o600)
+text = re.sub(r"(?m)^ADMIN_API_KEY(?:_ENABLE)?=.*\n?", "", text)
+updated = text.rstrip("\n") + "\nADMIN_API_KEY_ENABLE=true\nADMIN_API_KEY=" + key + "\n"
+if candidate.is_symlink() or (candidate.exists() and (candidate.stat().st_mode & 0o777 != 0o600 or candidate.read_text() != updated)):
+    raise SystemExit("Protected admin API candidate differs from this request; inspect privately")
+if not candidate.exists():
+    with candidate.open("x") as file:
+        file.write(updated)
+    candidate.chmod(0o600)
+os.replace(candidate, path)
+print("updated: protected Dify admin API configuration")
+PY
+}
+dify_enable_admin_api_host() {
+  require_root
+  need_command flock; need_command python3; need_command docker
+  CONFIG_FILE="$ROOT/config.json"; load_config
+  dify_install_preflight
+  [[ -f "$DIFY_DATA/current" && "$(<"$DIFY_DATA/current")" == 1.17.1 ]] || die 'Pinned Dify installation is not recorded'
+  if [[ "$APPLY" == false ]]; then dify_admin_api_state; return; fi
+  exec 9>"$STATE/operation.lock"
+  flock -n 9 || die 'Another host operation is running'
+  local state
+  state="$(dify_admin_api_state)"
+  if [[ -f "$STATE/operation.json" ]]; then
+    jq -e '.action == "dify-enable-admin-api" and .environment == "dify" and (.step == "queued" or .step == "configuring" or .step == "configured" or .step == "restarting")' "$STATE/operation.json" >/dev/null || die 'Another unresolved host operation exists; inspect its status first'
+    REQUEST_ID="$(jq -er .requestId "$STATE/operation.json")"
+    printf 'exists: resuming Dify admin API operation %s\n' "$REQUEST_ID"
+  else
+    if [[ "$state" == exists:* ]] && dify_admin_api_active; then
+      dify_verify_services
+      printf 'exists: Dify admin API settings are active in the API service\n'
+      return
+    fi
+    dify_idle_host
+    if [[ "$state" != exists:* ]]; then dify_prompt_admin_api_key; fi
+    REQUEST_ID="${REQUEST_ID:-$(date +%s)-$$}"
+    [[ ! -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Request ID already completed'
+    jq -n --arg requestId "$REQUEST_ID" '{requestId:$requestId,action:"dify-enable-admin-api",environment:"dify",image:"",commit:"",backupId:"",confirmation:"",step:"queued"}' > "$STATE/operation.json"
+  fi
+  dify_idle_host
+  if [[ "$state" != exists:* ]]; then
+    [[ -n "$ADMIN_API_KEY_FILE" ]] || dify_prompt_admin_api_key
+    set_step configuring
+    dify_admin_api_environment
+    set_step configured
+  fi
+  set_step restarting
+  dify_compose up -d --no-deps --force-recreate api api_websocket >/dev/null
+  dify_verify_services
+  dify_admin_api_active || die 'Dify API process did not receive admin API configuration'
+  printf 'verified: Dify admin API settings reached the API service; complete a private bearer request before claiming authentication works\n'
+  save_success ''
 }
 host_run() {
   require_root; need_command flock; need_command docker; need_command jq
@@ -381,10 +1679,53 @@ host_run() {
   COMMIT="$(jq -r .commit "$STATE/operation.json")"
   BACKUP_ID="$(jq -r .backupId "$STATE/operation.json")"
   CONFIRMATION="$(jq -r .confirmation "$STATE/operation.json")"
+  if [[ "$ACTION" == restore && "$(jq -r .step "$STATE/operation.json")" == restoring ]]; then
+    die 'Restore may have changed data; reconcile the exact backup and output before any new restore. Do not replay restoration blindly'
+  fi
+  if [[ "$ACTION" == reset-staging ]]; then
+    case "$(jq -r .step "$STATE/operation.json")" in
+      resetting|reset-verifying) die 'Reset may have changed data; inspect the backup and database before explicit restore. Do not replay reset';;
+    esac
+  fi
   recover_interrupted_rotation
-  if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then BACKUP_ID=''; fi
+  if [[ "$ACTION" != restore && -n "$BACKUP_ID" ]]; then
+    case "$ACTION:$(jq -r .step "$STATE/operation.json")" in
+      retire-staging-artifact-index:backup-verified|retire-staging-artifact-index:retiring-index|retire-staging-artifact-index:index-verified|retire-staging-artifact-index:index-restarting|retire-staging-artifact-index:index-finalizing|retire-staging-artifact-index:complete) :;;
+      *) BACKUP_ID='';;
+    esac
+  fi
   validate_arguments
+  if [[ "$ACTION" == dify-install ]]; then dify_install_host; return; fi
+  if [[ "$ACTION" == dify-repair-broker ]]; then dify_repair_broker_host; return; fi
+  if [[ "$ACTION" == dify-repair-collaboration ]]; then dify_repair_collaboration_host; return; fi
+  if [[ "$ACTION" == dify-repair-sandbox ]]; then dify_repair_sandbox_host; return; fi
+  if [[ "$ACTION" == dify-repair-scheduler ]]; then dify_repair_scheduler_host; return; fi
+  [[ "$ACTION" != dify-enable-admin-api ]] || die 'Resume Dify admin API setup from the private VPS terminal with its local apply action'
   run_lifecycle
+}
+dify_discover_host() {
+  for name in docker ss df nproc awk wc hostname uname paste; do need_command "$name"; done
+  local os_name memory_mib available_mib swap_mib free_gib free_inodes
+  # shellcheck disable=SC1091
+  os_name="$(. /etc/os-release; printf '%s' "${PRETTY_NAME:-unknown}")"
+  memory_mib="$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)"
+  available_mib="$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)"
+  swap_mib="$(awk '/^SwapTotal:/ {print int($2 / 1024)}' /proc/meminfo)"
+  free_gib="$(df -Pk "$STATE" | awk 'NR==2 {print int($4 / 1048576)}')"
+  free_inodes="$(df -Pi "$STATE" | awk 'NR==2 {print $4}')"
+  printf 'exists: Dify candidate host %s (%s, %s, %s CPU, %s MiB RAM, %s MiB available, %s MiB swap, %s GiB free and %s inodes free at state root)\n' "$(hostname -f)" "$os_name" "$(uname -m)" "$(nproc)" "$memory_mib" "$available_mib" "$swap_mib" "$free_gib" "$free_inodes"
+  printf 'exists: Docker %s; Compose %s\n' "$(docker --version)" "$(docker compose version --short)"
+  if [[ "$(ss -lnt '( sport = :3300 )' | wc -l)" -gt 1 ]]; then
+    printf 'failed: Dify loopback port 3300 is already listening\n'
+    return 1
+  fi
+  printf 'available: Dify loopback port 3300\n'
+  printf 'exists: running container names: '
+  docker ps --format '{{.Names}}' | paste -sd, -
+  printf 'exists: container resource observations (name, memory, restart count, OOM flag):\n'
+  docker ps -q | while IFS= read -r container_id; do
+    docker inspect --format '{{.Name}} memory_limit={{.HostConfig.Memory}} restart_count={{.RestartCount}} oom_killed={{.State.OOMKilled}}' "$container_id"
+  done
 }
 host_dispatch() {
   require_root
@@ -395,8 +1736,44 @@ host_dispatch() {
   for token in "${args[@]}"; do [[ "$token" =~ ^[a-zA-Z0-9_./:@-]+$ ]] || die 'Invalid remote argument'; done
   SEEN=(); ACTION=''; APPLY=false; SECRET_NAME=''
   parse_arguments "${args[@]}"; validate_arguments
-  case "$ACTION" in deploy|check|backup|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|resume|status|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
+  case "$ACTION" in deploy|dify-discover|dify-check|dify-idle|dify-diagnostics|dify-repair-sandbox|dify-repair-scheduler|dify-install|dify-repair-broker|dify-repair-collaboration|check|backup|backup-verify|staging-bootstrap-reconcile|restore|rollback|rotate-secrets|repair-first-activation-secrets|stage-secrets|reset-staging|retire-staging-artifact-index|resume|status|operation-status|operation-stop|infra-lock|infra-unlock|sync-host) :;; *) die 'Operation is not available remotely';; esac
   CONFIG_FILE="$ROOT/config.json"; load_config
+  if [[ "$ACTION" == operation-status ]]; then operation_status_host; exit 0; fi
+  if [[ "$ACTION" == operation-stop ]]; then operation_stop_host; exit 0; fi
+  if [[ "$ACTION" == backup-verify ]]; then backup_verify_host; exit 0; fi
+  if [[ "$ACTION" == staging-bootstrap-reconcile ]]; then staging_bootstrap_reconcile_host; exit 0; fi
+  if [[ "$ACTION" == dify-discover ]]; then dify_discover_host; exit 0; fi
+  if [[ "$ACTION" == dify-check ]]; then dify_check_host; exit 0; fi
+  if [[ "$ACTION" == dify-idle ]]; then dify_idle_host; exit 0; fi
+  if [[ "$ACTION" == dify-diagnostics ]]; then dify_diagnostics_host; exit 0; fi
+  if [[ -e "$STATE/staging-bootstrap.json" ]]; then
+    [[ "$ACTION" == deploy && "$ENVIRONMENT" == staging ]] || die 'Retained bootstrap maintenance requires its exact separate staging deployment; inspect status'
+  fi
+  if [[ "$ACTION" == dify-repair-scheduler && "$APPLY" == false ]]; then
+    dify_scheduler_preflight
+    printf 'would update: Dify worker_beat only, 1536 MiB; apply requires idle work and verifies 120 seconds of scheduler stability\n'
+    exit 0
+  fi
+  if [[ "$ACTION" == dify-repair-sandbox && "$APPLY" == false ]]; then
+    dify_sandbox_preflight
+    printf 'would update: Dify Python sandbox only, 1024 MiB; apply requires idle work\n'
+    exit 0
+  fi
+  if [[ "$ACTION" == dify-install && "$APPLY" == false ]]; then
+    dify_install_preflight
+    if [[ -f "$DIFY_DATA/current" ]]; then printf 'exists: pinned Dify 1.17.1 installation\n'; else printf 'would create: pinned Dify 1.17.1 installation\n'; fi
+    exit 0
+  fi
+  if [[ "$ACTION" == dify-repair-broker && "$APPLY" == false ]]; then
+    dify_broker_environment preview
+    exit 0
+  fi
+  if [[ "$ACTION" == dify-repair-collaboration && "$APPLY" == false ]]; then
+    dify_install_preflight
+    dify_validate_compose
+    printf 'would update: Dify collaboration only, 1536 MiB and healthcheck; apply requires idle work\n'
+    exit 0
+  fi
   if [[ "$ACTION" == status ]]; then
     show_operation_status
     exit 0
@@ -409,7 +1786,13 @@ host_dispatch() {
     dd of="$TEMP_DIR/secrets.json" bs=64K count=1 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Staged secret override exceeds 64 KiB'; fi
     if [[ -n "$SECRET_NAME" ]]; then
-      jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
+        community_probe_patch_is_valid "$TEMP_DIR/secrets.json" || die 'Community probe bundle is invalid'
+      elif [[ "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
+        booklet_runner_patch_is_valid "$TEMP_DIR/secrets.json" || die 'Booklet runner bundle is invalid'
+      else
+        jq -e --arg name "$SECRET_NAME" '.services.app.environment as $e | (($e|type)=="object") and (($e|keys)==[$name]) and (($e[$name]|type)=="string") and (($e[$name]|length)>0)' "$TEMP_DIR/secrets.json" >/dev/null || die 'Single-secret rotation payload is invalid'
+      fi
       jq -s '.[0] * .[1]' "$SECRETS/$ENVIRONMENT/secrets.json" "$TEMP_DIR/secrets.json" > "$TEMP_DIR/merged-secrets.json"
     else
       cp "$TEMP_DIR/secrets.json" "$TEMP_DIR/merged-secrets.json"
@@ -455,20 +1838,45 @@ host_dispatch() {
     dd of="$TEMP_DIR/host-bundle.tar" bs=1M count=5 iflag=fullblock status=none
     if IFS= read -r -n 1; then die 'Host configuration bundle exceeds 5 MiB'; fi
     tar -tf "$TEMP_DIR/host-bundle.tar" | sort > "$TEMP_DIR/contents"
-    printf '%s\n' deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/expected"
-    cmp -s "$TEMP_DIR/contents" "$TEMP_DIR/expected" || die 'Host configuration bundle has unexpected contents'
+    local includes_dify=false
+    printf '%s\n' deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/legacy-expected"
+    printf '%s\n' deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml deploy/dify/compose.override.yml deploy/dify/release.json infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/expected"
+    if cmp -s "$TEMP_DIR/contents" "$TEMP_DIR/expected"; then includes_dify=true
+    else cmp -s "$TEMP_DIR/contents" "$TEMP_DIR/legacy-expected" || die 'Host configuration bundle has unexpected contents'; fi
     tar -xf "$TEMP_DIR/host-bundle.tar" -C "$TEMP_DIR"
     bash -n "$TEMP_DIR/scripts/deploy/vps-deployment.sh"
+    if [[ "$includes_dify" == true ]]; then
+      jq -e '.release == "1.17.1" and (.source_commit | test("^[a-f0-9]{40}$")) and (.source_archive_sha256 | test("^[a-f0-9]{64}$")) and (.images | all(.[]; test("@sha256:[a-f0-9]{64}$")))' "$TEMP_DIR/deploy/dify/release.json" >/dev/null || die 'Invalid pinned Dify release manifest'
+    fi
     local staged_config="$TEMP_DIR/infra/config/vps.json" original_config="$CONFIG_FILE"
     CONFIG_FILE="$staged_config"; load_config; CONFIG_FILE="$original_config"
     install -m 755 "$TEMP_DIR/scripts/deploy/vps-deployment.sh" "$ROOT/vps-deployment.sh.next"
     mv "$ROOT/vps-deployment.sh.next" "$ROOT/vps-deployment.sh"
     local compose_file
     for compose_file in "$TEMP_DIR/deploy/"*.yml; do install -m 644 "$compose_file" "$ROOT/deploy/$(basename "$compose_file").next"; mv "$ROOT/deploy/$(basename "$compose_file").next" "$ROOT/deploy/$(basename "$compose_file")"; done
+    if [[ "$includes_dify" == true ]]; then
+      install -d -m 755 "$ROOT/dify"
+      install -m 644 "$TEMP_DIR/deploy/dify/release.json" "$ROOT/dify/release.json.next"; mv "$ROOT/dify/release.json.next" "$ROOT/dify/release.json"
+      install -m 644 "$TEMP_DIR/deploy/dify/compose.override.yml" "$ROOT/dify/compose.override.yml.next"; mv "$ROOT/dify/compose.override.yml.next" "$ROOT/dify/compose.override.yml"
+    fi
     install -m 600 "$staged_config" "$ROOT/config.json.next"; mv "$ROOT/config.json.next" "$ROOT/config.json"
     printf 'updated: reviewed host configuration installed\n'; exit 0
   fi
   local current=''
+  if [[ "$ACTION" == retire-staging-artifact-index && "$APPLY" == false ]]; then
+    [[ -f "$STATE/releases/staging/current" ]] || die 'No staging release recorded'
+    read -r current < "$STATE/releases/staging/current"
+    verify_artifact_retirement_release "$current" "$COMMIT"
+    verify_artifact_retirement_rollback
+    maintenance "$current" retire-staging-artifact-index --preview
+    exit 0
+  fi
+  if [[ "$ACTION" == reset-staging && "$APPLY" == false ]]; then
+    [[ -f "$STATE/releases/staging/current" ]] || die 'No staging release recorded'
+    read -r current < "$STATE/releases/staging/current"
+    maintenance "$current" read-staging-reset-readiness
+    exit 0
+  fi
   if [[ "$ACTION" == check ]]; then
     [[ -f "$STATE/releases/$ENVIRONMENT/current" ]] || die 'No release recorded'
     read -r current < "$STATE/releases/$ENVIRONMENT/current"
@@ -495,39 +1903,73 @@ host_dispatch() {
     old_id="$(jq -r .requestId "$STATE/operation.json")"
     if systemctl is-active --quiet "kids-booklet-operation-$old_id.service"; then die 'Previous service remains active'; fi
     [[ "$(jq -r .environment "$STATE/operation.json")" == "$ENVIRONMENT" ]] || die 'Interrupted operation belongs to another environment'
-    [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=kids-booklet-$ENVIRONMENT" --filter 'label=com.docker.compose.oneoff=True')" ]] || die 'Maintenance containers remain active'
+    local compose_project="kids-booklet-$ENVIRONMENT"
+    [[ "$ENVIRONMENT" != dify ]] || compose_project=booklet-dify
+    [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=$compose_project" --filter 'label=com.docker.compose.oneoff=True')" ]] || die 'Maintenance containers remain active'
     # Retry the exact recorded operation. In particular, never clear maintenance
     # over a partially restored database merely because the old image starts.
     REQUEST_ID="$old_id"
+    local remaining
+    remaining="$(ensure_operation_budget)" || die 'Original operation budget expired; reconcile outputs before a new approved attempt'
     flock -u 9
     if systemctl cat "kids-booklet-operation-$old_id.service" >/dev/null 2>&1; then
+      local unit_bound
+      unit_bound="$(systemctl show --property=RuntimeMaxUSec --value "kids-booklet-operation-$old_id.service")"
+      [[ -n "$unit_bound" && "$unit_bound" != infinity ]] || die 'Legacy operation unit has no runtime bound; inspect and replace the inactive unit before resume'
+      systemctl set-property --runtime "kids-booklet-operation-$old_id.service" "RuntimeMaxSec=${remaining}s"
       systemctl restart "kids-booklet-operation-$old_id.service"
     else
-      systemd-run --unit="kids-booklet-operation-$old_id" --property=Type=exec --property=UMask=0077 "$ROOT/vps-deployment.sh" --action host-run --request-id "$old_id" --apply
+      start_operation_unit
     fi
     wait_operation
     exit 0
   fi
-  [[ ! -f "$STATE/operation.json" ]] || die 'Unresolved operation exists; use resume'
+  if [[ "$ACTION" == restore && -f "$STATE/operation.json" ]]; then
+    jq -e --arg backup "$BACKUP_ID" '.action=="reset-staging" and .environment=="staging" and (.step=="resetting" or .step=="reset-verifying") and .backupId==$backup' "$STATE/operation.json" >/dev/null || die 'Retained operation does not permit this restore; inspect status'
+    [[ "$ENVIRONMENT" == staging && "$CONFIRMATION" == kids_booklet ]] || die 'Reset recovery requires the exact staging confirmation'
+    local reset_request
+    reset_request="$(jq -er .requestId "$STATE/operation.json")"
+    ! systemctl is-active --quiet "kids-booklet-operation-$reset_request.service" || die 'Reset service remains active'
+    [[ -z "$(docker ps -q --filter 'label=com.docker.compose.project=kids-booklet-staging' --filter 'label=com.docker.compose.oneoff=True')" ]] || die 'Reset maintenance containers remain active'
+    [[ ! -f "$STATE/operations/$reset_request-failed.json" ]] || die 'Reset recovery journal already exists; inspect status'
+    mv "$STATE/operation.json" "$STATE/operations/$reset_request-failed.json"
+    printf 'updated: retained failed reset journal; explicit matching-backup restore authorized\n'
+  fi
+  [[ ! -f "$STATE/operation.json" ]] || die 'Unresolved operation exists; use resume or the exact failed-reset backup restore'
   [[ "$ACTION" != deploy || "${IMAGE_DIGEST%@*}" == "$(jq -r .image "$CONFIG_FILE")" ]] || die 'Image repository does not match configured project'
   REQUEST_ID="${REQUEST_ID:-$(date +%s)-$$}"
   [[ ! -f "$STATE/operations/$REQUEST_ID.json" ]] || die 'Request ID already completed'
   jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg environment "$ENVIRONMENT" --arg image "$IMAGE_DIGEST" --arg commit "$COMMIT" --arg backupId "$BACKUP_ID" --arg confirmation "$CONFIRMATION" '{requestId:$requestId,action:$action,environment:$environment,image:$image,commit:$commit,backupId:$backupId,confirmation:$confirmation,step:"queued"}' > "$STATE/operation.json"
   flock -u 9
-  systemd-run --unit="kids-booklet-operation-$REQUEST_ID" --property=Type=exec --property=UMask=0077 "$ROOT/vps-deployment.sh" --action host-run --request-id "$REQUEST_ID" --apply
+  start_operation_unit
   wait_operation
 }
 wait_operation() {
-  local active completed_journal
+  local active completed_journal started=$SECONDS previous='' last_progress=$SECONDS
   while :; do
-    active="$(systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")"
-    case "$active" in active|activating|reloading|deactivating) sleep 5;; *) break;; esac
+    active="$(timeout 5s systemctl show --property=ActiveState --value "kids-booklet-operation-$REQUEST_ID.service")" || die 'Operation status unavailable; request may still be running'
+    case "$active" in active|activating|reloading|deactivating) :;; inactive|failed) break;; *) die 'Operation service returned an unsupported state';; esac
+    if [[ -f "$STATE/operation.json" ]]; then
+      local phase
+      phase="$(jq -er --arg id "$REQUEST_ID" 'select(.requestId==$id) | .step' "$STATE/operation.json")" || die 'Operation journal changed; inspect exact request'
+      if [[ "$phase" != "$previous" || "$((SECONDS - last_progress))" -ge 30 ]]; then
+        printf 'result: operation progress request=%s phase=%s elapsedSeconds=%s\n' "$REQUEST_ID" "$phase" "$((SECONDS - started))"
+        previous="$phase"
+        last_progress=$SECONDS
+      fi
+    fi
+    sleep 5
+    if [[ "$((SECONDS - started))" -ge 300 ]]; then
+      printf 'result: operation still running request=%s service=%s; client wait expired, no stop or replay sent\n' "$REQUEST_ID" "$active"
+      return 124
+    fi
   done
   completed_journal="$STATE/operations/$REQUEST_ID.json"
+  [[ "$active" != failed ]] || die 'Operation unit failed; inspect exact request and owned cleanup even if completion output was saved'
   [[ -f "$completed_journal" ]] || die 'Operation failed; journal retained. Use status and resume'
   printf 'updated: %s %s\n' "$ACTION" "$ENVIRONMENT"
   printf 'result: '
-  jq -c '{requestId,action,environment,commit,backupId,image,configHash,priorRelease,step}' "$completed_journal"
+  jq -c '{requestId,action,environment,commit,backupId,image,configHash,priorRelease,rollbackRelease,rollbackImage,step}' "$completed_journal"
 }
 backend_init() {
   local directory="$1" key="$2"
@@ -557,7 +1999,7 @@ validate_plan() {
   local json="$1"
   jq -e '[.resource_changes[]? | select(.change.actions | index("delete"))] | length == 0' "$json" >/dev/null || die 'Plan deletes or replaces resources; administrator review required'
   jq -e '[.resource_changes[]? | select(.type | startswith("cloudflare_zero_trust_access")) | select(.change.actions | index("update"))] | length == 0' "$json" >/dev/null || die 'Access boundary updates require separate administrator review'
-  jq -e '[.resource_changes[]? | select(.type=="cloudflare_ruleset") | .change.before.rules[]? | select(.ref != "application_bypass" and .ref != "next_static" and .ref != "application_api_rate")] | length == 0' "$json" >/dev/null || die 'Ruleset contains unrelated rules; preserve them through an administrator-reviewed change'
+  jq -e '[.resource_changes[]? | select(.type=="cloudflare_ruleset") | .change.before.rules[]? | select(.ref != "application_bypass" and .ref != "next_static" and .ref != "dify_bypass" and .ref != "application_api_rate")] | length == 0' "$json" >/dev/null || die 'Ruleset contains unrelated rules; preserve them through an administrator-reviewed change'
 }
 secret_value_is_valid() {
   local value="$1"
@@ -922,9 +2364,9 @@ discover_configuration() {
   atlas_request GET "groups/$project/clusters?itemsPerPage=100"; cp "$ATLAS_RESPONSE" "$TEMP_DIR/atlas-clusters.json"
   cluster="$(select_atlas_cluster)"
   candidate="$TEMP_DIR/vps.json"
-  jq -n --arg account "$TF_VAR_cloudflare_account_id" --arg zone "$TF_VAR_cloudflare_zone_id" --arg deploy "$DEPLOY_HOSTNAME" --arg project "$project" --arg cluster "$cluster" --arg staging "$STAGING_HOSTNAME" --arg prod "$PROD_HOSTNAME" '{repository:"karpishe-experiments/agentic-poc",image:"ghcr.io/karpishe-experiments/agentic-poc",cloudflare_account_id:$account,cloudflare_zone_id:$zone,deploy_hostname:$deploy,state_bucket:"kids-booklet-terraform-state",atlas_project_id:$project,atlas_cluster_name:$cluster,environments:{staging:{APP_HOSTNAME:$staging,ASSETS_BUCKET:"kids-booklet-staging-assets",DIAGNOSTICS_BUCKET:"kids-booklet-staging-diagnostics",RECOVERY_BUCKET:"kids-booklet-staging-recovery"},prod:{APP_HOSTNAME:$prod,ASSETS_BUCKET:"kids-booklet-prod-assets",DIAGNOSTICS_BUCKET:"kids-booklet-prod-diagnostics",RECOVERY_BUCKET:"kids-booklet-prod-recovery"}}}' > "$candidate"
+  jq -n --arg account "$TF_VAR_cloudflare_account_id" --arg zone "$TF_VAR_cloudflare_zone_id" --arg deploy "$DEPLOY_HOSTNAME" --arg project "$project" --arg cluster "$cluster" --arg staging "$STAGING_HOSTNAME" --arg prod "$PROD_HOSTNAME" --arg dify "dify.$ZONE_NAME" '{repository:"karpishe-experiments/agentic-poc",image:"ghcr.io/karpishe-experiments/agentic-poc",cloudflare_account_id:$account,cloudflare_zone_id:$zone,deploy_hostname:$deploy,dify_hostname:$dify,dify_public_enabled:false,dify_backup_bucket:"kids-booklet-dify-backups",state_bucket:"kids-booklet-terraform-state",atlas_project_id:$project,atlas_cluster_name:$cluster,environments:{staging:{APP_HOSTNAME:$staging,ASSETS_BUCKET:"kids-booklet-staging-assets",DIAGNOSTICS_BUCKET:"kids-booklet-staging-diagnostics",RECOVERY_BUCKET:"kids-booklet-staging-recovery"},prod:{APP_HOSTNAME:$prod,ASSETS_BUCKET:"kids-booklet-prod-assets",DIAGNOSTICS_BUCKET:"kids-booklet-prod-diagnostics",RECOVERY_BUCKET:"kids-booklet-prod-recovery"}}}' > "$candidate"
   if [[ -e "$CONFIG_OUTPUT" ]]; then
-    cmp -s "$candidate" "$CONFIG_OUTPUT" && { printf 'exists: non-secret deployment configuration\n'; return; }
+    [[ "$(jq -Sc 'del(.host_observation)' "$candidate")" == "$(jq -Sc 'del(.host_observation)' "$CONFIG_OUTPUT")" ]] && { printf 'exists: non-secret deployment configuration (host observation is informational)\n'; return; }
     die 'Existing infra/config/vps.json differs; inspect it and resolve the configuration drift'
   fi
   if [[ "$APPLY" == false ]]; then
@@ -1053,10 +2495,12 @@ assert_no_unmanaged_cloudflare_resources() {
         [[ "$CF_STATUS" == 404 ]] || die "R2 bucket $name exists without Terraform state; import or choose a clean project"
       done
     done
+    cloudflare_get "accounts/$account/r2/buckets/$TF_VAR_dify_backup_bucket"
+    [[ "$CF_STATUS" == 404 ]] || die 'Dify backup bucket exists without Terraform state; verify ownership before installation'
   fi
   cloudflare_get "accounts/$account/cfd_tunnel?name=kids-booklet-vps&is_deleted=false"
   [[ "$CF_STATUS" == 200 && "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || die 'A kids-booklet Tunnel exists without Terraform state; verify ownership and import it'
-  for hostname in "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname"; do
+  for hostname in "$TF_VAR_staging_hostname" "$TF_VAR_prod_hostname" "$TF_VAR_deploy_hostname" "$TF_VAR_dify_hostname"; do
     cloudflare_get "zones/$zone/dns_records?name=$hostname"
     [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || die "DNS record $hostname already exists without Terraform state"
   done
@@ -1104,6 +2548,25 @@ adopt_existing_r2_buckets() {
       fi
     done
   done
+  name="$TF_VAR_dify_backup_bucket"
+  address='cloudflare_r2_bucket.dify_backup'
+  cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$name"
+  if grep -Fqx "$address" <<< "$state"; then
+    [[ "$CF_STATUS" == 200 ]] || die "Terraform tracks missing Dify backup bucket $name"
+  elif [[ "$CF_STATUS" == 404 ]]; then
+    :
+  elif [[ "$CF_STATUS" == 200 ]]; then
+    if [[ "$APPLY" == false ]]; then
+      printf 'would update: adopt existing R2 bucket %s into Terraform state\n' "$name"
+    else
+      if [[ "$imported" == false ]]; then r2_state_snapshot "$directory" infrastructure-before-r2-adoption; imported=true; fi
+      terraform -chdir="$directory" import -input=false "$address" "$TF_VAR_cloudflare_account_id/$name/default"
+      terraform -chdir="$directory" state show "$address" >/dev/null || die "Terraform did not adopt R2 bucket $name"
+      printf 'updated: adopted existing R2 bucket %s into Terraform state\n' "$name"
+    fi
+  else
+    die "Cloudflare returned HTTP $CF_STATUS while checking R2 bucket $name"
+  fi
 }
 verify_cloudflare_ownership() {
   local directory="$1" state phase address expected environment kind name hostname key present
@@ -1116,13 +2579,16 @@ verify_cloudflare_ownership() {
       if grep -Fqx "$address" <<< "$state"; then [[ "$present" == true ]] || die "Terraform tracks missing R2 bucket $name"; else [[ "$present" == false ]] || die "R2 bucket $name exists outside Terraform state"; fi
     done
   done
+  name="$TF_VAR_dify_backup_bucket"; address='cloudflare_r2_bucket.dify_backup'
+  cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/r2/buckets/$name"; present=false; [[ "$CF_STATUS" == 404 ]] || present=true
+  if grep -Fqx "$address" <<< "$state"; then [[ "$present" == true ]] || die "Terraform tracks missing R2 bucket $name"; else [[ "$present" == false ]] || die "R2 bucket $name exists outside Terraform state"; fi
   cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/cfd_tunnel?name=kids-booklet-vps&is_deleted=false"; present=false; [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || present=true
   if grep -qx 'cloudflare_zero_trust_tunnel_cloudflared.vps' <<< "$state"; then [[ "$present" == true ]] || die 'Terraform tracks a missing Tunnel'; else [[ "$present" == false ]] || die 'The project Tunnel exists outside Terraform state'; fi
   cloudflare_get "accounts/$TF_VAR_cloudflare_account_id/access/apps"; present=false
   [[ "$(jq --arg hostname "$TF_VAR_deploy_hostname" '[.result[]? | select(.domain==$hostname)] | length' "$CF_RESPONSE")" == 0 ]] || present=true
   if grep -qx 'cloudflare_zero_trust_access_application.deployment' <<< "$state"; then [[ "$present" == true ]] || die 'Terraform tracks a missing deployment Access application'; else [[ "$present" == false ]] || die 'The deployment Access application exists outside Terraform state'; fi
-  for key in staging prod deploy; do
-    case "$key" in staging) hostname="$TF_VAR_staging_hostname";; prod) hostname="$TF_VAR_prod_hostname";; deploy) hostname="$TF_VAR_deploy_hostname";; esac
+  for key in staging prod deploy dify; do
+    case "$key" in staging) hostname="$TF_VAR_staging_hostname";; prod) hostname="$TF_VAR_prod_hostname";; deploy) hostname="$TF_VAR_deploy_hostname";; dify) hostname="$TF_VAR_dify_hostname";; esac
     address="cloudflare_dns_record.application[\"$key\"]"
     cloudflare_get "zones/$TF_VAR_cloudflare_zone_id/dns_records?name=$hostname"; present=false; [[ "$(jq '.result | length' "$CF_RESPONSE")" == 0 ]] || present=true
     if grep -Fqx "$address" <<< "$state"; then [[ "$present" == true ]] || die "Terraform tracks missing DNS record $hostname"; else [[ "$present" == false ]] || die "DNS record $hostname exists outside Terraform state"; fi
@@ -1133,7 +2599,11 @@ verify_cloudflare_ownership() {
     cloudflare_get "zones/$TF_VAR_cloudflare_zone_id/rulesets/phases/$phase/entrypoint"
     if grep -qx "$address" <<< "$state"; then
       [[ "$CF_STATUS" == 200 ]] || die "Terraform tracks $phase but its Cloudflare entrypoint is missing"
-      jq -e --argjson expected "$expected" '([.result.rules[]?.ref] | sort) == ($expected | sort)' "$CF_RESPONSE" >/dev/null || die "The $phase entrypoint contains rules outside this project"
+      if [[ "$phase" == http_request_cache_settings ]]; then
+        jq -e '([.result.rules[]?.ref] | sort) as $refs | $refs == (["application_bypass","next_static"] | sort) or $refs == (["application_bypass","next_static","dify_bypass"] | sort)' "$CF_RESPONSE" >/dev/null || die "The $phase entrypoint contains rules outside this project"
+      else
+        jq -e --argjson expected "$expected" '([.result.rules[]?.ref] | sort) == ($expected | sort)' "$CF_RESPONSE" >/dev/null || die "The $phase entrypoint contains rules outside this project"
+      fi
     else
       [[ "$CF_STATUS" == 404 ]] || die "The $phase entrypoint exists outside Terraform state; verify ownership and import it"
     fi
@@ -1238,16 +2708,25 @@ verify_infrastructure_head() {
 sync_host_configuration() {
   private_temp
   [[ -f "$REPO_ROOT/infra/config/vps.json" ]] || die 'Reviewed infra/config/vps.json is required for host synchronization'
-  tar -C "$REPO_ROOT" -cf "$TEMP_DIR/host-bundle.tar" scripts/deploy/vps-deployment.sh deploy/compose.yml deploy/compose.staging.yml deploy/compose.prod.yml infra/config/vps.json
   configure_ssh
   local remote_command
   local -a remote=(--action sync-host --request-id "$REQUEST_ID" --apply)
   printf -v remote_command ' %s' "${remote[@]}"
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar"
+  # The installed dispatcher must accept the first bundle before it can upgrade
+  # itself. Both transfers retain the same infrastructure journal and lock.
+  local phase
+  local -a files=(scripts/deploy/vps-deployment.sh deploy/compose.yml deploy/compose.staging.yml deploy/compose.prod.yml infra/config/vps.json)
+  for phase in dispatcher artifacts; do
+    if [[ "$phase" == artifacts ]]; then files+=(deploy/dify/compose.override.yml deploy/dify/release.json); fi
+    tar -C "$REPO_ROOT" -cf "$TEMP_DIR/host-bundle.tar" "${files[@]}"
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/host-bundle.tar" || return $?
+  done
 }
 terraform_operation() {
   local directory
   need_command terraform; need_command jq
+  load_config
+  load_terraform_configuration
   verify_infrastructure_head
   private_temp
   directory="$TEMP_DIR/infrastructure"
@@ -1317,13 +2796,22 @@ bootstrap_state() {
   chmod 600 "$directory"/*
 }
 build_secret_override() {
-  local environment="$1" destination="$2" name value secret_input=''
+  local environment="$1" destination="$2" name value secret_input='' runner_input=''
   private_temp
   if [[ -n "${DEPLOYMENT_SECRETS_DIR:-}" ]]; then
     [[ "$GENERATE_PASSWORD" == false ]] || die '--generate-password cannot be combined with DEPLOYMENT_SECRETS_DIR'
     secret_input="$DEPLOYMENT_SECRETS_DIR/$environment.json"
     [[ -d "$DEPLOYMENT_SECRETS_DIR" && "$(stat -c %a "$DEPLOYMENT_SECRETS_DIR")" == 700 && -f "$secret_input" && "$(stat -c %a "$secret_input")" == 600 ]] || die 'DEPLOYMENT_SECRETS_DIR must be mode 700 with a mode-600 environment JSON file'
-    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY","GEMINI_API_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((has("GEMINI_API_KEY")|not) or (.GEMINI_API_KEY|type=="string" and length>0))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
+    if jq -e 'keys|any(startswith("DIFY_BOOKLET_"))' "$secret_input" >/dev/null 2>&1; then
+      [[ "$environment" == staging ]] || die 'Booklet runner settings are staging-only'
+      booklet_runner_settings_are_valid "$secret_input" || die 'Private Booklet runner settings are invalid'
+      runner_input="$secret_input"
+      # Keep the existing legacy schema check; restore the complete input before serialization.
+      jq 'with_entries(select(.key|startswith("DIFY_BOOKLET_")|not))' "$secret_input" > "$TEMP_DIR/legacy-secret-input.json"
+      secret_input="$TEMP_DIR/legacy-secret-input.json"
+    fi
+    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_WORKFLOW_API_KEY","DIFY_COMMUNITY_CALLBACK_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_PROBE_ENABLED")|not) or (.DIFY_COMMUNITY_PROBE_ENABLED == "true" or .DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((has("DIFY_COMMUNITY_BASE_URL")|not) or .DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((has("DIFY_COMMUNITY_WORKFLOW_API_KEY")|not) or (.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_CALLBACK_KEY")|not) or (.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and ((.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (has("DIFY_COMMUNITY_BASE_URL") and has("DIFY_COMMUNITY_WORKFLOW_API_KEY") and has("DIFY_COMMUNITY_CALLBACK_KEY")))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
+    [[ -z "$runner_input" ]] || secret_input="$runner_input"
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi
     chmod 600 "$destination"
@@ -1353,8 +2841,9 @@ application_secret_value_is_valid() {
     ACCESS_GATE_PASSWORD) [[ ${#value} -ge 16 ]];;
     AWS_ACCESS_KEY_ID) [[ "$value" =~ ^[A-Za-z0-9]{32}$ ]];;
     AWS_SECRET_ACCESS_KEY) [[ "$value" =~ ^[A-Fa-f0-9]{64}$ ]];;
-    DIFY_API_KEY|DIFY_IMAGE_OPENAI_API_KEY|GEMINI_API_KEY) [[ -n "$value" ]];;
-    DIFY_TOOL_KEY) [[ "$(printf %s "$value" | LC_ALL=C wc -c)" -ge 32 ]];;
+    DIFY_API_KEY|DIFY_IMAGE_OPENAI_API_KEY) [[ -n "$value" ]];;
+    DIFY_TOOL_KEY|DIFY_COMMUNITY_CALLBACK_KEY) [[ "$(printf %s "$value" | LC_ALL=C wc -c)" -ge 32 ]];;
+    DIFY_COMMUNITY_WORKFLOW_API_KEY) [[ -n "$value" ]];;
     *) return 1;;
   esac
 }
@@ -1365,8 +2854,9 @@ application_secret_requirement() {
     ACCESS_GATE_PASSWORD) printf 'must contain at least 16 characters';;
     AWS_ACCESS_KEY_ID) printf 'must be a 32-character R2 access key ID';;
     AWS_SECRET_ACCESS_KEY) printf 'must be a 64-character hexadecimal R2 secret key';;
-    DIFY_API_KEY|DIFY_IMAGE_OPENAI_API_KEY|GEMINI_API_KEY) printf 'must not be empty';;
-    DIFY_TOOL_KEY) printf 'must contain at least 32 characters';;
+    DIFY_API_KEY|DIFY_IMAGE_OPENAI_API_KEY) printf 'must not be empty';;
+    DIFY_TOOL_KEY|DIFY_COMMUNITY_CALLBACK_KEY) printf 'must contain at least 32 bytes';;
+    DIFY_COMMUNITY_WORKFLOW_API_KEY) printf 'must not be empty';;
   esac
 }
 display_generated_password() {
@@ -1395,10 +2885,115 @@ prompt_application_secret() {
   done
 }
 application_secret_override_is_valid() {
-  jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$")) and ((($e|has("DIFY_API_KEY"))|not) or ($e.DIFY_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_TOOL_KEY"))|not) or ($e.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((($e|has("DIFY_IMAGE_OPENAI_API_KEY"))|not) or ($e.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((($e|has("GEMINI_API_KEY"))|not) or ($e.GEMINI_API_KEY|type=="string" and length>0))' "$1" >/dev/null
+  # The public Compose default is not a protected settings bundle. Permit only
+  # that exact disabled default when validating resolved Compose, not secret input.
+  if [[ "${2:-}" == resolved ]] && jq -e '.services.app.environment | with_entries(select(.key|startswith("DIFY_BOOKLET_"))) | .=={"DIFY_BOOKLET_RUNNER_ENABLED":"false"}' "$1" >/dev/null 2>&1; then
+    legacy_application_secret_override_is_valid "$1"
+    return
+  fi
+  if [[ "${ENVIRONMENT:-}" == prod ]] && jq -e '.services.app.environment|keys|any(startswith("DIFY_BOOKLET_"))' "$1" >/dev/null 2>&1; then return 1; fi
+  legacy_application_secret_override_is_valid "$1" && booklet_runner_settings_are_valid "$1" override
+}
+legacy_application_secret_override_is_valid() {
+  jq -e '.services.app.environment as $e | ($e.OPENAI_API_KEY|type=="string" and length>0) and ($e.MONGODB_URI|type=="string" and test("^mongodb(\\+srv)?://")) and ($e.ACCESS_GATE_PASSWORD|type=="string" and length>=16) and ($e.AWS_ACCESS_KEY_ID|type=="string" and test("^[A-Za-z0-9]{32}$")) and ($e.AWS_SECRET_ACCESS_KEY|type=="string" and test("^[A-Fa-f0-9]{64}$")) and ((($e|has("DIFY_API_KEY"))|not) or ($e.DIFY_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_TOOL_KEY"))|not) or ($e.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((($e|has("DIFY_IMAGE_OPENAI_API_KEY"))|not) or ($e.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_PROBE_ENABLED"))|not) or ($e.DIFY_COMMUNITY_PROBE_ENABLED == "true" or $e.DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((($e|has("DIFY_COMMUNITY_BASE_URL"))|not) or $e.DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY"))|not) or ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))|not) or ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and (($e.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (($e|has("DIFY_COMMUNITY_BASE_URL")) and ($e|has("DIFY_COMMUNITY_WORKFLOW_API_KEY")) and ($e|has("DIFY_COMMUNITY_CALLBACK_KEY"))))' "$1" >/dev/null
+}
+community_probe_patch_is_valid() {
+  jq -e 'keys==["services"] and (.services|keys)==["app"] and (.services.app|keys)==["environment"] and (.services.app.environment as $e | ($e|keys)==["DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_CALLBACK_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_WORKFLOW_API_KEY"] and $e.DIFY_COMMUNITY_PROBE_ENABLED=="true" and $e.DIFY_COMMUNITY_BASE_URL=="https://dify.uniwares.co.uk" and ($e.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0) and ($e.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32))' "$1" >/dev/null
+}
+booklet_runner_settings_are_valid() {
+  # Validate stored Compose values as well as the private flat input. No values are printed.
+  jq -e --arg source "${2:-flat}" '
+    def uuid: type=="string" and test("^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$");
+    (if $source=="override" then .services.app.environment else . end) as $all |
+    ($all | with_entries(select(.key|startswith("DIFY_BOOKLET_")))) as $e |
+    if ($e|length)==0 then true else
+      ($e.DIFY_BOOKLET_BINDINGS_JSON|fromjson) as $bindings |
+      ($e|keys)==["DIFY_BOOKLET_BASE_URL","DIFY_BOOKLET_BINDINGS_JSON","DIFY_BOOKLET_PUBLIC_ORIGIN","DIFY_BOOKLET_RUNNER_ENABLED","DIFY_BOOKLET_TOOL_KEY"] and
+      ($e.DIFY_BOOKLET_RUNNER_ENABLED=="false" or $e.DIFY_BOOKLET_RUNNER_ENABLED=="true") and
+      $e.DIFY_BOOKLET_BASE_URL=="https://dify.uniwares.co.uk" and
+      $e.DIFY_BOOKLET_PUBLIC_ORIGIN=="https://booklet-staging.uniwares.co.uk" and
+      ($e.DIFY_BOOKLET_TOOL_KEY|type=="string" and length>=32) and
+      ($e.DIFY_BOOKLET_BINDINGS_JSON|type=="string") and
+      ($bindings|type=="array" and (length==6 or length==11 or length==13 or length==15 or length==16 or length==17 or length==18)) and
+      all($bindings[];
+        type=="object" and
+        (keys==["apiKey","appId","persona","publishedWorkflowId","role","taskId","toolProviderId"] or
+          (keys==["apiKey","appId","finalPageIllustration","persona","publishedWorkflowId","role","taskId","toolProviderId"] and
+            .finalPageIllustration==true and .role=="image" and .taskId==null and .persona==null and ($bindings|length)>=17)) and
+        (.appId|uuid) and (.publishedWorkflowId|uuid) and
+        (.toolProviderId==null or (.toolProviderId|uuid)) and
+        (.apiKey|type=="string" and length>0)) and
+      ([$bindings[].appId]|unique|length)==($bindings|length) and
+      (($bindings|length)!=18 or any($bindings[]; .role=="image" and .finalPageIllustration==true)) and
+      ([$bindings[] | [.role,.taskId,.persona]] | sort)==
+        ([["manager",null,null],["specialist","J01",null],["specialist","J02",null],["tester",null,"playful_kid"],["tester",null,"enthusiast_parent"],["tester",null,"professional_creator"]] +
+          (if ($bindings|length)>=11 then ["J03","J04","J05","J06","J07"]|map(["specialist",.,null]) else [] end) +
+          (if ($bindings|length)>=13 then [["specialist","J08",null],["image",null,null]] else [] end) +
+          (if ($bindings|length)>=15 then [["specialist","J09",null],["specialist","J10",null]] else [] end) +
+          (if ($bindings|length)>=16 then [["specialist","J11",null]] else [] end) +
+          (if ($bindings|length)>=17 then [["specialist","J12",null]] else [] end) +
+          (if ($bindings|length)==18 then [["judge",null,null]] else [] end)|sort)
+    end' "$1" >/dev/null 2>&1
+}
+booklet_runner_patch_is_valid() {
+  jq -e 'keys==["services"] and (.services|keys)==["app"] and (.services.app|keys)==["environment"] and (.services.app.environment|keys)==["DIFY_BOOKLET_BASE_URL","DIFY_BOOKLET_BINDINGS_JSON","DIFY_BOOKLET_PUBLIC_ORIGIN","DIFY_BOOKLET_RUNNER_ENABLED","DIFY_BOOKLET_TOOL_KEY"]' "$1" >/dev/null 2>&1 &&
+    booklet_runner_settings_are_valid "$1" override
+}
+build_booklet_runner_patch() {
+  local environment="$1" destination="$2" settings=''
+  [[ "$environment" == staging ]] || die 'Booklet runner bundle is staging-only'
+  while true; do
+    if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+      settings="${DIFY_BOOKLET_RUNNER_SETTINGS_JSON:-}"
+    else
+      interactive_terminal || die 'Booklet runner setup requires a private terminal or protected workflow secret'
+      IFS= read -r -s -p 'Paste the private Booklet runner settings JSON: ' settings < /dev/tty
+      printf '\n' > /dev/tty
+    fi
+    printf '%s' "$settings" > "$TEMP_DIR/booklet-runner-settings.json"
+    chmod 600 "$TEMP_DIR/booklet-runner-settings.json"
+    if [[ "$(wc -c < "$TEMP_DIR/booklet-runner-settings.json")" -le 49152 ]] &&
+      jq -e 'type=="object" and keys==["DIFY_BOOKLET_BASE_URL","DIFY_BOOKLET_BINDINGS_JSON","DIFY_BOOKLET_PUBLIC_ORIGIN","DIFY_BOOKLET_RUNNER_ENABLED","DIFY_BOOKLET_TOOL_KEY"]' "$TEMP_DIR/booklet-runner-settings.json" >/dev/null 2>&1 &&
+      booklet_runner_settings_are_valid "$TEMP_DIR/booklet-runner-settings.json"; then break; fi
+    [[ "${GITHUB_ACTIONS:-}" != true ]] || die 'Protected Booklet runner settings are invalid or exceed 48 KiB'
+    printf 'error: invalid runner bundle; re-enter only this bundle, not existing host secrets\n' >&2
+  done
+  jq '{services:{app:{environment:with_entries(.value |= gsub("\\$";"$$"))}}}' "$TEMP_DIR/booklet-runner-settings.json" > "$destination"
+  chmod 600 "$destination"
+  [[ "$(wc -c < "$destination")" -le 65536 ]] || die 'Booklet runner patch exceeds 64 KiB'
+  booklet_runner_patch_is_valid "$destination" || die 'Booklet runner bundle is invalid'
+  unset settings
+}
+build_community_probe_patch() {
+  local environment="$1" destination="$2" workflow_value='' callback_value=''
+  [[ "$environment" == staging ]] || die 'Community probe bundle is staging-only'
+  if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    workflow_value="${DIFY_COMMUNITY_WORKFLOW_API_KEY:-}"
+    callback_value="${DIFY_COMMUNITY_CALLBACK_KEY:-}"
+    application_secret_value_is_valid DIFY_COMMUNITY_WORKFLOW_API_KEY "$workflow_value" || die 'Protected Community workflow key is invalid'
+    application_secret_value_is_valid DIFY_COMMUNITY_CALLBACK_KEY "$callback_value" || die 'Protected Community callback key is invalid'
+  else
+    prompt_application_secret "$environment" DIFY_COMMUNITY_WORKFLOW_API_KEY workflow_value
+    prompt_application_secret "$environment" DIFY_COMMUNITY_CALLBACK_KEY callback_value
+  fi
+  printf '%s' "$workflow_value" > "$TEMP_DIR/workflow-key"
+  printf '%s' "$callback_value" > "$TEMP_DIR/callback-key"
+  chmod 600 "$TEMP_DIR/workflow-key" "$TEMP_DIR/callback-key"
+  jq -n --rawfile workflow "$TEMP_DIR/workflow-key" --rawfile callback "$TEMP_DIR/callback-key" '{services:{app:{environment:{DIFY_COMMUNITY_PROBE_ENABLED:"true",DIFY_COMMUNITY_BASE_URL:"https://dify.uniwares.co.uk",DIFY_COMMUNITY_WORKFLOW_API_KEY:($workflow|gsub("\\$";"$$")),DIFY_COMMUNITY_CALLBACK_KEY:($callback|gsub("\\$";"$$"))}}}}' > "$destination"
+  chmod 600 "$destination"
+  community_probe_patch_is_valid "$destination" || die 'Community probe bundle is invalid'
+  unset workflow_value callback_value
 }
 build_secret_patch() {
   local environment="$1" name="$2" destination="$3" value
+  if [[ "$name" == DIFY_BOOKLET_RUNNER ]]; then
+    build_booklet_runner_patch "$environment" "$destination"
+    return
+  fi
+  if [[ "$name" == DIFY_COMMUNITY_PROBE ]]; then
+    build_community_probe_patch "$environment" "$destination"
+    return
+  fi
   printf '{"services":{"app":{"environment":{}}}}\n' > "$destination"
   prompt_application_secret "$environment" "$name" value
   printf '%s' "$value" > "$TEMP_DIR/value"
@@ -1460,6 +3055,31 @@ stage_and_trigger_rotation() {
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$TEMP_DIR/rotation.json"
   gh workflow run maintenance.yml --repo "$(jq -r .repository "$CONFIG_FILE")" --ref "_$ENVIRONMENT" -f "environment=$ENVIRONMENT" -f action=rotate-secrets
   printf 'updated: secrets staged; Maintenance rotation queued\n'
+}
+rotate_protected_dify_key() {
+  [[ "${GITHUB_ACTIONS:-}" == true ]] || die 'rotate-protected-dify-key is available only through GitHub Actions'
+  [[ "$ENVIRONMENT" == staging && "$APPLY" == true && -n "$REQUEST_ID" ]] || die 'rotate-protected-dify-key requires staging, --apply, and a request ID'
+  [[ "$SECRET_NAME" =~ ^(DIFY_TOOL_KEY|DIFY_API_KEY|DIFY_COMMUNITY_PROBE|DIFY_BOOKLET_RUNNER)$ ]] || die 'rotate-protected-dify-key accepts only Cloud keys or staging Dify bundles'
+  load_config
+  need_command jq; private_temp
+  local value="${!SECRET_NAME:-}" payload="$TEMP_DIR/rotation.json" remote_command
+  if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE ]]; then
+    build_community_probe_patch staging "$payload"
+  elif [[ "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
+    build_booklet_runner_patch staging "$payload"
+  else
+    application_secret_value_is_valid "$SECRET_NAME" "$value" || die "Protected $SECRET_NAME is invalid"
+    printf '%s' "$value" > "$TEMP_DIR/value"
+    chmod 600 "$TEMP_DIR/value"
+    jq -n --arg name "$SECRET_NAME" --rawfile value "$TEMP_DIR/value" '{services:{app:{environment:{($name):($value | gsub("\\$";"$$"))}}}}' > "$payload"
+  fi
+  chmod 600 "$payload"
+  configure_ssh
+  printf -v remote_command ' %s' --action stage-secrets --environment staging --secret-name "$SECRET_NAME" --apply
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o 'ProxyCommand=cloudflared access ssh --hostname %h' "$VPS_USER@$VPS_HOST" "$remote_command" < "$payload"
+  value=''; unset value DIFY_TOOL_KEY DIFY_API_KEY DIFY_COMMUNITY_WORKFLOW_API_KEY DIFY_COMMUNITY_CALLBACK_KEY DIFY_BOOKLET_RUNNER_SETTINGS_JSON
+  ACTION=rotate-secrets; SECRET_NAME=''
+  host_call
 }
 setup_host() {
   load_config
@@ -1710,11 +3330,13 @@ main() {
     access-check) access_check;;
     host-dispatch) host_dispatch;;
     host-run) CONFIG_FILE="$ROOT/config.json"; load_config; host_run;;
+    host-cleanup) CONFIG_FILE="$ROOT/config.json"; load_config; host_cleanup;;
     credential-session) start_credential_session;;
     clear-credential-session) clear_credential_session;;
-    status)
+    status|operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile)
       if [[ "$EUID" == 0 && -f "$ROOT/config.json" ]]; then
-        CONFIG_FILE="$ROOT/config.json"; load_config; show_operation_status
+        CONFIG_FILE="$ROOT/config.json"; load_config
+        case "$ACTION" in operation-status) operation_status_host;; operation-stop) operation_stop_host;; backup-verify) backup_verify_host;; staging-bootstrap-reconcile) staging_bootstrap_reconcile_host;; *) show_operation_status;; esac
       else
         if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
         [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
@@ -1723,20 +3345,20 @@ main() {
     setup) setup_host;;
     atlas-reconcile) reconcile_atlas;;
     finalize) finalize_repository;;
+    dify-enable-admin-api) dify_enable_admin_api_host;;
     rotate-secrets)
       if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
         if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
         [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
         host_call
       else stage_and_trigger_rotation; fi;;
+    rotate-protected-dify-key) rotate_protected_dify_key;;
     repair-first-activation-secrets) repair_first_activation_secrets;;
     infrastructure) terraform_operation;;
     *)
       if [[ -f "$CONFIG_FILE" ]]; then load_config; fi
       [[ -n "$VPS_HOST" ]] || die 'Supply --vps-host or configuration'
-      # Staging transports this action only. The reviewed master-installed
-      # dispatcher owns its locked lifecycle and retained-operation recovery.
-      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status ]]; then
+      if [[ "$APPLY" == false && "$ACTION" != reset-staging && "$ACTION" != retire-staging-artifact-index && "$ACTION" != check && "$ACTION" != status && "$ACTION" != dify-discover && "$ACTION" != dify-check && "$ACTION" != dify-idle && "$ACTION" != dify-diagnostics && "$ACTION" != dify-repair-sandbox && "$ACTION" != dify-repair-scheduler && "$ACTION" != dify-install && "$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then
         printf 'would update: %s %s\n' "$ACTION" "$ENVIRONMENT"
       else host_call; fi;;
   esac

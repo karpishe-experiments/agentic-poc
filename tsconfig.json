@@ -38,6 +38,8 @@
   "exclude": [
     "node_modules",
     "prototype",
-    "output"
+    "output",
+    ".next-*",
+    ".tools"
   ]
 }

@@ -1,0 +1,117 @@
+name: Dify operations
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Pinned Community operation
+        type: choice
+        required: true
+        options: [check, idle, diagnostics, repair-sandbox, repair-scheduler, install, repair-broker, repair-collaboration, status, resume]
+      run_id:
+        description: Optional staging run UUID for diagnostics
+        type: string
+        required: false
+      apply:
+        description: Apply installation, repair or resume (otherwise preview/read-only)
+        type: boolean
+        default: false
+permissions: {contents: read}
+defaults: {run: {shell: bash}}
+concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
+jobs:
+  dify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify reviewed branch and inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ inputs.action }}
+          APPLY: ${{ inputs.apply }}
+          RUN_ID: ${{ inputs.run_id }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == master && "$ACTION" =~ ^(check|idle|diagnostics|repair-sandbox|repair-scheduler|install|repair-broker|repair-collaboration|status|resume)$ ]]
+          [[ -z "$RUN_ID" || ( "$ACTION" == diagnostics && "$RUN_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ) ]]
+          if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then
+            [[ "$APPLY" != true ]] || { printf 'Check, idle, status and diagnostics are read-only; clear apply.\n' >&2; exit 1; }
+          elif [[ "$ACTION" == resume ]]; then
+            [[ "$APPLY" == true ]] || { printf 'Resume requires apply.\n' >&2; exit 1; }
+          fi
+          for name in VPS_HOST DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_HOST_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
+            [[ -n "${!name}" ]] || { printf 'Missing required configuration: %s\n' "$name" >&2; exit 1; }
+          done
+          remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)"
+          [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'master advanced; rerun from the current reviewed commit.\n' >&2; exit 1; }
+          jq -e '.dify_hostname == "dify.uniwares.co.uk" and (.host_observation.hostname | type == "string" and length > 0)' infra/config/vps.json >/dev/null
+      - uses: ./.github/actions/vps-access
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+      - name: Run pinned Dify operation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ inputs.action }}
+          APPLY: ${{ inputs.apply }}
+          RUN_ID: ${{ inputs.run_id }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)"
+          [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'master advanced before host contact.\n' >&2; exit 1; }
+          operation="dify-$ACTION"
+          [[ "$ACTION" != status && "$ACTION" != resume ]] || operation="$ACTION"
+          args=(--action "$operation" --environment dify --vps-host "$VPS_HOST")
+          [[ -z "$RUN_ID" ]] || args+=(--run-id "$RUN_ID")
+          if [[ "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox|repair-scheduler)$ && "$APPLY" == true ]]; then
+            args+=(--request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --apply)
+          elif [[ "$ACTION" == resume ]]; then
+            args+=(--apply)
+          fi
+          bash scripts/deploy/vps-deployment.sh "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/dify-operation-output.txt"
+      - name: Publish sanitized result
+        if: always()
+        env:
+          ACTION: ${{ inputs.action }}
+          APPLY: ${{ inputs.apply }}
+          OUTCOME: ${{ job.status }}
+          REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          {
+            printf '## Dify Community operation\n\n'
+            printf '| Action | Mode | Commit | Request / recovery target | Outcome |\n| --- | --- | --- | --- | --- |\n'
+            mode=preview; if [[ "$ACTION" =~ ^(check|idle|status|diagnostics)$ ]]; then mode=read-only; elif [[ "$APPLY" == true ]]; then mode=apply; fi
+            request_display="$REQUEST_ID"
+            [[ "$ACTION" != resume ]] || request_display='retained host journal'
+            # Markdown backticks are literal delimiters.
+            # shellcheck disable=SC2016
+            printf '| `%s` | `%s` | `%s` | `%s` | **%s** |\n\n' "$ACTION" "$mode" "$GITHUB_SHA" "$request_display" "$OUTCOME"
+            if [[ -s "$RUNNER_TEMP/dify-operation-output.txt" ]]; then
+              printf '```text\n'
+              grep -E '^(exists|would create|would update|created|updated|verified|failed|error|result): ' "$RUNNER_TEMP/dify-operation-output.txt" || true
+              printf '```\n'
+            else
+              printf 'No sanitized result was produced; inspect the failed step.\n'
+            fi
+            if [[ "$OUTCOME" != success && "$ACTION" =~ ^(install|repair-broker|repair-collaboration|repair-sandbox|repair-scheduler)$ && "$APPLY" == true ]]; then
+              # Markdown backticks are literal delimiters.
+              # shellcheck disable=SC2016
+              printf '\nInspect the host operation journal for request `%s` before resuming or retrying.\n' "$REQUEST_ID"
+            elif [[ "$OUTCOME" != success && "$ACTION" == resume ]]; then
+              # Markdown backticks are literal delimiters.
+              # shellcheck disable=SC2016
+              printf '\nInspect the retained host operation journal with `status` before another resume.\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

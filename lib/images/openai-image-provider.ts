@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { getServerEnv } from "@/lib/config/env";
 import { imageRequestSchema, imageResultSchema, type ImageRequest, type ImageResult } from "@/lib/contracts/images";
 import type { ImageProvider } from "@/lib/images/provider";
+import { operationSignal } from "@/lib/operations/budget";
 
 const sizeByGeometry = { square_1_1: "1536x1536", landscape_5_4: "1600x1280", portrait_4_5: "1280x1600" } as const;
 
@@ -33,7 +34,7 @@ export class OpenAIImageProvider implements ImageProvider {
   private readonly client: OpenAI;
 
   public constructor(client?: OpenAI) {
-    this.client = client ?? new OpenAI({ apiKey: getServerEnv().OPENAI_API_KEY });
+    this.client = client ?? new OpenAI({ apiKey: getServerEnv().OPENAI_API_KEY, maxRetries: 0 });
   }
 
   public async execute(input: ImageRequest, inputAssets: Array<{ assetId: string; bytes: Buffer }> = []): Promise<ImageResult> {
@@ -45,9 +46,14 @@ export class OpenAIImageProvider implements ImageProvider {
       const size = sizeByGeometry[request.geometry];
       const quality = request.outputControl?.kind === "quality" ? request.outputControl.value : request.quality;
       const qualityOptions = !quality || quality === "disabled" ? {} : { quality };
+      const signal = operationSignal();
       const response = request.operation === "edit"
-        ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, ...qualityOptions })
-        : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, ...qualityOptions });
+        ? signal
+          ? await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, ...qualityOptions }, { signal })
+          : await this.client.images.edit({ model: request.model, prompt: request.prompt, image: await Promise.all(inputAssets.map((asset) => toFile(asset.bytes, `${asset.assetId}.png`, { type: "image/png" }))), size, ...qualityOptions })
+        : signal
+          ? await this.client.images.generate({ model: request.model, prompt: request.prompt, size, ...qualityOptions }, { signal })
+          : await this.client.images.generate({ model: request.model, prompt: request.prompt, size, ...qualityOptions });
       const data = "data" in response && response.data ? response.data[0] : undefined;
       const bytesBase64 = data?.b64_json ?? null;
       if (!bytesBase64) throw new Error("The image provider did not return image bytes.");

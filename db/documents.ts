@@ -22,15 +22,16 @@ export type ApprovalDocument = BaseDocument & { bookletId: string; artifactVersi
 export type ExportDocument = BaseDocument & { bookletId: string; artifactVersionId: string; status: string; assetId: string | null; pageAssetIdsJson: string; preflightJson: string | null; errorJson: string | null; createdAtMs: number; updatedAtMs: number };
 
 export type ExecutionPreferenceDocument = BaseDocument & { bookletId: string; targetKey: string; selectedAgentIdsJson: string; revision: number; createdAtMs: number; updatedAtMs: number };
-export type ExecutionBatchDocument = BaseDocument & { bookletId: string; cardId: string; targetKey: string; subjectKind: string; subjectId: string; previousBatchId: string | null; poolFingerprint: string; status: string; materializationStatus: string; resultChoicePolicy: string; canonicalInputJson: string; workflowFingerprintJson: string; schemaVersion: string; selectedItemId: string | null; selectionMode: string | null; selectionResponseId: string | null; producedArtifactVersionId: string | null; producedQualityReviewId: string | null; producedAssetId: string | null; queuedAtMs: number; startedAtMs: number | null; terminalAtMs: number | null; completedAtMs: number | null; updatedAtMs: number };
+export type ExecutionBatchDocument = BaseDocument & { bookletId: string; cardId: string; targetKey: string; subjectKind: string; subjectId: string; previousBatchId: string | null; poolFingerprint: string; status: string; materializationStatus: string; materializationUnresolvedReason?: string | null; resultChoicePolicy: string; canonicalInputJson: string; workflowFingerprintJson: string; schemaVersion: string; selectedItemId: string | null; selectionMode: string | null; selectionResponseId: string | null; producedArtifactVersionId: string | null; producedQualityReviewId: string | null; producedAssetId: string | null; materializationOwnerId?: string | null; materializationStartedAtMs?: number | null; materializationDeadlineAtMs?: number | null; materializationContinuationPending?: boolean | null; queuedAtMs: number; startedAtMs: number | null; terminalAtMs: number | null; completedAtMs: number | null; updatedAtMs: number };
 export type ExecutionItemDocument = BaseDocument & { batchId: string; agentId: string; agentVersionId: string; profileId: string; profileVersion: number; agentSnapshotJson: string; profileSnapshotJson: string; status: string; attemptCount: number; attemptsJson: string; resultSummaryJson: string | null; canonicalResultJson: string | null; candidateAssetId: string | null; safeErrorJson: string | null; startedAtMs: number | null; finishedAtMs: number | null; updatedAtMs: number };
-export type DeploymentControlDocument = BaseDocument & { schemaVersion: "1"; environment: string; maintenance: boolean; reason: string | null; activeMutations: number; updatedAtMs: number };
 export type DifyExperimentDocument = BaseDocument & {
   schemaVersion: "1"; projectId: "booklet-dify-trial"; idea: string; preferences: import("@/lib/contracts/dify-experiment").DifyExperimentPreferences;
   revisions: import("@/lib/contracts/dify-experiment").DifyExperimentRevision[]; feedback: import("@/lib/contracts/dify-experiment").DifyExperimentFeedback[];
   currentRevision: number; reviewRevision: number | null; approvedRevision: number | null; image: import("@/lib/contracts/dify-experiment").DifyExperimentImage | null;
   imageAttemptCount: number; runs: import("@/lib/contracts/dify-experiment").DifyExperimentRun[]; activeRunId: string | null; createdAtMs: number; updatedAtMs: number;
 };
+export type MutationOwner = { id: string; processId: string; startedAtMs: number; interruptedAtMs?: number; runId?: string; operationId?: string; state: "active" | "interrupted" };
+export type DeploymentControlDocument = BaseDocument & { schemaVersion: "1"; environment: string; maintenance: boolean; draining?: boolean; interruptedMutations?: number; mutationOwners?: MutationOwner[]; reason: string | null; activeMutations: number; updatedAtMs: number };
 export type ExperimentCounters = { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
 export type ExperimentRunDocument = BaseDocument & {
   schemaVersion: "2"; bookletId: string; persona: Persona; mode: ExperimentMode; brief: string;
@@ -40,6 +41,7 @@ export type ExperimentRunDocument = BaseDocument & {
   generationCompletedAtMs?: number;
   generationVersionIds?: string[];
   revision: number; pauseRequested: boolean; activeOperationId: string | null;
+  preparation?: { ownerId: string; startedAtMs: number; deadlineAtMs: number; outcome?: "failed"; unresolved?: boolean; stopRequestedAtMs?: number } | null;
   counters: ExperimentCounters; limits: { text: number; image: number; steps: number };
   safeFailure: "limit_exhausted" | "unknown_outcome" | "definite_failure" | null;
   activeDelegationId: string | null; decisionSequence: number; pendingDecisionJson: string | null;
@@ -55,6 +57,17 @@ export type ExperimentOperationDocument = BaseDocument & {
   state: "prepared" | "started" | "succeeded" | "failed" | "unknown";
   workflowRunId: string | null; parentWorkflowRunId: string | null;
   dispatchStartedAtMs?: number | null;
+  workflowTaskId?: string | null;
+  remoteStatus?: "running" | "succeeded" | "failed" | "stopped";
+  lifecycle?: {
+    startedAtMs: number; phase: "preparing" | "dispatching" | "running" | "reconciling" | "finished";
+    lastProgressAtMs: number; ownerId: string;
+    attemptOutcome?: "succeeded" | "failed";
+    unresolved?: boolean; endedAtMs?: number;
+    stop?: { requestedAtMs: number; reason: "manual" | "deadline"; delivery: "pending" | "acknowledged" | "unknown" | "rejected" | "unsupported" };
+    timeoutAtMs?: number;
+    recoveredAtMs?: number;
+  };
   nextObservationAtMs?: number | null;
   verifiedWorkflowId?: string | null;
   imageRequestJson?: string | null;

@@ -4,6 +4,20 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+The issue #65 recovery candidate adds retained mutation ownership to the existing
+deployment-control document. A mutation has an ID, process identity and optional
+run/operation identities. Startup retains dead-process owners for evidence-based
+reconciliation; unidentifiable legacy counts remain explicit drain blockers.
+Counter cleanup cannot release another mutation. The run list uses a paginated
+metadata API; selected-run detail retains artifact and byte-verification paths.
+Active list rows poll every five seconds. Terminal pages stop automatic polling
+and retain manual Refresh. These candidate changes are not yet verified live.
+
+Bounded transactional find/aggregate cursors inherit a collection-level timeout
+default. This avoids the installed MongoDB 7.5 driver's invalid `getMore` timeout
+option while retaining operation cancellation and the transaction deadline.
+Writes retain the transaction timeout; no command-level override is added.
+
 Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser renders a persisted workspace and uses Vercel AI SDK UI for chat transport. Route handlers call deterministic application services, which are the only owners of workflow state, durable IDs, artifact versions, approvals, jobs, assets, and exports. OpenAI Agents SDK agents may route or author validated proposals, but they cannot persist data or advance the workflow directly.
 
 The isolated staging Dify experiment keeps this boundary. Dify owns its manager, Story Writer, and illustration Workflow execution. Booklet owns the synthetic project's revisions, approval, active turn, paid-attempt reservation, completion identity, stored asset, and recovery UI. The illustration Workflow receives identifiers from the manager, obtains the approved saved prompt only through an authenticated authorization callback, and uploads one image through an idempotent completion callback. Booklet fully decodes single-frame PNG/JPEG/WebP within 20 MiB and 64 megapixels and retains original bytes. Dimensions, aspect ratio, supported format, and story-length preferences produce warnings rather than failed completion. Required content and panel structure, hard storage limits, authentication, approval, attempt limits, and conditional writes remain strict. Optional image metadata preserves compatibility with old documents. Dify never writes MongoDB or R2 directly. These experiment-only callbacks do not alter normal Booklet validation or lifecycle.
@@ -48,86 +62,349 @@ The root responsibilities are:
 
 ## Artifact and decision flow
 
-The compatibility release adds `artifacts_booklet_type_subject_unique` over
-booklet, artifact type, subject kind and subject ID. It retains an exact existing
-`artifacts_booklet_type_unique` index, never removes it, and never recreates it
-when absent. Missing legacy subject fields retain null-identity uniqueness.
-Existing databases still need a later drained, backed-up index transition before
-multiple same-type sheets are stored. Deploy this compatibility image before
-that transition: automatic image rollback does not restore the database. No
-sheet dispatch or reset is enabled by this release.
+### Issue #65 local foundation
 
-The issue #65 runner has a separate `dify_booklet_v1` profile and operation ledger.
-Its staged image callbacks authenticate the dedicated tool key and validate the
-saved run, workflow identity and approved source versions. Normal authorization
-reserves once; fixture download adds no debit. Binary completion decodes original
-PNG/JPEG/WebP bytes, enforces 20 MiB and one frame, and reads stored bytes back
-before saving asset/operation success. Same-byte recovery preserves counters.
-The proxy has 32 MiB transport headroom above the content limit. Filesystem assets
-publish atomically without replacing an existing URI. Cloud trial routes remain
-unchanged. The candidate dispatcher accepts complete six-, eleven-, thirteen- or fifteen-slot
-profiles. Thirteen slots add J08 and a separate model-free image workflow. It saves
-the textual style draft, dispatches two samples, requires matching workflow/upload
-acknowledgements, and assembles a successor without approving the internal draft.
-Only the assembled package receives explicit or scoped delegated acceptance.
-Retained workflow IDs recover through GET; no-ID unknown outcomes never repeat POST.
-Fifteen slots add independent J09/J10 specialists. The existing repository and
-dispatcher schedule every saved recurring-character and final-location target,
-verify source approvals and original image bytes, and accept only assembled
-packages. Clarification and revisions retain their subject identity. Unknown
-tester outcomes recover without replay; manager delegation may select either
-ready sheet sibling. Sheet admission requires the replacement subject-aware
-index and absence of the retained legacy restriction. These are local contracts,
-not proof of activated bindings or full booklet generation.
-Local Python/TypeScript parity covers all three personas through J10. Actual Dify
-binary transfer, expanded private bindings and staging activation remain pending.
-The master-owned host validator update requires separate infrastructure approval;
-this release does not update the host dispatcher, rotate settings or remove an index.
-The staging maintenance image now includes the exact legacy-index retirement
-command, external-operation idle checks and completed-backup verification.
-Maintenance defaults to preview for this action. The staging shell only transports
-the request; the separately synchronized master dispatcher owns drain, backup,
-rollback compatibility and interruption recovery. Applying the action requires
-exact staging confirmation and separate authorization. Startup never removes the
-legacy index, and this release does not establish live sheet readiness.
-Canonical experiment plans and evidence remain on `master`, in
-`docs/accepted/2026-09-27_dify-booklet-runner/`.
+The [Dify booklet experiment](accepted/2026-09-27_dify-booklet-runner/PRD.md)
+has a separate `dify_booklet_v1` booklet profile. Its current local foundation
+uses `lib/contracts/experiment-runner.ts` and `db/experiment-repository.ts`.
+Experiment runs, single-operation claims and delegation grants use additive
+Mongo collections. Normal artifacts, immutable versions, dependencies, approvals
+and messages retain the created content and decision provenance.
 
-The reviewed J11 runner adds saved pagination, stable Booklet-owned page IDs,
-exact-source approvals and GET-only recovery. Sixteen bindings enable J11 after
-private configuration and drained activation; existing profiles retain their
-boundaries. Approved J11 stops at J12, not completed booklet generation.
+The narrative implementation covers J01–J07, through the final character
+and location lists, plus J08–J10 persistence described below. Staging has
+sixteen model-free bindings through J11. All three live Simulated M2 cases reached
+the approved reference boundary; final pages and booklet completion remain pending.
+Configuration accepts only
+complete six-slot M1, eleven-slot J01–J07, thirteen-slot J08/image or fifteen-slot
+J09/J10 sheet bundles, or the local sixteen-slot J11 pagination bundle,
+not partial profiles. The thirteen-slot profile adds a J08 specialist and one
+generic image binding. The M2 module
+preparation profile includes fourteen independent text modules through J10 and the
+separate model-free image workflow. Local Python/TypeScript parity covers J08
+style proposals, revisions and assembled-style tester decisions. J09/J10 preparation
+uses a supplied final-list subject ID and exact assembled-style source; these
+proposals use stable subject IDs. The fifteen-slot runtime path admits sheet
+specialists only after subject-aware index readiness and current source approval
+checks. A valid
+J07 list can have no additional required features; J10 preserves that empty list
+and the nonempty approved anchors instead of inventing a feature.
+The app API executes the latest publication; saved publication evidence is not
+an execution-version selector. Verified completed slice boundaries remain saved
+after a binding change. Unfinished changed configurations are blocked and need
+linked successors. Completion atomically saves the
+proposal and operation result. Explicit tester review or a current scoped grant
+accepts an exact version; manager and judge results cannot approve it. Revisions
+retain history and mark dependent current work for review. Preferred-length
+warnings do not reject valid content.
 
-The selective J12 candidate adds a complete seventeen-binding profile and one
-Page Bible artifact per saved J11 page. It verifies current approved manuscript,
-style and selected sheet sources before completion and exact-version approval.
-All 4/6/9 approved Page Bibles reach the J13 boundary, not booklet completion.
-Older profiles retain their existing boundaries. Publication, private binding
-setup and drained activation remain separate checkpoints; this delivery does
-not change active settings or claim live J12 acceptance.
+Narrative source checks share `lib/experiment-runner/narrative-tasks.ts` across
+preparation, completion, approval and specialist context. Its ordered J01–J07
+graph requires both draft lists before manuscript work. Only current approved,
+unambiguous source versions are eligible. Saved configurations enable J03–J07
+only with all seven distinct specialist bindings; old snapshots retain J01/J02.
+Booklet adds stable character/location IDs by draft `entryKey` and manuscript
+unit IDs by `unitKey`. Final lists validate exact subject/occurrence references.
+Revisions invalidate current descendants through saved dependency edges, retain
+unrelated siblings, and preserve versions and approvals. Grouped approval uses
+dependency order; invalidated content needs a new proposal before acceptance.
+The content materializer uses the same completion transaction and collections,
+not a second subject registry or workflow service. Local M2 fixtures exercise
+all three cases through J07. Live staging cases now reach approved J01–J10 artifacts;
+see the current M2 evidence below.
 
-The selective M3 final-page candidate carries the reviewed implementation from
-master PR #149. The complete eighteen-binding profile adds an independent judge
-and explicit final-page capability on the existing image binding. Booklet verifies
-approved Page Bibles and original reference bytes, retains ordered upload
-acknowledgements, and saves one image and approval record for each physical page
-and cover. Selected page batches retain their order across Pause/Resume and
-restart. Unknown outcomes recover existing results without automatic replay.
-Generation completion and advisory tester/judge evaluation are separate saved
-states; quality warnings do not force regeneration. The runner exposes saved
-images, reports and ordered page selection. Saved booklet links use the runner's
-`/experiments/booklet-runs/<runId>` detail view, not the legacy workspace. J13
-versions show page/cover previews and original links, including historical assets.
-Older profiles keep their boundaries.
-Cloud trial routes, collections, deployment configuration and browser profile
-remain unchanged. This candidate does not activate bindings or prove live M3
-completion. The master-owned dispatcher and drained private-setting rotation
-remain separate release checkpoints.
+The local image-storage foundation saves an exact prompt, ordered source versions
+and request fingerprint on the existing operation. Source checks require current
+approved versions and exact approval records; style samples may use their current
+draft J08 style version. Completion decodes PNG/JPEG/WebP pixels, hashes the
+original bytes, and claims a 60-second completion lease before using AssetStore.
+It reads stored bytes back before atomically saving the normal asset and operation
+result. Same-byte recovery preserves request counters; conflicting bytes or stale
+sources cannot replace a saved result. Missing or corrupt stored bytes remain a
+technical blocker even after database completion. The local image callback routes
+use the normal authorization claim and return the saved image request context.
+The authenticated fixture GET does not reserve again; binary POST validates and
+saves original bytes. The proxy transport limit has headroom above the handler's
+20 MiB limit. Sixteen live model-free Dify image operations passed binary transfer,
+storage and reference acceptance across the three personas. This does not prove
+provider execution, the full 20 MiB transport limit or reference-image inputs.
+The separate local `reference-transport.ts` adapter prepares runtime-key uploads
+of original PNG/JPEG/WebP bytes under the workflow's `booklet-<runId>` user.
+It copies and decodes bytes before one bounded multipart request, retains only
+the returned file ID and verified original metadata, and does not retry unknown
+outcomes. Its initial upload limit is 10 MiB. It is not wired into dispatch;
+published file-list consumption, ownership and live capacity remain pending.
+The runtime transport can serialize an optional ordered list of uploaded image
+IDs into the custom `reference_files` input using the same run user. It rejects
+invalid lists before dispatch and preserves the old request when no files are
+supplied. No runner caller supplies this input yet; live consumption and file
+recovery remain unverified.
+Filesystem AssetStore publishes complete temporary-file bytes through an atomic
+no-clobber hard link, so an interrupted write cannot occupy the final asset URI.
+Image failures retain their original category and timestamp when recorded;
+successful recovery clears the current failure, not its evidence history.
 
-The blocked-run correction closes running `dify_pages` item/job bookkeeping
-inside the existing transaction only for a definitely blocked owning run and
-exact retained terminal J13 operation. Provider results, assets and operations
-remain unchanged. Unknown, missing or nonterminal evidence remains unresolved.
+The local style-assembly service in `db/experiment-style.ts` combines a retained
+J08 textual draft with two completed sample operations. It checks their request
+fingerprints, saved lineage and original AssetStore bytes, then creates one
+application-owned immutable version and dependency edges in a transaction.
+Repeated assembly reuses that same version without another image reservation.
+It does not approve the package or dispatch work. The local J08 materialization
+path accepts a normal specialist proposal only when its saved configuration also
+has a distinct J08 binding after all seven narrative bindings. The proposal stays
+unapproved even under delegation. Context returns `style_samples` until the two
+saved samples form an assembled version. The thirteen-slot dispatcher prepares
+one sample at a time, verifies its image publication and saved upload acknowledgement,
+then assembles the two saved samples without another manager or image call.
+Retained workflow IDs recover through GET; unknown outcomes without an ID never
+repeat POST. Image progress counts saved completion IDs; empty image history
+preserves the existing six-/eleven-slot progress hash. Only the application-owned assembled version can be accepted by
+explicit tester review or a recorded scoped delegation, with sample and source
+evidence checked again. Acceptance also reads both sample files from AssetStore
+and verifies their saved byte lengths and SHA-256 values. Missing or corrupt
+files prevent acceptance without repeating image generation. Textual revisions return to this sample boundary and
+retain old images and approvals. The public configuration reader accepts six,
+eleven, thirteen, fifteen, sixteen, seventeen or eighteen complete bindings. The host
+validator candidate also accepts the exact seventeen-slot J12 and eighteen-slot
+final/evaluation profiles. Only their image binding can have
+`finalPageIllustration: true`; the eighteen-slot profile requires it. Existing
+profiles keep their original shape. Installation and the final host handoff remain
+pending. The reviewed host
+dispatcher and fifteen-slot staging settings were installed on 2026-10-05.
+J08 and all reference modules are published. All-persona reference acceptance and
+model-free binary output transfer passed with 5/5/6 saved images. Staging release
+`74f73208393a0f9c69ac6023de1e1f10dd43b6ee` passed deployment and readiness.
+The manager/tester publications were updated while dispatch was disabled and
+read back against the reviewed M2 source before activation. Configuration
+installation does not establish a complete simulation; see the
+[M2 live reference evidence](accepted/2026-09-27_dify-booklet-runner/M2-references.md#current-live-reference-evidence--2026-10-05)
+for retained run IDs, trace evidence and remaining M3 gates. The runner's saved-image
+viewer uses explicit J08 sample, J09/J10 build and J13 page/cover asset IDs through
+the existing authenticated asset route. It preserves version history and approvals.
+Runner booklet links use `/experiments/booklet-runs/<runId>` and the existing
+authenticated run-detail API. The legacy workspace still excludes this profile.
+Its earlier reference-viewer staging release passed deployment and readiness; browser inspection
+loaded both style samples and one character sheet. This is not visual inspection
+of all sixteen retained images.
+
+The local sheet assembler in `db/experiment-sheets.ts` combines a retained
+J09/J10 subject draft with one completed image operation. It verifies current
+approved final-list/style sources, subject identity, exact style bytes, saved
+request and asset lineage, and original stored bytes before committing an
+application-owned version. It rechecks database evidence after the storage read.
+Replay verifies the same image and dependency edges and returns the existing
+version without another reservation. Pause is preserved. This service does not
+admit sheet specialists, create subject artifacts, approve sheets or schedule images
+itself. The existing operation repository and dispatcher own those steps for the
+fifteen-slot profile. They save one textual draft and one assembled version per
+subject, verify image publication before assembly, and retain the specialist's
+workflow as the image's trace parent. Approval reuses transaction-aware assembly
+verification and reads saved bytes; textual drafts cannot receive acceptance.
+Booklet-scoped delegation applies to every eligible subject, with one approval
+record per exact assembled version. Stage J11 requires all derived sheets, not
+one artifact per task. Model-free Dify sheet execution and acceptance passed for
+all three personas. Final-page reference inputs and completion remain unverified.
+
+The local sixteen-binding profile adds J11 pagination without extending the
+narrative graph past its sheet boundary. It requires all current approved book
+sources and every sheet derived from the final lists. Read-only assembly checks
+verify saved style/sample and sheet lineage and original bytes before admission,
+completion and approval; they do not loosen assembly mutation admission. Booklet
+assigns page IDs inside normal artifact completion and preserves the mapping by
+page index on revision. Story pages must cover all known manuscript units, but
+one unit can span multiple panels or pages. Routed references must identify exact
+current approved sheets. J11 acceptance reaches a saved J12 slice boundary, not
+booklet completion. Old binding profiles retain their original boundaries. This
+profile is now published and active in staging after reviewed release, readiness
+and backed-up activation. The linked live Kid successor reached approved J11 and
+the J12 boundary without paid calls after the recovery correction. The Parent
+and Creator runs also reached that boundary with zero payable calls; see the
+[M3 evidence](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
+The retained fifteen-binding M2 runs preserve their saved boundaries.
+
+The local seventeen-binding candidate adds per-page J12 Page Bible work. It
+reuses the saved J11 page identities and verifies current approved manuscript,
+style and selected reference-sheet versions before completion or approval.
+Each page has its own artifact, dependency edges and approval record. All 4/6/9
+accepted pages advance to the J13 boundary, not booklet completion. Older
+profiles keep their existing boundaries. This candidate is not yet published or
+active in staging. Its model-free Dify fixture and graph are prepared locally;
+publication and the runtime binding remain pending.
+
+The local J13 configuration prerequisite adds optional
+`finalPageIllustration: true` to the image binding of a complete seventeen-slot
+profile. New persona snapshots retain that flag as configuration evidence;
+omitting it preserves older snapshot bytes and hashes. Saved enabled snapshots
+require the complete fifteen-row persona profile. The local candidate uses this
+flag to enable J13 dispatch after all Page Bibles are accepted. Existing snapshots
+keep their J12 boundary. No live host settings have changed.
+
+The local `page-image-requests.ts` serializer prepares one J13 `page_source`
+request from the saved J11 layout, selected J12 content and assembled J08 style.
+It retains exact native lettering and the unchanged style module, and returns
+only selected sheet identities in deterministic attachment order. This is pure
+request preparation, not an approval or byte-integrity check. The separate
+`verifyCurrentPageIllustrationSources` database helper checks current J12 approval,
+exact dependencies, and selected original sheet hashes, sizes and dimensions.
+It returns ordered attachments and advisory MIME-label warnings. Neither helper
+claims an operation or uploads files. The candidate dispatcher uses these sources
+for manager-selected page-image operations. Live delivery and completion remain pending.
+
+The local J13 saved-package contract retains exact request/source order, output
+metadata, selected runtime upload acknowledgements and per-page candidate lineage.
+Its pure builder does not prove database approval or runtime file ownership.
+The local assembly service consumes completed, publication-verified J13 image
+operations and saves immutable per-page versions with exact dependencies. Replay
+reuses the same version; eligible replacements retain the earlier version. MIME
+labels and preferred canvas deviations produce warnings, not quality blockers.
+The candidate dispatcher assembles verified completed outputs; tester approval
+rechecks the assembled version and original bytes. Failed assembly blocks the run
+and retains the known result instead of permitting an automatic replacement POST.
+
+The local reference-upload service writes an operation journal before each POST,
+then retains ordered acknowledgements in `referenceUploadsJson`. It verifies the
+saved image binding, manager selection and current original reference bytes.
+Interrupted or unknown uploads stop without another POST; completed prefix uploads
+remain saved. It does not establish recovery of a missing file identity. Dispatch
+uses its ordered saved file identifiers. A reference-free cover can return an
+omitted, null or empty `reference_files` output. A page with required references
+still needs exact ordered runtime file identities; null does not satisfy it.
+Live application-key ownership checks remain pending. Shared
+numeric image limits do not load the server-side decoder.
+
+The local page-work projection distinguishes generation, review and all-page
+acceptance while preserving older profiles' J12 dispatch boundary. J13 operation
+admission requires the saved manager parent, exact current page sources and ordered
+upload acknowledgements before dispatch or claim. A draft replacement requires the
+exact pending page/version revision. Image fixture access and output materialization
+recheck current source bytes; completed historical replay does not rewrite evidence.
+Reference upload admission updates the run revision and journal in one transaction
+before the external POST, so Pause cannot admit new uploads after it takes effect.
+The manager result contract permits J13 page delegation separately from text
+specialist tasks. Materialization verifies the selected page's current sources,
+original reference bytes and replacement eligibility. It then checks every Page
+Bible's current approval, content and exact dependency edges against the same
+transaction's verified layout/manuscript/style identities. Sibling checks do not
+prepare unrelated image requests. Shared source/version/approval reads are batched
+and remain serial on one Mongo session; image claim and context recheck sources
+at their own boundaries.
+The enabled candidate routes this selection to the existing image binding, not
+a new text-specialist binding. Local page revisions retain tester-decision and
+publication provenance, preserve prior versions and validate cumulative prompts
+before consuming an allowance. The local image-clarification path retains a
+page-scoped question and answer without creating an asset; binary completion and
+clarification cannot replace each other's terminal result. Each clarification
+consumes its logical image reservation, not a creative revision allowance.
+For J13, a publication-verified Pause before claim retains a zero-reservation
+operation in the item’s `pausedOperationIds` history. Reconciliation returns that
+same ordered item to pending. Resume can attach a fresh operation without
+discarding earlier pages or resetting the batch. Unknown outcomes, unverified
+attempts and actual failures do not receive this exception.
+The exact active claimed J13 operation can read its original approved style and
+sheet sources while its outcome is unknown. This permits a late authenticated
+binary callback before publication readback. Current-source and callback identity
+checks still apply. Assembly mutation remains blocked during active unknown work;
+saved J13 materialization still requires publication verification through GET.
+Completed batches guide review only while their J11/J12 sources are current.
+They do not schedule replacements after source revisions. A drained active batch
+can be superseded by a linked successor with current source and prior-image
+versions. The revision target comes first; remaining selected pages retain their
+order. Predecessor inputs, items, operations and assets remain unchanged.
+Running, unknown or unreconciled failed items prevent supersession. The refresh
+transaction neither reserves nor dispatches an image.
+Live full-booklet acceptance is still incomplete; the candidate is not ready for
+publication.
+The read-only generation verifier derives completion evidence from the current
+run revision, exact approved artifact sets, dependency edges and retained image
+bytes. It does not change run status. Verification loads current version,
+approval and dependency evidence with batched, serial transaction
+reads. Each page assembly verifier checks its sources and bytes once in the
+completion walk; completion does not repeat that same page-source walk first.
+These changes do not cache verification across transactions or relax validity.
+The pure advisory report contract checks
+run/configuration/version identity, finding targets and explicit missing evidence.
+Visual assessment requires every final page and cover; monetary availability
+must match actual, estimated or absent cost evidence. Independent judge
+execution is routed separately in the full eighteen-binding local profile. The tester-feedback persistence path
+uses immutable operation results, rechecks complete generation evidence and
+requires publication verification before acceptance. The runner projection
+returns retained report and operation/publication identities separately from
+whether its version evidence still matches the current artifact versions.
+The dispatcher records generation completion only after the thirteen artifact
+sets, exact approvals and durable bytes pass verification. It saves the generation
+timestamp and exact version IDs, marks the Booklet complete, and then runs tester
+feedback followed by the independent judge. Evaluation becomes complete only
+after both exact publication-verified reports pass validation. Missing reports
+and uncertain evaluation outcomes leave generation success intact. After
+generation completion, only advisory evaluation is permitted; revisions require
+a successor run. Repository admission and report saving require the persisted
+generation marker, one verified tester report before the judge, and no duplicate
+reports. Shorter saved profiles retain their original slice boundary.
+Pause prevents new evaluation dispatch. Unknown report results use GET recovery,
+not execution replay. Repeated completion rechecks retained evidence without
+changing counters or the run revision.
+The runner inspector shows generation/evaluation status separately and links to
+the existing saved-booklet view. Advisory reports retain operation, workflow and
+publication identities and show whether their version evidence is current.
+The local context endpoint supplies claimed tester/judge operations with verified
+generation evidence, current artifacts, dialogue, warnings, usage counters and
+durable image identities. Initial execution can read this evidence before runtime
+publication readback; saving the report still requires its exact verified binding.
+Publication-verified unknown judge operations can read saved source evidence for
+recovery. The full eighteen-binding profile and its persona-filtered snapshot keep
+J11/J12/J13 eligibility. Deterministic reports mark creative assessment as
+`not_assessed` and do not claim visual inspection.
+
+The candidate ordered page-batch contract preserves selected page order and
+source versions, with separate operation, asset and version identities per item.
+The selection repository retains jobs and ordered items in existing generation
+collections under `dify_pages`, with current-source checks and atomic run-revision
+admission. New batch selection stops once generation is saved. Duplicate selection can
+still return its retained job without changing generation or evaluation evidence.
+The authenticated `POST /api/experiments/booklet-runs/[runId]/pages` endpoint
+records this intent through the same repository and maintenance gate. A drained
+paused run can record selection without resuming or starting an operation;
+Resume remains separate. Active operations and pending decisions prevent selection.
+Item binding records the owning prepared operation before dispatch;
+reconciliation retains its uncertain outcome or verified assembled result without
+executing another call. Pause can retain an in-flight result without admitting the
+next item. The dispatcher binds each J13 operation before external work and
+reconciles its saved result after assembly. A published, materialized tester answer
+permits clarification rebinding while the item retains the earlier operation ID.
+Known post-callback images are assembled before new work is planned. Active-job
+projection uses the saved run identity. The local runner selector appears after
+current Page Bible readiness when the run is drained and paused. It retains click
+order for a single page or subset, submits exact source identities, and displays
+the saved batch. The repository rechecks those identities transactionally.
+Selection does not resume dispatch and an uncertain response is not replayed
+automatically. Deployed selector verification remains incomplete.
+The legacy worker's restart recovery and
+active/runnable projections select only `references`, `pages` and `export`.
+Dify recovery must reconcile the retained operation ledger, not reset uncertain
+items to pending. Batch generation does not replace per-page approval.
+The recovery candidate reconciles interrupted legacy follow-ups, jobs and
+execution batches before launching either service's recovered work. Both services
+reuse that one batch-ID set; a second sweep must not revoke newly acquired
+materialization ownership. Selection claims the current card and batch atomically,
+and stale terminal projections cannot replace a newer selection. Finalization
+commits the completed card, saved message projection and owned batch in one
+transaction. Recovery of an older partial commit requires the exact selected
+candidate and retained materialized output. It resumes only deterministic
+bookkeeping, not provider execution. Image completion also saves a pending
+continuation marker. Startup discovers that marker after a crash; finalization
+clears it only after the current artifact and review card are saved. Repeated
+finalization reuses matching outputs and cannot replace a newer job result.
+An older completed text card without exact materialization proof becomes an
+inspectable unresolved result. Recovery retains its selected candidate and
+response identity, blocks automatic replay, and offers only an explicit team change.
+The local blocked-run correction fails running `dify_pages` item/job bookkeeping
+only for a definitely blocked owning run and an exact retained terminal J13
+operation. It preserves provider results, assets and operation state. Unknown,
+missing or nonterminal evidence remains unresolved; deployment drain must not
+ignore it. The candidate also invokes this helper in the dispatch-outcome and
+failure-callback transactions, including idempotent terminal-failure readback.
+An unclaimed definite failure must not leave its page item counted as running;
+unknown claimed work remains unresolved. This extension is not yet deployed.
 
 J11 completion reuses source verification within one transaction attempt only;
 retries and later approvals verify current approvals, lineage and bytes again.
@@ -135,26 +412,160 @@ Failed/stopped runtime observations are classified against the persisted claim.
 Claimed uncertain work retains its active operation for late completion and
 GET-only recovery; terminal runtime status alone does not permit replacement.
 
-The async correction sends one streaming POST per saved dispatch marker. It
-validates the start identity and durably saves the workflow run ID before returning
-accepted/running. The managed reader remains active until terminal output or the
-original ten-minute operation deadline; start acknowledgement has a 30-second
-bound. Persisted five-second observation slots limit application-key GET recovery
-to one attempt per cycle, including after restart. Unknown and expired uncertain
-work retain the single-experiment lane. Pause stops new dispatch, not observation.
-Matching terminal evidence reconciles the latest operation without replay or
-deadline extension; a terminal failure preserves any saved callback result.
+Specialist context includes saved task-and-subject-specific answers and global manager
+answers. During a revision, clarification preserves the original target and
+instruction. The matching tester answer restores that revision without another
+revision debit. Restart reads reconstruct this context from saved operations and
+tester messages.
 
-Callback authorization passes its freshly verified image request to context
-construction. Fixture access and pre-upload checks validate current identity and
-source approvals without downloading references. Image admission and final
-acceptance still verify complete original bytes. Independent metadata reads are
-batched, with MongoDB commands serial inside transactions. Source and immutable
-byte reuse lasts only within one verification attempt and is rebuilt on retry;
-each consumer still verifies its metadata and dependency relationship. Storage
-uses one client and checked GETs instead of equivalent HEAD/GET pairs. Sanitized
-diagnostics record IDs, phases, elapsed time, instrumented counts and outcomes.
-These contracts do not establish live callback performance or M3 acceptance.
+Legacy booklet projections exclude this profile because their eight-stage
+parsers cannot read J01/J02. Subject-aware artifact uniqueness uses booklet,
+artifact type, subject kind and subject ID. Missing legacy subject fields share
+the same null identity, preserving legacy type uniqueness. Setup adds this index
+and retains an exact existing artifact-type index; it never removes or recreates
+that older restriction. Existing databases therefore still need a controlled
+index transition before multiple same-type sheets can be stored. Deploy the
+compatibility release first so later index removal has a viable rollback image;
+the host's automatic image rollback does not restore the database. No reset or
+sheet-dispatch enablement is part of this compatibility step.
+
+The explicit staging index-retirement command is separate from startup and runner
+admission. It uses the existing host lock, journal, maintenance control and backup
+storage. It rejects unresolved experiment work before closing admission and checks
+again before and after stop. Catalog checks preserve compound-key order; backup
+verification reads the completion marker, archive and original asset bytes. The
+host checks reviewed rollback image identities and retains the pre-change backup
+across interrupted removal. Finalization can resume after admission reopens without
+stopping the app. The command removes one named index, not records or assets.
+Authorized live staging retirement passed on 2026-10-05 with verified backup
+`staging-20261005T120906Z-4bf0d3b2d7950104`. It removed only the legacy index,
+preserved data/assets and release pointers, and passed readiness. This establishes
+the index prerequisite, not live sheet-production acceptance.
+`verifyExperimentData` checks experiment references without legacy agent seeds.
+The enabled, non-production runner profile initializes experiment structure
+without local-agent seeds or a host OpenAI key. It retains seed assets for health
+checks and leaves existing legacy seeds unchanged. Disabled settings retain
+legacy initialization and execution.
+
+`lib/experiment-runner/` supplies complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-module configuration, browser
+run APIs, six exact machine callback routes, a sequential dispatcher and bounded
+application-key transport. The bounded-operation candidate starts a persisted
+five-minute deadline before active preparation; queued time is excluded. Normal
+work uses at most 270 seconds and reserves 30 seconds for reconciliation. A
+transactional dispatch marker precedes each single streaming POST. The transport validates
+`workflow_started`, validates publication and awaits durable run-ID persistence, then returns
+accepted/running while retaining the stream reader until completion or deadline.
+Connection/start acknowledgement is bounded to 30 seconds. Callback authorization
+reserves once without extending the original deadline. A persisted five-second
+observation slot bounds application-key GET recovery to one attempt per cycle,
+including after restart; there is no nested transport retry loop. Observation
+timestamp writes wait while an image completion lease is active, so polling does
+not invalidate its source-verification transaction. Text and clarification saves
+also acquire a persisted 60-second `resultFinalizationClaim` before starting the
+materialization transaction. Both observation-slot and wake writes skip that
+lease. Completion checks the exact lease and its elapsed lifetime, clears it in
+the same commit, and releases it on a handled failure. A process interruption
+leaves an expiring lease; it does not permit another workflow POST. Expired leases
+remain observable without extending the operation deadline. Each materialization
+transaction attempt emits a sanitized `result_transaction` diagnostic event;
+attempt outcomes are not proof of commit or authorization.
+
+The candidate records the Dify task ID separately from its workflow run ID.
+Authenticated Inspect/reconcile and Stop operation actions use the same bounded
+coordinator as deadline handling. It checks saved output and remote status before
+stopping the exact task. A stop acknowledgement is not proof of termination.
+Stop intent is durable before delivery; uncertain delivery is not automatically
+repeated. Failed attempts retain unresolved identities and prevent replay. Late
+verified output retains attempt history and pauses the recovered run.
+MongoDB transaction retries share the remaining budget; collection operations,
+storage requests and body reads have shorter bounds. Process heartbeat and
+operation progress are separate observations. These changes require staging
+probe verification before the remaining Parent attempt; they are not a live claim.
+Authorization source checks use a separate persisted 60-second
+`authorizationClaim` before the reservation transaction. Observation-slot and wake
+writes skip its live lease. The transaction checks ownership and elapsed expiry
+before saving the single reservation; Pause, validation failure and expiry retain
+the existing admission and no-replay rules. Handled exits clear only their own
+lease; process interruption allows expiry-based observation. Each transaction
+attempt emits `authorization_transaction`, not proof of request admission.
+The local upload-preflight correction checks saved identity, recoverability and
+lease availability without repeating the source walk. Claim verifies current
+sources before storage; finalization validates its lease and derived path before
+the full source-and-byte verification. Evidence is not reused across these
+transactions. This correction is not yet deployed.
+The local metadata correction loads run-scoped artifacts, retained versions,
+approvals, dependencies, operations and asset metadata through seven serial
+queries per verification attempt. Page, style, sheet and generation verification
+reuse those records within that attempt only. Each consumer still checks exact
+current identities, ownership and lineage; original-byte verification is unchanged.
+Retries and later callbacks create a new attempt. Assembly mutation phases keep
+fresh reads. This candidate has not established live callback latency.
+Unknown work
+with a completed callback remains observable until terminal evidence. A matching
+terminal success clears only its latest operation's unknown blocker and preserves
+Pause. A matching terminal failure creates an inspection blocker without changing
+the callback result or permitting replay.
+Unknown work without an ID and expired uncertain work retain the single-experiment lane instead
+of permitting another POST or persona. No external queue or service is added.
+Published workflow identities and the saved configuration snapshot must match.
+After callback-first publication recovery, the dispatcher reloads the saved
+operation before dependent admission; an earlier in-memory record is not proof
+of the current publication state.
+Stage projection batches current sheet-source versions/approvals and Page Bible
+sibling versions/approvals. Each consumer still checks exact ownership, approved
+state and current source identities. Reads remain serial on the Mongo session;
+no verification cache survives a transaction attempt.
+The dispatcher candidate reads latest-operation heads for all saved runs in one
+batch instead of retrieving each complete history during the lane scan. It keeps
+the timestamp/ID ordering, separately reads an active operation, and refreshes
+the head after reconciliation. Completed runs with unverified latest execution
+still retain the lane. This read optimization does not change stored evidence,
+authorization, deadlines or callback verification; live latency remains unproven.
+Three unchanged progress observations block the run. Pause prevents admission
+but does not cancel in-flight work; an authorized result can still be stored.
+
+Callback authorization returns its fresh verified image request to context
+construction without repeating the same source walk. Synthetic fixture access and
+pre-upload checks verify active identity, fingerprint and current source/approval
+lineage without reference downloads; image admission and final acceptance retain
+complete original-byte verification. Evaluation batches independent artifact
+metadata reads. Shared source and byte evidence lasts only within the current
+read-only transaction attempt and is recreated on retry; consumers still check
+their own expected metadata and dependency relationship. Callback storage uses
+one client and checked GETs instead of redundant HEAD/GET pairs where equivalent.
+Sanitized phase diagnostics report IDs, timing, instrumented query/storage counts
+and outcome, never credentials or creative content. These local changes do not
+establish deployed callback latency; live proof is required by
+[M3](accepted/2026-09-27_dify-booklet-runner/M3-completion.md#latency-and-asynchronous-completion-correction).
+The staging-only `/api/diagnostics/logs` endpoint uses the existing Basic gate
+and returns bounded structured phase events, including failed outcomes, not raw
+logs or exception bodies. Its process-local 5000-event buffer is shared across
+Next.js bundles and clears on restart. The restricted Dify operations diagnostics
+action provides host/container state, exit codes, allowlisted sandbox/scheduler
+memory and error-category counters, and bounded retained callback summaries;
+see [the operating runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
+
+With the runner enabled, `/experiments/booklet-runs` shows saved work through the configured slice,
+warnings, exact version approvals, limits and Pause/Resume. Only Simulated runs
+can be created. An approved configured slice boundary remains a queued partial booklet,
+not completion. The legacy home and agent navigation remain when disabled.
+The six M1 Community bindings and all three live Simulated J01/J02 cases are
+verified; [M1 evidence](accepted/2026-09-27_dify-booklet-runner/M1-runner.md)
+records their release and run identifiers. Reload and idle Pause/Resume preserve
+saved results without duplicate execution. The deployed UI recovers a definite
+control revision conflict with a current-state read and at most one control retry;
+it does not retry an uncertain write. Live active-operation Pause persisted after
+reload and Resume did not duplicate work. Rapid progression can exhaust the
+single retry and require another Pause click. Production, Cloud and the diagnostic
+probe are unchanged.
+
+The local `scripts/experiment-runner.ts` driver uses these same application APIs
+for create, observe and exact-revision Pause/Resume. It defaults mutations to
+preview, accepts only staging/loopback targets and Simulated creation, retains
+request identity, and sends no automatic retries. It reports allowlisted saved
+state, not credentials or full creative content. It is not a separate dispatcher
+or a full acceptance verifier; image-byte, page and report verification remain
+outside its current scope.
 
 Every legacy-profile booklet has eight ordered artifact records:
 
@@ -294,14 +705,66 @@ VPS deployment uses a persisted `deployment_control` record. Mutation entrypoint
 
 The VPS topology and operational sequence are documented in [the deployment runbook](deployment/runbook.md). Terraform owns Cloudflare R2, Tunnel, Access and DNS rules. The root-owned host dispatcher owns Compose releases and a persistent operation journal; host flock and GitHub concurrency serialize changes. See [deployment contracts](deployment/contracts.md) for scope and acceptance limits.
 
+The diagnostic candidate checks the staging-only diagnostic API from the existing
+staging container through its fixed public HTTPS origin. It reuses Basic
+authentication in memory, rejects redirects and bounds time/response size. It
+returns only authentication status and event count. No new route, authentication
+exception, credential store or production access is added. Scheduler observations
+remain fixed-category counts rather than arbitrary container logs. Live readback
+passed in diagnostics `38138400115` and `38141274006`: authenticated HTTP 200.
+
+The temporary Dify trial adds optional host secrets and selects real mode only in staging. The application branch owns experiment availability, tool authorization, and approval checks. The host support is removed if Dify is rejected after the trial or replaced by the accepted long-term design if Dify is adopted. See the [experiment configuration](accepted/2026-09-16_agent-platform-decision/configuration.md).
+
+The Dify collaboration service uses the API runtime's 1536 MiB memory limit,
+a bounded healthcheck, and local Engine.IO readiness verification. Its targeted
+repair uses the shared operation lock and journal and recreates only that service
+after an idle check; it does not change Booklet release state or Dify data.
+
+The scheduler repair sets `worker_beat` to 1536 MiB after kernel
+logs confirmed migration subprocess OOM kills at 256 MiB. It uses the same lock,
+journal and idle guard, recreates only that service, and checks beat startup plus
+120 seconds without a restart. See the [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory)
+for deployment prerequisites and the verified live recovery.
+
+Issue #69 prepares a separate Dify Community stack on the same VPS. The pinned
+upstream Compose release and repository override keep its databases, networks,
+and data separate from Booklet; nginx binds only localhost port 3300 behind a
+maintenance-gated Tunnel route. The candidate staging-only probe has no model
+or image node. Booklet starts it with an application API key, receives an
+authenticated callback on one exact route, and retrieves the saved Dify result
+by workflow run ID with the same runtime key. Probe records are isolated in
+`dify_community_probes` and do not mutate booklet/artifact/approval state.
+Production and disabled staging deployments reject all probe routes. See the
+[Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md). The operator verified the
+public deterministic round trip and runtime lookup on 2026-10-03; interrupted
+response and platform backup/restore readiness remain separate checks.
+The candidate authenticated staging fault header discards the Dify start response
+before reading its identity. Recovery uses the callback's persisted ID and a GET,
+never a replacement execution. Production and disabled profiles remain closed.
+
+The protected staging key workflow can provision the Community probe as one
+four-setting patch. The master-owned host dispatcher limits it to staging,
+validates the exact field set, merges it without replacing unrelated secrets,
+and uses the existing serialized secret rotation. Dify's callback variable and
+application API key remain private operator bindings; no provider call is needed.
+
+The same protected workflow can stage the issue #65 runner's five settings from
+one private JSON bundle. The host validates the fixed staging/Community origins
+and complete six-, eleven-, thirteen-, fifteen-, sixteen- or seventeen-slot bindings, including disabled
+bundles, then preserves existing
+Cloud, probe and application secrets during the normal serialized rotation.
+Compose defaults the runner off. Private module keys/publications, exact-target
+reset approval and authorized enablement remain separate readiness checkpoints.
+
+The staging reset can select a fully validated, prepared Dify runner bundle for
+maintenance initialization while the running service retains disabled settings.
+After the reset, it activates that bundle before restarting the app.
+Maintenance containers still set `RUNNER_ENABLED=false`. The reset requires the
+exact staging bucket and completed backup coverage for every bucket object;
+its backup includes unreferenced objects. A reset interrupted during deletion
+or verification cannot be replayed through Resume. Inspect the retained backup
+and database before explicit recovery.
+
 ### Consolidated VPS deployment boundary
 
 VPS deployment is owned by `scripts/deploy/vps-deployment.sh`. Setup discovers Cloudflare and host ownership and configures database-scoped Atlas users and the exact VPS allowlist. Finalize creates absent environment branches from the reviewed commit containing `infra/config/vps.json`. Terraform owns Cloudflare R2, Tunnel, DNS and cache/rate-limit resources. `_staging` and `_prod` are independent reviewed release lines and may diverge from `master`. GitHub Actions verify the current environment-branch commit, build public GHCR environment-tagged images, and deploy only their immutable digests through the restricted VPS command interface. Compose overlays hold non-secret configuration; root-only final overrides hold secrets, including staged rotation files. Preview is the default and mutations require `--apply`. TypeScript owns application initialization, readiness, drain, backup/restore, and staging-reset behavior.
-
-### Isolated Dify staging experiment
-
-The separate Community connectivity probe uses `/api/integrations/dify-community/*` and `dify_community_probes`. It is disabled by default and unavailable in production. Only its exact callback path bypasses Basic authentication when enabled in staging; that callback requires its dedicated key. Start and result lookup remain Basic-auth protected. The probe records correlation and workflow run IDs, checks the matching acknowledgement, and retrieves saved results with the same application key. An unknown outcome does not trigger automatic replay. It does not create booklets, approvals, jobs, or assets. Its credentials and routes do not replace the Cloud trial.
-
-`/experiments/dify` and `/api/experiments/dify/*` are an isolated staging experiment enabled by application code on `_staging`. They do not change the normal booklet workflow. The experiment keeps one synthetic project in `dify_experiment_projects` and saves its optional panel image under `experiments/dify/booklet-dify-trial/` in the existing asset store. It does not create Booklet assets, jobs, artifacts, conversations, or approval records.
-
-Booklet owns the experiment document, revision checks, review approval, image-attempt cap, mutation accounting, and image storage. Dify's manager receives the internal `write_story` and `illustrate_panel` Workflow tools plus three Booklet HTTP tools for context, draft save, and review request. The illustration Workflow alone receives the authorize, complete, and failure callback contracts. Exact callback paths bypass the browser Basic Auth gate only on `_staging`; every callback validates `X-Booklet-Tool-Key`. Manager mutations and illustration authorization require the server Run ID from the current turn, while a matching completion may arrive after that turn ends. Conditional updates reject late calls from replaced attempts or revisions. Browser routes remain Basic-Auth protected and require same-origin mutation requests. Fake mode remains the local default. Real Dify manager calls use the Dify application key; the Dify OpenAI Tools plugin owns the `gpt-image-2` provider call. Booklet atomically reserves attempts, validates one fully decoded PNG/JPEG/WebP with warning-only quality preferences, and provides recovery upload without a new paid attempt. Expired turns and attempts become unknown through tracked recovery writes. Production has the experiment disabled.

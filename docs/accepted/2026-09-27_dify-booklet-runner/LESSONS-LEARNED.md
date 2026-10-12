@@ -1,0 +1,415 @@
+# Lessons learned
+
+Keep only verified, reusable lessons. This file does not mark M0 complete.
+
+## Candidates
+
+### Retain deterministic continuation after output completion
+
+- **Context:** Image output is saved before the final artifact and review card.
+- **Observation:** An in-memory callback can be lost after the completed batch
+  commits. Focused restart tests recover a persisted pending continuation without
+  another image-provider call and reject stale output that would replace newer work.
+- **Guidance:** Save pending continuation atomically with completion. Clear it
+  only after the required saved projections exist. Make finalization idempotent;
+  callback delivery alone is not proof that downstream bookkeeping finished.
+- **Evidence:** [Image recovery tests](../../../tests/integration/reference-generation.test.ts).
+  Live verification of this candidate remains pending.
+- **Promotion target:** Documentation for multi-stage saved-output recovery.
+
+### Keep observation writes out of callback finalization transactions
+
+- **Context:** An asynchronous runner polls the same operation that a callback
+  reads and updates inside a MongoDB snapshot transaction.
+- **Observation:** The focused overlap test made one observation write after the
+  callback's snapshot read. The complete materialization ran twice.
+  A persisted finalization lease suppressed both observation and wake writes;
+  the same test then materialized once with unchanged identity and reservation.
+  A second overlap reproduction confirmed the same retry mechanism before the
+  authorization reservation. Coordinate that transaction separately as well.
+- **Guidance:** Coordinate observers with long saves through a bounded persisted
+  lease. Preserve expiry recovery and original deadlines. Recreate source checks
+  on genuine transaction retries; do not weaken validation or replay execution.
+- **Evidence:** [Focused finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts).
+  This proves the conflict mechanism locally, not the complete cause of a live
+  timeout. Compare live callback and transaction-attempt timings after deployment.
+- **Promotion target:** Documentation for asynchronous persistence.
+
+### Correlate container snapshots with kernel OOM evidence
+
+- **Context:** A Dify scheduler restarts during its Flask migration subprocess.
+- **Observation:** Kernel events identified memory-cgroup OOM kills in the exact
+  scheduler container, despite a running snapshot with `oomKilled=false` and
+  zero sampled cgroup counters. The configured limit was 256 MiB.
+- **Guidance:** Identify the killed process and container in kernel records before
+  excluding OOM. Verify application startup and a stable restart count after a
+  repair; a momentary running state does not establish recovery.
+- **Evidence:** Operator kernel output from 2026-10-11 and the
+  [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
+  The 1536 MiB repair passed startup and stability verification; subsequent
+  readback showed 409.3 MiB usage, zero restarts and zero OOM counters.
+- **Promotion target:** Documentation for container failure diagnosis.
+
+### Reload authorization evidence after asynchronous reconciliation
+
+- **Context:** A callback completes before terminal publication readback.
+- **Observation:** The dispatcher persisted verified publication evidence but
+  passed its earlier, unverified manager snapshot to dependent page admission.
+  The focused callback-first J13 regression failed before the reload and passed
+  afterward, with one dependent image submission and no manager replay.
+- **Guidance:** Reload the exact operation after reconciliation before dependent
+  admission. Do not weaken publication checks to accept a stale snapshot.
+- **Evidence:** [dispatcher](../../../lib/experiment-runner/dispatch.ts) and
+  [callback-first regression](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+- **Promotion target:** Documentation for asynchronous operation recovery.
+
+### Bind the active publication, not a matching history entry
+
+- **Context:** Application-key execution on Dify Community 1.17.1.
+- **Observation:** The first workflow-history entry and the active workflow had
+  equal graph hashes but different IDs. Execution used the active ID, and Booklet
+  correctly stopped a run configured with the history ID.
+- **Guidance:** Read `app_get.workflow.id`, retrieve that exact version, verify
+  its graph, and bind its ID. Preserve rejected runs and use linked successors
+  after correcting settings. Do not relax publication-identity checks.
+- **Evidence:** [M3 deployed candidate](M3-completion.md#current-deployed-candidate--2026-10-06)
+  and runtime run `22fcdfd1-491c-4cfb-a28e-0dfe75ba04cb`.
+- **Promotion target:** Dify integration documentation; verified on this release.
+
+### Publish complete asset bytes before recording completion
+
+- **Context:** An image operation stores original bytes at an immutable attempt URI.
+- **Observation:** A direct exclusive filesystem write can leave a partial final
+  file on interruption. Atomic publication from a complete sibling temporary file
+  prevents that failure; competing writes retain one winner without overwriting it.
+- **Guidance:** Publish complete bytes without clobbering an existing asset, then
+  verify their digest before recording database completion. Recovery reuses the
+  original operation and bytes without another provider request. Record each
+  failure when it occurs, not from mutable run timestamps during recovery.
+- **Evidence:** [Atomic filesystem tests](../../../tests/unit/filesystem-asset-store-atomic.test.ts)
+  and [image-storage tests](../../../tests/integration/experiment-runner-image-storage.test.ts).
+- **Promotion target:** Asset and recovery documentation. These are local tests,
+  not live Dify binary-transfer evidence.
+
+### Preserve subject identity independently of names and array order
+
+- **Context:** Draft cast/location lists become manuscript sources and final lists.
+- **Observation:** A cast rename and reordered proposal retain Booklet-owned IDs
+  when versions match entries by stable `entryKey`. Rebuilding the manuscript
+  retains unit IDs by `unitKey`; dependency edges invalidate the final lists
+  without changing the unrelated location draft.
+- **Guidance:** Assign IDs during transactional materialization, not in model
+  proposals. Match stable keys, validate references against current approved
+  sources, and preserve earlier versions instead of replacing evidence.
+- **Evidence:** [M2 narrative tests](../../../tests/integration/experiment-runner-m2-narrative.test.ts).
+- **Promotion target:** Persistence and artifact-contract documentation. This is
+  local fixture proof; live M2 execution remains a separate checkpoint.
+
+### Validate HTTP body fields against a live callback
+
+- **Context:** Generated HTTP nodes in Dify Community 1.17.1.
+- **Observation:** A raw-text body item with `text` passed graph preparation but
+  sent an empty HTTP body. The first live tester callback returned HTTP 400.
+- **Guidance:** Use the supported `value` field and check both authorization and
+  result selectors. A successful HTTP node can still contain an error response;
+  inspect the HTTP status and saved callback outcome.
+- **Evidence:** Dify run `54f72080-9a7d-4316-b7a0-068f195dbc93` and
+  [graph regression](../../../tests/unit/experiment-runner-workflow-graph.test.ts).
+- **Promotion target:** Integration documentation; verified on this pinned release.
+
+### Preserve answered questions and interrupted revisions in saved context
+
+- **Context:** Local J01/J02 specialists run as separate operations, with an
+  external tester answering clarification questions.
+- **Observation:** Saving an answer is insufficient if the next specialist sees
+  only the original brief. A revision also needs its target and instruction
+  retained while clarification waits for an answer.
+- **Guidance:** Reconstruct relevant question/answer pairs from saved operations
+  and decisions. Suspend and restore the same revision after the exact answer;
+  do not debit the revision allowance again.
+- **Evidence:** Restarted specialist context and revision/clarification tests in
+  [context tests](../../../tests/integration/experiment-runner-context.test.ts)
+  and [narrative tests](../../../tests/integration/experiment-runner-narrative.test.ts).
+- **Promotion target:** Integration documentation. Live Dify behavior remains
+  unverified for this slice.
+
+### Carry explicit lineage when inspected tool traces omit child run IDs
+
+- **Context:** Community 1.17.1 workflow-tool calls.
+- **Observation:** Inspected native manager nodes report provider IDs, not child
+  run IDs. A deterministic caller can pass its system run ID and correlation into
+  the child; the child can return its own system run ID. Independent saved-run
+  reads confirm the exact relationship without timestamp matching.
+- **Guidance:** Retain and validate that explicit envelope with the application
+  operation. Use distinct operation IDs for revisions and retries. Do not claim
+  native trace linkage or application persistence from a transport probe.
+- **Evidence:** [M0 lineage proof](M0-readiness.md#explicit-parentchild-lineage-proof--2026-10-03),
+  parent `fbff27e2-634f-45fa-8558-e8ea981e99a5` and its independently read children.
+- **Promotion target:** Integration documentation; runner contract guidance.
+
+### Verify runtime access separately from administrative access
+
+- **Context:** A Booklet runtime calls a Dify workflow with an application API key.
+- **Observation:** The deployed diagnostic probe completed through an authenticated
+  callback and a separate Booklet result lookup using runtime credentials.
+  Administrative MCP discovery alone did not establish that path. A separate
+  staging fault discarded the successful start response before parsing its IDs;
+  the callback retained the ID and GET recovered the saved result without a
+  replacement POST. This does not establish recovery without a retained ID.
+- **Guidance:** Verify application execution, persisted callback identity and
+  runtime-key lookup together. Retain correlation and run IDs. Test lost-response
+  recovery separately; a successful ordinary lookup does not prove interruption
+  handling, and an unknown outcome is not permission to replay.
+- **Evidence:** [M0 runtime integration handoff](M0-readiness.md#runtime-integration-handoff),
+  ordinary run `18381193-b811-4809-a673-4784bf2d572f` (2026-10-03) and fault
+  recovery run `eb586ddf-243d-40a5-8a45-27935cf9d653` (2026-10-04), independently
+  retrieved with matching identifiers and zero tokens.
+- **Promotion target:** Integration documentation.
+
+### VPS releases snapshot master-owned Compose files
+
+- **Context:** Independent `master` and `_staging` release lines on the shared VPS.
+- **Observation:** Infrastructure sync transfers master's Compose files. The host's
+  `prepare_release` copies those installed files into immutable per-commit releases;
+  it does not obtain configuration from the application branch. A selective app port
+  can therefore preserve its source defaults but still inherit different host defaults.
+- **Guidance:** Compare both configuration sources before release. Correct and
+  synchronize reviewed host defaults first, then create a new release snapshot.
+  Do not expect redeploying an existing commit to replace its saved configuration.
+- **Evidence:** `sync_host_configuration` and `prepare_release` in
+  [the dispatcher](../../../scripts/deploy/vps-deployment.sh);
+  `preserves Cloud staging defaults in master-owned host configuration` in
+  [deployment contracts](../../../tests/unit/deployment-contracts.test.ts).
+- **Promotion target:** Deployment documentation; reflected in the canonical runbook.
+
+### Published callers do not pin child Workflow Tool bindings
+
+- **Context:** Dify Community 1.17.1; a published caller invokes separate workflows
+  through Workflow Tools.
+- **Observation:** Editing the child draft did not change the published caller.
+  Publishing the child without tool synchronization also kept the old result.
+  Refreshing the child tool changed the same pinned caller's result. Restoring,
+  republishing and refreshing the child recovered the original result without
+  rebuilding the caller or changing the provider ID.
+- **Guidance:** Do not claim transitive version isolation from the caller version
+  alone. Stop dispatch, reconcile active work, synchronize child tools, and retain
+  effective child publication evidence for successor runs. Inspect a failed or
+  uncertain refresh before retrying; publication alone is not synchronization.
+- **Evidence:** [M0 binding-change and restoration results](M0-readiness.md#binding-change-and-restoration-evidence),
+  including changed caller run `a383fb0b-160a-4f9c-b94d-31b8a5f54787` and restored
+  caller run `1ffa1a98-2674-4c79-96db-2bb693c7b62f`; zero reported tokens.
+- **Promotion target:** Documentation and the Dify operations skill.
+- **Status:** Candidate; behavior was verified on this pinned release only.
+
+### Unit checks do not prove server package initialization
+
+- **Context:** Next.js 16.2.12, Zod 4.4.3 and the runner configuration imported
+  by the root layout.
+- **Observation:** Typecheck, lint and runtime tests passed, but the release build
+  failed at `/_not-found` when Zod's bundled ISO/schema cycle accessed
+  `ZodISODateTime` before initialization. A clean debug build reproduced the
+  failure at `lib/contracts/common.ts:7`; native Node imports passed. The same
+  checkout completed the ordinary build with only Zod added to
+  `serverExternalPackages`. No dependency or validation rule changed.
+- **Guidance:** Diagnose generated server initialization with a clean checkout
+  and source-mapped failure. For this verified package cycle, retain native
+  server loading rather than weakening schemas or changing the whole bundler.
+  PR validation stays non-build; the deployment build remains a separate gate.
+- **Evidence:** [server configuration](../../../next.config.ts),
+  [configuration regression](../../../tests/unit/next-config.test.ts), and
+  [Next.js external-package contract](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages).
+- **Promotion target:** Documentation; reverify before removing the workaround
+  or changing Next.js/Zod versions. Linux container deployment remains the live
+  release checkpoint.
+
+### Studio validates output names across branches
+
+- **Context:** Dify Community 1.17.1 workflows with separate completion and pause End nodes.
+- **Observation:** Bridge validation and backend publication accepted duplicate
+  End output names. Studio blocked publication until those names were unique
+  across the graph. All six M1 checklists passed after each branch exposed only
+  its consumed output.
+- **Guidance:** Check global End output-name uniqueness in graph fixtures and
+  verify the Studio checklist. Backend publication alone does not prove editor
+  acceptance. Preserve the saved-completion acknowledgement gate when repairing
+  branch outputs.
+- **Evidence:** [graph regression](../../../tests/unit/experiment-runner-workflow-graph.test.ts)
+  and [M1 draft repair](M1-runner.md#entry-and-manual-setup).
+- **Promotion target:** Documentation; reverify for other Dify releases.
+
+### Handler upload limits need proxy transport headroom
+
+- **Context:** Image callbacks behind Next.js 16.2.12 proxy body cloning.
+- **Observation:** The installed clone defaults to 10 MiB and truncates larger
+  bodies before the handler's 20 MiB validator. A 32 MiB transport setting
+  preserves an allowed 20 MiB upload and lets the handler reject a chunked
+  20 MiB-plus-one-byte body with HTTP 413.
+- **Guidance:** Test the framework transport as well as the route factory.
+  Keep a bounded transport allowance above the application's content limit.
+- **Evidence:** [transport regression](../../../tests/unit/experiment-image-proxy-body.test.ts)
+  and [Next.js proxy limit](https://nextjs.org/docs/app/api-reference/config/next-config-js/proxyClientMaxBodySize).
+- **Promotion target:** Documentation; reverify when Next.js or limits change.
+
+### Maintenance must preserve callback recovery and finalization
+
+- **Context:** A staging schema transition whose maintenance gate also rejects
+  external workflow callbacks.
+- **Observation:** A tracked-mutation count of zero does not prove the external
+  operation ledger is idle. Closing admission can prevent unresolved work from
+  completing. An interruption after admission reopens can also leave a journal
+  whose ordinary resume path would incorrectly stop the running app.
+- **Guidance:** Check external work before closing admission and again after drain,
+  before stop. On a pre-change race, reopen admission while the app is still
+  running. Record a finalization checkpoint before reopening admission; its resume
+  must not replay stop, backup or mutation. Preserve the pre-change backup after
+  the mutation checkpoint.
+- **Recovery extension:** Retain exact mutation owners across process interruption.
+  Release an interrupted owner only after its operation has verified terminal
+  evidence. A lost stop acknowledgement remains history, not a permanent blocker
+  after verified completion. Keep unrelated or unidentified owners blocked.
+  The [drain ownership regressions](../../../tests/integration/deployment-drain-control.test.ts)
+  verify this behavior locally; live deployment proof remains pending.
+- **Evidence:** [Mongo ledger tests](../../../tests/integration/experiment-maintenance.test.ts)
+  and [host interruption/race scenarios](../../../tests/shell/vps-host.test.sh).
+  Focused local scenarios passed; complete Linux suites and live retirement remain
+  separate verification gates.
+- **Promotion target:** Documentation; reverify the admission and callback behavior
+  before using this pattern for another runtime.
+
+### A workflow failure does not prove that its callback did not save
+
+- **Context:** An external workflow times out while an authorized callback is
+  still running.
+- **Observation:** Dify can report a failed run after its save-node read timeout.
+  That status alone does not establish the callback's outcome. Clearing a claimed
+  operation can prevent its late result from saving.
+- **Guidance:** Classify the observation against the current persisted claim in
+  the outcome transaction. Retain uncertain claimed operations and their identities;
+  inspect the saved result before any replacement execution. Reuse expensive source
+  verification only within one transaction attempt, never across requests or retries.
+  Batch independent evidence reads while keeping Mongo transaction commands serial.
+  Avoid calling a source verifier twice when the downstream assembly verifier
+  already enforces the same sources and final bytes. Preserve ownership, approval
+  scope, dependency membership and corrupt-byte rejection in focused regressions.
+- **Evidence:** [outcome transaction](../../../db/experiment-repository.ts),
+  [pagination completion](../../../db/experiment-narrative.ts), and
+  [generation verification](../../../db/experiment-completion.ts),
+  [retained live failure](M3-completion.md#j11-dify-preparation-package).
+- **Promotion target:** Documentation; verify the callback and runtime recovery
+  interfaces before applying this pattern to another integration.
+
+### Validation normalization can change approved lettering
+
+- **Context:** A page-production fixture reads an approved manuscript through a
+  schema that trims strings.
+- **Observation:** Schema validation produced normalized narration and dialogue.
+  A fixture test with leading whitespace and a trailing newline detected a change
+  to the approved text.
+- **Guidance:** Validate the structure, but preserve the saved original strings
+  when the output contract requires exact approved lettering. Test whitespace as
+  well as words. Do not substitute normalized text for the approved source.
+- **Evidence:** [J12 fixture](../../../lib/experiment-runner/page-bible-fixtures.ts)
+  and [exact-lettering tests](../../../tests/unit/experiment-runner-page-bible-fixtures.test.ts).
+- **Promotion target:** Documentation for exact-text artifact transformations.
+
+### Capability flags must survive saved configuration projection
+
+- **Context:** A new capability is optional in a runtime binding while older runs
+  compare saved configuration bytes or hashes.
+- **Observation:** The snapshot producer selects an explicit field list. Adding
+  a flag only to the input schema would omit it from saved evidence. Regression
+  tests prove that true-only projection changes enabled evidence while omission
+  preserves the legacy JSON and SHA-256 value.
+- **Guidance:** Update input validation, saved validation and projection together.
+  Omit absent flags rather than applying a default. Keep saved and public profile
+  shapes separate, and retain the original legacy schema surface.
+- **Evidence:** [snapshot producer](../../../lib/experiment-runner/config.ts) and
+  [configuration regression tests](../../../tests/unit/experiment-runner-config.test.ts).
+- **Promotion target:** Documentation for versioned capability configuration.
+
+### Provider completion is not job completion
+
+- **Context:** An image callback succeeds before reference read-back or page
+  materialization fails.
+- **Observation:** A succeeded J13 operation can coexist with a blocked run and
+  a stale running generation item. The deployment drain correctly refuses that
+  running bookkeeping record. Focused regression checks cover this boundary.
+  Separate failure-path reproductions showed that dispatch outcomes and failure
+  callbacks also need the same cleanup, including idempotent terminal readback.
+- **Guidance:** Close eligible item/job bookkeeping transactionally when the
+  owning run becomes definitely blocked. Preserve provider results and assets;
+  never turn unknown evidence into a terminal result or replay it to clear drain.
+  Apply the invariant to each terminal-failure entry point, not only `blockRun`.
+- **Evidence:** [terminal bookkeeping helper](../../../db/experiment-page-batch-failure.ts)
+  and [reference read-back regression](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+- **Promotion target:** Documentation for multi-stage external-operation jobs.
+
+### Keep observation separate from submission and callback completion
+
+- **Context:** An external workflow can outlive an HTTP request or finish its
+  callback before its terminal acknowledgement reaches the application.
+- **Observation:** Focused async tests prove saved-ID recovery after restart,
+  one GET per observation slot, Pause preservation and retained lane ownership
+  after callback-first completion. No second POST is required.
+- **Guidance:** Save identity early, retain the original deadline, and reconcile
+  terminal evidence before releasing the lane. A timeout does not authorize replay.
+- **Evidence:** [transport tests](../../../tests/unit/experiment-runner-transport.test.ts)
+  and [recovery tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+- **Promotion target:** Documentation for asynchronous external-operation recovery.
+
+### Completion acknowledgements must cover every admitted task
+
+- **Context:** A callback saves a valid manager result before constructing its
+  allowlisted response summary.
+- **Observation:** J13 was accepted by the manager and repository, but the summary
+  allowed only text-specialist task IDs. Response validation could therefore
+  return HTTP 400 after the completion transaction succeeded.
+- **Guidance:** Keep acknowledgement fields aligned with the admitted result
+  domain. Test first completion and duplicate completion at the HTTP boundary,
+  not only repository persistence. Do not relax admission checks to fix a response.
+- **Evidence:** [callback summary](../../../lib/experiment-runner/http.ts) and
+  [J13 acknowledgement regression](../../../tests/unit/experiment-runner-http.test.ts).
+- **Promotion target:** Documentation for external completion callbacks.
+
+### Test bounded Mongo cursors across batches
+
+- **Context:** The MongoDB 7.5 driver uses client-side timeouts in transactions.
+- **Observation:** Session-only cursor timeouts caused an invalid `maxTimeMS`
+  on `getMore`, blocking a valid two-page selection after its image was saved.
+- **Guidance:** Give transactional find/aggregate cursors a supported
+  collection-level timeout default. Do not override transaction command timeouts
+  or use driver internals. Force multiple batches in regression tests.
+- **Evidence:** [cursor adapter](../../../db/bounded-collection.ts) and
+  [multi-batch regression](../../../tests/integration/bounded-mongo-cursors.test.ts).
+- **Promotion target:** Documentation for bounded MongoDB transaction reads;
+  recheck this driver-specific behavior when upgrading MongoDB dependencies.
+
+### Share verification reads only within one transaction attempt
+
+- **Context:** Several consumers verify the same approved sources during one
+  callback, including every page at final completion.
+- **Observation:** Retained server timings showed metadata-only verification
+  taking several seconds. Focused tests prove that consumers can share seven
+  serial metadata reads and one read of each immutable original per attempt,
+  while still rejecting stale approvals and changed or corrupt sources.
+- **Guidance:** Share read evidence inside the transaction callback. Create fresh
+  evidence on retry, later requests and mutation phases. Keep per-consumer
+  ownership, currentness, lineage and byte checks; do not persist a validity flag.
+- **Evidence:** [verification metadata](../../../db/experiment-verification-metadata.ts),
+  [source tests](../../../tests/integration/experiment-runner-page-illustration-sources.test.ts)
+  and [completion tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+  Deployed latency improvement remains unverified.
+- **Promotion target:** Documentation for transactional external-workflow callbacks.
+
+### Isolate lease clocks from database-driver clocks
+
+- **Context:** Integration tests advance elapsed time to prove authorization and
+  finalization expiry without waiting for a real lease.
+- **Observation:** Mocking global `performance.now()` also advanced MongoDB's I/O
+  timeout clock, producing a driver timeout before the intended lease assertion.
+- **Guidance:** Inject the repository's elapsed-time source. Keep the production
+  monotonic default and the driver's clock independent. Use one clock domain for
+  a fixture's persisted deadline and its HTTP handler.
+- **Evidence:** [finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts)
+  and [repository clock](../../../db/experiment-repository.ts).
+- **Promotion target:** Documentation for deterministic integration-test clocks.

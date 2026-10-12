@@ -246,8 +246,14 @@ describe("sequential simulated dispatch and read-only recovery", () => {
     const operation = (await env.repository.getOperation(run.activeOperationId!))!;
     expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
     await env.database.collections.experiment_operations.updateOne({ _id: operation._id }, { $set: { deadlineAtMs: 0 } });
+    vi.mocked(env.runtime.retrieve).mockClear();
     await env.dispatcher().cycle();
-    expect(env.runtime.retrieve).toHaveBeenCalledExactlyOnceWith(vi.mocked(env.runtime.start).mock.calls[0][0], operation.workflowRunId);
+    // Deadline reconciliation inspects before and after recording stop intent.
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(2);
+    expect(env.runtime.retrieve).toHaveBeenNthCalledWith(1, vi.mocked(env.runtime.start).mock.calls[0][0], operation.workflowRunId,
+      expect.objectContaining({ signal: expect.any(AbortSignal), deadlineAtMs: expect.any(Number) }));
+    expect(env.runtime.retrieve).toHaveBeenNthCalledWith(2, vi.mocked(env.runtime.start).mock.calls[0][0], operation.workflowRunId,
+      expect.objectContaining({ signal: expect.any(AbortSignal), deadlineAtMs: expect.any(Number) }));
     expect(env.runtime.start).toHaveBeenCalledTimes(1);
     expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: operation._id });
     expect(await env.repository.getOperation(operation._id)).toMatchObject({ deadlineAtMs: 0, workflowRunId: operation.workflowRunId });

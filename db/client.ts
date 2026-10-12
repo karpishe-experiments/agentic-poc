@@ -1,6 +1,8 @@
 import { MongoClient, type ClientSession, type Db, type TransactionOptions } from "mongodb";
 import { createCollectionHandles, type MongoCollections } from "@/db/collections";
 import { getServerEnv } from "@/lib/config/env";
+import { assertOperationBudget, remainingOperationMs } from "@/lib/operations/budget";
+import { countTransactionAttempt } from "@/lib/experiment-runner/diagnostics";
 
 const DATABASE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/;
 const RESERVED_DATABASES = new Set(["admin", "config", "local"]);
@@ -22,6 +24,8 @@ export function validateMongoUri(uri: string): string {
 }
 
 export function createMongoDatabase(input: { uri: string; databaseName: string }): MongoDatabaseContext {
+  // Collection calls supply CSOT explicitly. A client-level timeout is copied
+  // into insertMany's internal bulk operation and conflicts with withTransaction.
   const client = new MongoClient(validateMongoUri(input.uri), { maxPoolSize: 10, serverSelectionTimeoutMS: 5_000 });
   const database = client.db(validateMongoDatabaseName(input.databaseName));
   return { client, database, collections: createCollectionHandles(database), close: () => client.close() };
@@ -41,7 +45,14 @@ const transactionOptions: TransactionOptions = { readConcern: { level: "snapshot
 export async function withMongoTransaction<T>(context: MongoDatabaseContext, callback: (session: ClientSession) => Promise<T>): Promise<T> {
   const session = context.client.startSession();
   try {
-    return await session.withTransaction(() => callback(session), transactionOptions);
+    return await session.withTransaction(async () => {
+      countTransactionAttempt();
+      assertOperationBudget();
+      const result = await callback(session);
+      // Check again before the driver commits, including on transaction retries.
+      assertOperationBudget();
+      return result;
+    }, { ...transactionOptions, timeoutMS: remainingOperationMs(60_000) });
   } finally {
     await session.endSession();
   }

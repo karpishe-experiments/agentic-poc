@@ -1,6 +1,288 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
+
+# Exact-request controls use the existing restricted entrypoint. No lifecycle
+# mutation is available merely because a request or environment was omitted.
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -s -- "$script" <<'CONTROL_ARGUMENTS'
+set -euo pipefail
+source "$1"
+parse_arguments --action operation-status --environment staging --request-id 123-1
+validate_arguments
+if (APPLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (REQUEST_ID=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (ENVIRONMENT=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+ACTION=operation-stop APPLY=false
+validate_arguments
+ACTION=operation-status ENVIRONMENT=dify
+validate_arguments
+ACTION=backup-verify ENVIRONMENT=staging BACKUP_ID=exact COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa IMAGE_DIGEST=ghcr.io/example/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+validate_arguments
+if (BACKUP_ID=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (APPLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+ACTION=staging-bootstrap-reconcile REQUEST_ID=38149230374-1
+validate_arguments
+if (REQUEST_ID=other; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (ENVIRONMENT=prod; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (APPLY=true; CONFIRMATION=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+APPLY=true CONFIRMATION=kids_booklet
+validate_arguments
+CONTROL_ARGUMENTS
+
+# Run each scheduler outcome in a strict child shell, including expected failures.
+for scheduler_case in success existing low-memory wrong-limit idle-busy restart stopped never-started; do
+  scheduler_fixture="$(mktemp -d)"
+  if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -s -- "$script" "$scheduler_case" "$scheduler_fixture" <<'SCHEDULER'
+set -euo pipefail
+source "$1"
+scenario="$2"; fixture="$3"; tick=0; repaired=false
+parse_arguments --action dify-repair-scheduler --environment dify
+validate_arguments
+dify_diagnostic_identity() { :; }
+dify_install_preflight() { :; }
+dify_validate_compose() { :; }
+awk() { if [[ "$scenario" == low-memory ]]; then echo 3407871; else echo 3407872; fi; }
+timeout() { shift; "$@"; }
+sleep() { tick=$((tick + 1)); }
+dify_compose() {
+  case "$1" in
+    config)
+      if [[ "$scenario" == wrong-limit ]]; then
+        printf '{"services":{"worker_beat":{"mem_limit":"268435456"}}}\n'
+      else
+        printf '{"services":{"worker_beat":{"mem_limit":"1610612736"}}}\n'
+      fi;;
+    ps) echo scheduler;;
+    up) printf '%s\n' "$*" >> "$fixture/events"; repaired=true;;
+    *) exit 22;;
+  esac
+}
+docker() {
+  case "$1" in
+    inspect)
+      local memory=268435456 restarts=0 status=running
+      if [[ "$repaired" == true || "$scenario" == existing ]]; then memory=1610612736; fi
+      if [[ "$tick" -ge 5 && "$scenario" == restart ]]; then restarts=1; fi
+      if [[ "$tick" -ge 5 && "$scenario" == stopped ]]; then status=exited; fi
+      printf '[{"Id":"scheduler","State":{"Status":"%s","StartedAt":"2026-10-11T12:00:00Z"},"RestartCount":%s,"HostConfig":{"Memory":%s}}]\n' "$status" "$restarts" "$memory";;
+    logs)
+      [[ "$*" == *"--since 2026-10-11T12:00:00Z"* ]] || exit 23
+      if [[ "$scenario" != never-started && "$tick" -ge 2 ]]; then echo 'beat: Starting...'; fi
+      echo 'private-log-do-not-print';;
+    *) exit 24;;
+  esac
+}
+dify_idle_host() {
+  [[ "$scenario" != idle-busy ]] || die 'Dify work is active'
+  echo idle >> "$fixture/events"
+}
+set_step() { echo "step:$1" >> "$fixture/events"; }
+dify_verify_services() { echo ready >> "$fixture/events"; }
+save_success() { echo complete >> "$fixture/events"; }
+dify_repair_scheduler_host > "$fixture/output"
+[[ "$tick" -eq 26 ]]
+! grep -q private-log "$fixture/output"
+if [[ "$scenario" == existing ]]; then
+  ! grep -q 'up\|idle\|step:' "$fixture/events"
+else
+  [[ "$(head -n 1 "$fixture/events")" == idle ]]
+  grep -Fxq 'up -d --no-deps --force-recreate worker_beat' "$fixture/events"
+fi
+[[ "$(tail -n 1 "$fixture/events")" == complete ]]
+SCHEDULER
+  then
+    [[ "$scheduler_case" == success || "$scheduler_case" == existing ]] || exit 1
+  else
+    [[ "$scheduler_case" != success && "$scheduler_case" != existing ]] || exit 1
+    if [[ -f "$scheduler_fixture/events" ]]; then
+      ! grep -q complete "$scheduler_fixture/events"
+      case "$scheduler_case" in low-memory|wrong-limit|idle-busy) ! grep -q '^up ' "$scheduler_fixture/events";; esac
+    fi
+  fi
+  rm -rf "$scheduler_fixture"
+done
+
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+timeout() { shift; "$@"; }
+docker() {
+  case "$1" in
+    ps) [[ "${missing:-false}" == true ]] || printf "fixture-container\n";;
+    exec) [[ "${racing:-false}" != true ]] || return 1; printf "oom 2\ncredential=do-not-print\noom 2 secret\n";;
+    logs) printf "PermissionError: credential=do-not-print\nWRONGPASS credential=do-not-print\nOperationalError: credential=do-not-print\nTraceback (most recent call last): credential=do-not-print\nbeat: Starting credential=do-not-print\n";;
+    *) return 1;;
+  esac
+}
+for service in sandbox worker_beat; do
+  output="$(dify_service_diagnostics "$service")"
+  [[ "$output" == *"result: ${service}_memory oom 2"* ]]
+  [[ "$output" == *"\"permissionerror\": 1"* && "$output" == *"\"wrongpass\": 1"* ]]
+  [[ "$output" == *"\"operationalerror\": 1"* && "$output" == *"\"beat: starting\": 1"* ]]
+  [[ "$output" != *do-not-print* && "$output" != *"oom 2 secret"* ]]
+done
+racing=true
+output="$(dify_service_diagnostics worker_beat)"
+[[ "$output" == *"result: worker_beat_memory unavailable"* && "$output" == *worker_beat_errors* ]]
+missing=true
+[[ -z "$(dify_service_diagnostics worker_beat)" ]]
+if (dify_service_diagnostics arbitrary) >/dev/null 2>&1; then exit 1; fi
+' _ "$script"
+
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+timeout() { shift; "$@"; }
+export DEPLOYMENT_ENV=_staging ACCESS_GATE_PASSWORD=fixture-password-do-not-print
+docker() {
+  local code
+  code=$(</dev/stdin)
+  DIAG_CASE="$diag_case" node -e '"'"'
+    global.fetch = async (url, options) => {
+      if (url !== "https://booklet-staging.uniwares.co.uk/api/diagnostics/logs?limit=1&runId=390e8f0b-440a-4ebe-8a57-d23a80d5c8bb" ||
+          options.headers.Authorization !== "Basic " + Buffer.from("booklet:" + process.env.ACCESS_GATE_PASSWORD).toString("base64") ||
+          options.redirect !== "error") throw Error("fixture-password-do-not-print");
+      const mode = process.env.DIAG_CASE;
+      if (mode === "network") throw Error("fixture-password-do-not-print");
+      return new Response(mode === "large" ? "x".repeat(65537) : mode === "malformed" ? "fixture-password-do-not-print" :
+        JSON.stringify({data:{events:mode === "many" ? [{},{}] : []}}),
+        {status:mode === "denied" ? 401 : 200, headers:{"content-type":"application/json"}});
+    };
+    eval(process.argv[1]);
+  '"'"' "$code" 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb
+}
+for diag_case in success denied network malformed large many; do
+  output="$(dify_staging_api_diagnostic fixture-container 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb)"
+  [[ "$output" != *fixture-password-do-not-print* ]]
+  if [[ "$diag_case" == success ]]; then
+    [[ "$output" == *"\"authenticated\":true"* && "$output" == *"\"eventCount\":0"* ]]
+  else
+    [[ "$output" == *"\"authenticated\":false"* ]]
+  fi
+done
+docker() { printf "fixture-password-do-not-print\n" >&2; return 1; }
+output="$(dify_staging_api_diagnostic fixture-container 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb 2>&1)"
+[[ "$output" == '"'"'result: staging_api {"authenticated":false,"outcome":"unverified"}'"'"' ]]
+timeout() { return 124; }
+output="$(dify_staging_api_diagnostic fixture-container 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb)"
+[[ "$output" == '"'"'result: staging_api {"authenticated":false,"outcome":"unverified"}'"'"' ]]
+' _ "$script"
+
+diagnostic_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+parse_arguments --action dify-diagnostics --environment dify --run-id 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb
+validate_arguments
+[[ "$RUN_ID" == 390e8f0b-440a-4ebe-8a57-d23a80d5c8bb ]]
+APPLY=true
+if (validate_arguments) >/dev/null 2>&1; then exit 1; fi
+APPLY=false; RUN_ID="../../etc/passwd"
+if (validate_arguments) >/dev/null 2>&1; then exit 1; fi
+RUN_ID=""; ACTION=dify-repair-sandbox; DIFY_DATA="$2"
+dify_diagnostic_identity() { :; }
+dify_install_preflight() { :; }
+dify_validate_compose() { :; }
+memory_json=1073741824
+dify_compose() { printf "{\"services\":{\"sandbox\":{\"mem_limit\":%s}}}\n" "$memory_json"; }
+awk() { printf "2883583\n"; }
+if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
+awk() { printf "2883584\n"; }
+dify_sandbox_preflight
+memory_json=\"1073741824\"
+dify_sandbox_preflight
+memory_json=\"268435456\"
+if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
+memory_json=\"invalid\"
+if (dify_sandbox_preflight) >/dev/null 2>&1; then exit 1; fi
+dify_sandbox_is_ready() { [[ -f "$DIFY_DATA/healthy" ]]; }
+dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
+set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
+dify_compose() {
+  if [[ "$1" == config ]]; then printf "{\"services\":{\"sandbox\":{\"mem_limit\":\"1073741824\"}}}\n"; return; fi
+  printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; touch "$DIFY_DATA/healthy";
+}
+dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }
+save_success() { printf "complete\n" >> "$DIFY_DATA/events"; }
+dify_repair_sandbox_host >/dev/null
+grep -Fxq "compose:up -d --no-deps --force-recreate sandbox" "$DIFY_DATA/events"
+[[ "$(head -n 1 "$DIFY_DATA/events")" == idle ]]
+before="$(wc -l < "$DIFY_DATA/events")"
+dify_repair_sandbox_host >/dev/null
+[[ "$(wc -l < "$DIFY_DATA/events")" == "$((before + 1))" ]]
+' _ "$script" "$diagnostic_fixture"
+rm -r -- "$diagnostic_fixture"
+grep -Fq '"$ACTION" != dify-repair-broker && "$ACTION" != dify-repair-collaboration ]]; then' "$script"
+grep -Fq 'values["CELERY_BROKER_URL"] = f"redis://:{values['"'"'REDIS_PASSWORD'"'"']}@redis:6379/1"' "$script"
+broker_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_ENV="$2/runtime.env"
+password="$(printf "%064d" 0)"
+printf "REDIS_PASSWORD=%s\nCELERY_BROKER_URL=redis://:difyai123456@redis:6379/1\n" "$password" > "$DIFY_ENV"
+chmod 600 "$DIFY_ENV"
+[[ "$(dify_broker_environment preview)" == "would update: Dify Celery broker credential" ]]
+grep -Fxq "CELERY_BROKER_URL=redis://:difyai123456@redis:6379/1" "$DIFY_ENV"
+dify_broker_environment apply >/dev/null
+grep -Fxq "CELERY_BROKER_URL=redis://:$password@redis:6379/1" "$DIFY_ENV"
+[[ "$(dify_broker_environment apply)" == "exists: Dify Celery broker credential matches Redis" ]]
+printf "REDIS_PASSWORD=%s\nCELERY_BROKER_URL=redis://:other@redis:6379/1\n" "$password" > "$2/unknown.env"
+chmod 600 "$2/unknown.env"
+DIFY_ENV="$2/unknown.env"
+if dify_broker_environment apply >/dev/null 2>&1; then
+  echo "accepted an unknown broker credential" >&2
+  exit 1
+fi
+' _ "$script" "$broker_fixture"
+rm -rf "$broker_fixture"
+broker_operation_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_DATA="$2"; mkdir -p "$DIFY_DATA"; printf "1.17.1\n" > "$DIFY_DATA/current"
+dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
+dify_broker_environment() {
+  if [[ "$1" == preview ]]; then printf "would update: Dify Celery broker credential\n";
+  else printf "repaired\n" >> "$DIFY_DATA/events"; fi
+}
+set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
+dify_compose() { printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; }
+dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }
+dify_api_broker_authenticates() { printf "authenticated\n" >> "$DIFY_DATA/events"; }
+save_success() { printf "complete\n" >> "$DIFY_DATA/events"; }
+dify_repair_broker_host >/dev/null
+grep -Fxq "compose:up -d --no-deps --force-recreate api worker worker_beat" "$DIFY_DATA/events"
+grep -Fxq authenticated "$DIFY_DATA/events"
+grep -Fxq complete "$DIFY_DATA/events"
+' _ "$script" "$broker_operation_fixture"
+rm -rf "$broker_operation_fixture"
+collaboration_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_DATA="$2"; printf "1.17.1\n" > "$DIFY_DATA/current"
+dify_install_preflight() { printf "preflight\n" >> "$DIFY_DATA/events"; }
+dify_validate_compose() { printf "validated\n" >> "$DIFY_DATA/events"; }
+dify_idle_host() { printf "idle\n" >> "$DIFY_DATA/events"; }
+dify_collaboration_is_ready() { [[ -f "$DIFY_DATA/recreated" ]]; }
+set_step() { printf "step:%s\n" "$1" >> "$DIFY_DATA/events"; }
+dify_compose() { printf "compose:%s\n" "$*" >> "$DIFY_DATA/events"; touch "$DIFY_DATA/recreated"; }
+dify_verify_services() { printf "ready\n" >> "$DIFY_DATA/events"; }
+save_success() { printf "complete\n" >> "$DIFY_DATA/events"; }
+dify_repair_collaboration_host >/dev/null
+grep -Fxq "compose:up -d --no-deps --force-recreate api_websocket" "$DIFY_DATA/events"
+[[ "$(head -n 3 "$DIFY_DATA/events" | paste -sd,)" == preflight,validated,idle ]]
+dify_repair_collaboration_host >/dev/null
+[[ "$(grep -c "^compose:" "$DIFY_DATA/events")" == 1 ]]
+rm "$DIFY_DATA/recreated"
+dify_idle_host() { return 1; }
+if (set -e; dify_repair_collaboration_host >/dev/null); then exit 1; fi
+[[ "$(grep -c "^compose:" "$DIFY_DATA/events")" == 1 ]]
+curl() { printf "0{\"sid\":\"test-session\"}"; }
+dify_socket_responds
+curl() { printf "<html>not a socket</html>"; }
+if dify_socket_responds; then exit 1; fi
+curl() { printf "0{}"; }
+if dify_socket_responds; then exit 1; fi
+curl() { return 28; }
+if dify_socket_responds; then exit 1; fi
+' _ "$script" "$collaboration_fixture"
+rm -rf "$collaboration_fixture"
 workflow=.github/workflows/vps-operation.yml
 vps_access=.github/actions/vps-access/action.yml
 if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null; then
@@ -8,6 +290,74 @@ if grep -F 'terraform -chdir="$REPO_ROOT/infra/terraform"' "$script" >/dev/null;
   exit 1
 fi
 bash "$script" --help >/dev/null
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+dify_compose() { printf '\''[{"Service":"api"},{"Service":"web"}]\n'\''; }
+[[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
+dify_compose() { printf '\''{"Service":"api"}\n{"Service":"web"}\n'\''; }
+[[ "$(dify_service_records | jq -r '\''.[].Service'\'' | paste -sd, -)" == api,web ]]
+printf '\''[{"Service":"init_permissions","State":"exited","ExitCode":0},{"Service":"worker_beat","State":"running","Health":""}]\n'\'' | dify_service_records_are_ready
+if printf '\''[{"Service":"worker_beat","State":"running","Health":"starting"}]\n'\'' | dify_service_records_are_ready; then
+  echo "accepted a service whose healthcheck is still starting" >&2
+  exit 1
+fi
+if printf '\''[{"Service":"worker_beat","State":"exited","ExitCode":1,"Health":""}]\n'\'' | dify_service_records_are_ready; then
+  echo "accepted a stopped long-running service" >&2
+  exit 1
+fi
+' _ "$script"
+persistent_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+fixture="$2"
+DIFY_DATA="$fixture/data"; DIFY_RELEASE="$fixture/release"
+mkdir -p "$DIFY_DATA/sandbox/conf" "$DIFY_DATA/agent/home" "$DIFY_DATA/agent/workspace" "$DIFY_RELEASE/docker/volumes/sandbox/conf"
+printf "pinned sandbox config\n" > "$DIFY_RELEASE/docker/volumes/sandbox/conf/config.yaml"
+chown() { printf "%s\n" "$*" >> "$fixture/chown-args"; }
+dify_prepare_persistent_files
+grep -Fxq "pinned sandbox config" "$DIFY_DATA/sandbox/conf/config.yaml"
+grep -Fxq -- "-R 1000:1000 $DIFY_DATA/agent/home $DIFY_DATA/agent/workspace" "$fixture/chown-args"
+printf "operator-preserved config\n" > "$DIFY_DATA/sandbox/conf/config.yaml"
+dify_prepare_persistent_files
+grep -Fxq "operator-preserved config" "$DIFY_DATA/sandbox/conf/config.yaml"
+rm "$DIFY_DATA/sandbox/conf/config.yaml"
+ln -s "$fixture/outside-config" "$DIFY_DATA/sandbox/conf/config.yaml"
+if (dify_prepare_persistent_files >/dev/null 2>&1); then
+  echo "accepted dangling persistent sandbox configuration symlink" >&2
+  exit 1
+fi
+test ! -e "$fixture/outside-config"
+' _ "$script" "$persistent_fixture"
+rm -rf "$persistent_fixture"
+installation_root="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_DATA="$2"; ROOT="$2"
+mkdir -p "$ROOT/dify"
+printf "{\"images\":{}}" > "$ROOT/dify/release.json"
+dify_install_preflight() { :; }
+dify_prepare_directories() { :; }
+dify_prepare_release() { :; }
+dify_prepare_persistent_files() { :; }
+dify_prepare_environment() { :; }
+dify_validate_compose() { :; }
+set_step() { :; }
+save_success() { :; }
+dify_compose() { printf "started\n" >> "$DIFY_DATA/starts"; }
+dify_verify_services() { die "simulated readiness failure"; }
+set +e
+(set -e; dify_install_host) 2>/dev/null
+result=$?
+set -e
+[[ "$result" != 0 && ! -f "$DIFY_DATA/current" ]]
+dify_verify_services() { :; }
+dify_install_host
+[[ "$(cat "$DIFY_DATA/current")" == 1.17.1 ]]
+[[ "$(wc -l < "$DIFY_DATA/starts")" == 2 ]]
+dify_install_host
+[[ "$(wc -l < "$DIFY_DATA/starts")" == 2 ]]
+' _ "$script" "$installation_root"
+rm -rf "$installation_root"
 ! grep -q 'gh pr create' "$script"
 grep -q 'GITHUB_STEP_SUMMARY' "$workflow"
 grep -q 'grep -E' "$workflow"
@@ -19,6 +369,61 @@ grep -q -- 'curl -fsSL --retry 4 --retry-all-errors --retry-delay 2' "$script"
 for summarized_workflow in .github/workflows/deploy.yml .github/workflows/infrastructure.yml; do
   grep -q 'GITHUB_STEP_SUMMARY' "$summarized_workflow"
 done
+grep -Fq 'test "$GITHUB_REF_NAME" = master' .github/workflows/dify-tool-key.yml
+grep -Fq 'DIFY_TOOL_KEY: ${{ secrets.DIFY_TOOL_KEY }}' .github/workflows/dify-tool-key.yml
+grep -Fq 'DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}' .github/workflows/dify-tool-key.yml
+grep -Fq -- '--action rotate-protected-dify-key --environment staging --secret-name "$SECRET_NAME"' .github/workflows/dify-tool-key.yml
+grep -Fq 'rotate-protected-dify-key is available only through GitHub Actions' "$script"
+GITHUB_ACTIONS=true VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+ACTION=rotate-protected-dify-key; ENVIRONMENT=staging; SECRET_NAME=DIFY_API_KEY; APPLY=true; REQUEST_ID=123-1; VPS_USER=kids-booklet-deploy
+validate_arguments
+' _ "$script"
+for protected_name in DIFY_TOOL_KEY DIFY_API_KEY; do
+protected_rotation_root="$(mktemp -d)"
+protected_rotation_output="$(GITHUB_ACTIONS=true DIFY_TOOL_KEY='0123456789abcdef0123456789abcdef' DIFY_API_KEY='app-test-secret' VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$2"; SECRET_NAME="$3"; ENVIRONMENT=staging; APPLY=true; REQUEST_ID=123-1; VPS_HOST=deploy.example
+load_config() { :; }
+need_command() { :; }
+private_temp() { :; }
+configure_ssh() { :; }
+ssh() { cat > "$TEMP_DIR/staged.json"; printf "updated: staged staging secret rotation\n"; }
+host_call() { [[ "$ACTION" == rotate-secrets && -z "$SECRET_NAME" && -z "${DIFY_TOOL_KEY:-}" && -z "${DIFY_API_KEY:-}" ]]; printf "updated: rotation invoked\n"; }
+rotate_protected_dify_key
+jq -e --arg name "$3" '\''(.services.app.environment | keys)==[$name] and (.services.app.environment[$name]|length>0)'\'' "$TEMP_DIR/staged.json" >/dev/null
+' _ "$script" "$protected_rotation_root" "$protected_name")"
+grep -q 'updated: staged staging secret rotation' <<< "$protected_rotation_output"
+grep -q 'updated: rotation invoked' <<< "$protected_rotation_output"
+! grep -q '0123456789abcdef' <<< "$protected_rotation_output"
+! grep -q 'app-test-secret' <<< "$protected_rotation_output"
+rm -rf "$protected_rotation_root"
+done
+community_rotation_root="$(mktemp -d)"
+community_rotation_output="$(GITHUB_ACTIONS=true DIFY_COMMUNITY_WORKFLOW_API_KEY='community$app-key' DIFY_COMMUNITY_CALLBACK_KEY='0123456789abcdef0123456789abcdef' VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+set -euo pipefail
+source "$1"
+TEMP_DIR="$2"; ACTION=rotate-protected-dify-key; SECRET_NAME=DIFY_COMMUNITY_PROBE; ENVIRONMENT=staging; APPLY=true; REQUEST_ID=123-1; VPS_HOST=deploy.example; VPS_USER=kids-booklet-deploy
+validate_arguments
+load_config() { :; }; need_command() { :; }; private_temp() { :; }; configure_ssh() { :; }
+ssh() { [[ "$*" == *"--secret-name DIFY_COMMUNITY_PROBE"* ]]; cat > "$TEMP_DIR/staged.json"; }
+host_call() { [[ "$ACTION" == rotate-secrets && -z "$SECRET_NAME" && -z "${DIFY_COMMUNITY_WORKFLOW_API_KEY:-}" && -z "${DIFY_COMMUNITY_CALLBACK_KEY:-}" ]]; printf "updated: Community rotation invoked\n"; }
+rotate_protected_dify_key
+community_probe_patch_is_valid "$TEMP_DIR/staged.json"
+jq -e '\''.services.app.environment.DIFY_COMMUNITY_WORKFLOW_API_KEY=="community$$app-key"'\'' "$TEMP_DIR/staged.json" >/dev/null
+' _ "$script" "$community_rotation_root")"
+grep -q 'updated: Community rotation invoked' <<< "$community_rotation_output"
+! grep -q 'community\$app-key' <<< "$community_rotation_output"
+! grep -q '0123456789abcdef' <<< "$community_rotation_output"
+GITHUB_ACTIONS=true VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+set -euo pipefail
+source "$1"
+TEMP_DIR="$2"
+if (build_community_probe_patch staging "$TEMP_DIR/rejected.json") >/dev/null 2>&1; then echo "accepted missing Community credentials"; exit 1; fi
+ENVIRONMENT=prod; SECRET_NAME=DIFY_COMMUNITY_PROBE; ACTION=stage-secrets; VPS_USER=kids-booklet-deploy
+if (validate_arguments) >/dev/null 2>&1; then echo "accepted production Community bundle"; exit 1; fi
+' _ "$script" "$community_rotation_root"
+rm -rf "$community_rotation_root"
 grep -Fq 'node scripts/ci/validate.mjs summary' .github/workflows/validate.yml
 grep -q 'GITHUB_STEP_SUMMARY' scripts/ci/validate.mjs
 grep -Fq 'test "$GITHUB_REF_NAME" = "_$TARGET"' .github/workflows/deploy.yml
@@ -30,6 +435,19 @@ test "$(grep -Fc 'commits/$GITHUB_REF_NAME' .github/workflows/deploy.yml)" = 2
 ! grep -q 'compare/.*master_sha' .github/workflows/deploy.yml
 grep -q 'REQUEST_ID:.*github.run_id' .github/workflows/infrastructure.yml
 grep -q 'retained infrastructure journal' .github/workflows/infrastructure.yml
+grep -Fq "inputs.apply && '--apply' || ''" .github/workflows/infrastructure.yml
+! grep -Fq "github.event_name == 'push' || inputs.apply" .github/workflows/infrastructure.yml
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+fixture="$(jq -n '\''{services:{app:{environment:{OPENAI_API_KEY:"test",MONGODB_URI:"mongodb://example",ACCESS_GATE_PASSWORD:"sixteen-characters",AWS_ACCESS_KEY_ID:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",AWS_SECRET_ACCESS_KEY:("a"*64),DIFY_COMMUNITY_PROBE_ENABLED:"true",DIFY_COMMUNITY_BASE_URL:"https://dify.uniwares.co.uk",DIFY_COMMUNITY_WORKFLOW_API_KEY:"test-runtime-key",DIFY_COMMUNITY_CALLBACK_KEY:("b"*32)}}}}'\'')"
+fixture_file="$(mktemp)"; trap '\''rm -f "$fixture_file"'\'' EXIT
+printf "%s" "$fixture" > "$fixture_file"
+application_secret_override_is_valid "$fixture_file"
+printf "%s" "$fixture" | jq '\''.services.app.environment.DIFY_COMMUNITY_CALLBACK_KEY="short"'\'' > "$fixture_file"
+if application_secret_override_is_valid "$fixture_file"; then
+  printf "accepted a short Community callback key\n" >&2; exit 1
+fi
+' _ "$script"
 for reusable_caller in .github/workflows/check-deployment.yml .github/workflows/maintenance.yml .github/workflows/reset-staging.yml; do
   grep -q 'uses: ./.github/workflows/vps-operation.yml' "$reusable_caller"
 done
@@ -44,10 +462,6 @@ fi
 reject() { if bash "$script" "$@" > /dev/null 2>&1; then printf 'unexpected success: %s\n' "$*" >&2; exit 1; fi; }
 reject unexpected
 reject --action unknown
-reject --action retire-staging-artifact-index --environment prod --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-reject --action retire-staging-artifact-index --environment staging
-reject --action retire-staging-artifact-index --environment staging --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --backup-id unexpected
-reject --action retire-staging-artifact-index --environment staging --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --apply
 reject --action deploy --environment prod
 reject --action discover-config
 reject --action discover-config --zone example.com
@@ -59,6 +473,188 @@ reject --action github-login
 reject --action credential-session --apply
 reject --action clear-credential-session --apply
 reject --action access-check --apply
+reject --action dify-discover --apply
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; ACTION=dify-discover; VPS_USER=kids-booklet-deploy; APPLY=false; validate_arguments' _ "$script"
+reject --action dify-install --environment staging
+reject --action backup --environment dify
+reject --action dify-check --environment dify --apply
+reject --action dify-idle --environment dify --apply
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+CONFIG_FILE="$REPO_ROOT/infra/config/vps.json"
+load_config
+unset TF_VAR_dify_hostname TF_VAR_dify_backup_bucket TF_VAR_dify_public_enabled
+load_terraform_configuration
+test "$TF_VAR_dify_hostname" = dify.uniwares.co.uk
+test "$TF_VAR_dify_backup_bucket" = kids-booklet-dify-backups
+test "$TF_VAR_dify_public_enabled" = "$(jq -r .dify_public_enabled "$CONFIG_FILE")"
+bash -c '\''test "$TF_VAR_dify_hostname" = dify.uniwares.co.uk && [[ "$TF_VAR_dify_public_enabled" =~ ^(true|false)$ ]]'\''
+private_temp
+jq '\''.dify_public_enabled=true'\'' "$CONFIG_FILE" > "$TEMP_DIR/public-config.json"
+CONFIG_FILE="$TEMP_DIR/public-config.json"
+load_terraform_configuration
+bash -c '\''test "$TF_VAR_dify_public_enabled" = true'\''
+' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$(mktemp -d)"
+fixture="$TEMP_DIR/host"; mkdir -p "$fixture/deploy" "$fixture/state"
+cp "$REPO_ROOT/infra/config/vps.json" "$fixture/config.json"
+printf "{\"requestId\":\"issue69-upgrade\",\"action\":\"infrastructure\"}" > "$fixture/state/operation.json"
+REQUEST_ID=issue69-upgrade; VPS_HOST=example.invalid; VPS_USER=kids-booklet-deploy
+configure_ssh() { :; }
+ssh() {
+  local received="$TEMP_DIR/received.tar"
+  cat > "$received"
+  if [[ ! -f "$fixture/vps-deployment.sh" ]]; then
+    # The previous dispatcher admits exactly these five paths before replacing itself.
+    printf "%s\n" deploy/compose.prod.yml deploy/compose.staging.yml deploy/compose.yml infra/config/vps.json scripts/deploy/vps-deployment.sh | sort > "$TEMP_DIR/legacy-expected"
+    tar -tf "$received" | sort > "$TEMP_DIR/received-paths"
+    cmp "$TEMP_DIR/legacy-expected" "$TEMP_DIR/received-paths" || return 1
+    tar -xOf "$received" scripts/deploy/vps-deployment.sh > "$fixture/vps-deployment.sh"
+  else
+    VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '\''
+      source "$1/vps-deployment.sh"
+      ROOT="$1"; STATE="$1/state"; TEMP_DIR=""
+      require_root() { :; }
+      SSH_ORIGINAL_COMMAND="--action sync-host --request-id issue69-upgrade --apply"
+      host_dispatch
+    '\'' _ "$fixture" < "$received" || return $?
+  fi
+}
+sync_host_configuration
+cmp "$REPO_ROOT/deploy/dify/release.json" "$fixture/dify/release.json"
+cmp "$REPO_ROOT/deploy/dify/compose.override.yml" "$fixture/dify/compose.override.yml"
+test -f "$fixture/state/operation.json"
+# Repeating the upgrade also works with the new dispatcher already installed.
+sync_host_configuration
+calls=0
+ssh() { calls=$((calls + 1)); return 42; }
+if sync_host_configuration; then exit 1; else test "$?" = 42; fi
+test "$calls" = 1
+' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; ACTION=dify-install; ENVIRONMENT=dify; VPS_USER=kids-booklet-deploy; APPLY=true; validate_arguments' _ "$script"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_ENV="$(mktemp)"
+trap '\''rm -f "$DIFY_ENV"'\'' EXIT
+chmod 600 "$DIFY_ENV"
+printf "SECRET_KEY=retained\n" > "$DIFY_ENV"
+[[ "$(dify_admin_api_state)" == "would update: Dify admin API configuration" ]]
+printf "ADMIN_API_KEY_ENABLE=true\nADMIN_API_KEY=%064d\n" 0 >> "$DIFY_ENV"
+[[ "$(dify_admin_api_state)" == "exists: Dify admin API configuration is enabled with a generated-format key" ]]
+printf "ADMIN_API_KEY=duplicate\n" >> "$DIFY_ENV"
+if dify_admin_api_state >/dev/null 2>&1; then exit 1; fi
+' _ "$script"
+admin_fixture="$(mktemp -d)"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+fixture="$2"
+ROOT="$fixture/root"; STATE="$fixture/state"; DIFY_DATA="$fixture/data"; DIFY_ENV="$fixture/runtime.env"
+mkdir -p "$ROOT" "$STATE/operations" "$DIFY_DATA"
+printf "1.17.1\n" > "$DIFY_DATA/current"
+printf "SECRET_KEY=retained\n" > "$DIFY_ENV"; chmod 600 "$DIFY_ENV"
+printf "%064d" 0 > "$fixture/key"; chmod 600 "$fixture/key"
+require_root() { :; }
+need_command() { :; }
+load_config() { :; }
+dify_install_preflight() { :; }
+dify_idle_host() { printf "idle\n" >> "$fixture/events"; }
+dify_prompt_admin_api_key() { ADMIN_API_KEY_FILE="$fixture/key"; }
+dify_admin_api_active() { [[ -f "$fixture/active" ]]; }
+dify_compose() {
+  [[ "$1" == up ]] || return 1
+  [[ ! -f "$fixture/fail-restart" ]] || return 17
+  touch "$fixture/active"
+  printf "restart\n" >> "$fixture/events"
+}
+dify_verify_services() { [[ -f "$fixture/active" ]]; }
+APPLY=true; ENVIRONMENT=dify
+touch "$fixture/fail-restart"
+if (set -e; dify_enable_admin_api_host >/dev/null 2>&1); then exit 1; fi
+[[ "$(jq -r .step "$STATE/operation.json")" == restarting ]]
+systemctl() { return 99; }
+[[ "$(show_operation_status)" == *"repeat its local apply action to resume"* ]]
+grep -Fxq SECRET_KEY=retained "$DIFY_ENV"
+grep -Fxq ADMIN_API_KEY_ENABLE=true "$DIFY_ENV"
+grep -Fxq SECRET_KEY=retained "$fixture/runtime.env.admin-api-before-enable"
+! grep -q ADMIN_API_KEY "$fixture/runtime.env.admin-api-before-enable"
+rm "$fixture/fail-restart"
+dify_enable_admin_api_host >/dev/null
+[[ ! -f "$STATE/operation.json" ]]
+[[ -f "$STATE/operations/$REQUEST_ID.json" ]]
+[[ "$(jq -r .step "$STATE/operations/$REQUEST_ID.json")" == complete ]]
+[[ "$(grep -c ^restart$ "$fixture/events")" == 1 ]]
+rm "$fixture/active"
+printf "SECRET_KEY=retained\n" > "$DIFY_ENV"
+dify_idle_host() { return 1; }
+if (set -e; dify_enable_admin_api_host >/dev/null 2>&1); then exit 1; fi
+[[ ! -f "$STATE/operation.json" ]]
+printf '\''{"requestId":"other","action":"deploy","environment":"staging","step":"queued"}\n'\'' > "$STATE/operation.json"
+if (set -e; dify_enable_admin_api_host >/dev/null 2>&1); then exit 1; fi
+[[ "$(jq -r .action "$STATE/operation.json")" == deploy ]]
+' _ "$script" "$admin_fixture"
+rm -rf "$admin_fixture"
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+DIFY_ENV="$(mktemp)"; trap '\''rm -f "$DIFY_ENV"'\'' EXIT
+printf "ADMIN_API_KEY_ENABLE=true\nADMIN_API_KEY=%064d\n" 0 > "$DIFY_ENV"
+running_key="$(printf "%064d" 0)"
+dify_compose() { ADMIN_API_KEY_ENABLE=true ADMIN_API_KEY="$running_key" python3 -c "$6"; }
+dify_admin_api_active
+running_key="$(printf "%064d" 1)"
+if dify_admin_api_active; then exit 1; fi
+' _ "$script"
+idle_result="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"
+printf "DIFY_AGENT_REDIS_PREFIX=dify-agent\n" > "$DIFY_ENV"; touch "$DIFY_DATA/current"
+dify_compose() {
+  case "$*" in
+    *db_postgres*) printf "0\n" ;;
+    *"--scan"*) printf "dify-agent:runs:00000000-0000-4000-8000-000000000069:record\n" ;;
+    *" GET "*) printf "{\"status\":\"succeeded\"}\n" ;;
+    *) return 1 ;;
+  esac
+}
+dify_idle_host
+' _ "$script")"
+grep -Fq 'verified: no active Dify workflow or New Agent records' <<< "$idle_result"
+if VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+source "$1"
+TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"
+printf "DIFY_AGENT_REDIS_PREFIX=dify-agent\n" > "$DIFY_ENV"; touch "$DIFY_DATA/current"
+dify_compose() {
+  case "$*" in
+    *db_postgres*) printf "1\n" ;;
+    *"--scan"*) : ;;
+    *) return 1 ;;
+  esac
+}
+dify_idle_host
+' _ "$script" >/dev/null 2>&1; then
+  echo 'Dify idle check accepted an active workflow' >&2
+  exit 1
+fi
+for agent_record in '{"status":"running"}' '{"status":"unexpected"}' 'not-json'; do
+  if DIFY_AGENT_RECORD="$agent_record" VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
+  source "$1"
+  TEMP_DIR="$(mktemp -d)"; DIFY_DATA="$TEMP_DIR"; DIFY_ENV="$TEMP_DIR/runtime.env"
+  printf "DIFY_AGENT_REDIS_PREFIX=dify-agent\n" > "$DIFY_ENV"; touch "$DIFY_DATA/current"
+  dify_compose() {
+    case "$*" in
+      *db_postgres*) printf "0\n" ;;
+      *"--scan"*) printf "dify-agent:runs:00000000-0000-4000-8000-000000000069:record\n" ;;
+      *" GET "*) printf "%s\n" "$DIFY_AGENT_RECORD" ;;
+      *) return 1 ;;
+    esac
+  }
+  dify_idle_host
+  ' _ "$script" >/dev/null 2>&1; then
+    echo 'Dify idle check accepted an active or malformed New Agent record' >&2
+    exit 1
+  fi
+done
 source_option_check="$(bash -c 'set +e +u +o pipefail; VPS_DEPLOYMENT_LIBRARY_ONLY=true source "$1"; [[ $(set -o | awk "\$1==\"errexit\" {print \$2}") == off && $(set -o | awk "\$1==\"nounset\" {print \$2}") == off && $(set -o | awk "\$1==\"pipefail\" {print \$2}") == off ]]' _ "$script"; printf %s "$?")"
 test "$source_option_check" = 0
 credential_session_check="$(CLOUDFLARE_API_TOKEN=temporary-cloudflare-token AWS_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef AWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef GITHUB_ADMIN_TOKEN=temporary-github-token ATLAS_ADMIN_PUBLIC_KEY=temporary-atlas-public ATLAS_ADMIN_PRIVATE_KEY=temporary-atlas-private VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"; interactive_terminal() { :; }; main --action credential-session; test "$CLOUDFLARE_API_TOKEN" = temporary-cloudflare-token; test "$TF_VAR_cloudflare_api_token" = temporary-cloudflare-token; clear_credential_session; test -z "${CLOUDFLARE_API_TOKEN:-}"' _ "$script")"
@@ -211,15 +807,16 @@ test "$r2_error_status" -ne 0
 grep -q 'R2 Terraform state credential check failed (HTTP 400; InvalidAccessKeyId: Access key is invalid)' <<< "$r2_error_output"
 if grep -q '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' <<< "$r2_error_output"; then echo 'R2 secret leaked through access-check error' >&2; exit 1; fi
 adoption_preview="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
-APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TF_VAR_dify_backup_bucket=kids-booklet-dify-backups
 terraform() { [[ "$*" == *"state list"* ]] && return 0; }
 cloudflare_get() { CF_STATUS=200; }
 adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
-test "$(grep -c "would update: adopt existing R2 bucket" <<< "$adoption_preview")" = 6
+test "$(grep -c "would update: adopt existing R2 bucket" <<< "$adoption_preview")" = 7
 grep -q 'kids-booklet-staging-assets' <<< "$adoption_preview"
 grep -q 'kids-booklet-prod-recovery' <<< "$adoption_preview"
+grep -q 'kids-booklet-dify-backups' <<< "$adoption_preview"
 adoption_apply="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
-APPLY=true; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+APPLY=true; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TF_VAR_dify_backup_bucket=kids-booklet-dify-backups
 r2_state_snapshot() { printf "snapshot\\n"; }
 terraform() {
   if [[ "$2" == state && ( "$3" == list || "$3" == show ) ]]; then return 0; fi
@@ -228,14 +825,15 @@ terraform() {
 }
 cloudflare_get() { CF_STATUS=200; }
 adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script")"
-test "$(grep -c '^updated: adopted existing R2 bucket' <<< "$adoption_apply")" = 6
+test "$(grep -c '^updated: adopted existing R2 bucket' <<< "$adoption_apply")" = 7
 test "$(grep -c '^snapshot$' <<< "$adoption_apply")" = 1
-test "$(grep -c '^import:' <<< "$adoption_apply")" = 6
+test "$(grep -c '^import:' <<< "$adoption_apply")" = 7
 grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-staging-assets"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-staging-assets/default' <<< "$adoption_apply"
 grep -Fq 'cloudflare_r2_bucket.bucket["kids-booklet-prod-recovery"] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-prod-recovery/default' <<< "$adoption_apply"
+grep -Fq 'cloudflare_r2_bucket.dify_backup aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/kids-booklet-dify-backups/default' <<< "$adoption_apply"
 set +e
 adoption_drift_output="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c 'source "$1"
-APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+APPLY=false; TEMP_DIR="$(mktemp -d)"; TF_VAR_cloudflare_account_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TF_VAR_dify_backup_bucket=kids-booklet-dify-backups
 terraform() { [[ "$2" == state && "$3" == list ]] && printf "%s\\n" "cloudflare_r2_bucket.bucket[\"kids-booklet-staging-assets\"]"; }
 cloudflare_get() { CF_STATUS=404; }
 adopt_existing_r2_buckets "$TEMP_DIR"' _ "$script" 2>&1)"
@@ -301,6 +899,7 @@ reject --action status --vps-host 'host;id'
 terraform_apply_path="$(VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -c '
 source "$1"
 REPO_ROOT="$2"
+CONFIG_FILE="$REPO_ROOT/infra/config/vps.json"
 APPLY=true
 GITHUB_ACTIONS=true
 GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -316,6 +915,7 @@ sync_host_configuration() { printf "host:sync\n"; }
 r2_state_snapshot() { [[ -x "$1" ]]; printf "snapshot:%s\n" "$2"; }
 terraform() {
   local directory="${1#-chdir=}" output argument
+  [[ "$TF_VAR_dify_hostname" == dify.uniwares.co.uk && "$TF_VAR_dify_backup_bucket" == kids-booklet-dify-backups && "$TF_VAR_dify_public_enabled" =~ ^(true|false)$ ]] || return 92
   shift
   [[ -d "$directory" && -x "$directory" ]] || { printf "workspace is not traversable\n" >&2; return 90; }
   case "$1" in
@@ -395,14 +995,4 @@ grep -q 'ProxyCommand=cloudflared access ssh' "$SSH_LOG"
 if grep -q 'never-print-me' "$SSH_LOG" "$root/output"; then echo 'Access credential leaked' >&2; exit 1; fi
 export SSH_EXIT=0
 bash "$script" --action check --environment staging --vps-host vps.example >/dev/null
-# The staging checkout is a client, not the authoritative installed dispatcher.
-: > "$SSH_LOG"
-bash "$script" --action retire-staging-artifact-index --environment staging --commit "$commit" --config "$root/not-required-for-client.json" --vps-host vps.example >/dev/null
-grep -q -- '--action retire-staging-artifact-index' "$SSH_LOG"
-grep -q -- "--commit $commit" "$SSH_LOG"
-! grep -q -- '--apply' "$SSH_LOG"
-: > "$SSH_LOG"
-bash "$script" --action retire-staging-artifact-index --environment staging --commit "$commit" --confirmation kids_booklet --config "$root/not-required-for-client.json" --vps-host vps.example --apply >/dev/null
-grep -q -- '--apply' "$SSH_LOG"
-grep -q -- '--confirmation kids_booklet' "$SSH_LOG"
 printf 'deployment argument, preview, error propagation and SSH transport contracts passed\n'

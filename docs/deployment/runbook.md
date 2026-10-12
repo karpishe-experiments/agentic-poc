@@ -1,15 +1,5 @@
 # VPS deployment runbook
 
-## Community connectivity probe
-
-The host dispatcher snapshots master-owned Compose files, not this branch's checkout. Before release, synchronize the reviewed master defaults that match this branch: Cloud trial enabled in staging, fake mode, images disabled, two attempts, and the Cloud API origin. Protected explicit overrides remain unchanged. The Community flag remains false until its dedicated key bundle is installed. Use a new release commit after changing host configuration; redeploying an existing commit keeps its immutable configuration snapshot.
-
-This staging release adds a model-free Community probe. It preserves the Cloud trial and its settings. The probe is disabled by default. The canonical Community setup and protected-key procedure is maintained on [master](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md).
-
-After deploying this reviewed release, bind the probe application's API key and dedicated callback key privately. Use master’s `dify-tool-key.yml` workflow with `DIFY_COMMUNITY_PROBE` for staging; it preserves existing protected fields. The same callback key must be bound to the published `issue69_booklet_round_trip` workflow. Do not use the manager application's key.
-
-An authenticated `POST /api/integrations/dify-community/runs` starts one deterministic round trip. An authenticated `GET /api/integrations/dify-community/runs/<correlationId>` retrieves its saved result. Only the exact enabled staging callback uses machine authentication. Retain correlation and run IDs. If the original response is lost, inspect the saved result; do not submit another start request automatically. Live callback acceptance remains pending until private bindings and the round trip are verified. No model or image call is part of this check.
-
 This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
 PR Validate runs [selected non-build checks](../../scripts/ci/README.md). For a manual
@@ -19,17 +9,58 @@ Validate result does not prove the release build or browser smoke test succeeded
 Missing operational configuration fails before tool installation or image building;
 the error names the missing setting without printing its value.
 
+The staging delivery branch preserves the isolated Cloud trial, its tool routes,
+credentials and fake-mode defaults. Community runner changes must not replace
+those resources or production configuration.
+
 ## Current deployment status
 
-Live acceptance completed on 2026-09-15.
+The issue #65 bounded-recovery candidate is not deployed. Its current work and
+remaining gates are in [M3 current progress](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-progress-and-blockers--2026-10-12).
+The historical status below does not supersede that section.
+
+### Candidate recovery controls
+
+Use the canonical deployment entrypoint and the reviewed **VPS operation control**
+workflow. `operation-status` and `operation-stop` require the exact request ID and
+environment. Stop inspects phase outputs first; process exit alone is not an
+output verdict. `backup-verify` is read-only and requires the exact backup ID,
+selected commit and image digest. It verifies the completion marker, manifest,
+archive and retained asset bytes without restoring data; its bound is 30 minutes.
+
+`staging-bootstrap-reconcile` is an explicit compatibility transition for retained
+request `38149230374-1`, not a fallback for arbitrary old releases. Preview checks
+the exact old image, failed service, journal, stale page item/job and owning failed
+operation. Apply closes admission and rechecks for races, stops only staging,
+creates and verifies a matched backup, and repairs only the approved bookkeeping.
+It archives the original journal unchanged and retains maintenance for a separately
+identified reviewed deployment. The new commit/image must match the bootstrap
+checkpoint. An interruption after repair starts retains maintenance and requires
+inspection; do not replay repair or restore automatically. Production and Cloud
+are not part of this transition.
+
+The installed dispatcher must support these actions before workflow use. A merge
+does not prove synchronization. Check dispatcher identity, application image and
+capabilities together. Use existing protected access; request a root handoff only
+if the restricted interface cannot install the reviewed dispatcher safely.
+
+Initial live acceptance completed on 2026-09-15. The latest staging transition
+passed on 2026-10-05. Sixteen model-free bindings are active through J11.
+All three persona simulations reached approved pagination with zero payable
+calls. J12/J13, final images and full-booklet simulation remain pending; see
+[M3 evidence](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-live-pagination-evidence--2026-10-05).
 
 | Checkpoint | Verified state |
 | --- | --- |
-| Infrastructure | Cloudflare infrastructure applied successfully for `master` commit `fc81f4e272a3fba2086a1c24b40d7cc15d291c73` |
-| Staging | Deploy and Check deployment passed; `https://booklet-staging.uniwares.co.uk` is operational |
+| Infrastructure | Run `38139657415` synchronized reviewed `master` merge `3b017f839d60e56b4f7d4ef5e7c77aea91263e44`; Terraform changed no resources. Scheduler repair `38139804937` passed; diagnostics `38140083268` verified 1536 MiB, zero restarts and zero OOM counters. See the [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory). |
+| Staging | Release `0fb4c3d0d0996b38e7a8c03ffebf81793ddf1fe0`; Deploy `37356864220` and Check `37357833756` passed. Sixteen model-free bindings activated through `37348239296` with backup `staging-20261005T172539Z-9163268c683d14ee`. Index retirement `37307366249` passed with verified pre-change backup `staging-20261005T120906Z-4bf0d3b2d7950104`, preserving data/assets and release pointers. The authorized prior reset backup remains `staging-20261004T161608Z-54752b58ec7bc071`; no further reset is authorized. |
 | Production | Deploy and Check deployment passed for `_prod` commit `2ab3889f67f5e664d2a883cba4358c58ed94bc28`; `https://booklet.uniwares.co.uk` is operational |
 | Recovery | Staging backup and restore rehearsal passed |
 | Restart | Docker, Cloudflare Tunnel, and both healthy application containers recovered after a VPS restart; staging and production checks passed afterward |
+
+For Dify scheduler OOM recovery, use the targeted repair and
+verification checkpoint in the [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory)
+after reviewed host synchronization. The latest scheduler recovery is verified.
 
 This table records the accepted baseline. Use current workflow summaries and host state for later releases.
 
@@ -42,6 +73,7 @@ This table records the accepted baseline. Use current workflow summaries and hos
 | Staging hostname | `booklet-staging.uniwares.co.uk` |
 | Production hostname | `booklet.uniwares.co.uk` |
 | Deployment hostname | `srv1-deploy.uniwares.co.uk` |
+| Dify hostname | `dify.uniwares.co.uk`; current administration state is in the [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#enable-the-community-admin-api) |
 | Atlas project | `6a869d84e65675f845fa22eb` |
 | Atlas cluster | `kids-booklet`, Ireland (`eu-west-1`) |
 | Staging database | `kids_booklet` |
@@ -60,7 +92,7 @@ The VPS is a read-only Git consumer. Do not commit, create or switch branches, r
 
 `_staging` and `_prod` are independent reviewed release lines and may diverge from `master` and from each other. Deploy verifies that the selected environment matches the target branch and that the remote branch still points to the workflow commit. It does not require `master` ancestry or a successful Infrastructure run. It publishes `staging-<full-sha>` or `prod-<full-sha>`, verifies anonymous GHCR access, and deploys the immutable digest. The short environment tag advances only after success.
 
-Infrastructure remains master-owned. Merge Cloudflare, Terraform, installed host configuration, or deployment-bootstrap changes into `master` and require Infrastructure to pass before relying on those infrastructure changes. An Infrastructure result does not control whether an environment branch can deploy its own application release.
+Infrastructure remains master-owned. Merge Cloudflare, Terraform, installed host configuration, or deployment-bootstrap changes into `master`. A push runs Infrastructure in preview mode; after reviewing the plan, run it manually with `apply=true` and require that apply to pass before relying on those infrastructure changes. An Infrastructure result does not control whether an environment branch can deploy its own application release.
 
 After the independent-deployment workflow first merges to `master`, promote that reviewed commit once to `_staging` and `_prod`. Each environment uses the workflow stored on its own branch, so this one-time promotion activates the new behavior there. Later releases do not need to contain the current `master` commit.
 
@@ -68,22 +100,72 @@ For a manual environment workflow, open **Actions → workflow name → Run work
 
 ## Routine operations
 
+Use the [canonical credential inventory](contracts.md#variables-and-secrets) for
+names, protected locations, consumers and purposes. Follow its
+[maintenance procedure](contracts.md#maintaining-the-inventory) when implementation
+or credential setup changes. Verify provision privately; the inventory contains
+no values and does not prove live access.
+
 | Need | Action |
 | --- | --- |
 | Verify an environment | Run **Check deployment** on its environment branch |
-| Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; require **Infrastructure** to pass; then release each affected environment |
+| Inspect Dify host state and staging runner timings | Run **Dify operations** with `action=diagnostics`, Apply off, and an optional staging run UUID; see [diagnostics and sandbox repair](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory) |
+| Change Cloudflare or installed host configuration | Merge the reviewed change to `master`; inspect the Infrastructure preview; explicitly run **Infrastructure** with `apply=true`; then release each affected environment |
 | Create a backup | Run **Maintenance** with `action=backup`; retain the exact `backupId` from the summary |
 | Restore | Run **Maintenance** with `action=restore`, the exact `backup_id`, and confirmation `kids_booklet` or `kids_booklet_prod` |
 | Roll back application code | Run **Maintenance** with `action=rollback`; this restores the prior digest and matching non-secret configuration, not the database |
 | Resume an interrupted operation | Inspect host status, then run **Maintenance** with `action=resume` for the recorded environment |
 | Rotate one host secret | Run `bash scripts/deploy/vps-deployment.sh --action rotate-secrets --environment <target> --secret-name <name> --config infra/config/vps.json --apply` |
+| Install a temporary staging Dify key without local Cloudflare credentials | Store `DIFY_TOOL_KEY` or `DIFY_API_KEY` as a protected repository secret, then run **Dify staging key** on `master` and select that key; remove the repository secret after success |
+| Configure the Community staging probe | Follow [Community checkpoint 5](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#checkpoint-5--deterministic-booklet-round-trip); select `DIFY_COMMUNITY_PROBE` in **Dify staging key** after the reviewed host dispatcher and staging routes are installed |
+| Stage issue #65 runner bindings | Follow [M1 private setup](../accepted/2026-09-27_dify-booklet-runner/M1-runner.md#s4d-protected-staging-runner-bindings); store `DIFY_BOOKLET_RUNNER_SETTINGS_JSON` privately, initially disabled, then select `DIFY_BOOKLET_RUNNER` in **Dify staging key** on reviewed `master` |
+| Prepare J11 pagination bindings | Follow [M3 preparation](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#j11-dify-preparation-package). Sixteen slots add J11 and use new manager/tester apps. Private setup, reviewed host validator, staging release and drained activation are separate checkpoints; no reset or paid call. |
+| Prepare J12 Page Bible bindings | Follow [M3 J12 preparation](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#independent-local-preparation-j12-page-bible-slice). `scripts/prepare-dify-booklet-j12-keys.ps1` reuses sixteen bindings and privately adds only J12. Use `scripts/upload-dify-booklet-m3-settings.ps1 -Profile m3-j12` with the verified seventeen-publication manifest. Separate encrypted files preserve M3. Reviewed dispatcher installation, manager publication/read-back, staging release and drained activation remain separate gates; no reset or paid call. |
+| Prepare final-page/evaluation bindings | Follow [M3 final binding preparation](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#final-binding-preparation-candidate). Use the same preparation helper with `-Profile m3-j13`; it reuses sixteen bindings, or the prepared seventeen-binding file, and collects only missing J12/judge keys. The uploader's `m3-j13` profile requires eighteen verified publications and marks only the image binding for final-page execution. Review, drain, published readback, staging release and protected activation remain separate gates. No reset or paid call. |
+| Expand narrative bindings | Follow [M2 S3](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s3-binding-and-publication-package); use the complete eleven-slot bundle after reviewed dispatcher installation, closed admission, reconciliation and published read-back. Preserve old run evidence; do not repeat the staging reset. |
+| Enable style/image bindings | Follow [M2 scheduling](../accepted/2026-09-27_dify-booklet-runner/M2-references.md#s5-automatic-style-sample-dispatch); thirteen slots add J08 and one model-free image workflow. Verify Python/DSL parity, private bindings and live binary transfer before activation. Host dispatcher installation remains a separate authorized checkpoint; no new reset. |
+| Enable sheet bindings | Fifteen slots add independent J09/J10 specialists. Verify complete local reference journeys, private publications and binary transfer first. Sheet admission requires the subject-aware index and absence of the retained old restriction. Index removal and host synchronization require their separate maintenance checkpoints; configuration validation does not authorize them. |
+| Retire the staging artifact restriction | Run **Maintenance** on `_staging` with `action=retire-staging-artifact-index`, `environment=staging`, and default `apply=false`. Inspect its real catalog/ledger and rollback preview. After exact-target authorization, use `apply=true`, confirmation `kids_booklet`, and no supplied backup ID. The action creates and verifies its own pre-change backup, removes only `artifacts_booklet_type_unique`, and preserves data/assets and release pointers. The authorized staging transition passed; do not repeat it as setup. |
 | Rotate all host secrets | Use the same command without `--secret-name`; each value is validated immediately and earlier valid entries are retained |
 | Generate an access password | Add `--secret-name ACCESS_GATE_PASSWORD --generate-password`; the interactive command displays it once |
-| Reset staging | Run **Reset staging** on `_staging` and confirm `kids_booklet`; production reset is rejected |
+| Reset staging | Run **Reset staging** on `_staging`, confirm `kids_booklet`, and use default `apply=false` for inventory. Set `apply=true` only after exact-target approval. A valid prepared Dify bundle activates after reset; production reset is rejected |
+| Recover interrupted reset | Do not Resume a `resetting` or `reset-verifying` journal. Inspect status, then obtain restore authorization and run **Maintenance** on `_staging` with `action=restore`, the journal's exact backup ID and confirmation `kids_booklet`. The host requires the prior service/maintenance containers stopped, preserves the failed journal and restores without repeating reset |
 
-The Cloud trial remains enabled in staging with fake mode and images disabled by default. Preserve its existing `DIFY_API_KEY` and `DIFY_TOOL_KEY` values and any explicit protected overrides. Dify holds its image-provider credential; do not install or rotate `DIFY_IMAGE_OPENAI_API_KEY` for this Community probe rollout. Enabling real Cloud execution or image calls requires separate authorization. Production keeps the experiment disabled. Do not put host secrets in Compose files, Dify prompts, or logs. The illustration Workflow may hold the existing callback key only in Dify's secret environment-variable store.
+The Cloud trial defaults remain enabled in staging, with fake mode and images disabled. Preserve existing `DIFY_API_KEY` and `DIFY_TOOL_KEY` values and explicit protected overrides. Dify holds its image-provider credential; optional `DIFY_IMAGE_OPENAI_API_KEY` host support remains inert. Real turns and image calls require separate authorization. Production keeps the experiment disabled. Community uses independent keys; do not replace the Cloud keys. See the [experiment configuration](../accepted/2026-09-16_agent-platform-decision/configuration.md).
 
-Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
+Infrastructure sync installs master-owned Compose files on the host; `prepare_release` captures them in each immutable release snapshot. Compare those defaults with the selected environment branch before release. Synchronizing host files does not rewrite an existing release; a configuration correction requires a new release commit. See the [verified lesson](../accepted/2026-09-27_dify-booklet-runner/LESSONS-LEARNED.md#vps-releases-snapshot-master-owned-compose-files).
+
+The bounded-operation candidate changes release and restore to two-stage admission:
+draining rejects new work but permits admitted callbacks, observation and stop;
+maintenance starts only after work and mutations are resolved. Drain is bounded
+to five minutes. Uncertain identities and interrupted mutation ownership remain
+blockers. A failed candidate restores the prior application and configuration while
+maintenance remains active. Database restoration is always explicit.
+
+Candidate host limits are 30 seconds for status, 60 seconds for container stop,
+three minutes for readiness, 30 minutes for pull/backup, 60 minutes for restore,
+and 45 minutes for deployment overall. Each stage shares its remaining host
+budget. The client returns the retained request ID after five minutes; it does
+not imply that the detached operation stopped. The **VPS operation control**
+workflow on reviewed `master` inspects or stops one exact request and environment.
+Stop defaults to preview. Preserve its journal and inspect outputs before Resume;
+an interrupted restore must not restart automatically. These controls require a
+reviewed dispatcher and compatible application image before live use. The current
+legacy deployment transition is tracked in [M3](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md).
+
+Index retirement first rejects unresolved experiment work while callbacks remain
+available. It checks again after closing admission and draining, before stopping
+the app. If that check fails, it reopens admission with the original app running;
+reconcile the saved work before Resume. After stop, it verifies the ledger again,
+the complete backup bytes, the selected image and a pinned compatible rollback
+SHA/digest pair. An unknown rollback pair needs a reviewed table update, not an
+older deployment or a rewritten release pointer.
+
+After removal, Resume retains the pre-change backup and verifies an already-absent
+index without making another backup. The `index-finalizing` checkpoint resumes
+readiness and admission reopening without stopping the app or repeating removal.
+Inspect the journal and service state first. Failed verification retains the
+journal; database restore still needs separate exact-backup authorization.
 
 ## Interruption and recovery
 
@@ -97,7 +179,7 @@ sudo /opt/kids-booklet/vps-deployment.sh --action status
 | --- | --- |
 | `{"step":"idle"}` | No operation is retained; start the intended workflow |
 | Active detached service | Let it finish; do not start a competing workflow |
-| Failed application operation | Read its workflow summary and host service log, correct the cause, then use **Maintenance → resume** for the same environment |
+| Failed application operation | Read its workflow summary and host service log, correct the cause, then use **Maintenance → resume** for the same environment, except a destructive reset: use the exact-backup recovery row above |
 | Drain timeout | The old application remains selected; wait for active work to finish before resume |
 | Failed readiness | Inspect the candidate and prior-release checks; the database was not restored automatically |
 | Infrastructure journal retained after its Actions run stopped | Match its request ID and commit to the workflow summary, inspect Terraform state and the failed phase, then use guarded `infra-unlock` |
@@ -115,7 +197,7 @@ bash scripts/deploy/vps-deployment.sh \
 
 Rerun Infrastructure once and require its summary to report the same commit and success before promotion. Never delete a lock or edit the journal manually.
 
-Backups contain the MongoDB archive, collection inventory, checksums, and referenced assets. Restore accepts only a completed backup marker for the matching environment and database. Partial backup IDs remain reserved. Recovery objects expire after 30 days; current assets do not expire.
+Backups contain the MongoDB archive, collection inventory, checksums, and referenced assets. The staging reset backup also includes every object in the staging asset bucket, including unreferenced objects. Restore accepts only a completed backup marker for the matching environment and database. Partial backup IDs remain reserved. Recovery objects expire after 30 days; current assets do not expire.
 
 ## Provider credential session
 

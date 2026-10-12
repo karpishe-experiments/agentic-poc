@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { cancelOwnedControllers } from "@/lib/operations/controllers";
 import { createWorkflowRuntime, runtimeCompletion, runtimeImageCompletion, type RuntimeResult } from "@/lib/experiment-runner/transport";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 const id = "00000000-0000-4000-8000-000000000001";
 const workflow = "00000000-0000-4000-8000-000000000002";
+const task = "00000000-0000-4000-8000-000000000003";
 const binding = { role: "manager" as const, taskId: null, persona: null, appId: id, publishedWorkflowId: workflow, toolProviderId: null, apiKey: "private-runtime-key" };
 const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test", callbackKey: "private-callback-key", bindings: [binding] };
 const input = { runId: id, operationId: workflow, parentWorkflowRunId: null, mode: "simulated" as const };
@@ -26,6 +28,18 @@ function openSseResponse(chunks: string[]) {
       start(controller) { for (const chunk of chunks) controller.enqueue(encoder.encode(chunk)); },
       cancel() { cancelled = true; },
     }), { headers: { "Content-Type": "text/event-stream" } }),
+    wasCancelled: () => cancelled,
+  };
+}
+
+function openJsonResponse(chunks: string[]) {
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  return {
+    response: new Response(new ReadableStream<Uint8Array>({
+      start(controller) { for (const chunk of chunks) controller.enqueue(encoder.encode(chunk)); },
+      cancel() { cancelled = true; },
+    }), { headers: { "Content-Type": "application/json" } }),
     wasCancelled: () => cancelled,
   };
 }
@@ -57,6 +71,30 @@ describe("model-free runtime transport", () => {
     });
     expect(options?.redirect).toBe("error");
     expect(options?.body).not.toContain(config.callbackKey);
+  });
+  it("captures the Dify task identity and rejects a conflicting terminal task", async () => {
+    let resolveTerminal: (result: RuntimeResult) => void = () => undefined;
+    const terminal = new Promise<RuntimeResult>((resolve) => { resolveTerminal = resolve; });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(sseResponse([
+      `data: {"event":"workflow_started","workflow_run_id":"${id}","task_id":"${task}","data":{"id":"${id}","workflow_id":"${workflow}","task_id":"${task}"}}\n\n`,
+      `data: {"event":"workflow_finished","data":{"id":"${id}","workflow_id":"${workflow}","task_id":"00000000-0000-4000-8000-000000000004","status":"succeeded","outputs":{}}}\n\n`,
+    ]));
+    const runtime = createWorkflowRuntime(config, fetcher);
+    expect(await runtime.start(binding, input, { onTerminal: async (outcome) => resolveTerminal(outcome) })).toEqual({
+      kind: "accepted", execution: { id, workflow_id: workflow, task_id: task, status: "running" },
+    });
+    expect(await terminal).toEqual({ kind: "conflict" });
+  });
+  it("sends one Dify task-stop POST without treating the acknowledgement as terminal", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    const runtime = createWorkflowRuntime(config, fetcher);
+    expect(await runtime.stop?.(binding, { runId: id, taskId: task })).toEqual({ kind: "acknowledged" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, options] = fetcher.mock.calls[0];
+    expect(url).toBe(`https://dify.test/v1/workflows/tasks/${task}/stop`);
+    expect(options?.method).toBe("POST");
+    expect(JSON.parse(options?.body as string)).toEqual({ user: `booklet-${id}` });
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
   });
   it("serializes ordered local image descriptors in the custom reference_files input", async () => {
     const secondFile = "00000000-0000-4000-8000-000000000003";
@@ -103,6 +141,17 @@ describe("model-free runtime transport", () => {
     expect(await createWorkflowRuntime(config, fetcher).retrieve(binding, id)).toEqual({ kind: "unknown" });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+  });
+  it("cancels a hanging result body through the caller signal without another request", async () => {
+    const source = openJsonResponse([JSON.stringify({ id, workflow_id: workflow, status: "succeeded", outputs: {} })]);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(source.response);
+    const controller = new AbortController();
+    const pending = createWorkflowRuntime(config, fetcher).retrieve(binding, id, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    expect(await pending).toEqual({ kind: "unknown" });
+    expect(source.wasCancelled()).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("rejects malformed, oversized and redirect responses without retrying POST", async () => {
     for (const response of [Response.json({ data: { id: "bad" } }), new Response("x".repeat(2_500_001)), new Response(null, { status: 302 })]) {
@@ -206,6 +255,22 @@ describe("model-free runtime transport", () => {
       deadlineAtMs: Date.now() + 50,
       onTerminal: async (outcome) => resolveTerminal(outcome),
     })).kind).toBe("accepted");
+    expect(await terminal).toEqual({ kind: "unknown" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(source.wasCancelled()).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("cancels the retained reader after the start call returned accepted", async () => {
+    const source = openSseResponse([
+      `data: {"event":"workflow_started","workflow_run_id":"${id}","data":{"id":"${id}","workflow_id":"${workflow}"}}\n\n`,
+    ]);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(source.response);
+    let finish!: (result: RuntimeResult) => void;
+    const terminal = new Promise<RuntimeResult>((resolve) => { finish = resolve; });
+    expect((await createWorkflowRuntime(config, fetcher).start(binding, input, {
+      onTerminal: async (result) => finish(result),
+    })).kind).toBe("accepted");
+    cancelOwnedControllers(input.runId);
     expect(await terminal).toEqual({ kind: "unknown" });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(source.wasCancelled()).toBe(true);

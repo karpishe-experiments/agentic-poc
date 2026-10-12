@@ -5,10 +5,19 @@ import { CandidatePoolService, type CandidatePool } from "@/lib/application/cand
 import type { AgentVersion } from "@/lib/contracts/agents";
 import type { ExecutionTargetKey } from "@/lib/contracts/execution";
 import type { GenUICard } from "@/lib/contracts/cards";
+import { assertOperationBudget, OperationBudgetExpired, OPERATION_LIMIT_MS, withOperationBudget } from "@/lib/operations/budget";
 
 export type CandidateExecutor = (input: { canonicalInput: unknown; agent: AgentVersion; executionBatchId: string; executionItemId: string }) => Promise<{ result: unknown; summary: unknown; candidateAssetId?: string | null }>;
 type TerminalHandler = (batchId: string) => Promise<void>;
 const active = new Map<string, Promise<void>>();
+class FrozenCandidateUnavailable extends Error {}
+
+function safeFailure(error: unknown): { kind: string; message: string } {
+  if (error instanceof FrozenCandidateUnavailable) return { kind: "configuration", message: "The frozen candidate version is unavailable." };
+  if (error instanceof OperationBudgetExpired) return { kind: "unknown", message: "The candidate timed out before its outcome could be confirmed. Inspect saved output before retrying." };
+  if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError" || error.cause instanceof OperationBudgetExpired)) return { kind: "unknown", message: "The candidate timed out before its outcome could be confirmed. Inspect saved output before retrying." };
+  return { kind: "execution", message: "The candidate failed before its outcome could be confirmed." };
+}
 
 export class ExecutionService {
   public constructor(private readonly repositories: Repositories, private readonly pools: CandidatePoolService) {}
@@ -54,19 +63,31 @@ export class ExecutionService {
     await Promise.allSettled(items.filter((item) => item.status === "queued").map(async (item) => {
       const claimed = await this.repositories.execution.claimQueued(batchId, item.id, Date.now());
       if (!claimed) return;
-      const agent = await this.repositories.agents.getVersion(claimed.agentVersionId);
-      if (!agent) return this.repositories.execution.failItem({ batchId, itemId: claimed.id, kind: "configuration", message: "The frozen candidate version is unavailable.", now: Date.now() });
       try {
-        const output = await executor({ canonicalInput: batch.canonicalInput, agent, executionBatchId: batchId, executionItemId: claimed.id });
-        await this.repositories.execution.finishItem({ batchId, itemId: claimed.id, result: output.result, summary: output.summary, candidateAssetId: output.candidateAssetId ?? null, now: Date.now() });
+        const startedAtMs = claimed.startedAt ? Date.parse(claimed.startedAt) : NaN;
+        if (!Number.isFinite(startedAtMs)) throw new Error("The claimed candidate has no valid persisted start time.");
+        await withOperationBudget(startedAtMs + OPERATION_LIMIT_MS, async () => {
+          const agent = await this.repositories.agents.getVersion(claimed.agentVersionId);
+          assertOperationBudget();
+          if (!agent) throw new FrozenCandidateUnavailable();
+          const output = await executor({ canonicalInput: batch.canonicalInput, agent, executionBatchId: batchId, executionItemId: claimed.id });
+          assertOperationBudget();
+          await this.repositories.execution.finishItem({ batchId, itemId: claimed.id, result: output.result, summary: output.summary, candidateAssetId: output.candidateAssetId ?? null, now: Date.now() });
+        });
       } catch (error) {
-        await this.repositories.execution.failItem({ batchId, itemId: claimed.id, kind: "execution", message: error instanceof Error ? error.message.slice(0, 500) : "Candidate execution failed.", now: Date.now() });
+        const saved = (await this.repositories.execution.getItems(batchId)).find((candidate) => candidate.id === claimed.id);
+        if (saved?.status === "succeeded" && saved.canonicalResult !== null) return;
+        const failure = safeFailure(error);
+        await this.repositories.execution.failItem({ batchId, itemId: claimed.id, kind: failure.kind, message: failure.message, now: Date.now() });
       }
     }));
   }
 
-  public async recoverInterrupted(executor: CandidateExecutor, onTerminal?: TerminalHandler, accepts?: (batch: Awaited<ReturnType<Repositories["execution"]["getBatch"]>>) => boolean): Promise<string[]> {
-    const batchIds = await this.repositories.execution.recoverInterrupted(Date.now());
+  public async recoverInterrupted(executor: CandidateExecutor, onTerminal?: TerminalHandler, accepts?: (batch: Awaited<ReturnType<Repositories["execution"]["getBatch"]>>) => boolean, recoveredBatchIds?: readonly string[]): Promise<string[]> {
+    // Bootstrap supplies one shared reconciliation result to text and image
+    // handlers. A second repository sweep can reset work the first handler
+    // already claimed.
+    const batchIds = recoveredBatchIds ? [...recoveredBatchIds] : await this.repositories.execution.recoverInterrupted(Date.now());
     const accepted: string[] = [];
     for (const batchId of batchIds) {
       const batch = await this.repositories.execution.getBatch(batchId);
