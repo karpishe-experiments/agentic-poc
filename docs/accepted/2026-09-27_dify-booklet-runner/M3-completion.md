@@ -65,6 +65,11 @@ required Linux host suites and live lifecycle probes remain pending.
 Credential inventory impact: none; these corrections change no credential names,
 storage, transfers or consumers.
 
+Linux CI `38278889955` passed selected application tests, then exposed a shell
+test clock collision: an expired deadline of zero means disabled, not expired.
+The bounded-control fixture now starts its clock above zero. Runtime behavior is
+unchanged; both full Linux host suites still require a green CI result.
+
 Local checks for this increment: preparation/dispatch regression passed 26 cases;
 the final interrupted-owner drain regression passed 13 cases serially. Probe
 preflight/bootstrap passed 11 cases; API ownership passed 15; the affected

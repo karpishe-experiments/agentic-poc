@@ -187,6 +187,8 @@ case "$1" in
     result="$(operation_status_host)"
     [[ "$result" == *'"state":"unavailable"'* ]];;
   operation-control-bounds)
+    # Zero is the disabled-budget sentinel, not an expired absolute deadline.
+    SECONDS=10
     CONTROL_DEADLINE_SECONDS=$((SECONDS + 2))
     timeout() { printf '%s\n' "$*" >> "$CALLS"; }
     control_timeout 55 echo bounded
