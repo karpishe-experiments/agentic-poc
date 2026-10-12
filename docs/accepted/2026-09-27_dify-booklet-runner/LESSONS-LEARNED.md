@@ -371,6 +371,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   [J13 acknowledgement regression](../../../tests/unit/experiment-runner-http.test.ts).
 - **Promotion target:** Documentation for external completion callbacks.
 
+### Test bounded Mongo cursors across batches
+
+- **Context:** The MongoDB 7.5 driver uses client-side timeouts in transactions.
+- **Observation:** Session-only cursor timeouts caused an invalid `maxTimeMS`
+  on `getMore`, blocking a valid two-page selection after its image was saved.
+- **Guidance:** Give transactional find/aggregate cursors a supported
+  collection-level timeout default. Do not override transaction command timeouts
+  or use driver internals. Force multiple batches in regression tests.
+- **Evidence:** [cursor adapter](../../../db/bounded-collection.ts) and
+  [multi-batch regression](../../../tests/integration/bounded-mongo-cursors.test.ts).
+- **Promotion target:** Documentation for bounded MongoDB transaction reads;
+  recheck this driver-specific behavior when upgrading MongoDB dependencies.
+
 ### Share verification reads only within one transaction attempt
 
 - **Context:** Several consumers verify the same approved sources during one

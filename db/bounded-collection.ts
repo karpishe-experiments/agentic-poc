@@ -10,7 +10,7 @@ const optionsAt: Record<string, number> = {
 };
 const abortable = new Set(["find", "findOne", "aggregate", "countDocuments", "distinct"]);
 
-export function boundedCollection<T extends object>(collection: T): T {
+export function boundedCollection<T extends object>(collection: T, cursorCollection?: (timeoutMS: number) => T): T {
   return new Proxy(collection, {
     get(target, property) {
       const value: unknown = Reflect.get(target, property, target);
@@ -22,9 +22,16 @@ export function boundedCollection<T extends object>(collection: T): T {
         const options = (args[index] ?? {}) as Record<string, unknown>;
         const signal = operationSignal();
         const timeoutMS = remainingOperationMs(typeof options.timeoutMS === "number" ? Math.min(options.timeoutMS, 30_000) : 30_000);
+        // MongoDB 7.5 cursors need a collection-level CSOT default inside a
+        // transaction: session-only CSOT emits an invalid maxTimeMS on getMore.
+        // Do not set per-command timeoutMS; withTransaction rejects that override.
+        const receiver = options.session && (property === "find" || property === "aggregate") && cursorCollection
+          ? cursorCollection(timeoutMS) : target;
         args[index] = { ...options, ...(!options.session ? { timeoutMS } : {}),
           ...(signal && abortable.has(String(property)) ? { signal: options.signal instanceof AbortSignal ? AbortSignal.any([signal, options.signal]) : signal } : {}) };
-        return Reflect.apply(value, target, args);
+        const method: unknown = Reflect.get(receiver, property, receiver);
+        if (typeof method !== "function") throw new TypeError("Mongo collection method is unavailable.");
+        return Reflect.apply(method, receiver, args);
       };
     },
   });

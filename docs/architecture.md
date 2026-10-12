@@ -13,6 +13,11 @@ metadata API; selected-run detail retains artifact and byte-verification paths.
 Active list rows poll every five seconds. Terminal pages stop automatic polling
 and retain manual Refresh. These candidate changes are not yet verified live.
 
+Bounded transactional find/aggregate cursors inherit a collection-level timeout
+default. This avoids the installed MongoDB 7.5 driver's invalid `getMore` timeout
+option while retaining operation cancellation and the transaction deadline.
+Writes retain the transaction timeout; no command-level override is added.
+
 Kids Booklet is a strict-TypeScript Next.js App Router monolith. The browser renders a persisted workspace and uses Vercel AI SDK UI for chat transport. Route handlers call deterministic application services, which are the only owners of workflow state, durable IDs, artifact versions, approvals, jobs, assets, and exports. OpenAI Agents SDK agents may route or author validated proposals, but they cannot persist data or advance the workflow directly.
 
 ```mermaid

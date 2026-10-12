@@ -17,9 +17,12 @@ export function createCollectionHandles(database: Db): MongoCollections {
     execution_preferences: database.collection("execution_preferences"), execution_batches: database.collection("execution_batches"), execution_items: database.collection("execution_items"),
     deployment_control: database.collection("deployment_control"),
   };
-  for (const name of Object.keys(collections) as (keyof MongoCollections)[]) {
+  function bind<Name extends keyof MongoCollections>(name: Name) {
     // Each name keeps its original typed collection interface.
-    Object.defineProperty(collections, name, { value: boundedCollection(collections[name]), enumerable: true });
+    const collection = database.collection<MongoDocumentMap[Name]>(name);
+    Object.defineProperty(collections, name, { value: boundedCollection(collection,
+      (timeoutMS) => database.collection<MongoDocumentMap[Name]>(name, { timeoutMS })), enumerable: true });
   }
+  for (const name of Object.keys(collections) as (keyof MongoCollections)[]) bind(name);
   return collections;
 }

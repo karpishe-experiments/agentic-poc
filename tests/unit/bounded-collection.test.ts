@@ -15,6 +15,17 @@ describe("Mongo operation budgets", () => {
     await withOperationBudget(200, () => boundedCollection(raw).updateOne({}, {}, { session }), { now: () => 100 });
     expect(raw.updateOne).toHaveBeenCalledWith({}, {}, { session });
   });
+  it.each(["find", "aggregate"])("gives transactional %s cursors a collection default without a command override", async (method) => {
+    const raw = { [method]: vi.fn() }, scoped = { [method]: vi.fn(() => "cursor") };
+    const factory = vi.fn(() => scoped), session = {};
+    const collection = boundedCollection(raw, factory);
+    await withOperationBudget(200, async () => {
+      expect(collection[method]({}, { session })).toBe("cursor");
+    }, { now: () => 100 });
+    expect(factory).toHaveBeenCalledWith(100);
+    expect(raw[method]).not.toHaveBeenCalled();
+    expect(scoped[method]).toHaveBeenCalledWith({}, { session, signal: expect.any(AbortSignal) });
+  });
   it("does not start a command after expiry", async () => {
     let now = 100;
     const raw = { findOne: vi.fn(async () => null) };

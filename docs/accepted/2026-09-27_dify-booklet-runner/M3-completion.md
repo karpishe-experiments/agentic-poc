@@ -30,6 +30,14 @@ Private bindings are already prepared. Pending operator actions belong only in
 the [readiness register](EXECUTION.md#b-authorization-register). Daily Dify backups
 and restore rehearsal remain deferred follow-up, not M3 gates.
 
+The required Linux CI run `38258080043` exposed a multi-batch MongoDB cursor
+error during selected two-page completion. The saved image was valid; a
+session-only timeout produced an invalid `maxTimeMS` on `getMore`. The correction
+uses a collection-level timeout default for transactional find/aggregate cursors,
+without changing provider execution, approvals or request limits. The previously
+failing selected-page case passed locally. A dedicated regression forces both
+cursor types through multiple batches. Required CI and live proof remain gates.
+
 Local checks for this increment: preparation/dispatch regression passed 26 cases;
 the final interrupted-owner drain regression passed 13 cases serially. Probe
 preflight/bootstrap passed 11 cases; API ownership passed 15; the affected
