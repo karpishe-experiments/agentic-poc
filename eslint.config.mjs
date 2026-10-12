@@ -7,6 +7,8 @@ export default defineConfig([
   ...nextTypeScript,
   globalIgnores([
     ".next/**",
+    ".next-*/**",
+    ".tools/**",
     "node_modules/**",
     "data/**",
     "output/**",

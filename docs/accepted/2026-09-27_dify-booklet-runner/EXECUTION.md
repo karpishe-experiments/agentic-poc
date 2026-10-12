@@ -113,6 +113,13 @@ Technical access is not authority. Record verification and permission separately
 never infer a grant from a working login. These are the latest recorded results,
 not fresh live checks. Recheck the required row before dependent execution.
 
+Current M3 recovery status is in [M3 current progress](M3-completion.md#current-progress-and-blockers--2026-10-12).
+Existing eighteen bindings and encrypted private setup remain valid; do not ask
+for their keys again. The remaining deployment dependency is reviewed dispatcher
+synchronization followed by explicit legacy bootstrap for request `38149230374-1`.
+Restricted host access must be checked before requesting a root handoff. No new
+credential or spending approval is needed for the authorized model-free scope.
+
 Parent campaign deployment readiness was verified on 2026-10-11: staging release
 `5cf84ecc263847a8583c1e3623153151149306e8`, Deploy `38135107485` and Check
 `38135733238` passed. The [M3 amendment](M3-completion.md#parent-campaign-amendment--2026-10-11)
@@ -135,6 +142,18 @@ evidence unless its relevant release/configuration inputs change.
 | Automated host/run diagnostics and sandbox memory: existing shared VPS | Endpoint/workflow deployed. Sandbox verified at 1024 MiB. Scheduler repair `38139804937` passed; diagnostics `38141274006` verified 1536 MiB, zero restarts/OOM counters and authenticated public API HTTP 200. Kid completed without repair; earlier timing targets were missed. [M3 evidence](M3-completion.md#parent-attempt-2-and-authorization-coordination--2026-10-11) | Existing protected deployment SSH/Cloudflare access and staging Basic gate; no new keys or local credential copy | User authorized automated diagnostics and selective memory increase in this session. Preserve other limits, data, Cloud and production; require idle work and live capacity guard | Parent attempt 1 reconciled with verified backup; attempt 2 passed J12 but failed at J13 authorization. Finish reviewed authorization coordination and deploy before the final allowed Parent attempt. Timing is diagnostic. No routine root-terminal handoff is needed |
 | Real campaign: ordered 3/5/8-page staging runs, each plus cover | M4 completion and image-provider readiness pending; [M5](M5-real.md) | Text/image provider credentials inside Dify; approved model/binding references | Not granted. Default three initial runs, zero successors, ≤500 LLM and 46 real image requests; any additional allowance explicit | Paid Real calls; verify M4 successes, reference support, accounting, settings and approved finite campaign |
 | Probe cleanup: explicitly listed disposable IDs only | Retained probes documented in [M0](M0-readiness.md) | Existing Community control profile | Not granted; retaining probes is acceptable; no prefix-wide deletion | Cleanup only; verify exact IDs and confirmation before removal |
+
+The bounded-operation correction now blocks further persona acceptance. No new
+API key is required. Retain deployment request `38149230374-1`; the current image
+and retained unit need a reviewed compatibility transition before the new drain
+and process limits can be used. Exact backup-protected reconciliation of item
+`354d337a-4e9f-42ab-a8ec-0c327a45748a` and its owning job is authorized in this
+session, but is not yet executed. Preserve data and failed-run evidence. After
+reviewed deployment, prove recovery, intentional stall, stop, restart during
+reconciliation and an active callback during drain with disposable model-free
+probes. Only then spend Parent attempt 3/3; Creator follows success. See
+[M3 current work](M3-completion.md). Request operator access only if the existing
+restricted dispatcher cannot execute the reviewed exact repair or transition.
 
 The latency/async row's installed-binding, idle-state and collaboration read-back
 handoff passed in the operator's root output on 2026-10-08; see the
@@ -240,9 +259,12 @@ Before publishing the candidate configuration/code:
 5. Only two consecutive clean reviews permit publication. Optional quality/polish
    suggestions are not blockers. Do not expand scope to satisfy them.
 
-This requested iterative review rule governs these milestones instead of the
-generic skill's two-correction stopping default. Stop for genuine scope or access
-changes, not simply because an in-scope correction needed another pass.
+Apply the [repeated blocking review rule](../../../AGENTS.md#repeated-blocking-reviews).
+After more than three consecutive reviews with new defects or blockers, stop
+individual corrections and inspect the whole package and the review/correction
+failure pattern. If the pattern continues in both of the next two reviews, report
+the details and recommendation, then wait for user instructions. This rule
+governs these milestones instead of the generic skill's correction-cycle default.
 
 After deployment, record live acceptance evidence. A discovered defect requires
 affected validation and two clean reviews of the correction before publication.

@@ -10,7 +10,7 @@ $parseErrors = $null
 [void][Management.Automation.Language.Parser]::ParseFile($helper, [ref]$null, [ref]$parseErrors)
 if ($parseErrors.Count) { throw 'J12 helper syntax failed.' }
 
-$global:J12KeyTest = @{ imports=0; prompts=0; output=$null; clipboardWrites=@(); reads=0; sourceExists=$true; outputExists=$false; sourceJson=$null }
+$global:J12KeyTest = @{ imports=0; prompts=0; output=$null; clipboardWrites=@(); reads=0; sourceExists=$true; outputExists=$false; partialExists=$false; sourceJson=$null; partialJson=$null }
 $slots = @(@{ role='manager'; taskId=$null; persona=$null })
 $slots += 1..11 | ForEach-Object { @{ role='specialist'; taskId=('J{0:D2}' -f $_); persona=$null } }
 $slots += @('playful_kid','enthusiast_parent','professional_creator') | ForEach-Object { @{ role='tester'; taskId=$null; persona=$_ } }
@@ -25,6 +25,7 @@ if ($ReuseJ12) { $bindings[-1].appId = 'f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1' }
 if ($InvalidCase) { $bindings[3].taskId = 'J12' }
 $global:J12KeyTest.sourceJson = @{ callbackKey=('synthetic-callback-' * 3); bindings=$bindings } | ConvertTo-Json -Depth 10 -Compress
 function Test-Path { param($LiteralPath, $PathType)
+    if ($LiteralPath -like "*issue65-$Profile-bindings.partial.dpapi.xml") { return $global:J12KeyTest.partialExists }
     if ($LiteralPath -like "*issue65-$Profile-bindings.dpapi.xml") { return $global:J12KeyTest.outputExists }
     if ($LiteralPath -like '*issue65-m3-j12-bindings.dpapi.xml') { return [bool]$ReuseJ12 }
     if ($LiteralPath -like '*issue65-m3-bindings.dpapi.xml') { return $global:J12KeyTest.sourceExists }
@@ -32,6 +33,9 @@ function Test-Path { param($LiteralPath, $PathType)
 }
 function Import-Clixml { param($LiteralPath)
     $global:J12KeyTest.imports++
+    if ($LiteralPath -like "*issue65-$Profile-bindings.partial.dpapi.xml") {
+        return ConvertTo-SecureString $global:J12KeyTest.partialJson -AsPlainText -Force
+    }
     $expectedSource = if ($ReuseJ12) { 'm3-j12' } else { 'm3' }
     if ($LiteralPath -notlike "*issue65-$expectedSource-bindings.dpapi.xml") { throw 'Wrong source.' }
     return ConvertTo-SecureString $global:J12KeyTest.sourceJson -AsPlainText -Force
@@ -46,13 +50,23 @@ function Get-Clipboard { param([switch]$Raw)
 }
 function Start-Sleep { param($Milliseconds) }
 function Read-Host { param($Prompt) $global:J12KeyTest.prompts++; return '' }
-function Export-Clixml { param([Parameter(ValueFromPipeline)]$InputObject, $LiteralPath, [switch]$NoClobber)
+function Export-Clixml { param([Parameter(ValueFromPipeline)]$InputObject, $LiteralPath, [switch]$NoClobber, [switch]$Force)
     process {
+        if ($LiteralPath -like "*issue65-$Profile-bindings.partial.dpapi.xml") {
+            if (-not $Force -or $NoClobber) { throw 'Unsafe partial checkpoint.' }
+            $testPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($InputObject)
+            try { $global:J12KeyTest.partialJson = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($testPointer); $global:J12KeyTest.partialExists = $true }
+            finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($testPointer) }
+            return
+        }
         if (-not $NoClobber -or $LiteralPath -notlike "*issue65-$Profile-bindings.dpapi.xml") { throw 'Unsafe output.' }
         $testPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($InputObject)
         try { $global:J12KeyTest.output = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($testPointer) | ConvertFrom-Json }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($testPointer) }
     }
+}
+function Remove-Item { param($LiteralPath, [switch]$Force, $ErrorAction)
+    if ($LiteralPath -like "*issue65-$Profile-bindings.partial.dpapi.xml") { $global:J12KeyTest.partialExists = $false; $global:J12KeyTest.partialJson = $null }
 }
 try {
     if ($InvalidCase) {
@@ -90,6 +104,15 @@ try {
     if ($global:J12KeyTest.reads -ne (6 + $missingCount) -or $global:J12KeyTest.prompts -ne (2 + 2 * $missingCount)) { throw 'Clipboard contention or same-field retry failed.' }
     if ($global:J12KeyTest.clipboardWrites.Count -ne (1 + $missingCount) -or $global:J12KeyTest.clipboardWrites[-1] -ne ' ') { throw 'Clipboard cleanup failed.' }
     if ($global:J12KeyTest.sourceJson -cne (@{ callbackKey=('synthetic-callback-' * 3); bindings=$bindings } | ConvertTo-Json -Depth 10 -Compress)) { throw 'Source changed.' }
+    if ($global:J12KeyTest.partialExists) { throw 'Complete output retained an unnecessary private checkpoint.' }
+    if ($Profile -eq 'm3-j12') {
+        $global:J12KeyTest.partialJson = @{ profile=$Profile; callbackKey=('synthetic-callback-' * 3); bindings=@($bindings + @(@{ appId='f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1'; role='specialist'; taskId='J12'; persona=$null; apiKey='app-synthetic-j12' })) } | ConvertTo-Json -Depth 10 -Compress
+        $global:J12KeyTest.partialExists = $true
+        $priorPrompts = $global:J12KeyTest.prompts
+        $global:J12KeyTest.output = $null
+        & $helper -Profile 'm3-j12' -Apply
+        if ($global:J12KeyTest.prompts -ne $priorPrompts -or $null -eq $global:J12KeyTest.output -or @($global:J12KeyTest.output.bindings).Count -ne 17 -or $global:J12KeyTest.partialExists) { throw 'Resumed checkpoint did not reuse its validated J12 binding.' }
+    }
     $priorPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try { $invalid = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -InvalidCase 2>&1 }
@@ -106,7 +129,7 @@ try {
     "PASS: $Profile syntax, preview isolation, existing binding reuse, no overwrite, exact output, clipboard contention, invalid slot and cleanup."
 } finally {
     Remove-Variable J12KeyTest -Scope Global -ErrorAction SilentlyContinue
-    foreach ($name in 'Test-Path','Import-Clixml','Set-Clipboard','Get-Clipboard','Read-Host','Export-Clixml','Start-Sleep') {
+    foreach ($name in 'Test-Path','Import-Clixml','Set-Clipboard','Get-Clipboard','Read-Host','Export-Clixml','Remove-Item','Start-Sleep') {
         Remove-Item "Function:$name" -ErrorAction SilentlyContinue
     }
 }

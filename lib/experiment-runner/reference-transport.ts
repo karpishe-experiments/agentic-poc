@@ -2,6 +2,8 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { ExperimentImageValidationError, validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import type { BookletBinding, BookletRunnerConfig } from "@/lib/experiment-runner/config";
+import { operationSignal, remainingOperationMs } from "@/lib/operations/budget";
+import { readStreamChunk } from "@/lib/operations/read-stream";
 
 const MAX_ACK_BYTES = 64 * 1024;
 
@@ -10,13 +12,13 @@ export type ReferenceUploadResult =
   | { kind: "rejected"; reason: "invalid_input" | "invalid_image" | "too_large" | "http_rejected" }
   | { kind: "unknown" };
 
-async function readAcknowledgement(response: Response): Promise<unknown> {
+async function readAcknowledgement(response: Response, signal: AbortSignal): Promise<unknown> {
   if (!response.body) throw new Error("Missing acknowledgement body.");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader, signal);
     if (done) break;
     size += value.byteLength;
     if (size > MAX_ACK_BYTES) { await reader.cancel(); throw new Error("Acknowledgement exceeds limit."); }
@@ -50,16 +52,18 @@ export function createReferenceTransport(config: BookletRunnerConfig, fetcher: t
       body.append("user", `booklet-${runId}`);
       body.append("file", new Blob([bytes], { type: image.mimeType }), `reference.${image.extension}`);
       let response: Response;
+      const parent = operationSignal();
+      const signal = AbortSignal.any([AbortSignal.timeout(remainingOperationMs()), ...(parent ? [parent] : [])]);
       try {
         response = await fetcher(`${config.baseUrl}/v1/files/upload`, {
           method: "POST", redirect: "error", cache: "no-store",
-          headers: { Authorization: `Bearer ${binding.apiKey}` }, body, signal: AbortSignal.timeout(30_000),
+          headers: { Authorization: `Bearer ${binding.apiKey}` }, body, signal,
         });
       } catch { return { kind: "unknown" }; }
       if ([400, 401, 403, 404, 413, 415, 422].includes(response.status)) return { kind: "rejected", reason: "http_rejected" };
       if (!response.ok) return { kind: "unknown" };
       try {
-        const acknowledgement = await readAcknowledgement(response);
+        const acknowledgement = await readAcknowledgement(response, signal);
         if (!acknowledgement || typeof acknowledgement !== "object") return { kind: "unknown" };
         const record = acknowledgement as Record<string, unknown>;
         const id = opaqueIdSchema.safeParse(record.id);

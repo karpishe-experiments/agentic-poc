@@ -19,6 +19,8 @@ import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-pag
 import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { OPERATION_LIMIT_MS } from "@/lib/operations/budget";
+import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -27,6 +29,7 @@ const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z
 const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), parentWorkflowRunId: opaqueIdSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const dispatchInput = claimInput.omit({ workflowRunId: true });
+const dispatchIdentityInput = claimInput.extend({ workflowTaskId: opaqueIdSchema.optional() });
 const publicationInput = claimInput.extend({ workflowId: opaqueIdSchema, terminalSucceeded: z.boolean().optional() });
 const completeInput = z.strictObject({ envelope: resultEnvelopeSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
 const failInput = claimInput.extend({ category: z.enum(["unknown_outcome", "definite_failure"]) });
@@ -285,6 +288,9 @@ export function createExperimentRepository(database: Database, options: { store?
         if (input.imageRequest && !j13) await assertCurrentImageSources(database, session, run, input.imageRequest);
         const narrative = input.role === "specialist" && (isNarrativeTask(input.taskId) || input.taskId === "J09" || input.taskId === "J10" || input.taskId === "J11" || input.taskId === "J12") ? await prepareNarrativeContext(database, session, run, input.taskId, input.subjectKind, input.subjectId, options.store) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
         const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: j13 ? input.parentWorkflowRunId! : null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
+        operation.deadlineAtMs = run.preparation?.deadlineAtMs ?? input.nowMs + OPERATION_LIMIT_MS;
+        operation.lifecycle = { startedAtMs: run.preparation?.startedAtMs ?? input.nowMs, ownerId: run.preparation?.ownerId ?? randomUUID(), phase: "preparing", lastProgressAtMs: input.nowMs };
+        if (input.nowMs >= operation.deadlineAtMs) throw new ExperimentRepositoryError("invalid_state", "Preparation deadline expired.");
         if (input.imageRequest) {
           operation.imageRequestJson = JSON.stringify(input.imageRequest);
           operation.dependencyVersionIds = [...input.imageRequest.sourceVersionIds];
@@ -294,7 +300,7 @@ export function createExperimentRepository(database: Database, options: { store?
           operation.expectedTargetVersionId = admission.expectedTargetVersionId;
         }
         await operations.insertOne(operation, { session });
-        const changed = await runs.updateOne({ _id: input.runId, revision: input.expectedRevision, activeOperationId: null }, { $set: { activeOperationId: input.operationId, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+        const changed = await runs.updateOne({ _id: input.runId, revision: input.expectedRevision, activeOperationId: null }, { $set: { activeOperationId: input.operationId, preparation: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
         if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
         return operation;
       });
@@ -319,6 +325,8 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.activeOperationId !== operation._id || operation.state !== "prepared") throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting dispatch.");
       if (run.pauseRequested || run.status === "paused" || (run.status !== "queued" && run.status !== "running")) return { dispatched: false, operation };
+      const deployment = await database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" }, { session });
+      if (deployment?.draining || deployment?.maintenance) return { dispatched: false, operation };
       if (isJ13Image(operation)) {
         const admission = await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "dispatch");
         if (operation.expectedTargetVersionId !== admission.expectedTargetVersionId) {
@@ -326,13 +334,36 @@ export function createExperimentRepository(database: Database, options: { store?
         }
       }
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", dispatchStartedAtMs: null }, { $set: {
-        dispatchStartedAtMs: input.nowMs, deadlineAtMs: input.nowMs + 600_000,
+        dispatchStartedAtMs: input.nowMs, deadlineAtMs: operation.deadlineAtMs ?? input.nowMs + OPERATION_LIMIT_MS,
+        ...(operation.lifecycle ? { "lifecycle.phase": "dispatching" as const, "lifecycle.lastProgressAtMs": input.nowMs } : {}),
         parentWorkflowRunId: input.parentWorkflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Dispatch was recorded concurrently.");
       // Touch the run in the same transaction so Pause cannot race admission.
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id, pauseRequested: false }, { $set: { updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed before dispatch.");
       return { dispatched: true, operation: updated };
+    });
+  }
+
+  async function failPreparation(runId: string, operationId: string, nowMs: number) {
+    return withMongoTransaction(database, async (session) => {
+      const run = must(await runs.findOne({ _id: runId }, { session }), "Run");
+      const operation = must(await operations.findOne({ _id: operationId, runId }, { session }), "Operation");
+      if (run.activeOperationId !== operationId || operation.dispatchStartedAtMs != null || operation.state !== "prepared") throw new ExperimentRepositoryError("conflict", "Preparation ownership changed.");
+      let uncertain = false;
+      try { uncertain = uploadJournal.parse(JSON.parse(operation.referenceUploadJournalJson ?? "[]")).some((entry) => entry.state === "started" || entry.state === "unknown"); }
+      catch { uncertain = true; }
+      const category = uncertain ? "unknown_outcome" as const : "definite_failure" as const;
+      await operations.updateOne({ _id: operationId, state: "prepared" }, { $set: {
+        state: uncertain ? "unknown" : "failed", safeFailure: category, updatedAtMs: nowMs,
+        ...(operation.lifecycle ? { lifecycle: { ...operation.lifecycle, phase: "finished" as const, attemptOutcome: "failed" as const, unresolved: uncertain, endedAtMs: nowMs } } : {}),
+      } }, { session });
+      const changed = await runs.findOneAndUpdate({ _id: runId, revision: run.revision, activeOperationId: operationId }, {
+        $set: { status: "blocked", safeFailure: category, activeOperationId: uncertain ? operationId : null, updatedAtMs: nowMs }, $inc: { revision: 1 },
+      }, { session, returnDocument: "after" });
+      if (!changed) throw new ExperimentRepositoryError("stale_revision", "Run changed during preparation failure.");
+      await failTerminalPageBatchItems(database, changed, session, nowMs);
+      return changed;
     });
   }
 
@@ -395,7 +426,8 @@ export function createExperimentRepository(database: Database, options: { store?
       const counters = { ...run.counters, [logical]: run.counters[logical] + 1, steps: run.counters.steps + 1 };
       if (isPayable) counters[payable] = run.counters[payable] + 1;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", "authorizationClaim.id": claimId }, { $set: { state: "started", authorizationClaim: null, workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,
-        deadlineAtMs: operation.deadlineAtMs ?? (operation.dispatchStartedAtMs ?? input.nowMs) + 600_000,
+        ...(operation.lifecycle ? { "lifecycle.phase": "running" as const, "lifecycle.lastProgressAtMs": input.nowMs } : {}),
+        deadlineAtMs: operation.deadlineAtMs ?? (operation.dispatchStartedAtMs ?? input.nowMs) + OPERATION_LIMIT_MS,
         reservationCount: 1, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation was claimed concurrently.");
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "running", counters, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
@@ -411,16 +443,21 @@ export function createExperimentRepository(database: Database, options: { store?
   }
 
   async function recordDispatchIdentity(raw: unknown): Promise<ExperimentOperationDocument> {
-    const input = parse(claimInput, raw);
+    const input = parse(dispatchIdentityInput, raw);
     return withMongoTransaction(database, async (session) => {
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       if (operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Dispatch identity is not established.");
       if (operation.workflowRunId) {
         if (operation.workflowRunId !== input.workflowRunId) throw new ExperimentRepositoryError("conflict", "Workflow identity changed.");
+        if (input.workflowTaskId && operation.workflowTaskId && operation.workflowTaskId !== input.workflowTaskId) throw new ExperimentRepositoryError("conflict", "Workflow task identity changed.");
+        if (input.workflowTaskId && !operation.workflowTaskId) {
+          await operations.updateOne({ _id: operation._id, workflowRunId: input.workflowRunId, workflowTaskId: null }, { $set: { workflowTaskId: input.workflowTaskId } }, { session });
+          return { ...operation, workflowTaskId: input.workflowTaskId };
+        }
         return operation;
       }
       if (operation.state !== "prepared" && operation.state !== "unknown") throw new ExperimentRepositoryError("invalid_state", "Operation cannot save a dispatch identity.");
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: null, state: operation.state }, { $set: { workflowRunId: input.workflowRunId, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, workflowRunId: null, state: operation.state }, { $set: { workflowRunId: input.workflowRunId, ...(input.workflowTaskId ? { workflowTaskId: input.workflowTaskId } : {}), updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Workflow identity changed concurrently.");
       return updated;
     });
@@ -608,9 +645,10 @@ export function createExperimentRepository(database: Database, options: { store?
       const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs, options.store);
       if (lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Result finalization lease expired before saving.");
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, nowMs()), resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation completion changed concurrently.");
-      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { activeOperationId: null, status: run.pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs, ...materialized.runPatch }, $inc: { revision: 1 } }, { session });
+      const pauseRequested = run.pauseRequested || isRecoveredAttempt(operation, nowMs());
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { ...materialized.runPatch, activeOperationId: null, pauseRequested, status: pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       return { operation: updated, reused: false };
       }));
@@ -670,5 +708,5 @@ export function createExperimentRepository(database: Database, options: { store?
       dispatchStartedAtMs: { $ne: null }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
 }

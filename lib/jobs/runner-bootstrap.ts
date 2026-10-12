@@ -4,13 +4,13 @@ import { AgentRunService } from "@/lib/application/agent-run-service";
 import { ImageAgentRunService } from "@/lib/application/image-agent-run-service";
 import { GenerationService } from "@/lib/application/generation-service";
 import { describeGenerationError, createGenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
-import { readDeploymentControl } from "@/lib/application/deployment-control";
+import { readDeploymentControl, reconcileEndedMutations } from "@/lib/application/deployment-control";
 import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 
 const RUNNER_STATE = Symbol.for("kids-booklet-poc.job-runner");
 
-type RunnerState = { promise: Promise<void>; started: boolean; initialized: boolean; recovered: boolean; heartbeatAtMs: number; fatalError: string | null };
+type RunnerState = { promise: Promise<void>; started: boolean; initialized: boolean; recovered: boolean; heartbeatAtMs: number; cycleStartedAtMs?: number | null; lastProgressAtMs?: number; fatalError: string | null };
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -28,14 +28,17 @@ async function runLoop(): Promise<void> {
       if (runner) runner.heartbeatAtMs = Date.now();
       const heartbeat = setInterval(() => { if (runner) runner.heartbeatAtMs = Date.now(); }, 5_000);
       try {
+        if (runner) runner.cycleStartedAtMs = Date.now();
+        await reconcileEndedMutations();
         if (!(await readDeploymentControl()).maintenance) await dispatcher.cycle();
+        if (runner) runner.lastProgressAtMs = Date.now();
       }
       catch {
         // A failed control read or cycle is inspected on the next pass.
         // Never print credentials, runtime bodies or an uncertain result.
         console.error("Booklet experiment cycle did not finish; saved state will be inspected.");
       }
-      finally { clearInterval(heartbeat); }
+      finally { clearInterval(heartbeat); if (runner) runner.cycleStartedAtMs = null; }
       await delay(500);
     }
   }
@@ -47,16 +50,20 @@ async function runLoop(): Promise<void> {
   if (state) state.initialized = true;
   while (control.maintenance) { if (state) state.heartbeatAtMs = Date.now(); await delay(500); control = await readDeploymentControl(); }
   await repositories.conversation.recoverInterruptedFollowups();
+  // Reconcile mutable legacy state before either service launches work. Both
+  // handlers then receive the same immutable batch list, preventing one from
+  // resetting a batch that the other has claimed.
+  const recoveredExecutionBatchIds = await repositories.execution.recoverInterrupted(Date.now());
+  const recoveredItems = await repositories.jobs.recoverInterrupted();
   const generation = new GenerationService({ database, repositories, diagnostics });
-  const recoveredTextExecutions = await new AgentRunService({ repositories }).recoverInterrupted();
+  const recoveredTextExecutions = await new AgentRunService({ repositories }).recoverInterrupted(recoveredExecutionBatchIds);
   const recoveredImageExecutions = await new ImageAgentRunService({
     repositories,
     onMaterialized: async (ready, bookletId) => {
       if (ready.target === "reference") await generation.runReferenceJob(bookletId, ready.jobId);
       else await generation.runPageJob(bookletId, ready.jobId);
     },
-  }).recoverInterrupted();
-  const recoveredItems = await repositories.jobs.recoverInterrupted();
+  }).recoverInterrupted(recoveredExecutionBatchIds);
   if (state) state.recovered = true;
   await diagnostics.record({ event: "runner_recovered_interrupted_work", recoveredItems, recoveredExecutionBatches: recoveredTextExecutions.length + recoveredImageExecutions.length });
 
@@ -64,7 +71,9 @@ async function runLoop(): Promise<void> {
     try {
       const state = globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState };
       if (state[RUNNER_STATE]) state[RUNNER_STATE].heartbeatAtMs = Date.now();
-      if ((await readDeploymentControl()).maintenance) { await delay(500); continue; }
+      await reconcileEndedMutations();
+      const admission = await readDeploymentControl();
+      if (admission.maintenance || admission.draining) { await delay(500); continue; }
       const jobs = await repositories.jobs.listRunnable();
       for (const job of jobs) {
         await diagnostics.record({ event: "runner_job_started", bookletId: job.bookletId, jobId: job.id });
@@ -106,5 +115,6 @@ export function ensureRunnerStarted(): boolean {
 
 export function getRunnerStatus() {
   const state = (globalThis as typeof globalThis & { [RUNNER_STATE]?: RunnerState })[RUNNER_STATE];
-  return { started: Boolean(state?.started), initialized: Boolean(state?.initialized), recovered: Boolean(state?.recovered), heartbeatAtMs: state?.heartbeatAtMs ?? null, fatalError: state?.fatalError ?? null };
+  return { started: Boolean(state?.started), initialized: Boolean(state?.initialized), recovered: Boolean(state?.recovered), heartbeatAtMs: state?.heartbeatAtMs ?? null,
+    cycleStartedAtMs: state?.cycleStartedAtMs ?? null, lastProgressAtMs: state?.lastProgressAtMs ?? null, fatalError: state?.fatalError ?? null };
 }

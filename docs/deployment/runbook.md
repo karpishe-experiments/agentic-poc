@@ -11,6 +11,35 @@ the error names the missing setting without printing its value.
 
 ## Current deployment status
 
+The issue #65 bounded-recovery candidate is not deployed. Its current work and
+remaining gates are in [M3 current progress](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-progress-and-blockers--2026-10-12).
+The historical status below does not supersede that section.
+
+### Candidate recovery controls
+
+Use the canonical deployment entrypoint and the reviewed **VPS operation control**
+workflow. `operation-status` and `operation-stop` require the exact request ID and
+environment. Stop inspects phase outputs first; process exit alone is not an
+output verdict. `backup-verify` is read-only and requires the exact backup ID,
+selected commit and image digest. It verifies the completion marker, manifest,
+archive and retained asset bytes without restoring data; its bound is 30 minutes.
+
+`staging-bootstrap-reconcile` is an explicit compatibility transition for retained
+request `38149230374-1`, not a fallback for arbitrary old releases. Preview checks
+the exact old image, failed service, journal, stale page item/job and owning failed
+operation. Apply closes admission and rechecks for races, stops only staging,
+creates and verifies a matched backup, and repairs only the approved bookkeeping.
+It archives the original journal unchanged and retains maintenance for a separately
+identified reviewed deployment. The new commit/image must match the bootstrap
+checkpoint. An interruption after repair starts retains maintenance and requires
+inspection; do not replay repair or restore automatically. Production and Cloud
+are not part of this transition.
+
+The installed dispatcher must support these actions before workflow use. A merge
+does not prove synchronization. Check dispatcher identity, application image and
+capabilities together. Use existing protected access; request a root handoff only
+if the restricted interface cannot install the reviewed dispatcher safely.
+
 Initial live acceptance completed on 2026-09-15. The latest staging transition
 passed on 2026-10-05. Sixteen model-free bindings are active through J11.
 All three persona simulations reached approved pagination with zero payable
@@ -102,7 +131,23 @@ The Cloud trial defaults remain enabled in staging, with fake mode and images di
 
 Infrastructure sync installs master-owned Compose files on the host; `prepare_release` captures them in each immutable release snapshot. Compare those defaults with the selected environment branch before release. Synchronizing host files does not rewrite an existing release; a configuration correction requires a new release commit. See the [verified lesson](../accepted/2026-09-27_dify-booklet-runner/LESSONS-LEARNED.md#vps-releases-snapshot-master-owned-compose-files).
 
-Release and restore operations enable maintenance, drain active mutations for at most 15 minutes, and keep the environment closed until readiness succeeds. A failed candidate restores the prior application and configuration while maintenance remains active. Database restoration is always explicit.
+The bounded-operation candidate changes release and restore to two-stage admission:
+draining rejects new work but permits admitted callbacks, observation and stop;
+maintenance starts only after work and mutations are resolved. Drain is bounded
+to five minutes. Uncertain identities and interrupted mutation ownership remain
+blockers. A failed candidate restores the prior application and configuration while
+maintenance remains active. Database restoration is always explicit.
+
+Candidate host limits are 30 seconds for status, 60 seconds for container stop,
+three minutes for readiness, 30 minutes for pull/backup, 60 minutes for restore,
+and 45 minutes for deployment overall. Each stage shares its remaining host
+budget. The client returns the retained request ID after five minutes; it does
+not imply that the detached operation stopped. The **VPS operation control**
+workflow on reviewed `master` inspects or stops one exact request and environment.
+Stop defaults to preview. Preserve its journal and inspect outputs before Resume;
+an interrupted restore must not restart automatically. These controls require a
+reviewed dispatcher and compatible application image before live use. The current
+legacy deployment transition is tracked in [M3](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md).
 
 Index retirement first rejects unresolved experiment work while callbacks remain
 available. It checks again after closing admission and draining, before stopping

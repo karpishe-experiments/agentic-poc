@@ -8,6 +8,29 @@ const projection = { runId: id, bookletId: id, persona: "playful_kid", mode: "si
 const create = parseRunnerOptions(["--action", "create", "--origin", origin, "--persona", "playful_kid", "--request-id", id, "--apply"]);
 
 describe("application API runner driver", () => {
+  it.each(["missing-field", "wrong-identity", "unavailable"])("rejects probe preflight %s before creating a run", async failure => {
+    const options = parseRunnerOptions(["--action", "create", "--origin", origin, "--persona", "playful_kid",
+      "--request-id", id, "--probe-app-id", id, "--probe-publication", id, "--apply"]);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: failure === "missing-field" ? { ready: true } : {
+      ready: true, schemaVersion: "1", appId: "00000000-0000-4000-8000-000000000002", publication: id,
+      callbackConfigured: true, idle: true, difySecretPresence: "verify_through_workspace_control",
+    } }, { status: failure === "unavailable" ? 503 : 200 }));
+    await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow("No run was created");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toContain("/preflight?");
+    expect(fetcher.mock.calls[0][1]?.method).toBeUndefined();
+  });
+  it("checks exact probe publication once before the single create POST", async () => {
+    const options = parseRunnerOptions(["--action", "create", "--origin", origin, "--persona", "playful_kid",
+      "--request-id", id, "--probe-app-id", id, "--probe-publication", id, "--apply"]);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ data: {
+      ready: true, schemaVersion: "1", appId: id, publication: id, callbackConfigured: true, idle: true,
+      difySecretPresence: "verify_through_workspace_control",
+    } })).mockResolvedValueOnce(Response.json({ data: projection }));
+    await executeRunner(options, { password: "private-password", fetcher });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
   it("previews mutation without reading credentials or making a request", async () => {
     const fetcher = vi.fn<typeof fetch>();
     expect(await executeRunner({ ...create, apply: false }, { fetcher })).toMatchObject({ preview: true, requestId: id, mode: "simulated" });

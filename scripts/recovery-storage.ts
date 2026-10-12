@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { z } from "zod";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
+import { operationSignal, remainingOperationMs, withOperationBudget } from "@/lib/operations/budget";
 
 const checksum = z.string().regex(/^[a-f0-9]{64}$/);
 export const backupIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/);
@@ -46,17 +47,24 @@ export class RecoveryStorage {
     return manifest;
   }
   async read(key: string, bucket = this.bucket) {
-    const result = await this.s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    if (!result.Body) throw new Error("Recovery object body is missing.");
-    return { bytes: await result.Body.transformToByteArray(), contentType: result.ContentType ?? "application/octet-stream" };
+    return withOperationBudget(Date.now() + remainingOperationMs(), async () => {
+      const signal = operationSignal()!;
+      const result = await this.s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: signal });
+      const body = result.Body;
+      if (!body) throw new Error("Recovery object body is missing.");
+      const abort = () => { if ("destroy" in body) body.destroy(); };
+      signal.addEventListener("abort", abort, { once: true });
+      try { signal.throwIfAborted(); return { bytes: await body.transformToByteArray(), contentType: result.ContentType ?? "application/octet-stream" }; }
+      finally { signal.removeEventListener("abort", abort); }
+    });
   }
   async reserve(backupId: string) {
     backupIdSchema.parse(backupId);
     // Failed reservations persist. Retrying requires a new ID and cannot overwrite a snapshot.
-    await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: `database/${backupId}.reserved`, Body: backupId, IfNoneMatch: "*" }));
+    await withOperationBudget(Date.now() + remainingOperationMs(), () => this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: `database/${backupId}.reserved`, Body: backupId, IfNoneMatch: "*" }), { abortSignal: operationSignal() }));
   }
   async writeVerified(key: string, bytes: Uint8Array | string, contentType: string) {
-    await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, IfNoneMatch: "*" }));
+    await withOperationBudget(Date.now() + remainingOperationMs(), () => this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, IfNoneMatch: "*" }), { abortSignal: operationSignal() }));
     if (digest((await this.read(key)).bytes) !== digest(bytes)) throw new Error("Uploaded recovery object failed checksum verification.");
   }
   async snapshot(backupId: string, uri: string, sourceBucket: string) {

@@ -59,6 +59,21 @@ Apply a skill only where it supports the requested POC scope. Do not add product
 6. After Review passes, use `sync-docs-issues`; compose it with `capture-project-learnings` when verified work reveals durable knowledge.
 7. The core workflow may publish a reviewed branch and pull request. Merging, deployment, issue closure, and GitHub Project mutations remain outside that authority.
 
+### Repeated blocking reviews
+
+If more than three consecutive reviews each find a new defect or blocking issue,
+stop individual corrections and review the whole package. Identify why earlier
+reviews missed the blockers or why the corrections did not resolve them. Inspect
+shared assumptions, related paths and failure boundaries before correcting the
+package. Record the cause, correction and focused verification.
+
+After this package review, use the next two reviews to check whether the pattern
+continues. If both reviews again find a new defect or blocking issue, stop fixing
+and publishing. Report the findings, attempted corrections, remaining risks and
+a recommended next step to the user, then wait for instructions. A clean review
+breaks the consecutive-blocker sequence; required clean publication reviews still
+apply. This rule takes precedence over generic skill correction-cycle defaults.
+
 For issue-backed work, select one issue branch and keep all implementation,
 review corrections, deployment fixes, and follow-up changes for that issue on
 that branch. Do not create or switch to another working branch while the issue

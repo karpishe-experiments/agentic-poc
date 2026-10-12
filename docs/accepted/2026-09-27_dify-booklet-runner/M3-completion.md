@@ -13,6 +13,88 @@ candidate, not every implementation increment.
 
 ## Compact remaining delivery
 
+### Current progress and blockers — 2026-10-12
+
+This section is the current status. Later evidence supersedes earlier statements
+that key preparation, collaboration repair or async restart proof are pending.
+Keep historical run identities and failures; do not repeat completed private setup.
+
+| Checkpoint | Current result | Remaining work |
+| --- | --- | --- |
+| Recovery candidate | Local implementation is complete pending final review. Five-minute operation budgets, exact stop/inspection, two-stage drain, retained mutation owners, atomic legacy materialization, encrypted setup resume, probe preflight and paginated UI observation are implemented in the working tree. | Finish affected correction checks and two consecutive clean independent reviews. No live success is claimed. |
+| Staging transition | Retained request `38149230374-1` and the exact stale Parent item/job remain the known live blocker. The installed application lacks the new drain contract. | Synchronize the reviewed dispatcher, use the explicit backup-protected legacy bootstrap, then deploy the compatible reviewed candidate. Preserve the original journal and checkpoint. |
+| Model-free proof | Earlier 43.8-second same-operation restart recovery and collaboration health remain valid baseline evidence. | Prove stall, stop, restart, output recovery and active-callback drain against the new lifecycle candidate. |
+| Persona acceptance | Kid functional acceptance is retained. Parent attempts 1/3 and 2/3 failed and remain saved. | Run Parent 3/3 only after the probes pass. Stop if it fails; Creator follows Parent success. No paid calls. |
+
+Private bindings are already prepared. Pending operator actions belong only in
+the [readiness register](EXECUTION.md#b-authorization-register). Daily Dify backups
+and restore rehearsal remain deferred follow-up, not M3 gates.
+
+Local checks for this increment: preparation/dispatch regression passed 26 cases;
+the final interrupted-owner drain regression passed 13 cases serially. Probe
+preflight/bootstrap passed 11 cases; API ownership passed 15; the affected
+UI/recovery/storage/budget selection passed 55. Typecheck, lint and all 12 agent
+fixtures passed. Filesystem cancellation/budget checks passed 7 cases; affected
+deployment/transport/CLI contracts passed 43. Independent review found legacy
+saved-card recovery, callback ownership and private-checkpoint inventory gaps.
+The candidate corrects these gaps and fences selection against a concurrent
+Change agents action. Startup-order checks passed 4 cases; saved-image recovery
+passed 3, including an interrupted materialization with no image-provider replay.
+Standard `npm.cmd run typecheck` and `npm.cmd run lint` passed after those
+corrections. A second review found two additional recovery gaps: named host
+containers could appear absent after failed cleanup, and a completed card could
+commit before its batch. The candidate now checks exact container identity and
+commits the card, message projection and owned batch atomically. Historical
+partial commits require exact selected-output evidence; image recovery resumes
+only deterministic bookkeeping. The two focused legacy files passed all 15
+cases after this correction. Six focused host scenarios, shell syntax checks and
+CI-level ShellCheck passed. All five restart regressions passed, including a
+direct check that terminal-batch reconciliation makes no provider call.
+Review A then identified a crash window before image continuation. The correction
+persists pending continuation with completion, rediscovers it after restart, and
+clears it only after saved artifact/card finalization. The two focused legacy
+files passed all 15 cases, including fresh recovery and stale-output protection.
+Review B also identified older card-only text results without exact completion
+proof. Recovery now retains their selected identities, shows an unresolved warning
+and blocks automatic replay. The earlier 15 passing legacy cases cover
+running-card saved-image recovery without provider replay; they do not prove the
+new unresolved text fallback. The final focused text file passed 14 cases,
+including explicit historical intake and quality-result recovery. These cases
+retain selected identities, canonical output and existing unlinked quality
+evidence, show only the unresolved warning and Change agents action, and verify
+stable repeated startup without provider execution or new artifacts. The command
+was `npx.cmd vitest run tests/integration/parallel-agent-execution.test.ts --bail=1
+--retry=0`, with fake text/image providers and a non-secret test key (20.55 seconds).
+The final image-selection correction retains the original selected candidate
+when a saved generation output already exists. A conflicting candidate cannot
+replace that output. The image integration file passed 4 cases and the text file
+passed 14 cases with fake providers and a non-secret test key. Typecheck and
+focused lint passed after this correction. These results remain local evidence;
+the frozen candidate still requires Linux host CI and deployed lifecycle probes.
+These corrections reset the clean-review count to
+zero; two consecutive clean re-reviews remain publication gates.
+These results do not replace Linux host CI or live probes.
+
+The package review after repeated blockers found that legacy recovery shortcuts
+had crossed text/image boundaries and discarded candidate identity while reusing
+batch-level output. Sole-candidate tests did not expose a changed explicit
+selection. The running-card completion shortcut is now image-only. Text recovery
+retains the original item, selection mode and response, then restores its decision
+card against the same saved version. A second candidate cannot claim that output.
+Focused regressions cover sole and explicit selections without a provider call.
+The final text integration file passed 16 cases; typecheck and scoped lint passed.
+Final reviews must inspect the complete lifecycle, including the interval between
+output persistence, card projection, batch completion and continuation. Apply the
+shared repeated-blocker rule before further correction cycles.
+
+Disposable probes use the existing runner CLI with exact `--probe-app-id` and
+`--probe-publication` on create. Its read-only preflight validates the live binding,
+callback configuration, idle admission and response schema before the single POST.
+Workspace secret-variable presence must be checked through authenticated Dify
+control where observable; a valid runtime key does not prove that variable exists.
+Preflight failure creates no run. Keep callback-first, missing-field and delayed
+observation regressions local before consuming a live probe identity.
+
 Use three checkpoints for the remaining M3 work. This sequence consolidates
 delivery, not the PRD requirements or completion evidence. The detailed contracts
 and verified evidence below support these checkpoints, not a separate release
@@ -1295,8 +1377,9 @@ sequencing stay unchanged. No paid call, reset or production change is authorize
 | Review, release and accept | Freeze one candidate; run final affected validation and two consecutive clean independent reviews, required CI and the authorized staging delivery process. Reconcile active/uncertain work before deployment. Preserve failed runs and saved assets. Check collaboration memory/health, recent OOM/restarts and Engine.IO; reuse the existing 1536 MiB correction if healthy. Reuse completed Kid evidence, then run Parent and Creator sequentially. | Each case finishes generation, tester feedback and judge assessment without repair and with zero payable calls. Callback p95 below five seconds and maximum below ten seconds are diagnostic targets, not completion gates, under the 2026-10-11 user amendment below. Record cold-start timing separately. Retain exact release/configuration/run IDs and timing evidence. |
 
 Connection/start acknowledgement remains bounded to 30 seconds. The original
-operation deadline is ten minutes for this Simulated implementation; claim,
-polling, restart and reconnection must not extend it. Dify callback timeout
+operation deadline was ten minutes in the deployed async baseline. The approved
+bounded-operation correction below replaces it with five minutes from active
+preparation; claim, polling, restart and reconnection must not extend it. Dify callback timeout
 settings remain unchanged. A timeout is not proof of execution failure. Stream
 loss with a saved ID permits GET recovery; without an ID, inspect callback state
 and retain an unresolved outcome as unknown. Reconcile terminal Dify failure
@@ -1900,9 +1983,12 @@ Deploy `38149230374` failed with journal request `38149230374-1` retained at
 `draining`, before backup or release replacement. Diagnostics `38150452444`
 confirmed the prior release remains selected, Parent attempt 2 has no active
 operation, and its failed image operation still has zero reservations and no
-saved result. The exact drain blocker is not yet verified. Do not resume blindly
-or start a successor. A read-only VPS check must identify the retained running
-records; the current automated diagnostic does not expose drain counts/items.
+saved result. The operator's read-only VPS check identified running item
+`354d337a-4e9f-42ab-a8ec-0c327a45748a`, job
+`1a258e4b-aa34-454c-8f04-ada32b4c808f`, owned by failed operation
+`c8c0e121-d3cf-41bc-8023-79cfdae8e291`. Admission was open and active
+mutations were zero. Preserve these records until the approved exact,
+backup-protected reconciliation revalidates their ownership and current state.
 
 Local prevention checks found a separate gap: dispatch-outcome and failure-callback
 transactions did not invoke the existing terminal page-batch cleanup helper.
@@ -1915,9 +2001,27 @@ siblings and unknown work. All 37 affected page-batch/dispatch tests passed
 whitespace. This is local prevention evidence, not proof of the live drain cause.
 No API, credential, request-limit or provider behavior changes are included.
 
-Next: identify and reconcile the exact drain blocker under the existing
-backup-protected authorization, resume the retained deployment and verify health,
-then linked Parent attempt 3/3. Do not start a fourth Parent
+Next: complete the approved bounded-operation correction before resuming acceptance.
+The candidate must persist a five-minute deadline before active preparation,
+reserve the final 30 seconds for reconciliation, cancel underlying I/O, and
+inspect saved output before stopping exact remote work. An unresolved attempt
+fails without erasing its recoverable operation or permitting replay. Pause
+continues to stop new admission, not active work.
+
+Implementation is in progress, not deployed or approved for publication. Focused
+evidence currently includes 19 transport cases, six budget/query-bound cases,
+23 dispatch-persistence cases, twelve coordinator cases, and four legacy restart
+cases. Host control fixtures, Bash syntax, ShellCheck and Actionlint pass;
+the full required host suites and final affected review remain pending.
+The existing deployed image lacks the new two-stage `drain` action and the
+retained host unit lacks a runtime bound. Resolve this compatibility transition
+without bypassing the retained journal or treating a client timeout as host stop.
+
+After implementation, affected validation and two clean reviews: reconcile the
+exact drain blocker, recover the retained deployment, deploy the combined
+candidate, and prove recovery, stall, stop, restart and active-callback drain
+with disposable model-free probes. Only then run linked Parent attempt 3/3.
+Do not start a fourth Parent
 run. If attempt 3 fails, stop and explain the measured cause. Creator follows
 Parent success. No new credential, private handoff or paid authority is needed.
 

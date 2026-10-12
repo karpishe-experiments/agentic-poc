@@ -2,6 +2,33 @@
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
 
+# Exact-request controls use the existing restricted entrypoint. No lifecycle
+# mutation is available merely because a request or environment was omitted.
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -s -- "$script" <<'CONTROL_ARGUMENTS'
+set -euo pipefail
+source "$1"
+parse_arguments --action operation-status --environment staging --request-id 123-1
+validate_arguments
+if (APPLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (REQUEST_ID=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (ENVIRONMENT=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+ACTION=operation-stop APPLY=false
+validate_arguments
+ACTION=operation-status ENVIRONMENT=dify
+validate_arguments
+ACTION=backup-verify ENVIRONMENT=staging BACKUP_ID=exact COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa IMAGE_DIGEST=ghcr.io/example/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+validate_arguments
+if (BACKUP_ID=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (APPLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+ACTION=staging-bootstrap-reconcile REQUEST_ID=38149230374-1
+validate_arguments
+if (REQUEST_ID=other; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (ENVIRONMENT=prod; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (APPLY=true; CONFIRMATION=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+APPLY=true CONFIRMATION=kids_booklet
+validate_arguments
+CONTROL_ARGUMENTS
+
 # Run each scheduler outcome in a strict child shell, including expected failures.
 for scheduler_case in success existing low-memory wrong-limit idle-busy restart stopped never-started; do
   scheduler_fixture="$(mktemp -d)"

@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Retain deterministic continuation after output completion
+
+- **Context:** Image output is saved before the final artifact and review card.
+- **Observation:** An in-memory callback can be lost after the completed batch
+  commits. Focused restart tests recover a persisted pending continuation without
+  another image-provider call and reject stale output that would replace newer work.
+- **Guidance:** Save pending continuation atomically with completion. Clear it
+  only after the required saved projections exist. Make finalization idempotent;
+  callback delivery alone is not proof that downstream bookkeeping finished.
+- **Evidence:** [Image recovery tests](../../../tests/integration/reference-generation.test.ts).
+  Live verification of this candidate remains pending.
+- **Promotion target:** Documentation for multi-stage saved-output recovery.
+
 ### Keep observation writes out of callback finalization transactions
 
 - **Context:** An asynchronous runner polls the same operation that a callback
@@ -250,6 +263,12 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   running. Record a finalization checkpoint before reopening admission; its resume
   must not replay stop, backup or mutation. Preserve the pre-change backup after
   the mutation checkpoint.
+- **Recovery extension:** Retain exact mutation owners across process interruption.
+  Release an interrupted owner only after its operation has verified terminal
+  evidence. A lost stop acknowledgement remains history, not a permanent blocker
+  after verified completion. Keep unrelated or unidentified owners blocked.
+  The [drain ownership regressions](../../../tests/integration/deployment-drain-control.test.ts)
+  verify this behavior locally; live deployment proof remains pending.
 - **Evidence:** [Mongo ledger tests](../../../tests/integration/experiment-maintenance.test.ts)
   and [host interruption/race scenarios](../../../tests/shell/vps-host.test.sh).
   Focused local scenarios passed; complete Linux suites and live retirement remain

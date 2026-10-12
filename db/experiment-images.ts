@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import type { AssetDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
@@ -162,9 +163,10 @@ export function createExperimentImageRepository(database: Database, options: { s
       await assets.insertOne(asset, { session });
       const summary = { assetId: asset._id, sha256: input.validatedImage.sha256, uri: asset.uri };
       const history = operation.imageFailureHistory ?? [];
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "imageCompletionClaim.id": input.claimId }, { $set: { state: "succeeded", imageCompletionClaim: null, imageFailureHistory: history, resultDigest: input.validatedImage.sha256, resultJson: JSON.stringify(summary), materializationJson: JSON.stringify(summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "imageCompletionClaim.id": input.claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, input.nowMs), imageCompletionClaim: null, imageFailureHistory: history, resultDigest: input.validatedImage.sha256, resultJson: JSON.stringify(summary), materializationJson: JSON.stringify(summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
       if (!updated) conflict("Image operation changed before finalization.");
-      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: run.activeOperationId }, { $set: { activeOperationId: null, status: run.pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+      const pauseRequested = run.pauseRequested || isRecoveredAttempt(operation, input.nowMs);
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: run.activeOperationId }, { $set: { activeOperationId: null, pauseRequested, status: pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) conflict("Image run changed before finalization.");
       return { reused: false, operation: updated, asset };
     });
