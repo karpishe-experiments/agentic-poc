@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { select, parseDiff, deploymentTests, documentTest, adaptAvailableSuites } from './selection.mjs';
+import { select, parseDiff, deploymentTests, documentTest, adaptAvailableSuites, acceptanceExclusions } from './selection.mjs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -38,8 +38,10 @@ if (command === 'select') {
 } else if (command === 'summary') {
   const selection = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
   const text = `## Validation\n\nOutcome: ${process.env.CI_OUTCOME}\n\n${selection ? `Mode: ${selection.mode}\n\nBase: ${selection.base ?? 'all checks'}\nHead: ${selection.head}\n\n${Object.entries(selection.flags).map(([k,v]) => `- ${k}: ${v ? 'selected' : 'skipped'}`).join('\n')}` : 'Selection failed before checks could run.'}\n\nProduction/container builds are performed during deployment. Browser checks perform discovery only.\n`;
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text);
-  else console.log(text);
+  const exclusions = selection ? acceptanceExclusions(selection) : [];
+  const summary = text + (exclusions.length ? `\nUnchanged acceptance journeys excluded from this scope (available in full mode):\n${exclusions.map(p => `- ${p}`).join('\n')}\n` : '');
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  else console.log(summary);
 } else if (command === 'contracts' || command === 'tests') {
   const s = JSON.parse(readFileSync(file, 'utf8'));
   for (const p of [...s.tests, ...s.mockupTests, ...s.browserTests]) if (!existsSync(p)) throw new Error(`Expected test missing: ${p}`);
@@ -47,7 +49,7 @@ if (command === 'select') {
   if (command === 'contracts') { if (pure.length) vitest(['--config', 'vitest.ci-contracts.config.ts', ...pure]); }
   else {
     const appTests = s.tests.filter(p => !pure.includes(p));
-    if (s.flags.app || appTests.length) vitest(appTests);
+    if (s.flags.app || appTests.length) vitest([...appTests, ...acceptanceExclusions(s).flatMap(p => ['--exclude', p])]);
     if (s.flags.mockup || s.mockupTests.length) vitest(['--config', 'vitest.mockup.config.ts', ...s.mockupTests]);
     for (const config of ['playwright.config.ts', 'playwright.mockup.config.ts']) {
       const paths = s.browserTests.filter(p => p.startsWith('tests/mockups/') === config.includes('mockup'));

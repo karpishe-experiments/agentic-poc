@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { select, parseDiff, difyTests, documentTest, adaptAvailableSuites } from './selection.mjs';
+import { select, parseDiff, difyTests, documentTest, adaptAvailableSuites, acceptanceTests, acceptanceExclusions } from './selection.mjs';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const pick = (...paths) => select(paths.map(path => ({ path })));
+test('PR validation skips unchanged acceptance journeys, not changed tests or full validation', () => {
+  const shared = { mode: 'pr', ...pick('db/experiment-repository.ts') };
+  assert.deepEqual(acceptanceExclusions(shared), acceptanceTests);
+  const changed = { mode: 'pr', ...pick('db/experiment-repository.ts', acceptanceTests[0]) };
+  assert.deepEqual(acceptanceExclusions(changed), [acceptanceTests[1]]);
+  assert.deepEqual(acceptanceExclusions({ ...shared, mode: 'full' }), []);
+  assert.deepEqual(acceptanceExclusions({ mode: 'affected', ...pick(acceptanceTests[1]) }), [acceptanceTests[0]]);
+});
 test('docs-only branches skip absent Dify contracts but implementations require them', () => {
   const paths = ['docs/accepted/2026-09-16_agent-platform-decision/tools.openapi.json'];
   const absent = pick(...paths);

@@ -29,9 +29,9 @@ export function boundedCollection<T extends object>(collection: T, cursorCollect
           ? cursorCollection(timeoutMS) : target;
         args[index] = { ...options, ...(!options.session ? { timeoutMS } : {}),
           ...(signal && abortable.has(String(property)) ? { signal: options.signal instanceof AbortSignal ? AbortSignal.any([signal, options.signal]) : signal } : {}) };
-        const method: unknown = Reflect.get(receiver, property, receiver);
-        if (typeof method !== "function") throw new TypeError("Mongo collection method is unavailable.");
-        return Reflect.apply(method, receiver, args);
+        // Retain the method resolved at access time. Looking it up again can
+        // bypass instrumentation on a new handle or recurse through a wrapper.
+        return Reflect.apply(value, receiver, args);
       };
     },
   });

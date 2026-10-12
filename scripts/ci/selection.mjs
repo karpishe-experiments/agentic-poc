@@ -1,6 +1,14 @@
 export const difyTests = ['tests/integration/dify-experiment.test.ts', ...['adapter', 'http', 'routes', 'availability', 'openapi'].map(name => `tests/unit/dify-experiment-${name}.test.ts`)];
 export const deploymentTests = ['tests/unit/deployment-contracts.test.ts', 'tests/unit/recovery-storage.test.ts', 'tests/unit/config/env.test.ts'];
 export const documentTest = 'tests/unit/dify-experiment-openapi.test.ts';
+// Long persona journeys supplement the focused lifecycle/repository regressions.
+// Run them in full validation or when their own test file changes.
+export const acceptanceTests = ['tests/integration/experiment-runner-style-dispatch.test.ts', 'tests/integration/experiment-runner-style-journey.test.ts'];
+
+export function acceptanceExclusions(selection) {
+  if (selection.mode === 'full') return [];
+  return acceptanceTests.filter(p => !selection.reasons.some(r => r.path === p));
+}
 
 export function adaptAvailableSuites(selection, exists) {
   const difyRuntime = ['lib/dify-experiment', 'lib/contracts/dify-experiment.ts', 'app/api/experiments/dify', 'app/experiments/dify', 'components/dify-experiment'].some(exists);

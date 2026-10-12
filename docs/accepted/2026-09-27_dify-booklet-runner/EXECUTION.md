@@ -240,8 +240,14 @@ Do not repeat an unchanged deterministic failure or hide it with test retries.
 Do not run duplicate broad commands concurrently; keep MongoDB integration files
 serial. Run one broad local set per frozen candidate, not per small edit. Repeat
 broad checks when shared behavior, suite assumptions or other relevant inputs
-change; otherwise rerun affected checks only. CI selectors and required checks are
-unchanged. Live acceptance follows deployment; mocks or browser discovery alone
+change; otherwise rerun affected checks only. PR/affected CI excludes the unchanged
+`experiment-runner-style-dispatch` and `experiment-runner-style-journey` acceptance
+files. A changed acceptance file still runs. Focused lifecycle, repository,
+authorization, storage and recovery tests remain in the normal application suite.
+Use Validate's existing `full` mode for all local simulated journeys at a release
+checkpoint when their behavior changed and equivalent current evidence is absent.
+Required status checks and host suites remain unchanged.
+Live acceptance follows deployment; mocks or browser discovery alone
 cannot replace it.
 
 Before publishing the candidate configuration/code:

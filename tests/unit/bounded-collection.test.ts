@@ -16,15 +16,23 @@ describe("Mongo operation budgets", () => {
     expect(raw.updateOne).toHaveBeenCalledWith({}, {}, { session });
   });
   it.each(["find", "aggregate"])("gives transactional %s cursors a collection default without a command override", async (method) => {
-    const raw = { [method]: vi.fn() }, scoped = { [method]: vi.fn(() => "cursor") };
+    const raw = { [method]: vi.fn(() => "cursor") }, scoped = { [method]: vi.fn() };
     const factory = vi.fn(() => scoped), session = {};
     const collection = boundedCollection(raw, factory);
     await withOperationBudget(200, async () => {
       expect(collection[method]({}, { session })).toBe("cursor");
     }, { now: () => 100 });
     expect(factory).toHaveBeenCalledWith(100);
-    expect(raw[method]).not.toHaveBeenCalled();
-    expect(scoped[method]).toHaveBeenCalledWith({}, { session, signal: expect.any(AbortSignal) });
+    expect(raw[method]).toHaveBeenCalledWith({}, { session, signal: expect.any(AbortSignal) });
+    expect(raw[method].mock.contexts).toEqual([scoped]);
+    expect(scoped[method]).not.toHaveBeenCalled();
+  });
+  it("preserves captured methods when instrumentation replaces the collection method", async () => {
+    const raw = { insertOne: async () => "saved" };
+    const collection = boundedCollection(raw), insert = collection.insertOne.bind(collection);
+    const spy = vi.spyOn(raw, "insertOne").mockImplementation(() => insert());
+    await expect(withOperationBudget(200, () => collection.insertOne(), { now: () => 100 })).resolves.toBe("saved");
+    expect(spy).toHaveBeenCalledTimes(1);
   });
   it("does not start a command after expiry", async () => {
     let now = 100;

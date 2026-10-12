@@ -38,6 +38,18 @@ without changing provider execution, approvals or request limits. The previously
 failing selected-page case passed locally. A dedicated regression forces both
 cursor types through multiple batches. Required CI and live proof remain gates.
 
+Run `38270332034` passed the selected-page regression and then exposed an outdated
+runtime lookup assertion. Recovery tests now check cancellation/deadline options
+and the coordinator's before/after-stop observations without relaxing no-replay
+checks. PR CI no longer includes unchanged slow persona-journey files by default;
+changed files still run, and existing full validation retains all journeys.
+The collection wrapper retains the method resolved at access time, so scoped
+cursor receivers do not bypass instrumentation or recurse through retry spies.
+The two-file local run passed 104 of 109 tests in 581 seconds. All five remaining
+failures passed after this correction; the multi-batch cursor regression and six
+budget unit tests also passed. Typecheck and focused lint passed. These local
+results do not replace the pending required CI or live lifecycle probes.
+
 Local checks for this increment: preparation/dispatch regression passed 26 cases;
 the final interrupted-owner drain regression passed 13 cases serially. Probe
 preflight/bootstrap passed 11 cases; API ownership passed 15; the affected
