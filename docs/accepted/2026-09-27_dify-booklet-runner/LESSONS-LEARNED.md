@@ -4,6 +4,21 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Compare equivalent completion boundaries when optimizing delegation
+
+- **Context:** Booklet separates provider output, image assembly and creator approval.
+- **Observation:** The Kid fixture repeated the same delegation after each assembled
+  image package. Applying its existing current grant through the normal approval
+  service removes eight tester invocations and retains exact approval provenance.
+  Comparing image-only timing would omit the old separate approval operation.
+- **Guidance:** Measure equivalent durable end states. Keep original-byte checks and
+  current mutable-source checks distinct; scope any byte reuse to one preparation.
+  Report query/storage counts alongside timing and distinguish local from live proof.
+- **Evidence:** Focused dispatch/context/reference-upload tests and the
+  [efficiency record](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
+- **Promotion target:** Documentation for deterministic orchestration around agents.
+
+
 ### Separate Simulated completion from paid-provider readiness
 
 - **Context:** M3 completed three persona journeys through Booklet and Dify.

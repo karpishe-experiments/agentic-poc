@@ -16,6 +16,63 @@ credentials or grant spending/deployment authority. Infrastructure remains an
 assumed dependency; no restart campaign, fault injection, restore rehearsal or
 host automation belongs to this readiness step.
 
+## Execution efficiency follow-up ? 2026-10-13
+
+**State:** Candidate implementation; reviewed staging delivery and one authorized
+Simulated Kid comparison remain pending. M3 acceptance stays complete.
+
+The saved Kid baseline `fd21423e-0c6f-4303-80c8-9205900e5656` used 47 text and
+9 image operations. Its 56 Dify executions succeeded with zero tokens/provider
+nodes/payable calls. First execution start to final judge end was 37m 05s:
+approximately 8m inside Dify and 29m between executions. Those historical gaps
+include unpartitioned application/network work; they do not identify its cause
+or establish current staging latency.
+
+The candidate retains all roles and public workflow envelopes. Execution views
+load current versions and relevant approvals; inspection and final report context
+retain history. Scheduling uses targeted operation reads and a revision-scoped
+view. Completed progress and page assembly are reused. Current scoped grants
+approve assembled style/sheets/page images through the normal approval service;
+Creator explicit approval and revoked/narrowed grants remain effective. Reference
+preparation reuses original bytes within one invocation while each upload admission
+rechecks metadata, sources, parent and run state. Strict operation admission,
+authorization and completion keep independent byte verification. Historical terminal
+operations without an end timestamp show duration unavailable. No persisted schema,
+credential inventory or Dify publication changes are required.
+
+Local comparison uses fake providers and isolated real MongoDB, with identical
+endpoints: a saved J01 result, and a saved approved J13 image with three references.
+Read counts cover find/findOne/aggregate calls, not writes or individual returned
+records. Phase events overlap and must not be summed. The comparable local samples were:
+
+| Durable endpoint | Before | Candidate | Work reduction |
+| --- | --- | --- | --- |
+| Manager ? saved J01 | 144 ms; 125 read queries | 137 ms; 115 read queries | 10 fewer reads (8.0%) |
+| Manager ? approved J13 with three references | 1,784 ms; 542 read queries; 94 storage reads | 1,184 ms; 392 read queries; 61 storage reads | 150 fewer reads (27.7%); 33 fewer storage reads (35.1%) |
+
+These are single local samples with fake providers and real persistence. They
+support deterministic reductions in work, not a staging latency forecast. The
+image-only candidate also performs approval that the old image-only endpoint
+omitted; that unequal endpoint must not be used to claim a speed improvement.
+Focused query/storage assertions and the unchanged Kid fixture protect these
+reductions. Verification passed: 54 dispatch/orchestration/reference-upload integration cases,
+15 context/J13 admission cases (the corrected historical fixture also passed alone),
+23 UI/lifecycle/contracts units, five profile/grant/Kid completion cases, four image
+recovery safeguards, six approval/corruption/no-progress cases, and the five-case
+progress-compatibility correction check. Typecheck, focused lint and agent fixtures
+passed; 147 local documentation links/anchors passed independent verification.
+The progress correction retains historical approval IDs/nulls and ordered image
+identities in its persisted fingerprint, without loading historical version content.
+Reviewed publication and the live release/run remain pending.
+The deterministic Kid fixture must complete with 39 text + 9 image operations
+(48 total) and one saved delegation decision. No paid execution is authorized.
+
+After reviewed delivery, submit one new Simulated Kid run through the authenticated
+runner. Retain its identity, output/approval/report/asset proof and zero payable
+counters. Compare operation counts, first-to-final Dify duration, combined workflow
+time and inter-execution gaps with the saved baseline. Use fresh phase diagnostics
+for attribution; do not present local timings as live improvements.
+
 ## M4 readiness plan — 2026-10-13
 
 Use the [M3 exit evidence](M3-completion.md#persona-exit-evidence) and unchanged

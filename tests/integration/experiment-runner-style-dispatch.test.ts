@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import { MongoServerError } from "mongodb";
+import { MongoServerError, type Collection, type Document } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources, verifyCurrentPageIllustrationSources } from "@/db/experiment-pages";
 import * as pageVerification from "@/db/experiment-pages";
@@ -24,6 +25,35 @@ import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-tr
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
 const databases: Database[] = [];
+async function profileHandoff(env: Awaited<ReturnType<typeof setup>>, name: string, throughApproval = false) {
+  const queries = (Object.values(env.database.collections) as unknown as Collection<Document>[]).flatMap((collection) => [
+    vi.spyOn(collection, "find"), vi.spyOn(collection, "findOne"), vi.spyOn(collection, "aggregate"),
+  ]);
+  const reads = vi.spyOn(env.store, "get");
+  const before = vi.mocked(env.runtime.start).mock.calls.length;
+  const start = performance.now();
+  expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+  let calls = 1;
+  if (throughApproval) {
+    const image = (await env.repository.listOperations(env.runId)).at(-1)!;
+    const target = () => env.database.collections.artifacts.findOne({ experimentRunId: env.runId,
+      taskId: "J13", subjectId: image.subjectId });
+    if ((await target())?.state === "draft") {
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+      calls++;
+    }
+    expect(await target()).toMatchObject({ state: "approved" });
+  }
+  const elapsedMs = Math.round(performance.now() - start);
+  const queryCount = queries.reduce((count, spy) => count + spy.mock.calls.length, 0);
+  const storageReads = reads.mock.calls.length;
+  const profile = JSON.stringify({ event: "handoff_profile", name, elapsedMs, queryCount, storageReads });
+  if (process.env.EXPERIMENT_PROFILE_PATH) appendFileSync(process.env.EXPERIMENT_PROFILE_PATH, `${profile}\n`);
+  expect(env.runtime.start).toHaveBeenCalledTimes(before + calls);
+  queries.forEach((spy) => spy.mockRestore());
+  reads.mockRestore();
+  return { queryCount, elapsedMs, storageReads };
+}
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 class MemoryStore implements AssetStore {
   files = new Map<string, Uint8Array>();
@@ -238,6 +268,41 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }, next: () => clock++, elapse: (ms: number) => { clock += ms; } };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it.each(["revoked", "narrowed"] as const)("does not auto-approve assembled style under a %s grant", async (kind) => {
+    const env = await setup("playful_kid", 13);
+    await env.reachSamples();
+    await env.dispatcher().advance(env.runId);
+    await env.dispatcher().advance(env.runId);
+    const run = (await env.repository.getRun(env.runId))!;
+    await env.database.collections.experiment_delegations.updateOne({ _id: run.activeDelegationId! },
+      { $set: kind === "revoked" ? { revokedAtMs: env.next() } : { taskIds: ["J01"] } });
+    expect(await env.dispatcher().advance(env.runId)).toBe("advanced");
+    const view = (await env.context.getRunView(env.runId))!;
+    const style = view.currentArtifacts.find((artifact) => artifact.taskId === "J08")!;
+    expect(style.state).toBe("draft");
+    expect(style.versions.find((version) => version.id === style.currentVersionId)?.approval).toBeNull();
+    expect(view.nextNarrativeTask).toBe("tester");
+    expect(view.counters.logicalText).toBe(run.counters.logicalText);
+  });
+  it("profiles the manager to specialist handoff with real persistence", async () => {
+    const env = await setup("playful_kid", 18, true);
+    await env.dispatcher().advance(env.runId); // Initial delegation.
+    await env.dispatcher().advance(env.runId); // Manager selects J01.
+    const profile = await profileHandoff(env, "manager_specialist");
+    if (!process.env.EXPERIMENT_PROFILE_BASELINE) expect(profile.queryCount).toBeLessThan(125);
+    expect((await env.repository.listOperations(env.runId)).at(-1)).toMatchObject({ role: "specialist", taskId: "J01", reservationCount: 1 });
+  });
+
+  it("profiles the manager to image handoff with three real reference assets", async () => {
+    const env = await setup("playful_kid", 18, true);
+    await env.reachPageImageWithReferences();
+    env.uploadReference.mockClear();
+    const profile = await profileHandoff(env, "manager_image_three_references_through_approval", true);
+    if (!process.env.EXPERIMENT_PROFILE_BASELINE) expect(profile.storageReads).toBeLessThan(75);
+    expect(env.uploadReference).toHaveBeenCalledTimes(3);
+    expect((await env.repository.listOperations(env.runId)).findLast((operation) => operation.role === "image"))
+      .toMatchObject({ taskId: "J13", reservationCount: 1 });
+  }, 90_000);
   it.each((["failed", "stopped"] as const).flatMap((status) =>
     [false, true].flatMap((unknown) => (["image", "tester"] as const).map((role) => ({ status, unknown, role })))))
   ("retains callback-completed $role output after runtime $status with unknown=$unknown", async ({ status, unknown, role }) => {
@@ -383,7 +448,9 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(finished).toBe(true); expect(recovered).toBe(true); expect(checkedPendingEvaluation).toBe(true);
     const run = (await env.repository.getRun(env.runId))!;
     expect(run).toMatchObject({ status: "completed", evaluationStatus: "complete", activeOperationId: null,
-      counters: { payableText: 0, payableImage: 0 } });
+      counters: { logicalText: 39, logicalImage: 9, steps: 48, payableText: 0, payableImage: 0 } });
+    const decisions = await env.database.collections.messages.find({ experimentRunId: env.runId, role: "user" }).toArray();
+    expect(decisions).toHaveLength(1);
     expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
     expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "judge")).toHaveLength(1);
     expect(env.runtime.retrieve).toHaveBeenCalled();
@@ -825,7 +892,9 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(operation.verifiedWorkflowId).toBeTruthy();
     const uploads = env.uploadReference.mock.calls.length;
     const artifact = await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13", subjectId: operation.subjectId });
-    expect(artifact).toMatchObject({ state: "draft" });
+    expect(artifact).toMatchObject({ state: "approved" });
+    expect(await env.database.collections.approvals.findOne({ artifactVersionId: artifact!.currentVersionId! }))
+      .toMatchObject({ origin: "delegated", delegationId: (await env.repository.getRun(env.runId))!.activeDelegationId });
     await env.dispatcher().advance(env.runId);
     expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
     expect((await env.repository.listOperations(env.runId)).filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === operation.subjectId)).toHaveLength(1);
@@ -1455,11 +1524,11 @@ describe("automatic saved J08 sample dispatch", () => {
     expect((await createExperimentContextService(env.database).getRunView(env.runId))?.currentArtifacts.find((item) => item.taskId === "J11")?.currentVersionId).toBe(version.id);
   });
   it.each(["explicit", "delegated"] as const)("recovers an unknown tester sheet %s decision without replay", async (origin) => {
-    const env = await setup(origin === "explicit" ? "professional_creator" : "playful_kid", 15), view = await env.reachSheet("review");
+    const env = await setup("professional_creator", 15), view = await env.reachSheet("review");
     const versionId = view.nextSheetWork!.currentVersionId!, starts = vi.mocked(env.runtime.start).mock.calls.length;
     const before = (await env.repository.getRun(env.runId))!.counters;
     const result: RoleResult = origin === "explicit" ? { kind: "decision", payload: { decision: { action: "approve", versionIds: [versionId] } } } :
-      { kind: "decision", payload: { decision: { action: "delegate", taskIds: view.activeDelegation!.taskIds, subjectId: view.bookletId } } };
+      { kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J09", "J10"], subjectId: view.bookletId } } };
     const completed = await env.testerDecision(result, true);
     expect(completed.operation.state).toBe("succeeded");
     expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: versionId })).toBe(1);
@@ -1560,14 +1629,14 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: versionId })).toBe(0);
   });
   it.each(["explicit", "delegated"] as const)("rejects corrupt sheet bytes during %s acceptance", async (origin) => {
-    const env = await setup(origin === "explicit" ? "professional_creator" : "playful_kid", 15), view = await env.reachSheet("review");
+    const env = await setup("professional_creator", 15), view = await env.reachSheet("review");
     const versionId = view.nextSheetWork!.currentVersionId!;
     const sheet = view.currentArtifacts.find((item) => item.currentVersionId === versionId)!;
     const build = (sheet.versions.find((item) => item.id === versionId)!.content as { build: { assetId: string } }).build;
     const asset = (await env.database.collections.assets.findOne({ _id: build.assetId }))!;
     env.store.files.set(asset.uri, new Uint8Array([1]));
     const decision: RoleResult = origin === "explicit" ? { kind: "decision", payload: { decision: { action: "approve", versionIds: [versionId] } } } :
-      { kind: "decision", payload: { decision: { action: "delegate", taskIds: view.activeDelegation!.taskIds, subjectId: view.bookletId } } };
+      { kind: "decision", payload: { decision: { action: "delegate", taskIds: ["J09", "J10"], subjectId: view.bookletId } } };
     await expect(env.testerDecision(decision)).rejects.toMatchObject({ code: "invalid_state" });
     expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: versionId })).toBe(0);
   });
@@ -1608,8 +1677,14 @@ describe("automatic saved J08 sample dispatch", () => {
   });
   it.each([6, 11] as const)("preserves the retained %s-slot no-progress hash at count two", async (slots) => {
     const env = await setup("professional_creator", slots);
-    await env.dispatcher().advance(env.runId);
+    for (let step = 0; step < 3; step++) await env.dispatcher().advance(env.runId);
+    const current = (await env.database.collections.artifact_versions.findOne({ sourceOperationId: { $exists: true } }))!;
+    expect(current).toBeTruthy();
+    const historical = { ...current, _id: randomUUID(), versionNumber: 0 };
+    delete historical.sourceOperationId;
+    await env.database.collections.artifact_versions.insertOne(historical);
     const view = (await env.context.getRunView(env.runId))!;
+    expect(view.currentArtifacts[0].versions).toHaveLength(2);
     function ordered(value: unknown): unknown {
       if (Array.isArray(value)) return value.map(ordered);
       if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, ordered(item)]));

@@ -28,6 +28,25 @@ const proposal = (taskId: "J01" | "J02", content: unknown) => ({ kind: "proposal
 const decision = (decision: unknown) => ({ kind: "decision", payload: { decision } });
 
 describe("saved experiment context", () => {
+  it("keeps historical versions and operations in inspection while execution reads only current versions", async () => {
+    const { context, database, start } = await setup();
+    const specialist = await start(490, "specialist", "J01");
+    const saved = await specialist.complete(proposal("J01", concept));
+    const versionId = JSON.parse(saved.operation.materializationJson!).versionId as string;
+    const version = (await database.collections.artifact_versions.findOne({ _id: versionId }))!;
+    const historical = { ...version, _id: id(491), versionNumber: 0 };
+    delete historical.sourceOperationId;
+    await database.collections.artifact_versions.insertOne(historical);
+    const inspection = await context.getRunView(runId);
+    const execution = await context.getExecutionView(runId);
+    expect(inspection?.currentArtifacts[0].versions).toHaveLength(2);
+    expect(execution?.currentArtifacts[0].versions.map((row) => row.id)).toEqual([versionId]);
+    expect(execution?.nextNarrativeTask).toBe(inspection?.nextNarrativeTask);
+    expect(inspection?.operationHistory).toHaveLength(1);
+    expect(execution?.operationHistory).toEqual([]);
+    await database.collections.experiment_operations.updateOne({ _id: saved.operation._id }, { $unset: { lifecycle: "" } });
+    expect((await context.getRunView(runId))?.operationHistory[0].elapsedMs).toBeNull();
+  });
   it("projects the persisted predecessor of a repaired successor", async () => {
     const { repository, context, start } = await setup();
     const failed = await start(490, "manager");
