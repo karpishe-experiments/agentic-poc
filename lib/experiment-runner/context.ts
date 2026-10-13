@@ -19,6 +19,7 @@ import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
 import { experimentPageBatchSchema, type ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 import type { ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
+import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 type NextTask = ExperimentTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
@@ -194,7 +195,7 @@ export function createExperimentContextService(database: Database, options: { st
       revision: pending ? { pageId: pending.subjectId!, artifactVersionId: pending.artifactVersionId! } : null });
   }
 
-  async function getRunView(runId: string) {
+  async function getRunView(runId: string, projection: "inspection" | "execution" | "role" = "inspection") {
     const checked = opaqueIdSchema.parse(runId);
     const run = await runs.findOne({ _id: checked });
     if (!run) return null;
@@ -209,7 +210,9 @@ export function createExperimentContextService(database: Database, options: { st
       ...(configuredPageIllustrationTask(run.configurationJson) ? [{ taskId: "J13" as const, subjectKind: "page" as const }] : []),
     ] }).sort({ taskId: 1, subjectId: 1 }).toArray();
     if (new Set(artifactRows.map((row) => `${row.taskId}:${row.subjectKind}:${row.subjectId}`)).size !== artifactRows.length) deny("Run has duplicate task subject artifacts.");
-    const versionRows = await versions.find({ artifactId: { $in: artifactRows.map((row) => row._id) } })
+    const versionRows = await versions.find(projection === "inspection"
+      ? { artifactId: { $in: artifactRows.map((row) => row._id) } }
+      : { _id: { $in: artifactRows.flatMap((row) => row.currentVersionId ? [row.currentVersionId] : []) } })
       .sort({ versionNumber: 1 }).toArray();
     const approvalRows = await approvals.find({ experimentRunId: run._id,
       artifactVersionId: { $in: versionRows.map((row) => row._id) } }).toArray();
@@ -231,8 +234,10 @@ export function createExperimentContextService(database: Database, options: { st
       batch.pages.some((page) => currentArtifacts.some((artifact) => artifact.taskId === "J13" && artifact.subjectId === page.pageId && artifact.state === "draft")));
     const pageBatch = activeBatches[0]?.batch ?? reviewBatch?.batch;
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
-    const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" }).sort({ sequence: 1 }).toArray();
-    const operationRows = await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray();
+    const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" },
+      projection === "execution" ? { projection: { _id: 1, sequence: 1, createdAtMs: 1 } } : {}).sort({ sequence: 1 }).toArray();
+    const operationRows = projection === "inspection" ? await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray()
+      : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
     let pageSelection = null;
     if (configuredPageIllustrationTask(run.configurationJson) && run.mode === "simulated" &&
         run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
@@ -268,12 +273,13 @@ export function createExperimentContextService(database: Database, options: { st
       activeDelegation: grant && !grant.revokedAtMs && !grant.supersededById ? { id: grant._id, taskIds: [...grant.taskIds], subjectKind: grant.subjectKind, subjectId: grant.subjectId, testerDecisionId: grant.testerDecisionId, effectiveSequence: grant.effectiveSequence } : null,
       currentArtifacts,
       pageSelection,
-      creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: parseJson(row.uiMessageJson), createdAtMs: row.createdAtMs })),
+      creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: row.uiMessageJson ? parseJson(row.uiMessageJson) : null, createdAtMs: row.createdAtMs })),
       operationHistory: operationRows.map((row) => ({ id: row._id, role: row.role, taskId: row.taskId, state: row.state,
         workflowRunId: row.workflowRunId, parentWorkflowRunId: row.parentWorkflowRunId,
         verifiedWorkflowId: row.verifiedWorkflowId ?? null,
         workflowTaskId: row.workflowTaskId ?? null, deadlineAtMs: row.deadlineAtMs, remoteStatus: row.remoteStatus ?? null,
-        elapsedMs: Math.max(0, (row.lifecycle?.endedAtMs ?? Date.now()) - (row.lifecycle?.startedAtMs ?? row.dispatchStartedAtMs ?? row.createdAtMs)),
+        elapsedMs: ["succeeded", "failed"].includes(row.state) && row.lifecycle?.endedAtMs == null ? null :
+          Math.max(0, (row.lifecycle?.endedAtMs ?? Date.now()) - (row.lifecycle?.startedAtMs ?? row.dispatchStartedAtMs ?? row.createdAtMs)),
         lifecycle: row.lifecycle ? { phase: row.lifecycle.phase, startedAtMs: row.lifecycle.startedAtMs,
           lastProgressAtMs: row.lifecycle.lastProgressAtMs, attemptOutcome: row.lifecycle.attemptOutcome,
           unresolved: row.lifecycle.unresolved, stop: row.lifecycle.stop, timeoutAtMs: row.lifecycle.timeoutAtMs } : null,
@@ -329,7 +335,8 @@ export function createExperimentContextService(database: Database, options: { st
       return { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest,
         ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId) } : {}) };
     }
-    const view = await getRunView(run._id);
+    const report = (operation.role === "judge" || operation.role === "tester") && run.generationCompletedAtMs != null;
+    const view = await measurePhase(identity, "role_context", () => getRunView(run._id, report ? "inspection" : "role"));
     if (!view) deny("Run view is unavailable.");
     if ((operation.role === "judge" || operation.role === "tester") &&
         run.generationCompletedAtMs != null &&
@@ -385,5 +392,6 @@ export function createExperimentContextService(database: Database, options: { st
     deny("Role context is not supported in this slice.");
   }
 
-  return { getRunView, getOperationContext };
+  const getExecutionView = (runId: string) => measurePhase({ runId }, "execution_view", () => getRunView(runId, "execution"));
+  return { getRunView, getExecutionView, getOperationContext };
 }

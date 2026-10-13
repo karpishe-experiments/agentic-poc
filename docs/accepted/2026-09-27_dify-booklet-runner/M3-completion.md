@@ -1,6 +1,6 @@
 # M3 — Pages, runner UI and advisory evaluation
 
-**State:** In progress; full-booklet acceptance remains pending. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
+**State:** Complete — Simulated acceptance passed on 2026-10-13. **Coverage:** J11–J13; AC01–AC02, AC05–AC07, AC10–AC12.
 **Predecessor:** [M2](M2-references.md). Apply [EXECUTION](EXECUTION.md).
 
 Track missing private bindings and permissions only in the
@@ -20,29 +20,31 @@ remaining work and supersedes earlier infrastructure/restart/deadline probe gate
 
 | Current checkpoint | Verified evidence | Remaining work |
 | --- | --- | --- |
-| Application candidate | Release `5bbf9cec5f684f6702f6ea38486ca8f12b239e18`, image `sha256:0bf79c96e4ee66dacf45b8a862a9f5dec1108b6470c70821fa059edd609de6f5`; Deploy `38357699423` passed. | Reuse this release unless an application/workflow defect requires correction. |
+| Application candidate | Reviewed correction deployed through PR #187 at staging `db51e9b394ddb01b14a4a832f862b53a3cfd0b7b`; Deploy `38375187402` passed, image `sha256:d8b4efae997026bab6c3c0ab35e722a2378155c20f73ee9acf65035d2325dfb9`. | Reuse this verified release. |
 | Delayed recovery | Run `a2862e03-b7ac-4534-8818-85cdc1aa6026`, operation `4e04a1ed-0b79-4b60-81de-6db339bc968a`, Dify run `c39fa38f-8294-4153-956a-28e1f7b582fe` completed in 68.736 seconds across restart/draining; publication and saved output verified, one reservation, zero payable calls. | Complete; do not repeat. |
-| Stopped probe | Run `69e23447-d75f-4444-8263-91eb8c269dff`, operation `b0b0829d-b1ef-43e5-9543-5c33502f2cc7`; Dify run `ac515816-fce4-42d8-ac67-9b2eaf5470de` reports stopped, zero tokens. Booklet still reports unresolved. | Reconcile the original operation through the existing API; correct only a confirmed application defect if needed. |
-| Normal configuration | Existing protected eighteen-binding settings are prepared; temporary probe publication is `2f9a336b-ac69-4e56-afcb-83beadb008a3`. | Restore normal manager `46572ccb-d954-45e5-b73d-90fd0995cdb6`, publication `7425dbd8-efc5-48a7-8fe6-687b574d740f`; one application preflight. |
-| Persona acceptance | Kid `fd21423e-0c6f-4303-80c8-9205900e5656` completed generation/evaluation, 47 text and 9 image calls, zero payable calls. Parent 1/3 and 2/3 remain failed and saved. | Check deployed J13 fixes using existing evidence; run linked Parent 3/3 from `92272a97-f96d-4634-8cba-3524a3fa2b51`. Stop if it fails; Creator follows success. |
+| Stopped probe | Run `69e23447-d75f-4444-8263-91eb8c269dff`, operation `b0b0829d-b1ef-43e5-9543-5c33502f2cc7` is `failed/definite_failure`, lifecycle resolved, active pointer cleared, reservation one and counters unchanged. Diagnostics `38374753642` confirms revision 1244 and idle host journal. | Complete; do not repeat reconciliation. |
+| Normal configuration | Activation `38376309115` passed with backup `staging-20261013T092651Z-5c67f0dbbf8df758`. All eighteen expected Community publications were read back as current, with no real-provider nodes and callback-variable presence. Normal manager is `46572ccb-d954-45e5-b73d-90fd0995cdb6`, publication `7425dbd8-efc5-48a7-8fe6-687b574d740f`. | Complete; reuse activation readiness/admission checks and the authenticated runner UI check. Direct JSON preflight navigation was blocked by Chrome; no endpoint success is claimed. |
+| Persona acceptance | Kid evidence reused; Parent 3/3 and Creator initial run completed generation/evaluation. Exact runs, output counts and accounting are below. Failed Parent predecessors remain saved. | Complete; do not start another Simulated acceptance run. |
 
-**Current blocker:** the installed application cannot close the claimed stopped
-probe through Inspect/Stop. Its normal deployment drain uses that same installed
-image and counts the unresolved operation, so the correction cannot pass that
-drain. No existing supported API escape was found. Publish the focused correction,
-but do not start a deployment known to fail, overwrite records, restore bindings
-while this work remains unresolved, or add host automation. A bounded operator
-execution of the reviewed reconciliation code, or a separately agreed delivery
-exception, is needed before the normal deployment and persona sequence can resume.
-This is an application reconciliation/deployment dependency, not a new M3
-infrastructure test requirement.
+**Current checkpoint:** the approved one-time operator reconciliation succeeded.
+Backup `staging-stopped-probe-20261013T090710Z-2622181` was verified; private evidence
+remains at `/var/lib/kids-booklet/issue65-stop-exception.rVFuTytN`. The exact reviewed
+repository transition retained the reservation, counters, stop intent, original
+deadline and attempt history. Admission was restored. The delivery circularity is
+cleared; do not repeat the exception. Corrected deployment and normal binding
+activation/readiness passed. The authenticated UI confirmed saved history and
+available Simulated creation. Parent 3/3 and Creator initial acceptance completed
+without manual repair or a Creator correction cycle.
 
 The automatic-deadline probe `c20e0d05-966a-431c-894b-7e1cb5f48dbf` was not
 started and is cancelled from the M3 sequence. No disposable resource is deleted.
 The additional live restart-during-cancellation proof is no longer an M3 gate.
-Final acceptance remains all required pages/covers, approvals/assets, tester and
-judge reports, durable results and zero payable calls. No fourth Parent attempt
-is authorized. No new private setup is currently required.
+All required pages/covers, approvals/assets, tester and judge reports, durable
+results and zero payable calls passed. The bounded persona campaign is finished;
+unused Creator successor allowance is not an instruction to run more cases.
+Next work is [M4 readiness planning](M4-balanced.md#m4-readiness-plan--2026-10-13)
+only. Balanced implementation and paid execution remain outside this task.
+No new private setup is currently required.
 
 Authenticated MCP lookup confirmed the stopped execution and zero tokens on
 2026-10-13. Booklet Inspect retained `unknown_outcome`: ordinary claimed failure
@@ -51,10 +53,77 @@ The focused correction closes only that case when no callback claim or saved
 completion remains, preserves attempt/stop history and reservations, and atomically
 closes owned bookkeeping. Local validation: two completion unit tests and all
 29 dispatch integration cases passed (28 in the file run, the new Inspect case
-separately); typecheck and focused lint passed. Required publication review/CI and
-live reconciliation remain pending. Credential inventory impact: none; no names,
+separately); typecheck and focused lint passed. Two independent publication reviews
+and lean CI `38364968957` passed for `eb429a55c21c1d8f5b781b5e18bf4cb85f294742`;
+PR #186 merged at `f1a8e8e031b9065a123034bd2466620f4e83c9dd`. The same patch was
+reviewed twice for staging commit `bfb8996`; lean CI `38369170986` passed.
+PR #187 merged after explicit merge/deployment approval and verified reconciliation.
+Fresh diagnostics `38374753642` confirms resolved lifecycle, preserved tester
+completion, no saved manager output and unchanged accounting. Credential inventory
+impact: existing protected settings were restored through their documented
+transfer/consumer path; no names,
 storage, transfers or consumers changed.
 
+### Persona exit evidence
+
+| Persona | Saved run | Final images / current artifacts / assets | Logical text / image / steps | Payable text / image |
+| --- | --- | --- | --- | --- |
+| Kid, reused | `fd21423e-0c6f-4303-80c8-9205900e5656` | Cover + 3 story pages / retained J01–J13 completion / 9 assets | 47 / 9 / 56 | 0 / 0 |
+| Parent 3/3 | `74788c82-3bbb-4c01-8336-e8b565145ed6` | Cover + 5 story pages / 24 / 11 | 55 / 11 / 66 | 0 / 0 |
+| Creator initial | `bc24a8c6-39bd-44a0-87a5-5d1c0df39934` | Cover + 8 story pages / 31 / 15 | 84 / 15 / 99 | 0 / 0 |
+
+Parent booklet is `893e53d0-b674-416a-8113-03bd85b870fc`, linked to failed
+attempt 2 `92272a97-f96d-4634-8cba-3524a3fa2b51`; failed attempt 1
+`f9bc2497-02f4-457e-88f3-940fdef2c980` remains its predecessor. Creator booklet is
+`2229fa48-3a1c-48ec-887c-7129973b1041`. Both new runs retain all thirteen
+responsibilities, current approvals, source lineage, reference/page assets and
+separate matching tester/judge reports.
+
+Parent 3/3 completed at revision 375. All thirteen responsibilities have current
+approved artifacts (24 total); J12 and J13 each have six page subjects. The cover
+is index 0, story pages are 1–5, and page 3 has two panels. Eleven distinct assets
+cover two style samples, two character sheets, one location sheet and six final
+images. The saved decisions contain eleven J01–J13 delegation grants; all 24
+current approvals retain delegated provenance. No acceptance output was repaired.
+
+Tester workflow `bde2ca5e-d1c6-4a10-a5e8-cac45ac70f38` and judge workflow
+`5a537452-044c-45af-ae29-7a220f6ae252` succeeded with zero tokens. Their publications
+are `3c271e5a-6ec9-4eaf-a949-18de5412eadb` and
+`539c1fa5-a07d-40d2-835f-b290d3c8bab9`. Both reports match the 24 current versions
+and configuration `1c4f48134ad3cea76bd0cfafc87816f9746b76ef356a6dc0440dbd15bed0ae0a`.
+The two-panel page's image execution `61c4a2ae-d846-4d73-8d2c-aac0c3e91ee3`
+also succeeded with zero tokens under publication
+`3c930953-c3eb-40a4-b525-aa835b2ba889`. All three inspected graphs have no
+real-provider nodes. Diagnostic execution times were 14.983, 13.300 and 22.026
+seconds respectively; these are workflow times, not whole-persona duration.
+
+The saved completion transition validates current approvals, source lineage,
+reference evidence and stored image bytes. The UI readback confirms its saved
+result; it does not freshly hash assets. Six 8×8 fixture/canvas geometry warnings
+remain advisory. Simulated reports retain `not_assessed` quality and unavailable
+billing estimates; application counters independently show zero payable calls.
+
+Creator completed at revision 562. Its 31 current artifacts are explicitly
+approved through 29 tester decisions; two decisions each approve two versions.
+J12 and J13 each have nine page subjects, indices 0–8; pages 3 and 6 each have two
+panels. Fifteen distinct assets cover two style samples, two character sheets,
+two location sheets and nine final images. All 99 saved operations are succeeded,
+finished and retain one reservation; no active preparation or UI alert remains.
+The completion transition requires no active operation and validates stored
+assets and current source/approval evidence.
+
+Creator tester `023f8263-cd29-4a07-910d-893e8de61020` and judge
+`5f46eb88-290c-4554-9b99-d6d8c74f9e32` match all 31 current versions and
+configuration `20935b1519963bf447a3fce576dc20f3ea7b4c7f144973965aa503efb16bac5d`.
+Their publications are `28f6484f-43d0-4915-b9cd-f93fed4ecd15` and
+`539c1fa5-a07d-40d2-835f-b290d3c8bab9`. Authenticated Dify readback confirms both
+and the page-3 image execution `f905205f-98bd-48a8-9d38-6140bd1d1ea4` succeeded
+with zero tokens and no real-provider nodes. Their workflow times were 18.517,
+18.729 and 26.219 seconds. Saved operation progress spans approximately 56 minutes
+from first manager completion to judge completion; this is diagnostic, not a
+whole-run start timestamp. Nine fixture/canvas geometry warnings remain advisory.
+Simulated evidence does not establish creative quality, real-provider behavior
+or real image-reference consumption. M4 must verify its changed paths separately.
 ### Superseded delivery history
 
 The following records retain earlier identities and results. Their pending

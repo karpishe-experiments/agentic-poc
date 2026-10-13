@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** Accepted roadmap. M1 narrative slice and all-persona M2 reference boundaries have live evidence. M3 final pages, complete booklets and later acceptance remain pending; see [M2 evidence](M2-references.md#current-live-reference-evidence--2026-10-05).
+**Status:** M3 Simulated acceptance is complete. M4 readiness is prepared; Balanced implementation and paid execution remain unstarted. The authorized efficiency follow-up and one Simulated Kid comparison are recorded in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
@@ -138,6 +138,11 @@ Record these in the detailed plan as they are resolved, with evidence or explici
 
 **Coverage:** J11–J13; AC01, AC02, AC05–AC07, AC10.
 
+**State:** Complete on 2026-10-13. The [M3 exit evidence](M3-completion.md#persona-exit-evidence)
+records reused Kid, successful Parent 3/3 and successful Creator initial acceptance,
+all with zero payable calls. The checkpoints below describe the completed scope;
+do not repeat the campaign, operator reconciliation or normal-binding restoration.
+
 Deliver the remaining work through the three
 [compact M3 checkpoints](M3-completion.md#compact-remaining-delivery):
 
@@ -176,7 +181,9 @@ outside M3; this consolidation does not change PRD limits or acceptance criteria
 
 **Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
-M4 remains planned, pending M3's deployed completion. Use the three
+M3's deployed Simulated acceptance is complete. The current task prepares the
+[M4 readiness plan](M4-balanced.md#m4-readiness-plan--2026-10-13) only; it does not
+implement Balanced or start paid execution. For a later M4 task, use the three
 [M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |

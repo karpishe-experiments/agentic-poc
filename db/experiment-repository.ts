@@ -176,6 +176,10 @@ export function createExperimentRepository(database: Database, options: { store?
   async function getRun(runId: string) { return runs.findOne({ _id: parse(opaqueIdSchema, runId) }); }
   async function listRuns() { return runs.find().sort({ createdAtMs: -1, _id: -1 }).toArray(); }
   async function getOperation(operationId: string) { return operations.findOne({ _id: parse(opaqueIdSchema, operationId) }); }
+  async function latestOperation(runId: string, filter: Partial<Pick<ExperimentOperationDocument, "role" | "taskId" | "subjectId" | "state">> = {}) {
+    return measurePhase({ runId }, "operation_selection", () =>
+      operations.findOne({ ...filter, runId: parse(opaqueIdSchema, runId) }, { sort: { createdAtMs: -1, _id: -1 } }));
+  }
   async function listOperations(runId: string) { return operations.find({ runId: parse(opaqueIdSchema, runId) }).sort({ createdAtMs: 1, _id: 1 }).toArray(); }
   async function listOperationHeads(runIds: string[]): Promise<OperationHead[]> {
     const ids = runIds.map((id) => parse(opaqueIdSchema, id));
@@ -719,5 +723,5 @@ export function createExperimentRepository(database: Database, options: { store?
       dispatchStartedAtMs: { $ne: null }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, latestOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
 }

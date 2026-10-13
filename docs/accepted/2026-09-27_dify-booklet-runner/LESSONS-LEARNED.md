@@ -4,6 +4,59 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Compare equivalent completion boundaries when optimizing delegation
+
+- **Context:** Booklet separates provider output, image assembly and creator approval.
+- **Observation:** The Kid fixture repeated the same delegation after each assembled
+  image package. Applying its existing current grant through the normal approval
+  service removes eight tester invocations and retains exact approval provenance.
+  Comparing image-only timing would omit the old separate approval operation.
+- **Guidance:** Measure equivalent durable end states. Keep original-byte checks and
+  current mutable-source checks distinct; scope any byte reuse to one preparation.
+  Report query/storage counts alongside timing and distinguish local from live proof.
+- **Evidence:** Focused dispatch/context/reference-upload tests and the
+  [efficiency record](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
+- **Promotion target:** Documentation for deterministic orchestration around agents.
+
+
+### Separate Simulated completion from paid-provider readiness
+
+- **Context:** M3 completed three persona journeys through Booklet and Dify.
+- **Observation:** Parent and Creator retained their required pages, approvals,
+  references, assets and independent reports with zero payable calls. Simulated
+  reports correctly left creative quality unassessed. Code inspection then found
+  Simulated-only checks across admission, context, image assembly and completion;
+  the current reservation counts also do not retain provider token/cost usage.
+- **Guidance:** Reuse valid completion evidence, but audit the whole changed mode
+  path before enabling a paid branch. With exactly one provider request per
+  invocation, reuse its reservation; prove no hidden retries or repair calls.
+  Record effective model/token settings and attributable usage separately from
+  reserved attempts. Do not infer provider readiness or image quality from a
+  successful deterministic campaign.
+- **Evidence:** [M3 persona exit](M3-completion.md#persona-exit-evidence) and
+  [M4 readiness boundaries](M4-balanced.md#m4-readiness-plan--2026-10-13).
+- **Promotion target:** Documentation for staged provider experiments.
+
+### Verify complete operator input before execution
+
+- **Context:** A separately authorized operator must execute reviewed application
+  code when the installed application cannot complete its own delivery drain.
+- **Observation:** A long terminal paste was corrupted. A compressed transfer
+  checked against the pinned procedure hash loaded the exact reviewed bytes.
+  Preview then exposed a separate race with a tracked observation of the same
+  stopped operation; waiting only for its exact owner preserved the zero-active
+  mutation gate. Backup-protected reconciliation completed without changing
+  reservations, counters or stop history.
+- **Guidance:** Verify payload integrity and syntax before loading it. Report
+  allowlisted failure stages and state fields. Bound any wait for known work;
+  do not clear ownership or treat unrelated work as idle. Keep apply separate
+  from preview and retain evidence after an uncertain outcome.
+- **Evidence:** [Verified M3 reconciliation](M3-completion.md#current-progress-and-blockers--2026-10-13),
+  backup `staging-stopped-probe-20261013T090710Z-2622181` and diagnostics
+  `38374753642`.
+- **Promotion target:** Documentation for exceptional operator handoffs; no new
+  host action or infrastructure acceptance gate.
+
 ### Keep experiment acceptance proportional to its product flow
 
 - **Context:** M3 needs Simulated Kid, Parent and Creator completion.

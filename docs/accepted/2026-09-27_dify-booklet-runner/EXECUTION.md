@@ -6,6 +6,20 @@ implementation plan. Target staging only; no production promotion.
 
 ## Status and change surface
 
+### Efficiency follow-up ? 2026-10-13
+
+The operator approved the bounded execution cleanup before Balanced: preserve
+manager/specialist roles and J01?J13; reduce repeated scheduling/history reads,
+assembly, delegation decisions and reference-byte reads. Preserve current grants,
+source/approval checks, reservations, deadlines, uncertain outcomes and saved data.
+The [efficiency record](M4-balanced.md#execution-efficiency-follow-up--2026-10-13)
+owns measurements and validation. Existing reviewed staging delivery is authorized.
+After publication/deployment, the operator additionally requested one new Simulated
+Kid performance run: verify completion and compare it with the saved Kid baseline.
+This supersedes the no-new-persona-run restriction only for that comparison run;
+it does not reopen M3 acceptance or authorize Balanced/Real calls.
+
+
 ### M3 experiment-only scope
 
 The operator approved this scope correction on 2026-10-13. It supersedes earlier
@@ -19,11 +33,13 @@ identify the Booklet/persona behavior it protects and use the smallest sufficien
 verification. An observed external dependency failure is a blocker to report,
 not authorization to expand this experiment into infrastructure engineering.
 
-Reuse the deployed release and valid Kid evidence. Reconcile the existing stopped
-probe through authenticated APIs, restore and read back the normal eighteen
-bindings, and check application admission once. Then run linked Parent 3/3;
-stop acceptance if it fails. Creator follows Parent success. Cancel the unstarted
-deadline probe and the additional live restart-during-cancellation requirement.
+M3 completed on 2026-10-13: reuse its deployed release, restored eighteen bindings
+and saved Kid, Parent 3/3 and Creator initial acceptance. The stopped probe is
+resolved; do not repeat reconciliation, binding restoration or persona runs.
+The unstarted deadline probe and additional live restart-during-cancellation
+requirement are cancelled. The [current M3 exit record](M3-completion.md#persona-exit-evidence)
+is authoritative. Prepare M4 readiness only; do not implement Balanced or start
+paid execution under this task.
 Keep existing recovery code, historical evidence, data, source/approval checks,
 request limits and zero-payable-call requirements. Timing is diagnostic.
 
@@ -35,8 +51,8 @@ publication reviews still apply to changed candidates. Do not repeat broad suite
 infrastructure shell suites or container builds for unchanged infrastructure.
 Do not redeploy unchanged application code or introduce another manual script.
 
-This package prepares implementation. It does not mark any runtime milestone
-complete. Expected changes are the new Dify suite, normal Booklet contracts and
+This package governs implementation and records verified milestone outcomes.
+Expected changes are the new Dify suite, normal Booklet contracts and
 services, a small runner UI, focused tests and operating evidence. Keep the
 existing MongoDB, asset store, deployment system and access gate. No PDF, new
 queue service, custom agent editor, account system or infrastructure platform.
@@ -144,10 +160,27 @@ not fresh live checks. Recheck the required row before dependent execution.
 
 Current M3 recovery status is in [M3 current progress](M3-completion.md#current-progress-and-blockers--2026-10-13).
 Existing eighteen bindings and encrypted private setup remain valid; do not ask
-for their keys again. The remaining deployment dependency is reviewed dispatcher
-synchronization followed by explicit legacy bootstrap for request `38149230374-1`.
-Restricted host access must be checked before requesting a root handoff. No new
-credential or spending approval is needed for the authorized model-free scope.
+for their keys again. Dispatcher synchronization and legacy bootstrap for request
+`38149230374-1` are complete; do not repeat them. On 2026-10-13 the operator approved
+one delivery exception: execute PR #186's reviewed reconciliation code once for
+run `69e23447-d75f-4444-8263-91eb8c269dff`, operation
+`b0b0829d-b1ef-43e5-9543-5c33502f2cc7`, after a verified backup and fresh terminal,
+deadline, stop-intent and callback-claim checks. Retain reservations and history.
+This permits a temporary operator execution, not a permanent host action or repair
+script. The restricted dispatcher has no action for this exact code execution;
+the private VPS root-terminal execution completed with verified backup
+`staging-stopped-probe-20261013T090710Z-2622181`. Diagnostics `38374753642` confirms
+the operation failed definitively, lifecycle resolved, active pointer cleared and
+accounting retained. Do not repeat the exception. PR #187 merge and its staging
+deployment were explicitly approved; browser control of Booklet staging for
+preflight and remaining persona acceptance was also approved in this chat.
+No new credential or
+spending approval is needed for the authorized model-free scope.
+
+The approved persona sequence was Parent 3/3 only, then Creator after Parent
+success, with at most three Creator runs. Parent and Creator initial acceptance
+both passed; no further persona run is needed. The remaining grant is M4 readiness
+planning only. Balanced implementation and paid execution remain outside it.
 
 Parent campaign deployment readiness was verified on 2026-10-11: staging release
 `5cf84ecc263847a8583c1e3623153151149306e8`, Deploy `38135107485` and Check
@@ -179,7 +212,7 @@ Parent item/job. Original request `38149230374-1` is archived unchanged; deploym
 
 | Remaining dependency | Technical verification | Private reference | Required action | Exit |
 | --- | --- | --- | --- | --- |
-| Restore normal M3 experiment after stopped probe | Delayed run `a2862e03…` completed with verified publication/output in 68.736 seconds. Manual run `69e23447…` is remotely stopped but locally unresolved. Installed Inspect/Stop cannot close it; the same old image blocks normal deployment drain. Focused correction passes local tests/reviews; [M3 blocker](M3-completion.md#current-progress-and-blockers--2026-10-13) | Existing encrypted probe key and normal eighteen-binding settings; no new credentials | Publish the correction; report the delivery dependency for a bounded operator execution of reviewed reconciliation code or a separately agreed delivery exception. Do not add another root script or try a doomed deployment. Then restore prepared normal settings through the existing protected workflow and one application preflight | Normal manager/publication read back, unresolved active work cleared by evidence, admission open. Parent 3/3 then Creator after success. Deadline and extra cancellation/restart proofs cancelled under the experiment-only scope |
+| M3 exit / M4 readiness | M3 Simulated acceptance complete: retained Kid, Parent 3/3 and Creator initial run all passed with zero payable calls; [current exit evidence](M3-completion.md#persona-exit-evidence). Reconciliation, reviewed deployment and normal bindings passed. | Existing protected access and eighteen bindings; no private action remains for this completed task | Prepare [M4 readiness](M4-balanced.md#m4-readiness-plan--2026-10-13) only. Do not repeat M3 runs or implement Balanced/start paid execution | A bounded future implementation/check plan and explicit later spending checkpoint; M4 remains unexecuted |
 
 Preserve all saved data and failed-run evidence. Do not repeat completed private
 setup, bootstrap or deployment. No paid execution, reset, production or Cloud
