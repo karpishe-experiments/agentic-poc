@@ -263,6 +263,54 @@ describe("experiment dispatch persistence", () => {
     expect(await repository.claimOperation(claim)).toMatchObject({ started: false, reason: "already_started" });
   });
 
+  it("closes a confirmed requested stop after the deadline without replay or losing history", async () => {
+    const { database, repository, dispatch, claim } = await setup();
+    await repository.beginDispatch(dispatch);
+    await repository.recordDispatchIdentity(claim);
+    await repository.claimOperation(claim);
+    const stop = { requestedAtMs: 8, reason: "manual" as const, delivery: "acknowledged" as const };
+    await database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: {
+      remoteStatus: "stopped", "lifecycle.stop": stop, "lifecycle.attemptOutcome": "failed",
+      "lifecycle.unresolved": true, "lifecycle.endedAtMs": 9,
+    } });
+    expect(await repository.recordDispatchOutcome({ ...dispatch, category: "observed_stop", nowMs: 10 }))
+      .toMatchObject({ state: "unknown", lifecycle: { unresolved: true } });
+    await database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: {
+      resultFinalizationClaim: { id: id(780), expiresAtMs: 300_100 },
+    } });
+    expect(await repository.recordDispatchOutcome({ ...dispatch, category: "observed_stop", nowMs: 300_003 }))
+      .toMatchObject({ state: "unknown" });
+    await database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: { resultFinalizationClaim: null } });
+    expect(await repository.recordDispatchOutcome({ ...dispatch, category: "observed_stop", nowMs: 300_004 }))
+      .toMatchObject({ state: "failed", safeFailure: "definite_failure", workflowRunId, reservationCount: 1,
+        lifecycle: { stop, attemptOutcome: "failed", unresolved: false, endedAtMs: 9 } });
+    expect(await repository.getRun(runId)).toMatchObject({ status: "blocked", safeFailure: "definite_failure", activeOperationId: null });
+    expect((await repository.beginDispatch(dispatch)).dispatched).toBe(false);
+  });
+
+  it("reconciles an expired stopped workflow through Inspect without another POST", async () => {
+    const { database, repository, dispatch, claim } = await setup();
+    await repository.beginDispatch(dispatch);
+    await repository.recordDispatchIdentity(claim);
+    await repository.claimOperation(claim);
+    await database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: {
+      "lifecycle.stop": { requestedAtMs: 8, reason: "manual", delivery: "acknowledged" },
+      "lifecycle.attemptOutcome": "failed", "lifecycle.unresolved": true, "lifecycle.endedAtMs": 9,
+    } });
+    const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test",
+      callbackKey: "fixture", bindings: [{ role: "manager", taskId: null, persona: null, appId: id(770),
+        publishedWorkflowId: id(771), toolProviderId: null, apiKey: "fixture" }] };
+    const runtime: WorkflowRuntime = { start: vi.fn(), stop: vi.fn(), retrieve: vi.fn().mockResolvedValue({
+      kind: "execution", execution: { id: workflowRunId, workflow_id: id(771), status: "stopped" },
+    }) };
+    const dispatcher = createExperimentDispatcher({ database, config, runtime, now: () => 300_003 });
+    expect(await dispatcher.inspect({ runId, operationId })).toMatchObject({ state: "failed", reservationCount: 1,
+      lifecycle: { unresolved: false, attemptOutcome: "failed", endedAtMs: 9 } });
+    expect((await repository.getRun(runId))?.activeOperationId).toBeNull();
+    expect(runtime.start).not.toHaveBeenCalled();
+    expect(runtime.stop).not.toHaveBeenCalled();
+  });
+
   it("closes a verified paused unclaimed operation without reservation", async () => {
     const { repository, dispatch, claim } = await setup();
     await repository.beginDispatch(dispatch);

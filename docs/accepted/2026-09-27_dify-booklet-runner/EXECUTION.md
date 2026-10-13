@@ -6,6 +6,35 @@ implementation plan. Target staging only; no production promotion.
 
 ## Status and change surface
 
+### M3 experiment-only scope
+
+The operator approved this scope correction on 2026-10-13. It supersedes earlier
+M3 infrastructure-probe requirements throughout this package.
+
+M3 validates Booklet application behavior and controlled Dify workflow logic.
+Infrastructure resilience, forced container restarts, deployment fault injection,
+backup/restore rehearsal and host-controller automation are outside its acceptance
+scope. Do not add these as prerequisites. A proposed correction or test must
+identify the Booklet/persona behavior it protects and use the smallest sufficient
+verification. An observed external dependency failure is a blocker to report,
+not authorization to expand this experiment into infrastructure engineering.
+
+Reuse the deployed release and valid Kid evidence. Reconcile the existing stopped
+probe through authenticated APIs, restore and read back the normal eighteen
+bindings, and check application admission once. Then run linked Parent 3/3;
+stop acceptance if it fails. Creator follows Parent success. Cancel the unstarted
+deadline probe and the additional live restart-during-cancellation requirement.
+Keep existing recovery code, historical evidence, data, source/approval checks,
+request limits and zero-payable-call requirements. Timing is diagnostic.
+
+For documentation, check consistency, links and whitespace. For an application or
+Dify correction, run relevant units and only necessary focused integration or
+workflow fixtures; reuse unchanged passes. Keep timeout/stop/interruption boundary
+checks local with fake dependencies and injected clocks. Required lean CI and
+publication reviews still apply to changed candidates. Do not repeat broad suites,
+infrastructure shell suites or container builds for unchanged infrastructure.
+Do not redeploy unchanged application code or introduce another manual script.
+
 This package prepares implementation. It does not mark any runtime milestone
 complete. Expected changes are the new Dify suite, normal Booklet contracts and
 services, a small runner UI, focused tests and operating evidence. Keep the
@@ -150,7 +179,7 @@ Parent item/job. Original request `38149230374-1` is archived unchanged; deploym
 
 | Remaining dependency | Technical verification | Private reference | Required action | Exit |
 | --- | --- | --- | --- | --- |
-| Three model-free lifecycle probes on the existing staging app | Delayed output completed after 67.438 seconds during drain. Controller exposed missing automatic publication readback; original execution recovered through live Inspect/reconcile without replay. Manual/deadline probes did not start; [M3 current work](M3-completion.md#current-progress-and-blockers--2026-10-13) | Existing encrypted probe API key, normal eighteen-binding settings and separate `issue65-async-probe-settings-v4.dpapi.xml`; no new credential | Publish/deploy the focused drain-order correction, then resume only uncovered checks. Root handoff remains necessary for exact app interruption. Preserve the completed delayed execution and draining ownership; do not repeat the original submission | Automatic drain publication readback, manual stop/restart and automatic deadline pass. Restore/read back normal bindings and idle admission before Parent 3/3; Creator follows Parent success |
+| Restore normal M3 experiment after stopped probe | Delayed run `a2862e03…` completed with verified publication/output in 68.736 seconds. Manual run `69e23447…` is remotely stopped but locally unresolved. Installed Inspect/Stop cannot close it; the same old image blocks normal deployment drain. Focused correction passes local tests/reviews; [M3 blocker](M3-completion.md#current-progress-and-blockers--2026-10-13) | Existing encrypted probe key and normal eighteen-binding settings; no new credentials | Publish the correction; report the delivery dependency for a bounded operator execution of reviewed reconciliation code or a separately agreed delivery exception. Do not add another root script or try a doomed deployment. Then restore prepared normal settings through the existing protected workflow and one application preflight | Normal manager/publication read back, unresolved active work cleared by evidence, admission open. Parent 3/3 then Creator after success. Deadline and extra cancellation/restart proofs cancelled under the experiment-only scope |
 
 Preserve all saved data and failed-run evidence. Do not repeat completed private
 setup, bootstrap or deployment. No paid execution, reset, production or Cloud
