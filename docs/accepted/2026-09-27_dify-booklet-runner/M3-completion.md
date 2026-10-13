@@ -15,6 +15,52 @@ candidate, not every implementation increment.
 
 ### Current progress and blockers — 2026-10-13
 
+The [experiment-only scope](EXECUTION.md#m3-experiment-only-scope) governs the
+remaining work and supersedes earlier infrastructure/restart/deadline probe gates.
+
+| Current checkpoint | Verified evidence | Remaining work |
+| --- | --- | --- |
+| Application candidate | Release `5bbf9cec5f684f6702f6ea38486ca8f12b239e18`, image `sha256:0bf79c96e4ee66dacf45b8a862a9f5dec1108b6470c70821fa059edd609de6f5`; Deploy `38357699423` passed. | Reuse this release unless an application/workflow defect requires correction. |
+| Delayed recovery | Run `a2862e03-b7ac-4534-8818-85cdc1aa6026`, operation `4e04a1ed-0b79-4b60-81de-6db339bc968a`, Dify run `c39fa38f-8294-4153-956a-28e1f7b582fe` completed in 68.736 seconds across restart/draining; publication and saved output verified, one reservation, zero payable calls. | Complete; do not repeat. |
+| Stopped probe | Run `69e23447-d75f-4444-8263-91eb8c269dff`, operation `b0b0829d-b1ef-43e5-9543-5c33502f2cc7`; Dify run `ac515816-fce4-42d8-ac67-9b2eaf5470de` reports stopped, zero tokens. Booklet still reports unresolved. | Reconcile the original operation through the existing API; correct only a confirmed application defect if needed. |
+| Normal configuration | Existing protected eighteen-binding settings are prepared; temporary probe publication is `2f9a336b-ac69-4e56-afcb-83beadb008a3`. | Restore normal manager `46572ccb-d954-45e5-b73d-90fd0995cdb6`, publication `7425dbd8-efc5-48a7-8fe6-687b574d740f`; one application preflight. |
+| Persona acceptance | Kid `fd21423e-0c6f-4303-80c8-9205900e5656` completed generation/evaluation, 47 text and 9 image calls, zero payable calls. Parent 1/3 and 2/3 remain failed and saved. | Check deployed J13 fixes using existing evidence; run linked Parent 3/3 from `92272a97-f96d-4634-8cba-3524a3fa2b51`. Stop if it fails; Creator follows success. |
+
+**Current blocker:** the installed application cannot close the claimed stopped
+probe through Inspect/Stop. Its normal deployment drain uses that same installed
+image and counts the unresolved operation, so the correction cannot pass that
+drain. No existing supported API escape was found. Publish the focused correction,
+but do not start a deployment known to fail, overwrite records, restore bindings
+while this work remains unresolved, or add host automation. A bounded operator
+execution of the reviewed reconciliation code, or a separately agreed delivery
+exception, is needed before the normal deployment and persona sequence can resume.
+This is an application reconciliation/deployment dependency, not a new M3
+infrastructure test requirement.
+
+The automatic-deadline probe `c20e0d05-966a-431c-894b-7e1cb5f48dbf` was not
+started and is cancelled from the M3 sequence. No disposable resource is deleted.
+The additional live restart-during-cancellation proof is no longer an M3 gate.
+Final acceptance remains all required pages/covers, approvals/assets, tester and
+judge reports, durable results and zero payable calls. No fourth Parent attempt
+is authorized. No new private setup is currently required.
+
+Authenticated MCP lookup confirmed the stopped execution and zero tokens on
+2026-10-13. Booklet Inspect retained `unknown_outcome`: ordinary claimed failure
+handling had no closure path for a requested, confirmed stop after its deadline.
+The focused correction closes only that case when no callback claim or saved
+completion remains, preserves attempt/stop history and reservations, and atomically
+closes owned bookkeeping. Local validation: two completion unit tests and all
+29 dispatch integration cases passed (28 in the file run, the new Inspect case
+separately); typecheck and focused lint passed. Required publication review/CI and
+live reconciliation remain pending. Credential inventory impact: none; no names,
+storage, transfers or consumers changed.
+
+### Superseded delivery history
+
+The following records retain earlier identities and results. Their pending
+statements and infrastructure-probe gates are superseded by the current section
+above; they are not instructions to repeat tests, setup or deployment.
+
 This section is the current status. Later evidence supersedes earlier statements
 that key preparation, collaboration repair or async restart proof are pending.
 Keep historical run identities and failures; do not repeat completed private setup.
@@ -23,7 +69,7 @@ Keep historical run identities and failures; do not repeat completed private set
 | --- | --- | --- |
 | Recovery candidate | Main PR #183 is merged at `6d10daa`; lean CI `38282476173` passed. Staging delivery PR #182 is merged at `5374ec42026d48af907136b4ac2e3a8070a8e789`; CI `38285675918` passed, including both full Linux host suites. Two independent delivery reviews passed. | Candidate deployed. Obtain live lifecycle proof; do not repeat unchanged local validation. |
 | Staging transition | Dispatcher SHA256 `f3199c99c989a08e8dbbad2bbb96c17875939853edafc562946047b326acbba3` is installed. Bootstrap preview `38288011539` and apply `38288136389` passed. Backup `staging-bootstrap-20261012T180154Z-27919` was fully verified with 113 assets; only the approved stale Parent item/job was repaired. The original request `38149230374-1` is archived unchanged. Deploy `38287424389`, attempt 2, passed at `5374ec4` using existing image `sha256:4d7ae74106240a606f3f5145ecb9407d3b1c99b19d90fc67dfd4115b97cb3a10`; exact request status `38289361125` confirms completion. Diagnostics `38289463065` and `38289680068` verified the dispatcher, selected release and authenticated API (HTTP 200). Chrome loaded the new paginated run list with saved Kid completion and Parent history intact. | Deployment blocker cleared. Continue model-free lifecycle probes; deployment alone does not establish recovery acceptance. |
-| Model-free proof | Earlier restart recovery remains valid baseline evidence. Reviewed disposable publication `a6aef6ea-2f3e-4597-8e2c-adacbed68030` and temporary activation `38292423440` are verified. The new delayed probe saved output after 67.438 seconds during draining and recovered through explicit inspection without replay. It exposed an automatic publication-reconciliation ordering defect. | Deploy the focused correction and prove automatic drain publication readback. Manual-stop/restart and deadline probes have not run. Restore normal bindings before Parent 3/3. |
+| Model-free proof | The original delayed probe saved output after 67.438 seconds during draining and recovered through explicit inspection without replay. Its automatic publication-reconciliation ordering defect is corrected: PR #184 merged after CI `38357142100`; staging PR #185 merged after CI `38357417551`. Deploy `38357699423` passed at `5bbf9cec5f684f6702f6ea38486ca8f12b239e18`, image `sha256:0bf79c96e4ee66dacf45b8a862a9f5dec1108b6470c70821fa059edd609de6f5`, backup `staging-20261013T064021Z-31eae1fac783cbb0`. | Prove automatic drain readback using a new delayed identity; preserve the original run. Manual-stop/restart and deadline probes remain unrun. Restore normal bindings before Parent 3/3. |
 | Persona acceptance | Kid functional acceptance is retained. Parent attempts 1/3 and 2/3 failed and remain saved. | Run Parent 3/3 only after the probes pass. Stop if it fails; Creator follows Parent success. No paid calls. |
 
 Private bindings are already prepared. Pending operator actions belong only in
@@ -44,7 +90,18 @@ focused lint and three budget unit tests passed. No broad suite was repeated.
 The existing live Inspect/reconcile action recovered the same execution without
 replay: the UI shows paused revision 11 and remote status succeeded. Automatic
 drain reconciliation still requires corrected deployment and live proof. Staging
-admission remains draining; Parent 3/3 and Creator have not started.
+admission remained draining at that observation; the subsequent corrected
+deployment completed normally. Parent 3/3 and Creator have not started.
+
+The reviewed v2 probe package uses delayed request
+`8ef39d2f-2abc-43c6-8bdb-1b0780c3581c`, run
+`a2862e03-b7ac-4534-8818-85cdc1aa6026`. Manual/deadline identities are unchanged
+and unused. Publication `2f9a336b-ac69-4e56-afcb-83beadb008a3` was read back with
+the exact reviewed provider-free graph and existing secret-variable presence.
+Separate encrypted v5 settings preserve all earlier private copies. Activation
+`38358513747` passed; no v2 probe has started. The root controller is pinned
+to the deployed image and publication. This is a repeat of uncovered proof, not
+a replay of the saved original execution.
 
 The required Linux CI run `38258080043` exposed a multi-batch MongoDB cursor
 error during selected two-page completion. The saved image was valid; a
@@ -156,19 +213,15 @@ control where observable; a valid runtime key does not prove that variable exist
 Preflight failure creates no run. Keep callback-first, missing-field and delayed
 observation regressions local before consuming a live probe identity.
 
-Use three checkpoints for the remaining M3 work. This sequence consolidates
-delivery, not the PRD requirements or completion evidence. The detailed contracts
-and verified evidence below support these checkpoints, not a separate release
-sequence. Current entry gates remain mandatory: prove runtime-key file ownership,
-ordered references, size limits and lost-response recovery before J13 dispatch.
-This plan update does not start implementation, publish Dify
-configuration, activate bindings or authorize new execution.
+Use the current three checkpoints below. Existing source, approval, reference,
+byte and request-limit checks remain application responsibilities. Reuse verified
+evidence; earlier infrastructure gates above are historical and superseded.
 
 | Checkpoint | Work | Exit evidence |
 | --- | --- | --- |
-| 1. Finish one runnable candidate | Wire separate tester feedback and judge execution, generation/evaluation status and recovery. Reuse existing artifact/image viewers. Add a minimal single-page or ordered-batch selector, progress and Pause/Resume; retain individual page approvals. Finish compatible Dify graph/settings/host-validation changes and consolidate only missing private bindings into one handoff. | Focused contracts and integration checks cover reports, completion, exact sources/references, approvals, limits and recovery. Existing working bindings and saved evidence remain intact; unresolved live dependencies are explicit. |
-| 2. Review and release one candidate | Freeze application code, Dify graphs and non-secret binding evidence together. Run one affected validation set and two consecutive independent clean reviews. Publish/read back workflows and synchronize applicable Workflow Tools, then use the reviewed staging delivery and drained binding-activation process. | Required CI, exact reviewed/published identities, synchronized applicable tool bindings and staging health pass. Stop new dispatch and reconcile in-flight/unknown work before changing configuration; Pause alone is not a drain. Private setup and release actions still require their existing authorization checkpoints. |
-| 3. Verify and record one acceptance campaign | Complete all three cases through actual deployed Dify in Simulated mode. Combine browser inspection, targeted failure/recovery checks and sanitized evidence capture in the same campaign. Correct defects and rerun affected checks/reviews; use linked successors rather than rewriting failed runs. | All thirteen responsibilities, required current artifacts and images, individual approvals, tester/judge reports and durable lineage are saved. Zero real provider calls, warning-bearing completion, UI controls and no uncertain-operation replay are verified. Record limitations and hand off to M4. |
+| 1. Restore normal execution | Reconcile the existing stopped probe through APIs; correct only a confirmed application blocker. Restore the prepared normal eighteen bindings and perform one application preflight. | Normal manager/publication verified, admission open and no unresolved active work. |
+| 2. Complete personas | Reuse Kid evidence and existing J13 fix tests. Run linked Parent 3/3; stop if it fails. Creator follows success. | Five/eight story pages plus cover respectively, required approvals/assets, tester/judge reports, durable results and zero payable calls. |
+| 3. Record the exit | Save one concise release/configuration/persona/usage record and remaining limitations. | All three Simulated persona requirements supported; hand off to M4. |
 
 ### Simplifications and retained boundaries
 
