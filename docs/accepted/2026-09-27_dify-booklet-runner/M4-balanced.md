@@ -18,8 +18,71 @@ host automation belongs to this readiness step.
 
 ## Execution efficiency follow-up ? 2026-10-13
 
-**State:** Candidate implementation; reviewed staging delivery and one authorized
-Simulated Kid comparison remain pending. M3 acceptance stays complete.
+**State:** Improvements deployed and the single authorized Simulated Kid comparison
+passed. M3 acceptance stays complete; Balanced implementation/execution is unstarted.
+
+Main PR #188 merged reviewed commit `9e1b819cadd62d8ffd692134d5036b000e594356`
+after lean CI `38406602852`. Staging PR #189 carried only the reviewed changes;
+two clean delivery reviews and lean CI `38407168602` passed. Release
+`db9321091cb7864f57f71419797f8eca9ba6fe5c` uses image
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:82e75c990184dffd2842367158899fedd5712dfc72ae0d845795e7be08f78dd1`.
+Deploy `38407581872` reached its client wait limit while the host continued;
+exact request `38407581872-1` completed and archived without replay, verified by
+status `38408949314`. Backup `staging-20261013T134930Z-da101f91a5fcca21` is retained;
+application Check `38409180811` passed. Normal eighteen bindings remain unchanged.
+
+Comparison run [`5490f4e0-b966-40d5-8295-1e094f8f328a`](https://booklet-staging.uniwares.co.uk/experiments/booklet-runs/5490f4e0-b966-40d5-8295-1e094f8f328a),
+booklet `6d84ef9b-8fc6-4fbc-80dc-5e0cee441491`, was submitted once and completed
+without repair at revision 279. Generation and evaluation are complete; active
+operation and preparation are null. Final diagnostics `38411518567` confirms
+48 succeeded operations, one reservation each, saved results/materialization and
+expected publication identities. All 48 authenticated Dify execution readbacks
+succeeded with zero tokens and no LLM/Agent/tool provider nodes. Early diagnostics
+`38409611919` remains retained.
+
+The saved output has all J01?J13 responsibilities, 20 current approved versions,
+one delegated tester decision, nine assets, cover index 0 and three single-panel
+story pages. Each story page retains its current Page Bible and three approved
+reference attachments; cover has zero attachments. Application saved completion
+provides original-byte verification. UI readback confirms version/reference/digest
+identities; no new storage hashing campaign was performed. Tester feedback
+`c7e3041a-dac5-4143-b1ba-fe31a21a5ae7` (publication
+`dd1cf687-2c2c-45bc-9c1e-10fffa820909`) and independent judge
+`87f2419d-2de9-4851-ac47-1eb59d58e6a1` (publication
+`539c1fa5-a07d-40d2-835f-b290d3c8bab9`) match all 20 current versions and
+configuration `f2b7e9a84a114d05e9c857fa01c09443d1849544a288b4768fb42d5e5654d5fa`.
+Simulated creative findings remain unassessed and 8x8 fixture geometry advisory.
+
+| Measured evidence | Original Kid baseline | New efficiency run |
+| --- | --- | --- |
+| Text / image / total operations | 47 / 9 / 56 | 39 / 9 / 48 |
+| Saved delegation decisions | 9 | 1 |
+| First Dify start ? final judge end | 37m 05s | 14m 28s |
+| Combined Dify execution time | 8m 00s | 5m 26s |
+| Time outside Dify execution intervals, approximate | 29m 05s | 9m 02s |
+| Inter-execution gap median / maximum | 27s / 79s | 7s / 45s |
+| Payable text / image | 0 / 0 | 0 / 0 |
+
+New Dify timestamps span 17:28:24?17:42:52 on 2026-10-13, Asia/Tehran. Compare
+this same clock/window for each run; it excludes initial submission and final
+Booklet evaluation bookkeeping. Duration is 61.0% shorter than the original.
+A newer completed pre-change Kid `36c696df-a50d-4aa9-8fa4-18bbc50802c3` used the
+same 56 operations and took 21m 00s; the new run is 31.1% shorter than that more
+recent baseline. These are observed runs under potentially different load, not
+a controlled attribution of every saved second to this change.
+
+Final-page J13 work remains the largest stage: 6m 30s of the new measured window,
+including four manager/image pairs, reference preparation, assembly and approval.
+The manager ? image gaps total 154s across four pages. Lifecycle preparation before
+image dispatch totals 154.253s across all nine images, maximum 39.739s. These two
+measurements overlap and must not be summed. Final callback authorization p95/max
+is 5.611/10.172s; its nested claim p95/max is 4.540/4.951s and context is
+2.008/9.841s. Image callback maximum is 10.065s; storage maximum 1.545s and decode
+maximum 81ms. Source/approval verification and reference preparation remain the
+next bounded profiling targets. The existing host diagnostic allowlist returns
+callback summaries; the new fine-grained application phase events were not exported
+through that interface. Infrastructure changes and further runs are outside this
+completed comparison.
 
 The saved Kid baseline `fd21423e-0c6f-4303-80c8-9205900e5656` used 47 text and
 9 image operations. Its 56 Dify executions succeeded with zero tokens/provider
@@ -63,15 +126,12 @@ progress-compatibility correction check. Typecheck, focused lint and agent fixtu
 passed; 147 local documentation links/anchors passed independent verification.
 The progress correction retains historical approval IDs/nulls and ordered image
 identities in its persisted fingerprint, without loading historical version content.
-Reviewed publication and the live release/run remain pending.
+Reviewed publication, delivery and the single live completion/comparison passed.
 The deterministic Kid fixture must complete with 39 text + 9 image operations
 (48 total) and one saved delegation decision. No paid execution is authorized.
 
-After reviewed delivery, submit one new Simulated Kid run through the authenticated
-runner. Retain its identity, output/approval/report/asset proof and zero payable
-counters. Compare operation counts, first-to-final Dify duration, combined workflow
-time and inter-execution gaps with the saved baseline. Use fresh phase diagnostics
-for attribution; do not present local timings as live improvements.
+The authorized comparison is complete. Retain both baselines and the new run;
+do not start another persona campaign or paid execution from this exit record.
 
 ## M4 readiness plan — 2026-10-13
 
@@ -79,8 +139,9 @@ Use the [M3 exit evidence](M3-completion.md#persona-exit-evidence) and unchanged
 passing checks. Kid used 47 logical text/9 image calls, Parent 55/11 and Creator
 84/15, all zero payable. These counts measure deterministic orchestration;
 they are not forecasts of real model requests, tokens, cost or creative quality.
-Normal staging remains release `db51e9b394ddb01b14a4a832f862b53a3cfd0b7b`, with
-the eighteen restored bindings recorded in M3. Do not repeat its delivery,
+M3 acceptance used release `db51e9b394ddb01b14a4a832f862b53a3cfd0b7b` and
+the eighteen restored bindings recorded in M3. The delivered efficiency release
+above retains those bindings. Do not repeat its delivery,
 operator exception, binding restoration or persona campaign.
 
 ### Minimum implementation changes for a later task

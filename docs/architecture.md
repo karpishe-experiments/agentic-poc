@@ -4,7 +4,7 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
-The issue #65 efficiency candidate separates current-version execution projections
+The delivered issue #65 efficiency cleanup separates current-version execution projections
 from full historical inspection/report context. Scheduling reads exact operation
 heads/parents, reuses a projection within an unchanged run revision, and records
 completion progress once. Existing grants approve assembled image artifacts through
@@ -13,7 +13,7 @@ Reference preparation reuses original bytes only within that invocation, with fr
 source/admission metadata per upload and independent byte checks at operation claim
 and final completion. Completed page materialization is reused by its unique source
 operation. The [efficiency record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#execution-efficiency-follow-up--2026-10-13)
-records local proof and the pending live comparison; no persisted schema changes.
+records local proof, release identities and the live comparison; no persisted schema changes.
 
 
 Issue #65 M3 follows the [experiment-only scope](accepted/2026-09-27_dify-booklet-runner/EXECUTION.md#m3-experiment-only-scope).
