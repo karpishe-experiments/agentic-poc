@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 Simulated acceptance is complete. M4 readiness is prepared; Balanced implementation and paid execution remain unstarted. The authorized efficiency follow-up and one Simulated Kid comparison are recorded in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
+**Status:** M3 Simulated acceptance is complete. M4 model/budget decisions and the detailed implementation contract are recorded; installed provider-source/retry verification remains open. Balanced implementation and paid execution remain unstarted. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13). The completed efficiency follow-up and Kid comparison remain in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
@@ -192,8 +192,9 @@ implement Balanced or start paid execution. For a later M4 task, use the three
 | 2. Execute one Balanced campaign | Run Kid → Parent → Creator sequentially within 120/160/220 LLM requests; zero real image calls. Retain artifacts, individual approvals, short tester/judge reports, usage and timing. Quality findings remain warnings; simulated images do not prove real image-provider quality. |
 | 3. Record results and prepare M5 | Keep one concise exit record in M4 with bindings, runs, failures/successors, measured usage and limitations. Pass exact evidence to M5; no new report hierarchy. |
 
-Default campaign proposal: three initial runs, zero successors, at most 500 LLM
-requests in total; this is not spending authorization. Any successors need a finite
+Selected campaign policy: three initial runs, zero successors, at most 500 LLM
+requests, three judge requests and USD 10 incremental model charges in total;
+the final paid execution grant remains pending. Any successors need a finite
 approved allowance with its additional worst-case request total. Without paid
 approval, complete non-billable readiness work and stop at the paid checkpoint.
 

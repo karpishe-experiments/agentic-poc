@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Readiness plan prepared; Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Model/budget decisions recorded and implementation contract prepared; provider-source verification remains blocked. Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -144,6 +144,179 @@ the eighteen restored bindings recorded in M3. The delivered efficiency release
 above retains those bindings. Do not repeat its delivery,
 operator exception, binding restoration or persona campaign.
 
+### Selected policy and implementation contract - 2026-10-13
+
+This section records the user's selected policy and governs the later implementation.
+It grants no implementation or paid execution under this documentation task.
+
+| Invocation | Model | Reasoning | Maximum output tokens |
+| --- | --- | --- | ---: |
+| Manager and persona decisions | `gpt-6-luna` | `none` | 2,048 |
+| J01-J12 creative specialists | `gpt-6-luna` | `low` | 8,192 |
+| Final tester report | `gpt-6-luna` | `none` | 8,192 |
+| Independent final judge | `gpt-6-sol` | `low` | 8,192 |
+
+Use Standard processing, at most 32,000 total input tokens per request, and output
+limits that include reasoning and other billed output tokens. No automatic retries,
+paid tools, model escalation or real image calls. Run Kid, Parent, Creator in that
+order, one initial run each, with text-request ceilings 120/160/220 and 500 total.
+Stop the campaign on technical failure. No successor or additional judge request
+is authorized by unused allowance. Paid execution needs the final explicit grant
+in [EXECUTION](EXECUTION.md#b-authorization-register), after readiness passes.
+
+The selected ceiling is USD 10 of incremental campaign model charges, excluding
+earlier account usage. This is not an account-wide cap or a forecast. All paid
+requests, including any separately authorized repairs, must fit the same ledger.
+
+#### Observed configuration and precise remaining blocker
+
+Read-only Community MCP inspection on 2026-10-13 identifies workspace
+`ffac910f-2786-490e-90d8-07243d49741b`, provider `langgenius/openai/openai`, and active
+`gpt-6-luna`/`gpt-6-sol` model metadata. Installed model plugin:
+`langgenius/openai:1.0.7@f36c3761167b3af0bfb4975b728fe3cd126342d076e1ec5359e6d4f92557d3d4`.
+Its manifest exposes `max_tokens`, `reasoning_effort`, `reasoning_mode`,
+`service_tier`, `enable_stream` and JSON-schema output. Provider configuration
+exposes `api_protocol=responses`. These are available parameters, not proof of
+the active request settings or a successful paid invocation.
+
+The user reports the OpenAI key provisioned privately in Dify. No key value was
+retrieved, copied or changed. The screenshot shows model-list read and text-request
+permissions; it does not prove model entitlement, funding or end-to-end execution.
+Credential inventory impact: reuse the existing Dify provider-key row in the
+[inventory](../../deployment/contracts.md#dify-accounts-provider-bindings-and-developer-sessions);
+no name, storage, transfer or consumer changes occur in this documentation task.
+
+`plugin.list` and `plugin.get` return manifests, not executable implementation.
+Therefore SDK/plugin retries, exact Responses parameter translation, token counting,
+and attributable usage extraction are **unverified**, not passed. Before provider
+integration, obtain a read-only source/package inspection matching this exact
+checksum through an existing supported access path. Inspect client construction,
+retry decorators, fallback calls and all exception paths. Do not substitute a
+different upstream version as proof. If source cannot be obtained, or zero retries
+cannot be enforced with existing configuration, stop that integration slice and
+report the exact missing capability. Do not silently install a plugin, introduce
+a direct HTTP credential copy, or move provider execution into Booklet.
+
+#### Selected provider request contract
+
+Use one Dify LLM node through the existing OpenAI provider's Responses path per
+authorized text invocation. Set `api_protocol=responses`, `service_tier=default`,
+`reasoning_mode=standard`, `enable_stream=false`, and the table's explicit effort.
+The outgoing API request must contain `max_output_tokens` (mapped from the plugin's
+`max_tokens`) and `reasoning.effort`, a task-specific structured output schema,
+no tools, no prior-response/conversation continuation and no automatic truncation.
+The official [reasoning contract](https://developers.openai.com/api/docs/guides/reasoning)
+includes reasoning tokens in `max_output_tokens`; reaching that limit can produce
+an incomplete response with no visible output. Keep that failure and its charge.
+
+Prepare the exact role prompt, schema and selected context before authorization;
+count all serialized provider input, including system instructions/schema overhead.
+Require a verified model tokenizer or provider-supported non-generating counter;
+block if its upper bound cannot establish the 32,000 ceiling. Persist a request
+fingerprint and reject any difference between prepared and executed input. Dify
+owns role prompts and creative output; Booklet owns state, approvals and admission.
+Retain the existing operation deadline; provider timeout is at most 120 seconds
+and at most the remaining deadline. Disable node retries and verify SDK retries
+are zero. A timeout or lost response is inspected, never automatically replayed.
+
+#### Incremental implementation slices
+
+1. **Manifest and mode contracts (AC01-AC03, AC08, AC13).** Extend existing binding
+   configuration with a versioned non-secret execution policy. Save that policy
+   separately from the historical `configurationJson` array; preserve old hashes.
+   Pin provider/plugin checksum, models, reasoning, API/token parameters, prices,
+   timeout/retry policy, prompt/schema/request fingerprints and publication IDs.
+   Add optional policy/campaign references to new run and operation records;
+   require them for Balanced, leave historical records unchanged. UI and CLI expose
+   Balanced only when readiness is verified; server independently enforces it.
+   Keep Real and production rejected. Propagate mode through dispatch, context,
+   narrative/reference/page paths and callbacks; Balanced images use fixture bytes.
+2. **Campaign admission (AC08, AC13).** Add one campaign document in the existing
+   MongoDB database, with immutable policy hash, explicit grant reference, three
+   persona slots, request/judge counters, integer USD microdollar totals, revision
+   and active/stopped/completed state. Create it only from reviewed protected
+   server configuration after the later execution grant; no budget-edit public API.
+   Extend run creation with optional `campaignId`, required for Balanced. Atomically
+   claim the unique persona slot; concurrent creates cannot start a second run.
+   Parent requires Kid generation/evaluation success; Creator requires Parent.
+3. **Atomic monetary reservation (AC08, AC13).** Extend the existing operation
+   claim transaction to update operation, run and campaign together. Enforce
+   Pause/Stop, deadline, publication/policy/request identity, current sources,
+   persona order, per-run/500-request limits and at most three judge requests
+   (one per run). Store each operation's maximum reservation in integer
+   microdollars. Admit only when settled charges plus unresolved reservations
+   plus the new maximum do not exceed 10,000,000 microdollars. Concurrent claims
+   contend on the campaign revision. Duplicates return the prior claim and cannot
+   invoke the provider again. Count requests permanently, including failures.
+4. **Completion and usage (AC05-AC08, AC10-AC13).** Extend existing result callbacks
+   additively for Balanced with provider response/request identity, requested and
+   returned model/service tier, input/output/cached/reasoning counts and usage
+   provenance. Bind evidence to operation, workflow execution and policy; reconcile
+   it with authenticated Dify execution metadata. Persist usage even when content
+   validation fails. Settle once when usage is attributable and consistent; otherwise
+   retain the full reservation and mark cost unavailable. Store provider-reported
+   cost separately from price-derived cost; never label an estimate as invoiced cost.
+   A conflicting or over-limit result blocks further campaign admission. Late
+   valid completion can settle the original operation without a new request.
+5. **Workflow delivery and experience (AC01-AC03, AC05-AC13).** Keep the deterministic
+   branch and existing result envelopes; add only the bounded text branch and usage
+   fields. Do not consolidate roles. Reuse normal grants, Creator explicit approvals,
+   image/reference journals and materialization. UI/CLI show campaign remaining
+   allowance, settled/reserved charges and unavailable usage. Reports retain source
+   versions and independent judge identity, and label images synthetic. A malformed,
+   refused or incomplete provider result blocks with its retained evidence; no
+   automatic repair loop. Explicit future repair requires an additional grant,
+   a new counted operation and remaining campaign limits, never a counter reset.
+
+Build slices 1-4 with fake providers before any live graph mutation. Slice 5 needs
+later implementation authorization and the source-inspection gate above. Public
+route paths stay unchanged; only optional fields are added for new Balanced records.
+No historical migration/backfill, new service or credential is required by this plan.
+Update architecture and credential inventory when later verified implementation
+changes their boundaries; do not describe planned behavior as deployed today.
+
+#### Price basis and bounded calculation
+
+Official prices checked 2026-10-13, USD per million tokens:
+[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) input 0.10,
+cache-write 0.125, output 0.50;
+[Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) input 2.00,
+cache-write 2.50, output 10.00. Reserve input at the higher cache-write rate;
+ignore cache discounts. Standard processing only, no regional premium or paid tools.
+If the effective price/tier differs, stop before execution and revise the manifest.
+
+At 32,000 input and 8,192 output tokens, maximum reservations are USD 0.008096
+per Luna request and USD 0.161920 per Sol request. The deliberately loose bound
+`497 * 0.008096 + 3 * 0.161920 = 4.509472` rounds up to USD 4.51. It assumes at most
+500 requests, at most three Sol judges, the stated complete input/output bounds,
+no hidden requests and the verified price policy. Smaller decision outputs reduce
+it. This is conditional planning arithmetic, not measured cost or implemented
+enforcement. The independent USD 10 ledger remains mandatory; unknown charges
+retain their maxima. No paid smoke call is outside this allowance.
+
+#### Focused acceptance and handoff
+
+Use named tests in the existing config/contracts, repository, dispatch, context,
+reference-upload, report and UI/CLI suites. Add only necessary persistence cases:
+concurrent claims at the dollar/request boundary; duplicate create/authorize/result;
+one reservation before one provider action; Pause/Stop/deadline/source changes;
+input/output exhaustion; absent/conflicting/late usage; malformed/refused output;
+loss after provider execution; judge failure retaining generation; and zero real
+image calls through Balanced J13. Test exactly 10,000,000 microdollars and one above,
+microdollar rounding, three-judge maximum, changed policy/publication and old records.
+Use one non-billable Dify-provider adapter fixture to capture outgoing Responses
+parameters and count network attempts on timeout/429/5xx; a node toggle is not proof.
+Token accounting includes schema overhead and reasoning; completion does not release
+uncertain reservations. Preserve all M3 personas and the efficiency baseline.
+
+Finish affected units/integration, typecheck, focused lint, agent fixtures, local
+links and a fake-provider UI/CLI journey; reuse unrelated passes. Obtain two clean
+independent reviews and lean CI, then use the existing selective staging process.
+Read back exact publications, policy and release identity without executing a paid
+preflight. Present the frozen manifest, remaining technical gaps (none required for
+execution), USD 10 ledger proof and three-run allowance for the final explicit paid
+grant. Stop here until that grant; this document does not mark M4 ready or complete.
+
 ### Minimum implementation changes for a later task
 
 | Boundary | Current restriction or gap | Minimum change and protected behavior |
@@ -180,23 +353,21 @@ implementation candidate.
 
 ### Token controls and later spending checkpoint
 
-Retain the [M0 proposals](M0-readiness.md#provider-readiness-before-m4m5): verify
-2,048 output tokens for manager/testers, 8,192 for specialists/judge and at most
-32,000 input text tokens after explicit context selection. These are proposed
-bounds, not verified live settings. Preserve exact lettering and required
-references; fail visibly rather than silently truncating them. Record enforceable
-model-specific parameters before paid readiness. No model selection is made here.
+Apply the [selected policy](#selected-policy-and-implementation-contract---2026-10-13).
+The model and token choices are settled; their live enforcement is not verified.
+Preserve exact lettering and required references; fail visibly rather than silently
+truncating them. Verify model-specific parameters before paid readiness.
 
 Automatic provider, SDK/plugin, node and transport retries must be disabled and
 verified. An explicit correction is a new attributable request within the same
 run allowance; an uncertain request is inspected, never automatically replayed.
 Provider reservations must cover every paid call, including report/repair calls.
 
-After non-billable implementation/readiness passes, present one concrete manifest
-and finite spending request: proposed Kid → Parent → Creator, three initial runs,
-zero successors, ceilings 120/160/220 text requests, at most 500 total, zero real
-images. Include per-role input/output token ceilings and a provider-price-based
-worst-case monetary ceiling, then obtain explicit approval before execution.
+After non-billable implementation/readiness passes, present the frozen manifest
+and final execution request: Kid → Parent → Creator, three initial runs, zero
+successors, ceilings 120/160/220 text requests, at most 500 total and three judge
+requests, zero real images and the selected USD 10 ceiling. Include the verified
+per-role token limits and price calculation, then obtain explicit approval before execution.
 Any successor requires its own finite allowance and additional worst-case bound.
 This plan grants no spending and does not mark M4 complete.
 
@@ -222,8 +393,9 @@ An opaque unbounded node is not acceptable for paid readiness.
 
 Before paid execution starts, reconcile model/binding evidence here with the shared
 readiness register and bundle only its unresolved required actions into one handoff.
-Default proposal: three initial runs, one per persona, zero successors and at most
-500 LLM requests in total (120 + 160 + 220). This is not spending authorization.
+Selected campaign policy: three initial runs, one per persona, zero successors,
+at most 500 LLM requests (120 + 160 + 220), three judge requests and USD 10 total.
+This is not paid execution authorization.
 If successors are requested, obtain a finite allowance and show its additional
 worst-case request total before execution. No image spending is permitted in
 Balanced mode. Without paid approval, finish non-billable readiness work and stop
