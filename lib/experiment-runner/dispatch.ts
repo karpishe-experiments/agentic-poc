@@ -246,7 +246,7 @@ export function createExperimentDispatcher(deps: {
           return;
         }
         if ((execution.status === "failed" || execution.status === "stopped") && current.state !== "succeeded") {
-          await repository.recordDispatchOutcome({ ...identity, category: "observed_failure" });
+          await repository.recordDispatchOutcome({ ...identity, category: execution.status === "stopped" ? "observed_stop" : "observed_failure" });
           return;
         }
         if (!imageCompletion || imageCompletion.runId !== run._id || imageCompletion.operationId !== operation._id ||
@@ -287,7 +287,7 @@ export function createExperimentDispatcher(deps: {
         if (execution.status === "succeeded" && execution.outputs?.authorization_reason === "paused" && current.reservationCount === 0) {
           await repository.recordDispatchOutcome({ ...identity, category: "paused" });
         } else if (execution.status === "failed" || execution.status === "stopped") {
-          await repository.recordDispatchOutcome({ ...identity, category: "observed_failure" });
+          await repository.recordDispatchOutcome({ ...identity, category: execution.status === "stopped" ? "observed_stop" : "observed_failure" });
         } else if (execution.status !== "running" || now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + OPERATION_LIMIT_MS)) {
           await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
         }
