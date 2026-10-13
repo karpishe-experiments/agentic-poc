@@ -4,6 +4,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Keep experiment acceptance proportional to its product flow
+
+- **Context:** M3 needs Simulated Kid, Parent and Creator completion.
+- **Observation:** Live host restart/cancellation probes introduced repeated
+  manual handoffs; the delayed probe completed, while cancellation hit a Booklet
+  reconciliation gap. Infrastructure timing windows were unrelated to persona
+  output acceptance.
+- **Guidance:** Test application/workflow boundaries with focused local cases and
+  validate persona completion live. Treat infrastructure as a working dependency;
+  report observed external blockers without adding resilience campaigns.
+- **Evidence:** [M3 scope correction](EXECUTION.md#m3-experiment-only-scope) and
+  [retained live results](M3-completion.md#current-progress-and-blockers--2026-10-13).
+- **Promotion target:** Agent instruction for proportional experiment validation.
+
 ### Retain deterministic continuation after output completion
 
 - **Context:** Image output is saved before the final artifact and review card.

@@ -4,6 +4,14 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Issue #65 M3 follows the [experiment-only scope](accepted/2026-09-27_dify-booklet-runner/EXECUTION.md#m3-experiment-only-scope).
+Infrastructure is assumed working; its fault-injection tests are not persona
+acceptance gates. Authenticated stopped-task readback can close a requested stop
+after the original operation deadline when no callback claim or saved completion
+remains. Closure atomically fails the owned bookkeeping, retains stop/attempt
+history and reservations, and releases the active-operation pointer without replay.
+Ordinary claimed workflow failures remain uncertain to preserve late completion.
+
 The issue #65 recovery candidate adds retained mutation ownership to the existing
 deployment-control document. A mutation has an ID, process identity and optional
 run/operation identities. Startup retains dead-process owners for evidence-based

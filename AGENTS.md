@@ -4,6 +4,14 @@
 
 This repository is a non-production playground for small agentic application and generative UI experiments. Optimize for learning, clarity, and speed rather than production readiness.
 
+For issue #65 M3, apply the experiment-only scope in
+[EXECUTION.md](docs/accepted/2026-09-27_dify-booklet-runner/EXECUTION.md#m3-experiment-only-scope).
+Test Booklet and controlled Dify workflow behavior. Treat infrastructure as a
+working dependency; do not add infrastructure fault injection, forced restarts,
+or host automation as persona-acceptance prerequisites. Report an observed
+external blocker without expanding scope. Each correction or test must identify
+the persona behavior it protects and use the smallest sufficient verification.
+
 ## Skill environment
 
 Project-local skills are copied under `.agents/skills` and pinned in `skills-lock.json` so collaborators use the same guidance:

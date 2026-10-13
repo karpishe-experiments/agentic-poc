@@ -143,9 +143,15 @@ Deliver the remaining work through the three
 
 | Checkpoint | Scope |
 | --- | --- |
-| 1. Runnable candidate | Finish J11–J13 generation, separate tester/judge reports, completion and recovery. Reuse viewers; add minimal single-page/ordered-batch controls with per-page explicit/delegated approvals. Consolidate missing private setup into one handoff. |
-| 2. Review and release | Freeze code and Dify configuration together. Run the affected checks and two consecutive independent clean reviews, then use authorized publication/read-back, applicable tool synchronization, drained staging release and binding activation. |
-| 3. Acceptance and evidence | Complete all three deployed model-free cases, browser inspection and representative failure/recovery checks in one campaign. Save exact evidence and limitations; correct defects through the affected validation/review cycle before republishing. |
+| 1. Restore the experiment | Reconcile the existing stopped probe through authenticated APIs, restore the prepared normal eighteen bindings, and perform one application preflight. Reuse the deployed candidate and valid recovery evidence. |
+| 2. Complete personas | Reuse Kid acceptance; check existing J13 fix evidence, then run linked Parent 3/3. Stop if it fails; Creator follows success. Keep required pages/covers, approvals/assets, tester/judge reports and zero payable calls. |
+| 3. Record the exit | Save release/binding identities, persona outcomes, usage and limitations in M3. Correct only application/workflow defects affecting acceptance, with focused validation and required publication review/CI. |
+
+Apply the authoritative [experiment-only scope](EXECUTION.md#m3-experiment-only-scope).
+Infrastructure is an assumed working dependency. Forced restarts, infrastructure
+fault injection, backup/restore rehearsal and host automation are not M3 gates.
+The unstarted deadline probe and extra live cancellation/restart proof are
+cancelled. Preserve existing code and evidence; do not add a cleanup refactor.
 
 Keep native lettering, persona-specific multi-panel layouts, exact references,
 limits, durable evidence, warning-bearing completion and separate generation/
