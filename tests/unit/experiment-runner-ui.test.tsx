@@ -79,6 +79,12 @@ describe("booklet runner inspector", () => {
     expect(screen.getByText("Current artifact versions: do not match; report is historical")).toBeTruthy();
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
   });
+  it("shows unavailable duration for a terminal historical operation without an end timestamp", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed",
+      operationHistory: [{ ...run.operationHistory[0], state: "succeeded", elapsedMs: null }] }] })));
+    render(<BookletRunner />);
+    expect(await screen.findByText(/Elapsed: unavailable/)).toBeTruthy();
+  });
   it("loads a saved runner booklet through its detail API, not the legacy workspace", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { ...run, bookletId: "saved-book", status: "blocked" } })));
     render(<BookletRunner focusedRunId={run.runId} />);

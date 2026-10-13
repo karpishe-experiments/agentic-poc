@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Planned. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Readiness plan prepared; Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -10,8 +10,134 @@ Keep model/accounting proof and campaign evidence here. Apply the
 reuse valid tests and repeat only affected checks during implementation/corrections.
 Complete broader affected checks before publication, not after each local commit.
 
-M4 remains planned, pending M3's deployed completion. This document update does
-not start runs, change configuration or grant spending/deployment authority.
+M3 Simulated acceptance completed on 2026-10-13. This task prepares M4 readiness
+only. It does not implement Balanced, start runs, change live configuration, add
+credentials or grant spending/deployment authority. Infrastructure remains an
+assumed dependency; no restart campaign, fault injection, restore rehearsal or
+host automation belongs to this readiness step.
+
+## Execution efficiency follow-up ? 2026-10-13
+
+**State:** Candidate implementation; reviewed staging delivery and one authorized
+Simulated Kid comparison remain pending. M3 acceptance stays complete.
+
+The saved Kid baseline `fd21423e-0c6f-4303-80c8-9205900e5656` used 47 text and
+9 image operations. Its 56 Dify executions succeeded with zero tokens/provider
+nodes/payable calls. First execution start to final judge end was 37m 05s:
+approximately 8m inside Dify and 29m between executions. Those historical gaps
+include unpartitioned application/network work; they do not identify its cause
+or establish current staging latency.
+
+The candidate retains all roles and public workflow envelopes. Execution views
+load current versions and relevant approvals; inspection and final report context
+retain history. Scheduling uses targeted operation reads and a revision-scoped
+view. Completed progress and page assembly are reused. Current scoped grants
+approve assembled style/sheets/page images through the normal approval service;
+Creator explicit approval and revoked/narrowed grants remain effective. Reference
+preparation reuses original bytes within one invocation while each upload admission
+rechecks metadata, sources, parent and run state. Strict operation admission,
+authorization and completion keep independent byte verification. Historical terminal
+operations without an end timestamp show duration unavailable. No persisted schema,
+credential inventory or Dify publication changes are required.
+
+Local comparison uses fake providers and isolated real MongoDB, with identical
+endpoints: a saved J01 result, and a saved approved J13 image with three references.
+Read counts cover find/findOne/aggregate calls, not writes or individual returned
+records. Phase events overlap and must not be summed. The comparable local samples were:
+
+| Durable endpoint | Before | Candidate | Work reduction |
+| --- | --- | --- | --- |
+| Manager ? saved J01 | 144 ms; 125 read queries | 137 ms; 115 read queries | 10 fewer reads (8.0%) |
+| Manager ? approved J13 with three references | 1,784 ms; 542 read queries; 94 storage reads | 1,184 ms; 392 read queries; 61 storage reads | 150 fewer reads (27.7%); 33 fewer storage reads (35.1%) |
+
+These are single local samples with fake providers and real persistence. They
+support deterministic reductions in work, not a staging latency forecast. The
+image-only candidate also performs approval that the old image-only endpoint
+omitted; that unequal endpoint must not be used to claim a speed improvement.
+Focused query/storage assertions and the unchanged Kid fixture protect these
+reductions. Verification passed: 54 dispatch/orchestration/reference-upload integration cases,
+15 context/J13 admission cases (the corrected historical fixture also passed alone),
+23 UI/lifecycle/contracts units, five profile/grant/Kid completion cases, four image
+recovery safeguards, six approval/corruption/no-progress cases, and the five-case
+progress-compatibility correction check. Typecheck, focused lint and agent fixtures
+passed; 147 local documentation links/anchors passed independent verification.
+The progress correction retains historical approval IDs/nulls and ordered image
+identities in its persisted fingerprint, without loading historical version content.
+Reviewed publication and the live release/run remain pending.
+The deterministic Kid fixture must complete with 39 text + 9 image operations
+(48 total) and one saved delegation decision. No paid execution is authorized.
+
+After reviewed delivery, submit one new Simulated Kid run through the authenticated
+runner. Retain its identity, output/approval/report/asset proof and zero payable
+counters. Compare operation counts, first-to-final Dify duration, combined workflow
+time and inter-execution gaps with the saved baseline. Use fresh phase diagnostics
+for attribution; do not present local timings as live improvements.
+
+## M4 readiness plan — 2026-10-13
+
+Use the [M3 exit evidence](M3-completion.md#persona-exit-evidence) and unchanged
+passing checks. Kid used 47 logical text/9 image calls, Parent 55/11 and Creator
+84/15, all zero payable. These counts measure deterministic orchestration;
+they are not forecasts of real model requests, tokens, cost or creative quality.
+Normal staging remains release `db51e9b394ddb01b14a4a832f862b53a3cfd0b7b`, with
+the eighteen restored bindings recorded in M3. Do not repeat its delivery,
+operator exception, binding restoration or persona campaign.
+
+### Minimum implementation changes for a later task
+
+| Boundary | Current restriction or gap | Minimum change and protected behavior |
+| --- | --- | --- |
+| Admission, UI and CLI | `http.ts` rejects non-Simulated create/tool calls; `dispatch.ts` and `transport.ts` reject or send only Simulated; `scripts/experiment-runner.ts` fixes request/response mode. | Add explicit Balanced admission and mode propagation through these existing surfaces. Keep Real unavailable, production rejected and saved Simulated runs readable. Require the approved configuration before any claim. |
+| Dify roles | Current published manager, specialists, testers and judge use deterministic Code fixtures and reject non-Simulated mode. | Keep the fixture branch. Add one bounded text-provider request per eligible role invocation, using the existing saved-context and result envelope. Booklet continues to validate tasks, source ownership and approvals; Dify owns instructions and creative output. No opaque Agent loop. |
+| Image path and callbacks | `db/experiment-images.ts`, style/sheet/page assembly, reference uploads, page batches, J13 authorization, narrative routing and completion contain Simulated-only checks. `context.ts` fixes image/report context to Simulated. | Distinguish run mode from provider kind consistently: Balanced images remain synthetic. Extend existing authorization, context, storage, assembly and completion guards only for that route. Preserve exact references, native lettering, digests, callback claims, original deadlines and terminal bookkeeping. No real-image provider branch is reachable. |
+| Configuration evidence | Saved configuration hash pins app/publication identities, but not a complete effective provider/model/token/retry policy. | Freeze a non-secret per-role manifest with publication, provider/model ID, token parameter/ceiling, context ceiling, timeout, retry policy and number of provider nodes. Read back the published graph and compare it before admission. Version the evidence without rewriting historical snapshots; choose the smallest compatible persistence change during implementation. |
+| Reservations and usage | Repository already makes Balanced text payable and Balanced images non-payable, but reserves once per operation. Transport does not retain attributable provider token/cost usage. | Use exactly one provider request per reserved text invocation. Reserve before that request; count failed/uncertain requests and explicit repairs. Persist provider request identity, input/output tokens and actual or unavailable cost separately from the reservation. Never treat missing usage as zero or refund uncertainty. If one-request enforcement cannot be proved, block paid readiness rather than counting a multi-call workflow as one request. |
+| Reports | Report schema already accepts modes and checks current version/asset ownership; current report producers are deterministic and context fixes Simulated. | Pass actual run mode and make tester/judge text-backed under Balanced. Preserve independent judge identity and advisory findings. Label image findings as based on synthetic images; retain unavailable/estimated cost explicitly. No scoring framework. |
+
+These are application/workflow changes for a later implementation task. No
+runtime API, persisted schema, Dify publication or credential changes occur in
+this readiness-planning revision. Reuse existing credentials only if verified
+sufficient; otherwise consolidate the missing private provider binding into one
+handoff. Do not create it under this task.
+
+### Evidence reuse and focused gaps
+
+| Requirement | Reuse | Check only uncovered or changed behavior later |
+| --- | --- | --- |
+| Full persona outputs and approval behavior | Three M3 completions; Parent delegated approvals; Creator's 31 explicit approvals; required 3/5/8-page layouts, sources and assets. | Focused mode/routing fixtures for each persona. The inspect/revise/narrow-grant scenario below still needs its own evidence where not already covered; do not rerun unchanged full Simulated personas. |
+| Reservation, duplicate/stale callbacks, deadlines and uncertain outcomes | Existing focused repository/dispatch/completion tests, retained delayed recovery and resolved stopped probe. | One representative fake-provider case for changed Balanced authorization, duplicate/lost callback and late completion; assert retained ledger and output. No forced restart. |
+| Assets, references and reports | M3 stored-byte completion checks, ordered J13 references, separate matching tester/judge reports, advisory geometry warnings. | Balanced run mode with synthetic images through source upload, storage and final verification; report mode and attributable usage. No real-image test. |
+| Bounds and internal calls | Existing 120/160/220 logical ceilings and per-operation reservation tests. | Fake provider proves one reservation precedes one text request, exhaustion blocks the next request, explicit repairs count, no hidden retry/subcall exists and Real/image-provider branches cannot execute. |
+| Published provider configuration | M3 publication readback proves deterministic graphs only. | Read-only exact model/token/retry manifest and reachable-branch audit. A node toggle alone does not prove provider SDK/plugin retry behavior. |
+
+Select named affected unit/contract tests and the minimum persistence integration
+case for each changed boundary. Add one non-billable fake-provider end-to-end case
+only where unit/integration evidence does not cover the actual route. Do not add
+a broad suite or infrastructure campaign. Reuse unrelated passes; two clean
+independent reviews, lean CI and the existing staging process apply to the later
+implementation candidate.
+
+### Token controls and later spending checkpoint
+
+Retain the [M0 proposals](M0-readiness.md#provider-readiness-before-m4m5): verify
+2,048 output tokens for manager/testers, 8,192 for specialists/judge and at most
+32,000 input text tokens after explicit context selection. These are proposed
+bounds, not verified live settings. Preserve exact lettering and required
+references; fail visibly rather than silently truncating them. Record enforceable
+model-specific parameters before paid readiness. No model selection is made here.
+
+Automatic provider, SDK/plugin, node and transport retries must be disabled and
+verified. An explicit correction is a new attributable request within the same
+run allowance; an uncertain request is inspected, never automatically replayed.
+Provider reservations must cover every paid call, including report/repair calls.
+
+After non-billable implementation/readiness passes, present one concrete manifest
+and finite spending request: proposed Kid → Parent → Creator, three initial runs,
+zero successors, ceilings 120/160/220 text requests, at most 500 total, zero real
+images. Include per-role input/output token ceilings and a provider-price-based
+worst-case monetary ceiling, then obtain explicit approval before execution.
+Any successor requires its own finite allowance and additional worst-case bound.
+This plan grants no spending and does not mark M4 complete.
 
 ## Three execution checkpoints
 
@@ -62,7 +188,7 @@ injection as a normal agent capability.
 | Detailed creator control | Creator can inspect/revise an artifact and narrow delegation; only current grant applies |
 | Scope/brief conflict | Tester is asked; manager cannot grant itself authority or change limits |
 | Duplicate/lost authorization | One claim, at most one simulated provider action; inspection, not re-execution |
-| Restart/pause | In-flight result can save; no new claims while paused; resume does not repeat completed work |
+| Pause and application recovery | In-flight result can save; no new claims while paused; resume does not repeat completed work. Reuse retained restart evidence; do not add a forced-restart campaign. |
 | Missing/corrupt asset, storage failure | Technical blocked state; existing-result recovery retains counter and prior pages |
 | Concurrent/superseded completion | One winner; old result cannot overwrite replacement |
 | Exhausted calls/revisions | No extra provider call; usable quality result accepted with warning; required missing output remains blocked |

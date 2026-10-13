@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
-import type { Database } from "@/db/client";
+import { withMongoTransaction, type Database } from "@/db/client";
 import type { ArtifactDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, MAX_DRAFT_LIST_CONTENT_BYTES, type SpecialistTask, type RoleResult, type NarrativeWarning } from "@/lib/contracts/experiment-runner";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
@@ -227,6 +227,30 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   await database.collections.artifacts.updateOne({ _id: artifact._id, currentVersionId: versionId }, { $set: { state: "approved", updatedAtMs: nowMs } }, { session });
   await updateStage(database, session, run, nowMs);
   return approvalId;
+}
+
+// Assembly is separate from provider completion. Apply the existing grant to
+// its exact current version without manufacturing another tester decision.
+export async function approveAssembledDelegation(database: Database, runId: string, versionId: string,
+  nowMs: number, assetStore: () => AssetStore) {
+  return withMongoTransaction(database, async (session) => {
+    const run = await database.collections.experiment_runs.findOne({ _id: runId }, { session });
+    if (!run || run.activeOperationId || run.pendingDecisionJson || run.pauseRequested ||
+        !["queued", "running"].includes(run.status) || !run.activeDelegationId || run.generationCompletedAtMs != null) return false;
+    const grant = await database.collections.experiment_delegations.findOne({ _id: run.activeDelegationId, runId,
+      action: "approve", subjectKind: "book", subjectId: run.bookletId, revokedAtMs: null, supersededById: null }, { session });
+    const version = await database.collections.artifact_versions.findOne({ _id: versionId }, { session });
+    const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId,
+      experimentRunId: runId, currentVersionId: versionId, state: "draft" }, { session }) : null;
+    if (!grant || !artifact || !["J08", "J09", "J10", "J13"].includes(artifact.taskId ?? "") ||
+        !grant.taskIds.includes(artifact.taskId!) || version?.createdBy !== "application") return false;
+    await approveVersion(database, session, run, versionId, "delegated", grant.testerDecisionId, grant._id, null, nowMs, assetStore);
+    const changed = await database.collections.experiment_runs.updateOne({ _id: runId, revision: run.revision,
+      activeOperationId: null, activeDelegationId: grant._id, pendingDecisionJson: null, pauseRequested: false },
+    { $inc: { revision: 1 }, $set: { updatedAtMs: nowMs } }, { session });
+    if (changed.modifiedCount !== 1) conflict("Run changed during delegated assembly approval.");
+    return true;
+  });
 }
 
 export async function materializeNarrativeResult(database: Database, session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RoleResult, warnings: NarrativeWarning[], nowMs: number, assetStore: () => AssetStore = createAssetStore): Promise<Materialized> {
