@@ -13,6 +13,11 @@ metadata API; selected-run detail retains artifact and byte-verification paths.
 Active list rows poll every five seconds. Terminal pages stop automatic polling
 and retain manual Refresh. These candidate changes are not yet verified live.
 
+Drain permits publication readback for a callback-completed operation even after
+the callback clears its active-operation pointer. New preparation and dispatch
+remain gated. Pause remains set during this reconciliation; saved output does
+not require a replacement workflow submission.
+
 Bounded transactional find/aggregate cursors inherit a collection-level timeout
 default. This avoids the installed MongoDB 7.5 driver's invalid `getMore` timeout
 option while retaining operation cancellation and the transaction deadline.

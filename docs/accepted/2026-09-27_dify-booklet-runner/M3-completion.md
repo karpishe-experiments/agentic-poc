@@ -13,7 +13,7 @@ candidate, not every implementation increment.
 
 ## Compact remaining delivery
 
-### Current progress and blockers — 2026-10-12
+### Current progress and blockers — 2026-10-13
 
 This section is the current status. Later evidence supersedes earlier statements
 that key preparation, collaboration repair or async restart proof are pending.
@@ -21,14 +21,30 @@ Keep historical run identities and failures; do not repeat completed private set
 
 | Checkpoint | Current result | Remaining work |
 | --- | --- | --- |
-| Recovery candidate | PR #183 merged to master as `6d10daa2cd4b0327c31c1357535be723b67be95f`. CI `38282476173` passed in 133 seconds with unit/static/contract checks and both full Linux host suites. Five-minute budgets, stop/inspection, two-stage drain, retained mutation owners, atomic materialization, setup resume, probe preflight and paginated observation are implemented. | Finish staging delivery compatibility and its required CI. No live success is claimed. |
-| Staging transition | Retained request `38149230374-1` and the exact stale Parent item/job remain the known live blocker. The installed application lacks the new drain contract. | Synchronize the reviewed dispatcher, use the explicit backup-protected legacy bootstrap, then deploy the compatible reviewed candidate. Preserve the original journal and checkpoint. |
-| Model-free proof | Earlier 43.8-second same-operation restart recovery and collaboration health remain valid baseline evidence. | Prove stall, stop, restart, output recovery and active-callback drain against the new lifecycle candidate. |
+| Recovery candidate | Main PR #183 is merged at `6d10daa`; lean CI `38282476173` passed. Staging delivery PR #182 is merged at `5374ec42026d48af907136b4ac2e3a8070a8e789`; CI `38285675918` passed, including both full Linux host suites. Two independent delivery reviews passed. | Candidate deployed. Obtain live lifecycle proof; do not repeat unchanged local validation. |
+| Staging transition | Dispatcher SHA256 `f3199c99c989a08e8dbbad2bbb96c17875939853edafc562946047b326acbba3` is installed. Bootstrap preview `38288011539` and apply `38288136389` passed. Backup `staging-bootstrap-20261012T180154Z-27919` was fully verified with 113 assets; only the approved stale Parent item/job was repaired. The original request `38149230374-1` is archived unchanged. Deploy `38287424389`, attempt 2, passed at `5374ec4` using existing image `sha256:4d7ae74106240a606f3f5145ecb9407d3b1c99b19d90fc67dfd4115b97cb3a10`; exact request status `38289361125` confirms completion. Diagnostics `38289463065` and `38289680068` verified the dispatcher, selected release and authenticated API (HTTP 200). Chrome loaded the new paginated run list with saved Kid completion and Parent history intact. | Deployment blocker cleared. Continue model-free lifecycle probes; deployment alone does not establish recovery acceptance. |
+| Model-free proof | Earlier restart recovery remains valid baseline evidence. Reviewed disposable publication `a6aef6ea-2f3e-4597-8e2c-adacbed68030` and temporary activation `38292423440` are verified. The new delayed probe saved output after 67.438 seconds during draining and recovered through explicit inspection without replay. It exposed an automatic publication-reconciliation ordering defect. | Deploy the focused correction and prove automatic drain publication readback. Manual-stop/restart and deadline probes have not run. Restore normal bindings before Parent 3/3. |
 | Persona acceptance | Kid functional acceptance is retained. Parent attempts 1/3 and 2/3 failed and remain saved. | Run Parent 3/3 only after the probes pass. Stop if it fails; Creator follows Parent success. No paid calls. |
 
 Private bindings are already prepared. Pending operator actions belong only in
 the [readiness register](EXECUTION.md#b-authorization-register). Daily Dify backups
 and restore rehearsal remain deferred follow-up, not M3 gates.
+
+The delayed lifecycle probe ran on 2026-10-13 as
+`d85bb9a6-622a-4efa-895c-ad07b3cd65af`, operation
+`eb4f2bb4-5b42-4a51-8775-46fa81576c75`, Dify execution
+`e63d26be-fd0e-47a4-83d9-3cf447cf8162`. Output and materialization were saved
+after 67.438 seconds during draining, with one manager reservation, unchanged
+deadline and zero payable calls. The controller stopped before the manual/deadline
+probes because publication readback remained absent. The dispatcher checked drain
+before observing the latest callback-completed operation after its active pointer
+was cleared. The focused correction moves that gate after admitted reconciliation,
+not after new-work admission. All 27 dispatcher persistence tests, typecheck,
+focused lint and three budget unit tests passed. No broad suite was repeated.
+The existing live Inspect/reconcile action recovered the same execution without
+replay: the UI shows paused revision 11 and remote status succeeded. Automatic
+drain reconciliation still requires corrected deployment and live proof. Staging
+admission remains draining; Parent 3/3 and Creator have not started.
 
 The required Linux CI run `38258080043` exposed a multi-batch MongoDB cursor
 error during selected two-page completion. The saved image was valid; a

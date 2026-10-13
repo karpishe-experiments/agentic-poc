@@ -381,7 +381,6 @@ export function createExperimentDispatcher(deps: {
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
         const deployment = await deps.database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" });
-        if (deployment?.draining || deployment?.maintenance) return "waiting";
         let latest = (await repository.listOperations(runId)).at(-1);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
           const binding = bindingFor(latest, run);
@@ -394,6 +393,9 @@ export function createExperimentDispatcher(deps: {
           latest = (await repository.getOperation(latest._id)) ?? undefined;
           if (!latest?.verifiedWorkflowId) return "waiting";
         }
+        // A callback can clear activeOperationId before publication readback.
+        // Drain blocks new work, not reconciliation of that admitted execution.
+        if (deployment?.draining || deployment?.maintenance) return "waiting";
         if (latest?.state === "succeeded" && run.progressOperationId !== latest._id) {
           await observeProgress(runId, latest);
           run = (await repository.getRun(runId))!;
