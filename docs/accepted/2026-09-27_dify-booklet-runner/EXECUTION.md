@@ -6,6 +6,20 @@ implementation plan. Target staging only; no production promotion.
 
 ## Status and change surface
 
+### Efficiency follow-up ? 2026-10-13
+
+The operator approved the bounded execution cleanup before Balanced: preserve
+manager/specialist roles and J01?J13; reduce repeated scheduling/history reads,
+assembly, delegation decisions and reference-byte reads. Preserve current grants,
+source/approval checks, reservations, deadlines, uncertain outcomes and saved data.
+The [efficiency record](M4-balanced.md#execution-efficiency-follow-up--2026-10-13)
+owns measurements and validation. Existing reviewed staging delivery is authorized.
+After publication/deployment, the operator additionally requested one new Simulated
+Kid performance run: verify completion and compare it with the saved Kid baseline.
+This supersedes the no-new-persona-run restriction only for that comparison run;
+it does not reopen M3 acceptance or authorize Balanced/Real calls.
+
+
 ### M3 experiment-only scope
 
 The operator approved this scope correction on 2026-10-13. It supersedes earlier

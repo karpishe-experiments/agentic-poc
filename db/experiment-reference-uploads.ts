@@ -10,6 +10,7 @@ import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-ill
 import { savedConfigurationSchema, type BookletBinding } from "@/lib/experiment-runner/config";
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
+import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema });
 const acknowledgement = pageIllustrationAttachmentSchema.transform(({ uploadUser, ...item }) => {
@@ -39,6 +40,17 @@ export function createExperimentReferenceUploads(input: {
     { kind: "ready"; fileIds: string[] } | { kind: "unknown" } | { kind: "rejected" }
   > {
     const value = identity.parse(raw);
+    // Original bytes are immutable evidence for this one preparation only.
+    // Every upload admission still reads current metadata in a fresh transaction
+    // and validates these bytes against its current digest/length/approval chain.
+    const bytes = new Map<string, Uint8Array>();
+    const preparedStore: AssetStore = { ...input.store,
+      put: (...args) => input.store.put(...args), exists: (uri) => input.store.exists(uri),
+      async get(uri) {
+        if (!bytes.has(uri)) bytes.set(uri, Uint8Array.from(await input.store.get(uri)));
+        return Uint8Array.from(bytes.get(uri)!);
+      },
+    };
     for (;;) {
       const next = await withMongoTransaction(database, async (session) => {
         const options = { session };
@@ -69,7 +81,8 @@ export function createExperimentReferenceUploads(input: {
             (operation.parentWorkflowRunId !== null && operation.parentWorkflowRunId !== value.parentWorkflowRunId)) {
           conflict("Reference upload requires the verified manager selection for this page.");
         }
-        const sources = await verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId, input.store);
+        const sources = await measurePhase(value, "reference_source_verification", () =>
+          verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId, preparedStore));
         if (canonical(JSON.parse(operation.imageRequestJson ?? "null")) !== canonical(sources.request.request) ||
             imageRequestFingerprint(sources.request.request) !== operation.inputFingerprint ||
             canonical(operation.dependencyVersionIds) !== canonical(sources.request.request.sourceVersionIds)) {
@@ -122,7 +135,7 @@ export function createExperimentReferenceUploads(input: {
       });
       if (next.kind !== "upload") return next;
       let result: ReferenceUploadResult;
-      try { result = await input.upload(binding, value.runId, Uint8Array.from(next.reference.bytes)); }
+      try { result = await measurePhase(value, "reference_upload", () => input.upload(binding, value.runId, Uint8Array.from(next.reference.bytes))); }
       catch { result = { kind: "unknown" }; }
       const reference = next.reference;
       if (result.kind === "uploaded") {

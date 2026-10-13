@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
+import { approveAssembledDelegation } from "@/db/experiment-narrative";
+import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
@@ -64,6 +66,27 @@ export function createExperimentDispatcher(deps: {
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
     operation.role, operation.taskId as SpecialistTask | null, run.persona);
 
+  async function retrieveOperation(run: ExperimentRunDocument, operation: ExperimentOperationDocument) {
+    return measurePhase({ runId: run._id, operationId: operation._id }, "publication_readback", () =>
+      runtime.retrieve(bindingFor(operation, run), operation.workflowRunId!));
+  }
+
+  async function assemblePage(runId: string, pageId: string, imageOperationId: string) {
+    // An assembly is immutable and unique to this provider operation. Current
+    // approval and final acceptance still verify its sources and original bytes.
+    const saved = await deps.database.collections.artifact_versions.findOne({ sourceOperationId: imageOperationId, createdBy: "application" });
+    const owner = saved ? await deps.database.collections.artifacts.findOne({ _id: saved.artifactId,
+      experimentRunId: runId, taskId: "J13", subjectId: pageId, currentVersionId: saved._id }) : null;
+    const assembled = owner && saved ? { version: saved } : await measurePhase({ runId, operationId: imageOperationId }, "page_assembly", () =>
+      createExperimentPageIllustrationAssembly({ database: deps.database, store: store(), now }).assemble({ runId, pageId, imageOperationId }));
+    await measurePhase({ runId, operationId: imageOperationId }, "delegated_approval", () =>
+      approveAssembledDelegation(deps.database, runId, assembled.version._id, now(), store));
+    return assembled;
+  }
+
+  const prepareOperation = (input: { runId: string; operationId: string } & Record<string, unknown>) =>
+    measurePhase(input, "operation_preparation", () => repository.prepareOperation(input));
+
   async function preparePageImage(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>, manager: ExperimentOperationDocument) {
     const work = view.nextPageIllustrationWork;
     if (!work || work.kind !== "image" || !manager.workflowRunId || !manager.verifiedWorkflowId) {
@@ -76,15 +99,17 @@ export function createExperimentDispatcher(deps: {
     const assetStore = store();
     const sources = await withMongoTransaction(deps.database, async (session) => {
       const attempt = createVerificationAttempt(assetStore);
-      const selected = await verifyCurrentPageIllustrationSources(deps.database, session, run, work.subjectId, assetStore, { attempt });
+      // Selection needs current lineage. prepareOperation performs the complete
+      // independent byte check before it admits the selected operation.
+      const selected = await verifyCurrentPageIllustrationSources(deps.database, session, run, work.subjectId, assetStore, { attempt, verifyBytes: false });
       for (const page of selected.layout.pages) {
-        if (page.pageId !== work.subjectId) await verifyCurrentPageIllustrationSources(deps.database, session, run, page.pageId, assetStore, { attempt });
+        if (page.pageId !== work.subjectId) await verifyCurrentPageIllustrationSources(deps.database, session, run, page.pageId, assetStore, { attempt, verifyBytes: false });
       }
       return selected;
     });
     const request = sources.request.request;
     const inputFingerprint = imageRequestFingerprint(request);
-    const history = await repository.listOperations(run._id);
+    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: "J13", subjectId: work.subjectId }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const matches = history.filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectKind === "page" &&
       item.subjectId === work.subjectId && item.parentWorkflowRunId === manager.workflowRunId && item.inputFingerprint === inputFingerprint);
     const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
@@ -93,9 +118,7 @@ export function createExperimentDispatcher(deps: {
       if (executable.length !== 1 || executable[0].state !== "succeeded" || !executable[0].verifiedWorkflowId) {
         throw new ExperimentRepositoryError("conflict", "Existing page-image outcome requires reconciliation.");
       }
-      await createExperimentPageIllustrationAssembly({ database: deps.database, store: assetStore, now }).assemble({
-        runId: run._id, pageId: work.subjectId, imageOperationId: executable[0]._id,
-      });
+      await assemblePage(run._id, work.subjectId, executable[0]._id);
       return null;
     }
     let active = await batches().listActive(run._id);
@@ -118,7 +141,7 @@ export function createExperimentDispatcher(deps: {
         pages: [{ pageId: work.subjectId, pageBibleVersionId: sources.pageBibleVersionId, previousPageVersionId: work.currentVersionId }] } });
       run = (await repository.getRun(run._id))!;
     }
-    return { operation: await repository.prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
+    return { operation: await prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
       role: "image", taskId: "J13", subjectKind: "page", subjectId: work.subjectId, inputFingerprint,
       attempt: Math.max(0, ...history.filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectId === work.subjectId).map((item) => item.attempt)) + 1,
       providerKind: "image", imageRequest: request, parentWorkflowRunId: manager.workflowRunId, nowMs: now() }),
@@ -133,7 +156,7 @@ export function createExperimentDispatcher(deps: {
     if (!draft || canonical(draft.dependencyVersionIds) !== canonical(work.target.sourceVersionIds)) throw new ExperimentRepositoryError("conflict", "Sheet image sources changed.");
     const request = referenceSheetRequest(work.target.taskId, draft.content);
     const inputFingerprint = imageRequestFingerprint(request);
-    const history = await repository.listOperations(run._id);
+    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: work.target.taskId, subjectId: work.target.subjectId, inputFingerprint }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const matches = history.filter((item) => item.role === "image" && item.taskId === work.target.taskId &&
       item.subjectKind === work.target.subjectKind && item.subjectId === work.target.subjectId && item.inputFingerprint === inputFingerprint);
     const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
@@ -141,15 +164,16 @@ export function createExperimentDispatcher(deps: {
     if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId ||
         canonical(JSON.parse(item.imageRequestJson ?? "null")) !== canonical(request))) throw new ExperimentRepositoryError("conflict", "Saved sheet image requires reconciliation.");
     if (executable.length === 1) {
-      await createExperimentSheetAssembly({ database: deps.database, store: store(), now }).assemble({
+      const assembled = await createExperimentSheetAssembly({ database: deps.database, store: store(), now }).assemble({
         runId: run._id, draftSheetVersionId: draft.id, imageOperationId: executable[0]._id,
       });
+      await approveAssembledDelegation(deps.database, run._id, assembled.version._id, now(), store);
       return null;
     }
-    return { operation: await repository.prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
+    return { operation: await prepareOperation({ runId: run._id, operationId: randomUUID(), expectedRevision: run.revision,
       role: "image", taskId: work.target.taskId, subjectKind: work.target.subjectKind, subjectId: work.target.subjectId,
       inputFingerprint, attempt: Math.max(0, ...matches.map((item) => item.attempt)) + 1, providerKind: "image", imageRequest: request, nowMs: now() }),
-      parentWorkflowRunId: draft.sourceOperationId ? history.find((item) => item._id === draft.sourceOperationId)?.workflowRunId ?? null : null };
+      parentWorkflowRunId: draft.sourceOperationId ? (await repository.getOperation(draft.sourceOperationId))?.workflowRunId ?? null : null };
   }
 
   async function prepareStyleSample(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>) {
@@ -161,7 +185,7 @@ export function createExperimentDispatcher(deps: {
     }
     const slots = styleSampleRequests(draft.content, { draftStyleVersionId: draft.id, conceptVersionId: sources[0],
       outlineVersionId: sources[1], manuscriptVersionId: sources[2], finalCharactersVersionId: sources[3], finalLocationsVersionId: sources[4] });
-    const history = await repository.listOperations(run._id);
+    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: "J08", subjectId: run.bookletId }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const savedIds: string[] = [];
     for (const slot of slots) {
       const inputFingerprint = imageRequestFingerprint(slot.request);
@@ -175,31 +199,46 @@ export function createExperimentDispatcher(deps: {
         throw new ExperimentRepositoryError("conflict", "Saved style sample requires reconciliation.");
       }
       if (executable.length === 1) { savedIds.push(executable[0]._id); continue; }
-      return { operation: await repository.prepareOperation({ runId: run._id, operationId: randomUUID(),
+      return { operation: await prepareOperation({ runId: run._id, operationId: randomUUID(),
         expectedRevision: run.revision, role: "image", taskId: "J08", subjectKind: "book", subjectId: run.bookletId,
         inputFingerprint, attempt: Math.max(0, ...matches.map((item) => item.attempt)) + 1, providerKind: "image", imageRequest: slot.request, nowMs: now() }),
-        parentWorkflowRunId: draft.sourceOperationId ? history.find((item) => item._id === draft.sourceOperationId)?.workflowRunId ?? null : null };
+        parentWorkflowRunId: draft.sourceOperationId ? (await repository.getOperation(draft.sourceOperationId))?.workflowRunId ?? null : null };
     }
-    await createExperimentStyleAssembly({ database: deps.database, store: store(), now }).assemble({
+    const assembled = await createExperimentStyleAssembly({ database: deps.database, store: store(), now }).assemble({
       runId: run._id, draftStyleVersionId: draft.id, sampleOperationIds: savedIds,
     });
+    await approveAssembledDelegation(deps.database, run._id, assembled.version._id, now(), store);
     return null;
   }
 
   async function observeProgress(runId: string, operation: ExperimentOperationDocument) {
-    if (operation.state !== "succeeded") return;
-    const view = await context.getRunView(runId);
+    if (operation.state !== "succeeded" || (await repository.getRun(runId))?.progressOperationId === operation._id) return;
+    const view = await measurePhase({ runId, operationId: operation._id }, "progress_context", () => context.getExecutionView(runId));
     if (!view) return;
-    const images = (await repository.listOperations(runId)).filter((item) => item.role === "image" && item.state === "succeeded" &&
+    // Keep persisted progress hashes compatible with earlier releases without
+    // loading historical content into the scheduling view.
+    const versions = await deps.database.collections.artifact_versions.find({ artifactId: { $in: view.currentArtifacts.map((item) => item.id) } },
+      { projection: { _id: 1, artifactId: 1, versionNumber: 1 } }).sort({ versionNumber: 1 }).toArray();
+    const approvals = await deps.database.collections.approvals.find({ experimentRunId: runId,
+      artifactVersionId: { $in: versions.map((item) => item._id) } }, { projection: { _id: 1, artifactVersionId: 1 } }).toArray();
+    const approvalByVersion = new Map(approvals.map((item) => [item.artifactVersionId, item._id]));
+    const images = (await deps.database.collections.experiment_operations.find({ runId, role: "image", state: "succeeded" }, { projection: { _id: 1, resultJson: 1 } })
+      .sort({ createdAtMs: 1, _id: 1 }).toArray()).filter((item) =>
       typeof (JSON.parse(item.resultJson ?? "null") as { assetId?: unknown } | null)?.assetId === "string").map((item) => item._id);
     await repository.recordProgress({ runId, operationId: operation._id, nowMs: now(), fingerprint64: fingerprint({
-      artifacts: view.currentArtifacts.map(({ id, state, currentVersionId, versions }) => ({ id, state, currentVersionId, approvals: versions.map((version) => version.approval?.id ?? null) })),
+      artifacts: view.currentArtifacts.map(({ id, state, currentVersionId }) => ({ id, state, currentVersionId,
+        approvals: versions.filter((version) => version.artifactId === id).map((version) => approvalByVersion.get(version._id) ?? null) })),
       delegation: view.activeDelegation?.id ?? null, pending: view.pendingDecision, messages: view.creatorMessages.map((message) => message.id),
       ...(images.length ? { images } : {}),
     }) });
   }
 
   async function reconcile(run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult, observed = false) {
+    return measurePhase({ runId: run._id, operationId: operation._id }, "completion_reconciliation", () =>
+      reconcileWork(run, operation, result, observed));
+  }
+
+  async function reconcileWork(run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult, observed: boolean) {
     const identity = { runId: run._id, operationId: operation._id, parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: now() };
     const current = await repository.getOperation(operation._id);
     if (!current) return;
@@ -306,9 +345,7 @@ export function createExperimentDispatcher(deps: {
     if (saved?.role === "image" && saved.taskId === "J13" && saved.state === "succeeded" && saved.verifiedWorkflowId &&
         (JSON.parse(saved.resultJson ?? "null") as { kind?: string } | null)?.kind !== "clarification") {
       try {
-        await createExperimentPageIllustrationAssembly({ database: deps.database, store: store(), now }).assemble({
-          runId: run._id, pageId: saved.subjectId, imageOperationId: saved._id,
-        });
+        await assemblePage(run._id, saved.subjectId, saved._id);
       } catch {
         // The provider result is known and retained. A materialization failure
         // is not permission to create a new manager/image operation.
@@ -331,12 +368,19 @@ export function createExperimentDispatcher(deps: {
     return mutate(async () => {
       let run = await repository.getRun(runId);
       if (!run || run.mode !== "simulated" || run.status === "completed" || run.status === "failed") return "blocked";
+      let snapshot: Awaited<ReturnType<typeof context.getExecutionView>> | undefined;
+      let snapshotRevision = -1;
+      const viewForRun = async () => {
+        if (snapshotRevision !== run!.revision || snapshot === undefined) {
+          snapshot = await context.getExecutionView(runId); snapshotRevision = snapshot?.revision ?? -1;
+        }
+        return snapshot;
+      };
       if (!run.activeOperationId && run.status !== "blocked") {
-        const last = (await repository.listOperations(runId)).at(-1);
+        const last = await repository.latestOperation(runId);
         if (last?.role === "image" && last.taskId === "J13" && last.state === "succeeded" && last.verifiedWorkflowId && last.imageCompletionDigest) {
           try {
-            await createExperimentPageIllustrationAssembly({ database: deps.database, store: store(), now }).assemble({ runId,
-              pageId: last.subjectId, imageOperationId: last._id });
+            await assemblePage(runId, last.subjectId, last._id);
             for (const batch of await batches().listActive(runId)) {
               if (batch.items.some((item) => item.operationId === last._id)) await batches().reconcile({ runId, jobId: batch.jobId });
             }
@@ -350,9 +394,9 @@ export function createExperimentDispatcher(deps: {
       // Completed slice evidence remains complete after a newer suite is bound.
       // This is a saved-state read, not permission to execute an old publication.
       if (!run.activeOperationId && run.status !== "blocked") {
-        const savedView = await context.getRunView(runId);
+        const savedView = await viewForRun();
         if (savedView?.nextNarrativeTask === "slice_complete") {
-          const last = (await repository.listOperations(runId)).at(-1);
+          const last = await repository.latestOperation(runId);
           if (last?.state === "succeeded" && last.verifiedWorkflowId && run.progressOperationId === last._id &&
               !savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).some((binding) => binding.role === "judge")) return "boundary";
         }
@@ -366,11 +410,10 @@ export function createExperimentDispatcher(deps: {
       let operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
       if (operation) await bindTrackedMutationOperation(runId, operation._id);
       if (operation?.dispatchStartedAtMs != null) {
-        const binding = bindingFor(operation, run);
         // A retained ID is the only read-back path. Never POST after the marker.
         if (operation.workflowRunId) {
           if (!await repository.beginObservation(operation._id, now())) return "waiting";
-          await reconcile(run, operation, await runtime.retrieve(binding, operation.workflowRunId), true);
+          await reconcile(run, operation, await retrieveOperation(run, operation), true);
         } else {
           await reconcile(run, operation, { kind: "unknown" });
         }
@@ -381,16 +424,15 @@ export function createExperimentDispatcher(deps: {
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
         const deployment = await deps.database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" });
-        let latest = (await repository.listOperations(runId)).at(-1);
+        let latest = await repository.latestOperation(runId);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
-          const binding = bindingFor(latest, run);
           if (latest.workflowRunId && !await repository.beginObservation(latest._id, now())) return "waiting";
-          await reconcile(run, latest, latest.workflowRunId ? await runtime.retrieve(binding, latest.workflowRunId) : { kind: "unknown" }, true);
+          await reconcile(run, latest, latest.workflowRunId ? await retrieveOperation(run, latest) : { kind: "unknown" }, true);
           run = (await repository.getRun(runId))!;
           if (run.status === "blocked") return "blocked";
           // Reconciliation persists publication evidence. Admission must use that
           // refreshed record, not the callback-completed snapshot read above.
-          latest = (await repository.getOperation(latest._id)) ?? undefined;
+          latest = await repository.getOperation(latest._id);
           if (!latest?.verifiedWorkflowId) return "waiting";
         }
         // A callback can clear activeOperationId before publication readback.
@@ -402,7 +444,7 @@ export function createExperimentDispatcher(deps: {
           if (run.status === "blocked") return "blocked";
         }
         if (run.pauseRequested || run.status === "paused") return "waiting";
-        const view = await context.getRunView(runId);
+        const view = await viewForRun();
         if (!view || !view.nextNarrativeTask) return "waiting";
         let evaluationRole: "tester" | "judge" | null = null;
         if (view.nextNarrativeTask === "slice_complete") {
@@ -440,9 +482,8 @@ export function createExperimentDispatcher(deps: {
             return "blocked";
           }
         } else {
-        const history = await repository.listOperations(runId);
-        const last = history.at(-1);
-        const initialDelegation = run.persona !== "professional_creator" && history.length === 0;
+        const last = latest;
+        const initialDelegation = run.persona !== "professional_creator" && !last;
         let role: "manager" | "specialist" | "tester" | "judge" = evaluationRole ?? (view.nextNarrativeTask === "tester" || initialDelegation ? "tester" : "manager");
         let taskId: SpecialistTask | null = null;
         let subjectKind: ExperimentOperationDocument["subjectKind"] = "book", subjectId = run.bookletId;
@@ -477,7 +518,7 @@ export function createExperimentDispatcher(deps: {
           }
         }
         try {
-          operation = await repository.prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind, subjectId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, subjectKind, subjectId, view }), attempt: 1, providerKind: "text", nowMs: now() });
+          operation = await prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind, subjectId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, subjectKind, subjectId, view }), attempt: 1, providerKind: "text", nowMs: now() });
         } catch (error) {
           const current = await repository.getRun(runId);
           if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
@@ -488,8 +529,7 @@ export function createExperimentDispatcher(deps: {
       } else {
         // Before the marker a prepared specialist still needs its saved manager parent.
         if (operation.role === "specialist") {
-          const history = await repository.listOperations(runId);
-          parentWorkflowRunId = history.filter((item) => item.role === "manager" && item.state === "succeeded").at(-1)?.workflowRunId ?? null;
+          parentWorkflowRunId = (await repository.latestOperation(runId, { role: "manager", state: "succeeded" }))?.workflowRunId ?? null;
         } else if (operation.role === "image" && operation.taskId === "J13") {
           parentWorkflowRunId = operation.parentWorkflowRunId;
         } else if (operation.role === "image") {
@@ -509,8 +549,9 @@ export function createExperimentDispatcher(deps: {
           if (active.length !== 1) throw new ExperimentRepositoryError("conflict", "Page image requires one retained batch.");
           const currentRun = (await repository.getRun(runId))!;
           await batches().bind({ runId, jobId: active[0].jobId, operationId: operation._id, expectedRevision: currentRun.revision });
-          const uploads = await createExperimentReferenceUploads({ database: deps.database, store: store(), upload: uploadReference })
-            .prepare({ runId, operationId: operation._id, parentWorkflowRunId }, binding);
+          const uploads = await measurePhase({ runId, operationId: operation._id }, "reference_preparation", () =>
+            createExperimentReferenceUploads({ database: deps.database, store: store(), upload: uploadReference })
+              .prepare({ runId, operationId: operation!._id, parentWorkflowRunId }, binding));
           if (uploads.kind !== "ready") {
             await repository.failPreparation(runId, operation._id, now());
             return "blocked";
@@ -524,7 +565,8 @@ export function createExperimentDispatcher(deps: {
         }
       }
       await bindTrackedMutationOperation(runId, operation._id);
-      const admission = await repository.beginDispatch({ runId, operationId: operation._id, parentWorkflowRunId, nowMs: now() });
+      const admission = await measurePhase({ runId, operationId: operation._id }, "dispatch_admission", () =>
+        repository.beginDispatch({ runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now() }));
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
       const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated",
@@ -591,7 +633,8 @@ export function createExperimentDispatcher(deps: {
     }
     const deadline = operation?.deadlineAtMs ?? run.preparation?.deadlineAtMs ?? now() + OPERATION_LIMIT_MS;
     try {
-      const result = await withOwnedController(runId, (signal) => withOperationBudget(deadline - RECONCILIATION_RESERVE_MS, () => advanceWork(runId), { now, signal }));
+      const result = await withOwnedController(runId, (signal) => withOperationBudget(deadline - RECONCILIATION_RESERVE_MS,
+        () => measurePhase({ runId, ...(operation ? { operationId: operation._id } : {}) }, "advance", () => advanceWork(runId)), { now, signal }));
       if (!operation && run.preparation) await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null, "preparation.ownerId": ownerId },
         { $set: result === "blocked" ? { "preparation.outcome": "failed", "preparation.unresolved": false } : { preparation: null } });
       return result;
