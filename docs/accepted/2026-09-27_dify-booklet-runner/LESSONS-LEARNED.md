@@ -353,8 +353,13 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   after callback-first completion. No second POST is required.
 - **Guidance:** Save identity early, retain the original deadline, and reconcile
   terminal evidence before releasing the lane. A timeout does not authorize replay.
+  Keep that observation path available during drain after a callback clears the
+  active-operation pointer. Gate new work only after admitted reconciliation.
 - **Evidence:** [transport tests](../../../tests/unit/experiment-runner-transport.test.ts)
   and [recovery tests](../../../tests/integration/experiment-runner-style-dispatch.test.ts).
+  The 2026-10-13 delayed probe saved output during drain but exposed this ordering
+  defect; [dispatcher regression](../../../tests/integration/experiment-runner-dispatch.test.ts)
+  proves publication readback without another POST or reservation.
 - **Promotion target:** Documentation for asynchronous external-operation recovery.
 
 ### Completion acknowledgements must cover every admitted task
