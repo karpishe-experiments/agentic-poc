@@ -113,7 +113,7 @@ Technical access is not authority. Record verification and permission separately
 never infer a grant from a working login. These are the latest recorded results,
 not fresh live checks. Recheck the required row before dependent execution.
 
-Current M3 recovery status is in [M3 current progress](M3-completion.md#current-progress-and-blockers--2026-10-12).
+Current M3 recovery status is in [M3 current progress](M3-completion.md#current-progress-and-blockers--2026-10-13).
 Existing eighteen bindings and encrypted private setup remain valid; do not ask
 for their keys again. The remaining deployment dependency is reviewed dispatcher
 synchronization followed by explicit legacy bootstrap for request `38149230374-1`.
@@ -143,17 +143,18 @@ evidence unless its relevant release/configuration inputs change.
 | Real campaign: ordered 3/5/8-page staging runs, each plus cover | M4 completion and image-provider readiness pending; [M5](M5-real.md) | Text/image provider credentials inside Dify; approved model/binding references | Not granted. Default three initial runs, zero successors, ≤500 LLM and 46 real image requests; any additional allowance explicit | Paid Real calls; verify M4 successes, reference support, accounting, settings and approved finite campaign |
 | Probe cleanup: explicitly listed disposable IDs only | Retained probes documented in [M0](M0-readiness.md) | Existing Community control profile | Not granted; retaining probes is acceptable; no prefix-wide deletion | Cleanup only; verify exact IDs and confirmation before removal |
 
-The bounded-operation correction now blocks further persona acceptance. No new
-API key is required. Retain deployment request `38149230374-1`; the current image
-and retained unit need a reviewed compatibility transition before the new drain
-and process limits can be used. Exact backup-protected reconciliation of item
-`354d337a-4e9f-42ab-a8ec-0c327a45748a` and its owning job is authorized in this
-session, but is not yet executed. Preserve data and failed-run evidence. After
-reviewed deployment, prove recovery, intentional stall, stop, restart during
-reconciliation and an active callback during drain with disposable model-free
-probes. Only then spend Parent attempt 3/3; Creator follows success. See
-[M3 current work](M3-completion.md). Request operator access only if the existing
-restricted dispatcher cannot execute the reviewed exact repair or transition.
+The bounded-operation candidate is deployed at staging `5374ec4` on 2026-10-12.
+Bootstrap `38288136389` verified the backup and reconciled only the approved stale
+Parent item/job. Original request `38149230374-1` is archived unchanged; deployment
+`38287424389`, attempt 2, passed. These transition actions are complete.
+
+| Remaining dependency | Technical verification | Private reference | Required action | Exit |
+| --- | --- | --- | --- | --- |
+| Three model-free lifecycle probes on the existing staging app | Delayed output completed after 67.438 seconds during drain. Controller exposed missing automatic publication readback; original execution recovered through live Inspect/reconcile without replay. Manual/deadline probes did not start; [M3 current work](M3-completion.md#current-progress-and-blockers--2026-10-13) | Existing encrypted probe API key, normal eighteen-binding settings and separate `issue65-async-probe-settings-v4.dpapi.xml`; no new credential | Publish/deploy the focused drain-order correction, then resume only uncovered checks. Root handoff remains necessary for exact app interruption. Preserve the completed delayed execution and draining ownership; do not repeat the original submission | Automatic drain publication readback, manual stop/restart and automatic deadline pass. Restore/read back normal bindings and idle admission before Parent 3/3; Creator follows Parent success |
+
+Preserve all saved data and failed-run evidence. Do not repeat completed private
+setup, bootstrap or deployment. No paid execution, reset, production or Cloud
+change is authorized by this checkpoint.
 
 The latency/async row's installed-binding, idle-state and collaboration read-back
 handoff passed in the operator's root output on 2026-10-08; see the
@@ -168,8 +169,8 @@ uninterrupted persona acceptance with callback timings and reports. Runtime
 normal-binding readback passed and Chrome control works after the operator reopened
 the page. Kid successor `88a58434-be3f-4936-8f09-dd02efa29c9a` reached J12,
 then blocked on a J13 response-summary schema mismatch. The focused correction
-requires reviewed application deployment and a linked successor; no new keys or
-mandatory manual checks are currently identified. Recheck
+required reviewed application deployment and a linked successor. This historical
+pending statement is superseded by the current lifecycle checkpoint above. Recheck
 host guards immediately before submission; the prior observation is not a lock
 or permission to bypass changed state. Restore and read back normal bindings only
 if a future authorized probe changes them again.
