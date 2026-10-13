@@ -164,7 +164,7 @@ Stop the campaign on technical failure. No successor or additional judge request
 is authorized by unused allowance. Paid execution needs the final explicit grant
 in [EXECUTION](EXECUTION.md#b-authorization-register), after readiness passes.
 
-The selected ceiling is USD 10 of incremental campaign model charges, excluding
+The selected ceiling is USD 5 of incremental campaign model charges, excluding
 earlier account usage. This is not an account-wide cap or a forecast. All paid
 requests, including any separately authorized repairs, must fit the same ledger.
 
@@ -245,7 +245,7 @@ are zero. A timeout or lost response is inspected, never automatically replayed.
    persona order, per-run/500-request limits and at most three judge requests
    (one per run). Store each operation's maximum reservation in integer
    microdollars. Admit only when settled charges plus unresolved reservations
-   plus the new maximum do not exceed 10,000,000 microdollars. Concurrent claims
+   plus the new maximum do not exceed 5,000,000 microdollars. Concurrent claims
    contend on the campaign revision. Duplicates return the prior claim and cannot
    invoke the provider again. Count requests permanently, including failures.
 4. **Completion and usage (AC05-AC08, AC10-AC13).** Extend existing result callbacks
@@ -291,8 +291,60 @@ per Luna request and USD 0.161920 per Sol request. The deliberately loose bound
 500 requests, at most three Sol judges, the stated complete input/output bounds,
 no hidden requests and the verified price policy. Smaller decision outputs reduce
 it. This is conditional planning arithmetic, not measured cost or implemented
-enforcement. The independent USD 10 ledger remains mandatory; unknown charges
+enforcement. The independent USD 5 ledger remains mandatory; unknown charges
 retain their maxima. No paid smoke call is outside this allowance.
+
+The user tightened the ceiling from USD 10 to USD 5 after the initial decision.
+The conditional bound leaves USD 0.490528 headroom. Do not use that headroom to
+increase tokens, add retries or relax price verification. Recompute reservations
+before approval if any premise changes; stop rather than silently reduce required
+content or increase spending.
+
+#### Failure-prevention gaps from M3 and the Balanced transition
+
+These checks refine the existing slices; they are not another campaign. M3 proves
+deterministic completion, not that real models will follow every contract. Use
+the saved Kid/Parent/Creator artifacts as offline inputs without rewriting them.
+
+| Gap and evidence | Required prevention before the first paid run |
+| --- | --- |
+| **Fixtures hide real-output variation.** Current result contracts contain unions, task-specific content and strict IDs; valid JSON alone is insufficient. M3 already exposed a J13 acknowledgement schema mismatch after a successful save. | Derive each provider output schema from the relevant task contract, including report and clarification variants. Supply exact eligible targets/current version IDs as allowed choices. Construct run/operation/workflow IDs, fingerprints, lineage and usage in trusted workflow code, never ask the model to invent them. Parse through the actual HTTP callback and owning service, testing first and duplicate completion. Reject unsupported structured-output schema features in a non-billable adapter check before publication. |
+| **Preparation currently depends on authorization.** `getOperationContext` requires a started/unknown active claim, while the selected request contract requires exact input preparation before that claim. | Add an internal read-only preparation projection for the already prepared operation. It must not reserve or return permission to execute. Store the request fingerprint against the run revision and exact source versions; the normal claim rechecks these and admits only that prepared request. Keep the existing claimed-context route protected. Test a source/approval change between prepare and claim. |
+| **Context and output ceilings can fail late.** Current report context includes artifact content, creator messages and operation history. Creator is larger than Kid; low reasoning can also consume the output allowance before JSON finishes. | Render/count the exact prompts and schemas offline for all distinct task shapes and the largest retained Creator report. Keep required content and current evidence; omit unrelated historical content using explicit role projections. Reject overflow before dispatch. Include a maximum-size valid output and an incomplete/refusal fixture per structurally different output family. Token counting and supported schema translation remain source-verification gates. Fake tests do not establish real model reliability; do not raise ceilings automatically. |
+| **Successful provider output can precede failed saving or acknowledgement.** M3 retained callback timeout, publication/readback and terminal-job defects. | Prove save-before-ack recovery and authenticated original-result retrieval for the new text/usage envelope. Observe the same execution after timeout. Never re-invoke the model to recover a saved result or repair bookkeeping. Preserve complete generation when reports fail; retain valid output and settle attributable usage independently of report/content validation. |
+| **New campaign writes can recreate transaction contention.** Parent attempt 2 timed out during authorization after observation writes retried its transaction. | Keep network calls, tokenization and context construction outside the atomic claim. The transaction contains only currentness/allowance checks and owned writes. Keep existing authorization leases and observation suppression. Add one focused overlap case using the campaign document, not a load/restart campaign. Account for preparation, provider and callback time within the original deadline; check the minimum timeout across the whole path. |
+| **Persona decisions can consume attempts without technical progress.** Deterministic testers follow a fixed happy path; real testers may repeatedly revise, ask or delegate beyond their scope. | Keep the existing revision/no-progress limits, eligible action list and delegation provenance authoritative. Prompts must distinguish technical missing output from advisory creative preferences. Test a repeated question, exhausted revision allowance and narrowed Creator grant using scripted responses. No new scoring loop or automatic repair invocation. |
+| **Metadata does not prove a bounded paid request.** Active models and plugin manifests do not prove SDK retries, exact parameter mapping, reachable branches, account entitlement or usage persistence. | Before the paid grant, complete the exact-source audit and captured-request adapter fixture already required above. Check all eighteen published bindings against the policy, including final tester/judge routes. Keep provider credentials private. If account entitlement cannot be established without generation, label it unverified until the first authorized Kid request; do not consume an undisclosed paid probe. |
+
+Evidence: [M3 Parent authorization failure](M3-completion.md#parent-attempt-2-and-authorization-coordination--2026-10-11),
+[retained callback/job/acknowledgement lessons](LESSONS-LEARNED.md#completion-acknowledgements-must-cover-every-admitted-task),
+[claimed context](../../../lib/experiment-runner/context.ts),
+[result contracts](../../../lib/contracts/experiment-runner.ts).
+
+**Attempt policy:** Stop new campaign admission on a technical failure, retain its
+run and reservation evidence, and inspect before changing anything. Inspection or
+idempotent saving of the same valid result consumes no new provider request. Resume
+that same run only if inspection proves the failure was an observation/acknowledgement
+problem and current policy still matches. A prompt/schema/config repair that needs a
+new provider action is outside the three-initial-run/no-successor grant until a
+separate finite repair decision. Do not automatically restart Kid or proceed to the
+next persona. Group related causes into one correction package and one affected
+verification pass; retain the repository's repeated-blocking-review stop rule.
+
+**Minimum rehearsal:** In the changed text-node adapter, replace only the provider
+transport with scripted non-billable responses. Exercise the actual new request,
+result parsing, usage and callback path; the unchanged deterministic branch alone
+is insufficient. Cover one normal manager-to-specialist handoff, final report and
+largest valid payload through the HTTP boundary, plus the failure cases above.
+After reviewed publication in the later implementation task, exercise the changed
+selectors and separate report-return route once with the same provider-shaped fake
+response path and real Booklet persistence, with provider execution disabled.
+Verify non-empty callback bodies and the active publication identity. This bounded
+graph-path check must execute zero provider requests and consume no paid allowance.
+Reuse all unchanged persona/image evidence. Measure callback and authorization
+phases for that payload so configured timeouts cover the application work without
+extending original operation deadlines. This is a focused integration rehearsal,
+not a new live persona campaign or a reliability claim about real model outputs.
 
 #### Focused acceptance and handoff
 
@@ -302,7 +354,7 @@ concurrent claims at the dollar/request boundary; duplicate create/authorize/res
 one reservation before one provider action; Pause/Stop/deadline/source changes;
 input/output exhaustion; absent/conflicting/late usage; malformed/refused output;
 loss after provider execution; judge failure retaining generation; and zero real
-image calls through Balanced J13. Test exactly 10,000,000 microdollars and one above,
+image calls through Balanced J13. Test exactly 5,000,000 microdollars and one above,
 microdollar rounding, three-judge maximum, changed policy/publication and old records.
 Use one non-billable Dify-provider adapter fixture to capture outgoing Responses
 parameters and count network attempts on timeout/429/5xx; a node toggle is not proof.
@@ -314,7 +366,7 @@ links and a fake-provider UI/CLI journey; reuse unrelated passes. Obtain two cle
 independent reviews and lean CI, then use the existing selective staging process.
 Read back exact publications, policy and release identity without executing a paid
 preflight. Present the frozen manifest, remaining technical gaps (none required for
-execution), USD 10 ledger proof and three-run allowance for the final explicit paid
+execution), USD 5 ledger proof and three-run allowance for the final explicit paid
 grant. Stop here until that grant; this document does not mark M4 ready or complete.
 
 ### Minimum implementation changes for a later task
@@ -366,7 +418,7 @@ Provider reservations must cover every paid call, including report/repair calls.
 After non-billable implementation/readiness passes, present the frozen manifest
 and final execution request: Kid → Parent → Creator, three initial runs, zero
 successors, ceilings 120/160/220 text requests, at most 500 total and three judge
-requests, zero real images and the selected USD 10 ceiling. Include the verified
+requests, zero real images and the selected USD 5 ceiling. Include the verified
 per-role token limits and price calculation, then obtain explicit approval before execution.
 Any successor requires its own finite allowance and additional worst-case bound.
 This plan grants no spending and does not mark M4 complete.
@@ -394,7 +446,7 @@ An opaque unbounded node is not acceptable for paid readiness.
 Before paid execution starts, reconcile model/binding evidence here with the shared
 readiness register and bundle only its unresolved required actions into one handoff.
 Selected campaign policy: three initial runs, one per persona, zero successors,
-at most 500 LLM requests (120 + 160 + 220), three judge requests and USD 10 total.
+at most 500 LLM requests (120 + 160 + 220), three judge requests and USD 5 total.
 This is not paid execution authorization.
 If successors are requested, obtain a finite allowance and show its additional
 worst-case request total before execution. No image spending is permitted in

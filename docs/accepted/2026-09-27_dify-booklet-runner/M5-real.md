@@ -18,7 +18,7 @@ The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
 reference ordering, provider permissions, retry behavior and price limits before
 choosing the M5 configuration. Do not carry Image 2 settings over as verified
-Sunburst behavior. The M4 USD 10 budget covers its text campaign only; it grants
+Sunburst behavior. The M4 USD 5 budget covers its text campaign only; it grants
 no image spending. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13)
 and [official model reference](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst).
 

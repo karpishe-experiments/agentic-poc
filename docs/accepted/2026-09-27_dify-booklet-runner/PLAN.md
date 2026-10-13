@@ -193,7 +193,7 @@ implement Balanced or start paid execution. For a later M4 task, use the three
 | 3. Record results and prepare M5 | Keep one concise exit record in M4 with bindings, runs, failures/successors, measured usage and limitations. Pass exact evidence to M5; no new report hierarchy. |
 
 Selected campaign policy: three initial runs, zero successors, at most 500 LLM
-requests, three judge requests and USD 10 incremental model charges in total;
+requests, three judge requests and USD 5 incremental model charges in total;
 the final paid execution grant remains pending. Any successors need a finite
 approved allowance with its additional worst-case request total. Without paid
 approval, complete non-billable readiness work and stop at the paid checkpoint.
