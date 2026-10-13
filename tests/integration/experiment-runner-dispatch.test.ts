@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/client";
 import { withMongoTransaction } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
+import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
+import type { WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -20,6 +22,36 @@ async function setup() {
 }
 
 describe("experiment dispatch persistence", () => {
+  it("reconciles callback-completed publication while draining without new dispatch", async () => {
+    const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
+    const repository = createExperimentRepository(database);
+    const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.test", publicOrigin: "https://booklet.test",
+      callbackKey: "fixture", bindings: [{ role: "manager", taskId: null, persona: null, appId: id(770),
+        publishedWorkflowId: id(771), toolProviderId: null, apiKey: "fixture" }] };
+    await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated",
+      configuration: configurationSnapshot(config, "playful_kid"), nowMs: 1 });
+    await repository.prepareOperation({ runId, operationId, expectedRevision: 0, role: "manager", taskId: null,
+      subjectKind: "book", subjectId: bookletId, inputFingerprint: "a".repeat(64), attempt: 1, providerKind: "text", nowMs: 2 });
+    const identity = { runId, operationId, workflowRunId, parentWorkflowRunId: null, nowMs: 4 };
+    await repository.beginDispatch({ runId, operationId, parentWorkflowRunId: null, nowMs: 3 });
+    await repository.claimOperation(identity);
+    await repository.completeOperation({ envelope: { runId, operationId, workflowRunId, inputFingerprint: "a".repeat(64),
+      result: { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: bookletId } } }, parentWorkflowRunId: null, nowMs: 5 });
+    await database.collections.experiment_runs.updateOne({ _id: runId }, { $set: { pauseRequested: true, status: "paused" } });
+    const environment = process.env.DEPLOYMENT_ENV ?? "local";
+    await database.collections.deployment_control.insertOne({ _id: `environment:${environment}`, schemaVersion: "1",
+      environment, maintenance: false, draining: true, activeMutations: 0, reason: "fixture", updatedAtMs: 6 });
+    const runtime: WorkflowRuntime = { start: vi.fn(), retrieve: vi.fn().mockResolvedValue({ kind: "execution",
+      execution: { id: workflowRunId, workflow_id: id(771), status: "succeeded" } }) };
+    const dispatcher = createExperimentDispatcher({ database, config, runtime, now: () => 10, mutate: async work => work() });
+    expect(await dispatcher.cycle()).toBe("idle");
+    expect(await repository.getOperation(operationId)).toMatchObject({ state: "succeeded", verifiedWorkflowId: id(771), reservationCount: 1 });
+    expect(await repository.getRun(runId)).toMatchObject({ status: "paused", pauseRequested: true, activeOperationId: null });
+    expect(runtime.retrieve).toHaveBeenCalledTimes(1);
+    expect(runtime.start).not.toHaveBeenCalled();
+    expect(await database.collections.experiment_operations.countDocuments({ runId })).toBe(1);
+  });
+
   it("does not clear another controller's preparation while paused", async () => {
     const { database, repository } = await setup();
     await database.collections.experiment_operations.deleteMany({ runId });
