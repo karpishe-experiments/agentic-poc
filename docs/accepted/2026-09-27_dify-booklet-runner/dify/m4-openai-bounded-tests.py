@@ -43,6 +43,15 @@ class BoundedTests(unittest.TestCase):
                 "required": ["answer"], "additionalProperties": False,
             }},
         }
+        prepared = {"model": "gpt-6-luna", "input": llm_module.responses.input_items(self.messages),
+                    **llm_module.responses.parameters("gpt-6-luna", {
+                        key: value for key, value in self.parameters.items() if not key.startswith("booklet_")
+                    }, None, None, {})}
+        prepared.update(store=False, truncation="disabled")
+        self.parameters["booklet_request_digest"] = hashlib.sha256(json.dumps(
+            prepared, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+        self.client_creations = 0
+        self.factory_hook = None
         self.requests = []
         self.count = 32000
         self.status = "completed"
@@ -55,6 +64,9 @@ class BoundedTests(unittest.TestCase):
         self.content = '{"answer":"fixture"}'
 
     def factory(self, **kwargs):
+        self.client_creations += 1
+        if self.factory_hook:
+            self.factory_hook()
         self.assertEqual(kwargs["max_retries"], 0)
         self.assertEqual(kwargs["timeout"], 60)
 
@@ -96,6 +108,7 @@ class BoundedTests(unittest.TestCase):
         self.assertEqual(generate["service_tier"], "default")
         self.assertFalse(generate["store"])
         self.assertNotIn("booklet_bounded_execution", generate)
+        self.assertNotIn("booklet_request_digest", generate)
         wrapper = json.loads(result.message.content)
         self.assertEqual(wrapper["schemaVersion"], "booklet_provider_v1")
         self.assertEqual(json.loads(wrapper["content"]), {"answer": "fixture"})
@@ -107,6 +120,32 @@ class BoundedTests(unittest.TestCase):
         self.assertFalse(evidence["refused"])
         self.assertEqual(evidence["usage"]["reasoningOutputTokens"], 3)
         self.assertEqual(len(evidence["requestDigest"]), 64)
+        self.assertEqual(evidence["requestDigest"], self.parameters["booklet_request_digest"])
+
+    def test_missing_invalid_or_different_digest_prevents_both_requests(self):
+        for digest in (None, True, "", "A" * 64, "0" * 64):
+            with self.subTest(digest=digest):
+                with self.assertRaises(InvokeBadRequestError): self.invoke(booklet_request_digest=digest)
+        self.assertEqual(self.requests, [])
+        self.assertEqual(self.client_creations, 0)
+
+    def test_prompt_schema_or_output_policy_drift_prevents_both_requests(self):
+        self.messages = [UserPromptMessage(content="changed after authorization")]
+        with self.assertRaises(InvokeBadRequestError): self.invoke()
+        self.messages = [UserPromptMessage(content="fixture")]
+        changed = self.parameters["json_schema"] | {"name": "changed_schema"}
+        for parameters in ({"json_schema": changed}, {"max_tokens": 1024}, {"reasoning_effort": "low"}):
+            with self.subTest(parameters=parameters):
+                with self.assertRaises(InvokeBadRequestError): self.invoke(**parameters)
+        self.assertEqual(self.requests, [])
+        self.assertEqual(self.client_creations, 0)
+
+    def test_admitted_snapshot_is_independent_of_later_caller_mutation(self):
+        self.factory_hook = lambda: self.parameters["json_schema"]["schema"].update(description="late mutation")
+        self.invoke()
+        count, generated = [request[1] for request in self.requests]
+        self.assertNotIn("description", count["text"]["format"]["schema"])
+        self.assertNotIn("description", generated["text"]["format"]["schema"])
 
     def test_input_above_limit_never_generates(self):
         self.count = 32001
@@ -182,7 +221,8 @@ class BoundedTests(unittest.TestCase):
     def test_false_opt_in_preserves_original_route(self):
         with patch.object(llm_module, "OpenAI") as factory, patch.object(llm_module.responses, "generate", return_value="original") as original:
             result = self.llm._chat_generate("gpt-6-luna", {"openai_api_key": "not-a-key"},
-                self.messages, {"booklet_bounded_execution": False, "booklet_timeout_seconds": 60, "max_tokens": 10}, stream=False)
+                self.messages, {"booklet_bounded_execution": False, "booklet_timeout_seconds": 60,
+                                "booklet_request_digest": "0" * 64, "max_tokens": 10}, stream=False)
         self.assertEqual(result, "original")
         self.assertEqual(original.call_args.args[5], {"max_tokens": 10})
         self.assertNotIn("max_retries", factory.call_args.kwargs)
@@ -216,6 +256,8 @@ class BoundedTests(unittest.TestCase):
             self.assertIs(policy.default, False)
             timeout = next(rule for rule in model.parameter_rules if rule.name == "booklet_timeout_seconds")
             self.assertEqual(timeout.max, 120)
+            digest = next(rule for rule in model.parameter_rules if rule.name == "booklet_request_digest")
+            self.assertFalse(digest.required)
         name = "models/llm/gpt-4.1-mini.yaml"
         self.assertEqual((PACKAGE / name).read_bytes(), (PACKAGE.parent / "package" / name).read_bytes())
 

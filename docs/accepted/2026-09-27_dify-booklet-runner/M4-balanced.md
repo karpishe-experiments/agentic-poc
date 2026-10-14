@@ -253,8 +253,9 @@ reviewed package/diff; do not introduce a new credential path by default.
 The subsequent user instruction authorizes continuing the non-billable correction
 work. The [candidate module](dify/m4-openai-bounded.py),
 [opt-in provider patch](dify/m4-openai-bounded.patch) and
-[focused candidate tests](dify/m4-openai-bounded-tests.py) define the installed local
-provider correction. It is unsigned; existing workflow routes retain false/absent
+[focused candidate tests](dify/m4-openai-bounded-tests.py) define the current local
+provider candidate. The installed `1.0.7-dev1` package described below predates the
+request-digest guard added to these sources. The candidate is unsigned; existing workflow routes retain false/absent
 opt-in behavior. No Balanced workflow or paid execution is enabled. After checking the
 original content identity, normalize affected text and patch line endings to LF,
 apply the zero-context patch with `git apply --unidiff-zero` to the exact audited
@@ -267,7 +268,8 @@ context and a remaining timeout before creating a zero-retry client. It rejects
 streaming, tools, stop sequences, conversation replay and unsupported parameters.
 The boolean `booklet_bounded_execution` defaults false; the original route is
 preserved when absent/false. Only Luna/Sol model parameter catalogs add that flag
-and `booklet_timeout_seconds`. No provider credential schema changes.
+and `booklet_timeout_seconds`; the local candidate also adds
+`booklet_request_digest`. No provider credential schema changes.
 
 Before its single generation request the candidate calls
 `responses.input_tokens.count` on the same input, reasoning and text/schema fields,
@@ -285,12 +287,19 @@ generation. A failed count leaves the original counted reservation for recovery;
 it grants no replay. The earlier pre-claim preparation projection remains necessary
 for current source/request identity, but the implementation must not claim a
 provider-verified count before the actual counting step. Its full-payload digest
-includes model, inputs and output/schema policy. **Pre-generation readiness gate:**
-the local adapter does not yet accept an authorized expected digest. Before live
-use, integration must supply that digest through the protected operation context
-and compare it with the final serialized payload before either count or generation.
-Test changed prompt/schema against the authorized digest with zero requests.
-Comparing only at completion is insufficient. Completion must also match the digest.
+includes model, inputs and output/schema policy. The local candidate requires
+`booklet_request_digest` and compares it before client creation, counting or
+generation. It owns a serialized snapshot and isolates counting from generation
+so later caller mutations cannot change the admitted payload. Canonical bytes use
+Python JSON with sorted keys, compact separators, UTF-8, unescaped Unicode and
+finite numeric values only. Integration must prepare these exact bytes; do not
+assume a different language's key ordering or number serialization is equivalent.
+
+**Remaining readiness gate:** Booklet must supply the digest through the protected
+operation context, bound to the prepared request and admission. A workflow-supplied
+self-calculated digest alone does not establish authorization. Completion must also
+match the digest. The installed package lacks this enforcement; deliver the reviewed
+candidate with the later integration rather than reopen signature policy now.
 
 Provider evidence travels in the LLM's text as JSON with
 `schemaVersion=booklet_provider_v1`, `content` (original creative string) and
@@ -316,7 +325,7 @@ not a live published-node rehearsal. Configure Dify node-level structured-output
 postprocessing off for this wrapper; the provider request still uses its strict
 creative-output schema, and the trusted downstream code parses the outer wrapper.
 
-Fifteen socket-denied candidate cases passed: count equality at 32,000, rejection at
+Fifteen socket-denied cases passed for the installed package: count equality at 32,000, rejection at
 32,001, one attempt each for count/generation 429/500/timeout, timeout expiry after
 count, policy/history/stream and non-strict schema rejection, missing usage, incomplete/refused output,
 actual opt-in routing, false opt-in compatibility, SDK model-catalog validation and
@@ -325,6 +334,14 @@ after normalizing the three affected text files and the patch to LF; original
 package bytes remain retained. Existing eight audit
 cases remain unchanged. No paid request was made; live provider delivery is
 recorded below.
+
+**Local request-digest follow-up:** Eighteen socket-denied cases pass against a
+separate patched source copy. They retain the fifteen installed-package checks and
+add rejection of missing/invalid/mismatched digests, prompt/schema/output-policy
+drift before any client/request, and mutation isolation after admission. The patch
+replays against the audited original source. No new package was built or installed.
+This changes no credential storage, transfer or consumer; the existing conditional
+provider use remains unchanged. Application integration is still pending.
 
 **Selected delivery path - 2026-10-14:** The user prefers the existing OpenAI
 plugin and permits an experiment signature exception where signing adds work.

@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import time
+from copy import deepcopy
 from typing import Any
 
 from dify_plugin.entities.model.llm import LLMResult, LLMUsage
@@ -54,6 +55,10 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     params = parameters.copy()
     enabled = params.pop("booklet_bounded_execution", None)
     seconds = params.pop("booklet_timeout_seconds", None)
+    expected_digest = params.pop("booklet_request_digest", None)
+    if (type(expected_digest) is not str or len(expected_digest) != 64
+            or any(char not in "0123456789abcdef" for char in expected_digest)):
+        raise InvokeBadRequestError("Booklet requires an authorized request digest.")
     if enabled is not True or type(seconds) not in (int, float) or not math.isfinite(seconds) or not 0 < seconds <= 120:
         raise InvokeBadRequestError("Booklet bounded execution needs a remaining timeout in (0, 120].")
     if model not in ("gpt-6-luna", "gpt-6-sol") or stream or tools or stop:
@@ -86,14 +91,19 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
         raise InvokeBadRequestError("Booklet requires a strict object output schema.")
     payload["store"] = False
     payload["truncation"] = "disabled"
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    # Own the admitted snapshot; callers and counting must not mutate generation.
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    digest = hashlib.sha256(encoded).hexdigest()
+    if digest != expected_digest:
+        raise InvokeBadRequestError("Booklet request differs from authorized preparation.")
+    payload = json.loads(encoded)
     count_payload = {key: value for key, value in payload.items()
                      if key in {"model", "input", "reasoning", "text", "truncation"}}
     started = clock()
     kwargs = llm._to_credential_kwargs(credentials)
     kwargs.update(max_retries=0, timeout=seconds)
     with client_factory(**kwargs) as client:
-        count = client.responses.input_tokens.count(**count_payload)
+        count = client.responses.input_tokens.count(**deepcopy(count_payload))
         input_count = _integer(_field(count, "input_tokens"))
         if input_count is None or input_count > 32000:
             raise InvokeBadRequestError("Booklet complete input exceeds its verified token limit.")
