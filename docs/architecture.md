@@ -75,6 +75,12 @@ The root responsibilities are:
 | Image pipeline | `lib/images/`, `lib/composition/` | Provider seam, prompt serialization, image calls, and geometry-only normalization. |
 | Persistence | `db/` | Official MongoDB driver, typed repositories, indexes, initialization, and verification. |
 
+The Community OpenAI provider has the reviewed opt-in M4 correction installed as
+`1.0.7-dev1`; signature verification is restored. Existing workflows retain the
+original false/absent route. Balanced routing, request identity and campaign-ledger
+integration remain pending; no M4 paid execution is enabled. See the
+[M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+
 ## Artifact and decision flow
 
 ### Issue #65 local foundation

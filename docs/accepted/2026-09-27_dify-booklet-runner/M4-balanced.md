@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Model/budget decisions and implementation contract recorded; exact provider package audited. Local bounded-provider correction tested but not installed. Integrated Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Model/budget decisions and implementation contract recorded; exact provider package audited. Bounded-provider correction installed; signature verification restored. Integrated Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -184,7 +184,7 @@ retrieved, copied or changed. The screenshot shows model-list read and text-requ
 permissions; it does not prove model entitlement, funding or end-to-end execution.
 Credential inventory impact: reuse the existing Dify provider-key row in the
 [inventory](../../deployment/contracts.md#dify-accounts-provider-bindings-and-developer-sessions);
-no live name, storage, transfer or consumer changes occur. The local candidate would add token counting through the same credential; verify permission and update use metadata before installation.
+no live name, storage, transfer or consumer changes occur. The installed opt-in correction adds conditional token counting through the same credential; inventory use metadata is updated. Permission/billing remains unverified and no count request was made.
 
 `plugin.list` and `plugin.get` return manifests, not executable implementation.
 The 2026-10-14 [exact-package audit](#exact-provider-package-audit---2026-10-14)
@@ -253,8 +253,9 @@ reviewed package/diff; do not introduce a new credential path by default.
 The subsequent user instruction authorizes continuing the non-billable correction
 work. The [candidate module](dify/m4-openai-bounded.py),
 [opt-in provider patch](dify/m4-openai-bounded.patch) and
-[focused candidate tests](dify/m4-openai-bounded-tests.py) are prepared locally.
-They are not installed, signed or bound to any live workflow. After checking the
+[focused candidate tests](dify/m4-openai-bounded-tests.py) define the installed local
+provider correction. It is unsigned; existing workflow routes retain false/absent
+opt-in behavior. No Balanced workflow or paid execution is enabled. After checking the
 original content identity, normalize affected text and patch line endings to LF,
 apply the zero-context patch with `git apply --unidiff-zero` to the exact audited
 source and copy the module to `models/llm/booklet_bounded.py`;
@@ -322,7 +323,8 @@ actual opt-in routing, false opt-in compatibility, SDK model-catalog validation 
 the Graphon text boundary and both package-version validators. The patch was replayed against an untouched source copy
 after normalizing the three affected text files and the patch to LF; original
 package bytes remain retained. Existing eight audit
-cases remain unchanged. No paid request or live provider change was made.
+cases remain unchanged. No paid request was made; live provider delivery is
+recorded below.
 
 **Selected delivery path - 2026-10-14:** The user prefers the existing OpenAI
 plugin and permits an experiment signature exception where signing adds work.
@@ -337,7 +339,7 @@ It retains all original assets and 93 unchanged original files. Changes are the
 three patched sources and the manifest's explicit local version, plus the new
 adapter. Original verification metadata and ZIP signature are removed, not copied.
 The package stays ignored; all fifteen focused cases pass against its extracted
-bytes. It is not an official vendor release and is not installed.
+bytes. It is not an official vendor release. Installation is verified below.
 
 The prior `1.0.7-m4r1` package remains retained unchanged. Its upload failed before
 Install became enabled: the API could not parse `PluginDecodeResponse`. The daemon
@@ -346,18 +348,27 @@ version regex accepts that suffix, but the pinned API's
 rejects it through `packaging.version.Version`. A regression executes that actual
 method and reproduces the rejection; `1.0.7-dev1` passes both validators. Only the
 manifest version differs between these two packages. This explains the observed
-error without claiming a live API-log attestation. The original installed 1.0.7
-manifest remains readable and its installation identity is unchanged. Failed
+error without claiming a live API-log attestation. Before replacement, the original 1.0.7 manifest remained readable and its
+installation identity was unchanged. Failed
 upload can retain a cached package; no cleanup or replay of that upload occurred.
 The exact API source fixture stays ignored at
 `output/issue65-openai-plugin-audit/dify-1.17.1-plugin-entity.py`, SHA-256
 `f57e8f058bf733485ad02960e09bf72ff14572a25547c861c00abe378df39f84`.
 
-The operator opened the temporary signature window with verified reviewed source;
-backup: `/var/lib/kids-booklet/issue65-m4-plugin-policy.RUZBmSux/runtime.env.before`.
-Operator readback reports verification false, pinned daemon running and other
-services unchanged. The replacement package still needs reviewed upload and
-installation confirmation; verification restoration remains pending.
+**Delivery verified - 2026-10-14:** The user gave action-time approval for this exact
+package. Dify displayed Installation successful; authenticated MCP readback confirms
+the identifier above with `source=package`. The UI retains `API KEY 1`; no key value
+was retrieved, copied or re-entered. Both observed Unibase drafts retain their exact
+hashes and four GPT-4.1 mini bindings. Their workflows were not executed.
+
+The operator opened the temporary signature window with a verified configuration
+backup at `/var/lib/kids-booklet/issue65-m4-plugin-policy.RUZBmSux/runtime.env.before`.
+After installation, the same reviewed procedure restored verification to `true`;
+backup: `/var/lib/kids-booklet/issue65-m4-plugin-policy.wIr9ro9o/runtime.env.before`.
+Operator readbacks report the pinned daemon running and other services unchanged.
+After restoration, MCP still returns the installed identity and 56 model metadata
+entries, including active Luna/Sol. This proves post-restoration availability, not
+provider entitlement, request execution or billable usage. No paid calls were made.
 
 Pinned [single-package upload](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/service/plugin_decoder.go#L57)
 supports `FORCE_VERIFYING_SIGNATURE=false`. Leave Langgenius-specific and third-party
@@ -365,8 +376,8 @@ verification settings unchanged; do not use bundle installation. This flag affec
 Community plugin uploads across the instance, not only Booklet. Temporarily disable
 it for this exact reviewed upload, then restore `true`. Existing local runtime
 [startup](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/core/control_panel/builder.go#L29)
-does not re-enforce the upload flag; restoration should permit the installed
-unsigned runtime to load. This is source evidence, not a live restoration proof.
+does not re-enforce the upload flag. Post-restoration installed identity and model
+metadata are now verified above; no additional restart campaign is needed.
 Do not add restart tests; ordinary service readback after configuration apply is
 sufficient. Later re-upload again needs an explicit bounded exception.
 
@@ -382,15 +393,14 @@ installations, so preserve the current LATEST policy. On uncertain failure,
 inspect the installation task before any further action; do not replay or remove
 credentials. Do not call successful credential retention verified until read back.
 
-**Necessary manual checkpoint:** The restricted host dispatcher has no signature-
-policy action. A root operator must perform the temporary configuration change
-with a verified private configuration backup, idle host/workflow checks and pinned
-image readback. The prepared one-time procedure changes only this setting and
-recreates only the plugin daemon; it adds no permanent host action or entrypoint.
-After the exact package is installed, restore verification through the same
-procedure. Do not start work during this interval. Browser installation of the
-locally modified package also requires action-time confirmation under the browser
-control policy. Neither this exception nor installation grants paid execution.
+**Delivery checkpoint complete:** The restricted dispatcher had no signature-policy
+action, so the operator executed the reviewed one-time procedure. It added no
+permanent host action or entrypoint. Browser installation received the required
+confirmation. Signature verification is restored; no manual delivery step remains.
+Future re-upload needs another bounded exception. Request-digest enforcement before
+count/generation, count permission/billing, Balanced routing/callback integration
+and atomic campaign accounting remain paid-readiness gates. Paid execution is not
+authorized by this delivery.
 
 #### Selected provider request contract
 

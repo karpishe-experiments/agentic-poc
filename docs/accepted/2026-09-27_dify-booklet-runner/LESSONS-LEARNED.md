@@ -499,5 +499,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   on its shape alone or treat missing usage as zero charges.
 - **Evidence:** [bounded-provider cases](dify/m4-openai-bounded-tests.py) prove the
   pinned filter boundary, completed JSON-shaped refusal and unavailable usage
-  locally. Live installation and callback integration remain pending in [M4](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+  locally. Installation is verified; callback integration remains pending in [M4](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 - **Promotion target:** Documentation for external provider-result adapters.
+
+### Validate package versions at every consuming boundary
+
+- **Context:** A locally corrected Dify provider package crosses the daemon decoder
+  and the Dify API response model before installation.
+- **Observation:** The daemon accepted `1.0.7-m4r1`; the API's packaging-version
+  validator rejected it and returned a generic response-parse error. The corrected
+  `1.0.7-dev1` version passed both validators and reached successful installation.
+- **Guidance:** Test the receiving API validator as well as the package decoder.
+  Keep failed uploads and inspect current installation state before a correction;
+  an API parse failure does not prove the daemon stored nothing.
+- **Evidence:** [pinned-validator regression](dify/m4-openai-bounded-tests.py) and
+  [verified delivery](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+- **Promotion target:** Documentation for versioned external integration packages.
