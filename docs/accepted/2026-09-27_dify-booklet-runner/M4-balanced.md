@@ -315,11 +315,11 @@ not a live published-node rehearsal. Configure Dify node-level structured-output
 postprocessing off for this wrapper; the provider request still uses its strict
 creative-output schema, and the trusted downstream code parses the outer wrapper.
 
-Fourteen socket-denied candidate cases passed: count equality at 32,000, rejection at
+Fifteen socket-denied candidate cases passed: count equality at 32,000, rejection at
 32,001, one attempt each for count/generation 429/500/timeout, timeout expiry after
 count, policy/history/stream and non-strict schema rejection, missing usage, incomplete/refused output,
 actual opt-in routing, false opt-in compatibility, SDK model-catalog validation and
-the Graphon text boundary. The patch was replayed against an untouched source copy
+the Graphon text boundary and both package-version validators. The patch was replayed against an untouched source copy
 after normalizing the three affected text files and the patch to LF; original
 package bytes remain retained. Existing eight audit
 cases remain unchanged. No paid request or live provider change was made.
@@ -329,15 +329,35 @@ plugin and permits an experiment signature exception where signing adds work.
 The HTTP-node alternative is not selected. Reuse the stored provider credential;
 no new signing key or OpenAI credential transfer is introduced.
 
-The complete local package is `output/issue65-openai-plugin-audit/openai-1.0.7-m4r1.difypkg`
-(487,180 bytes), SHA-256 `d266069fc9d5511c7e2af0ea419c8b792c62090cf739ced89030ed261c90d162`.
+The complete local package is `output/issue65-openai-plugin-audit/openai-1.0.7-dev1.difypkg`
+(487,180 bytes), SHA-256 `7da1e41e8a3c481aa803bd6a3946da19d23f93de6726105277451ab53e17867a`.
 Its Dify identifier is
-`langgenius/openai:1.0.7-m4r1@cc331dd86301341d8fc86fafccdabf34c4d40f7657af8d21b7a69a1d9e4ea5d5`.
+`langgenius/openai:1.0.7-dev1@da51ec682f9505bb0dbd3f6caa8f3e0980ac1761c70b014a1eeda82f0ccec74f`.
 It retains all original assets and 93 unchanged original files. Changes are the
 three patched sources and the manifest's explicit local version, plus the new
 adapter. Original verification metadata and ZIP signature are removed, not copied.
-The package stays ignored; all fourteen focused cases pass against its extracted
+The package stays ignored; all fifteen focused cases pass against its extracted
 bytes. It is not an official vendor release and is not installed.
+
+The prior `1.0.7-m4r1` package remains retained unchanged. Its upload failed before
+Install became enabled: the API could not parse `PluginDecodeResponse`. The daemon
+version regex accepts that suffix, but the pinned API's
+[second version validator](https://github.com/langgenius/dify/blob/8387590ace4a094de812b7847fc6a4c3a27cd52b/api/core/plugin/entities/plugin.py#L115)
+rejects it through `packaging.version.Version`. A regression executes that actual
+method and reproduces the rejection; `1.0.7-dev1` passes both validators. Only the
+manifest version differs between these two packages. This explains the observed
+error without claiming a live API-log attestation. The original installed 1.0.7
+manifest remains readable and its installation identity is unchanged. Failed
+upload can retain a cached package; no cleanup or replay of that upload occurred.
+The exact API source fixture stays ignored at
+`output/issue65-openai-plugin-audit/dify-1.17.1-plugin-entity.py`, SHA-256
+`f57e8f058bf733485ad02960e09bf72ff14572a25547c861c00abe378df39f84`.
+
+The operator opened the temporary signature window with verified reviewed source;
+backup: `/var/lib/kids-booklet/issue65-m4-plugin-policy.RUZBmSux/runtime.env.before`.
+Operator readback reports verification false, pinned daemon running and other
+services unchanged. The replacement package still needs reviewed upload and
+installation confirmation; verification restoration remains pending.
 
 Pinned [single-package upload](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/service/plugin_decoder.go#L57)
 supports `FORCE_VERIFYING_SIGNATURE=false`. Leave Langgenius-specific and third-party

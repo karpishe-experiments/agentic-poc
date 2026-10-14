@@ -5,6 +5,7 @@ Uses the audited SDK versions and in-memory transport; real sockets are denied.
 from __future__ import annotations
 
 import json
+import ast
 import hashlib
 import socket
 import sys
@@ -14,6 +15,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from zipfile import ZipFile
 import yaml
+from packaging.version import Version, InvalidVersion
 
 from dify_plugin.entities.model.llm import LLMUsage
 from dify_plugin.entities.model import AIModelEntity
@@ -216,6 +218,22 @@ class BoundedTests(unittest.TestCase):
             self.assertEqual(timeout.max, 120)
         name = "models/llm/gpt-4.1-mini.yaml"
         self.assertEqual((PACKAGE / name).read_bytes(), (PACKAGE.parent / "package" / name).read_bytes())
+
+    def test_package_version_passes_daemon_and_actual_api_validator(self):
+        # Run the pinned API method, not only the daemon's looser version regex.
+        source = (PACKAGE.parent / "dify-1.17.1-plugin-entity.py").read_bytes()
+        self.assertEqual(hashlib.sha256(source).hexdigest(),
+                         "f57e8f058bf733485ad02960e09bf72ff14572a25547c861c00abe378df39f84")
+        method = next(node for node in ast.walk(ast.parse(source))
+                      if isinstance(node, ast.FunctionDef) and node.name == "validate_version")
+        method.decorator_list = []
+        namespace = {"Version": Version, "InvalidVersion": InvalidVersion}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), "dify-1.17.1/plugin.py", "exec"), namespace)
+        with self.assertRaisesRegex(ValueError, "Invalid version format"):
+            namespace["validate_version"](None, "1.0.7-m4r1")
+        version = yaml.safe_load((PACKAGE / "manifest.yaml").read_text(encoding="utf-8"))["version"]
+        self.assertEqual(namespace["validate_version"](None, version), version)
+        self.assertRegex(version, r"^\d{1,4}(\.\d{1,4}){2}(-\w{1,16})?$")
 
 
 if __name__ == "__main__":
