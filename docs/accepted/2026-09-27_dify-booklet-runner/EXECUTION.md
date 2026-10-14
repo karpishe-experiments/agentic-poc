@@ -204,7 +204,11 @@ user subsequently selected the existing plugin path and permitted an experiment
 signature exception. The reviewed package is installed, stored-key presence is
 preserved, and signature verification is restored. The
 [current provider delivery checkpoint](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14)
-is complete; paid execution remains unapproved.
+is complete for installed dev1; later local digest/endpoint changes are not yet
+installed. The official documentation MCP restart is complete. The user asked to
+continue without a support confirmation of count billing/permission. M4 records
+an explicit unverified fee allowance, which the final execution request must
+disclose; it is not an invoice guarantee. Paid execution remains unapproved.
 
 Parent campaign deployment readiness was verified on 2026-10-11: staging release
 `5cf84ecc263847a8583c1e3623153151149306e8`, Deploy `38135107485` and Check

@@ -53,8 +53,11 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
+    requestJson: string; contextJson: string; systemPrompt: string; modelParametersJson: string;
+    sourceFingerprint: string; operationFingerprint: string; publishedWorkflowId: string; parentWorkflowRunId: string | null; preparedAtMs: number };
   m4Reservation?: { campaignId: string; policyHash: string; requestDigest: string; bucket: M4ModelBucket;
-    maximumMicrodollars: number; settledMicrodollars: number | null; evidenceDigest: string | null };
+    maximumMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null; evidenceDigest: string | null };
   runId: string; role: ExperimentRole; taskId: ExperimentTask | null;
   subjectKind: "book" | "character" | "location" | "page"; subjectId: string;
   idempotencyKey: string; inputFingerprint: string; attempt: number;

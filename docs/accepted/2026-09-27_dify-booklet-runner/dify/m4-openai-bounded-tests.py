@@ -69,8 +69,10 @@ class BoundedTests(unittest.TestCase):
             self.factory_hook()
         self.assertEqual(kwargs["max_retries"], 0)
         self.assertEqual(kwargs["timeout"], 60)
+        self.assertEqual(kwargs["base_url"], "https://api.openai.com/v1")
 
         def handle(request):
+            self.assertEqual(request.url.host, "api.openai.com")
             body = json.loads(request.content)
             self.requests.append((request.url.path, body))
             failure = self.count_failure if request.url.path.endswith("input_tokens") else self.failure
@@ -128,6 +130,20 @@ class BoundedTests(unittest.TestCase):
                 with self.assertRaises(InvokeBadRequestError): self.invoke(booklet_request_digest=digest)
         self.assertEqual(self.requests, [])
         self.assertEqual(self.client_creations, 0)
+
+    def test_regional_custom_or_credential_bearing_endpoint_never_creates_client(self):
+        for endpoint in ("https://eu.api.openai.com", "https://api.openai.com.evil.test", "https://user:password@api.openai.com"):
+            with self.subTest(endpoint=endpoint), self.assertRaises(InvokeBadRequestError):
+                booklet_bounded.generate(self.llm, self.factory, "gpt-6-luna",
+                    {"openai_api_key": "not-a-key", "api_protocol": "responses", "openai_api_base": endpoint},
+                    self.messages, self.parameters, None, None, False, None)
+        self.assertEqual(self.requests, [])
+        self.assertEqual(self.client_creations, 0)
+
+    def test_environment_endpoint_cannot_redirect_the_bounded_request(self):
+        with patch.dict("os.environ", {"OPENAI_BASE_URL": "https://eu.api.openai.com/v1"}):
+            self.invoke()
+        self.assertEqual(len(self.requests), 2)
 
     def test_prompt_schema_or_output_policy_drift_prevents_both_requests(self):
         self.messages = [UserPromptMessage(content="changed after authorization")]

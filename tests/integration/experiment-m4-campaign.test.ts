@@ -9,9 +9,10 @@ import type { Persona } from "@/lib/contracts/experiment-runner";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
-async function setup() {
+async function setup(assumedCount = false) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const policy = m4TestPolicy();
+  if (assumedCount) { policy.countChargeStatus = "assumed"; policy.countChargeCeilingMicrodollars = 900; }
   const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-test-grant-only" } };
   const repo = createExperimentRepository(db, { m4Authority: authority });
   const ledger = createExperimentCampaignLedger(db, authority);
@@ -39,6 +40,15 @@ async function setup() {
 }
 
 describe("M4 campaign ledger with real persistence and no providers", () => {
+  it("retains the unverified count allowance after attributable model usage settles", async () => {
+    const { db, repo, creation, prepare, reserve, settle } = await setup(true);
+    await repo.createRun(creation(10)); await prepare(10, 12); await reserve(10, 12);
+    expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ reservedMicrodollars: 5924 });
+    expect(await settle(12, 123)).toBe("settled");
+    expect(await settle(12, 123)).toBe("reused");
+    expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ reservedMicrodollars: 900, settledMicrodollars: 123 });
+    expect(await db.collections.experiment_operations.findOne({ _id: id(12) })).toMatchObject({ m4Reservation: { unsettledMicrodollars: 900 } });
+  });
   it("requires protected authority, freezes policy separately, claims slots once and preserves historical snapshots", async () => {
     const { db, repo, creation } = await setup();
     await expect(createExperimentRepository(db).createRun(creation(10))).rejects.toMatchObject({ code: "invalid_state" });

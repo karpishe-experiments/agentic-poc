@@ -6,9 +6,10 @@ import { m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapsh
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
-  constructor(message: string) { super(message); this.name = "CampaignAdmissionError"; }
+  constructor(message: string, public readonly reason: "conflict" | "limit_exhausted" = "conflict") { super(message); this.name = "CampaignAdmissionError"; }
 }
 const requireState = (condition: unknown, message: string): void => { if (!condition) throw new CampaignAdmissionError(message); };
+const requireAllowance = (condition: unknown, message: string): void => { if (!condition) throw new CampaignAdmissionError(message, "limit_exhausted"); };
 
 // No route or environment reader calls this yet. Later readiness wiring supplies
 // protected policy + explicit grant; a public request cannot create an authority.
@@ -79,12 +80,12 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       operation.deadlineAtMs != null && operation.deadlineAtMs > nowMs, "Operation cannot reserve provider work.");
     const campaign = await current(session);
     requireState(campaign.state === "active" && campaign.slots[run.persona] === run._id, "Campaign has no active persona slot.");
-    requireState(campaign.requests < snapshot.policy.maxRequests && campaign.requestCounts[run.persona] < CASES[run.persona].llmLimit,
+    requireAllowance(campaign.requests < snapshot.policy.maxRequests && campaign.requestCounts[run.persona] < CASES[run.persona].llmLimit,
       "Campaign request allowance is exhausted.");
-    requireState(bucket !== "judge" || campaign.judgeRunIds.length < snapshot.policy.maxJudges && !campaign.judgeRunIds.includes(run._id), "Judge allowance is exhausted.");
-    requireState(campaign.settledMicrodollars + campaign.reservedMicrodollars + maximumMicrodollars <= snapshot.policy.maxMicrodollars,
+    requireAllowance(bucket !== "judge" || campaign.judgeRunIds.length < snapshot.policy.maxJudges && !campaign.judgeRunIds.includes(run._id), "Judge allowance is exhausted.");
+    requireAllowance(campaign.settledMicrodollars + campaign.reservedMicrodollars + maximumMicrodollars <= snapshot.policy.maxMicrodollars,
       "Campaign monetary allowance is exhausted.");
-    const reservation = { ...expected, settledMicrodollars: null, evidenceDigest: null };
+    const reservation = { ...expected, unsettledMicrodollars: maximumMicrodollars, settledMicrodollars: null, evidenceDigest: null };
     const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, state: "prepared", reservationCount: 0, m4Reservation: { $exists: false } },
       { $set: { m4Reservation: reservation } }, { session });
     requireState(saved.modifiedCount === 1, "Operation reservation changed.");
@@ -110,11 +111,15 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     }
     const campaign = await current(session);
     requireState(campaign.reservedMicrodollars >= reservation!.maximumMicrodollars, "Campaign reservation totals conflict.");
-    const overLimit = evidence.chargeMicrodollars > reservation!.maximumMicrodollars;
+    // A disclosed fee assumption is not attributable usage. Keep it reserved
+    // after model-token settlement and label its cost unavailable in reports.
+    const countHold = snapshot.policy.countChargeStatus === "assumed" ? snapshot.policy.countChargeCeilingMicrodollars : 0;
+    const overLimit = evidence.chargeMicrodollars + countHold > reservation!.maximumMicrodollars;
     const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, "m4Reservation.evidenceDigest": null },
-      { $set: { "m4Reservation.evidenceDigest": evidence.digest, "m4Reservation.settledMicrodollars": evidence.chargeMicrodollars } }, { session });
+      { $set: { "m4Reservation.evidenceDigest": evidence.digest, "m4Reservation.settledMicrodollars": evidence.chargeMicrodollars,
+        "m4Reservation.unsettledMicrodollars": countHold } }, { session });
     requireState(saved.modifiedCount === 1, "Settlement changed concurrently.");
-    await touch(campaign, session, { reservedMicrodollars: campaign.reservedMicrodollars - reservation!.maximumMicrodollars,
+    await touch(campaign, session, { reservedMicrodollars: campaign.reservedMicrodollars - reservation!.maximumMicrodollars + countHold,
       settledMicrodollars: campaign.settledMicrodollars + evidence.chargeMicrodollars,
       ...(overLimit ? { state: "stopped" as const } : {}) }, nowMs);
     return "settled" as const;

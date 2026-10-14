@@ -10,6 +10,8 @@ describe("frozen M4 policy", () => {
     expect(m4MaximumCharge(policy, "decision")).toBe(5024);
     expect(497 * m4MaximumCharge(policy, "specialist") + 3 * m4MaximumCharge(policy, "judge")).toBe(4_509_472);
     expect(m4MaximumCharge({ ...policy, countChargeCeilingMicrodollars: 1 }, "specialist")).toBe(8097);
+    const assumed = m4PolicySchema.parse({ ...policy, countChargeStatus: "assumed", countChargeCeilingMicrodollars: 900 });
+    expect(497 * m4MaximumCharge(assumed, "specialist") + 3 * m4MaximumCharge(assumed, "judge")).toBe(4_959_472);
     expect(m4ModelBucket("tester", true)).toBe("testerReport");
     expect(() => m4ModelBucket("image", false)).toThrow();
   });

@@ -281,8 +281,10 @@ describes that complete count. It blocks above 32,000 or on a failed count, then
 reduces the generation timeout by elapsed counting time. Neither request retries.
 This adds one non-generating count request per invocation; it must be tracked
 separately from the at-most-500 generation allowance. The documentation consulted
-does not establish count-endpoint billing or this key's permission; verify those
-before live use and include any charge in the same USD 5 ledger. The USD 4.509472
+does not establish count-endpoint billing or this key's permission. The later
+[current implementation record](#non-billable-application-foundation---2026-10-14)
+records the disclosed experiment assumption and first-invocation permission gate.
+Include any attributable charge in the same USD 5 ledger. The USD 4.509472
 generation-only bound must not silently absorb an unknown fee.
 
 The exact count currently occurs after application reservation but before model
@@ -505,8 +507,8 @@ changes their boundaries; do not describe planned behavior as deployed today.
 The latest operator continuation authorizes the accepted non-billable application
 slices. The [policy contract](../../../lib/experiment-runner/m4-policy.ts) freezes
 the selected model/effort/token/retry/price limits, eighteen publications, plugin
-identity and request-definition hash. Counting requires an explicit verified charge
-ceiling/reference; absent fee evidence cannot become a zero default. These are
+identity and request-definition hash. Counting requires an explicit charge
+ceiling/reference and a verified/assumed status; absent fee evidence cannot become a zero default. These are
 frozen planning inputs, not fresh live price or permission verification.
 
 The [campaign ledger](../../../db/experiment-campaign.ts) uses the existing MongoDB
@@ -524,9 +526,10 @@ Failures/uncertainty retain the maximum; no release API exists. Attributable
 settlement is idempotent, retains charges above the reservation, and stops admission
 on excess or conflicting evidence. Its evidence is an internal trusted input;
 authenticated provider attribution and token-based charge calculation must be
-implemented before callbacks can call it. The existing operation/run claim writes
-are not connected to these primitives yet. All public Balanced routes remain
-closed; repository claims also block Balanced and Real during this partial slice.
+implemented before callbacks can call it. The protected text-claim integration
+described below connects these primitives to operation/run writes. All public
+Balanced routes remain closed; Real remains rejected. The internal execution seam
+is available only to focused fake-provider tests.
 
 Focused evidence: three policy units, seven real-persistence ledger cases and
 eleven existing repository/HTTP cases pass. Coverage includes duplicate/concurrent
@@ -545,11 +548,71 @@ Current deterministic fixtures are examples, not real-text prompts. Prove byte
 parity with the adapter's Python JSON encoding before claim integration; do not
 substitute the scheduling fingerprint or a workflow's self-calculated digest.
 
-**Tooling checkpoint:** The official OpenAI documentation MCP was absent and is now
-registered at `https://developers.openai.com/mcp`. AGENTS.md requires a Codex restart
-before relying on that workflow. After restart, verify the current count-endpoint
-permission/billing and supported schema/parameter contract before provider request
-integration. Registration did not introduce a credential or provider request.
+**Current implementation record — 2026-10-14:** The documentation MCP restart is
+complete. Official [token-count guidance](https://developers.openai.com/api/docs/guides/token-counting),
+[structured-output guidance](https://developers.openai.com/api/docs/guides/structured-outputs),
+[reasoning guidance](https://developers.openai.com/api/docs/guides/reasoning) and
+[pricing](https://developers.openai.com/api/docs/pricing) were checked. They support
+the selected request/schema contract but do not establish the count endpoint's
+fee, failed-request billing or exact restricted-key permission. The user asked to
+proceed with available documentation instead of a support handoff. No account
+verification or paid request occurred.
+
+The proposed experiment manifest reserves **900 microdollars (USD 0.0009) per
+count**, explicitly marked `assumed`. This allowance is a planning assumption,
+not a documented price or an invoice guarantee. It stays reserved after model
+usage settles. The final spending request must disclose this uncertainty and
+obtain acceptance before execution. Count permission will be checked by the first
+authorized Kid invocation, without a separate probe or automatic retry. A denied
+count prevents generation and stops the campaign for inspection.
+
+The local [request bundle](../../../lib/experiment-runner/m4-request.ts) defines
+48 role/task/persona/report variants. It retains all roles and uses exact saved
+context strings, strict output schemas and protected eligible identities. Its
+integer-only wire encoding matches Python canonical JSON; fractional context
+values remain inside the exact context string. A socket-denied translation fixture
+compares Node requests with the audited provider's actual parameter/message
+translation. The bounded adapter pins the global OpenAI endpoint, so regional or
+environment endpoint overrides cannot silently change the price basis.
+
+[Preparation](../../../db/experiment-text-preparation.ts) takes a read-only role
+projection before dispatch, saves exact request bytes/digest and binds them to
+current sources, approvals, policy, publication and manager parent. It makes no
+reservation. Unchanged preparation is reused; changed sources are rejected without
+replay. The internal text claim rechecks currentness, Pause/Stop/deadline/drain,
+then commits operation, run and campaign reservations together. Exhausted campaign
+allowances block the run and stop campaign admission without a partial reservation.
+Duplicate authorization admits one action.
+
+Report preparation uses a separate read-only generation-verification phase. It
+requires the current unreserved, undispatched report operation, original deadline,
+retained Balanced policy/bindings, matching operation modes, exact approvals and
+lineage, and original asset bytes. Tester precedes judge. Each preparation attempt
+independently reads the nine fixture assets; no byte cache crosses requests.
+Simulated report lifecycle checks remain unchanged. Balanced assembly mutations
+and final completion remain closed pending the image/accounting integration.
+
+[Creative output assembly](../../../lib/experiment-runner/m4-output.ts) restores
+workflow-owned identities, exact approved sheet facts, style hashes and report
+identity/evidence fields from the saved context. It does not authorize completion
+or release money. Reports remain text-only with visual consistency unassessed.
+The owning completion services must still verify approvals, source lineage and
+bytes. The local provider-evidence assessor checks request/model/tier identity,
+token ceilings and usage consistency independently of creative parsing. It
+allocates model charges at frozen upper rates, not invoice prices. Incomplete or
+refused output retains attributable usage and cannot materialize. Missing usage or
+attribution retains the maximum. Authenticated readback/persistence/settlement integration,
+callback wiring, Balanced image routing,
+workflow generation and public configuration/UI/CLI remain separate unfinished
+readiness gates. The installed plugin predates these local digest/endpoint changes;
+do not infer live delivery from local validation.
+
+Focused local verification for this slice: 23 policy/request/choice/output/usage
+units; 25 campaign, preparation and context integration cases; one full synthetic
+Balanced report-preparation case and two existing Simulated report lifecycle/order
+cases; 20 socket-denied provider cases; and 48 exact Node/Python request translations.
+Typecheck, focused lint, agent fixtures, 77 local documentation links/anchors and
+whitespace checks passed. These are non-billable fixtures, not M4 persona acceptance.
 
 #### Price basis and bounded calculation
 
@@ -570,8 +633,15 @@ it. This is conditional planning arithmetic, not measured cost or implemented
 enforcement. The independent USD 5 ledger remains mandatory; unknown charges
 retain their maxima. No paid smoke call is outside this allowance.
 
+With the explicitly unverified count allowance, the conservative planning total is
+`4.509472 + 500 * 0.0009 = 4.959472`, leaving USD 0.040528 below the selected USD 5
+ceiling. The USD 4.509472 figure covers generation under its stated assumptions;
+it excludes unknown count charges. Neither figure proves an undocumented fee bound.
+The ledger enforces its frozen reservations; it cannot enforce unknown invoice
+charges. Keep the assumption and unsettled count allowance visible in results.
+
 The user tightened the ceiling from USD 10 to USD 5 after the initial decision.
-The conditional bound leaves USD 0.490528 headroom. Do not use that headroom to
+Do not use planning headroom to
 increase tokens, add retries or relax price verification. Recompute reservations
 before approval if any premise changes; stop rather than silently reduce required
 content or increase spending.

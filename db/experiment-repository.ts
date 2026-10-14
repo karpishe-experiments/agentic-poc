@@ -21,7 +21,9 @@ import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { OPERATION_LIMIT_MS } from "@/lib/operations/budget";
 import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
-import { createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
+import { CampaignAdmissionError, createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
+import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
+import { m4Hash, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -85,11 +87,31 @@ function isJ13Image(operation: Pick<ExperimentOperationDocument, "role" | "taskI
   return operation.role === "image" && operation.taskId === "J13" && operation.subjectKind === "page" && operation.providerKind === "image";
 }
 
-export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number; m4Authority?: M4Authority } = {}) {
+export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number; m4Authority?: M4Authority; m4ExecutionEnabled?: true } = {}) {
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
   const campaignLedger = options.m4Authority ? createExperimentCampaignLedger(database, options.m4Authority) : null;
+  async function assertM4Prepared(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, parent: string | null, phase: "dispatch" | "claim") {
+    const prepared = operation.m4Preparation;
+    const binding = campaignLedger?.snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
+      item.persona === (operation.role === "tester" ? run.persona : null));
+    const selector = { role: operation.role, taskId: operation.taskId, persona: run.persona,
+      report: (operation.role === "tester" || operation.role === "judge") && run.generationCompletedAtMs != null } as M4RequestSelector;
+    if (!campaignLedger || options.m4ExecutionEnabled !== true || operation.providerKind !== "text" || !prepared ||
+        run.m4?.campaignId !== campaignLedger.grant.campaignId || run.m4.policyHash !== campaignLedger.snapshot.hash ||
+        run.m4.policyJson !== campaignLedger.snapshot.json || prepared.policyHash !== run.m4.policyHash || prepared.configurationHash !== run.configurationHash ||
+        !binding || operation.lifecycle?.stop != null || prepared.publishedWorkflowId !== binding.publishedWorkflowId || prepared.parentWorkflowRunId !== parent ||
+        prepared.requestDigest !== m4Hash(prepared.requestJson) || prepared.operationFingerprint !== m4OperationFingerprint(operation) ||
+        prepared.definitionHash !== m4RequestDefinition(selector).hash ||
+        phase === "claim" && operation.verifiedWorkflowId !== prepared.publishedWorkflowId ||
+        prepared.sourceFingerprint !== await m4SourceFingerprint(database, session, run)) {
+      throw new ExperimentRepositoryError("conflict", "M4 prepared request, source, policy or publication is not current.");
+    }
+    const deployment = await database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" }, { session });
+    if (deployment?.maintenance || deployment?.draining) throw new ExperimentRepositoryError("invalid_state", "M4 admission is closed.");
+    return prepared;
+  }
 
   async function assertJ13Admission(
     session: ClientSession,
@@ -342,6 +364,8 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.activeOperationId !== operation._id || operation.state !== "prepared") throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting dispatch.");
       if (run.pauseRequested || run.status === "paused" || (run.status !== "queued" && run.status !== "running")) return { dispatched: false, operation };
+      if (run.mode === "real") return { dispatched: false, operation };
+      if (run.mode === "balanced") await assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "dispatch");
       const deployment = await database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" }, { session });
       if (deployment?.draining || deployment?.maintenance) return { dispatched: false, operation };
       if (isJ13Image(operation)) {
@@ -405,9 +429,9 @@ export function createExperimentRepository(database: Database, options: { store?
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs != null && operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Claim parent differs from dispatch.");
-      // Public Balanced routes remain closed. Do not admit provider work until
-      // protected request preparation and attributable callback settlement land.
-      if (["balanced", "real"].includes(run.mode)) return { started: false, reason: "blocked", operation };
+      // No public route/config enables this internal seam. Focused fake-provider
+      // tests can exercise the whole protected claim before later readiness wiring.
+      if (run.mode === "real" || run.mode === "balanced" && (!campaignLedger || options.m4ExecutionEnabled !== true)) return { started: false, reason: "blocked", operation };
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
       if (operation.state !== "prepared") return { started: false, reason: "already_started", operation };
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
@@ -442,7 +466,23 @@ export function createExperimentRepository(database: Database, options: { store?
         await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: "limit_exhausted", updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
         return { started: false, reason: "limit_exhausted", operation };
       }
-      const isPayable = run.mode === "real" || run.mode === "balanced" && operation.providerKind === "text";
+      if (run.mode === "balanced") {
+        const prepared = await assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "claim");
+        if (nowMs() >= operation.deadlineAtMs! || lease.expiresAtMs <= nowMs()) return { started: false, reason: "blocked", operation };
+        try {
+          await campaignLedger!.reserve(session, run, operation, prepared.requestDigest, nowMs());
+        } catch (error) {
+          // Allowance checks precede all reservation writes. Preserve the
+          // unstarted dispatch for observation; never replay it as a new request.
+          if (!(error instanceof CampaignAdmissionError) || error.reason !== "limit_exhausted") throw error;
+          await campaignLedger!.stop(session, nowMs());
+          const blocked = await runs.updateOne({ _id: run._id, revision: run.revision },
+            { $set: { status: "blocked", safeFailure: "limit_exhausted", updatedAtMs: nowMs() }, $inc: { revision: 1 } }, { session });
+          if (blocked.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run changed at the campaign limit.");
+          return { started: false, reason: "limit_exhausted", operation };
+        }
+      }
+      const isPayable = run.mode === "balanced" && operation.providerKind === "text";
       const counters = { ...run.counters, [logical]: run.counters[logical] + 1, steps: run.counters.steps + 1 };
       if (isPayable) counters[payable] = run.counters[payable] + 1;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", "authorizationClaim.id": claimId }, { $set: { state: "started", authorizationClaim: null, workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,

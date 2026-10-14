@@ -16,10 +16,12 @@ const modelPolicy = (model: "gpt-6-luna" | "gpt-6-sol", effort: "none" | "low", 
 export const m4PolicySchema = z.strictObject({
   schemaVersion: z.literal("m4_v1"), mode: z.literal("balanced"), imageProvider: z.literal("simulated"),
   provider: z.literal("openai"), protocol: z.literal("responses"), serviceTier: z.literal("default"),
+  apiBaseUrl: z.literal("https://api.openai.com/v1"),
   pluginIdentity: z.string().regex(/^langgenius\/openai:[^@\s]+@[0-9a-f]{64}$/),
   requestDefinitionHash: m4Digest,
   pricingReference: z.string().min(1).max(500),
-  // This must be supplied after count permission/billing verification, never defaulted to zero.
+  // User-selected experiment assumption is explicit, never treated as a verified fee.
+  countChargeStatus: z.enum(["verified", "assumed"]),
   countChargeCeilingMicrodollars: money, countVerificationReference: z.string().min(1).max(500),
   maxInputTokens: z.literal(32000), maxRequests: z.literal(500), maxJudges: z.literal(3),
   maxMicrodollars: z.literal(M4_DOLLAR_LIMIT), retries: z.literal(0), tools: z.literal(false),
@@ -32,6 +34,9 @@ export const m4PolicySchema = z.strictObject({
   }),
   publications: z.array(savedConfigurationItemSchema.extend({ persona: personaSchema.nullable() })).length(18),
 }).superRefine((policy, context) => {
+  if (policy.countChargeStatus === "assumed" && policy.countChargeCeilingMicrodollars !== 900) {
+    context.addIssue({ code: "custom", message: "The disclosed unverified count allowance is 900 microdollars per invocation." });
+  }
   const slots = policy.publications.map((p) => `${p.role}:${p.taskId ?? ""}:${p.persona ?? ""}`);
   const expected = ["manager::", "image::", "judge::", ...Array.from({ length: 12 }, (_, i) => `specialist:J${String(i + 1).padStart(2, "0")}:`),
     ...personaSchema.options.map((p) => `tester::${p}`)];

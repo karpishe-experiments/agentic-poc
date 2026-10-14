@@ -10,7 +10,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { styleSampleRequests, type StyleSampleSources } from "@/lib/experiment-runner/reference-requests";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
+import { isBalancedImageVerificationRun, verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftStyleVersionId: opaqueIdSchema,
   sampleOperationIds: z.array(opaqueIdSchema).length(2).refine((ids) => new Set(ids).size === 2) });
@@ -54,7 +54,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: "simulated",
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if (run.mode !== "simulated" || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
+    if ((run.mode !== "simulated" && !(verificationOnly && isBalancedImageVerificationRun(run))) || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftStyleVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");
@@ -92,7 +92,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
       const fingerprint = imageRequestFingerprint(slot.request);
       const operation = operations.find((item) => item.inputFingerprint === fingerprint);
       if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J08" ||
-        operation.subjectKind !== "book" || operation.subjectId !== run.bookletId || operation.mode !== "simulated" ||
+        operation.subjectKind !== "book" || operation.subjectId !== run.bookletId || operation.mode !== run.mode ||
         operation.state !== "succeeded" || operation.reservationCount !== 1 || !operation.workflowRunId || operation.imageCompletionClaim) invalid("Sample operation is not a completed authorized J08 image.");
       if (verificationOnly && !operation.verifiedWorkflowId) invalid("Style approval requires verified image publication.");
       const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));

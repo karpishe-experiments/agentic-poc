@@ -11,7 +11,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { assembleReferenceSheet } from "@/lib/experiment-runner/reference-assembly";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
+import { isBalancedImageVerificationRun, verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftSheetVersionId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const metadataSchema = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().positive(),
@@ -56,7 +56,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: "simulated",
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
+    if ((run.mode !== "simulated" && !(verificationOnly && isBalancedImageVerificationRun(run))) || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftSheetVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
@@ -97,7 +97,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     } else invalid("Sheet target type differs.");
     const operation = metadata ? metadata.operations.find((item) => item._id === value.imageOperationId) : await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== task ||
-      operation.subjectKind !== subjectKind || operation.subjectId !== subjectId || operation.mode !== "simulated" ||
+      operation.subjectKind !== subjectKind || operation.subjectId !== subjectId || operation.mode !== run.mode ||
       operation.state !== "succeeded" || operation.reservationCount !== 1 || !operation.workflowRunId || operation.imageCompletionClaim) invalid("Sheet operation is not a completed authorized image.");
     if (verificationOnly && !operation.verifiedWorkflowId) invalid("Sheet approval requires verified image publication.");
     const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));

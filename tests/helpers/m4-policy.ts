@@ -12,9 +12,9 @@ export function m4TestPolicy() {
     ...personaSchema.options.map((persona) => ({ role: "tester", taskId: null, persona })),
     { role: "image", taskId: null, persona: null, finalPageIllustration: true }, { role: "judge", taskId: null, persona: null },
   ];
-  return m4PolicySchema.parse({ schemaVersion: "m4_v1", mode: "balanced", imageProvider: "simulated", provider: "openai", protocol: "responses", serviceTier: "default",
+  return m4PolicySchema.parse({ schemaVersion: "m4_v1", mode: "balanced", imageProvider: "simulated", provider: "openai", protocol: "responses", serviceTier: "default", apiBaseUrl: "https://api.openai.com/v1",
     pluginIdentity: `langgenius/openai:1.0.7-dev1@${"a".repeat(64)}`, requestDefinitionHash: "f".repeat(64), pricingReference: "test-fixture-not-live-price-proof",
-    countChargeCeilingMicrodollars: 0, countVerificationReference: "fake-transport-zero-charge-only",
+    countChargeStatus: "verified", countChargeCeilingMicrodollars: 0, countVerificationReference: "fake-transport-zero-charge-only",
     maxInputTokens: 32000, maxRequests: 500, maxJudges: 3, maxMicrodollars: 5_000_000, retries: 0, tools: false, maxTimeoutSeconds: 120,
     models: { decision: model("gpt-6-luna", "none", 2048), specialist: model("gpt-6-luna", "low", 8192),
       testerReport: model("gpt-6-luna", "none", 8192), judge: model("gpt-6-sol", "low", 8192) },

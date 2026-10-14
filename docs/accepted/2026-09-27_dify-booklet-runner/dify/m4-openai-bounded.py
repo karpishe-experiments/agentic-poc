@@ -101,6 +101,11 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
                      if key in {"model", "input", "reasoning", "text", "truncation"}}
     started = clock()
     kwargs = llm._to_credential_kwargs(credentials)
+    endpoint = kwargs.get("base_url", "https://api.openai.com/v1")
+    if not isinstance(endpoint, str) or endpoint.rstrip("/") != "https://api.openai.com/v1":
+        raise InvokeBadRequestError("Booklet requires the frozen global OpenAI endpoint.")
+    # Do not inherit OPENAI_BASE_URL or select a regional/FedRAMP price premium.
+    kwargs["base_url"] = "https://api.openai.com/v1"
     kwargs.update(max_retries=0, timeout=seconds)
     with client_factory(**kwargs) as client:
         count = client.responses.input_tokens.count(**deepcopy(count_payload))
@@ -125,6 +130,7 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
         incomplete_reason = "unknown"
     evidence = {
         "provider": "openai", "responseId": _field(response, "id"),
+        "apiBaseUrl": "https://api.openai.com/v1",
         "requestId": _field(response, "_request_id"), "model": _field(response, "model"),
         "serviceTier": _field(response, "service_tier"), "status": status,
         "refused": refused, "incompleteReason": incomplete_reason,

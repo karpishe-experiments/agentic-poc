@@ -83,9 +83,17 @@ monetary reservations. Protected repository injection is required for new Balanc
 runs. The ledger owns persona slots, request/judge counts and integer microdollar
 reservation/settlement in caller-owned transactions. It has no public grant/budget
 API and no automatic uncertain-reservation release. The public routes and
-repository execution claims still block Balanced/Real. Request preparation,
-provider attribution, callbacks and claim integration remain pending; no M4 paid
-execution is enabled. Historical run configuration hashes remain unchanged. See the
+repository defaults still block Balanced/Real. A protected internal text-only seam
+now saves the exact role request before dispatch, rechecks source/approval and
+publication identities, and reserves operation/run/campaign allowances atomically
+at claim. Preparation grants no execution permission. Duplicate claims admit one
+action. Trusted output assembly supplies approved identity/hash/fact fields rather
+than asking a model to reproduce them. The request bundle has canonical Python/Node
+byte parity; the local provider pins the global endpoint. Assumed token-count
+charges remain reserved after model usage settlement and are not reported as
+verified invoice charges. Provider attribution, callbacks, Balanced image routing
+and public configuration remain pending; no M4 paid execution is enabled.
+Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 
 ## Artifact and decision flow
