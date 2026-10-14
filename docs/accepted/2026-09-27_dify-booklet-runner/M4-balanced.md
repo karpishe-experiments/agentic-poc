@@ -324,18 +324,53 @@ after normalizing the three affected text files and the patch to LF; original
 package bytes remain retained. Existing eight audit
 cases remain unchanged. No paid request or live provider change was made.
 
-**Necessary delivery checkpoint:** The canonical Community installer sets
-`FORCE_VERIFYING_SIGNATURE=true`; it must remain enabled. Browser inspection shows
-the Local Package File install path and an existing OpenAI credential, but does
-not attest host signature configuration or approve an unsigned candidate. Two
-existing non-runner Unibase workflow drafts also use `langgenius/openai/openai`
-with GPT-4.1 mini, so this is a shared provider. The candidate has no accepted
-vendor/third-party signature. Do not attempt its live installation, weaken policy,
-or overwrite those consumers. Finish independent review and publication, then
-request one bounded integration decision: obtain a properly signed correction
-through a supported path, or approve a Dify-only HTTP-node alternative with a
-private user credential-entry checkpoint. Prepare the latter's concrete graph
-before asking the user to enter a key. Infrastructure changes are excluded.
+**Selected delivery path - 2026-10-14:** The user prefers the existing OpenAI
+plugin and permits an experiment signature exception where signing adds work.
+The HTTP-node alternative is not selected. Reuse the stored provider credential;
+no new signing key or OpenAI credential transfer is introduced.
+
+The complete local package is `output/issue65-openai-plugin-audit/openai-1.0.7-m4r1.difypkg`
+(487,180 bytes), SHA-256 `d266069fc9d5511c7e2af0ea419c8b792c62090cf739ced89030ed261c90d162`.
+Its Dify identifier is
+`langgenius/openai:1.0.7-m4r1@cc331dd86301341d8fc86fafccdabf34c4d40f7657af8d21b7a69a1d9e4ea5d5`.
+It retains all original assets and 93 unchanged original files. Changes are the
+three patched sources and the manifest's explicit local version, plus the new
+adapter. Original verification metadata and ZIP signature are removed, not copied.
+The package stays ignored; all fourteen focused cases pass against its extracted
+bytes. It is not an official vendor release and is not installed.
+
+Pinned [single-package upload](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/service/plugin_decoder.go#L57)
+supports `FORCE_VERIFYING_SIGNATURE=false`. Leave Langgenius-specific and third-party
+verification settings unchanged; do not use bundle installation. This flag affects
+Community plugin uploads across the instance, not only Booklet. Temporarily disable
+it for this exact reviewed upload, then restore `true`. Existing local runtime
+[startup](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/core/control_panel/builder.go#L29)
+does not re-enforce the upload flag; restoration should permit the installed
+unsigned runtime to load. This is source evidence, not a live restoration proof.
+Do not add restart tests; ordinary service readback after configuration apply is
+sufficient. Later re-upload again needs an explicit bounded exception.
+
+The [local installer](https://github.com/langgenius/dify/blob/8387590ace4a094de812b7847fc6a4c3a27cd52b/web/app/components/plugins/install-plugin/install-from-local-package/steps/install.tsx#L71)
+removes the old installation with `preserveCredentials:true`, then installs the
+candidate. This is not atomic. Retain the original signed package and privately
+back up affected configuration before replacement. Two observed Unibase drafts
+also use this provider; all consumers briefly lose it during replacement, then use
+the new package with the unchanged false/absent route. Read back their bindings
+and retained credential presence without generating requests. Require installed
+`source=package`; pinned automatic-upgrade selection includes only Marketplace
+installations, so preserve the current LATEST policy. On uncertain failure,
+inspect the installation task before any further action; do not replay or remove
+credentials. Do not call successful credential retention verified until read back.
+
+**Necessary manual checkpoint:** The restricted host dispatcher has no signature-
+policy action. A root operator must perform the temporary configuration change
+with a verified private configuration backup, idle host/workflow checks and pinned
+image readback. The prepared one-time procedure changes only this setting and
+recreates only the plugin daemon; it adds no permanent host action or entrypoint.
+After the exact package is installed, restore verification through the same
+procedure. Do not start work during this interval. Browser installation of the
+locally modified package also requires action-time confirmation under the browser
+control policy. Neither this exception nor installation grants paid execution.
 
 #### Selected provider request contract
 
