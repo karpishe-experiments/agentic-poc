@@ -1,0 +1,134 @@
+"""Non-billable audit. Run with the package's selected dependency versions.
+
+Usage: python m4-openai-provider-audit.py.txt PATH_TO_EXTRACTED_PACKAGE
+No credentials are read. Every SDK request uses an in-memory mock transport.
+This tests the installed package source, not a live Dify workflow.
+"""
+from __future__ import annotations
+
+import json
+import hashlib
+from importlib.metadata import version
+import socket
+import sys
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+from zipfile import ZipFile
+
+from dify_plugin.entities.model.llm import LLMUsage
+from dify_plugin.entities.model.message import UserPromptMessage
+import httpx2
+from openai import OpenAI, APIStatusError, APITimeoutError
+
+PACKAGE = Path(sys.argv.pop(1)).resolve()
+sys.path.insert(0, str(PACKAGE))
+from models.llm.llm import OpenAILargeLanguageModel
+from models.llm import responses
+
+
+class ProviderAudit(unittest.TestCase):
+    def setUp(self):
+        self.llm = object.__new__(OpenAILargeLanguageModel)
+        self.messages = [UserPromptMessage(content="Non-billable fixture")]
+
+    def test_package_content_matches_installed_identifier(self):
+        with ZipFile(PACKAGE.parent / "openai-1.0.7.difypkg") as archive:
+            checksum = hashlib.sha256()
+            for name in sorted(archive.namelist()):
+                checksum.update(hashlib.sha256(name.encode()).digest())
+                checksum.update(hashlib.sha256(archive.read(name)).digest())
+            self.assertEqual(checksum.hexdigest(),
+                "f36c3761167b3af0bfb4975b728fe3cd126342d076e1ec5359e6d4f92557d3d4")
+            for name in ("models/common_openai.py", "models/llm/llm.py",
+                         "models/llm/responses.py", "models/llm/tokens.py"):
+                self.assertEqual((PACKAGE / name).read_bytes(), archive.read(name))
+
+    def test_selected_dependency_versions(self):
+        self.assertEqual(version("openai"), "3.26.0")
+        self.assertEqual(version("dify-plugin"), "0.10.2")
+        self.assertEqual(version("tiktoken"), "0.14.0")
+
+    def attempts(self, *, bounded, failure):
+        count = 0
+
+        def handle(request):
+            nonlocal count
+            count += 1
+            if failure == "timeout":
+                raise httpx2.ReadTimeout("fixture", request=request)
+            return httpx2.Response(
+                failure, request=request, headers={"retry-after-ms": "1"},
+                json={"error": {"message": "fixture", "type": "fixture"}},
+            )
+
+        kwargs = self.llm._to_credential_kwargs({"openai_api_key": "not-a-key"})
+        kwargs["http_client"] = httpx2.Client(transport=httpx2.MockTransport(handle))
+        if bounded:
+            kwargs.update(max_retries=0, timeout=120)
+        with OpenAI(**kwargs) as client:
+            with self.assertRaises((APIStatusError, APITimeoutError)):
+                client.responses.create(model="gpt-6-luna", input="fixture", max_output_tokens=2)
+        return count
+
+    def test_original_client_retries_429(self):
+        self.assertEqual(self.attempts(bounded=False, failure=429), 3)
+
+    def test_zero_retry_correction_has_one_attempt(self):
+        for failure in (429, 500, "timeout"):
+            with self.subTest(failure=failure):
+                self.assertEqual(self.attempts(bounded=True, failure=failure), 1)
+
+    def test_original_client_defaults_exceed_m4_bounds(self):
+        kwargs = self.llm._to_credential_kwargs({"openai_api_key": "not-a-key"})
+        self.assertNotIn("max_retries", kwargs)
+        self.assertNotIn("timeout", kwargs)
+        with OpenAI(**kwargs) as client:
+            self.assertEqual(client.max_retries, 2)
+            self.assertEqual(client.timeout.read, 600)
+
+    def test_selected_parameters_translate_for_both_models(self):
+        schema = {"name": "fixture", "strict": True, "schema": {
+            "type": "object", "properties": {"answer": {"type": "string"}},
+            "required": ["answer"], "additionalProperties": False,
+        }}
+        for model, effort, ceiling in (
+            ("gpt-6-luna", "none", 2048),
+            ("gpt-6-luna", "low", 8192),
+            ("gpt-6-sol", "low", 8192),
+        ):
+            with self.subTest(model=model, effort=effort):
+                result = responses.parameters(model, {
+                    "max_tokens": ceiling, "reasoning_effort": effort,
+                    "reasoning_mode": "standard", "service_tier": "default",
+                    "response_format": "json_schema", "json_schema": schema,
+                }, None, None, {})
+                self.assertEqual(result["max_output_tokens"], ceiling)
+                self.assertEqual(result["reasoning"], {"effort": effort, "mode": "standard"})
+                self.assertEqual(result["service_tier"], "default")
+                self.assertEqual(result["text"]["format"]["schema"], schema["schema"])
+                self.assertFalse(result["store"])
+                self.assertNotIn("tools", result)
+                self.assertNotIn("previous_response_id", result)
+                self.assertNotIn("max_tokens", result)
+
+    def test_reported_usage_is_forwarded(self):
+        self.llm._calc_response_usage = Mock(return_value=LLMUsage.empty_usage())
+        response = SimpleNamespace(usage=SimpleNamespace(input_tokens=11, output_tokens=7))
+        responses.usage(self.llm, "gpt-6-luna", {}, self.messages, None, response, "fixture", [])
+        self.llm._calc_response_usage.assert_called_once_with("gpt-6-luna", {}, 11, 7)
+
+    def test_absent_usage_is_replaced_by_estimates_without_provenance(self):
+        self.llm._calc_response_usage = Mock(return_value=LLMUsage.empty_usage())
+        with patch.object(responses.tokens, "count_messages", return_value=101), \
+             patch.object(responses.tokens, "count_text", return_value=17):
+            responses.usage(self.llm, "gpt-6-luna", {}, self.messages, None,
+                            SimpleNamespace(usage=None), "fixture", [])
+        self.llm._calc_response_usage.assert_called_once_with("gpt-6-luna", {}, 101, 17)
+
+
+if __name__ == "__main__":
+    # Fail closed if any library tries to reach an actual network socket.
+    with patch.object(socket.socket, "connect", side_effect=AssertionError("Network forbidden")):
+        unittest.main(verbosity=2)

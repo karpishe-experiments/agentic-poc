@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 Simulated acceptance is complete. M4 model/budget decisions and the detailed implementation contract are recorded; installed provider-source/retry verification remains open. Balanced implementation and paid execution remain unstarted. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13). The completed efficiency follow-up and Kid comparison remain in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
+**Status:** M3 Simulated acceptance is complete. M4 model/budget decisions and the detailed implementation contract are recorded. The [exact-package audit](M4-balanced.md#exact-provider-package-audit---2026-10-14) verified provider source identity and identified required retry/timeout/usage corrections. Balanced implementation and paid execution remain unstarted. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13). The completed efficiency follow-up and Kid comparison remain in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 

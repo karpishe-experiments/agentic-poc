@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Model/budget decisions recorded and implementation contract prepared; provider-source verification remains blocked. Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Model/budget decisions and implementation contract recorded; exact provider package audited. Retry, timeout and usage-provenance corrections remain required. Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -187,15 +187,66 @@ Credential inventory impact: reuse the existing Dify provider-key row in the
 no name, storage, transfer or consumer changes occur in this documentation task.
 
 `plugin.list` and `plugin.get` return manifests, not executable implementation.
-Therefore SDK/plugin retries, exact Responses parameter translation, token counting,
-and attributable usage extraction are **unverified**, not passed. Before provider
-integration, obtain a read-only source/package inspection matching this exact
-checksum through an existing supported access path. Inspect client construction,
-retry decorators, fallback calls and all exception paths. Do not substitute a
-different upstream version as proof. If source cannot be obtained, or zero retries
-cannot be enforced with existing configuration, stop that integration slice and
-report the exact missing capability. Do not silently install a plugin, introduce
-a direct HTTP credential copy, or move provider execution into Booklet.
+The 2026-10-14 [exact-package audit](#exact-provider-package-audit---2026-10-14)
+resolves source availability through the public marketplace package. The installed
+plugin cannot yet satisfy the bounded execution/usage contract. Prepare the
+correction below before integration; do not silently install it, copy a credential
+into a direct HTTP node, or move provider execution into Booklet.
+
+#### Exact provider package audit - 2026-10-14
+
+The pinned Dify 1.17.1 [marketplace helper](https://github.com/langgenius/dify/blob/1.17.1/api/core/helper/marketplace.py)
+defines the public package GET path `/api/v1/plugins/download-url` with the exact
+`unique_identifier` query. Download of the installed 1.0.7 identity succeeded
+without credentials. ZIP SHA-256 is
+`ac6299b0f0cffa264acab719d78360b0a2bf63088979d2490bcbba5ffc7b4b94`.
+Reproducing Dify's sorted path/content digest from
+[checksum.go](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/pkg/plugin_packager/decoder/checksum.go)
+produces `f36c3761167b3af0bfb4975b728fe3cd126342d076e1ec5359e6d4f92557d3d4`,
+exactly the installed metadata checksum. This is content-identity verification;
+no independent package-signature or live host-filesystem attestation is claimed.
+The private ignored package and extracted sources remain under
+`output/issue65-openai-plugin-audit/` and are not vendored into Git.
+
+The [non-billable audit fixture](dify/m4-openai-provider-audit.py.txt) checks that
+identity and loaded source bytes. It uses the package's selected versions:
+OpenAI 3.26.0, Dify plugin SDK 0.10.2 and tiktoken 0.14.0, in an isolated Python
+3.14 environment. Transitive dependencies were resolved locally, not asserted to
+match the installed host. Real socket connections are forbidden; all SDK calls
+use an in-memory mock transport and a dummy key. Eight cases passed.
+
+| Verified finding | Consequence / minimum correction |
+| --- | --- |
+| `models/common_openai.py` supplies no SDK retry/timeout overrides. Selected SDK defaults are two retries and a 600-second read timeout. One mocked 429 produced three attempts. | An LLM-node retry toggle cannot bound SDK attempts. Use explicit `max_retries=0` and a per-invocation timeout no greater than 120 seconds or the remaining operation deadline. Mocked 429/500/timeout with those overrides each produced one attempt. This proves the SDK option, not an installed plugin correction. |
+| `responses.parameters` maps `max_tokens` to `max_output_tokens`, effort/mode to `reasoning`, and JSON schema to `text.format`. Luna none/low and Sol low mappings passed. | Reuse these translations; capture the full request after the correction and confirm Standard tier, no tools and no history continuation. |
+| `responses.usage` substitutes local counts when provider usage is absent, then passes them through the same calculation interface as reported counts. | Add explicit provenance and raw reported token details/request identity. Booklet must retain its maximum reservation when provider evidence is absent; never settle against this estimate. |
+| `tokens.count_messages` describes its overhead as approximate and falls back to `o200k_base` for unknown models. | Do not use it as proof of a 32,000-token upper bound. Require a separately verified complete-request bound/counting path before admitting Balanced. |
+
+**Prepared correction contract:** Prefer an opt-in change to this same provider,
+with normal behavior preserved when the flag is absent. Add a model parameter for
+Booklet bounded execution, disabled by default and supported only for Luna/Sol.
+In that path reject streaming, tools, history continuation, unsupported tiers and
+missing/invalid remaining-time policy before creating a client. Consume internal
+policy parameters before the API call; set SDK retries to zero and cap timeout.
+An SDK phase/read timeout is not a total wall-clock deadline. Keep the original
+operation deadline authoritative for new admission and observation; test delayed
+connect/read and late completion separately before claiming total-duration bounds.
+Keep provider credentials in their existing binding. Emit trusted provider
+evidence alongside creative content with explicit `provider_reported` or
+`unavailable` usage provenance, response/request ID, model, tier, status and raw
+token details. Preserve incomplete/refused content and evidence for inspection;
+do not manufacture completion or usage. The workflow adapter must receive that
+evidence through an actually exposed LLM-node output, not assume an opaque SDK
+field survives Dify. Its exact wire shape and Dify compatibility are part of the
+later integration contract and must pass the changed-path rehearsal.
+
+No plugin correction, installation or credential change occurred during this audit.
+Before installing a reviewed candidate, verify the supported package-install path,
+signature policy, credential retention, all workspace consumers and absence of
+active/uncertain work. Do not weaken signature policy or replace another consumer's
+provider silently. If opt-in installation cannot preserve those boundaries, report
+that concrete incompatibility and request a bounded integration decision with the
+reviewed package/diff; do not introduce a new credential path by default.
 
 #### Selected provider request contract
 
@@ -269,7 +320,7 @@ are zero. A timeout or lost response is inspected, never automatically replayed.
    a new counted operation and remaining campaign limits, never a counter reset.
 
 Build slices 1-4 with fake providers before any live graph mutation. Slice 5 needs
-later implementation authorization and the source-inspection gate above. Public
+later implementation authorization and the provider-correction verification gate above. Public
 route paths stay unchanged; only optional fields are added for new Balanced records.
 No historical migration/backfill, new service or credential is required by this plan.
 Update architecture and credential inventory when later verified implementation
@@ -310,11 +361,11 @@ the saved Kid/Parent/Creator artifacts as offline inputs without rewriting them.
 | --- | --- |
 | **Fixtures hide real-output variation.** Current result contracts contain unions, task-specific content and strict IDs; valid JSON alone is insufficient. M3 already exposed a J13 acknowledgement schema mismatch after a successful save. | Derive each provider output schema from the relevant task contract, including report and clarification variants. Supply exact eligible targets/current version IDs as allowed choices. Construct run/operation/workflow IDs, fingerprints, lineage and usage in trusted workflow code, never ask the model to invent them. Parse through the actual HTTP callback and owning service, testing first and duplicate completion. Reject unsupported structured-output schema features in a non-billable adapter check before publication. |
 | **Preparation currently depends on authorization.** `getOperationContext` requires a started/unknown active claim, while the selected request contract requires exact input preparation before that claim. | Add an internal read-only preparation projection for the already prepared operation. It must not reserve or return permission to execute. Store the request fingerprint against the run revision and exact source versions; the normal claim rechecks these and admits only that prepared request. Keep the existing claimed-context route protected. Test a source/approval change between prepare and claim. |
-| **Context and output ceilings can fail late.** Current report context includes artifact content, creator messages and operation history. Creator is larger than Kid; low reasoning can also consume the output allowance before JSON finishes. | Render/count the exact prompts and schemas offline for all distinct task shapes and the largest retained Creator report. Keep required content and current evidence; omit unrelated historical content using explicit role projections. Reject overflow before dispatch. Include a maximum-size valid output and an incomplete/refusal fixture per structurally different output family. Token counting and supported schema translation remain source-verification gates. Fake tests do not establish real model reliability; do not raise ceilings automatically. |
+| **Context and output ceilings can fail late.** Current report context includes artifact content, creator messages and operation history. Creator is larger than Kid; low reasoning can also consume the output allowance before JSON finishes. | Render/count the exact prompts and schemas offline for all distinct task shapes and the largest retained Creator report. Keep required content and current evidence; omit unrelated historical content using explicit role projections. Reject overflow before dispatch. Include a maximum-size valid output and an incomplete/refusal fixture per structurally different output family. Complete-request token bounds and task-specific schema compatibility remain readiness gates. Fake tests do not establish real model reliability; do not raise ceilings automatically. |
 | **Successful provider output can precede failed saving or acknowledgement.** M3 retained callback timeout, publication/readback and terminal-job defects. | Prove save-before-ack recovery and authenticated original-result retrieval for the new text/usage envelope. Observe the same execution after timeout. Never re-invoke the model to recover a saved result or repair bookkeeping. Preserve complete generation when reports fail; retain valid output and settle attributable usage independently of report/content validation. |
 | **New campaign writes can recreate transaction contention.** Parent attempt 2 timed out during authorization after observation writes retried its transaction. | Keep network calls, tokenization and context construction outside the atomic claim. The transaction contains only currentness/allowance checks and owned writes. Keep existing authorization leases and observation suppression. Add one focused overlap case using the campaign document, not a load/restart campaign. Account for preparation, provider and callback time within the original deadline; check the minimum timeout across the whole path. |
 | **Persona decisions can consume attempts without technical progress.** Deterministic testers follow a fixed happy path; real testers may repeatedly revise, ask or delegate beyond their scope. | Keep the existing revision/no-progress limits, eligible action list and delegation provenance authoritative. Prompts must distinguish technical missing output from advisory creative preferences. Test a repeated question, exhausted revision allowance and narrowed Creator grant using scripted responses. No new scoring loop or automatic repair invocation. |
-| **Metadata does not prove a bounded paid request.** Active models and plugin manifests do not prove SDK retries, exact parameter mapping, reachable branches, account entitlement or usage persistence. | Before the paid grant, complete the exact-source audit and captured-request adapter fixture already required above. Check all eighteen published bindings against the policy, including final tester/judge routes. Keep provider credentials private. If account entitlement cannot be established without generation, label it unverified until the first authorized Kid request; do not consume an undisclosed paid probe. |
+| **Metadata does not prove a bounded paid request.** Active models and plugin manifests do not prove SDK retries, exact parameter mapping, reachable branches, account entitlement or usage persistence. | Before the paid grant, reuse the completed exact-source audit, then verify the corrected captured-request adapter already required above. Check all eighteen published bindings against the policy, including final tester/judge routes. Keep provider credentials private. If account entitlement cannot be established without generation, label it unverified until the first authorized Kid request; do not consume an undisclosed paid probe. |
 
 Evidence: [M3 Parent authorization failure](M3-completion.md#parent-attempt-2-and-authorization-coordination--2026-10-11),
 [retained callback/job/acknowledgement lessons](LESSONS-LEARNED.md#completion-acknowledgements-must-cover-every-admitted-task),
