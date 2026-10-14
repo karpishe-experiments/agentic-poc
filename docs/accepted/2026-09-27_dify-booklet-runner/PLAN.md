@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 Simulated acceptance is complete. M4 model/budget decisions and the detailed implementation contract are recorded. The [exact-package audit](M4-balanced.md#exact-provider-package-audit---2026-10-14) verified provider source identity. The [bounded provider correction](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14) is installed with signature verification restored. Integrated Balanced implementation and paid execution remain unstarted. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13). The completed efficiency follow-up and Kid comparison remain in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
+**Status:** M3 Simulated acceptance is complete. M4 model/budget decisions and the detailed implementation contract are recorded. The [exact-package audit](M4-balanced.md#exact-provider-package-audit---2026-10-14) verified provider source identity. The [bounded provider correction](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14) is installed with signature verification restored. The local policy/campaign foundation is implemented; provider integration and paid execution remain pending. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13). The completed efficiency follow-up and Kid comparison remain in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
@@ -181,9 +181,10 @@ outside M3; this consolidation does not change PRD limits or acceptance criteria
 
 **Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
-M3's deployed Simulated acceptance is complete. The current task prepares the
-[M4 readiness plan](M4-balanced.md#m4-readiness-plan--2026-10-13) only; it does not
-implement Balanced or start paid execution. For a later M4 task, use the three
+M3's deployed Simulated acceptance is complete. The operator's later continuation
+authorizes non-billable M4 implementation under the
+[M4 contract](M4-balanced.md#incremental-implementation-slices). The local policy and
+campaign foundation is implemented; Balanced execution remains closed. Use the three
 [M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |

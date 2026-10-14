@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Model/budget decisions and implementation contract recorded; exact provider package audited. Bounded-provider correction installed; signature verification restored. Integrated Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Model/budget decisions and implementation contract recorded; exact provider package audited. Bounded-provider correction installed; signature verification restored. Non-billable application foundation implemented locally; Balanced execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -10,16 +10,19 @@ Keep model/accounting proof and campaign evidence here. Apply the
 reuse valid tests and repeat only affected checks during implementation/corrections.
 Complete broader affected checks before publication, not after each local commit.
 
-M3 Simulated acceptance completed on 2026-10-13. This task prepares M4 readiness
-only. It does not implement Balanced, start runs, change live configuration, add
-credentials or grant spending/deployment authority. Infrastructure remains an
+M3 Simulated acceptance completed on 2026-10-13. Its original handoff authorized
+M4 readiness planning only. The later continuation authorizes the
+[non-billable application foundation](#non-billable-application-foundation---2026-10-14)
+and accepted implementation slices. It grants no paid execution, new credentials
+or additional live delivery authority. Infrastructure remains an
 assumed dependency; no restart campaign, fault injection, restore rehearsal or
 host automation belongs to this readiness step.
 
 ## Execution efficiency follow-up ? 2026-10-13
 
 **State:** Improvements deployed and the single authorized Simulated Kid comparison
-passed. M3 acceptance stays complete; Balanced implementation/execution is unstarted.
+passed. M3 acceptance stays complete; later non-billable implementation is recorded
+below, and Balanced execution remains unstarted.
 
 Main PR #188 merged reviewed commit `9e1b819cadd62d8ffd692134d5036b000e594356`
 after lean CI `38406602852`. Staging PR #189 carried only the reviewed changes;
@@ -496,6 +499,57 @@ route paths stay unchanged; only optional fields are added for new Balanced reco
 No historical migration/backfill, new service or credential is required by this plan.
 Update architecture and credential inventory when later verified implementation
 changes their boundaries; do not describe planned behavior as deployed today.
+
+#### Non-billable application foundation - 2026-10-14
+
+The latest operator continuation authorizes the accepted non-billable application
+slices. The [policy contract](../../../lib/experiment-runner/m4-policy.ts) freezes
+the selected model/effort/token/retry/price limits, eighteen publications, plugin
+identity and request-definition hash. Counting requires an explicit verified charge
+ceiling/reference; absent fee evidence cannot become a zero default. These are
+frozen planning inputs, not fresh live price or permission verification.
+
+The [campaign ledger](../../../db/experiment-campaign.ts) uses the existing MongoDB
+database and caller-owned transactions. New Balanced runs require a protected
+policy and explicit grant reference injected into the repository; no route or
+environment reader supplies these yet. Run creation atomically saves a separate
+policy snapshot, claims one initial persona slot and checks predecessor persona
+success. Historical configuration arrays/hashes remain unchanged; no backfill runs.
+The new `experiment_campaigns` collection uses its standard unique `_id`; existing
+additive initialization owns its creation. No live initialization occurred.
+
+Ledger primitives atomically reserve each operation maximum against the USD 5,
+500-request, persona and judge ceilings. Duplicate reservations reuse the original.
+Failures/uncertainty retain the maximum; no release API exists. Attributable
+settlement is idempotent, retains charges above the reservation, and stops admission
+on excess or conflicting evidence. Its evidence is an internal trusted input;
+authenticated provider attribution and token-based charge calculation must be
+implemented before callbacks can call it. The existing operation/run claim writes
+are not connected to these primitives yet. All public Balanced routes remain
+closed; repository claims also block Balanced and Real during this partial slice.
+
+Focused evidence: three policy units, seven real-persistence ledger cases and
+eleven existing repository/HTTP cases pass. Coverage includes duplicate/concurrent
+reservation and settlement, exactly USD 5/one microdollar above, shared-cap overlap,
+transaction rollback, exhausted requests/judges, Pause/deadline, slot ordering,
+conflicting evidence and preserved historical configuration. No providers execute.
+Full prepared-source/approval checks, callbacks, mode propagation, reports and
+workflow rehearsal remain pending. Existing runtime evidence outside this surface
+is reused. Credential inventory impact: no names, storage, transfer or consumers
+change; no live policy, grant or campaign has been provisioned.
+
+The next request-definition bundle must be reviewed once and consumed by both Dify
+graph generation and protected Booklet preparation. It must contain the Dify-owned
+prompt, task-specific strict output schema, role projection and rendering version.
+Current deterministic fixtures are examples, not real-text prompts. Prove byte
+parity with the adapter's Python JSON encoding before claim integration; do not
+substitute the scheduling fingerprint or a workflow's self-calculated digest.
+
+**Tooling checkpoint:** The official OpenAI documentation MCP was absent and is now
+registered at `https://developers.openai.com/mcp`. AGENTS.md requires a Codex restart
+before relying on that workflow. After restart, verify the current count-endpoint
+permission/billing and supported schema/parameter contract before provider request
+integration. Registration did not introduce a credential or provider request.
 
 #### Price basis and bounded calculation
 

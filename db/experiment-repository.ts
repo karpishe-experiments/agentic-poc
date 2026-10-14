@@ -21,10 +21,11 @@ import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { OPERATION_LIMIT_MS } from "@/lib/operations/budget";
 import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
+import { createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
-const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: savedConfigurationSchema, nowMs: time });
+const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: savedConfigurationSchema, campaignId: opaqueIdSchema.optional(), nowMs: time });
 const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: time });
 const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), parentWorkflowRunId: opaqueIdSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
@@ -84,10 +85,11 @@ function isJ13Image(operation: Pick<ExperimentOperationDocument, "role" | "taskI
   return operation.role === "image" && operation.taskId === "J13" && operation.subjectKind === "page" && operation.providerKind === "image";
 }
 
-export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number } = {}) {
+export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number; m4Authority?: M4Authority } = {}) {
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
+  const campaignLedger = options.m4Authority ? createExperimentCampaignLedger(database, options.m4Authority) : null;
 
   async function assertJ13Admission(
     session: ClientSession,
@@ -203,15 +205,25 @@ export function createExperimentRepository(database: Database, options: { store?
     const input = parse(createInput, raw);
     const configurationJson = canonical(input.configuration);
     const configurationHash = digest(configurationJson);
+    const sameCreation = (prior: ExperimentRunDocument) => prior.bookletId === input.bookletId && prior.persona === input.persona && prior.mode === input.mode &&
+      prior.predecessorRunId === (input.predecessorRunId ?? null) && prior.configurationHash === configurationHash &&
+      prior.m4?.campaignId === input.campaignId && (!prior.m4 || prior.m4.policyHash === campaignLedger?.snapshot.hash);
     const prior = await runs.findOne({ _id: input.runId });
     if (prior) {
-      if (prior.bookletId === input.bookletId && prior.persona === input.persona && prior.mode === input.mode && prior.predecessorRunId === (input.predecessorRunId ?? null) && prior.configurationHash === configurationHash) return prior;
+      if (sameCreation(prior)) return prior;
       throw new ExperimentRepositoryError("conflict", "Run ID already belongs to different input.");
+    }
+    if (input.mode === "real" || input.mode === "balanced" && (!campaignLedger || !input.campaignId) || input.mode !== "balanced" && input.campaignId) {
+      throw new ExperimentRepositoryError("invalid_state", "Mode requires a ready protected campaign; Real is unavailable.");
     }
     const fixed = CASES[input.persona];
     const run: ExperimentRunDocument = { _id: input.runId, schemaVersion: "2", bookletId: input.bookletId, persona: input.persona, mode: input.mode, brief: fixed.brief, predecessorRunId: input.predecessorRunId ?? null, configurationJson, configurationHash, status: "queued", evaluationStatus: "pending", revision: 0, pauseRequested: false, activeOperationId: null, counters: { logicalText: 0, logicalImage: 0, payableText: 0, payableImage: 0, steps: 0 }, limits: { text: fixed.llmLimit, image: fixed.imageLimit, steps: 300 }, safeFailure: null, activeDelegationId: null, decisionSequence: 0, pendingDecisionJson: null, textRevisions: 0, imageRevisions: 0, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
     try {
       await withMongoTransaction(database, async (session) => {
+        if (input.mode === "balanced") {
+          await campaignLedger!.create(session, input.nowMs);
+          run.m4 = await campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs);
+        }
         if (input.predecessorRunId) {
           const predecessor = must(await runs.findOne({ _id: input.predecessorRunId }, { session }), "Predecessor run");
           if (!(["completed", "failed", "blocked"] as string[]).includes(predecessor.status)) throw new ExperimentRepositoryError("invalid_state", "Predecessor run is not terminal.");
@@ -222,7 +234,7 @@ export function createExperimentRepository(database: Database, options: { store?
     } catch (error) {
       if (isDuplicate(error)) {
         const existing = await runs.findOne({ _id: input.runId });
-        if (existing && existing.bookletId === input.bookletId && existing.persona === input.persona && existing.mode === input.mode && existing.predecessorRunId === (input.predecessorRunId ?? null) && existing.configurationHash === configurationHash) return existing;
+        if (existing && sameCreation(existing)) return existing;
         throw new ExperimentRepositoryError("conflict", "Run or booklet ID already exists.");
       }
       throw error;
@@ -393,6 +405,9 @@ export function createExperimentRepository(database: Database, options: { store?
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs != null && operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Claim parent differs from dispatch.");
+      // Public Balanced routes remain closed. Do not admit provider work until
+      // protected request preparation and attributable callback settlement land.
+      if (["balanced", "real"].includes(run.mode)) return { started: false, reason: "blocked", operation };
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
       if (operation.state !== "prepared") return { started: false, reason: "already_started", operation };
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");

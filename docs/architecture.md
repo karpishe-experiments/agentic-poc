@@ -77,8 +77,15 @@ The root responsibilities are:
 
 The Community OpenAI provider has the reviewed opt-in M4 correction installed as
 `1.0.7-dev1`; signature verification is restored. Existing workflows retain the
-original false/absent route. Balanced routing, request identity and campaign-ledger
-integration remain pending; no M4 paid execution is enabled. See the
+original false/absent route. The local M4 policy/campaign foundation adds
+`experiment_campaigns`, optional separate run policy snapshots and operation
+monetary reservations. Protected repository injection is required for new Balanced
+runs. The ledger owns persona slots, request/judge counts and integer microdollar
+reservation/settlement in caller-owned transactions. It has no public grant/budget
+API and no automatic uncertain-reservation release. The public routes and
+repository execution claims still block Balanced/Real. Request preparation,
+provider attribution, callbacks and claim integration remain pending; no M4 paid
+execution is enabled. Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 
 ## Artifact and decision flow
