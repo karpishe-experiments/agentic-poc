@@ -485,3 +485,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts)
   and [repository clock](../../../db/experiment-repository.ts).
 - **Promotion target:** Documentation for deterministic integration-test clocks.
+
+### Preserve provider evidence through workflow text processing
+
+- **Context:** A Dify LLM node returns structured creative content plus provider
+  identity and usage to an application-owned callback.
+- **Observation:** The pinned Graphon reasoning filter removes inline `<think>`
+  blocks without parsing JSON. The provider content helper also flattens refusal
+  blocks into ordinary text. A completed refusal can resemble valid JSON.
+- **Guidance:** Preserve a trusted refusal discriminator separately from content.
+  Test the actual downstream text filter. Escape angle brackets in the outer JSON
+  envelope and decode them only in the trusted parser. Do not accept content based
+  on its shape alone or treat missing usage as zero charges.
+- **Evidence:** [bounded-provider cases](dify/m4-openai-bounded-tests.py) prove the
+  pinned filter boundary, completed JSON-shaped refusal and unavailable usage
+  locally. Live installation and callback integration remain pending in [M4](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+- **Promotion target:** Documentation for external provider-result adapters.
