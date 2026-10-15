@@ -1,0 +1,68 @@
+--- a/models/llm/llm.py
++++ b/models/llm/llm.py
+@@ -16,0 +17 @@
++from . import booklet_bounded
+@@ -72,0 +74,9 @@
++        if model_parameters.get("booklet_bounded_execution") is not None and model_parameters.get("booklet_bounded_execution") is not False:
++            return booklet_bounded.generate(self, OpenAI, model, credentials, prompt_messages,
++                                            model_parameters, tools, stop, stream, user)
++        model_parameters = model_parameters.copy()
++        model_parameters.pop("booklet_bounded_execution", None)
++        model_parameters.pop("booklet_timeout_seconds", None)
++        model_parameters.pop("booklet_request_digest", None)
++        model_parameters.pop("booklet_prepared_request", None)
++        model_parameters.pop("booklet_deadline_at_ms", None)
+--- a/models/llm/gpt-6-luna.yaml
++++ b/models/llm/gpt-6-luna.yaml
+@@ -129,0 +130,24 @@
++  - name: booklet_bounded_execution
++    label: {en_US: Booklet bounded execution}
++    type: boolean
++    required: false
++    default: false
++  - name: booklet_timeout_seconds
++    label: {en_US: Booklet remaining timeout seconds}
++    type: float
++    required: false
++    min: 0.001
++    max: 120
++  - name: booklet_request_digest
++    label: {en_US: Booklet authorized request SHA-256}
++    type: string
++    required: false
++  - name: booklet_prepared_request
++    label: {en_US: Booklet exact prepared-request carrier}
++    type: boolean
++    required: false
++    default: false
++  - name: booklet_deadline_at_ms
++    label: {en_US: Booklet original operation deadline milliseconds}
++    type: float
++    required: false
+--- a/models/llm/gpt-6-sol.yaml
++++ b/models/llm/gpt-6-sol.yaml
+@@ -129,0 +130,24 @@
++  - name: booklet_bounded_execution
++    label: {en_US: Booklet bounded execution}
++    type: boolean
++    required: false
++    default: false
++  - name: booklet_timeout_seconds
++    label: {en_US: Booklet remaining timeout seconds}
++    type: float
++    required: false
++    min: 0.001
++    max: 120
++  - name: booklet_request_digest
++    label: {en_US: Booklet authorized request SHA-256}
++    type: string
++    required: false
++  - name: booklet_prepared_request
++    label: {en_US: Booklet exact prepared-request carrier}
++    type: boolean
++    required: false
++    default: false
++  - name: booklet_deadline_at_ms
++    label: {en_US: Booklet original operation deadline milliseconds}
++    type: float
++    required: false

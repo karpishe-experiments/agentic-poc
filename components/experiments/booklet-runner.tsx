@@ -20,6 +20,9 @@ type Operation = { id: string; role: string; taskId: string | null; state: strin
 type Run = {
   runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; brief?: string; status: string; revision: number; pauseRequested: boolean;
   counters: { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
+  m4Accounting?: { campaignId: string; state: "active" | "stopped" | "completed"; requests: number; maxRequests: number;
+    runRequests: number; runMaxRequests: number; reservedMicrodollars: number; settledMicrodollars: number;
+    remainingMicrodollars: number; maxMicrodollars: number; countChargeStatus: "verified" | "assumed"; invoiceCostAvailable: false };
   limits: { text: number; image: number; steps: number }; currentArtifacts?: Artifact[];
   pendingDecision?: unknown; nextNarrativeTask?: string | null; safeFailure?: string | null; activeOperationId?: string | null;
   creatorMessages?: { id: string; sequence: number; content: unknown; createdAtMs: number }[];
@@ -35,7 +38,8 @@ type Run = {
   preparation?: { identity: string; startedAtMs: number; deadlineAtMs: number; unresolved: boolean } | null;
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
-type PendingCreate = { persona: Persona; key: string; predecessorRunId?: string };
+type Mode = "simulated" | "balanced";
+type PendingCreate = { persona: Persona; mode: Mode; key: string; predecessorRunId?: string };
 class RunnerRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
 }
@@ -47,10 +51,15 @@ async function read<T>(response: Response): Promise<T> {
   return envelope.data;
 }
 const format = (value: unknown) => typeof value === "string" ? value : JSON.stringify(value, null, 2);
+const dollars = (microdollars: number) => `$${(microdollars / 1_000_000).toFixed(6)}`;
 
-export function BookletRunner({ focusedRunId }: { focusedRunId?: string } = {}) {
+export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State = "disabled" }: {
+  focusedRunId?: string; balancedEnabled?: boolean; m4State?: "disabled" | "invalid" | "ready" | "granted";
+} = {}) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [persona, setPersona] = useState<Persona>("playful_kid");
+  const [mode, setMode] = useState<Mode>("simulated");
+  const canCreateBalanced = balancedEnabled && m4State === "granted";
   const [pending, setPending] = useState<PendingCreate[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -88,6 +97,9 @@ export function BookletRunner({ focusedRunId }: { focusedRunId?: string } = {}) 
   }, [refresh, hasActiveRows]);
 
   async function create(queue: PendingCreate[]) {
+    if (queue.some((item) => item.mode === "balanced") && !canCreateBalanced) {
+      setActionError("Balanced creation requires the campaign execution grant."); return;
+    }
     setBusy(true); setActionError(null); setPending(queue);
     for (let index = 0; index < queue.length; index += 1) {
       const item = queue[index];
@@ -95,7 +107,7 @@ export function BookletRunner({ focusedRunId }: { focusedRunId?: string } = {}) 
         await read<Run>(await fetch("/api/experiments/booklet-runs", {
           method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": item.key },
           signal: AbortSignal.timeout(30_000),
-          body: JSON.stringify({ persona: item.persona, mode: "simulated", ...(item.predecessorRunId ? { predecessorRunId: item.predecessorRunId } : {}) }),
+          body: JSON.stringify({ persona: item.persona, mode: item.mode, ...(item.predecessorRunId ? { predecessorRunId: item.predecessorRunId } : {}) }),
         }));
         setPending(queue.slice(index + 1));
       } catch (caught) {
@@ -154,10 +166,15 @@ export function BookletRunner({ focusedRunId }: { focusedRunId?: string } = {}) 
   return <section className="max-w-4xl space-y-8">
     <header className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.16em] text-[var(--accent)]">Dify booklet experiment</p><h1 className="text-3xl font-semibold">Booklet runs</h1><p className="text-[var(--muted-ink)]">Inspect saved artifacts, images, approvals and advisory reports. Shorter suites stop at their slice boundary; full suites record generation and evaluation separately.</p></header>
     {focusedRunId ? <Link className="underline" href="/experiments/booklet-runs">Back to all runs</Link> : <section aria-labelledby="new-run-heading" className="space-y-3 rounded-lg border border-[var(--border)] p-5">
-      <h2 id="new-run-heading" className="text-xl font-semibold">Start simulated runs</h2>
+      <h2 id="new-run-heading" className="text-xl font-semibold">Start runs</h2>
+      <label className="block space-y-1"><span>Mode</span><select aria-label="Mode" className="rounded border border-[var(--border)] p-2" value={mode} onChange={(event) => {
+        if (event.target.value === "simulated" || event.target.value === "balanced" && canCreateBalanced) setMode(event.target.value);
+      }}><option value="simulated">Simulated</option><option value="balanced" disabled={!canCreateBalanced}>Balanced</option><option value="real" disabled>Real (unavailable)</option></select></label>
       <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-      <p className="text-sm text-[var(--muted-ink)]">Balanced and Real modes are unavailable.</p>
-      <div className="flex flex-wrap gap-2"><button disabled={busy || pending !== null} onClick={() => void create([{ persona, key: crypto.randomUUID() }])}>Start selected</button><button disabled={busy || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, key: crypto.randomUUID() })))}>Start all three</button>{pending?.length ? <button disabled={busy} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
+      <p className="text-sm text-[var(--muted-ink)]">{canCreateBalanced ? "Balanced uses real text models and simulated images. Start one persona at a time: Kid, Parent, then Creator. Real mode is unavailable." :
+        m4State === "ready" ? "Balanced is ready but awaits the campaign execution grant. Real mode is unavailable." :
+          m4State === "invalid" ? "Balanced setup needs attention before creation. Real mode is unavailable." : "Balanced and Real modes are unavailable."}</p>
+      <div className="flex flex-wrap gap-2"><button disabled={busy || pending !== null || mode === "balanced" && !canCreateBalanced} onClick={() => void create([{ persona, mode, key: crypto.randomUUID() }])}>Start selected</button>{mode === "simulated" ? <button disabled={busy || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, mode: "simulated", key: crypto.randomUUID() })))}>Start all three</button> : null}{pending?.length ? <button disabled={busy || pending.some((item) => item.mode === "balanced") && !canCreateBalanced} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
     </section>}
     <button onClick={() => void refresh()}>Refresh</button>
     {actionError ? <p role="alert" className="rounded border border-red-500 p-3">{actionError}</p> : null}
@@ -180,8 +197,14 @@ export function BookletRunner({ focusedRunId }: { focusedRunId?: string } = {}) 
           <pre className="overflow-auto whitespace-pre-wrap text-sm">{format(entry.report)}</pre>
         </details>)}</section> : null}
       {run.predecessorRunId ? <p className="break-all text-xs">Predecessor run: {run.predecessorRunId}</p> : null}
-      {!focusedRunId && run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={busy || pending !== null} onClick={() => void create([{ persona: run.persona, key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
+      {!focusedRunId && run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={busy || pending !== null} onClick={() => void create([{ persona: run.persona, mode: "simulated", key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
       <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · Image calls {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>
+      {run.m4Accounting ? <section aria-label="Balanced campaign accounting" className="space-y-1 text-sm">
+        <p className="break-all">Campaign {run.m4Accounting.campaignId} · {run.m4Accounting.state}</p>
+        <p>Campaign requests {run.m4Accounting.requests}/{run.m4Accounting.maxRequests} · Run requests {run.m4Accounting.runRequests}/{run.m4Accounting.runMaxRequests}</p>
+        <p>Reserved {dollars(run.m4Accounting.reservedMicrodollars)} · Settled upper bound {dollars(run.m4Accounting.settledMicrodollars)} · Remaining {dollars(run.m4Accounting.remainingMicrodollars)} of {dollars(run.m4Accounting.maxMicrodollars)}</p>
+        <p>Count charge: {run.m4Accounting.countChargeStatus === "assumed" ? "assumed; allowance retained" : "verified ceiling"}. Invoice cost unavailable.</p>
+      </section> : null}
       {run.activeOperationId ? <p className="break-all text-sm">Active operation: {run.operationHistory?.find((operation) => operation.id === run.activeOperationId)?.role ?? "unknown"} {run.operationHistory?.find((operation) => operation.id === run.activeOperationId)?.taskId ?? ""} ({run.activeOperationId})</p> : null}
       {run.preparation ? <section aria-label="Active preparation"><p>Preparation {run.preparation.identity} · Deadline {new Date(run.preparation.deadlineAtMs).toISOString()}{run.preparation.unresolved ? " · Outcome unresolved" : ""}</p><button disabled={busy} onClick={() => void inspectOperation(run, run.preparation!.identity, "inspect", true)}>Inspect preparation</button><button disabled={busy} onClick={() => void inspectOperation(run, run.preparation!.identity, "stop", true)}>Stop preparation</button></section> : null}
       {run.activeDelegation ? <p className="text-sm">Active tester grant: {run.activeDelegation.taskIds.join(", ")} for {run.activeDelegation.subjectKind} {run.activeDelegation.subjectId}</p> : null}
@@ -193,7 +216,7 @@ export function BookletRunner({ focusedRunId }: { focusedRunId?: string } = {}) 
         <p>Elapsed: {operation.elapsedMs == null ? "unavailable" : `${Math.floor(operation.elapsedMs / 1000)}s`} · Remote status: {operation.remoteStatus ?? "not verified"}</p>
         <button disabled={busy} onClick={() => void inspectOperation(run, operation.id, "inspect")}>Inspect/reconcile</button>{run.activeOperationId === operation.id ? <button disabled={busy} onClick={() => void inspectOperation(run, operation.id, "stop")}>Stop operation</button> : null}
       </li>)}</ol></details> : null}
-      <div className="space-y-3">{run.currentArtifacts?.map((artifact) => <section key={artifact.id} className="rounded border border-[var(--border)] p-3"><h4 className="font-semibold">{artifact.taskId} · {artifact.state}</h4>{artifact.versions.map((version) => <details key={version.id} open={version.id === artifact.currentVersionId}><summary>Version {version.number} · {version.approval ? `Approved (${version.approval.origin})` : "Needs review"}</summary><p className="break-all text-xs">Version ID: {version.id}</p>{version.dependencyVersionIds.length ? <p className="break-all text-xs">Sources: {version.dependencyVersionIds.join(", ")}</p> : null}<SavedArtifactImages taskId={artifact.taskId} content={version.content} simulated={run.mode === "simulated"} /><pre className="overflow-auto whitespace-pre-wrap text-sm">{format(version.content)}</pre>{version.warnings.length ? <ul className="list-disc pl-5">{version.warnings.map((warning, index) => <li key={`${warning.field}-${index}`}>{warning.field}: {warning.message}</li>)}</ul> : null}</details>)}</section>)}</div>
+      <div className="space-y-3">{run.currentArtifacts?.map((artifact) => <section key={artifact.id} className="rounded border border-[var(--border)] p-3"><h4 className="font-semibold">{artifact.taskId} · {artifact.state}</h4>{artifact.versions.map((version) => <details key={version.id} open={version.id === artifact.currentVersionId}><summary>Version {version.number} · {version.approval ? `Approved (${version.approval.origin})` : "Needs review"}</summary><p className="break-all text-xs">Version ID: {version.id}</p>{version.dependencyVersionIds.length ? <p className="break-all text-xs">Sources: {version.dependencyVersionIds.join(", ")}</p> : null}<SavedArtifactImages taskId={artifact.taskId} content={version.content} simulated={run.mode === "simulated" || run.mode === "balanced"} /><pre className="overflow-auto whitespace-pre-wrap text-sm">{format(version.content)}</pre>{version.warnings.length ? <ul className="list-disc pl-5">{version.warnings.map((warning, index) => <li key={`${warning.field}-${index}`}>{warning.field}: {warning.message}</li>)}</ul> : null}</details>)}</section>)}</div>
     </article>)}</section>
     {!focusedRunId ? <nav aria-label="Run pages"><button disabled={page === 0 || busy} onClick={() => setPage(value => value - 1)}>Previous page</button><span> Page {page + 1} </span><button disabled={!hasMore || busy} onClick={() => setPage(value => value + 1)}>Next page</button></nav> : null}
   </section>;

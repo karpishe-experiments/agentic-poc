@@ -85,6 +85,40 @@ The root responsibilities are:
 | Image pipeline | `lib/images/`, `lib/composition/` | Provider seam, prompt serialization, image calls, and geometry-only normalization. |
 | Persistence | `db/` | Official MongoDB driver, typed repositories, indexes, initialization, and verification. |
 
+The Community OpenAI provider has the reviewed opt-in M4 correction installed as
+`1.0.7-dev2`; signature verification is restored. The eighteen Booklet graphs
+are published with the bounded opt-in branch; other workflows retain their
+existing provider route. The local M4 policy/campaign foundation adds
+`experiment_campaigns`, optional separate run policy snapshots and operation
+monetary reservations. Protected repository injection is required for new Balanced
+runs. The ledger owns persona slots, request/judge counts and integer microdollar
+reservation/settlement in caller-owned transactions. It has no public grant/budget
+API and no automatic uncertain-reservation release. The checked-in non-secret
+campaign manifest records the eighteen verified publications as ready, without
+execution authority. Only a reviewed staging manifest with an
+explicit grant enables Balanced creation and dispatch; Real remains blocked.
+A protected text preparation path
+now saves the exact role request before dispatch, rechecks source/approval and
+publication identities, and reserves operation/run/campaign allowances atomically
+at claim. Preparation grants no execution permission. Duplicate claims admit one
+action. Trusted output assembly supplies approved identity/hash/fact fields rather
+than asking a model to reproduce them. The request bundle has canonical Python/Node
+byte parity; the local provider pins the global endpoint. Assumed token-count
+charges remain reserved after model usage settlement and are not reported as
+verified invoice charges. Authenticated original Dify GET results retain provider
+content and usage before parsing or materialization. Result/failure callbacks only
+request observation for Balanced text. Terminal exit checks reconcile run counters
+and campaign totals with every attributable reservation. Report cost snapshots
+include their own request and remain fixed after later work. Balanced images use
+the existing simulated bytes, approval, source, upload and assembly boundaries.
+The UI and CLI retain Simulated defaults and expose grant-gated Balanced controls.
+The candidate provider transports the exact prepared request in a plain text
+carrier, then unwraps it before OpenAI; static role/model limits and original
+deadlines remain enforced. The provider and graphs are installed/published;
+Booklet staging delivery and rebinding remain pending. No M4 paid execution is enabled.
+Historical run configuration hashes remain unchanged. See the
+[M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+
 ## Artifact and decision flow
 
 ### Issue #65 local foundation

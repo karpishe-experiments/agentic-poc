@@ -84,6 +84,13 @@ Preparation scripts retain DPAPI-encrypted files under
 `issue65-m3-j13-bindings.dpapi.xml` and `issue65-m3-j13-settings.dpapi.xml`;
 earlier M1/M2/M3/J12 files may retain previous keys. DPAPI copies depend on the
 Windows user/machine context; do not treat them as portable recovery copies.
+The approved M4 graph publication also retains private before/reviewed DSL files
+under `issue65-m4-before-publication-20261015` in this protected directory. These
+files contain existing Dify `BOOKLET_TOOL_KEY` variables so CLI import preserves
+them; they do not contain the OpenAI provider key. The local operator owns these
+conditional publication/recovery copies. Do not print, commit or upload them to
+GitHub. Retain them privately for publication verification/recovery; any later
+removal follows the normal explicit deletion policy.
 The local Windows operator owns conditional preparation checkpoints
 `issue65-m3-j12-bindings.partial.dpapi.xml` and
 `issue65-m3-j13-bindings.partial.dpapi.xml` in that same protected directory.
@@ -159,7 +166,7 @@ Source: [installer](../../scripts/deploy/vps-deployment.sh) and
 | Credential | Variable / identifier | Storage | Consumer and purpose |
 | --- | --- | --- | --- |
 | Human Dify account passwords | No Booklet variable | Dify account store; private user custody | Workspace owner/developer login and administration; distinct accounts |
-| Dify model/image provider keys | Provider-specific Dify binding fields; no runner variable | Private Dify workspace provider bindings | Real model/image calls; current model-free Simulated graphs do not need paid-provider calls |
+| Dify model/image provider keys | Provider-specific Dify binding fields; no runner variable | Private Dify workspace provider bindings | Real model/image calls; Simulated execution does not call a paid provider. Installed OpenAI dev2 and eighteen published Booklet graphs conditionally reuse the same Dify-held key for input counting and Responses; Booklet requires a separate paid grant. Other workflows retain existing routes. Count permission/billing and paid readiness are unverified. No new provider secret name, storage or transfer copy |
 | MCP device tokens and console cookies | `__Host-access_token`, `__Host-refresh_token`, `__Host-csrf_token`; `DIFYWF_HOME` identifies the store, not a secret | Plaintext `hosts.json` protected by Windows ACLs under `%LOCALAPPDATA%\DifyWf-Community-Codex`; Cloud uses separate `%LOCALAPPDATA%\DifyWf-Codex` | Local-stdio MCP administration; credential file ACL must limit access to the user, SYSTEM and Administrators |
 | Official CLI session tokens | Separate Community/Cloud `difyctl` profiles; no Booklet variable | CLI-managed local credential state; exact file path must be checked for the installed CLI | CLI fallback administration; CLI login does not authenticate MCP |
 | Dedicated Dify backup R2 credentials and restic password | Names/provision path not yet established | Intended root-owned host files and independent password-manager recovery copies | Deferred, not active: Dify backup setup and restore/upgrade rehearsal remain incomplete |

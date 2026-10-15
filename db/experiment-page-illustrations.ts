@@ -1,3 +1,4 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -69,9 +70,9 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         $or: [{ role: "tester" }, { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId,
           providerKind: "text", workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null } }],
-        state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
-    if (run.mode !== "simulated" || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
-      invalid("Page illustration assembly requires idle simulated work.");
+        mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
+    if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
+      invalid("Page illustration assembly requires idle work with a simulated image policy.");
     }
     if (!configuredPageIllustrationTask(run.configurationJson)) invalid("Page illustration is not enabled by this saved run configuration.");
     const configuration = savedConfigurationSchema.parse(json(run.configurationJson, "Saved run configuration is malformed."));
@@ -80,13 +81,13 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     const sources = await verifyCurrentPageIllustrationSources(database, session, run, value.pageId, store, { attempt });
     const operation = snapshot ? snapshot.operations.find((item) => item._id === value.imageOperationId) : await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J13" ||
-      operation.subjectKind !== "page" || operation.subjectId !== value.pageId || operation.mode !== "simulated" || operation.state !== "succeeded" ||
+      operation.subjectKind !== "page" || operation.subjectId !== value.pageId || operation.mode !== run.mode || operation.state !== "succeeded" ||
       operation.reservationCount !== 1 || !operation.workflowRunId || !operation.verifiedWorkflowId || !operation.parentWorkflowRunId || operation.imageCompletionClaim) {
       invalid("Page illustration operation is not a completed authorized J13 image.");
     }
-    const manager = snapshot ? snapshot.operations.find((item) => item.role === "manager" && item.taskId === null && item.mode === "simulated" && item.reservationCount === 1 &&
+    const manager = snapshot ? snapshot.operations.find((item) => item.role === "manager" && item.taskId === null && item.mode === run.mode && item.reservationCount === 1 &&
       item.subjectKind === "book" && item.subjectId === run.bookletId && item.providerKind === "text" && item.workflowRunId === operation.parentWorkflowRunId &&
-      item.state === "succeeded" && item.verifiedWorkflowId != null) : await database.collections.experiment_operations.findOne({ runId: run._id, role: "manager", taskId: null, mode: "simulated", reservationCount: 1,
+      item.state === "succeeded" && item.verifiedWorkflowId != null) : await database.collections.experiment_operations.findOne({ runId: run._id, role: "manager", taskId: null, mode: run.mode, reservationCount: 1,
       subjectKind: "book", subjectId: run.bookletId, providerKind: "text", workflowRunId: operation.parentWorkflowRunId,
       state: "succeeded", verifiedWorkflowId: { $ne: null } }, options);
     if (!manager) invalid("Page illustration operation has no verified manager parent.");

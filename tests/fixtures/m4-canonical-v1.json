@@ -1,0 +1,71 @@
+[
+  {
+    "input": null,
+    "canonical": "null",
+    "digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+  },
+  {
+    "input": true,
+    "canonical": "true",
+    "digest": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+  },
+  {
+    "input": false,
+    "canonical": "false",
+    "digest": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+  },
+  {
+    "input": 0,
+    "canonical": "0",
+    "digest": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+  },
+  {
+    "input": 9007199254740991,
+    "canonical": "9007199254740991",
+    "digest": "f40b423c2dd95ff2b2f027e22208f438cf7242862e5e746860e697308c9add26"
+  },
+  {
+    "input": {
+      "2": "second",
+      "10": "tenth",
+      "a": "first"
+    },
+    "canonical": "{\"10\":\"tenth\",\"2\":\"second\",\"a\":\"first\"}",
+    "digest": "bd76753b173dd67750d2e3fd357c337126c882ff77ba4fc2983687644ba7d33a"
+  },
+  {
+    "input": {
+      "": "BMP",
+      "🧪": "supplementary",
+      "a": [
+        "هواپیما 🪁",
+        "<think>literal</think>",
+        "\b\f\n\r\t\u0001\"\\/"
+      ]
+    },
+    "canonical": "{\"a\":[\"هواپیما 🪁\",\"<think>literal</think>\",\"\\b\\f\\n\\r\\t\\u0001\\\"\\\\/\"],\"\":\"BMP\",\"🧪\":\"supplementary\"}",
+    "digest": "ad09ffd4fd6d612476f86421deedce779b78187671170beda2fb482c290d94b7"
+  },
+  {
+    "input": {
+      "schema": {
+        "properties": {
+          "alpha": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "beta": {
+            "enum": [
+              "é",
+              "é",
+              " ",
+              " "
+            ]
+          }
+        }
+      }
+    },
+    "canonical": "{\"schema\":{\"properties\":{\"alpha\":{\"minimum\":0,\"type\":\"integer\"},\"beta\":{\"enum\":[\"é\",\"é\",\" \",\" \"]}}}}",
+    "digest": "9a0d57ea8573621510b14b9d75c5f24ed07a2fecd7bfebbdfd13ff994bd9bbb7"
+  }
+]

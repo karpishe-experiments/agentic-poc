@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
-import type { ApprovalDocument, ArtifactDocument, ArtifactVersionDocument, ExperimentRunDocument } from "@/db/documents";
+import type { ApprovalDocument, ArtifactDocument, ArtifactVersionDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
@@ -20,8 +21,11 @@ import { experimentPageBatchSchema, type ExperimentPageBatch } from "@/lib/contr
 import type { ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { CASES } from "@/lib/contracts/experiment-runner";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
+const preparationIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, nowMs: z.number().int().nonnegative() });
 type NextTask = ExperimentTask | "style_samples" | "sheet_image" | "tester" | "slice_complete" | null;
 function parseJson(value: string | null): unknown { return value === null ? null : JSON.parse(value) as unknown; }
 function deny(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
@@ -239,7 +243,7 @@ export function createExperimentContextService(database: Database, options: { st
     const operationRows = projection === "inspection" ? await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray()
       : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
     let pageSelection = null;
-    if (configuredPageIllustrationTask(run.configurationJson) && run.mode === "simulated" &&
+    if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasM4SimulatedImagePolicy(run)) &&
         run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
         run.generationCompletedAtMs == null && !pageBatch) {
       const readiness = pageBibleWork(run, currentArtifacts);
@@ -258,8 +262,21 @@ export function createExperimentContextService(database: Database, options: { st
           configurationHash: run.configurationHash, layoutVersionId: layoutVersion.id, pages };
       }
     }
+    const m4Accounting = projection === "inspection" && hasM4SimulatedImagePolicy(run) && run.m4 ? await (async () => {
+      const { policy, hash } = m4PolicySnapshot(JSON.parse(run.m4!.policyJson));
+      const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.m4!.campaignId }, { projection: {
+        _id: 1, policyHash: 1, state: 1, requests: 1, requestCounts: 1, reservedMicrodollars: 1, settledMicrodollars: 1,
+      } });
+      if (!campaign || campaign.policyHash !== hash) return null;
+      return { campaignId: campaign._id, state: campaign.state, requests: campaign.requests, maxRequests: policy.maxRequests,
+        runRequests: campaign.requestCounts[run.persona], runMaxRequests: CASES[run.persona].llmLimit,
+        reservedMicrodollars: campaign.reservedMicrodollars, settledMicrodollars: campaign.settledMicrodollars,
+        remainingMicrodollars: Math.max(0, policy.maxMicrodollars - campaign.reservedMicrodollars - campaign.settledMicrodollars),
+        maxMicrodollars: policy.maxMicrodollars, countChargeStatus: policy.countChargeStatus, invoiceCostAvailable: false as const };
+    })() : null;
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
+      ...(run.mode === "balanced" && projection === "inspection" ? { m4Accounting } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
       generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
@@ -326,15 +343,42 @@ export function createExperimentContextService(database: Database, options: { st
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     if (operation.role === "image") {
+      if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run))) deny("Image context requires its retained simulated image policy.");
       // Only the authorize handler passes fresh evidence returned by its claim.
       // Standalone context requests perform a new current-source check.
       if (claimedImageRequest && (imageRequestFingerprint(claimedImageRequest) !== operation.inputFingerprint ||
           JSON.stringify(claimedImageRequest.sourceVersionIds) !== JSON.stringify(operation.dependencyVersionIds))) deny("Claimed image request differs from saved identity.");
       const imageRequest = claimedImageRequest ?? await createExperimentImageRepository(database, options)
         .authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
-      return { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest,
+      const imageContext = { role: "image" as const, mode: run.mode, inputFingerprint: operation.inputFingerprint, imageRequest,
+        ...(run.mode === "balanced" ? { imageProvider: "simulated" as const } : {}),
         ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId) } : {}) };
+      // Preserve the optional absent text fields in the existing inferred union.
+      return imageContext as typeof imageContext & {
+        [K in Exclude<keyof Awaited<ReturnType<typeof getTextRoleContext>>, keyof typeof imageContext>]?: never;
+      };
     }
+    return getTextRoleContext(run, operation);
+  }
+
+  // Internal projection only: no claim, reservation or permission to execute.
+  // The preparation owner must recheck source/currentness when attaching it.
+  async function getPreparationContext(raw: unknown) {
+    const identity = preparationIdentity.parse(raw);
+    const run = await runs.findOne({ _id: identity.runId });
+    const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
+    if (!run || !operation || run.mode !== "balanced" || !run.m4 || operation.mode !== "balanced" ||
+        run.activeOperationId !== operation._id || run.pauseRequested || !["queued", "running"].includes(run.status) ||
+        operation.state !== "prepared" || operation.providerKind !== "text" || operation.role === "image" ||
+        operation.reservationCount !== 0 || operation.lifecycle?.stop != null || operation.m4Reservation != null || operation.dispatchStartedAtMs != null ||
+        operation.workflowRunId !== null || operation.deadlineAtMs == null || operation.deadlineAtMs <= identity.nowMs) {
+      deny("Operation is not eligible for internal request preparation.");
+    }
+    return getTextRoleContext(run, operation, identity.nowMs);
+  }
+
+  async function getTextRoleContext(run: ExperimentRunDocument, operation: ExperimentOperationDocument, preparationNowMs?: number) {
+    const identity = { runId: run._id, operationId: operation._id };
     const report = (operation.role === "judge" || operation.role === "tester") && run.generationCompletedAtMs != null;
     const view = await measurePhase(identity, "role_context", () => getRunView(run._id, report ? "inspection" : "role"));
     if (!view) deny("Run view is unavailable.");
@@ -344,18 +388,20 @@ export function createExperimentContextService(database: Database, options: { st
         chooseNext({ ...run, activeOperationId: null, pauseRequested: false,
           status: run.status === "paused" || run.status === "blocked" && run.safeFailure === "unknown_outcome" ? "running" : run.status },
         view.currentArtifacts, view.pageBatch) === "slice_complete") {
-      // Context is needed inside execution, before runtime readback can verify
-      // publication. Report materialization still uses the strict completion phase.
+      // Preparation reads the same durable generation evidence without a claim.
+      // Execution context and materialization retain their separate claim gates.
       const generation = await withMongoTransaction(database, (session) =>
-        verifyExperimentGeneration(database, session, run, (options.store ?? createAssetStore)(), operation._id, "context"));
+        verifyExperimentGeneration(database, session, run, (options.store ?? createAssetStore)(), operation._id,
+          preparationNowMs == null ? "context" : "preparation", preparationNowMs));
       return { role: operation.role as "tester" | "judge", bookletId: view.bookletId, brief: view.brief, persona: view.persona,
         currentArtifacts: view.currentArtifacts, creatorMessages: view.creatorMessages, operationHistory: view.operationHistory,
         counters: view.counters, limits: view.limits, warnings: generation.warnings,
         imageEvidence: { finalPages: generation.finalPages, referenceAssetIds: generation.referenceAssetIds },
-        reportEvidence: { role: operation.role as "tester" | "judge", mode: "simulated" as const, runId: run._id,
+        reportEvidence: { role: operation.role as "tester" | "judge", mode: run.mode, runId: run._id,
           configurationHash: generation.configurationHash, versionIds: generation.artifacts.map((artifact) => artifact.versionId),
           warningCount: generation.warnings.reduce((count, entry) => count + (Array.isArray(entry.warnings) ? entry.warnings.length : 0), 0) } };
     }
+    if (report && preparationNowMs != null) deny("Report preparation requires complete current generation evidence.");
     if (operation.role === "manager") {
       const eligibleRoute = chooseNext({ ...run, activeOperationId: null, pauseRequested: false, status: run.status === "paused" ? "running" : run.status }, view.currentArtifacts, view.pageBatch);
       const pending = view.pendingDecision as { kind?: string; subjectKind?: string; subjectId?: string; taskId?: string } | null;
@@ -393,5 +439,5 @@ export function createExperimentContextService(database: Database, options: { st
   }
 
   const getExecutionView = (runId: string) => measurePhase({ runId }, "execution_view", () => getRunView(runId, "execution"));
-  return { getRunView, getExecutionView, getOperationContext };
+  return { getRunView, getExecutionView, getOperationContext, getPreparationContext };
 }

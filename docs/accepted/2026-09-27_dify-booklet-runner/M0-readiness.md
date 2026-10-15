@@ -550,13 +550,23 @@ Complete the roadmap access matrix with dates/results, including these decisions
 ## Provider readiness before M4/M5
 
 Record actual provider/model IDs from existing bindings, output-token parameter,
-token ceiling, timeouts, retry behavior and image-reference support. Defaults to
-verify: manager/tester 2,048 output tokens; specialists/judge 8,192; at most 32,000
-input text tokens after explicit context selection; no silent truncation of exact
+token ceiling, timeouts, retry behavior and image-reference support. Selected M4
+bounds to verify: manager/tester decisions 2,048 output tokens; specialists and
+final tester/judge reports 8,192, including reasoning; at most 32,000 total
+input tokens after explicit context selection; no silent truncation of exact
 lettering or required references. If the binding cannot enforce a bound, select
 a verified bounded invocation before paid execution, with any model change approved.
 
-Image target remains `gpt-image-2`, medium, one PNG, 1536×1536. The existing
+The selected M4 text models, token/cost limits and exact verification gaps are in
+the [M4 implementation contract](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13).
+The 2026-10-04 empty-provider inventory above is historical: Community metadata on
+2026-10-13 lists the installed OpenAI provider and active Luna/Sol models. This
+does not prove paid execution or zero retries.
+
+The user selected `gpt-image-2.5-sunburst` for M5. The previous Image 2 settings
+(medium, one PNG, 1536×1536) are historical, not verified Sunburst settings.
+Verify quality, dimensions, output format/count and ordered reference support
+against the selected model and actual Dify integration before M5 execution. The existing
 illustrator metadata explicitly reports hidden plugin retries; do not reuse it
 as proof of one-request accounting. Inspect the pinned plugin. Prefer a verified
 zero-retry binding; if unavailable, plan a direct Dify HTTP request with retries
@@ -567,7 +577,7 @@ fixture before paid use. Do not silently add a custom plugin or swap image model
 Official references establish possible interfaces, not workspace readiness:
 [Dify HTTP node](https://docs.dify.ai/en/cloud/use-dify/nodes/http-request),
 [LLM node](https://docs.dify.ai/en/cloud/use-dify/nodes/llm),
-[GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2).
+[GPT Image 2.5 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst).
 
 ## Deliverables and exit
 

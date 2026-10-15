@@ -18,6 +18,63 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("shows retained Balanced allowance separately from invoice cost", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, mode: "balanced", m4Accounting: {
+      campaignId: "campaign-safe-id", state: "active", requests: 7, maxRequests: 500, runRequests: 7, runMaxRequests: 120,
+      reservedMicrodollars: 6300, settledMicrodollars: 1000, remainingMicrodollars: 4992700, maxMicrodollars: 5000000,
+      countChargeStatus: "assumed", invoiceCostAvailable: false,
+    } }] })));
+    render(<BookletRunner />);
+    const accounting = await screen.findByRole("region", { name: "Balanced campaign accounting" });
+    expect(accounting.textContent).toContain("Campaign requests 7/500");
+    expect(accounting.textContent).toContain("Run requests 7/120");
+    expect(accounting.textContent).toContain("Reserved $0.006300");
+    expect(accounting.textContent).toContain("Settled upper bound $0.001000");
+    expect(accounting.textContent).toContain("Remaining $4.992700 of $5.000000");
+    expect(accounting.textContent).toContain("assumed; allowance retained");
+    expect(accounting.textContent).toContain("Invoice cost unavailable");
+  });
+  it.each(["disabled", "invalid", "ready"] as const)("keeps Balanced creation closed when readiness is %s", async (m4State) => {
+    render(<BookletRunner balancedEnabled={false} m4State={m4State} />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    expect((screen.getByRole("combobox", { name: "Mode" }) as HTMLSelectElement).value).toBe("simulated");
+    expect((screen.getByRole("option", { name: /^Balanced$/ }) as HTMLOptionElement).disabled).toBe(true);
+    expect((screen.getByRole("option", { name: "Real (unavailable)" }) as HTMLOptionElement).disabled).toBe(true);
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "balanced" } });
+    expect((screen.getByRole("combobox", { name: "Mode" }) as HTMLSelectElement).value).toBe("simulated");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(0);
+  });
+  it("retains the selected Balanced mode and key for explicit retry and hides bulk creation", async () => {
+    fetchMock.mockImplementation(async (_url, options) => options?.method === "POST" ? Promise.reject(new Error("lost")) :
+      new Response(JSON.stringify({ data: [] })));
+    const view = render(<BookletRunner balancedEnabled m4State="granted" />);
+    await screen.findByText("No runs yet.");
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "balanced" } });
+    expect(screen.queryByRole("button", { name: "Start all three" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
+    await screen.findByRole("alert");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "simulated" } });
+    view.rerender(<BookletRunner m4State="ready" />);
+    expect((screen.getByRole("button", { name: "Retry pending creation" }) as HTMLButtonElement).disabled).toBe(true);
+    view.rerender(<BookletRunner balancedEnabled m4State="granted" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry pending creation" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(2));
+    const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
+    for (const [, options] of writes) {
+      expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "balanced" });
+      expect(new Headers(options?.headers).get("Idempotency-Key")).toBe("00000000-0000-4000-8000-000000000010");
+    }
+  });
+  it("labels saved Balanced images simulated and offers no linked successor", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, mode: "balanced", status: "blocked", activeOperationId: null,
+      currentArtifacts: [{ ...run.currentArtifacts[0], taskId: "J13", versions: [{ ...run.currentArtifacts[0].versions[0],
+        content: { pageIndex: 0, assetId: "00000000-0000-4000-8000-000000000020" } }] }] }] })));
+    render(<BookletRunner />);
+    expect(await screen.findByText(/Cover image.*Simulated fixture/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Start linked successor" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(0);
+  });
   it("polls unresolved blocked summaries and stops after terminal recovery", async () => {
     vi.useFakeTimers();
     let active = true;

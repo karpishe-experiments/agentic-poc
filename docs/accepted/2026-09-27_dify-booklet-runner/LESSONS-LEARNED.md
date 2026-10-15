@@ -485,3 +485,67 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [finalization tests](../../../tests/integration/experiment-runner-finalization.test.ts)
   and [repository clock](../../../db/experiment-repository.ts).
 - **Promotion target:** Documentation for deterministic integration-test clocks.
+
+### Preserve provider evidence through workflow text processing
+
+- **Context:** A Dify LLM node returns structured creative content plus provider
+  identity and usage to an application-owned callback.
+- **Observation:** The pinned Graphon reasoning filter removes inline `<think>`
+  blocks without parsing JSON. The provider content helper also flattens refusal
+  blocks into ordinary text. A completed refusal can resemble valid JSON.
+- **Guidance:** Preserve a trusted refusal discriminator separately from content.
+  Test the actual downstream text filter. Escape angle brackets in the outer JSON
+  envelope and decode them only in the trusted parser. Do not accept content based
+  on its shape alone or treat missing usage as zero charges.
+- **Evidence:** [bounded-provider cases](dify/m4-openai-bounded-tests.py) prove the
+  pinned filter boundary, completed JSON-shaped refusal and unavailable usage
+  locally. Installation is verified; callback integration remains pending in [M4](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+- **Promotion target:** Documentation for external provider-result adapters.
+
+### Validate package versions at every consuming boundary
+
+- **Context:** A locally corrected Dify provider package crosses the daemon decoder
+  and the Dify API response model before installation.
+- **Observation:** The daemon accepted `1.0.7-m4r1`; the API's packaging-version
+  validator rejected it and returned a generic response-parse error. The corrected
+  `1.0.7-dev1` version passed both validators and reached successful installation.
+- **Guidance:** Test the receiving API validator as well as the package decoder.
+  Keep failed uploads and inspect current installation state before a correction;
+  an API parse failure does not prove the daemon stored nothing.
+- **Evidence:** [pinned-validator regression](dify/m4-openai-bounded-tests.py) and
+  [verified delivery](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
+- **Promotion target:** Documentation for versioned external integration packages.
+
+### Verify request carriers at each workflow boundary
+
+- **Context:** A workflow transports an application-prepared Responses request
+  through a model node without changing its prompts or strict output schema.
+- **Observation:** Graphon 0.7.0 limits variable model-parameter strings to 1,024
+  characters. Its plain message template can carry longer strings. The Code node
+  also limits arrays, while the HTTP node limits the whole escaped response to
+  1 MiB. Testing only the unescaped inner request misses that final constraint.
+- **Guidance:** Carry exact prepared bytes through a verified plain-message path,
+  check the digest before provider execution, and bound the serialized response
+  before reserving money. Keep static model/token limits independent of the
+  carrier. Reject overflow visibly instead of truncating required content.
+- **Evidence:** [graph tests](../../../tests/unit/experiment-m4-workflow-graph.test.ts),
+  [pinned Graphon rehearsal](../../../tests/helpers/m4-graphon-rehearsal.py) and
+  [HTTP cases](../../../tests/integration/experiment-m4-http.test.ts) verify the
+  source/local boundary with fake providers. Live delivery remains pending.
+- **Promotion target:** Documentation for externally hosted workflow adapters.
+
+### Separate terminal notification from authoritative provider output
+
+- **Context:** Streaming notifications and callbacks can arrive before original
+  saved workflow output is available or after an application deadline.
+- **Observation:** The Balanced observer saves original authenticated GET content
+  and attributable usage before parsing creative output. Malformed output can
+  still consume money. Duplicate notification cannot authorize another request.
+- **Guidance:** Let notifications request observation. Retain maximum liability
+  for unknown usage, stop new campaign work on technical failure, and preserve
+  late-result inspection without automatic replay. Reconcile exit counters with
+  all reservations rather than trusting a successful creative result alone.
+- **Evidence:** [provider-result tests](../../../tests/integration/experiment-m4-provider-results.test.ts),
+  [accounting tests](../../../tests/integration/experiment-m4-accounting.test.ts) and
+  [dispatch tests](../../../tests/integration/experiment-m4-dispatch.test.ts).
+- **Promotion target:** Documentation for bounded paid-provider execution.

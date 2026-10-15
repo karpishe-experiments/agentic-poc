@@ -7,6 +7,8 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import type { BookletBinding } from "@/lib/experiment-runner/config";
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
+import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 const { verifySources } = vi.hoisted(() => ({ verifySources: vi.fn() }));
 vi.mock("@/db/experiment-pages", () => ({ verifyCurrentPageIllustrationSources: verifySources }));
@@ -51,6 +53,22 @@ async function setup(count = 2) {
 }
 
 describe("J13 durable reference upload preparation", () => {
+  it("preserves three-reference ordering and uncertain upload history under a retained Balanced simulated-image policy", async () => {
+    const env = await setup(3);
+    const policy = m4TestPolicy();
+    await retainM4ImageTestPolicy(env.database, env.runId, policy);
+    const image = policy.publications.find((item) => item.role === "image")!;
+    const binding: BookletBinding = { ...image, role: "image", taskId: null, persona: null, apiKey: "fake-key", finalPageIllustration: true };
+    const original = env.upload.getMockImplementation()!;
+    env.upload.mockImplementation(async (...args) => env.upload.mock.calls.length === 3 ? { kind: "unknown" } : original(...args));
+    expect(await env.service.prepare(env.input, binding)).toEqual({ kind: "unknown" });
+    expect(env.upload.mock.calls.map((call) => [...call[2]])).toEqual([[1], [2], [3]]);
+    expect(await env.service.prepare(env.input, binding)).toEqual({ kind: "unknown" });
+    expect(env.upload).toHaveBeenCalledTimes(3);
+    const operation = await env.database.collections.experiment_operations.findOne({ _id: env.operationId });
+    expect(JSON.parse(operation!.referenceUploadJournalJson!).map((item: { state: string }) => item.state)).toEqual(["uploaded", "uploaded", "unknown"]);
+    expect(operation!.reservationCount).toBe(0);
+  });
   it("persists each marker before POST, keeps selected order, and reuses completed acknowledgements", async () => {
     const env = await setup();
     const original = env.upload.getMockImplementation()!;

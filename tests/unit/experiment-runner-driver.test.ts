@@ -8,6 +8,51 @@ const projection = { runId: id, bookletId: id, persona: "playful_kid", mode: "si
 const create = parseRunnerOptions(["--action", "create", "--origin", origin, "--persona", "playful_kid", "--request-id", id, "--apply"]);
 
 describe("application API runner driver", () => {
+  it("returns only safe optional campaign accounting and rejects invoice-cost claims", async () => {
+    const m4Accounting = { campaignId: id, state: "active", requests: 7, maxRequests: 500, runRequests: 7, runMaxRequests: 120,
+      reservedMicrodollars: 6300, settledMicrodollars: 1000, remainingMicrodollars: 4992700, maxMicrodollars: 5000000,
+      countChargeStatus: "assumed", invoiceCostAvailable: false };
+    const options = parseRunnerOptions(["--action", "observe", "--origin", origin, "--run-id", id]);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: { ...projection, mode: "balanced",
+      m4Accounting: { ...m4Accounting, privateGrant: "never-output" } } }));
+    const observed = await executeRunner(options, { password: "private-password", fetcher });
+    expect(observed).toMatchObject({ result: { m4Accounting } });
+    expect(JSON.stringify(observed)).not.toContain("privateGrant");
+    fetcher.mockResolvedValue(Response.json({ data: { ...projection, mode: "balanced", m4Accounting: { ...m4Accounting, invoiceCostAvailable: true } } }));
+    await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow();
+  });
+  it("previews and sends one explicit Balanced creation, requiring a matching response mode", async () => {
+    const options = parseRunnerOptions(["--action", "create", "--origin", origin, "--persona", "playful_kid", "--request-id", id, "--mode", "balanced"]);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: { ...projection, mode: "balanced", counters: { ...projection.counters, payableText: 1 } } }));
+    expect(await executeRunner(options, { fetcher })).toMatchObject({ preview: true, mode: "balanced" });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await executeRunner({ ...options, apply: true }, { password: "private-password", fetcher })).toMatchObject({ result: { mode: "balanced" } });
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ persona: "playful_kid", mode: "balanced" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fetcher.mockResolvedValue(Response.json({ data: projection }));
+    await expect(executeRunner({ ...options, apply: true }, { password: "private-password", fetcher })).rejects.toThrow("not a verified Simulated/Balanced projection");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("observes saved Balanced runs without a mode flag and rejects invalid payable evidence", async () => {
+    const options = parseRunnerOptions(["--action", "observe", "--origin", origin, "--run-id", id]);
+    const balanced = { ...projection, mode: "balanced", counters: { ...projection.counters, payableText: 3 } };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: balanced }));
+    expect(await executeRunner(options, { password: "private-password", fetcher })).toMatchObject({ result: { mode: "balanced", counters: { payableText: 3 } } });
+    expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
+    for (const data of [{ ...balanced, counters: { ...balanced.counters, payableImage: 1 } },
+      { ...balanced, counters: { ...balanced.counters, payableText: -1 } }, { ...balanced, mode: "simulated" }, { ...balanced, mode: "real" }]) {
+      fetcher.mockResolvedValue(Response.json({ data }));
+      await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow("not a verified Simulated/Balanced projection");
+    }
+  });
+  it("rejects Real, duplicate mode arguments, Balanced successors and Balanced simulation probes", () => {
+    const base = ["--action", "create", "--origin", origin, "--persona", "playful_kid", "--request-id", id];
+    for (const flags of [["--mode", "real"], ["--mode", "balanced", "--mode", "simulated"],
+      ["--mode", "balanced", "--predecessor-run-id", id], ["--mode", "balanced", "--probe-app-id", id, "--probe-publication", id]]) {
+      expect(() => parseRunnerOptions([...base, ...flags])).toThrow();
+    }
+    expect(parseRunnerOptions(base).mode).toBe("simulated");
+  });
   it.each(["missing-field", "wrong-identity", "unavailable"])("rejects probe preflight %s before creating a run", async failure => {
     const options = parseRunnerOptions(["--action", "create", "--origin", origin, "--persona", "playful_kid",
       "--request-id", id, "--probe-app-id", id, "--probe-publication", id, "--apply"]);
@@ -75,9 +120,9 @@ describe("application API runner driver", () => {
     await executeRunner(options, { password: "private-password", fetcher });
     expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
     fetcher.mockResolvedValue(Response.json({ data: { ...projection, counters: { ...projection.counters, payableImage: 1 } } }));
-    await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow("not a verified simulated projection");
+    await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow("not a verified Simulated/Balanced projection");
     fetcher.mockResolvedValue(Response.json({ data: { ...projection, runId: "00000000-0000-4000-8000-000000000002" } }));
-    await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow("not a verified simulated projection");
+    await expect(executeRunner(options, { password: "private-password", fetcher })).rejects.toThrow("not a verified Simulated/Balanced projection");
   });
   it("controls one exact revision without retries", async () => {
     const options = parseRunnerOptions(["--action", "pause", "--origin", origin, "--run-id", id, "--expected-revision", "1", "--apply"]);

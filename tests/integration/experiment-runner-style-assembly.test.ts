@@ -9,6 +9,7 @@ import { styleSampleRequests } from "@/lib/experiment-runner/reference-requests"
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const databases: Database[] = [];
@@ -80,6 +81,20 @@ async function setup(sampleCount = 2) {
 }
 
 describe("saved style sample assembly", () => {
+  it("assembles Balanced synthetic style samples and retains byte and policy checks", async () => {
+    const env = await setup();
+    const retained = await retainM4ImageTestPolicy(env.database, env.input.runId);
+    const saved = await env.service().assemble(env.input);
+    expect(saved.reused).toBe(false);
+    expect((await env.service().assemble(env.input)).reused).toBe(true);
+    expect((await env.repository.getRun(env.input.runId))!.counters).toEqual(retained.counters);
+    await env.database.collections.experiment_operations.updateOne({ _id: env.input.sampleOperationIds[0] }, { $set: { mode: "simulated" } });
+    await expect(env.service().assemble(env.input)).rejects.toThrow("completed authorized J08");
+    await env.database.collections.experiment_operations.updateOne({ _id: env.input.sampleOperationIds[0] }, { $set: { mode: "balanced" } });
+    const uri = [...env.store.files.keys()][0]; env.store.files.set(uri, new Uint8Array([1]));
+    await expect(env.service().assemble(env.input)).rejects.toMatchObject({ code: "invalid_state" });
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: saved.version._id })).toBe(0);
+  });
   it("assembles two saved samples without approval, provider calls or another reservation", async () => {
     const env = await setup(); const before = await env.repository.getRun(env.input.runId);
     const saved = await env.service().assemble({ ...env.input, sampleOperationIds: [...env.input.sampleOperationIds].reverse() });
