@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Readiness plan prepared; Balanced implementation and execution not started. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Application integration passes offline. OpenAI dev2 is installed and all eighteen reviewed graphs are published and read back. Signature verification is restored. The non-secret ready manifest records those identities without an execution grant. PR #191 review/CI and staging delivery of the final configuration remain pending. Balanced paid execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -10,16 +10,19 @@ Keep model/accounting proof and campaign evidence here. Apply the
 reuse valid tests and repeat only affected checks during implementation/corrections.
 Complete broader affected checks before publication, not after each local commit.
 
-M3 Simulated acceptance completed on 2026-10-13. This task prepares M4 readiness
-only. It does not implement Balanced, start runs, change live configuration, add
-credentials or grant spending/deployment authority. Infrastructure remains an
+M3 Simulated acceptance completed on 2026-10-13. Its original handoff authorized
+M4 readiness planning only. The later continuation authorizes the
+[non-billable application foundation](#non-billable-application-foundation---2026-10-14)
+and accepted implementation slices. It grants no paid execution, new credentials
+or additional live delivery authority. Infrastructure remains an
 assumed dependency; no restart campaign, fault injection, restore rehearsal or
 host automation belongs to this readiness step.
 
 ## Execution efficiency follow-up ? 2026-10-13
 
 **State:** Improvements deployed and the single authorized Simulated Kid comparison
-passed. M3 acceptance stays complete; Balanced implementation/execution is unstarted.
+passed. M3 acceptance stays complete; later non-billable implementation is recorded
+below, and Balanced execution remains unstarted.
 
 Main PR #188 merged reviewed commit `9e1b819cadd62d8ffd692134d5036b000e594356`
 after lean CI `38406602852`. Staging PR #189 carried only the reviewed changes;
@@ -144,6 +147,713 @@ the eighteen restored bindings recorded in M3. The delivered efficiency release
 above retains those bindings. Do not repeat its delivery,
 operator exception, binding restoration or persona campaign.
 
+### Selected policy and implementation contract - 2026-10-13
+
+This section records the user's selected policy and governs the later implementation.
+It grants no implementation or paid execution under this documentation task.
+
+| Invocation | Model | Reasoning | Maximum output tokens |
+| --- | --- | --- | ---: |
+| Manager and persona decisions | `gpt-6-luna` | `none` | 2,048 |
+| J01-J12 creative specialists | `gpt-6-luna` | `low` | 8,192 |
+| Final tester report | `gpt-6-luna` | `none` | 8,192 |
+| Independent final judge | `gpt-6-sol` | `low` | 8,192 |
+
+Use Standard processing, at most 32,000 total input tokens per request, and output
+limits that include reasoning and other billed output tokens. No automatic retries,
+paid tools, model escalation or real image calls. Run Kid, Parent, Creator in that
+order, one initial run each, with text-request ceilings 120/160/220 and 500 total.
+Stop the campaign on technical failure. No successor or additional judge request
+is authorized by unused allowance. Paid execution needs the final explicit grant
+in [EXECUTION](EXECUTION.md#b-authorization-register), after readiness passes.
+
+The selected ceiling is USD 5 of incremental campaign model charges, excluding
+earlier account usage. This is not an account-wide cap or a forecast. All paid
+requests, including any separately authorized repairs, must fit the same ledger.
+
+#### Observed configuration and precise remaining blocker
+
+Read-only Community MCP inspection on 2026-10-13 identifies workspace
+`ffac910f-2786-490e-90d8-07243d49741b`, provider `langgenius/openai/openai`, and active
+`gpt-6-luna`/`gpt-6-sol` model metadata. Installed model plugin:
+`langgenius/openai:1.0.7@f36c3761167b3af0bfb4975b728fe3cd126342d076e1ec5359e6d4f92557d3d4`.
+Its manifest exposes `max_tokens`, `reasoning_effort`, `reasoning_mode`,
+`service_tier`, `enable_stream` and JSON-schema output. Provider configuration
+exposes `api_protocol=responses`. These are available parameters, not proof of
+the active request settings or a successful paid invocation.
+
+The user reports the OpenAI key provisioned privately in Dify. No key value was
+retrieved, copied or changed. The screenshot shows model-list read and text-request
+permissions; it does not prove model entitlement, funding or end-to-end execution.
+Credential inventory impact: reuse the existing Dify provider-key row in the
+[inventory](../../deployment/contracts.md#dify-accounts-provider-bindings-and-developer-sessions);
+no live name, storage, transfer or consumer changes occur. The installed opt-in correction adds conditional token counting through the same credential; inventory use metadata is updated. Permission/billing remains unverified and no count request was made.
+
+`plugin.list` and `plugin.get` return manifests, not executable implementation.
+The 2026-10-14 [exact-package audit](#exact-provider-package-audit---2026-10-14)
+resolves source availability through the public marketplace package. The installed
+plugin cannot yet satisfy the bounded execution/usage contract. Prepare the
+correction below before integration; do not silently install it, copy a credential
+into a direct HTTP node, or move provider execution into Booklet.
+
+#### Exact provider package audit - 2026-10-14
+
+The pinned Dify 1.17.1 [marketplace helper](https://github.com/langgenius/dify/blob/1.17.1/api/core/helper/marketplace.py)
+defines the public package GET path `/api/v1/plugins/download-url` with the exact
+`unique_identifier` query. Download of the installed 1.0.7 identity succeeded
+without credentials. ZIP SHA-256 is
+`ac6299b0f0cffa264acab719d78360b0a2bf63088979d2490bcbba5ffc7b4b94`.
+Reproducing Dify's sorted path/content digest from
+[checksum.go](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/pkg/plugin_packager/decoder/checksum.go)
+produces `f36c3761167b3af0bfb4975b728fe3cd126342d076e1ec5359e6d4f92557d3d4`,
+exactly the installed metadata checksum. This is content-identity verification;
+no independent package-signature or live host-filesystem attestation is claimed.
+The private ignored package and extracted sources remain under
+`output/issue65-openai-plugin-audit/` and are not vendored into Git.
+
+The [non-billable audit fixture](dify/m4-openai-provider-audit.py.txt) checks that
+identity and loaded source bytes. It uses the package's selected versions:
+OpenAI 3.26.0, Dify plugin SDK 0.10.2 and tiktoken 0.14.0, in an isolated Python
+3.14 environment. Transitive dependencies were resolved locally, not asserted to
+match the installed host. Real socket connections are forbidden; all SDK calls
+use an in-memory mock transport and a dummy key. Eight cases passed.
+
+| Verified finding | Consequence / minimum correction |
+| --- | --- |
+| `models/common_openai.py` supplies no SDK retry/timeout overrides. Selected SDK defaults are two retries and a 600-second read timeout. One mocked 429 produced three attempts. | An LLM-node retry toggle cannot bound SDK attempts. Use explicit `max_retries=0` and a per-invocation timeout no greater than 120 seconds or the remaining operation deadline. Mocked 429/500/timeout with those overrides each produced one attempt. This proves the SDK option, not an installed plugin correction. |
+| `responses.parameters` maps `max_tokens` to `max_output_tokens`, effort/mode to `reasoning`, and JSON schema to `text.format`. Luna none/low and Sol low mappings passed. | Reuse these translations; capture the full request after the correction and confirm Standard tier, no tools and no history continuation. |
+| `responses.usage` substitutes local counts when provider usage is absent, then passes them through the same calculation interface as reported counts. | Add explicit provenance and raw reported token details/request identity. Booklet must retain its maximum reservation when provider evidence is absent; never settle against this estimate. |
+| `tokens.count_messages` describes its overhead as approximate and falls back to `o200k_base` for unknown models. | Do not use it as proof of a 32,000-token upper bound. Require a separately verified complete-request bound/counting path before admitting Balanced. |
+
+**Prepared correction contract:** Prefer an opt-in change to this same provider,
+with normal behavior preserved when the flag is absent. Add a model parameter for
+Booklet bounded execution, disabled by default and supported only for Luna/Sol.
+In that path reject streaming, tools, history continuation, unsupported tiers and
+missing/invalid remaining-time policy before creating a client. Consume internal
+policy parameters before the API call; set SDK retries to zero and cap timeout.
+An SDK phase/read timeout is not a total wall-clock deadline. Keep the original
+operation deadline authoritative for new admission and observation; test delayed
+connect/read and late completion separately before claiming total-duration bounds.
+Keep provider credentials in their existing binding. Emit trusted provider
+evidence alongside creative content with explicit `provider_reported` or
+`unavailable` usage provenance, response/request ID, model, tier, status and raw
+token details. Preserve incomplete/refused content and evidence for inspection;
+do not manufacture completion or usage. The workflow adapter must receive that
+evidence through an actually exposed LLM-node output, not assume an opaque SDK
+field survives Dify. Its exact wire shape and Dify compatibility are part of the
+later integration contract and must pass the changed-path rehearsal.
+
+No plugin correction, installation or credential change occurred during this audit.
+Before installing a reviewed candidate, verify the supported package-install path,
+signature policy, credential retention, all workspace consumers and absence of
+active/uncertain work. Do not weaken signature policy or replace another consumer's
+provider silently. If opt-in installation cannot preserve those boundaries, report
+that concrete incompatibility and request a bounded integration decision with the
+reviewed package/diff; do not introduce a new credential path by default.
+
+#### Local bounded-provider correction candidate - 2026-10-14
+
+The subsequent user instruction authorizes continuing the non-billable correction
+work. The [candidate module](dify/m4-openai-bounded.py),
+[opt-in provider patch](dify/m4-openai-bounded.patch) and
+[focused candidate tests](dify/m4-openai-bounded-tests.py) define the current local
+provider candidate. The installed `1.0.7-dev1` package described below predates the
+request-digest guard added to these sources. The candidate is unsigned; existing workflow routes retain false/absent
+opt-in behavior. No Balanced workflow or paid execution is enabled. After checking the
+original content identity, normalize affected text and patch line endings to LF,
+apply the zero-context patch with `git apply --unidiff-zero` to the exact audited
+source and copy the module to `models/llm/booklet_bounded.py`;
+the unchanged source package remains retained separately. Do not install these
+artifacts directly as an official signed upstream release.
+
+The module validates explicit Luna/Sol, effort, schema, Standard tier, text-only
+context and a remaining timeout before creating a zero-retry client. It rejects
+streaming, tools, stop sequences, conversation replay and unsupported parameters.
+The boolean `booklet_bounded_execution` defaults false; the original route is
+preserved when absent/false. Only Luna/Sol model parameter catalogs add that flag
+and `booklet_timeout_seconds`; the local candidate also adds
+`booklet_request_digest`. No provider credential schema changes.
+
+Before its single generation request the candidate calls
+`responses.input_tokens.count` on the same input, reasoning and text/schema fields,
+including framing. OpenAI's [token-count contract](https://developers.openai.com/api/docs/guides/token-counting)
+describes that complete count. It blocks above 32,000 or on a failed count, then
+reduces the generation timeout by elapsed counting time. Neither request retries.
+This adds one non-generating count request per invocation; it must be tracked
+separately from the at-most-500 generation allowance. The documentation consulted
+does not establish count-endpoint billing or this key's permission. The later
+[current implementation record](#non-billable-application-foundation---2026-10-14)
+records the disclosed experiment assumption and first-invocation permission gate.
+Include any attributable charge in the same USD 5 ledger. The USD 4.509472
+generation-only bound must not silently absorb an unknown fee.
+
+The exact count currently occurs after application reservation but before model
+generation. A failed count leaves the original counted reservation for recovery;
+it grants no replay. The earlier pre-claim preparation projection remains necessary
+for current source/request identity, but the implementation must not claim a
+provider-verified count before the actual counting step. Its full-payload digest
+includes model, inputs and output/schema policy. The local candidate requires
+`booklet_request_digest` and compares it before client creation, counting or
+generation. It owns a serialized snapshot and isolates counting from generation
+so later caller mutations cannot change the admitted payload. Canonical bytes use
+Python JSON with sorted keys, compact separators, UTF-8, unescaped Unicode and
+finite numeric values only. Integration must prepare these exact bytes; do not
+assume a different language's key ordering or number serialization is equivalent.
+
+**Remaining readiness gate:** Booklet must supply the digest through the protected
+operation context, bound to the prepared request and admission. A workflow-supplied
+self-calculated digest alone does not establish authorization. Completion must also
+match the digest. The installed package lacks this enforcement; deliver the reviewed
+candidate with the later integration rather than reopen signature policy now.
+
+Provider evidence travels in the LLM's text as JSON with
+`schemaVersion=booklet_provider_v1`, `content` (original creative string) and
+`providerEvidence`. Evidence has provider response/request IDs, model, tier,
+status, explicit refusal flag, safe incomplete reason, request digest, counted input
+and raw input/output/cache/reasoning counts. Downstream validation must reject a
+refusal even when status is completed and the refusal text resembles valid JSON.
+Usage provenance is `provider_reported` only when both total counts are valid;
+otherwise it is `unavailable`, with no estimate substituted. The Dify node's
+generic empty usage object in that case is not payable-usage evidence. Booklet
+must use the provenance field and retain its maximum reservation. Incomplete and
+refused results retain evidence for validation/inspection rather than triggering
+another provider request.
+
+Dify 1.17.1 pins Graphon 0.7.0. Its official wheel SHA-256
+`6f7608aaaa65607c4935735137ed4b7029b1e6ca80202cbe829af3370cf4404e`
+was inspected without installing it. The LLM node exposes `text`; its separated
+reasoning filter removes inline `<think>` blocks without parsing JSON. The
+candidate escapes angle brackets in the outer JSON so decoding restores original
+content. A test executes the wheel's actual separated reasoning filter and proves
+that content and provider evidence survive. This is a source/local boundary proof,
+not a live published-node rehearsal. Configure Dify node-level structured-output
+postprocessing off for this wrapper; the provider request still uses its strict
+creative-output schema, and the trusted downstream code parses the outer wrapper.
+
+Fifteen socket-denied cases passed for the installed package: count equality at 32,000, rejection at
+32,001, one attempt each for count/generation 429/500/timeout, timeout expiry after
+count, policy/history/stream and non-strict schema rejection, missing usage, incomplete/refused output,
+actual opt-in routing, false opt-in compatibility, SDK model-catalog validation and
+the Graphon text boundary and both package-version validators. The patch was replayed against an untouched source copy
+after normalizing the three affected text files and the patch to LF; original
+package bytes remain retained. Existing eight audit
+cases remain unchanged. No paid request was made; live provider delivery is
+recorded below.
+
+**Local request-digest follow-up:** Eighteen socket-denied cases pass against a
+separate patched source copy. They retain the fifteen installed-package checks and
+add rejection of missing/invalid/mismatched digests, prompt/schema/output-policy
+drift before any client/request, and mutation isolation after admission. The patch
+replays against the audited original source. No new package was built or installed.
+This changes no credential storage, transfer or consumer; the existing conditional
+provider use remains unchanged. Application integration is still pending.
+
+**Selected delivery path - 2026-10-14:** The user prefers the existing OpenAI
+plugin and permits an experiment signature exception where signing adds work.
+The HTTP-node alternative is not selected. Reuse the stored provider credential;
+no new signing key or OpenAI credential transfer is introduced.
+
+The complete local package is `output/issue65-openai-plugin-audit/openai-1.0.7-dev1.difypkg`
+(487,180 bytes), SHA-256 `7da1e41e8a3c481aa803bd6a3946da19d23f93de6726105277451ab53e17867a`.
+Its Dify identifier is
+`langgenius/openai:1.0.7-dev1@da51ec682f9505bb0dbd3f6caa8f3e0980ac1761c70b014a1eeda82f0ccec74f`.
+It retains all original assets and 93 unchanged original files. Changes are the
+three patched sources and the manifest's explicit local version, plus the new
+adapter. Original verification metadata and ZIP signature are removed, not copied.
+The package stays ignored; all fifteen focused cases pass against its extracted
+bytes. It is not an official vendor release. Installation is verified below.
+
+The prior `1.0.7-m4r1` package remains retained unchanged. Its upload failed before
+Install became enabled: the API could not parse `PluginDecodeResponse`. The daemon
+version regex accepts that suffix, but the pinned API's
+[second version validator](https://github.com/langgenius/dify/blob/8387590ace4a094de812b7847fc6a4c3a27cd52b/api/core/plugin/entities/plugin.py#L115)
+rejects it through `packaging.version.Version`. A regression executes that actual
+method and reproduces the rejection; `1.0.7-dev1` passes both validators. Only the
+manifest version differs between these two packages. This explains the observed
+error without claiming a live API-log attestation. Before replacement, the original 1.0.7 manifest remained readable and its
+installation identity was unchanged. Failed
+upload can retain a cached package; no cleanup or replay of that upload occurred.
+The exact API source fixture stays ignored at
+`output/issue65-openai-plugin-audit/dify-1.17.1-plugin-entity.py`, SHA-256
+`f57e8f058bf733485ad02960e09bf72ff14572a25547c861c00abe378df39f84`.
+
+**Delivery verified - 2026-10-14:** The user gave action-time approval for this exact
+package. Dify displayed Installation successful; authenticated MCP readback confirms
+the identifier above with `source=package`. The UI retains `API KEY 1`; no key value
+was retrieved, copied or re-entered. Both observed Unibase drafts retain their exact
+hashes and four GPT-4.1 mini bindings. Their workflows were not executed.
+
+The operator opened the temporary signature window with a verified configuration
+backup at `/var/lib/kids-booklet/issue65-m4-plugin-policy.RUZBmSux/runtime.env.before`.
+After installation, the same reviewed procedure restored verification to `true`;
+backup: `/var/lib/kids-booklet/issue65-m4-plugin-policy.wIr9ro9o/runtime.env.before`.
+Operator readbacks report the pinned daemon running and other services unchanged.
+After restoration, MCP still returns the installed identity and 56 model metadata
+entries, including active Luna/Sol. This proves post-restoration availability, not
+provider entitlement, request execution or billable usage. No paid calls were made.
+
+Pinned [single-package upload](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/service/plugin_decoder.go#L57)
+supports `FORCE_VERIFYING_SIGNATURE=false`. Leave Langgenius-specific and third-party
+verification settings unchanged; do not use bundle installation. This flag affects
+Community plugin uploads across the instance, not only Booklet. Temporarily disable
+it for this exact reviewed upload, then restore `true`. Existing local runtime
+[startup](https://github.com/langgenius/dify-plugin-daemon/blob/635d262e8e93e34ffb948573327d8486b97a11a3/internal/core/control_panel/builder.go#L29)
+does not re-enforce the upload flag. Post-restoration installed identity and model
+metadata are now verified above; no additional restart campaign is needed.
+Do not add restart tests; ordinary service readback after configuration apply is
+sufficient. Later re-upload again needs an explicit bounded exception.
+
+The [local installer](https://github.com/langgenius/dify/blob/8387590ace4a094de812b7847fc6a4c3a27cd52b/web/app/components/plugins/install-plugin/install-from-local-package/steps/install.tsx#L71)
+removes the old installation with `preserveCredentials:true`, then installs the
+candidate. This is not atomic. Retain the original signed package and privately
+back up affected configuration before replacement. Two observed Unibase drafts
+also use this provider; all consumers briefly lose it during replacement, then use
+the new package with the unchanged false/absent route. Read back their bindings
+and retained credential presence without generating requests. Require installed
+`source=package`; pinned automatic-upgrade selection includes only Marketplace
+installations, so preserve the current LATEST policy. On uncertain failure,
+inspect the installation task before any further action; do not replay or remove
+credentials. Do not call successful credential retention verified until read back.
+
+**Delivery checkpoint complete:** The restricted dispatcher had no signature-policy
+action, so the operator executed the reviewed one-time procedure. It added no
+permanent host action or entrypoint. Browser installation received the required
+confirmation. Signature verification is restored; no manual delivery step remains.
+Future re-upload needs another bounded exception. Request-digest enforcement before
+count/generation, count permission/billing, Balanced routing/callback integration
+and atomic campaign accounting remain paid-readiness gates. Paid execution is not
+authorized by this delivery.
+
+#### Selected provider request contract
+
+Use one Dify LLM node through the existing OpenAI provider's Responses path per
+authorized text invocation. Set `api_protocol=responses`, `service_tier=default`,
+`reasoning_mode=standard`, `enable_stream=false`, and the table's explicit effort.
+The outgoing API request must contain `max_output_tokens` (mapped from the plugin's
+`max_tokens`) and `reasoning.effort`, a task-specific structured output schema,
+no tools, no prior-response/conversation continuation and no automatic truncation.
+The official [reasoning contract](https://developers.openai.com/api/docs/guides/reasoning)
+includes reasoning tokens in `max_output_tokens`; reaching that limit can produce
+an incomplete response with no visible output. Keep that failure and its charge.
+
+Prepare the exact role prompt, schema and selected context before authorization;
+count all serialized provider input, including system instructions/schema overhead.
+Require a verified model tokenizer or provider-supported non-generating counter;
+block if its upper bound cannot establish the 32,000 ceiling. Persist a request
+fingerprint and reject any difference between prepared and executed input. Dify
+owns role prompts and creative output; Booklet owns state, approvals and admission.
+Retain the existing operation deadline; provider timeout is at most 120 seconds
+and at most the remaining deadline. Disable node retries and verify SDK retries
+are zero. A timeout or lost response is inspected, never automatically replayed.
+
+#### Incremental implementation slices
+
+1. **Manifest and mode contracts (AC01-AC03, AC08, AC13).** Extend existing binding
+   configuration with a versioned non-secret execution policy. Save that policy
+   separately from the historical `configurationJson` array; preserve old hashes.
+   Pin provider/plugin checksum, models, reasoning, API/token parameters, prices,
+   timeout/retry policy, prompt/schema/request fingerprints and publication IDs.
+   Add optional policy/campaign references to new run and operation records;
+   require them for Balanced, leave historical records unchanged. UI and CLI expose
+   Balanced only when readiness is verified; server independently enforces it.
+   Keep Real and production rejected. Propagate mode through dispatch, context,
+   narrative/reference/page paths and callbacks; Balanced images use fixture bytes.
+2. **Campaign admission (AC08, AC13).** Add one campaign document in the existing
+   MongoDB database, with immutable policy hash, explicit grant reference, three
+   persona slots, request/judge counters, integer USD microdollar totals, revision
+   and active/stopped/completed state. Create it only from reviewed protected
+   server configuration after the later execution grant; no budget-edit public API.
+   Extend run creation with optional `campaignId`, required for Balanced. Atomically
+   claim the unique persona slot; concurrent creates cannot start a second run.
+   Parent requires Kid generation/evaluation success; Creator requires Parent.
+3. **Atomic monetary reservation (AC08, AC13).** Extend the existing operation
+   claim transaction to update operation, run and campaign together. Enforce
+   Pause/Stop, deadline, publication/policy/request identity, current sources,
+   persona order, per-run/500-request limits and at most three judge requests
+   (one per run). Store each operation's maximum reservation in integer
+   microdollars. Admit only when settled charges plus unresolved reservations
+   plus the new maximum do not exceed 5,000,000 microdollars. Concurrent claims
+   contend on the campaign revision. Duplicates return the prior claim and cannot
+   invoke the provider again. Count requests permanently, including failures.
+4. **Completion and usage (AC05-AC08, AC10-AC13).** Extend existing result callbacks
+   additively for Balanced with provider response/request identity, requested and
+   returned model/service tier, input/output/cached/reasoning counts and usage
+   provenance. Bind evidence to operation, workflow execution and policy; reconcile
+   it with authenticated Dify execution metadata. Persist usage even when content
+   validation fails. Settle once when usage is attributable and consistent; otherwise
+   retain the full reservation and mark cost unavailable. Store provider-reported
+   cost separately from price-derived cost; never label an estimate as invoiced cost.
+   A conflicting or over-limit result blocks further campaign admission. Late
+   valid completion can settle the original operation without a new request.
+5. **Workflow delivery and experience (AC01-AC03, AC05-AC13).** Keep the deterministic
+   branch and existing result envelopes; add only the bounded text branch and usage
+   fields. Do not consolidate roles. Reuse normal grants, Creator explicit approvals,
+   image/reference journals and materialization. UI/CLI show campaign remaining
+   allowance, settled/reserved charges and unavailable usage. Reports retain source
+   versions and independent judge identity, and label images synthetic. A malformed,
+   refused or incomplete provider result blocks with its retained evidence; no
+   automatic repair loop. Explicit future repair requires an additional grant,
+   a new counted operation and remaining campaign limits, never a counter reset.
+
+Build slices 1-4 with fake providers before any live graph mutation. Slice 5 needs
+later implementation authorization and the provider-correction verification gate above. Public
+route paths stay unchanged; only optional fields are added for new Balanced records.
+No historical migration/backfill, new service or credential is required by this plan.
+Update architecture and credential inventory when later verified implementation
+changes their boundaries; do not describe planned behavior as deployed today.
+
+#### Non-billable application foundation - 2026-10-14
+
+The latest operator continuation authorizes the accepted non-billable application
+slices. The [policy contract](../../../lib/experiment-runner/m4-policy.ts) freezes
+the selected model/effort/token/retry/price limits, eighteen publications, plugin
+identity and request-definition hash. Counting requires an explicit charge
+ceiling/reference and a verified/assumed status; absent fee evidence cannot become a zero default. These are
+frozen planning inputs, not fresh live price or permission verification.
+
+The [campaign ledger](../../../db/experiment-campaign.ts) uses the existing MongoDB
+database and caller-owned transactions. New Balanced runs require a protected
+policy and explicit grant reference injected into the repository; no route or
+environment reader supplies these yet. Run creation atomically saves a separate
+policy snapshot, claims one initial persona slot and checks predecessor persona
+success. Historical configuration arrays/hashes remain unchanged; no backfill runs.
+The new `experiment_campaigns` collection uses its standard unique `_id`; existing
+additive initialization owns its creation. No live initialization occurred.
+
+Ledger primitives atomically reserve each operation maximum against the USD 5,
+500-request, persona and judge ceilings. Duplicate reservations reuse the original.
+Failures/uncertainty retain the maximum; no release API exists. Attributable
+settlement is idempotent, retains charges above the reservation, and stops admission
+on excess or conflicting evidence. Its evidence is an internal trusted input;
+authenticated provider attribution and token-based charge calculation must be
+implemented before callbacks can call it. The protected text-claim integration
+described below connects these primitives to operation/run writes. All public
+Balanced routes remain closed; Real remains rejected. The internal execution seam
+is available only to focused fake-provider tests.
+
+Focused evidence: three policy units, seven real-persistence ledger cases and
+eleven existing repository/HTTP cases pass. Coverage includes duplicate/concurrent
+reservation and settlement, exactly USD 5/one microdollar above, shared-cap overlap,
+transaction rollback, exhausted requests/judges, Pause/deadline, slot ordering,
+conflicting evidence and preserved historical configuration. No providers execute.
+Full prepared-source/approval checks, callbacks, mode propagation, reports and
+workflow rehearsal remain pending. Existing runtime evidence outside this surface
+is reused. Credential inventory impact: no names, storage, transfer or consumers
+change; no live policy, grant or campaign has been provisioned.
+
+The next request-definition bundle must be reviewed once and consumed by both Dify
+graph generation and protected Booklet preparation. It must contain the Dify-owned
+prompt, task-specific strict output schema, role projection and rendering version.
+Current deterministic fixtures are examples, not real-text prompts. Prove byte
+parity with the adapter's Python JSON encoding before claim integration; do not
+substitute the scheduling fingerprint or a workflow's self-calculated digest.
+
+**Current implementation record — 2026-10-14:** The documentation MCP restart is
+complete. Official [token-count guidance](https://developers.openai.com/api/docs/guides/token-counting),
+[structured-output guidance](https://developers.openai.com/api/docs/guides/structured-outputs),
+[reasoning guidance](https://developers.openai.com/api/docs/guides/reasoning) and
+[pricing](https://developers.openai.com/api/docs/pricing) were checked. They support
+the selected request/schema contract but do not establish the count endpoint's
+fee, failed-request billing or exact restricted-key permission. The user asked to
+proceed with available documentation instead of a support handoff. No account
+verification or paid request occurred.
+
+The proposed experiment manifest reserves **900 microdollars (USD 0.0009) per
+count**, explicitly marked `assumed`. This allowance is a planning assumption,
+not a documented price or an invoice guarantee. It stays reserved after model
+usage settles. The final spending request must disclose this uncertainty and
+obtain acceptance before execution. Count permission will be checked by the first
+authorized Kid invocation, without a separate probe or automatic retry. A denied
+count prevents generation and stops the campaign for inspection.
+
+The local [request bundle](../../../lib/experiment-runner/m4-request.ts) defines
+48 role/task/persona/report variants. It retains all roles and uses exact saved
+context strings, strict output schemas and protected eligible identities. Its
+integer-only wire encoding matches Python canonical JSON; fractional context
+values remain inside the exact context string. A socket-denied translation fixture
+compares Node requests with the audited provider's actual parameter/message
+translation. The bounded adapter pins the global OpenAI endpoint, so regional or
+environment endpoint overrides cannot silently change the price basis.
+
+[Preparation](../../../db/experiment-text-preparation.ts) takes a read-only role
+projection before dispatch, saves exact request bytes/digest and binds them to
+current sources, approvals, policy, publication and manager parent. It makes no
+reservation. Unchanged preparation is reused; changed sources are rejected without
+replay. The internal text claim rechecks currentness, Pause/Stop/deadline/drain,
+then commits operation, run and campaign reservations together. Exhausted campaign
+allowances block the run and stop campaign admission without a partial reservation.
+Duplicate authorization admits one action.
+
+Report preparation uses a separate read-only generation-verification phase. It
+requires the current unreserved, undispatched report operation, original deadline,
+retained Balanced policy/bindings, matching operation modes, exact approvals and
+lineage, and original asset bytes. Tester precedes judge. Each preparation attempt
+independently reads the nine fixture assets; no byte cache crosses requests.
+Simulated report lifecycle checks remain unchanged. Balanced assembly mutations
+and final completion were closed in that published slice. The current candidate
+below adds the image/accounting integration.
+
+[Creative output assembly](../../../lib/experiment-runner/m4-output.ts) restores
+workflow-owned identities, exact approved sheet facts, style hashes and report
+identity/evidence fields from the saved context. It does not authorize completion
+or release money. Reports remain text-only with visual consistency unassessed.
+The owning completion services must still verify approvals, source lineage and
+bytes. The local provider-evidence assessor checks request/model/tier identity,
+token ceilings and usage consistency independently of creative parsing. It
+allocates model charges at frozen upper rates, not invoice prices. Incomplete or
+refused output retains attributable usage and cannot materialize. Missing usage or
+attribution retains the maximum. Authenticated readback/persistence/settlement integration,
+callback wiring, Balanced image routing,
+workflow generation and public configuration/UI/CLI remain separate unfinished
+readiness gates. The installed plugin predates these local digest/endpoint changes;
+do not infer live delivery from local validation.
+
+Focused local verification for this slice: 23 policy/request/choice/output/usage
+units; 25 campaign, preparation and context integration cases; one full synthetic
+Balanced report-preparation case and two existing Simulated report lifecycle/order
+cases; 20 socket-denied provider cases; and 48 exact Node/Python request translations.
+Typecheck, focused lint, agent fixtures, 77 local documentation links/anchors and
+whitespace checks passed. These are non-billable fixtures, not M4 persona acceptance.
+
+#### Current delivery record - 2026-10-15
+
+This current section supersedes earlier installation/publication pending statements.
+The reviewed integration at `7b590edd0e4acd268d1416d2aadbc2b34dce51e9`
+passed two independent reviews and lean CI `38728250672` in PR #191.
+OpenAI `1.0.7-dev2` is now installed in Community workspace
+`ffac910f-2786-490e-90d8-07243d49741b`, from the reviewed package with SHA-256
+`015884036390e78469e1190db677b3bd20bad957cfefde28c64b33356c28e15d`.
+MCP readback identifies
+`langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d`.
+The operator restored signature verification to `true`; protected configuration
+backup: `/var/lib/kids-booklet/issue65-m4-plugin-policy.kMgTf9MY/runtime.env.before`.
+The existing provider credential remains present; its value was not retrieved.
+The prior Unibase app IDs no longer resolve. Current Unibase app
+`cf2b1066-319e-42c1-84bc-6bfc558d91e2` retains four `gpt-4.1-mini` binding nodes;
+metadata readback is not an execution or unchanged-history proof.
+
+All eighteen graphs passed server-aware validation, publication and semantic
+readback against the reviewed UTF-8 source. App identities, existing variables
+and features are preserved. Exact publication IDs and frozen model/token/price
+policy are in the [ready manifest](../../../lib/experiment-runner/m4-campaign-manifest.json).
+Manager publication: `64d08408-4ab7-4413-a5a1-0fccadd2ff26`.
+Request bundle: `293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a`.
+Policy hash: `b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3`.
+No tool-provider synchronization is needed: the eighteen existing runtime bindings
+have null tool-provider IDs. Existing staging bindings still select prior publications.
+
+The installed MCP bridge rejects graph saves because it replays an unsupported
+legacy environment-variable field. The inspected CLI export/import fallback
+preserved the existing variables. Private before/reviewed DSL copies remain under
+`%LOCALAPPDATA%\DifyWf-Community-Codex\issue65-m4-before-publication-20261015`;
+they contain existing Booklet callback variables, not the OpenAI provider key.
+The user explicitly approved these protected copies after automatic review stopped
+that transfer step. Never print or commit these files. Non-secret graph backups
+and publication evidence are retained separately. No workflow execution occurred.
+
+Remaining gates: two clean reviews and lean CI for the final manifest/documentation
+delta; selective Booklet staging delivery; protected binding update and read-only
+application preflight. Then request the explicit three-run paid grant, including
+the assumed count charge and unresolved account entitlement/permission disclosure.
+`ready` supplies no authority and cannot admit Balanced execution. Seven focused
+configuration/policy units pass, including the actual release manifest and drift
+rejection. No paid call or live model reliability is inferred.
+
+#### Local integration evidence - 2026-10-15
+
+This section supersedes earlier pending statements for local implementation only.
+Published commit `188fcc7ec974484ce1575a7247b1cd02a2a00db1` in PR #191 has two
+clean reviews and successful lean CI `38583085271`. The integration candidate is
+verified locally. Its publication requires two clean reviews and lean CI; exact
+reviewed and CI identities are recorded in PR #191. Installation
+and deployment are pending. M3 and the efficiency run
+remain complete. No paid execution occurred or is authorized.
+
+- The non-secret campaign manifest defaults to `disabled`. `ready` records a
+  complete reviewed policy; only `granted` permits staging Balanced creation and
+  dispatch. Public input cannot supply a campaign, policy, grant or successor.
+  Simulated stays the default and Real remains rejected.
+- Authorization verifies the original running Dify execution and saved publication
+  before claim. The complete escaped response must fit Dify's 1 MiB HTTP text
+  boundary before any reservation. It contains the exact prepared request, not a
+  rebuilt UI context. Provider time excludes the original reconciliation reserve.
+- The candidate graph carries exact request JSON in a plain user message. The
+  adapter unwraps it before OpenAI and verifies canonical bytes, digest, static
+  role/model/effort/output limits, global endpoint and original deadline. Graphon
+  model parameters cannot carry the full schema because its variable resolver
+  caps strings at 1,024 characters. Thirty-two named text chunks avoid Code array
+  limits without bypassing the complete HTTP response cap. No Agent, memory,
+  vision, paid tool, escalation or node retry is added.
+- The pinned daemon retries local stdin acquisition/write failures. The selected
+  SDK reader dispatches complete newline frames only. An opt-in runtime guard
+  checks SDK 0.10.2 and its exact reader-source hash before creating a client.
+  Source/local tests support this bounded path; they do not claim that every
+  transport retry is disabled or prove live provider execution.
+- Original authenticated GET results retain bounded provider content and usage
+  before creative parsing. Balanced text result/failure callbacks only request
+  observation. Known malformed/refused/incomplete results stop campaign admission;
+  unknown usage retains the maximum. Inspection can recover the same valid result
+  without another provider request. Pause stops new work; a valid admitted result
+  can still settle. No automatic replay or reservation reset occurs.
+- Balanced image work retains simulated bytes and existing reference ordering,
+  current source/approval checks, upload journals, assembly, delegation provenance
+  and Creator controls. Terminal exit reconciles run counters, reservations and
+  campaign totals. Verified unclaimed Pause attempts remain preserved history,
+  without becoming provider requests. Reports freeze an upper charge allocation
+  through their own request; invoice cost remains unavailable. Inspection exposes
+  campaign/run allowances and labels assumed count charges.
+
+Focused offline evidence includes manager-to-specialist dispatch, duplicate
+authorization, source drift, Pause/deadline gates, authenticated settlement,
+malformed output, accounting corruption and three-reference uncertain uploads.
+Provider tests deny sockets; image fixtures use isolated persistence and storage.
+These prove local contracts, not paid model quality or live latency. Final review
+and CI evidence will be attached to the exact published candidate.
+
+Known failure closure uses retained authenticated evidence and settlement, even
+when the Dify execution succeeded but its creative output is invalid. Repeated
+Inspect and deadline Stop preserve closure, including unknown or failed GET
+readback. Image failure callbacks, terminal conflicts, exhausted logical allowances
+and preparation failure/Stop also stop the matching campaign atomically. Duplicate
+failure preserves counters, reservations, assets and history. Forty-two focused
+dispatch/failure cases pass after these corrections. Earlier combined validation
+passed 77 integration cases and 94 affected units; unchanged evidence is reused.
+No persona acceptance is inferred from these fixtures.
+
+The full isolated Balanced Kid fixture passes through actual preparation, atomic
+claims, fake authenticated Dify GET results, materialization and owning completion
+verification. It completes J01-J13 with 39 text operations and nine simulated
+images, four final pages, approved artifacts and two reports matching current
+versions. All 48 operations succeed with one reservation each. Nine original 8x8
+PNG assets pass digest/geometry readback. The tester's cost snapshot includes its
+own request and stays byte-identical after the judge; final ledger totals reconcile.
+The fixture uses fake usage and prices, not real provider requests or paid
+acceptance. TypeScript and focused lint pass. Fifteen existing lifecycle cases
+pass, and all eighteen candidate graphs prepare through the actual CLI with valid
+edges; fourteen graph/CLI units pass. No workflow was published by these checks.
+
+The complete ignored provider candidate is
+`output/issue65-openai-plugin-audit/openai-1.0.7-dev2.difypkg`, 491,984 bytes,
+SHA-256 `015884036390e78469e1190db677b3bd20bad957cfefde28c64b33356c28e15d`.
+It preserves 93 original files. Only the manifest version, three patched sources
+and bounded adapter differ from the audited original; original verification
+metadata/signature are not copied. All 25 socket-denied provider cases and 48
+exact Node/Python translations with fake carrier invocations pass against its
+extracted bytes. The package is not uploaded or installed. Its Dify content
+identifier remains pending daemon decode.
+
+Remaining delivery gates: finish focused validation and two clean independent
+reviews; package and install the reviewed provider update through a new bounded
+signature window; prepare/publish/read back all eighteen graphs; selectively
+deliver Booklet staging and its non-secret ready manifest; perform application
+preflight. The installed dev1 predates the carrier, digest, endpoint and SDK guards.
+No hidden paid smoke allowance is reserved. The final three-run grant must disclose
+the assumed count fee and unresolved account entitlement/permission, checked by
+the first authorized Kid invocation. Credential inventory impact: reuse existing
+Dify-only OpenAI and existing Booklet callback/module keys; no new secret,
+credential transfer, public route or permanent host action.
+
+#### Price basis and bounded calculation
+
+Official prices checked 2026-10-13, USD per million tokens:
+[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) input 0.10,
+cache-write 0.125, output 0.50;
+[Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) input 2.00,
+cache-write 2.50, output 10.00. Reserve input at the higher cache-write rate;
+ignore cache discounts. Standard processing only, no regional premium or paid tools.
+If the effective price/tier differs, stop before execution and revise the manifest.
+
+At 32,000 input and 8,192 output tokens, maximum reservations are USD 0.008096
+per Luna request and USD 0.161920 per Sol request. The deliberately loose bound
+`497 * 0.008096 + 3 * 0.161920 = 4.509472` rounds up to USD 4.51. It assumes at most
+500 requests, at most three Sol judges, the stated complete input/output bounds,
+no hidden requests and the verified price policy. Smaller decision outputs reduce
+it. This is conditional planning arithmetic, not measured cost or implemented
+enforcement. The independent USD 5 ledger remains mandatory; unknown charges
+retain their maxima. No paid smoke call is outside this allowance.
+
+With the explicitly unverified count allowance, the conservative planning total is
+`4.509472 + 500 * 0.0009 = 4.959472`, leaving USD 0.040528 below the selected USD 5
+ceiling. The USD 4.509472 figure covers generation under its stated assumptions;
+it excludes unknown count charges. Neither figure proves an undocumented fee bound.
+The ledger enforces its frozen reservations; it cannot enforce unknown invoice
+charges. Keep the assumption and unsettled count allowance visible in results.
+
+The user tightened the ceiling from USD 10 to USD 5 after the initial decision.
+Do not use planning headroom to
+increase tokens, add retries or relax price verification. Recompute reservations
+before approval if any premise changes; stop rather than silently reduce required
+content or increase spending.
+
+#### Failure-prevention gaps from M3 and the Balanced transition
+
+These checks refine the existing slices; they are not another campaign. M3 proves
+deterministic completion, not that real models will follow every contract. Use
+the saved Kid/Parent/Creator artifacts as offline inputs without rewriting them.
+
+| Gap and evidence | Required prevention before the first paid run |
+| --- | --- |
+| **Fixtures hide real-output variation.** Current result contracts contain unions, task-specific content and strict IDs; valid JSON alone is insufficient. M3 already exposed a J13 acknowledgement schema mismatch after a successful save. | Derive each provider output schema from the relevant task contract, including report and clarification variants. Supply exact eligible targets/current version IDs as allowed choices. Construct run/operation/workflow IDs, fingerprints, lineage and usage in trusted workflow code, never ask the model to invent them. Parse through the actual HTTP callback and owning service, testing first and duplicate completion. Reject unsupported structured-output schema features in a non-billable adapter check before publication. |
+| **Preparation currently depends on authorization.** `getOperationContext` requires a started/unknown active claim, while the selected request contract requires exact input preparation before that claim. | Add an internal read-only preparation projection for the already prepared operation. It must not reserve or return permission to execute. Store the request fingerprint against the run revision and exact source versions; the normal claim rechecks these and admits only that prepared request. Keep the existing claimed-context route protected. Test a source/approval change between prepare and claim. |
+| **Context and output ceilings can fail late.** Current report context includes artifact content, creator messages and operation history. Creator is larger than Kid; low reasoning can also consume the output allowance before JSON finishes. | Render/count the exact prompts and schemas offline for all distinct task shapes and the largest retained Creator report. Keep required content and current evidence; omit unrelated historical content using explicit role projections. Reject overflow before dispatch. Include a maximum-size valid output and an incomplete/refusal fixture per structurally different output family. Complete-request token bounds and task-specific schema compatibility remain readiness gates. Fake tests do not establish real model reliability; do not raise ceilings automatically. |
+| **Successful provider output can precede failed saving or acknowledgement.** M3 retained callback timeout, publication/readback and terminal-job defects. | Prove save-before-ack recovery and authenticated original-result retrieval for the new text/usage envelope. Observe the same execution after timeout. Never re-invoke the model to recover a saved result or repair bookkeeping. Preserve complete generation when reports fail; retain valid output and settle attributable usage independently of report/content validation. |
+| **New campaign writes can recreate transaction contention.** Parent attempt 2 timed out during authorization after observation writes retried its transaction. | Keep network calls, tokenization and context construction outside the atomic claim. The transaction contains only currentness/allowance checks and owned writes. Keep existing authorization leases and observation suppression. Add one focused overlap case using the campaign document, not a load/restart campaign. Account for preparation, provider and callback time within the original deadline; check the minimum timeout across the whole path. |
+| **Persona decisions can consume attempts without technical progress.** Deterministic testers follow a fixed happy path; real testers may repeatedly revise, ask or delegate beyond their scope. | Keep the existing revision/no-progress limits, eligible action list and delegation provenance authoritative. Prompts must distinguish technical missing output from advisory creative preferences. Test a repeated question, exhausted revision allowance and narrowed Creator grant using scripted responses. No new scoring loop or automatic repair invocation. |
+| **Metadata does not prove a bounded paid request.** Active models and plugin manifests do not prove SDK retries, exact parameter mapping, reachable branches, account entitlement or usage persistence. | Before the paid grant, reuse the completed exact-source audit, then verify the corrected captured-request adapter already required above. Check all eighteen published bindings against the policy, including final tester/judge routes. Keep provider credentials private. If account entitlement cannot be established without generation, label it unverified until the first authorized Kid request; do not consume an undisclosed paid probe. |
+
+Evidence: [M3 Parent authorization failure](M3-completion.md#parent-attempt-2-and-authorization-coordination--2026-10-11),
+[retained callback/job/acknowledgement lessons](LESSONS-LEARNED.md#completion-acknowledgements-must-cover-every-admitted-task),
+[claimed context](../../../lib/experiment-runner/context.ts),
+[result contracts](../../../lib/contracts/experiment-runner.ts).
+
+**Attempt policy:** Stop new campaign admission on a technical failure, retain its
+run and reservation evidence, and inspect before changing anything. Inspection or
+idempotent saving of the same valid result consumes no new provider request. Resume
+that same run only if inspection proves the failure was an observation/acknowledgement
+problem and current policy still matches. A prompt/schema/config repair that needs a
+new provider action is outside the three-initial-run/no-successor grant until a
+separate finite repair decision. Do not automatically restart Kid or proceed to the
+next persona. Group related causes into one correction package and one affected
+verification pass; retain the repository's repeated-blocking-review stop rule.
+
+**Minimum rehearsal:** In the changed text-node adapter, replace only the provider
+transport with scripted non-billable responses. Exercise the actual new request,
+result parsing, usage and callback path; the unchanged deterministic branch alone
+is insufficient. Cover one normal manager-to-specialist handoff, final report and
+largest valid payload through the HTTP boundary, plus the failure cases above.
+After reviewed publication in the later implementation task, exercise the changed
+selectors and separate report-return route once with the same provider-shaped fake
+response path and real Booklet persistence, with provider execution disabled.
+Verify non-empty callback bodies and the active publication identity. This bounded
+graph-path check must execute zero provider requests and consume no paid allowance.
+Reuse all unchanged persona/image evidence. Measure callback and authorization
+phases for that payload so configured timeouts cover the application work without
+extending original operation deadlines. This is a focused integration rehearsal,
+not a new live persona campaign or a reliability claim about real model outputs.
+
+#### Focused acceptance and handoff
+
+Use named tests in the existing config/contracts, repository, dispatch, context,
+reference-upload, report and UI/CLI suites. Add only necessary persistence cases:
+concurrent claims at the dollar/request boundary; duplicate create/authorize/result;
+one reservation before one provider action; Pause/Stop/deadline/source changes;
+input/output exhaustion; absent/conflicting/late usage; malformed/refused output;
+loss after provider execution; judge failure retaining generation; and zero real
+image calls through Balanced J13. Test exactly 5,000,000 microdollars and one above,
+microdollar rounding, three-judge maximum, changed policy/publication and old records.
+Use one non-billable Dify-provider adapter fixture to capture outgoing Responses
+parameters and count network attempts on timeout/429/5xx; a node toggle is not proof.
+Token accounting includes schema overhead and reasoning; completion does not release
+uncertain reservations. Preserve all M3 personas and the efficiency baseline.
+
+Finish affected units/integration, typecheck, focused lint, agent fixtures, local
+links and a fake-provider UI/CLI journey; reuse unrelated passes. Obtain two clean
+independent reviews and lean CI, then use the existing selective staging process.
+Read back exact publications, policy and release identity without executing a paid
+preflight. Present the frozen manifest, remaining technical gaps (none required for
+execution), USD 5 ledger proof and three-run allowance for the final explicit paid
+grant. Stop here until that grant; this document does not mark M4 ready or complete.
+
 ### Minimum implementation changes for a later task
 
 | Boundary | Current restriction or gap | Minimum change and protected behavior |
@@ -152,7 +862,7 @@ operator exception, binding restoration or persona campaign.
 | Dify roles | Current published manager, specialists, testers and judge use deterministic Code fixtures and reject non-Simulated mode. | Keep the fixture branch. Add one bounded text-provider request per eligible role invocation, using the existing saved-context and result envelope. Booklet continues to validate tasks, source ownership and approvals; Dify owns instructions and creative output. No opaque Agent loop. |
 | Image path and callbacks | `db/experiment-images.ts`, style/sheet/page assembly, reference uploads, page batches, J13 authorization, narrative routing and completion contain Simulated-only checks. `context.ts` fixes image/report context to Simulated. | Distinguish run mode from provider kind consistently: Balanced images remain synthetic. Extend existing authorization, context, storage, assembly and completion guards only for that route. Preserve exact references, native lettering, digests, callback claims, original deadlines and terminal bookkeeping. No real-image provider branch is reachable. |
 | Configuration evidence | Saved configuration hash pins app/publication identities, but not a complete effective provider/model/token/retry policy. | Freeze a non-secret per-role manifest with publication, provider/model ID, token parameter/ceiling, context ceiling, timeout, retry policy and number of provider nodes. Read back the published graph and compare it before admission. Version the evidence without rewriting historical snapshots; choose the smallest compatible persistence change during implementation. |
-| Reservations and usage | Repository already makes Balanced text payable and Balanced images non-payable, but reserves once per operation. Transport does not retain attributable provider token/cost usage. | Use exactly one provider request per reserved text invocation. Reserve before that request; count failed/uncertain requests and explicit repairs. Persist provider request identity, input/output tokens and actual or unavailable cost separately from the reservation. Never treat missing usage as zero or refund uncertainty. If one-request enforcement cannot be proved, block paid readiness rather than counting a multi-call workflow as one request. |
+| Reservations and usage | Repository already makes Balanced text payable and Balanced images non-payable, but reserves once per operation. Transport does not retain attributable provider token/cost usage. | Permit at most one generation and one separately recorded input-count request per reserved text invocation. Reserve before both requests; include any count fee, failed/uncertain requests and explicit repairs. Persist provider request identity, input/output tokens and actual or unavailable cost separately from the reservation. Never treat missing usage as zero or refund uncertainty. If this two-request maximum and fee bound cannot be proved, block paid readiness; do not hide additional calls inside one invocation. |
 | Reports | Report schema already accepts modes and checks current version/asset ownership; current report producers are deterministic and context fixes Simulated. | Pass actual run mode and make tester/judge text-backed under Balanced. Preserve independent judge identity and advisory findings. Label image findings as based on synthetic images; retain unavailable/estimated cost explicitly. No scoring framework. |
 
 These are application/workflow changes for a later implementation task. No
@@ -168,7 +878,7 @@ handoff. Do not create it under this task.
 | Full persona outputs and approval behavior | Three M3 completions; Parent delegated approvals; Creator's 31 explicit approvals; required 3/5/8-page layouts, sources and assets. | Focused mode/routing fixtures for each persona. The inspect/revise/narrow-grant scenario below still needs its own evidence where not already covered; do not rerun unchanged full Simulated personas. |
 | Reservation, duplicate/stale callbacks, deadlines and uncertain outcomes | Existing focused repository/dispatch/completion tests, retained delayed recovery and resolved stopped probe. | One representative fake-provider case for changed Balanced authorization, duplicate/lost callback and late completion; assert retained ledger and output. No forced restart. |
 | Assets, references and reports | M3 stored-byte completion checks, ordered J13 references, separate matching tester/judge reports, advisory geometry warnings. | Balanced run mode with synthetic images through source upload, storage and final verification; report mode and attributable usage. No real-image test. |
-| Bounds and internal calls | Existing 120/160/220 logical ceilings and per-operation reservation tests. | Fake provider proves one reservation precedes one text request, exhaustion blocks the next request, explicit repairs count, no hidden retry/subcall exists and Real/image-provider branches cannot execute. |
+| Bounds and internal calls | Existing 120/160/220 logical ceilings and per-operation reservation tests. | Fake provider proves one reservation precedes the count and at most one generation, exhaustion blocks both requests, count fees and explicit repairs are covered, no hidden retry/subcall exists and Real/image-provider branches cannot execute. |
 | Published provider configuration | M3 publication readback proves deterministic graphs only. | Read-only exact model/token/retry manifest and reachable-branch audit. A node toggle alone does not prove provider SDK/plugin retry behavior. |
 
 Select named affected unit/contract tests and the minimum persistence integration
@@ -180,23 +890,21 @@ implementation candidate.
 
 ### Token controls and later spending checkpoint
 
-Retain the [M0 proposals](M0-readiness.md#provider-readiness-before-m4m5): verify
-2,048 output tokens for manager/testers, 8,192 for specialists/judge and at most
-32,000 input text tokens after explicit context selection. These are proposed
-bounds, not verified live settings. Preserve exact lettering and required
-references; fail visibly rather than silently truncating them. Record enforceable
-model-specific parameters before paid readiness. No model selection is made here.
+Apply the [selected policy](#selected-policy-and-implementation-contract---2026-10-13).
+The model and token choices are settled; their live enforcement is not verified.
+Preserve exact lettering and required references; fail visibly rather than silently
+truncating them. Verify model-specific parameters before paid readiness.
 
 Automatic provider, SDK/plugin, node and transport retries must be disabled and
 verified. An explicit correction is a new attributable request within the same
 run allowance; an uncertain request is inspected, never automatically replayed.
 Provider reservations must cover every paid call, including report/repair calls.
 
-After non-billable implementation/readiness passes, present one concrete manifest
-and finite spending request: proposed Kid → Parent → Creator, three initial runs,
-zero successors, ceilings 120/160/220 text requests, at most 500 total, zero real
-images. Include per-role input/output token ceilings and a provider-price-based
-worst-case monetary ceiling, then obtain explicit approval before execution.
+After non-billable implementation/readiness passes, present the frozen manifest
+and final execution request: Kid → Parent → Creator, three initial runs, zero
+successors, ceilings 120/160/220 text requests, at most 500 total and three judge
+requests, zero real images and the selected USD 5 ceiling. Include the verified
+per-role token limits and price calculation, then obtain explicit approval before execution.
 Any successor requires its own finite allowance and additional worst-case bound.
 This plan grants no spending and does not mark M4 complete.
 
@@ -222,8 +930,9 @@ An opaque unbounded node is not acceptable for paid readiness.
 
 Before paid execution starts, reconcile model/binding evidence here with the shared
 readiness register and bundle only its unresolved required actions into one handoff.
-Default proposal: three initial runs, one per persona, zero successors and at most
-500 LLM requests in total (120 + 160 + 220). This is not spending authorization.
+Selected campaign policy: three initial runs, one per persona, zero successors,
+at most 500 LLM requests (120 + 160 + 220), three judge requests and USD 5 total.
+This is not paid execution authorization.
 If successors are requested, obtain a finite allowance and show its additional
 worst-case request total before execution. No image spending is permitted in
 Balanced mode. Without paid approval, finish non-billable readiness work and stop

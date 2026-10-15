@@ -4,6 +4,10 @@ import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/do
 import { approveAssembledDelegation } from "@/db/experiment-narrative";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
+import { createM4TextPreparation } from "@/db/experiment-text-preparation";
+import { createM4ProviderResults } from "@/db/experiment-provider-results";
+import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
+import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -46,7 +50,9 @@ export function createExperimentDispatcher(deps: {
   uploadReference?: (binding: ReturnType<typeof selectBinding>, runId: string, bytes: Uint8Array) => Promise<ReferenceUploadResult>;
 }) {
   const store = deps.store ?? createAssetStore;
-  const repository = createExperimentRepository(deps.database, { store });
+  const authority = deps.config.m4?.state === "granted" ? deps.config.m4.authority : undefined;
+  const repository = createExperimentRepository(deps.database, { store,
+    ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}) });
   const context = createExperimentContextService(deps.database, { store });
   const rawRuntime = deps.runtime ?? createWorkflowRuntime(deps.config);
   const mutate = deps.mutate ?? runTrackedMutation;
@@ -247,6 +253,10 @@ export function createExperimentDispatcher(deps: {
       await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
       return;
     }
+    // A failed lookup cannot reopen a previously proved terminal failure.
+    // Revalidate its retained evidence before handling observation uncertainty.
+    if (authority && run.mode === "balanced" && current.providerKind === "text" && current.state === "failed" &&
+        await closeM4KnownFailure(deps.database, authority, { runId: run._id, operationId: current._id, nowMs: now() }) === "closed") return;
     if (result.kind === "accepted") {
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: result.execution.id, ...(result.execution.task_id ? { workflowTaskId: result.execution.task_id } : {}) });
       // Start identity is not terminal result evidence. Leave the existing
@@ -260,6 +270,40 @@ export function createExperimentDispatcher(deps: {
         return;
       }
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id, ...(execution.task_id ? { workflowTaskId: execution.task_id } : {}) });
+      if (run.mode === "balanced" && operation.providerKind === "text" && current.reservationCount === 1) {
+        if (!authority) return;
+        if (current.state === "succeeded" && current.verifiedWorkflowId) {
+          if (execution.status === "succeeded") await observeProgress(run._id, current);
+          else if (execution.status === "failed" || execution.status === "stopped") {
+            await withMongoTransaction(deps.database, (session) => createExperimentCampaignLedger(deps.database, authority).stop(session, now()));
+            await repository.recordTerminalConflict({ ...identity, workflowRunId: execution.id,
+              workflowId: execution.workflow_id, status: execution.status });
+          }
+          return;
+        }
+        // Only a runtime GET is authoritative. Reuse this request's authenticated
+        // snapshot; stream notifications must trigger their own original lookup.
+        const observationRuntime = observed ? { ...runtime, retrieve: async () => result } : runtime;
+        const outcome = await createM4ProviderResults(deps.database, authority, deps.config, observationRuntime)
+          .observe({ runId: run._id, operationId: current._id, nowMs: now() });
+        if (outcome.kind === "result") {
+          try {
+            await repository.completeOperation({ envelope: { runId: run._id, operationId: current._id,
+              workflowRunId: execution.id, inputFingerprint: current.inputFingerprint, result: outcome.result },
+              parentWorkflowRunId: current.parentWorkflowRunId, nowMs: now() });
+            const saved = await repository.getOperation(current._id);
+            if (saved) await observeProgress(run._id, saved);
+          } catch {
+            // Retain the provider result and accounting; changed sources or
+            // materialization failure cannot authorize another paid request.
+            await withMongoTransaction(deps.database, (session) => createExperimentCampaignLedger(deps.database, authority).stop(session, now()));
+            await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+          }
+        } else if (outcome.kind === "pending" && now() >= (current.deadlineAtMs ?? Infinity)) {
+          await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
+        }
+        return;
+      }
       await deps.database.collections.experiment_operations.updateOne({ _id: operation._id, workflowRunId: execution.id,
         remoteStatus: { $ne: execution.status }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null },
       { $set: { remoteStatus: execution.status } });
@@ -362,12 +406,15 @@ export function createExperimentDispatcher(deps: {
   }
 
   const coordinator = createOperationCoordinator({ database: deps.database, runtime, now, binding: bindingFor,
+    resolvedFailure: async (run, operation) => !!authority && run.mode === "balanced" && operation.state === "failed" &&
+      await closeM4KnownFailure(deps.database, authority, { runId: run._id, operationId: operation._id, nowMs: now() }) === "closed",
     reconcile: (run, operation, result) => reconcile(run, operation, result, true) });
 
   async function advanceWork(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
     return mutate(async () => {
       let run = await repository.getRun(runId);
-      if (!run || run.mode !== "simulated" || run.status === "completed" || run.status === "failed") return "blocked";
+      if (!run || run.mode === "real" || run.mode === "balanced" && (!authority || run.m4?.campaignId !== authority.grant.campaignId) ||
+          run.status === "completed" || run.status === "failed") return "blocked";
       let snapshot: Awaited<ReturnType<typeof context.getExecutionView>> | undefined;
       let snapshotRevision = -1;
       const viewForRun = async () => {
@@ -423,6 +470,10 @@ export function createExperimentDispatcher(deps: {
       if (run.status === "blocked" && (operation || run.safeFailure !== "unknown_outcome")) return "blocked";
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
+        if (run.mode === "balanced") {
+          const campaign = await deps.database.collections.experiment_campaigns.findOne({ _id: run.m4!.campaignId });
+          if (campaign?.state !== "active") return "blocked";
+        }
         const deployment = await deps.database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" });
         let latest = await repository.latestOperation(runId);
         if (latest?.state === "succeeded" && !latest.verifiedWorkflowId) {
@@ -565,11 +616,16 @@ export function createExperimentDispatcher(deps: {
         }
       }
       await bindTrackedMutationOperation(runId, operation._id);
+      if (run.mode === "balanced" && operation.providerKind === "text") {
+        if (!authority) return "blocked";
+        await measurePhase({ runId, operationId: operation._id }, "text_preparation", () =>
+          createM4TextPreparation(deps.database, authority, { store }).prepare({ runId, operationId: operation!._id, nowMs: now() }));
+      }
       const admission = await measurePhase({ runId, operationId: operation._id }, "dispatch_admission", () =>
         repository.beginDispatch({ runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now() }));
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
-      const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: "simulated",
+      const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: run.mode === "balanced" ? "balanced" : "simulated",
         ...(referenceFileIds ? { referenceFileIds } : {}) }, {
         deadlineAtMs: (operation.deadlineAtMs ?? operation.dispatchStartedAtMs! + OPERATION_LIMIT_MS) - RECONCILIATION_RESERVE_MS,
         onStarted: async (execution) => {
@@ -608,8 +664,13 @@ export function createExperimentDispatcher(deps: {
     // Pause does not transfer a live preparation lease to another controller.
     if (!operation && run.preparation && run.preparation.ownerId !== ownerId) {
       if (now() < run.preparation.deadlineAtMs) return "waiting";
-      await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null, revision: run.revision, "preparation.ownerId": run.preparation.ownerId },
-        { $set: { status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed", "preparation.unresolved": true }, $inc: { revision: 1 } });
+      await withMongoTransaction(deps.database, async (session) => {
+        const changed = await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null, revision: run!.revision, "preparation.ownerId": run!.preparation!.ownerId },
+          { $set: { status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed", "preparation.unresolved": true }, $inc: { revision: 1 } }, { session });
+        if (changed.modifiedCount && authority && run!.mode === "balanced" && run!.m4?.campaignId === authority.grant.campaignId) {
+          await createExperimentCampaignLedger(deps.database, authority).stop(session, now());
+        }
+      });
       return "blocked";
     }
     if (operation?.deadlineAtMs && now() >= operation.deadlineAtMs - RECONCILIATION_RESERVE_MS) {
@@ -719,11 +780,17 @@ export function createExperimentDispatcher(deps: {
     if (run.activeOperationId || run.preparation?.ownerId !== input.preparationId) throw new ExperimentRepositoryError("conflict", "Preparation ownership changed.");
     if (!input.stop) return run.preparation;
     // Incrementing revision fences an in-flight prepareOperation transaction.
-    const changed = await deps.database.collections.experiment_runs.updateOne({ _id: run._id, revision: run.revision,
-      activeOperationId: null, "preparation.ownerId": input.preparationId }, { $set: {
-      pauseRequested: true, status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed",
-      "preparation.unresolved": true, "preparation.stopRequestedAtMs": now(), updatedAtMs: now(),
-    }, $inc: { revision: 1 } });
+    const changed = await withMongoTransaction(deps.database, async (session) => {
+      const result = await deps.database.collections.experiment_runs.updateOne({ _id: run._id, revision: run.revision,
+        activeOperationId: null, "preparation.ownerId": input.preparationId }, { $set: {
+        pauseRequested: true, status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed",
+        "preparation.unresolved": true, "preparation.stopRequestedAtMs": now(), updatedAtMs: now(),
+      }, $inc: { revision: 1 } }, { session });
+      if (result.modifiedCount && authority && run.mode === "balanced" && run.m4?.campaignId === authority.grant.campaignId) {
+        await createExperimentCampaignLedger(deps.database, authority).stop(session, now());
+      }
+      return result;
+    });
     if (!changed.modifiedCount) throw new ExperimentRepositoryError("stale_revision", "Preparation changed before stop.");
     cancelOwnedControllers(run._id);
     return (await repository.getRun(run._id))?.preparation;

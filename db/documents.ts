@@ -1,4 +1,6 @@
 import type { ExperimentMode, ExperimentRole, ExperimentTask, Persona } from "@/lib/contracts/experiment-runner";
+import type { M4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 
 export type BaseDocument = { _id: string };
 
@@ -27,7 +29,15 @@ export type ExecutionItemDocument = BaseDocument & { batchId: string; agentId: s
 export type MutationOwner = { id: string; processId: string; startedAtMs: number; interruptedAtMs?: number; runId?: string; operationId?: string; state: "active" | "interrupted" };
 export type DeploymentControlDocument = BaseDocument & { schemaVersion: "1"; environment: string; maintenance: boolean; draining?: boolean; interruptedMutations?: number; mutationOwners?: MutationOwner[]; reason: string | null; activeMutations: number; updatedAtMs: number };
 export type ExperimentCounters = { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
+export type ExperimentCampaignDocument = BaseDocument & {
+  schemaVersion: "m4_v1"; policyHash: string; policyJson: string; grantReference: string;
+  state: "active" | "stopped" | "completed"; revision: number;
+  slots: Record<Persona, string | null>; requests: number; judgeRunIds: string[];
+  requestCounts: Record<Persona, number>; reservedMicrodollars: number; settledMicrodollars: number;
+  createdAtMs: number; updatedAtMs: number;
+};
 export type ExperimentRunDocument = BaseDocument & {
+  m4?: { campaignId: string; policyHash: string; policyJson: string };
   schemaVersion: "2"; bookletId: string; persona: Persona; mode: ExperimentMode; brief: string;
   predecessorRunId: string | null; configurationJson: string; configurationHash: string;
   status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
@@ -44,6 +54,16 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  m4Observation?: { workflowRunId: string; publishedWorkflowId: string; wrapperDigest: string | null;
+    content: string | null; evidenceJson: string | null; evidenceDigest: string | null;
+    costEvidence?: ExperimentReport["costEvidence"];
+    remoteStatus: "succeeded" | "failed" | "stopped"; observedAtMs: number;
+    issue: "missing_wrapper" | "invalid_evidence" | "provider_failure" | "creative_invalid" | "conflicting_evidence" | null };
+  m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
+    requestJson: string; contextJson: string; systemPrompt: string; modelParametersJson: string;
+    sourceFingerprint: string; operationFingerprint: string; publishedWorkflowId: string; parentWorkflowRunId: string | null; preparedAtMs: number };
+  m4Reservation?: { campaignId: string; policyHash: string; requestDigest: string; bucket: M4ModelBucket;
+    maximumMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null; evidenceDigest: string | null };
   runId: string; role: ExperimentRole; taskId: ExperimentTask | null;
   subjectKind: "book" | "character" | "location" | "page"; subjectId: string;
   idempotencyKey: string; inputFingerprint: string; attempt: number;
@@ -91,6 +111,7 @@ export type ExperimentDelegationDocument = BaseDocument & {
   effectiveSequence: number; supersededById: string | null; revokedAtMs: number | null; createdAtMs: number;
 };
 export type MongoDocumentMap = {
+  experiment_campaigns: ExperimentCampaignDocument;
   experiment_runs: ExperimentRunDocument;
   experiment_operations: ExperimentOperationDocument;
   experiment_delegations: ExperimentDelegationDocument;
@@ -119,4 +140,4 @@ export type MongoDocumentMap = {
 };
 
 export type CollectionName = keyof MongoDocumentMap;
-export const COLLECTION_NAMES = ["booklets", "artifacts", "artifact_versions", "artifact_dependencies", "messages", "cards", "card_responses", "assets", "style_catalog", "generation_jobs", "generation_items", "model_calls", "agent_definitions", "agent_versions", "agent_version_events", "quality_reviews", "approvals", "exports", "execution_preferences", "execution_batches", "execution_items", "deployment_control", "experiment_runs", "experiment_operations", "experiment_delegations"] as const satisfies readonly CollectionName[];
+export const COLLECTION_NAMES = ["booklets", "artifacts", "artifact_versions", "artifact_dependencies", "messages", "cards", "card_responses", "assets", "style_catalog", "generation_jobs", "generation_items", "model_calls", "agent_definitions", "agent_versions", "agent_version_events", "quality_reviews", "approvals", "exports", "execution_preferences", "execution_batches", "execution_items", "deployment_control", "experiment_runs", "experiment_operations", "experiment_delegations", "experiment_campaigns"] as const satisfies readonly CollectionName[];

@@ -13,6 +13,9 @@ export function createOperationCoordinator(deps: {
   database: Database; runtime: WorkflowRuntime; now?: () => number;
   binding: (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => BookletBinding;
   reconcile: (run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult) => Promise<void>;
+  // Optional provider-specific proof, never a caller's terminal flag. This must
+  // independently revalidate retained authenticated evidence and accounting.
+  resolvedFailure?: (run: ExperimentRunDocument, operation: ExperimentOperationDocument) => Promise<boolean>;
 }) {
   const now = deps.now ?? Date.now;
   const operations = deps.database.collections.experiment_operations;
@@ -69,6 +72,7 @@ export function createOperationCoordinator(deps: {
       if (operation.dispatchStartedAtMs != null) await deps.reconcile(run, operation, observed);
       operation = (await operations.findOne({ _id: operation._id }))!;
       run = (await runs.findOne({ _id: run._id }))!;
+      if (await deps.resolvedFailure?.(run, operation)) return operation;
       if (operation.state === "succeeded" && operation.verifiedWorkflowId && run.safeFailure !== "definite_failure") {
         return operation.lifecycle?.attemptOutcome === "failed" ? finishAttempt(input) : operation;
       }
@@ -107,6 +111,9 @@ export function createOperationCoordinator(deps: {
       operation = (await operations.findOne({ _id: operation._id }))!;
       run = (await runs.findOne({ _id: run._id }))!;
       if (operation.dispatchStartedAtMs != null) await deps.reconcile(run, operation, observed);
+      operation = (await operations.findOne({ _id: operation._id }))!;
+      run = (await runs.findOne({ _id: run._id }))!;
+      if (await deps.resolvedFailure?.(run, operation)) return operation;
       // Do not turn an unavailable provider or a callback conflict into proof of
       // failure. Attempt failure is separate from recoverable operation state.
       return finishAttempt(input);

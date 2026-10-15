@@ -1,3 +1,4 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -34,7 +35,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
     if (!run || !job) throw new ExperimentRepositoryError("not_found", "Page batch or owning run was not found.");
     const batch = experimentPageBatchSchema.parse(JSON.parse(job.inputJson));
     if (batch.runId !== run._id || job.bookletId !== run.bookletId || batch.configurationHash !== run.configurationHash ||
-      run.mode !== "simulated" || !configuredPageIllustrationTask(run.configurationJson) ||
+      (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       job.idempotencyKey !== `dify-pages:${run._id}:${pageBatchFingerprint(batch)}`) invalid("Page batch ownership or saved selection changed.");
     const items = await database.collections.generation_items.find({ jobId: job._id }, options).sort({ position: 1 }).toArray();
     const states: PageBatchItemState[] = items.map((item) => {
@@ -80,14 +81,14 @@ export function createExperimentPageBatchRepository(input: { database: Database;
         const imageBinding = configuration.find((binding) => binding.role === "image" && binding.taskId === null);
         const testerBinding = configuration.find((binding) => binding.role === "tester" && binding.taskId === null);
         const prior = await database.collections.experiment_operations.findOne({ _id: checked.next.operationId!, runId: value.runId,
-          role: "image", taskId: "J13", subjectKind: "page", subjectId: selected.pageId, state: "succeeded" }, options);
+          role: "image", taskId: "J13", subjectKind: "page", subjectId: selected.pageId, mode: checked.run.mode, state: "succeeded" }, options);
         const clarification = prior?.resultJson ? JSON.parse(prior.resultJson) as { kind?: string } : null;
         if (!prior || clarification?.kind !== "clarification" || prior.imageCompletionDigest || prior.imageCompletionClaim || !prior.workflowRunId ||
           prior.reservationCount !== 1 || !imageBinding || prior.verifiedWorkflowId !== imageBinding.publishedWorkflowId || !testerBinding) {
           invalid("Only an answered, publication-verified clarification permits a successor page operation.");
         }
         const answers = await database.collections.experiment_operations.find({ runId: value.runId, role: "tester", taskId: null,
-          subjectKind: "book", subjectId: checked.run.bookletId, mode: "simulated", providerKind: "text", state: "succeeded",
+          subjectKind: "book", subjectId: checked.run.bookletId, mode: checked.run.mode, providerKind: "text", state: "succeeded",
           reservationCount: 1, workflowRunId: { $ne: null }, verifiedWorkflowId: testerBinding.publishedWorkflowId }, options).toArray();
         const answered = answers.some((answer) => {
           const result = answer.resultJson ? JSON.parse(answer.resultJson) as { kind?: string; payload?: { decision?: { action?: string; questionId?: string } } } : null;
@@ -102,7 +103,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       const operation = await database.collections.experiment_operations.findOne({ _id: value.operationId, runId: value.runId }, options);
       if (!operation || checked.run.activeOperationId !== operation._id || operation.state !== "prepared" || operation.dispatchStartedAtMs != null ||
         operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J13" || operation.subjectKind !== "page" ||
-        operation.subjectId !== selected.pageId || operation.mode !== "simulated" || operation.reservationCount !== 0 ||
+        operation.subjectId !== selected.pageId || operation.mode !== checked.run.mode || operation.reservationCount !== 0 ||
         operation.expectedTargetVersionId !== selected.previousPageVersionId) invalid("Page batch requires its owning prepared J13 operation before dispatch.");
       const sources = await verifyCurrentPageIllustrationSources(database, session, checked.run, selected.pageId, store);
       if (sources.layoutVersionId !== checked.batch.layoutVersionId || sources.pageBibleVersionId !== selected.pageBibleVersionId ||
@@ -131,7 +132,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       if (!("position" in checked.next) || !checked.next.operationId) return checked.next;
       const state = checked.states[checked.next.position], selected = checked.batch.pages[state.position];
       const operation = await database.collections.experiment_operations.findOne({ _id: state.operationId!, runId: identity.runId,
-        role: "image", taskId: "J13", subjectKind: "page", subjectId: selected.pageId }, options);
+        role: "image", taskId: "J13", subjectKind: "page", subjectId: selected.pageId, mode: checked.run.mode }, options);
       if (!operation) invalid("Retained page batch operation is missing.");
       const configuration = savedConfigurationSchema.parse(JSON.parse(checked.run.configurationJson));
       const imageBinding = configuration.find((binding) => binding.role === "image" && binding.taskId === null);
@@ -188,7 +189,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       const options = { session };
       const run = await database.collections.experiment_runs.findOne({ _id: value.batch.runId }, options);
       if (!run) throw new ExperimentRepositoryError("not_found", "Page batch run was not found.");
-      if (run.configurationHash !== value.batch.configurationHash || run.mode !== "simulated" || !configuredPageIllustrationTask(run.configurationJson)) {
+      if (run.configurationHash !== value.batch.configurationHash || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson)) {
         invalid("Page batch requires the saved simulated final-page configuration.");
       }
       const existing = await database.collections.generation_jobs.findOne({ idempotencyKey }, options);

@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 Simulated acceptance is complete. M4 readiness is prepared; Balanced implementation and paid execution remain unstarted. The authorized efficiency follow-up and one Simulated Kid comparison are recorded in [M4](M4-balanced.md#execution-efficiency-follow-up--2026-10-13).
+**Status:** M3 Simulated acceptance and the efficiency follow-up are complete. M4 application integration passes offline; OpenAI dev2 is installed and eighteen graphs are published/read back. The ready manifest contains no paid grant. Final configuration review/CI, staging delivery/rebinding and application preflight remain. See the [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
@@ -181,9 +181,10 @@ outside M3; this consolidation does not change PRD limits or acceptance criteria
 
 **Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
-M3's deployed Simulated acceptance is complete. The current task prepares the
-[M4 readiness plan](M4-balanced.md#m4-readiness-plan--2026-10-13) only; it does not
-implement Balanced or start paid execution. For a later M4 task, use the three
+M3's deployed Simulated acceptance is complete. The operator's later continuation
+authorizes non-billable M4 implementation under the
+[M4 contract](M4-balanced.md#incremental-implementation-slices). The local policy and
+campaign foundation is implemented; Balanced execution remains closed. Use the three
 [M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |
@@ -192,8 +193,9 @@ implement Balanced or start paid execution. For a later M4 task, use the three
 | 2. Execute one Balanced campaign | Run Kid → Parent → Creator sequentially within 120/160/220 LLM requests; zero real image calls. Retain artifacts, individual approvals, short tester/judge reports, usage and timing. Quality findings remain warnings; simulated images do not prove real image-provider quality. |
 | 3. Record results and prepare M5 | Keep one concise exit record in M4 with bindings, runs, failures/successors, measured usage and limitations. Pass exact evidence to M5; no new report hierarchy. |
 
-Default campaign proposal: three initial runs, zero successors, at most 500 LLM
-requests in total; this is not spending authorization. Any successors need a finite
+Selected campaign policy: three initial runs, zero successors, at most 500 LLM
+requests, three judge requests and USD 5 incremental model charges in total;
+the final paid execution grant remains pending. Any successors need a finite
 approved allowance with its additional worst-case request total. Without paid
 approval, complete non-billable readiness work and stop at the paid checkpoint.
 

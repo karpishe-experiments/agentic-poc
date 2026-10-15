@@ -38,8 +38,9 @@ and saved Kid, Parent 3/3 and Creator initial acceptance. The stopped probe is
 resolved; do not repeat reconciliation, binding restoration or persona runs.
 The unstarted deadline probe and additional live restart-during-cancellation
 requirement are cancelled. The [current M3 exit record](M3-completion.md#persona-exit-evidence)
-is authoritative. Prepare M4 readiness only; do not implement Balanced or start
-paid execution under this task.
+is authoritative. That M3 handoff authorized M4 readiness planning only. The later
+M4 continuation below authorizes non-billable implementation; paid execution remains
+unapproved.
 Keep existing recovery code, historical evidence, data, source/approval checks,
 request limits and zero-payable-call requirements. Timing is diagnostic.
 
@@ -158,6 +159,23 @@ Technical access is not authority. Record verification and permission separately
 never infer a grant from a working login. These are the latest recorded results,
 not fresh live checks. Recheck the required row before dependent execution.
 
+**Current M4 decision status - 2026-10-13:** The user selected Luna for manager,
+specialists and testers, Sol for the independent judge, and a USD 5 incremental
+text-campaign ceiling. The [M4 contract](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13)
+owns exact reasoning, tokens, prices, accounting and three-run/no-successor limits.
+The later continuation authorizes non-billable Balanced implementation and
+reviewed publication. Paid execution still needs a later instruction. Final paid
+execution requires explicit approval after technical readiness, without reopening
+unchanged model/budget preferences. The user reports the OpenAI key entered in
+Community Dify; provider/model metadata is observed, not paid execution proof.
+No key retrieval, copy or re-entry is needed. The exact-package audit on 2026-10-14
+verified source identity and reproduced SDK retries/default timeouts; corrections
+and provider-usage provenance remain technical gates. See M4's audit. No new
+credential path is introduced. The separately approved dev1 installation and
+signature restoration are complete; an updated package needs its own bounded
+installation checkpoint.
+M5 targets Image 2.5 Sunburst, with separate settings/permissions/spending readiness.
+
 Current M3 recovery status is in [M3 current progress](M3-completion.md#current-progress-and-blockers--2026-10-13).
 Existing eighteen bindings and encrypted private setup remain valid; do not ask
 for their keys again. Dispatcher synchronization and legacy bootstrap for request
@@ -179,8 +197,21 @@ spending approval is needed for the authorized model-free scope.
 
 The approved persona sequence was Parent 3/3 only, then Creator after Parent
 success, with at most three Creator runs. Parent and Creator initial acceptance
-both passed; no further persona run is needed. The remaining grant is M4 readiness
-planning only. Balanced implementation and paid execution remain outside it.
+both passed; no further persona run is needed. Subsequent instructions authorize
+M4 readiness work, the local non-billable provider correction and, through the latest
+continuation, the accepted non-billable application implementation slices. The local
+policy/campaign foundation does not enable Balanced execution. The bounded Dify
+browser grant covers policy/consumer inspection and reviewed installation. The
+user subsequently selected the existing plugin path and permitted an experiment
+signature exception. The reviewed package is installed, stored-key presence is
+preserved, and signature verification is restored. The
+[current provider delivery checkpoint](M4-balanced.md#current-delivery-record---2026-10-15)
+records installed dev2, restored signature verification and eighteen verified
+publications. Booklet staging delivery remains pending. The official documentation
+MCP restart is complete. The user asked to
+continue without a support confirmation of count billing/permission. M4 records
+an explicit unverified fee allowance, which the final execution request must
+disclose; it is not an invoice guarantee. Paid execution remains unapproved.
 
 Parent campaign deployment readiness was verified on 2026-10-11: staging release
 `5cf84ecc263847a8583c1e3623153151149306e8`, Deploy `38135107485` and Check
@@ -200,7 +231,7 @@ evidence unless its relevant release/configuration inputs change.
 | Reset: staging `kids_booklet` and entire `kids-booklet-staging-assets` bucket | Granted/executed 2026-10-04; Reset `37216104737`, Check `37216248316`; backup/targets in [M1](M1-runner.md#current-staging-transition-evidence) | Protected staging configuration and retained private backup | No further reset needed merely for a milestone. A new reset needs exact-target authorization, backup and evidence preservation; local/prod/Dify resources excluded | Only a necessary clean-baseline transition; verify inventory, backup, target isolation and post-reset Check |
 | Historical staging reconciliation: operations `1625178b…`, `419fc51a…`, `8e4c482c…`, `0213da53…`; item `9ab7d95a…`, job `575b5f2e…` | Exact IDs and evidence in [M3](M3-completion.md). Approved repair passed on 2026-10-07 with verified backup `staging-approved-reconciliation-20261007T083649Z-4008958`, 56 assets, normal maintenance-idle check and healthy restart. Retained deployment resume `37595520504` and Check `37596067024` passed | Existing protected staging runtime credentials and recovery bucket; no new keys | Exact bounded reconciliation and retained deployment resume approved in this chat; both complete. Preserve failed runs/results/assets, Cloud and production; no reset or replay | No remaining manual action for this repair. Prevention release and linked successor acceptance remain separate M3 checkpoints |
 | Simulated latency and async correction: issue #65 staging runner | [Current M3 evidence](M3-completion.md#automated-diagnostic-candidate): Kid `fd21423e…` completed generation/evaluation without repair, with 47 text calls, 9 images and zero payable calls. Same-operation restart recovery passed after 43.809 seconds. Diagnostics `38132946615` missed the earlier timing gate; retain these measurements | Existing eighteen protected bindings and callback key; encrypted normal settings and probe credentials remain in the existing private Windows profile. No new keys needed | On 2026-10-11 the user made timing targets diagnostic, authorized proceeding to simulated Parent after reviewed deployment/health verification and limited this campaign to three Parent runs. See the [M3 amendment](M3-completion.md#parent-campaign-amendment--2026-10-11). Existing no-reset, no-paid-call, Cloud/production isolation and backup-protected exact-record no-replay boundaries remain | Reuse completed Kid evidence. Check shared fixes and Parent contracts, then run Parent with focused monitoring. Stop after three unsuccessful Parent runs and explain the causes; no fourth run. After success, proceed to Creator and audit retained outputs/reports |
-| Balanced campaign: three persona runs on staging | Model/token/retry/internal-call enforcement pending; [M4](M4-balanced.md) | Text provider credentials inside Dify; approved model/binding references | Not granted. Bundle missing setup and finite campaign approval; default three initial runs, zero successors, ≤500 LLM requests, zero real images | Paid Balanced calls; verify models, branch routing, reservations and approved run/successor allowance |
+| Balanced campaign: three persona runs on staging | OpenAI dev2 installed; signature verification restored; eighteen reviewed graphs published and read back. Ready manifest records exact identities without a grant. Offline integration passes; final configuration review/CI, staging delivery/rebinding and application preflight remain; [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15) | Existing Dify-only OpenAI key is not retrieved/copied. Approved private CLI DSL copies retain existing Booklet callback variables in the protected Community directory; canonical inventory records the copies | Models and USD 5 incremental ceiling settled. Final paid execution grant required, with assumed count-fee and unresolved permission disclosure. Three initial runs, zero successors, at most 500 text requests/three judges, zero real images | Paid Balanced calls remain closed; finish delivery and preflight, then obtain the explicit execution grant |
 | Automated host/run diagnostics and sandbox memory: existing shared VPS | Endpoint/workflow deployed. Sandbox verified at 1024 MiB. Scheduler repair `38139804937` passed; diagnostics `38141274006` verified 1536 MiB, zero restarts/OOM counters and authenticated public API HTTP 200. Kid completed without repair; earlier timing targets were missed. [M3 evidence](M3-completion.md#parent-attempt-2-and-authorization-coordination--2026-10-11) | Existing protected deployment SSH/Cloudflare access and staging Basic gate; no new keys or local credential copy | User authorized automated diagnostics and selective memory increase in this session. Preserve other limits, data, Cloud and production; require idle work and live capacity guard | Parent attempt 1 reconciled with verified backup; attempt 2 passed J12 but failed at J13 authorization. Finish reviewed authorization coordination and deploy before the final allowed Parent attempt. Timing is diagnostic. No routine root-terminal handoff is needed |
 | Real campaign: ordered 3/5/8-page staging runs, each plus cover | M4 completion and image-provider readiness pending; [M5](M5-real.md) | Text/image provider credentials inside Dify; approved model/binding references | Not granted. Default three initial runs, zero successors, ≤500 LLM and 46 real image requests; any additional allowance explicit | Paid Real calls; verify M4 successes, reference support, accounting, settings and approved finite campaign |
 | Probe cleanup: explicitly listed disposable IDs only | Retained probes documented in [M0](M0-readiness.md) | Existing Community control profile | Not granted; retaining probes is acceptable; no prefix-wide deletion | Cleanup only; verify exact IDs and confirmation before removal |
@@ -212,7 +243,7 @@ Parent item/job. Original request `38149230374-1` is archived unchanged; deploym
 
 | Remaining dependency | Technical verification | Private reference | Required action | Exit |
 | --- | --- | --- | --- | --- |
-| M3 exit / M4 readiness | M3 Simulated acceptance complete: retained Kid, Parent 3/3 and Creator initial run all passed with zero payable calls; [current exit evidence](M3-completion.md#persona-exit-evidence). Reconciliation, reviewed deployment and normal bindings passed. | Existing protected access and eighteen bindings; no private action remains for this completed task | Prepare [M4 readiness](M4-balanced.md#m4-readiness-plan--2026-10-13) only. Do not repeat M3 runs or implement Balanced/start paid execution | A bounded future implementation/check plan and explicit later spending checkpoint; M4 remains unexecuted |
+| M3 exit / M4 readiness | M3 Simulated acceptance complete: retained Kid, Parent 3/3 and Creator initial run all passed with zero payable calls; [current exit evidence](M3-completion.md#persona-exit-evidence). Reconciliation, reviewed deployment and normal bindings passed. | Existing protected access and eighteen bindings; no private action remains for this completed task | Completed planning handoff; later continuation authorizes the [non-billable M4 slices](M4-balanced.md#incremental-implementation-slices). Do not repeat M3 runs or start paid execution | A bounded future implementation/check plan and explicit later spending checkpoint; M4 remains unexecuted |
 
 Preserve all saved data and failed-run evidence. Do not repeat completed private
 setup, bootstrap or deployment. No paid execution, reset, production or Cloud

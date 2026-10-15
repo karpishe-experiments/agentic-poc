@@ -1,3 +1,4 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -38,11 +39,11 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     if (!run) throw new ExperimentRepositoryError("not_found", "Sheet run was not found.");
     const recoveredApproval = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
-        role: "tester", state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
+        role: "tester", mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
     const recoveredPagination = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
-        mode: "simulated", providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+        mode: run.mode, providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
         // A late authenticated callback may precede terminal publication GET.
         // This permits source reads only, not assembly or replacement dispatch.
         $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
@@ -53,10 +54,10 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     // claimed J13 operation. This does not authorize assembly or a new dispatch.
     const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
-        role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: "simulated",
+        role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if (run.mode !== "simulated" || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle simulated work.");
+    if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle work with a simulated image policy.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftSheetVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
@@ -97,7 +98,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     } else invalid("Sheet target type differs.");
     const operation = metadata ? metadata.operations.find((item) => item._id === value.imageOperationId) : await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== task ||
-      operation.subjectKind !== subjectKind || operation.subjectId !== subjectId || operation.mode !== "simulated" ||
+      operation.subjectKind !== subjectKind || operation.subjectId !== subjectId || operation.mode !== run.mode ||
       operation.state !== "succeeded" || operation.reservationCount !== 1 || !operation.workflowRunId || operation.imageCompletionClaim) invalid("Sheet operation is not a completed authorized image.");
     if (verificationOnly && !operation.verifiedWorkflowId) invalid("Sheet approval requires verified image publication.");
     const request = experimentImageRequestSchema.parse(json(operation.imageRequestJson));

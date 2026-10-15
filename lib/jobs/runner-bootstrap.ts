@@ -5,7 +5,7 @@ import { ImageAgentRunService } from "@/lib/application/image-agent-run-service"
 import { GenerationService } from "@/lib/application/generation-service";
 import { describeGenerationError, createGenerationDiagnostics } from "@/lib/jobs/generation-diagnostics";
 import { readDeploymentControl, reconcileEndedMutations } from "@/lib/application/deployment-control";
-import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
+import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 
 const RUNNER_STATE = Symbol.for("kids-booklet-poc.job-runner");
@@ -18,7 +18,7 @@ function delay(milliseconds: number): Promise<void> {
 
 async function runLoop(): Promise<void> {
   const database = getDatabase();
-  const profile = readBookletRunnerConfig();
+  const profile = readM4RunnerConfig();
   if (!profile.enabled && profile.reason === "invalid") throw new Error("Booklet runner configuration is invalid.");
   if (profile.enabled) {
     const dispatcher = createExperimentDispatcher({ database, config: profile.config });
