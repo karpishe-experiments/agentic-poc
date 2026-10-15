@@ -6,6 +6,7 @@ export type MongoCollections = { [Name in keyof MongoDocumentMap]: Collection<Mo
 
 export function createCollectionHandles(database: Db): MongoCollections {
   const collections: MongoCollections = {
+    experiment_campaigns: database.collection("experiment_campaigns"),
     experiment_runs: database.collection("experiment_runs"), experiment_operations: database.collection("experiment_operations"),
     experiment_delegations: database.collection("experiment_delegations"),
     booklets: database.collection("booklets"), artifacts: database.collection("artifacts"), artifact_versions: database.collection("artifact_versions"),

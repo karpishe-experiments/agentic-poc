@@ -8,6 +8,7 @@ import { validateExperimentImage } from "@/lib/experiment-runner/image-validatio
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 
 const { verifySources } = vi.hoisted(() => ({ verifySources: vi.fn() }));
 vi.mock("@/db/experiment-pages", () => ({ verifyCurrentPageIllustrationSources: verifySources }));
@@ -46,6 +47,19 @@ async function setup() {
 }
 
 describe("J13 fixture and original-image storage source checks", () => {
+  it("stores Balanced J13 bytes with independent source checks and preserves Pause", async () => {
+    const env = await setup();
+    await retainM4ImageTestPolicy(env.database, env.runId);
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { pauseRequested: true, status: "paused" } });
+    await env.images.authorizeFixture(env.identity);
+    expect(verifySources).toHaveBeenLastCalledWith(env.database, expect.anything(), expect.objectContaining({ mode: "balanced" }),
+      id(4), env.store, { verifyBytes: false });
+    const saved = await env.storage.complete({ identity: env.identity, content: env.content });
+    expect(env.files.get(saved.asset!.uri)).toEqual(env.content);
+    expect(verifySources).toHaveBeenLastCalledWith(env.database, expect.anything(), expect.objectContaining({ mode: "balanced" }),
+      id(4), env.store, { verifyBytes: true });
+    expect(await env.database.collections.experiment_runs.findOne({ _id: env.runId })).toMatchObject({ status: "paused", pauseRequested: true });
+  });
   it("keeps preflight bounded and rejects a competing lease before source verification", async () => {
     const env = await setup();
     await env.images.preflight({ ...env.identity, nowMs: 3 });

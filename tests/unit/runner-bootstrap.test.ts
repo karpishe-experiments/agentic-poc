@@ -9,7 +9,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.doUnmock("@/db/client");
-  vi.doUnmock("@/lib/experiment-runner/config");
+  vi.doUnmock("@/lib/experiment-runner/m4-config");
   vi.doUnmock("@/lib/experiment-runner/dispatch");
   vi.doUnmock("@/lib/application/deployment-control");
 });
@@ -25,7 +25,7 @@ describe("runner bootstrap", () => {
     vi.stubEnv("VITEST", "");
     const cycle = vi.fn().mockResolvedValue(undefined);
     vi.doMock("@/db/client", () => ({ getDatabase: vi.fn().mockReturnValue({}) }));
-    vi.doMock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true, config: {} }) }));
+    vi.doMock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => ({ enabled: true, config: {} }) }));
     vi.doMock("@/lib/experiment-runner/dispatch", () => ({ createExperimentDispatcher: () => ({ cycle }) }));
     vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl: async () => ({ maintenance: false }), reconcileEndedMutations: vi.fn().mockResolvedValue(undefined) }));
     vi.resetModules();
@@ -44,7 +44,7 @@ describe("runner bootstrap", () => {
       .mockResolvedValue({ maintenance: false });
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.doMock("@/db/client", () => ({ getDatabase: vi.fn().mockReturnValue({}) }));
-    vi.doMock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true, config: {} }) }));
+    vi.doMock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => ({ enabled: true, config: {} }) }));
     vi.doMock("@/lib/experiment-runner/dispatch", () => ({ createExperimentDispatcher: () => ({ cycle }) }));
     const reconcileEndedMutations = vi.fn().mockResolvedValue(undefined);
     vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl, reconcileEndedMutations }));
@@ -74,10 +74,7 @@ describe("runner bootstrap", () => {
     };
     vi.doMock("@/db/client", () => ({ getDatabase: vi.fn().mockReturnValue({}) }));
     vi.doMock("@/db/repositories", () => ({ createRepositories: vi.fn().mockReturnValue(repositories) }));
-    vi.doMock("@/lib/experiment-runner/config", async (importOriginal) => {
-      const actual = await importOriginal<typeof import("@/lib/experiment-runner/config")>();
-      return { ...actual, readBookletRunnerConfig: () => ({ enabled: false, reason: "disabled" }) };
-    });
+    vi.doMock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => ({ enabled: false, reason: "disabled" }) }));
     vi.doMock("@/lib/application/deployment-control", () => ({ readDeploymentControl: async () => ({ maintenance: false, draining: false }), reconcileEndedMutations: vi.fn().mockResolvedValue(undefined) }));
     vi.doMock("@/lib/jobs/generation-diagnostics", () => ({ createGenerationDiagnostics: () => ({ record: vi.fn().mockResolvedValue(undefined) }), describeGenerationError: () => ({ message: "test" }) }));
     vi.doMock("@/lib/application/generation-service", () => ({ GenerationService: class {} }));

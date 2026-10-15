@@ -8,7 +8,7 @@ import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources, verifyCu
 import * as pageVerification from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
-import { materializeNarrativeResult } from "@/db/experiment-narrative";
+import { materializeNarrativeResult, approveAssembledDelegation } from "@/db/experiment-narrative";
 import { verifyExperimentGeneration, createExperimentCompletionService } from "@/db/experiment-completion";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
@@ -23,6 +23,10 @@ import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
 import type { RuntimeExecution, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 
 const databases: Database[] = [];
 async function profileHandoff(env: Awaited<ReturnType<typeof setup>>, name: string, throughApproval = false) {
@@ -268,6 +272,132 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }, next: () => clock++, elapse: (ms: number) => { clock += ms; } };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it("approves a retained Balanced J13 assembly through the saved grant only after original-byte verification", async () => {
+    const env = await setup("playful_kid", 18, true);
+    for (let step = 0; step < 120; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "slice_complete") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    const retained = await retainM4ImageTestPolicy(env.database, env.runId, { ...m4TestPolicy(),
+      publications: env.config.bindings.map(({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) => ({
+        role, taskId, persona, appId, publishedWorkflowId, toolProviderId, ...(finalPageIllustration ? { finalPageIllustration } : {}),
+      })),
+    });
+    const artifact = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13" }))!;
+    const version = (await env.database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId! }))!;
+    const content = JSON.parse(version.contentJson) as { assetId: string };
+    const asset = (await env.database.collections.assets.findOne({ _id: content.assetId }))!;
+    const original = env.store.files.get(asset.uri)!;
+    // A retained assembled draft with the original valid delegation, not a new
+    // tester decision. All surrounding approved evidence remains intact.
+    await env.database.collections.artifacts.updateOne({ _id: artifact._id }, { $set: { state: "draft" } });
+    await env.database.collections.approvals.deleteMany({ experimentRunId: env.runId, artifactVersionId: version._id });
+    env.store.files.set(asset.uri, new Uint8Array([1]));
+    await expect(approveAssembledDelegation(env.database, env.runId, version._id, env.next(), () => env.store)).rejects.toThrow();
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: version._id })).toBe(0);
+    env.store.files.set(asset.uri, original);
+    expect(await approveAssembledDelegation(env.database, env.runId, version._id, env.next(), () => env.store)).toBe(true);
+    expect(await env.database.collections.approvals.findOne({ artifactVersionId: version._id })).toMatchObject({
+      origin: "delegated", delegationId: retained.activeDelegationId,
+    });
+    expect((await env.repository.getRun(env.runId))!.counters).toEqual(retained.counters);
+    expect(await env.database.collections.artifacts.findOne({ _id: artifact._id })).toMatchObject({ state: "approved" });
+  }, 120_000);
+  it("prepares Balanced reports from independently verified generation without claiming or changing records", async () => {
+    const env = await setup("playful_kid", 18, true);
+    for (let step = 0; step < 120; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "slice_complete") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    const complete = await createExperimentCompletionService(env.database, env.store).markGenerationComplete({ runId: env.runId,
+      expectedRevision: (await env.repository.getRun(env.runId))!.revision, nowMs: env.next() });
+    const operationId = randomUUID();
+    await env.repository.prepareOperation({ runId: env.runId, operationId, expectedRevision: complete.revision,
+      role: "tester", taskId: null, subjectKind: "book", subjectId: complete.bookletId,
+      providerKind: "text", attempt: 1, inputFingerprint: "b".repeat(64), nowMs: env.next() });
+    // Construct synthetic retained Balanced evidence in this isolated test DB.
+    // The runtime does not relabel records or enable Balanced generation/claims.
+    const policy = m4PolicySnapshot({ ...m4TestPolicy(), publications: env.config.bindings.map((binding) => ({
+      role: binding.role, taskId: binding.taskId, persona: binding.persona, appId: binding.appId,
+      publishedWorkflowId: binding.publishedWorkflowId, toolProviderId: binding.toolProviderId,
+      ...(binding.finalPageIllustration === true ? { finalPageIllustration: true } : {}),
+    })) });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: {
+      mode: "balanced", m4: { campaignId: randomUUID(), policyHash: policy.hash, policyJson: policy.json },
+    } });
+    await env.database.collections.experiment_operations.updateMany({ runId: env.runId }, { $set: { mode: "balanced" } });
+    const identity = { runId: env.runId, operationId, nowMs: env.next() };
+    const records = async () => ({ run: await env.repository.getRun(env.runId), operations: await env.repository.listOperations(env.runId),
+      artifacts: await env.database.collections.artifacts.find({ experimentRunId: env.runId }).toArray(),
+      versions: await env.database.collections.artifact_versions.find({}).toArray(),
+      approvals: await env.database.collections.approvals.find({ experimentRunId: env.runId }).toArray(),
+      campaigns: await env.database.collections.experiment_campaigns.find({}).toArray() });
+    const before = await records(), posts = vi.mocked(env.runtime.start).mock.calls.length;
+    const reads = vi.spyOn(env.store, "get");
+    const prepared = await env.context.getPreparationContext(identity);
+    expect(prepared).toMatchObject({ role: "tester", reportEvidence: { mode: "balanced", versionIds: complete.generationVersionIds } });
+    expect(prepared.imageEvidence?.finalPages).toHaveLength(4);
+    expect(prepared.imageEvidence?.referenceAssetIds).toHaveLength(5);
+    expect(reads).toHaveBeenCalledTimes(9);
+    await env.context.getPreparationContext(identity);
+    expect(reads).toHaveBeenCalledTimes(18); // A new projection rereads every original.
+    await expect(env.context.getOperationContext({ runId: env.runId, operationId, workflowRunId: randomUUID(), parentWorkflowRunId: null }))
+      .rejects.toThrow("Operation claim identity is not current");
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { activeOperationId: null } });
+    await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
+      (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("complete attributable accounting");
+    const page = before.operations.find((item) => item.role === "image" && item.taskId === "J13")!;
+    expect((await createExperimentPageIllustrationAssembly({ database: env.database, store: env.store }).assemble({
+      runId: env.runId, pageId: page.subjectId, imageOperationId: page._id })).reused).toBe(true);
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { activeOperationId: operationId } });
+    expect(await records()).toEqual(before);
+
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { "m4.policyHash": "0".repeat(64) } });
+    await expect(env.context.getPreparationContext(identity)).rejects.toThrow("active Balanced work");
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { "m4.policyHash": policy.hash } });
+    for (const taskId of ["J08", "J09", "J13"] as const) {
+      const image = before.operations.find((item) => item.role === "image" && item.taskId === taskId)!;
+      await env.database.collections.experiment_operations.updateOne({ _id: image._id }, { $set: { mode: "simulated" } });
+      await expect(env.context.getPreparationContext(identity)).rejects.toThrow();
+      await env.database.collections.experiment_operations.updateOne({ _id: image._id }, { $set: { mode: "balanced" } });
+    }
+    const manager = before.operations.find((item) => item.workflowRunId === page.parentWorkflowRunId)!;
+    await env.database.collections.experiment_operations.updateOne({ _id: manager._id }, { $set: { mode: "simulated" } });
+    await expect(env.context.getPreparationContext(identity)).rejects.toThrow("verified manager parent");
+    await env.database.collections.experiment_operations.updateOne({ _id: manager._id }, { $set: { mode: "balanced" } });
+    const approval = before.approvals.find((item) => item.artifactVersionId === prepared.imageEvidence!.finalPages[0].versionId)!;
+    await env.database.collections.approvals.updateOne({ _id: approval._id }, { $set: { action: "reject" } });
+    await expect(env.context.getPreparationContext(identity)).rejects.toThrow();
+    await env.database.collections.approvals.replaceOne({ _id: approval._id }, approval);
+    const edge = (await env.database.collections.artifact_dependencies.findOne({ downstreamVersionId: approval.artifactVersionId }))!;
+    await env.database.collections.artifact_dependencies.deleteOne({ _id: edge._id });
+    await expect(env.context.getPreparationContext(identity)).rejects.toThrow("dependency edges");
+    await env.database.collections.artifact_dependencies.insertOne(edge);
+    for (const assetId of [prepared.imageEvidence!.referenceAssetIds[0], prepared.imageEvidence!.finalPages[0].assetId]) {
+      const asset = (await env.database.collections.assets.findOne({ _id: assetId }))!;
+      const original = env.store.files.get(asset.uri)!;
+      env.store.files.set(asset.uri, new Uint8Array([1]));
+      await expect(env.context.getPreparationContext(identity)).rejects.toThrow();
+      env.store.files.set(asset.uri, original);
+    }
+    expect(await records()).toEqual(before);
+    await env.database.collections.experiment_operations.updateOne({ _id: operationId }, { $set: { role: "judge" } });
+    await expect(env.context.getPreparationContext(identity)).rejects.toThrow("one tester report");
+    const prior = before.operations.find((item) => item._id === operationId)!;
+    const report = { ...simulatedExperimentReport({ ...prepared.reportEvidence!, mode: "simulated" }), mode: "balanced" };
+    const testerReportId = randomUUID();
+    await env.database.collections.experiment_operations.insertOne({ ...prior, _id: testerReportId, idempotencyKey: "c".repeat(64), state: "succeeded", reservationCount: 1,
+      workflowRunId: randomUUID(), dispatchStartedAtMs: identity.nowMs,
+      verifiedWorkflowId: env.config.bindings.find((item) => item.role === "tester" && item.persona === "playful_kid")!.publishedWorkflowId,
+      resultJson: JSON.stringify({ kind: "feedback", payload: report }) });
+    const judgeBefore = await records();
+    expect(await env.context.getPreparationContext(identity)).toMatchObject({ role: "judge", reportEvidence: { mode: "balanced" } });
+    expect(await records()).toEqual(judgeBefore);
+    await env.database.collections.experiment_operations.updateOne({ _id: testerReportId }, { $set: { mode: "simulated" } });
+    await expect(env.context.getPreparationContext(identity)).rejects.toThrow("report evidence is invalid");
+    expect(env.runtime.start).toHaveBeenCalledTimes(posts);
+  }, 120_000);
+
   it.each(["revoked", "narrowed"] as const)("does not auto-approve assembled style under a %s grant", async (kind) => {
     const env = await setup("playful_kid", 13);
     await env.reachSamples();

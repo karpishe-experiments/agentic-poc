@@ -12,14 +12,18 @@ import { ExperimentImageValidationError, MAX_EXPERIMENT_IMAGE_BYTES } from "@/li
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import sharp from "sharp";
-import { configurationSnapshot, readBookletRunnerConfig, validToolKey, type ConfigState } from "@/lib/experiment-runner/config";
+import { configurationSnapshot, savedConfigurationSchema, validToolKey, type ConfigState, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
+import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
+import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4Hash } from "@/lib/experiment-runner/m4-request";
+import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { createRunInputSchema, experimentTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/deployment-control";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { readStreamChunk } from "@/lib/operations/read-stream";
-import { withOperationBudget } from "@/lib/operations/budget";
+import { RECONCILIATION_RESERVE_MS, withOperationBudget } from "@/lib/operations/budget";
 import { checkProbeReadiness, probeIdentitySchema } from "@/lib/experiment-runner/probe-preflight";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
@@ -131,17 +135,19 @@ function toolAuth(request: Request, state: ConfigState): Response | null {
   if (state.enabled && !validToolKey(request.headers.get("x-booklet-tool-key"), state.config.callbackKey)) return reply(401, "unauthorized");
   return null;
 }
-export function createBookletRunnerHttp(deps: { database?: () => Database; config?: () => ConfigState; mutate?: typeof runTrackedMutation; store?: () => AssetStore; admit?: typeof assertMutationsAllowed } = {}) {
+export function createBookletRunnerHttp(deps: { database?: () => Database; config?: () => ConfigState; mutate?: typeof runTrackedMutation; store?: () => AssetStore; admit?: typeof assertMutationsAllowed; runtime?: (config: BookletRunnerConfig) => WorkflowRuntime } = {}) {
   const database = deps.database ?? getDatabase;
-  const config = deps.config ?? readBookletRunnerConfig;
+  const config = deps.config ?? readM4RunnerConfig;
   const mutate = deps.mutate ?? runTrackedMutation;
   const store = deps.store ?? createAssetStore;
   const admit = deps.admit ?? assertMutationsAllowed;
-  function services() {
+  function services(state: ConfigState) {
     const db = database();
     // One client for this callback, never a cross-request verification cache.
     const callbackStore = diagnosticAssetStore(store());
-    return { repository: createExperimentRepository(db, { store: () => callbackStore }),
+    const authority = state.enabled && state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
+    return { repository: createExperimentRepository(db, { store: () => callbackStore,
+      ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}) }),
       context: createExperimentContextService(db, { store: () => callbackStore }) };
   }
   async function run(operation: () => Promise<Response>) { try { return await withOperationBudget(Date.now() + 30_000, operation); } catch (error) { return safeError(error); } }
@@ -180,7 +186,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       await mutate(async () => { if ("preparationId" in body) await dispatcher.inspectPreparation({ runId: opaqueIdSchema.parse(runId), ...body, stop: action === "stop" });
         else await dispatcher.inspect({ runId: opaqueIdSchema.parse(runId), ...body, ...(action === "stop" ? { stop: "manual" as const } : {}) }); },
       { admitted: true, runId, ...("operationId" in body ? { operationId: body.operationId } : {}) });
-      return data(await services().context.getRunView(runId));
+      return data(await services(state).context.getRunView(runId));
     }); },
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;
@@ -199,30 +205,34 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       database: database(), store: diagnosticAssetStore(store()) }).complete({ identity: input, content }), { admitted: true, runId: input.runId, operationId: input.operationId }));
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
-    list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
-    detail(request: Request, runId: string) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const view = await services().context.getRunView(opaqueIdSchema.parse(runId)); return view ? data(view) : reply(404, "not_found"); }); },
+    list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
+    detail(request: Request, runId: string) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const view = await services(state).context.getRunView(opaqueIdSchema.parse(runId)); return view ? data(view) : reply(404, "not_found"); }); },
     create(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       if (!state.enabled) return reply(503, "runner_unavailable");
       const key = opaqueIdSchema.safeParse(request.headers.get("idempotency-key"));
       if (!key.success) return reply(400, "invalid_request");
       const body = createRunInputSchema.parse(await boundedJson(request, 4096));
-      if (body.mode !== "simulated") return reply(422, "mode_unavailable");
-      const { repository, context } = services();
+      const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
+      if (body.mode === "real" || body.mode === "balanced" && (!authority || body.predecessorRunId)) return reply(422, "mode_unavailable");
+      const { repository, context } = services(state);
       const runId = stableUuid(key.data, "booklet-run");
       const bookletId = stableUuid(key.data, "booklet");
       const prior = await repository.getRun(runId);
       if (prior) {
-        if (prior.persona !== body.persona || prior.mode !== body.mode || prior.predecessorRunId !== (body.predecessorRunId ?? null)) return reply(409, "conflict");
+        if (prior.persona !== body.persona || prior.mode !== body.mode || prior.predecessorRunId !== (body.predecessorRunId ?? null) ||
+            body.mode === "balanced" && prior.m4?.campaignId !== authority!.grant.campaignId) return reply(409, "conflict");
         return data(await context.getRunView(prior._id), 200);
       }
-      const saved = await mutate(() => repository.createRun({ runId, bookletId, ...body, configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId });
+      const saved = await mutate(() => repository.createRun({ runId, bookletId, ...body,
+        ...(body.mode === "balanced" ? { campaignId: authority!.grant.campaignId } : {}),
+        configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId });
       return data(await context.getRunView(saved._id), 201);
     }); },
     control(request: Request, runId: string, action: "pause" | "resume") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       const body = control.parse(await boundedJson(request, 4096));
-      const { repository, context } = services();
+      const { repository, context } = services(state);
       const saved = await mutate(() => repository[action]({ runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() }), { runId });
       return data(await context.getRunView(saved._id));
     }); },
@@ -240,12 +250,75 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }); },
     tool(request: Request, action: "authorize" | "context" | "result" | "failure") { return run(async () => {
       const state = config(); const denied = toolAuth(request, state); if (denied) return denied;
+      if (!state.enabled) return reply(503, "runner_unavailable");
       const schema = action === "result" ? result : action === "failure" ? failure : identity;
-      const body = schema.parse(await boundedJson(request, action === "result" ? 2_359_296 : 4096));
-      const { repository, context } = services();
-      const savedRun = await repository.getRun(body.runId);
+      const raw = await boundedJson(request, action === "result" ? 2_359_296 : 4096);
+      const callbackIdentity = identity.strip().parse(raw);
+      const { repository, context } = services(state);
+      const savedRun = await repository.getRun(callbackIdentity.runId);
       if (!savedRun) return reply(404, "not_found");
-      if (savedRun.mode !== "simulated") return reply(422, "mode_unavailable");
+      if (savedRun.mode === "real") return reply(422, "mode_unavailable");
+      if (savedRun.mode === "balanced") {
+        const operation = await repository.getOperation(callbackIdentity.operationId);
+        if (!operation || operation.runId !== callbackIdentity.runId || operation.mode !== "balanced" ||
+            operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== callbackIdentity.parentWorkflowRunId ||
+            operation.workflowRunId && operation.workflowRunId !== callbackIdentity.workflowRunId) return reply(409, "conflict");
+        if (operation.providerKind === "text") {
+          if (action === "result" || action === "failure") {
+            // The callback is only a wake-up hint. Content, costs and terminal
+            // state come from the coordinator's authenticated original GET.
+            if (!operation.workflowRunId) return reply(409, "conflict");
+            await mutate(() => repository.requestObservation(operation._id), { admitted: true, runId: savedRun._id, operationId: operation._id });
+            return data({ observationRequested: true });
+          }
+          if (action === "context") return reply(422, "mode_unavailable");
+          const body = identity.parse(raw);
+          const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
+          if (!authority) return reply(422, "mode_unavailable");
+          const summary = { role: operation.role, taskId: operation.taskId, subjectKind: operation.subjectKind,
+            subjectId: operation.subjectId, mode: operation.mode, inputFingerprint: operation.inputFingerprint };
+          if (operation.state !== "prepared") return data({ started: false, reason: "already_started", ...summary, m4: null });
+          const snapshot = m4PolicySnapshot(authority.policy);
+          const prep = operation.m4Preparation;
+          const expected = snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
+            item.persona === (operation.role === "tester" ? savedRun.persona : null));
+          const saved = savedConfigurationSchema.parse(JSON.parse(savedRun.configurationJson)).find((item) => item.role === operation.role && item.taskId === operation.taskId);
+          const candidates = state.config.bindings.filter((item) => item.role === operation.role && item.taskId === operation.taskId &&
+            item.persona === (operation.role === "tester" ? savedRun.persona : null));
+          const binding = candidates[0];
+          if (!prep || !expected || !saved || candidates.length !== 1 || !binding.apiKey ||
+              savedRun.m4?.campaignId !== authority.grant.campaignId || savedRun.m4.policyHash !== snapshot.hash ||
+              prep.policyHash !== snapshot.hash || prep.configurationHash !== savedRun.configurationHash ||
+              prep.requestDigest !== m4Hash(prep.requestJson) || prep.parentWorkflowRunId !== body.parentWorkflowRunId ||
+              prep.publishedWorkflowId !== expected.publishedWorkflowId ||
+              [saved, binding].some((item) => item.appId !== expected.appId || item.publishedWorkflowId !== expected.publishedWorkflowId ||
+                item.toolProviderId !== expected.toolProviderId || item.finalPageIllustration !== expected.finalPageIllustration)) return reply(409, "conflict");
+          const runtime = (deps.runtime ?? createWorkflowRuntime)(state.config);
+          const deadlineAtMs = (operation.deadlineAtMs ?? 0) - RECONCILIATION_RESERVE_MS;
+          const remote = await runtime.retrieve(binding, body.workflowRunId, { deadlineAtMs: Math.min(deadlineAtMs, Date.now() + 30_000), signal: request.signal });
+          if (remote.kind !== "execution" || remote.execution.id !== body.workflowRunId || remote.execution.status !== "running" ||
+              remote.execution.workflow_id !== expected.publishedWorkflowId) return reply(409, "conflict");
+          const timeoutSeconds = Math.min(snapshot.policy.maxTimeoutSeconds, Math.floor((deadlineAtMs - Date.now()) / 1000));
+          if (timeoutSeconds < 1) return reply(409, "conflict");
+          // Measure the actual escaped JSON envelope, not the unescaped request.
+          // These immutable prepared bytes are the only context sent to M4 text.
+          const authorized = { started: true, reason: null, ...summary, m4: {
+            requestJson: prep.requestJson, requestDigest: prep.requestDigest, timeoutSeconds, deadlineAtMs,
+            report: (operation.role === "tester" || operation.role === "judge") && savedRun.generationCompletedAtMs != null,
+          } };
+          const encoded = JSON.stringify({ data: authorized });
+          if (Buffer.byteLength(encoded, "utf8") > 1_048_576) return reply(422, "invalid_result");
+          const claim = await mutate(async () => {
+            await repository.recordDispatchIdentity({ ...body, ...(remote.execution.task_id ? { workflowTaskId: remote.execution.task_id } : {}), nowMs: Date.now() });
+            await repository.verifyDispatchPublication({ ...body, workflowId: remote.execution.workflow_id, nowMs: Date.now() });
+            return repository.claimOperation({ ...body, nowMs: Date.now() });
+          }, { admitted: true, runId: body.runId, operationId: body.operationId });
+          return claim.started ? new Response(encoded, { headers: { ...headers, "Content-Type": "application/json" } }) :
+            data({ started: false, reason: claim.reason ?? null, ...summary, m4: null });
+        }
+        if (action === "authorize" && (state.config.m4?.state !== "granted" || !state.config.m4.authority)) return reply(422, "mode_unavailable");
+      }
+      const body = schema.parse(raw);
       if (action === "authorize") {
         const prepared = await repository.getOperation(body.operationId);
         if (!prepared || prepared.runId !== body.runId || prepared.dispatchStartedAtMs == null) return reply(409, "conflict");

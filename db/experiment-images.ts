@@ -12,6 +12,7 @@ import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-ill
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import type { VerificationMetadata } from "@/db/experiment-verification-metadata";
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 
 const time = z.number().int().nonnegative();
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
@@ -74,7 +75,8 @@ export function createExperimentImageRepository(database: Database, options: { s
     const operation = await operations.findOne({ _id: input.operationId, runId: input.runId }, { session });
     const run = await runs.findOne({ _id: input.runId }, { session });
     if (!operation || !run) throw new ExperimentRepositoryError("not_found", "Image operation was not found.");
-    if (operation.role !== "image" || operation.providerKind !== "image" || operation.mode !== "simulated" || run.mode !== "simulated" || operation.reservationCount !== 1) invalid("Operation is not an authorized simulated image claim.");
+    if (operation.role !== "image" || operation.providerKind !== "image" || operation.mode !== run.mode ||
+        (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || operation.reservationCount !== 1) invalid("Operation is not an authorized simulated image claim.");
     if (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId || operation.inputFingerprint !== input.inputFingerprint) conflict("Image completion identity differs from the saved claim.");
     const request = requestFor(operation);
     if (imageRequestFingerprint(request) !== input.inputFingerprint || JSON.stringify(request.sourceVersionIds) !== JSON.stringify(operation.dependencyVersionIds)) conflict("Saved image request or source identity changed.");

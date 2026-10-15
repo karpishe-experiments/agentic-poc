@@ -121,14 +121,10 @@ describe("experiment repository", () => {
     await repository.prepareOperation(prepared(0));
     expect(await repository.claimOperation(claimed())).toMatchObject({ started: false, reason: "limit_exhausted" });
     expect(await repository.getRun(ids[0])).toMatchObject({ status: "blocked", safeFailure: "limit_exhausted" });
-    const balanced = await repository.createRun({ ...creation, runId: ids[4], bookletId: ids[5], mode: "balanced" });
-    await repository.prepareOperation(prepared(balanced.revision, { operationId: ids[6], runId: ids[4], subjectId: ids[5], role: "image", taskId: null, providerKind: "image" }));
-    await repository.claimOperation({ runId: ids[4], operationId: ids[6], workflowRunId: ids[7], parentWorkflowRunId: null, nowMs: 3 });
-    expect((await repository.getRun(ids[4]))?.counters).toMatchObject({ logicalImage: 1, payableImage: 0 });
-    const real = await repository.createRun({ ...creation, runId: ids[8], bookletId: ids[9], mode: "real" });
-    await repository.prepareOperation(prepared(real.revision, { operationId: ids[7], runId: ids[8], subjectId: ids[9] }));
-    await repository.claimOperation({ runId: ids[8], operationId: ids[7], workflowRunId: ids[6], parentWorkflowRunId: null, nowMs: 3 });
-    expect((await repository.getRun(ids[8]))?.counters).toMatchObject({ logicalText: 1, payableText: 1 });
+    await expect(repository.createRun({ ...creation, runId: ids[4], bookletId: ids[5], mode: "balanced" })).rejects.toMatchObject({ code: "invalid_state" });
+    await expect(repository.createRun({ ...creation, runId: ids[8], bookletId: ids[9], mode: "real" })).rejects.toMatchObject({ code: "invalid_state" });
+    expect(await database.collections.booklets.findOne({ _id: ids[5] })).toBeNull();
+    expect(await database.collections.booklets.findOne({ _id: ids[9] })).toBeNull();
   });
 
   it("rejects wrong identity, role, task and conflicting completion; reuses canonical duplicate", async () => {

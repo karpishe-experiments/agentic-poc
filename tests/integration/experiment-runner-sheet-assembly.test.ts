@@ -9,6 +9,7 @@ import { referenceSheetRequest } from "@/lib/experiment-runner/reference-request
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const databases: Database[] = [];
@@ -74,6 +75,19 @@ async function setup(task: "J09" | "J10" = "J09") {
 }
 
 describe("saved sheet assembly", () => {
+  it.each(["J09", "J10"] as const)("assembles Balanced %s only from matching retained image evidence", async (task) => {
+    const env = await setup(task);
+    const retained = await retainM4ImageTestPolicy(env.database, env.input.runId);
+    const saved = await env.service().assemble(env.input);
+    expect(saved.reused).toBe(false);
+    expect((await env.service().assemble(env.input)).reused).toBe(true);
+    expect((await env.repository.getRun(env.input.runId))!.counters).toEqual(retained.counters);
+    await env.database.collections.experiment_runs.updateOne({ _id: env.input.runId }, { $set: { configurationHash: "0".repeat(64) } });
+    await expect(env.service().assemble(env.input)).rejects.toThrow("simulated image policy");
+    await env.database.collections.experiment_runs.updateOne({ _id: env.input.runId }, { $set: { configurationHash: retained.configurationHash } });
+    env.store.files.set([...env.store.files.keys()][0], new Uint8Array([1]));
+    await expect(env.service().assemble(env.input)).rejects.toMatchObject({ code: "invalid_state" });
+  });
   for (const task of ["J09", "J10"] as const) {
     it(`${task} persists one unapproved assembly and reuses it after restart and concurrent calls`, async () => {
       const env = await setup(task), before = await env.repository.getRun(env.input.runId);

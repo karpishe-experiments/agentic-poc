@@ -1,3 +1,5 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { z } from "zod";
@@ -15,7 +17,7 @@ import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { verificationMetadata } from "@/db/experiment-verification-metadata";
+import { isBalancedImageVerificationRun, verificationMetadata } from "@/db/experiment-verification-metadata";
 
 function incomplete(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
 
@@ -23,30 +25,44 @@ function incomplete(message: string): never { throw new ExperimentRepositoryErro
 // the transaction and any later run transition; this does not mark completion.
 export async function verifyExperimentGeneration(database: Database, session: ClientSession,
   inputRun: ExperimentRunDocument, store: AssetStore, reportOperationId?: string,
-  phase: "completion" | "context" = "completion") {
+  phase: "completion" | "context" | "preparation" = "completion", nowMs?: number) {
   const attempt = createVerificationAttempt(store);
   const run = await database.collections.experiment_runs.findOne({ _id: inputRun._id }, { session });
   if (!run || run.revision !== inputRun.revision || run.configurationHash !== inputRun.configurationHash) incomplete("Generation run evidence changed before verification.");
+  const preparation = phase === "preparation";
+  if (preparation && (!reportOperationId || !isBalancedImageVerificationRun(run) || run.pauseRequested ||
+      !["queued", "running"].includes(run.status) || nowMs == null || !Number.isSafeInteger(nowMs) || nowMs < 0)) {
+    incomplete("Report preparation requires active Balanced work and an original deadline check.");
+  }
   if (reportOperationId) {
     const operation = await database.collections.experiment_operations.findOne({ _id: reportOperationId, runId: run._id }, { session });
     if (!operation || run.activeOperationId !== reportOperationId || !["tester", "judge"].includes(operation.role) ||
         operation.taskId !== null || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId ||
-        operation.providerKind !== "text" || operation.reservationCount !== 1 || !["started", "unknown"].includes(operation.state)) {
-      incomplete("Report evidence requires its current claimed evaluation operation.");
+        operation.providerKind !== "text" || operation.mode !== run.mode || (preparation
+          ? operation.reservationCount !== 0 || operation.state !== "prepared" || operation.m4Reservation != null ||
+            operation.lifecycle?.stop != null || operation.dispatchStartedAtMs != null || operation.workflowRunId !== null ||
+            operation.parentWorkflowRunId !== null || operation.verifiedWorkflowId != null ||
+            operation.deadlineAtMs == null || operation.deadlineAtMs <= nowMs!
+          : operation.reservationCount !== 1 || !["started", "unknown"].includes(operation.state))) {
+      incomplete(preparation ? "Report preparation requires its current unreserved evaluation operation." : "Report evidence requires its current claimed evaluation operation.");
     }
     const bindings = savedConfigurationSchema.parse(JSON.parse(run.configurationJson) as unknown)
       .filter((binding) => binding.role === operation.role && binding.taskId === null);
-    if (bindings.length !== 1 || !operation.workflowRunId || operation.dispatchStartedAtMs == null ||
+    if (bindings.length !== 1 || (!preparation && (!operation.workflowRunId || operation.dispatchStartedAtMs == null ||
         (phase === "completion" ? operation.verifiedWorkflowId !== bindings[0].publishedWorkflowId :
-          operation.verifiedWorkflowId != null && operation.verifiedWorkflowId !== bindings[0].publishedWorkflowId)) {
+          operation.verifiedWorkflowId != null && operation.verifiedWorkflowId !== bindings[0].publishedWorkflowId)))) {
       incomplete("Report requires its exact verified published workflow binding.");
     }
+    if (preparation) await assertExperimentEvaluationOrder(database, session, run, operation.role as "tester" | "judge");
   }
-  if (run.mode !== "simulated" || !configuredPageIllustrationTask(run.configurationJson) ||
+  if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       (run.activeOperationId && run.activeOperationId !== reportOperationId) || run.pendingDecisionJson ||
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
       (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.");
+  // Preparation is a read-only source projection, not accounting acceptance.
+  // Generation/report materialization and final exit require retained usage.
+  if (run.mode === "balanced" && !preparation) await verifyM4Accounting(database, session, run, reportOperationId);
   const metadata = await verificationMetadata(database, session, run._id, attempt);
   const artifacts = metadata.artifacts;
   const tasks = Array.from({ length: 13 }, (_, index) => `J${String(index + 1).padStart(2, "0")}`);
@@ -141,7 +157,7 @@ export async function assertExperimentEvaluationOrder(database: Database, sessio
     const binding = bindings.find((item) => item.role === operation.role && item.taskId === null);
     if (!report.success || !binding || operation.verifiedWorkflowId !== binding.publishedWorkflowId || !operation.workflowRunId ||
         operation.reservationCount !== 1 || operation.dispatchStartedAtMs == null || operation.subjectKind !== "book" ||
-        operation.subjectId !== run.bookletId || operation.taskId !== null || operation.providerKind !== "text" ||
+        operation.subjectId !== run.bookletId || operation.taskId !== null || operation.providerKind !== "text" || operation.mode !== run.mode ||
         report.data.role !== operation.role || report.data.runId !== run._id || report.data.mode !== run.mode ||
         report.data.configurationHash !== run.configurationHash || report.data.evidence.versionIds.length !== run.generationVersionIds!.length ||
         report.data.evidence.versionIds.some((id) => !run.generationVersionIds!.includes(id))) incomplete("Saved evaluation report evidence is invalid.");
