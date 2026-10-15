@@ -11,8 +11,8 @@ export class CampaignAdmissionError extends Error {
 const requireState = (condition: unknown, message: string): void => { if (!condition) throw new CampaignAdmissionError(message); };
 const requireAllowance = (condition: unknown, message: string): void => { if (!condition) throw new CampaignAdmissionError(message, "limit_exhausted"); };
 
-// No route or environment reader calls this yet. Later readiness wiring supplies
-// protected policy + explicit grant; a public request cannot create an authority.
+// Reviewed staging configuration supplies policy + explicit grant. A public
+// request cannot create authority or change the frozen campaign allowance.
 export function createExperimentCampaignLedger(database: Database, authority: M4Authority) {
   const snapshot = m4PolicySnapshot(authority.policy);
   const grant = Object.freeze(m4GrantSchema.parse(authority.grant));

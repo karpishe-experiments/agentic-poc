@@ -1,5 +1,6 @@
 import type { ExperimentMode, ExperimentRole, ExperimentTask, Persona } from "@/lib/contracts/experiment-runner";
 import type { M4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 
 export type BaseDocument = { _id: string };
 
@@ -53,6 +54,11 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  m4Observation?: { workflowRunId: string; publishedWorkflowId: string; wrapperDigest: string | null;
+    content: string | null; evidenceJson: string | null; evidenceDigest: string | null;
+    costEvidence?: ExperimentReport["costEvidence"];
+    remoteStatus: "succeeded" | "failed" | "stopped"; observedAtMs: number;
+    issue: "missing_wrapper" | "invalid_evidence" | "provider_failure" | "creative_invalid" | "conflicting_evidence" | null };
   m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
     requestJson: string; contextJson: string; systemPrompt: string; modelParametersJson: string;
     sourceFingerprint: string; operationFingerprint: string; publishedWorkflowId: string; parentWorkflowRunId: string | null; preparedAtMs: number };

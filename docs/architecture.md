@@ -82,8 +82,10 @@ original false/absent route. The local M4 policy/campaign foundation adds
 monetary reservations. Protected repository injection is required for new Balanced
 runs. The ledger owns persona slots, request/judge counts and integer microdollar
 reservation/settlement in caller-owned transactions. It has no public grant/budget
-API and no automatic uncertain-reservation release. The public routes and
-repository defaults still block Balanced/Real. A protected internal text-only seam
+API and no automatic uncertain-reservation release. The checked-in non-secret
+campaign manifest defaults to disabled. Only a reviewed staging manifest with an
+explicit grant enables Balanced creation and dispatch; Real remains blocked.
+A protected text preparation path
 now saves the exact role request before dispatch, rechecks source/approval and
 publication identities, and reserves operation/run/campaign allowances atomically
 at claim. Preparation grants no execution permission. Duplicate claims admit one
@@ -91,8 +93,18 @@ action. Trusted output assembly supplies approved identity/hash/fact fields rath
 than asking a model to reproduce them. The request bundle has canonical Python/Node
 byte parity; the local provider pins the global endpoint. Assumed token-count
 charges remain reserved after model usage settlement and are not reported as
-verified invoice charges. Provider attribution, callbacks, Balanced image routing
-and public configuration remain pending; no M4 paid execution is enabled.
+verified invoice charges. Authenticated original Dify GET results retain provider
+content and usage before parsing or materialization. Result/failure callbacks only
+request observation for Balanced text. Terminal exit checks reconcile run counters
+and campaign totals with every attributable reservation. Report cost snapshots
+include their own request and remain fixed after later work. Balanced images use
+the existing simulated bytes, approval, source, upload and assembly boundaries.
+The UI and CLI retain Simulated defaults and expose grant-gated Balanced controls.
+The candidate provider transports the exact prepared request in a plain text
+carrier, then unwraps it before OpenAI; static role/model limits and original
+deadlines remain enforced. These local changes are not deployed. The installed
+dev1 provider predates the carrier, digest, endpoint and SDK guards; no M4 paid
+execution is enabled.
 Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 

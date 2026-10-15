@@ -1,3 +1,5 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { z } from "zod";
@@ -53,11 +55,14 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     }
     if (preparation) await assertExperimentEvaluationOrder(database, session, run, operation.role as "tester" | "judge");
   }
-  if ((!preparation && run.mode !== "simulated") || !configuredPageIllustrationTask(run.configurationJson) ||
+  if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       (run.activeOperationId && run.activeOperationId !== reportOperationId) || run.pendingDecisionJson ||
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
       (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.");
+  // Preparation is a read-only source projection, not accounting acceptance.
+  // Generation/report materialization and final exit require retained usage.
+  if (run.mode === "balanced" && !preparation) await verifyM4Accounting(database, session, run, reportOperationId);
   const metadata = await verificationMetadata(database, session, run._id, attempt);
   const artifacts = metadata.artifacts;
   const tasks = Array.from({ length: 13 }, (_, index) => `J${String(index + 1).padStart(2, "0")}`);

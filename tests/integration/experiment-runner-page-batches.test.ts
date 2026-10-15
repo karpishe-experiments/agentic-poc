@@ -7,6 +7,7 @@ import { createRepositories } from "@/db/repositories";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const { verifySources, verifyVersion } = vi.hoisted(() => ({ verifySources: vi.fn(), verifyVersion: vi.fn() }));
@@ -44,6 +45,20 @@ async function prepareFirst(env: Awaited<ReturnType<typeof setup>>) {
   return { identity: { runId: id(1), jobId: id(8) }, binding: { runId: id(1), jobId: id(8), operationId: id(11), expectedRevision: 2 }, request };
 }
 describe("saved Dify page batch selection", () => {
+  it("binds a Balanced synthetic page selection without reserving and rejects retained mode or policy drift", async () => {
+    const env = await setup();
+    const run = await retainM4ImageTestPolicy(env.database, id(1));
+    env.batch.configurationHash = run.configurationHash;
+    const { binding, identity } = await prepareFirst(env);
+    await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: { mode: "balanced" } });
+    expect((await env.repository().bind(binding)).reused).toBe(false);
+    expect(await env.database.collections.experiment_operations.findOne({ _id: id(11) })).toMatchObject({ reservationCount: 0, mode: "balanced", state: "prepared" });
+    expect((await env.database.collections.experiment_runs.findOne({ _id: id(1) }))!.counters).toEqual(run.counters);
+    await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: { mode: "simulated" } });
+    await expect(env.repository().reconcile(identity)).rejects.toThrow("operation is missing");
+    await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { "m4.policyHash": "0".repeat(64) } });
+    await expect(env.repository().get(identity)).rejects.toThrow("ownership or saved selection");
+  });
   it.each(["observed", "callback", "retained"])("closes terminal page bookkeeping after %s failure without replay", async (failure) => {
     const env = await setup(); const { binding } = await prepareFirst(env);
     await env.repository().bind(binding);

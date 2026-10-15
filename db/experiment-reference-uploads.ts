@@ -11,6 +11,8 @@ import { savedConfigurationSchema, type BookletBinding } from "@/lib/experiment-
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { operationSignal, remainingOperationMs } from "@/lib/operations/budget";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema });
 const acknowledgement = pageIllustrationAttachmentSchema.transform(({ uploadUser, ...item }) => {
@@ -56,11 +58,12 @@ export function createExperimentReferenceUploads(input: {
         const options = { session };
         const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
         const operation = await database.collections.experiment_operations.findOne({ _id: value.operationId, runId: value.runId }, options);
-        if (!run || !operation || run.mode !== "simulated" || !configuredPageIllustrationTask(run.configurationJson) ||
+        if (!run || !operation || run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run) || !configuredPageIllustrationTask(run.configurationJson) ||
             operation.role !== "image" || operation.taskId !== "J13" || operation.subjectKind !== "page" ||
-            operation.mode !== "simulated" || operation.providerKind !== "image" || operation.state !== "prepared" ||
+            operation.mode !== run.mode || operation.providerKind !== "image" || operation.state !== "prepared" || operation.lifecycle?.stop ||
             operation.dispatchStartedAtMs != null || operation.workflowRunId !== null || operation.reservationCount !== 0 ||
-            run.activeOperationId !== operation._id || !["queued", "running"].includes(run.status) || run.pauseRequested) {
+            run.activeOperationId !== operation._id || !["queued", "running"].includes(run.status) || run.pauseRequested ||
+            operationSignal()?.aborted || remainingOperationMs() <= 0) {
           conflict("Reference upload requires current, undispatched simulated J13 work.");
         }
         const configuration = savedConfigurationSchema.parse(JSON.parse(run.configurationJson));
@@ -72,7 +75,7 @@ export function createExperimentReferenceUploads(input: {
         }
         const managerBinding = configuration.find((item) => item.role === "manager" && item.taskId === null);
         const manager = await database.collections.experiment_operations.findOne({ runId: run._id, role: "manager", taskId: null,
-          subjectKind: "book", subjectId: run.bookletId, mode: "simulated", providerKind: "text", state: "succeeded",
+          subjectKind: "book", subjectId: run.bookletId, mode: run.mode, providerKind: "text", state: "succeeded",
           reservationCount: 1, workflowRunId: value.parentWorkflowRunId }, options);
         const decision = z.strictObject({ kind: z.literal("delegate"), payload: z.strictObject({ taskId: z.literal("J13"),
           subjectKind: z.literal("page"), subjectId: opaqueIdSchema }) }).safeParse(JSON.parse(manager?.resultJson ?? "null"));

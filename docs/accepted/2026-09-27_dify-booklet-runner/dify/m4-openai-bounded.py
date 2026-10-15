@@ -20,6 +20,25 @@ from dify_plugin.errors.model import InvokeBadRequestError
 from . import responses
 
 
+def _verify_stdio_sdk() -> dict[str, str]:
+    # The pinned daemon can retry an incomplete local stdin write. At-most-once
+    # delivery depends on this SDK dispatching only newline-terminated frames.
+    # Verify the audited reader before paid I/O, without a host inspection action.
+    import inspect
+    from importlib.metadata import version
+    from pathlib import Path
+    from dify_plugin.core.server.stdio.request_reader import StdioRequestReader
+    expected = "546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22"
+    try:
+        sdk_version = version("dify-plugin")
+        reader_digest = hashlib.sha256(Path(inspect.getfile(StdioRequestReader)).read_bytes()).hexdigest()
+    except (OSError, TypeError, ValueError):
+        raise InvokeBadRequestError("Booklet cannot verify its audited stdio dependency.") from None
+    if sdk_version != "0.10.2" or reader_digest != expected:
+        raise InvokeBadRequestError("Booklet stdio dependency differs from its audited delivery contract.")
+    return {"version": sdk_version, "readerSha256": reader_digest}
+
+
 def _integer(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
@@ -56,11 +75,22 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     enabled = params.pop("booklet_bounded_execution", None)
     seconds = params.pop("booklet_timeout_seconds", None)
     expected_digest = params.pop("booklet_request_digest", None)
+    carrier = params.pop("booklet_prepared_request", False)
+    deadline_at_ms = params.pop("booklet_deadline_at_ms", None)
+    # Graphon coerces all-numeric dynamic parameter strings to numbers. The
+    # explicit prefix keeps the authorized digest a string through that boundary.
+    if isinstance(expected_digest, str) and expected_digest.startswith("sha256:"):
+        expected_digest = expected_digest[len("sha256:"):]
     if (type(expected_digest) is not str or len(expected_digest) != 64
             or any(char not in "0123456789abcdef" for char in expected_digest)):
         raise InvokeBadRequestError("Booklet requires an authorized request digest.")
     if enabled is not True or type(seconds) not in (int, float) or not math.isfinite(seconds) or not 0 < seconds <= 120:
         raise InvokeBadRequestError("Booklet bounded execution needs a remaining timeout in (0, 120].")
+    if type(carrier) is not bool:
+        raise InvokeBadRequestError("Booklet prepared-request mode must be Boolean.")
+    if carrier and (type(deadline_at_ms) not in (int, float) or not math.isfinite(deadline_at_ms)
+                    or deadline_at_ms <= time.time() * 1000):
+        raise InvokeBadRequestError("Booklet original operation deadline has expired or is missing.")
     if model not in ("gpt-6-luna", "gpt-6-sol") or stream or tools or stop:
         raise InvokeBadRequestError("Booklet bounded execution permits only non-streaming Luna/Sol text.")
     if credentials.get("api_protocol", "responses") != "responses":
@@ -76,15 +106,39 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
         raise InvokeBadRequestError("Unsupported Booklet reasoning effort.")
     if params.get("reasoning_mode") != "standard" or params.get("service_tier") != "default":
         raise InvokeBadRequestError("Booklet requires Standard reasoning and service tier.")
-    if params.get("response_format") != "json_schema" or not params.get("json_schema"):
+    if not carrier and (params.get("response_format") != "json_schema" or not params.get("json_schema")):
         raise InvokeBadRequestError("Booklet requires a structured output schema.")
     # No assistant/tool history or opaque replay is permitted in this request.
     if any(message.role.value not in ("system", "developer", "user") or not isinstance(message.content, str)
            for message in messages):
         raise InvokeBadRequestError("Booklet requires explicit text-only context.")
-    payload = {"model": model, "input": responses.input_items(messages),
-               **responses.parameters(model, params, None, None, {})}
+    if carrier:
+        if (len(messages) != 1 or messages[0].role.value != "user"
+                or len(messages[0].content.encode("utf-8")) > 2 * 1024 * 1024):
+            raise InvokeBadRequestError("Booklet requires one bounded prepared-request carrier.")
+        try:
+            payload = json.loads(messages[0].content)
+        except (ValueError, TypeError):
+            raise InvokeBadRequestError("Booklet prepared request is invalid.") from None
+        if (not isinstance(payload, dict)
+                or set(payload) != {"model", "input", "max_output_tokens", "reasoning", "service_tier", "text", "store", "truncation", "include"}
+                or payload["model"] != model or type(payload["max_output_tokens"]) is not int
+                or payload["max_output_tokens"] != ceiling
+                or payload["reasoning"] != {"effort": effort, "mode": "standard"}
+                or payload["service_tier"] != "default" or payload["store"] is not False
+                or payload["truncation"] != "disabled" or payload["include"] != ["reasoning.encrypted_content"]
+                or not isinstance(payload["input"], list) or len(payload["input"]) != 2
+                or any(not isinstance(item, dict) or set(item) != {"type", "role", "content"}
+                       or item["type"] != "message" or item["role"] != role or not isinstance(item["content"], str)
+                       for item, role in zip(payload["input"], ("system", "user")))
+                or not isinstance(payload["text"], dict) or set(payload["text"]) != {"format"}):
+            raise InvokeBadRequestError("Booklet prepared request differs from the bounded role policy.")
+    else:
+        payload = {"model": model, "input": responses.input_items(messages),
+                   **responses.parameters(model, params, None, None, {})}
     output_format = payload.get("text", {}).get("format", {})
+    if not isinstance(output_format, dict):
+        raise InvokeBadRequestError("Booklet requires a strict object output schema.")
     schema = output_format.get("schema")
     if (output_format.get("type") != "json_schema" or output_format.get("strict") is not True
             or not isinstance(schema, dict) or not schema or schema.get("type") != "object"):
@@ -93,13 +147,20 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     payload["truncation"] = "disabled"
     # Own the admitted snapshot; callers and counting must not mutate generation.
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    if carrier and messages[0].content != encoded.decode():
+        raise InvokeBadRequestError("Booklet prepared carrier must preserve exact canonical bytes.")
     digest = hashlib.sha256(encoded).hexdigest()
     if digest != expected_digest:
         raise InvokeBadRequestError("Booklet request differs from authorized preparation.")
     payload = json.loads(encoded)
+    stdio_sdk = _verify_stdio_sdk()
     count_payload = {key: value for key, value in payload.items()
                      if key in {"model", "input", "reasoning", "text", "truncation"}}
     started = clock()
+    if carrier:
+        seconds = min(seconds, (deadline_at_ms - time.time() * 1000) / 1000)
+        if seconds <= 0:
+            raise InvokeBadRequestError("Booklet original deadline expired before counting.")
     kwargs = llm._to_credential_kwargs(credentials)
     endpoint = kwargs.get("base_url", "https://api.openai.com/v1")
     if not isinstance(endpoint, str) or endpoint.rstrip("/") != "https://api.openai.com/v1":
@@ -113,6 +174,8 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
         if input_count is None or input_count > 32000:
             raise InvokeBadRequestError("Booklet complete input exceeds its verified token limit.")
         remaining = seconds - (clock() - started)
+        if carrier:
+            remaining = min(remaining, (deadline_at_ms - time.time() * 1000) / 1000)
         if remaining <= 0:
             raise InvokeBadRequestError("Booklet timeout expired before generation.")
         response = client.responses.create(**payload, timeout=remaining)
@@ -130,6 +193,7 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
         incomplete_reason = "unknown"
     evidence = {
         "provider": "openai", "responseId": _field(response, "id"),
+        "stdioSdk": stdio_sdk,
         "apiBaseUrl": "https://api.openai.com/v1",
         "requestId": _field(response, "_request_id"), "model": _field(response, "model"),
         "serviceTier": _field(response, "service_tier"), "status": status,

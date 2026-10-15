@@ -8,6 +8,8 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { MAX_EXPERIMENT_IMAGE_BYTES, validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
+import { createExperimentContextService } from "@/lib/experiment-runner/context";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const databases: Database[] = [];
@@ -51,6 +53,54 @@ async function setup(options: { skipPrepare?: boolean } = {}) {
 }
 
 describe("experiment image storage", () => {
+  it("accepts a late Balanced synthetic upload for the same retained unknown claim", async () => {
+    const env = await setup();
+    await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    await retainM4ImageTestPolicy(env.database, env.runId);
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operationId }, {
+      $set: { state: "unknown", safeFailure: "unknown_outcome", deadlineAtMs: 4 },
+    });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, {
+      $set: { status: "blocked", safeFailure: "unknown_outcome" },
+    });
+    expect(await createExperimentImageRepository(env.database).authorizeFixture(env.identity)).toEqual(env.request);
+    const saved = await env.storage().complete({ identity: env.identity, content: env.bytes });
+    expect(saved.reused).toBe(false);
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "paused", pauseRequested: true,
+      activeOperationId: null, counters: { logicalImage: 1, payableImage: 0 } });
+    expect(await env.database.collections.experiment_operations.findOne({ _id: env.operationId })).toMatchObject({
+      state: "succeeded", reservationCount: 1, workflowRunId: env.identity.workflowRunId,
+    });
+  });
+  it("finishes a retained Balanced synthetic claim while paused and rejects policy, mode and source drift", async () => {
+    const env = await setup();
+    await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const retained = await retainM4ImageTestPolicy(env.database, env.runId);
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { pauseRequested: true, status: "paused" } });
+    const images = createExperimentImageRepository(env.database, { store: () => env.store });
+    const context = createExperimentContextService(env.database, { store: () => env.store });
+    expect(await images.authorizeFixture(env.identity)).toEqual(env.request);
+    expect(await context.getOperationContext(env.claimIdentity)).toMatchObject({ mode: "balanced", imageProvider: "simulated", imageRequest: env.request });
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operationId }, { $set: { mode: "simulated" } });
+    await expect(images.authorizeFixture(env.identity)).rejects.toMatchObject({ code: "invalid_state" });
+    await expect(context.getOperationContext(env.claimIdentity, env.request)).rejects.toThrow("retained simulated image policy");
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operationId }, { $set: { mode: "balanced" } });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { "m4.policyHash": "0".repeat(64) } });
+    await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toMatchObject({ code: "invalid_state" });
+    expect(env.store.files.size).toBe(0);
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { m4: retained.m4 } });
+    const approval = (await env.database.collections.approvals.findOne({ artifactVersionId: env.sourceVersionId }))!;
+    await env.database.collections.approvals.deleteOne({ _id: approval._id });
+    await expect(images.authorizeFixture(env.identity)).rejects.toThrow("saved approval");
+    await env.database.collections.approvals.insertOne(approval);
+    const result = await env.storage().complete({ identity: env.identity, content: env.bytes });
+    expect(await env.store.get(result.asset!.uri)).toEqual(Uint8Array.from(env.bytes));
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ mode: "balanced", status: "paused", pauseRequested: true,
+      counters: { logicalImage: 1, payableImage: 0 } });
+    expect((await env.storage().complete({ identity: env.identity, content: env.bytes })).reused).toBe(true);
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { mode: "real" } });
+    await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toMatchObject({ code: "invalid_state" });
+  });
   it("stores original bytes once, retains lineage, and does not charge a simulated provider", async () => {
     const env = await setup();
     await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toMatchObject({ code: "invalid_state" });

@@ -1,3 +1,4 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -13,7 +14,7 @@ import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { isBalancedImageVerificationRun, verificationMetadata } from "@/db/experiment-verification-metadata";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, pageId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -69,9 +70,9 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         $or: [{ role: "tester" }, { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId,
           providerKind: "text", workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null } }],
-        state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
-    if ((run.mode !== "simulated" && !(verificationOnly && isBalancedImageVerificationRun(run))) || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
-      invalid("Page illustration assembly requires idle simulated work.");
+        mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
+    if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
+      invalid("Page illustration assembly requires idle work with a simulated image policy.");
     }
     if (!configuredPageIllustrationTask(run.configurationJson)) invalid("Page illustration is not enabled by this saved run configuration.");
     const configuration = savedConfigurationSchema.parse(json(run.configurationJson, "Saved run configuration is malformed."));

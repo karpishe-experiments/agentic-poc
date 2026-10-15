@@ -21,7 +21,7 @@ export type RuntimeInput = {
   runId: string;
   operationId: string;
   parentWorkflowRunId: string | null;
-  mode: "simulated";
+  mode: "simulated" | "balanced";
   referenceFileIds?: string[];
 };
 export type WorkflowStartOptions = {
@@ -51,7 +51,7 @@ const runtimeInputSchema = z.object({
   runId: opaqueIdSchema,
   operationId: opaqueIdSchema,
   parentWorkflowRunId: opaqueIdSchema.nullable(),
-  mode: z.literal("simulated"),
+  mode: z.enum(["simulated", "balanced"]),
   referenceFileIds: z.array(opaqueIdSchema).min(1).max(15)
     .refine((ids) => new Set(ids).size === ids.length, "Reference file IDs must be unique")
     .optional(),
@@ -62,12 +62,12 @@ function runtimeBody(input: z.infer<typeof runtimeInputSchema>): string {
   // files are supplied. Dify custom workflow inputs use descriptors, not
   // top-level `files`; the caller owns upload and reference identity checks.
   const inputs = input.referenceFileIds === undefined
-    ? { run_id: input.runId, operation_id: input.operationId, parent_workflow_run_id: input.parentWorkflowRunId ?? "", mode: "simulated" }
+    ? { run_id: input.runId, operation_id: input.operationId, parent_workflow_run_id: input.parentWorkflowRunId ?? "", mode: input.mode }
     : {
       run_id: input.runId,
       operation_id: input.operationId,
       parent_workflow_run_id: input.parentWorkflowRunId ?? "",
-      mode: "simulated",
+      mode: input.mode,
       reference_files: input.referenceFileIds.map((upload_file_id) => ({ type: "image", transfer_method: "local_file", upload_file_id })),
     };
   return JSON.stringify({ inputs, response_mode: "streaming", user: `booklet-${input.runId}` });

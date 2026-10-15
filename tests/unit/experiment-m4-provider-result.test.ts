@@ -10,6 +10,7 @@ const operation = { mode: "balanced", providerKind: "text", m4Preparation: { req
   m4Reservation: { requestDigest: digest, policyHash, bucket: "decision" } } as ExperimentOperationDocument;
 function wrapper() { return { schemaVersion: "booklet_provider_v1", content: '{"result":', providerEvidence: {
   provider: "openai", apiBaseUrl: "https://api.openai.com/v1", responseId: "resp_fake", requestId: "req_fake", model: "gpt-6-luna",
+  stdioSdk: { version: "0.10.2", readerSha256: "546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22" },
   serviceTier: "default", status: "completed", refused: false, incompleteReason: null, requestDigest: digest, countedInputTokens: 100,
   usage: { source: "provider_reported", inputTokens: 100, outputTokens: 100, cachedInputTokens: 25, cacheWriteInputTokens: null, reasoningOutputTokens: 20 },
 } }; }
@@ -57,5 +58,10 @@ describe("M4 attributable provider evidence", () => {
     const invalid = structuredClone(m4TestPolicy()) as unknown as { models: { decision: { inputMicrodollarsPerMillion: number } } };
     invalid.models.decision.inputMicrodollarsPerMillion = 0;
     expect(() => assessM4ProviderResult(wrapper(), invalid, operation)).toThrow();
+  });
+  it("retains old usage for inspection but rejects materialization without stdio provenance", () => {
+    const raw = wrapper(); Reflect.deleteProperty(raw.providerEvidence, "stdioSdk");
+    expect(assessM4ProviderResult(raw, m4TestPolicy(), operation)).toMatchObject({ chargeUpperMicrodollars: 63,
+      violations: ["stdio_unverified"], canMaterialize: false });
   });
 });

@@ -7,6 +7,8 @@ const tokens = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nulla
 export const m4ProviderWrapperSchema = z.strictObject({ schemaVersion: z.literal("booklet_provider_v1"),
   content: z.string().max(2 * 1024 * 1024), providerEvidence: z.strictObject({
     provider: z.literal("openai"), apiBaseUrl: z.literal("https://api.openai.com/v1"),
+    stdioSdk: z.strictObject({ version: z.literal("0.10.2"),
+      readerSha256: z.literal("546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22") }).optional(),
     responseId: z.string().min(1).max(200).nullable(), requestId: z.string().min(1).max(200).nullable(),
     model: z.string().min(1).max(200).nullable(), serviceTier: z.string().max(100).nullable(),
     status: z.enum(["completed", "incomplete", "failed", "cancelled"]), refused: z.boolean(),
@@ -31,6 +33,7 @@ export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operati
   }
   const model = policy.models[reservation.bucket]; const usage = evidence.usage;
   const violations: string[] = [];
+  if (!evidence.stdioSdk) violations.push("stdio_unverified");
   if (evidence.model !== model.model) violations.push("model_mismatch");
   if (evidence.serviceTier !== policy.serviceTier) violations.push("tier_mismatch");
   if (evidence.countedInputTokens === null || evidence.countedInputTokens > policy.maxInputTokens) violations.push("count_limit");

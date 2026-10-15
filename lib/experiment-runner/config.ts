@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentRoleSchema, experimentTaskSchema, specialistTaskSchema, personaSchema, type Persona, type SpecialistTask } from "@/lib/contracts/experiment-runner";
+import type { M4Authority } from "@/db/experiment-campaign";
 
 const binding = z.strictObject({
   role: z.enum(["manager", "specialist", "tester", "image", "judge"]),
@@ -50,7 +51,8 @@ export const savedConfigurationSchema = z.array(savedConfigurationItemSchema).ma
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Final-page illustration requires the complete saved J12 profile." });
   }
 });
-export type BookletRunnerConfig = { enabled: true; baseUrl: string; publicOrigin: string; callbackKey: string; bindings: BookletBinding[] };
+export type BookletRunnerConfig = { enabled: true; baseUrl: string; publicOrigin: string; callbackKey: string; bindings: BookletBinding[];
+  m4?: { state: "disabled" | "invalid" | "ready" | "granted"; authority?: M4Authority } };
 export type RunnerConfig = BookletRunnerConfig;
 export type RunnerBinding = BookletBinding;
 export type ConfigState = { enabled: false; reason: "disabled" | "production" } | { enabled: true; config: BookletRunnerConfig } | { enabled: false; reason: "invalid" };

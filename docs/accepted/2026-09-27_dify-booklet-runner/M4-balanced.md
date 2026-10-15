@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Model/budget decisions and implementation contract recorded; exact provider package audited. Bounded-provider correction installed; signature verification restored. Non-billable application foundation implemented locally; Balanced execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Model/budget decisions recorded; application integration and updated provider implemented locally. Full offline Kid completion passes. Integration publication is tracked in PR #191; live delivery and paid acceptance remain pending. Installed provider is still dev1, with signature verification restored. Balanced paid execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -590,7 +590,8 @@ retained Balanced policy/bindings, matching operation modes, exact approvals and
 lineage, and original asset bytes. Tester precedes judge. Each preparation attempt
 independently reads the nine fixture assets; no byte cache crosses requests.
 Simulated report lifecycle checks remain unchanged. Balanced assembly mutations
-and final completion remain closed pending the image/accounting integration.
+and final completion were closed in that published slice. The current candidate
+below adds the image/accounting integration.
 
 [Creative output assembly](../../../lib/experiment-runner/m4-output.ts) restores
 workflow-owned identities, exact approved sheet facts, style hashes and report
@@ -613,6 +614,100 @@ Balanced report-preparation case and two existing Simulated report lifecycle/ord
 cases; 20 socket-denied provider cases; and 48 exact Node/Python request translations.
 Typecheck, focused lint, agent fixtures, 77 local documentation links/anchors and
 whitespace checks passed. These are non-billable fixtures, not M4 persona acceptance.
+
+#### Current local integration candidate - 2026-10-15
+
+This section supersedes earlier pending statements for local implementation only.
+Published commit `188fcc7ec974484ce1575a7247b1cd02a2a00db1` in PR #191 has two
+clean reviews and successful lean CI `38583085271`. The integration candidate is
+verified locally. Its publication requires two clean reviews and lean CI; exact
+reviewed and CI identities are recorded in PR #191. Installation
+and deployment are pending. M3 and the efficiency run
+remain complete. No paid execution occurred or is authorized.
+
+- The non-secret campaign manifest defaults to `disabled`. `ready` records a
+  complete reviewed policy; only `granted` permits staging Balanced creation and
+  dispatch. Public input cannot supply a campaign, policy, grant or successor.
+  Simulated stays the default and Real remains rejected.
+- Authorization verifies the original running Dify execution and saved publication
+  before claim. The complete escaped response must fit Dify's 1 MiB HTTP text
+  boundary before any reservation. It contains the exact prepared request, not a
+  rebuilt UI context. Provider time excludes the original reconciliation reserve.
+- The candidate graph carries exact request JSON in a plain user message. The
+  adapter unwraps it before OpenAI and verifies canonical bytes, digest, static
+  role/model/effort/output limits, global endpoint and original deadline. Graphon
+  model parameters cannot carry the full schema because its variable resolver
+  caps strings at 1,024 characters. Thirty-two named text chunks avoid Code array
+  limits without bypassing the complete HTTP response cap. No Agent, memory,
+  vision, paid tool, escalation or node retry is added.
+- The pinned daemon retries local stdin acquisition/write failures. The selected
+  SDK reader dispatches complete newline frames only. An opt-in runtime guard
+  checks SDK 0.10.2 and its exact reader-source hash before creating a client.
+  Source/local tests support this bounded path; they do not claim that every
+  transport retry is disabled or prove live provider execution.
+- Original authenticated GET results retain bounded provider content and usage
+  before creative parsing. Balanced text result/failure callbacks only request
+  observation. Known malformed/refused/incomplete results stop campaign admission;
+  unknown usage retains the maximum. Inspection can recover the same valid result
+  without another provider request. Pause stops new work; a valid admitted result
+  can still settle. No automatic replay or reservation reset occurs.
+- Balanced image work retains simulated bytes and existing reference ordering,
+  current source/approval checks, upload journals, assembly, delegation provenance
+  and Creator controls. Terminal exit reconciles run counters, reservations and
+  campaign totals. Verified unclaimed Pause attempts remain preserved history,
+  without becoming provider requests. Reports freeze an upper charge allocation
+  through their own request; invoice cost remains unavailable. Inspection exposes
+  campaign/run allowances and labels assumed count charges.
+
+Focused offline evidence includes manager-to-specialist dispatch, duplicate
+authorization, source drift, Pause/deadline gates, authenticated settlement,
+malformed output, accounting corruption and three-reference uncertain uploads.
+Provider tests deny sockets; image fixtures use isolated persistence and storage.
+These prove local contracts, not paid model quality or live latency. Final review
+and CI evidence will be attached to the exact published candidate.
+
+Known failure closure uses retained authenticated evidence and settlement, even
+when the Dify execution succeeded but its creative output is invalid. Repeated
+Inspect and deadline Stop preserve closure, including unknown or failed GET
+readback. Image failure callbacks, terminal conflicts, exhausted logical allowances
+and preparation failure/Stop also stop the matching campaign atomically. Duplicate
+failure preserves counters, reservations, assets and history. Forty-two focused
+dispatch/failure cases pass after these corrections. Earlier combined validation
+passed 77 integration cases and 94 affected units; unchanged evidence is reused.
+No persona acceptance is inferred from these fixtures.
+
+The full isolated Balanced Kid fixture passes through actual preparation, atomic
+claims, fake authenticated Dify GET results, materialization and owning completion
+verification. It completes J01-J13 with 39 text operations and nine simulated
+images, four final pages, approved artifacts and two reports matching current
+versions. All 48 operations succeed with one reservation each. Nine original 8x8
+PNG assets pass digest/geometry readback. The tester's cost snapshot includes its
+own request and stays byte-identical after the judge; final ledger totals reconcile.
+The fixture uses fake usage and prices, not real provider requests or paid
+acceptance. TypeScript and focused lint pass. Fifteen existing lifecycle cases
+pass, and all eighteen candidate graphs prepare through the actual CLI with valid
+edges; fourteen graph/CLI units pass. No workflow was published by these checks.
+
+The complete ignored provider candidate is
+`output/issue65-openai-plugin-audit/openai-1.0.7-dev2.difypkg`, 491,984 bytes,
+SHA-256 `015884036390e78469e1190db677b3bd20bad957cfefde28c64b33356c28e15d`.
+It preserves 93 original files. Only the manifest version, three patched sources
+and bounded adapter differ from the audited original; original verification
+metadata/signature are not copied. All 25 socket-denied provider cases and 48
+exact Node/Python translations with fake carrier invocations pass against its
+extracted bytes. The package is not uploaded or installed. Its Dify content
+identifier remains pending daemon decode.
+
+Remaining delivery gates: finish focused validation and two clean independent
+reviews; package and install the reviewed provider update through a new bounded
+signature window; prepare/publish/read back all eighteen graphs; selectively
+deliver Booklet staging and its non-secret ready manifest; perform application
+preflight. The installed dev1 predates the carrier, digest, endpoint and SDK guards.
+No hidden paid smoke allowance is reserved. The final three-run grant must disclose
+the assumed count fee and unresolved account entitlement/permission, checked by
+the first authorized Kid invocation. Credential inventory impact: reuse existing
+Dify-only OpenAI and existing Booklet callback/module keys; no new secret,
+credential transfer, public route or permanent host action.
 
 #### Price basis and bounded calculation
 

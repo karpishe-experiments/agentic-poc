@@ -14,18 +14,19 @@ const optionsSchema = z.object({
   probePublication: opaqueIdSchema.optional(),
   requestId: opaqueIdSchema.optional(),
   persona: personaSchema.optional(),
+  mode: z.enum(["simulated", "balanced"]).default("simulated"),
   predecessorRunId: opaqueIdSchema.optional(),
   expectedRevision: z.number().int().nonnegative().optional(),
   apply: z.boolean(),
 });
 export type RunnerOptions = z.infer<typeof optionsSchema>;
-const help = "Usage: tsx scripts/experiment-runner.ts --action observe|create|pause|resume|inspect|stop --origin <staging-or-loopback-origin> [--run-id <uuid>] [--operation-id <uuid> | --preparation-id <uuid>] [--persona <persona> --request-id <uuid> --predecessor-run-id <uuid>] [--probe-app-id <uuid> --probe-publication <uuid>] [--expected-revision <number>] [--apply]\nMutations default to preview. Inspect and stop require exact run, operation or preparation, and revision. Probe create validates exact app/publication readiness before submission. Apply uses BOOKLET_RUNNER_PASSWORD privately; username is booklet. Only Simulated mode is supported. Observe without --run-id lists saved runs. No automatic request retries.";
+const help = "Usage: tsx scripts/experiment-runner.ts --action observe|create|pause|resume|inspect|stop --origin <staging-or-loopback-origin> [--run-id <uuid>] [--operation-id <uuid> | --preparation-id <uuid>] [--mode simulated|balanced] [--persona <persona> --request-id <uuid> --predecessor-run-id <uuid>] [--probe-app-id <uuid> --probe-publication <uuid>] [--expected-revision <number>] [--apply]\nMutations default to preview. Inspect and stop require exact run, operation or preparation, and revision. Probe create validates exact app/publication readiness before submission. Apply uses BOOKLET_RUNNER_PASSWORD privately; username is booklet. Creation defaults to Simulated; Balanced requires the server campaign execution grant. Real is unavailable. Observation uses the saved mode. Observe without --run-id lists saved runs. No automatic request retries.";
 
 export function parseRunnerOptions(args: string[]): RunnerOptions {
   const raw: Record<string, unknown> = { apply: false };
   const names: Record<string, string> = {
     "--action": "action", "--origin": "origin", "--run-id": "runId", "--request-id": "requestId",
-    "--persona": "persona", "--predecessor-run-id": "predecessorRunId", "--expected-revision": "expectedRevision",
+    "--persona": "persona", "--mode": "mode", "--predecessor-run-id": "predecessorRunId", "--expected-revision": "expectedRevision",
     "--operation-id": "operationId",
     "--preparation-id": "preparationId",
     "--probe-app-id": "probeAppId", "--probe-publication": "probePublication",
@@ -49,6 +50,7 @@ export function parseRunnerOptions(args: string[]): RunnerOptions {
   options.origin = url.origin;
   if (options.action === "create") {
     if (!options.persona || !options.requestId || options.runId || options.expectedRevision !== undefined) throw new Error(help);
+    if (options.mode === "balanced" && (options.predecessorRunId || options.probeAppId)) throw new Error("Balanced creation permits only an initial campaign run, without a simulation probe.");
   } else if (options.persona || options.requestId || options.predecessorRunId) throw new Error(help);
   if (options.action === "pause" || options.action === "resume" || options.action === "inspect" || options.action === "stop") {
     if (!options.runId || options.expectedRevision === undefined) throw new Error(help);
@@ -61,10 +63,17 @@ export function parseRunnerOptions(args: string[]): RunnerOptions {
 // Return only allowlisted diagnostic fields, not prompts, decisions or response bodies.
 const summarySchema = z.object({
   runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema,
-  mode: z.literal("simulated"), status: z.string(), revision: z.number().int().nonnegative(),
+  mode: z.enum(["simulated", "balanced"]), status: z.string(), revision: z.number().int().nonnegative(),
   nextNarrativeTask: z.string().nullable(), activeOperationId: opaqueIdSchema.nullable(),
   safeFailure: z.string().nullable(), pauseRequested: z.boolean(),
-  counters: z.object({ logicalText: z.number(), logicalImage: z.number(), payableText: z.literal(0), payableImage: z.literal(0), steps: z.number() }),
+  counters: z.object({ logicalText: z.number(), logicalImage: z.number(), payableText: z.number().int().nonnegative(), payableImage: z.literal(0), steps: z.number() }),
+  m4Accounting: z.object({ campaignId: opaqueIdSchema, state: z.enum(["active", "stopped", "completed"]),
+    requests: z.number().int().nonnegative(), maxRequests: z.number().int().nonnegative(),
+    runRequests: z.number().int().nonnegative(), runMaxRequests: z.number().int().nonnegative(),
+    reservedMicrodollars: z.number().int().nonnegative(), settledMicrodollars: z.number().int().nonnegative(),
+    remainingMicrodollars: z.number().int().nonnegative(), maxMicrodollars: z.number().int().nonnegative(),
+    countChargeStatus: z.enum(["verified", "assumed"]), invoiceCostAvailable: z.literal(false),
+  }).optional(),
   operationHistory: z.array(z.object({ id: opaqueIdSchema, role: z.string(), taskId: z.string().nullable(), state: z.string(), workflowRunId: opaqueIdSchema.nullable(), parentWorkflowRunId: opaqueIdSchema.nullable(), verifiedWorkflowId: opaqueIdSchema.nullable(),
     workflowTaskId: opaqueIdSchema.nullable().optional(), deadlineAtMs: z.number().nullable().optional(), elapsedMs: z.number().optional(), remoteStatus: z.string().nullable().optional(),
     lifecycle: z.object({ phase: z.string(), startedAtMs: z.number(), lastProgressAtMs: z.number(), attemptOutcome: z.enum(["succeeded", "failed"]).optional(), unresolved: z.boolean().optional(), timeoutAtMs: z.number().optional(),
@@ -72,9 +81,9 @@ const summarySchema = z.object({
     }).nullable().optional(),
   })),
   currentArtifacts: z.array(z.object({ id: opaqueIdSchema, taskId: z.string(), state: z.string(), currentVersionId: opaqueIdSchema.nullable() })),
-});
+}).refine((run) => run.mode === "balanced" || run.counters.payableText === 0, "Simulated text cannot be payable.");
 export async function executeRunner(options: RunnerOptions, deps: { password?: string; fetcher?: typeof fetch } = {}) {
-  if (options.action !== "observe" && !options.apply) return { preview: true, action: options.action, origin: options.origin, runId: options.runId ?? null, requestId: options.requestId ?? null, persona: options.persona ?? null, mode: "simulated" };
+  if (options.action !== "observe" && !options.apply) return { preview: true, action: options.action, origin: options.origin, runId: options.runId ?? null, requestId: options.requestId ?? null, persona: options.persona ?? null, mode: options.mode };
   if (!deps.password) throw new Error("BOOKLET_RUNNER_PASSWORD is required privately. Do not paste it into chat or command arguments.");
   const suffix = options.action === "create" ? "" : options.runId ? `/${options.runId}${options.action === "observe" ? "" : `/${options.action}`}` : "";
   const headers: Record<string, string> = { Authorization: `Basic ${Buffer.from(`booklet:${deps.password}`).toString("base64")}`, Origin: options.origin };
@@ -93,7 +102,7 @@ export async function executeRunner(options: RunnerOptions, deps: { password?: s
   let body: string | undefined;
   if (options.action === "create") {
     headers["Idempotency-Key"] = options.requestId!;
-    body = JSON.stringify({ persona: options.persona, mode: "simulated", ...(options.predecessorRunId ? { predecessorRunId: options.predecessorRunId } : {}) });
+    body = JSON.stringify({ persona: options.persona, mode: options.mode, ...(options.predecessorRunId ? { predecessorRunId: options.predecessorRunId } : {}) });
   } else if (options.action !== "observe") body = JSON.stringify({ expectedRevision: options.expectedRevision, ...(options.operationId ? { operationId: options.operationId } : {}), ...(options.preparationId ? { preparationId: options.preparationId } : {}) });
   if (body) headers["Content-Type"] = "application/json";
   let response: Response;
@@ -110,9 +119,10 @@ export async function executeRunner(options: RunnerOptions, deps: { password?: s
     const envelope = await response.json() as { data?: unknown };
     const result = options.action === "observe" && !options.runId ? z.array(summarySchema).parse(envelope.data) : summarySchema.parse(envelope.data);
     if (!Array.isArray(result) && options.runId && result.runId !== options.runId) throw new Error("Wrong run identity.");
+    if (!Array.isArray(result) && options.action === "create" && result.mode !== options.mode) throw new Error("Wrong run mode.");
     return { preview: false, action: options.action, result };
   } catch {
-    throw new Error("Runner response is not a verified simulated projection. Inspect saved state; do not repeat the mutation automatically.");
+    throw new Error("Runner response is not a verified Simulated/Balanced projection. Inspect saved state; do not repeat the mutation automatically.");
   }
 }
 

@@ -163,15 +163,17 @@ not fresh live checks. Recheck the required row before dependent execution.
 specialists and testers, Sol for the independent judge, and a USD 5 incremental
 text-campaign ceiling. The [M4 contract](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13)
 owns exact reasoning, tokens, prices, accounting and three-run/no-successor limits.
-Only recording decisions and preparing the detailed plan is authorized now;
-Balanced implementation and paid execution need later instructions. Final paid
+The later continuation authorizes non-billable Balanced implementation and
+reviewed publication. Paid execution still needs a later instruction. Final paid
 execution requires explicit approval after technical readiness, without reopening
 unchanged model/budget preferences. The user reports the OpenAI key entered in
 Community Dify; provider/model metadata is observed, not paid execution proof.
 No key retrieval, copy or re-entry is needed. The exact-package audit on 2026-10-14
 verified source identity and reproduced SDK retries/default timeouts; corrections
 and provider-usage provenance remain technical gates. See M4's audit. No new
-credential path or plugin installation is authorized by the documentation task.
+credential path is introduced. The separately approved dev1 installation and
+signature restoration are complete; an updated package needs its own bounded
+installation checkpoint.
 M5 targets Image 2.5 Sunburst, with separate settings/permissions/spending readiness.
 
 Current M3 recovery status is in [M3 current progress](M3-completion.md#current-progress-and-blockers--2026-10-13).

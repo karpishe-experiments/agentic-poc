@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
@@ -20,6 +21,8 @@ import { experimentPageBatchSchema, type ExperimentPageBatch } from "@/lib/contr
 import type { ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { CASES } from "@/lib/contracts/experiment-runner";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const preparationIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, nowMs: z.number().int().nonnegative() });
@@ -240,7 +243,7 @@ export function createExperimentContextService(database: Database, options: { st
     const operationRows = projection === "inspection" ? await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray()
       : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
     let pageSelection = null;
-    if (configuredPageIllustrationTask(run.configurationJson) && run.mode === "simulated" &&
+    if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasM4SimulatedImagePolicy(run)) &&
         run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
         run.generationCompletedAtMs == null && !pageBatch) {
       const readiness = pageBibleWork(run, currentArtifacts);
@@ -259,8 +262,21 @@ export function createExperimentContextService(database: Database, options: { st
           configurationHash: run.configurationHash, layoutVersionId: layoutVersion.id, pages };
       }
     }
+    const m4Accounting = projection === "inspection" && hasM4SimulatedImagePolicy(run) && run.m4 ? await (async () => {
+      const { policy, hash } = m4PolicySnapshot(JSON.parse(run.m4!.policyJson));
+      const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.m4!.campaignId }, { projection: {
+        _id: 1, policyHash: 1, state: 1, requests: 1, requestCounts: 1, reservedMicrodollars: 1, settledMicrodollars: 1,
+      } });
+      if (!campaign || campaign.policyHash !== hash) return null;
+      return { campaignId: campaign._id, state: campaign.state, requests: campaign.requests, maxRequests: policy.maxRequests,
+        runRequests: campaign.requestCounts[run.persona], runMaxRequests: CASES[run.persona].llmLimit,
+        reservedMicrodollars: campaign.reservedMicrodollars, settledMicrodollars: campaign.settledMicrodollars,
+        remainingMicrodollars: Math.max(0, policy.maxMicrodollars - campaign.reservedMicrodollars - campaign.settledMicrodollars),
+        maxMicrodollars: policy.maxMicrodollars, countChargeStatus: policy.countChargeStatus, invoiceCostAvailable: false as const };
+    })() : null;
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
+      ...(run.mode === "balanced" && projection === "inspection" ? { m4Accounting } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
       generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
@@ -327,13 +343,15 @@ export function createExperimentContextService(database: Database, options: { st
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     if (operation.role === "image") {
+      if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run))) deny("Image context requires its retained simulated image policy.");
       // Only the authorize handler passes fresh evidence returned by its claim.
       // Standalone context requests perform a new current-source check.
       if (claimedImageRequest && (imageRequestFingerprint(claimedImageRequest) !== operation.inputFingerprint ||
           JSON.stringify(claimedImageRequest.sourceVersionIds) !== JSON.stringify(operation.dependencyVersionIds))) deny("Claimed image request differs from saved identity.");
       const imageRequest = claimedImageRequest ?? await createExperimentImageRepository(database, options)
         .authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
-      const imageContext = { role: "image" as const, mode: "simulated" as const, inputFingerprint: operation.inputFingerprint, imageRequest,
+      const imageContext = { role: "image" as const, mode: run.mode, inputFingerprint: operation.inputFingerprint, imageRequest,
+        ...(run.mode === "balanced" ? { imageProvider: "simulated" as const } : {}),
         ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId) } : {}) };
       // Preserve the optional absent text fields in the existing inferred union.
       return imageContext as typeof imageContext & {

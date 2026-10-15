@@ -1,3 +1,4 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -161,6 +162,9 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   if (!version) invalid("Approval version does not exist.");
   const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
   if (!artifact || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId || artifact.currentVersionId !== versionId) invalid("Approval target is not the current run artifact.");
+  if (["J08", "J09", "J10", "J13"].includes(artifact.taskId ?? "") && run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) {
+    invalid("Image artifact approval requires its retained simulated image policy.");
+  }
   const pageImage = artifact.taskId === "J13" && configuredPageIllustrationTask(run.configurationJson);
   if (!pageImage && !enabled(run, artifact.taskId)) invalid("Approval task is outside the saved configuration.");
   if (artifact.state === "needs_review") invalid("Stale content requires an updated proposal before approval.");
@@ -187,7 +191,7 @@ async function approveVersion(database: Database, session: ClientSession, run: E
       for (const sample of assembled.samples) {
         const operation = await database.collections.experiment_operations.findOne({ _id: sample.build.operationId, runId: run._id }, { session });
         const asset = await database.collections.assets.findOne({ _id: sample.build.assetId, bookletId: run.bookletId }, { session });
-        if (!operation || operation.role !== "image" || operation.taskId !== "J08" || operation.subjectId !== run.bookletId ||
+        if (!operation || operation.role !== "image" || operation.taskId !== "J08" || operation.mode !== run.mode || operation.subjectId !== run.bookletId ||
             operation.state !== "succeeded" || !asset || asset._id !== operation._id || asset.kind !== "style_preview") invalid("Style sample evidence is missing.");
         const result = JSON.parse(operation.resultJson ?? "null") as { assetId?: string; uri?: string; sha256?: string } | null;
         const request = JSON.parse(operation.imageRequestJson ?? "null") as { prompt?: string; sourceVersionIds?: string[] } | null;
@@ -340,7 +344,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     if (operation.taskId && operation.taskId !== result.payload.taskId) invalid("Manager delegation target is not eligible.");
     try {
       if (result.payload.taskId === "J13") {
-        if (!configuredPageIllustrationTask(run.configurationJson) || run.mode !== "simulated") invalid("Page illustration is outside the saved configuration.");
+        if (operation.mode !== run.mode || !configuredPageIllustrationTask(run.configurationJson) || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run))) invalid("Page illustration is outside the saved configuration.");
         const target = await database.collections.artifacts.findOne({ bookletId: run.bookletId, experimentRunId: run._id,
           taskId: "J13", subjectKind: "page", subjectId: result.payload.subjectId }, { session });
         const decision = pending(run);
@@ -420,7 +424,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
         experimentRunId: run._id, bookletId: run.bookletId, taskId: decision.taskId }, { session }) : null;
       if (!artifact || artifact.currentVersionId !== decision.artifactVersionId) invalid("Revision target is not current.");
       if (pageImageRevision) {
-        if (run.mode !== "simulated" || artifact.subjectKind !== "page" || !artifact.subjectId ||
+        if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || artifact.subjectKind !== "page" || !artifact.subjectId ||
             !["draft", "approved"].includes(artifact.state)) invalid("Image revision requires a current saved page image.");
         if (run.imageRevisions >= CASES[run.persona].imageRevisionLimit) invalid("Image revision allowance is exhausted.");
         await createExperimentPageIllustrationAssembly({ database, store: assetStore() }).verifyVersion({ runId: run._id, versionId: decision.artifactVersionId }, session);

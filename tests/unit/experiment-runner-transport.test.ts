@@ -45,6 +45,20 @@ function openJsonResponse(chunks: string[]) {
 }
 
 describe("model-free runtime transport", () => {
+  it("propagates Balanced without changing the Simulated wire shape", async () => {
+    const bodies: string[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (_url, options) => {
+      bodies.push(options!.body as string);
+      return new Response(null, { status: 422 });
+    });
+    const runtime = createWorkflowRuntime(config, fetcher);
+    await runtime.start(binding, input);
+    await runtime.start(binding, { ...input, mode: "balanced" });
+    expect(bodies[0]).toBe(JSON.stringify({ inputs: { run_id: id, operation_id: workflow, parent_workflow_run_id: "", mode: "simulated" }, response_mode: "streaming", user: `booklet-${id}` }));
+    expect(bodies[1]).toBe(bodies[0].replace('"mode":"simulated"', '"mode":"balanced"'));
+    expect(await runtime.start(binding, { ...input, mode: "real" } as unknown as typeof input)).toEqual({ kind: "rejected" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("parses a strict image acknowledgement without treating it as a narrative result", () => {
     const result = { runId: id, operationId: workflow, workflowRunId: id, parentWorkflowRunId: null,
       inputFingerprint: "a".repeat(64), assetId: workflow, sha256: "b".repeat(64) };

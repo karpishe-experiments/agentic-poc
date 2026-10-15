@@ -8,7 +8,7 @@ import { verifyCurrentPageBibleSources, verifyCurrentPaginationSources, verifyCu
 import * as pageVerification from "@/db/experiment-pages";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
-import { materializeNarrativeResult } from "@/db/experiment-narrative";
+import { materializeNarrativeResult, approveAssembledDelegation } from "@/db/experiment-narrative";
 import { verifyExperimentGeneration, createExperimentCompletionService } from "@/db/experiment-completion";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { Persona, RoleResult } from "@/lib/contracts/experiment-runner";
@@ -26,6 +26,7 @@ import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
+import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 
 const databases: Database[] = [];
 async function profileHandoff(env: Awaited<ReturnType<typeof setup>>, name: string, throughApproval = false) {
@@ -271,6 +272,37 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
     }, next: () => clock++, elapse: (ms: number) => { clock += ms; } };
 }
 describe("automatic saved J08 sample dispatch", () => {
+  it("approves a retained Balanced J13 assembly through the saved grant only after original-byte verification", async () => {
+    const env = await setup("playful_kid", 18, true);
+    for (let step = 0; step < 120; step++) {
+      if ((await env.context.getRunView(env.runId))?.nextNarrativeTask === "slice_complete") break;
+      expect(await env.dispatcher().advance(env.runId)).not.toBe("blocked");
+    }
+    const retained = await retainM4ImageTestPolicy(env.database, env.runId, { ...m4TestPolicy(),
+      publications: env.config.bindings.map(({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) => ({
+        role, taskId, persona, appId, publishedWorkflowId, toolProviderId, ...(finalPageIllustration ? { finalPageIllustration } : {}),
+      })),
+    });
+    const artifact = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J13" }))!;
+    const version = (await env.database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId! }))!;
+    const content = JSON.parse(version.contentJson) as { assetId: string };
+    const asset = (await env.database.collections.assets.findOne({ _id: content.assetId }))!;
+    const original = env.store.files.get(asset.uri)!;
+    // A retained assembled draft with the original valid delegation, not a new
+    // tester decision. All surrounding approved evidence remains intact.
+    await env.database.collections.artifacts.updateOne({ _id: artifact._id }, { $set: { state: "draft" } });
+    await env.database.collections.approvals.deleteMany({ experimentRunId: env.runId, artifactVersionId: version._id });
+    env.store.files.set(asset.uri, new Uint8Array([1]));
+    await expect(approveAssembledDelegation(env.database, env.runId, version._id, env.next(), () => env.store)).rejects.toThrow();
+    expect(await env.database.collections.approvals.countDocuments({ artifactVersionId: version._id })).toBe(0);
+    env.store.files.set(asset.uri, original);
+    expect(await approveAssembledDelegation(env.database, env.runId, version._id, env.next(), () => env.store)).toBe(true);
+    expect(await env.database.collections.approvals.findOne({ artifactVersionId: version._id })).toMatchObject({
+      origin: "delegated", delegationId: retained.activeDelegationId,
+    });
+    expect((await env.repository.getRun(env.runId))!.counters).toEqual(retained.counters);
+    expect(await env.database.collections.artifacts.findOne({ _id: artifact._id })).toMatchObject({ state: "approved" });
+  }, 120_000);
   it("prepares Balanced reports from independently verified generation without claiming or changing records", async () => {
     const env = await setup("playful_kid", 18, true);
     for (let step = 0; step < 120; step++) {
@@ -313,10 +345,10 @@ describe("automatic saved J08 sample dispatch", () => {
       .rejects.toThrow("Operation claim identity is not current");
     await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { activeOperationId: null } });
     await expect(withMongoTransaction(env.database, async (session) => verifyExperimentGeneration(env.database, session,
-      (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("unfinished or blocked work");
+      (await env.repository.getRun(env.runId))!, env.store))).rejects.toThrow("complete attributable accounting");
     const page = before.operations.find((item) => item.role === "image" && item.taskId === "J13")!;
-    await expect(createExperimentPageIllustrationAssembly({ database: env.database, store: env.store }).assemble({
-      runId: env.runId, pageId: page.subjectId, imageOperationId: page._id })).rejects.toThrow("idle simulated work");
+    expect((await createExperimentPageIllustrationAssembly({ database: env.database, store: env.store }).assemble({
+      runId: env.runId, pageId: page.subjectId, imageOperationId: page._id })).reused).toBe(true);
     await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { activeOperationId: operationId } });
     expect(await records()).toEqual(before);
 

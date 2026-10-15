@@ -3,26 +3,12 @@ import type { Database } from "@/db/client";
 import { countVerificationQuery } from "@/lib/experiment-runner/diagnostics";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import type { ExperimentRunDocument } from "@/db/documents";
-import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 
 // Read-only evidence eligibility, never image admission or materialization.
 // Balanced retains its own operation identities while its image policy is synthetic.
 export function isBalancedImageVerificationRun(run: ExperimentRunDocument): boolean {
-  if (run.mode !== "balanced" || !run.m4 || !["queued", "running", "paused", "completed"].includes(run.status)) return false;
-  try {
-    const snapshot = m4PolicySnapshot(JSON.parse(run.m4.policyJson));
-    if (snapshot.hash !== run.m4.policyHash || snapshot.json !== run.m4.policyJson || snapshot.policy.imageProvider !== "simulated") return false;
-    const expected = snapshot.policy.publications.filter((item) => item.persona === null || item.persona === run.persona)
-      .map(({ role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) => ({
-        role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration,
-      }));
-    const actual = savedConfigurationSchema.parse(JSON.parse(run.configurationJson));
-    return actual.length === expected.length && expected.every((binding) => actual.some((item) =>
-      item.role === binding.role && item.taskId === binding.taskId && item.appId === binding.appId &&
-      item.publishedWorkflowId === binding.publishedWorkflowId && item.toolProviderId === binding.toolProviderId &&
-      item.finalPageIllustration === binding.finalPageIllustration));
-  } catch { return false; }
+  return ["queued", "running", "paused", "completed"].includes(run.status) && hasM4SimulatedImagePolicy(run);
 }
 
 // Read-only transport of evidence, not a validity flag. Consumers must still

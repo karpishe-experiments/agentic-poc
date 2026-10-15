@@ -51,6 +51,7 @@ class BoundedTests(unittest.TestCase):
         self.parameters["booklet_request_digest"] = hashlib.sha256(json.dumps(
             prepared, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
         self.client_creations = 0
+        self.expected_timeout = 60
         self.factory_hook = None
         self.requests = []
         self.count = 32000
@@ -68,7 +69,7 @@ class BoundedTests(unittest.TestCase):
         if self.factory_hook:
             self.factory_hook()
         self.assertEqual(kwargs["max_retries"], 0)
-        self.assertEqual(kwargs["timeout"], 60)
+        self.assertEqual(kwargs["timeout"], self.expected_timeout)
         self.assertEqual(kwargs["base_url"], "https://api.openai.com/v1")
 
         def handle(request):
@@ -99,6 +100,65 @@ class BoundedTests(unittest.TestCase):
         return booklet_bounded.generate(self.llm, self.factory, "gpt-6-luna",
             {"openai_api_key": "not-a-key", "api_protocol": "responses"},
             self.messages, params, None, None, False, None)
+
+    def carrier(self):
+        payload = {"model": "gpt-6-luna", "input": [
+            {"type": "message", "role": "system", "content": "Reviewed role instructions"},
+            {"type": "message", "role": "user", "content": '{"brief":"\u0647\u0648\u0627\u067e\u06cc\u0645\u0627 \U0001fa81 {{#not.recursive#}} <think>"}'},
+        ], "max_output_tokens": 2048, "reasoning": {"effort": "none", "mode": "standard"},
+            "service_tier": "default", "text": {"format": {"type": "json_schema", "name": "fixture", "strict": True,
+                "schema": {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": False}}},
+            "store": False, "truncation": "disabled", "include": ["reasoning.encrypted_content"]}
+        return payload
+
+    def invoke_carrier(self, payload=None, raw=None, **overrides):
+        payload = self.carrier() if payload is None else payload
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        parameters = {key: value for key, value in self.parameters.items() if key not in ("response_format", "json_schema", "booklet_request_digest")}
+        parameters.update(booklet_prepared_request=True, enable_stream=False,
+                          booklet_deadline_at_ms=4102444800000,  # Deliberately future fake-only deadline.
+                          booklet_request_digest="sha256:" + hashlib.sha256(encoded.encode()).hexdigest())
+        with patch.object(llm_module, "OpenAI", side_effect=self.factory):
+            return self.llm._invoke("gpt-6-luna", {"openai_api_key": "not-a-key", "api_protocol": "responses"},
+                [UserPromptMessage(content=encoded if raw is None else raw)], parameters | overrides, stream=True)
+
+    def test_carrier_uses_exact_inner_request_through_actual_invoke(self):
+        result = self.invoke_carrier()
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.requests[1][1], self.carrier())
+        self.assertEqual(json.loads(result.message.content)["schemaVersion"], "booklet_provider_v1")
+
+    def test_carrier_policy_drift_is_rejected_even_with_matching_self_digest(self):
+        for change in ({"model": "gpt-6-sol"}, {"tools": []}, {"max_output_tokens": True}, {"max_output_tokens": 8192},
+                       {"reasoning": {"effort": "low", "mode": "standard"}}, {"store": True},
+                       {"text": {"format": None}}, {"input": [{"type": "message", "role": "user", "content": "bad"}]}):
+            with self.subTest(change=change):
+                with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(self.carrier() | change)
+        self.assertEqual(self.client_creations, 0)
+
+    def test_carrier_truncation_formatting_and_invalid_mode_fail_before_clients(self):
+        encoded = json.dumps(self.carrier(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        for raw in (encoded[:-1], " " + encoded, "[1]", "x" * (2 * 1024 * 1024 + 1)):
+            with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(raw=raw)
+        with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(booklet_prepared_request=1)
+        self.assertEqual(self.client_creations, 0)
+
+    def test_stdio_dependency_drift_prevents_count_and_generation(self):
+        with patch("importlib.metadata.version", return_value="0.10.3"):
+            with self.assertRaises(InvokeBadRequestError): self.invoke_carrier()
+        with patch("pathlib.Path.read_bytes", return_value=b"changed reader"):
+            with self.assertRaises(InvokeBadRequestError): self.invoke_carrier()
+        self.assertEqual(self.client_creations, 0)
+
+    def test_original_deadline_blocks_queued_or_post_count_generation(self):
+        for value in (None, True, 0):
+            with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(booklet_deadline_at_ms=value)
+        self.assertEqual(self.client_creations, 0)
+        self.expected_timeout = 10
+        with patch.object(booklet_bounded.time, "time", side_effect=[0, 0, 11]):
+            with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(booklet_deadline_at_ms=10000)
+        self.assertEqual(len(self.requests), 1)
+        self.assertTrue(self.requests[0][0].endswith("input_tokens"))
 
     def test_exact_count_then_one_generation_and_evidence_survives_text(self):
         result = self.invoke()
@@ -238,7 +298,8 @@ class BoundedTests(unittest.TestCase):
         with patch.object(llm_module, "OpenAI") as factory, patch.object(llm_module.responses, "generate", return_value="original") as original:
             result = self.llm._chat_generate("gpt-6-luna", {"openai_api_key": "not-a-key"},
                 self.messages, {"booklet_bounded_execution": False, "booklet_timeout_seconds": 60,
-                                "booklet_request_digest": "0" * 64, "max_tokens": 10}, stream=False)
+                                "booklet_request_digest": "0" * 64, "booklet_prepared_request": True,
+                                "booklet_deadline_at_ms": 4102444800000, "max_tokens": 10}, stream=False)
         self.assertEqual(result, "original")
         self.assertEqual(original.call_args.args[5], {"max_tokens": 10})
         self.assertNotIn("max_retries", factory.call_args.kwargs)
@@ -274,6 +335,10 @@ class BoundedTests(unittest.TestCase):
             self.assertEqual(timeout.max, 120)
             digest = next(rule for rule in model.parameter_rules if rule.name == "booklet_request_digest")
             self.assertFalse(digest.required)
+            carrier = next(rule for rule in model.parameter_rules if rule.name == "booklet_prepared_request")
+            self.assertIs(carrier.default, False)
+            deadline = next(rule for rule in model.parameter_rules if rule.name == "booklet_deadline_at_ms")
+            self.assertFalse(deadline.required)
         name = "models/llm/gpt-4.1-mini.yaml"
         self.assertEqual((PACKAGE / name).read_bytes(), (PACKAGE.parent / "package" / name).read_bytes())
 

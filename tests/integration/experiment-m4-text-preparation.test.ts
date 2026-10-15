@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
+import { createM4ProviderResults } from "@/db/experiment-provider-results";
+import { specialistTaskSchema, type RoleResult } from "@/lib/contracts/experiment-runner";
+import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
+import type { RuntimeResult, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
@@ -27,7 +31,29 @@ async function setup() {
     await repository.recordDispatchIdentity({ ...claim, nowMs: 5 });
     if (verify) await repository.verifyDispatchPublication({ ...claim, workflowId: policy.publications[0].publishedWorkflowId, nowMs: 5 });
   }
-  return { db, repository, preparation, input, claim, dispatch, policy };
+  return { db, repository, preparation, input, claim, dispatch, policy, authority };
+}
+
+async function observeFakeResult(env: Awaited<ReturnType<typeof setup>>, operationId: string, result: RoleResult, nowMs: number) {
+  const operation = (await env.repository.getOperation(operationId))!;
+  const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "https://booklet.invalid", callbackKey: "fixture",
+    bindings: env.policy.publications.map((item) => ({ ...item, taskId: specialistTaskSchema.nullable().parse(item.taskId), apiKey: "fake-test-key" })) };
+  const wrapper = { schemaVersion: "booklet_provider_v1", content: JSON.stringify({ result }), providerEvidence: {
+    provider: "openai", apiBaseUrl: "https://api.openai.com/v1",
+    stdioSdk: { version: "0.10.2", readerSha256: "546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22" },
+    responseId: `resp_fake_${operationId}`, requestId: `req_fake_${operationId}`, model: "gpt-6-luna", serviceTier: "default", status: "completed",
+    refused: false, incompleteReason: null, requestDigest: operation.m4Preparation!.requestDigest, countedInputTokens: 100,
+    usage: { source: "provider_reported", inputTokens: 100, outputTokens: 100, cachedInputTokens: 0, cacheWriteInputTokens: null, reasoningOutputTokens: 0 },
+  } };
+  const runtime: WorkflowRuntime = { start: vi.fn(async () => { throw new Error("No provider POST allowed"); }), retrieve: vi.fn(async (): Promise<RuntimeResult> => ({ kind: "execution",
+    execution: { id: operation.workflowRunId!, workflow_id: operation.verifiedWorkflowId!, status: "succeeded", outputs: { booklet_provider_result: JSON.stringify(wrapper) } },
+  })) };
+  const observed = await createM4ProviderResults(env.db, env.authority, config, runtime).observe({ runId: id(10), operationId, nowMs });
+  expect(observed.kind).toBe("result");
+  expect(runtime.retrieve).toHaveBeenCalledTimes(1);
+  expect(runtime.start).not.toHaveBeenCalled();
+  if (observed.kind !== "result") throw new Error("Missing original fake-provider result");
+  return observed.result;
 }
 
 describe("protected M4 preparation and atomic text claim", () => {
@@ -67,10 +93,12 @@ describe("protected M4 preparation and atomic text claim", () => {
     expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ requests: 1 });
   });
   it("hands the verified manager selection to one prepared specialist and saves its normal proposal", async () => {
-    const { db, repository, preparation, input, claim, dispatch, policy } = await setup();
+    const env = await setup();
+    const { db, repository, preparation, input, claim, dispatch, policy } = env;
     await preparation.prepare(input); await dispatch(); await repository.claimOperation(claim);
+    const managerResult = await observeFakeResult(env, id(12), { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: id(11) } }, 7);
     await repository.completeOperation({ envelope: { runId: id(10), operationId: id(12), workflowRunId: id(13), inputFingerprint: "b".repeat(64),
-      result: { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: id(11) } } }, parentWorkflowRunId: null, nowMs: 7 });
+      result: managerResult }, parentWorkflowRunId: null, nowMs: 7 });
     const run = (await repository.getRun(id(10)))!;
     await repository.prepareOperation({ runId: id(10), operationId: id(14), expectedRevision: run.revision, role: "specialist", taskId: "J01",
       subjectKind: "book", subjectId: id(11), inputFingerprint: "c".repeat(64), attempt: 1, providerKind: "text", nowMs: 8 });
@@ -87,12 +115,14 @@ describe("protected M4 preparation and atomic text claim", () => {
     const content = { schemaVersion: "2", title: "Kite Rescue", sourceInput: text, audience: { ageBand: "6-8", readingNeeds: "Short text" },
       premise: text, theme: "Friendship", emotionalPromise: "Hope", tone: "Playful", storyScope: "Three story pages and a cover",
       contentRequirements: [text], knownConstraints: [], deferredDecisions: [], approvalQuestions: [] };
-    await repository.completeOperation({ envelope: { runId: id(10), operationId: id(14), workflowRunId: id(15), inputFingerprint: "c".repeat(64), result: { kind: "proposal", payload: { taskId: "J01", content } } },
+    const specialistResult = await observeFakeResult(env, id(14), { kind: "proposal", payload: { taskId: "J01", content } }, 12);
+    await repository.completeOperation({ envelope: { runId: id(10), operationId: id(14), workflowRunId: id(15), inputFingerprint: "c".repeat(64), result: specialistResult },
       parentWorkflowRunId: id(13), nowMs: 12 });
     expect(await db.collections.artifacts.findOne({ experimentRunId: id(10), taskId: "J01" })).toMatchObject({ state: "draft" });
     expect((await repository.getRun(id(10)))!.counters).toMatchObject({ payableText: 2, payableImage: 0 });
-    // Missing attributed provider evidence cannot release either maximum.
-    expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ requests: 2, reservedMicrodollars: 13120 });
+    // Each original fake GET supplies 100 input + 100 output tokens; the frozen
+    // upper rate settles 63 microdollars per invocation, with verified zero count fee.
+    expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ requests: 2, settledMicrodollars: 126, reservedMicrodollars: 0 });
   });
   it("invalidates mutable source/approval metadata without relying on a run revision change", async () => {
     for (const drift of ["artifact", "approval"] as const) {

@@ -1,3 +1,4 @@
+import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -10,7 +11,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { styleSampleRequests, type StyleSampleSources } from "@/lib/experiment-runner/reference-requests";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { isBalancedImageVerificationRun, verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
+import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftStyleVersionId: opaqueIdSchema,
   sampleOperationIds: z.array(opaqueIdSchema).length(2).refine((ids) => new Set(ids).size === 2) });
@@ -40,7 +41,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     const recovered = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
-        mode: "simulated", providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
+        mode: run.mode, providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
         $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "tester", taskId: null, subjectKind: "book", subjectId: run.bookletId },
@@ -51,11 +52,11 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     // assembly mutations and later publication/approval checks remain unchanged.
     const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
       ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
-        role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: "simulated",
+        role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if ((run.mode !== "simulated" && !(verificationOnly && isBalancedImageVerificationRun(run))) || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
-        (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle simulated work.");
+    if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
+        (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle work with a simulated image policy.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftStyleVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");
     const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);

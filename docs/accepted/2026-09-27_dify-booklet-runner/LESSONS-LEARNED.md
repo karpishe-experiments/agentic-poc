@@ -515,3 +515,37 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [pinned-validator regression](dify/m4-openai-bounded-tests.py) and
   [verified delivery](M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 - **Promotion target:** Documentation for versioned external integration packages.
+
+### Verify request carriers at each workflow boundary
+
+- **Context:** A workflow transports an application-prepared Responses request
+  through a model node without changing its prompts or strict output schema.
+- **Observation:** Graphon 0.7.0 limits variable model-parameter strings to 1,024
+  characters. Its plain message template can carry longer strings. The Code node
+  also limits arrays, while the HTTP node limits the whole escaped response to
+  1 MiB. Testing only the unescaped inner request misses that final constraint.
+- **Guidance:** Carry exact prepared bytes through a verified plain-message path,
+  check the digest before provider execution, and bound the serialized response
+  before reserving money. Keep static model/token limits independent of the
+  carrier. Reject overflow visibly instead of truncating required content.
+- **Evidence:** [graph tests](../../../tests/unit/experiment-m4-workflow-graph.test.ts),
+  [pinned Graphon rehearsal](../../../tests/helpers/m4-graphon-rehearsal.py) and
+  [HTTP cases](../../../tests/integration/experiment-m4-http.test.ts) verify the
+  source/local boundary with fake providers. Live delivery remains pending.
+- **Promotion target:** Documentation for externally hosted workflow adapters.
+
+### Separate terminal notification from authoritative provider output
+
+- **Context:** Streaming notifications and callbacks can arrive before original
+  saved workflow output is available or after an application deadline.
+- **Observation:** The Balanced observer saves original authenticated GET content
+  and attributable usage before parsing creative output. Malformed output can
+  still consume money. Duplicate notification cannot authorize another request.
+- **Guidance:** Let notifications request observation. Retain maximum liability
+  for unknown usage, stop new campaign work on technical failure, and preserve
+  late-result inspection without automatic replay. Reconcile exit counters with
+  all reservations rather than trusting a successful creative result alone.
+- **Evidence:** [provider-result tests](../../../tests/integration/experiment-m4-provider-results.test.ts),
+  [accounting tests](../../../tests/integration/experiment-m4-accounting.test.ts) and
+  [dispatch tests](../../../tests/integration/experiment-m4-dispatch.test.ts).
+- **Promotion target:** Documentation for bounded paid-provider execution.
