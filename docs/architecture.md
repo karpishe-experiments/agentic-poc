@@ -76,14 +76,16 @@ The root responsibilities are:
 | Persistence | `db/` | Official MongoDB driver, typed repositories, indexes, initialization, and verification. |
 
 The Community OpenAI provider has the reviewed opt-in M4 correction installed as
-`1.0.7-dev1`; signature verification is restored. Existing workflows retain the
-original false/absent route. The local M4 policy/campaign foundation adds
+`1.0.7-dev2`; signature verification is restored. The eighteen Booklet graphs
+are published with the bounded opt-in branch; other workflows retain their
+existing provider route. The local M4 policy/campaign foundation adds
 `experiment_campaigns`, optional separate run policy snapshots and operation
 monetary reservations. Protected repository injection is required for new Balanced
 runs. The ledger owns persona slots, request/judge counts and integer microdollar
 reservation/settlement in caller-owned transactions. It has no public grant/budget
 API and no automatic uncertain-reservation release. The checked-in non-secret
-campaign manifest defaults to disabled. Only a reviewed staging manifest with an
+campaign manifest records the eighteen verified publications as ready, without
+execution authority. Only a reviewed staging manifest with an
 explicit grant enables Balanced creation and dispatch; Real remains blocked.
 A protected text preparation path
 now saves the exact role request before dispatch, rechecks source/approval and
@@ -102,9 +104,8 @@ the existing simulated bytes, approval, source, upload and assembly boundaries.
 The UI and CLI retain Simulated defaults and expose grant-gated Balanced controls.
 The candidate provider transports the exact prepared request in a plain text
 carrier, then unwraps it before OpenAI; static role/model limits and original
-deadlines remain enforced. These local changes are not deployed. The installed
-dev1 provider predates the carrier, digest, endpoint and SDK guards; no M4 paid
-execution is enabled.
+deadlines remain enforced. The provider and graphs are installed/published;
+Booklet staging delivery and rebinding remain pending. No M4 paid execution is enabled.
 Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 

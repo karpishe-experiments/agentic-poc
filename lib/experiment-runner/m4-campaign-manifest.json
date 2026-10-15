@@ -1,3 +1,202 @@
 {
-  "state": "disabled"
+  "state": "ready",
+  "policy": {
+    "apiBaseUrl": "https://api.openai.com/v1",
+    "countChargeCeilingMicrodollars": 900,
+    "countChargeStatus": "assumed",
+    "countVerificationReference": "User accepted proceeding without count-endpoint fee/permission confirmation; M4-balanced.md documents assumption; final execution grant pending.",
+    "imageProvider": "simulated",
+    "maxInputTokens": 32000,
+    "maxJudges": 3,
+    "maxMicrodollars": 5000000,
+    "maxRequests": 500,
+    "maxTimeoutSeconds": 120,
+    "mode": "balanced",
+    "models": {
+      "decision": {
+        "inputMicrodollarsPerMillion": 125000,
+        "maxOutputTokens": 2048,
+        "model": "gpt-6-luna",
+        "outputMicrodollarsPerMillion": 500000,
+        "reasoningEffort": "none"
+      },
+      "judge": {
+        "inputMicrodollarsPerMillion": 2500000,
+        "maxOutputTokens": 8192,
+        "model": "gpt-6-sol",
+        "outputMicrodollarsPerMillion": 10000000,
+        "reasoningEffort": "low"
+      },
+      "specialist": {
+        "inputMicrodollarsPerMillion": 125000,
+        "maxOutputTokens": 8192,
+        "model": "gpt-6-luna",
+        "outputMicrodollarsPerMillion": 500000,
+        "reasoningEffort": "low"
+      },
+      "testerReport": {
+        "inputMicrodollarsPerMillion": 125000,
+        "maxOutputTokens": 8192,
+        "model": "gpt-6-luna",
+        "outputMicrodollarsPerMillion": 500000,
+        "reasoningEffort": "none"
+      }
+    },
+    "pluginIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
+    "pricingReference": "Official Luna/Sol prices checked 2026-10-13; M4-balanced.md#price-basis-and-bounded-calculation; input reserve uses cache-write ceiling.",
+    "protocol": "responses",
+    "provider": "openai",
+    "publications": [
+      {
+        "appId": "7c186b42-a069-4059-aac6-5589e870951f",
+        "persona": null,
+        "publishedWorkflowId": "2c880f40-e5b7-4e0b-b9aa-dbd67f244960",
+        "role": "specialist",
+        "taskId": "J01",
+        "toolProviderId": null
+      },
+      {
+        "appId": "4b49ed43-218d-4892-981f-acfe7181c60c",
+        "persona": null,
+        "publishedWorkflowId": "54cb9b6e-31e9-4d6c-ac47-e9fa7f8fd0bf",
+        "role": "specialist",
+        "taskId": "J02",
+        "toolProviderId": null
+      },
+      {
+        "appId": "9f9b7ce0-1753-4999-87e0-290dcd47b46a",
+        "persona": null,
+        "publishedWorkflowId": "7452f187-e351-4cbd-8d8f-cfb3ec1f5d0d",
+        "role": "specialist",
+        "taskId": "J03",
+        "toolProviderId": null
+      },
+      {
+        "appId": "98bb1b3f-d287-4f5b-a764-b47b30c314af",
+        "persona": null,
+        "publishedWorkflowId": "8ca700bf-77ae-4ea1-a3a4-de683aa108d5",
+        "role": "specialist",
+        "taskId": "J04",
+        "toolProviderId": null
+      },
+      {
+        "appId": "4c7aff37-66fd-4dd5-a6a0-246001fd8d27",
+        "persona": null,
+        "publishedWorkflowId": "6698c71b-125a-4876-9a4d-47a6ec8abe77",
+        "role": "specialist",
+        "taskId": "J05",
+        "toolProviderId": null
+      },
+      {
+        "appId": "fddf2de9-cdcd-4e1d-bcc7-3141c326a7fe",
+        "persona": null,
+        "publishedWorkflowId": "9cdbb7c3-a8d6-49db-b1d4-cf22841fdbc8",
+        "role": "specialist",
+        "taskId": "J06",
+        "toolProviderId": null
+      },
+      {
+        "appId": "dafefca5-4155-465b-9cdf-6bb041ac0d99",
+        "persona": null,
+        "publishedWorkflowId": "ecf197f4-e29f-4a6b-a38f-db3a5b5db7fe",
+        "role": "specialist",
+        "taskId": "J07",
+        "toolProviderId": null
+      },
+      {
+        "appId": "0fc8f253-1ae6-4103-a105-4f737ce995d6",
+        "persona": null,
+        "publishedWorkflowId": "8c3f80a9-6e9a-47ec-916d-aaf825e2cbe2",
+        "role": "specialist",
+        "taskId": "J08",
+        "toolProviderId": null
+      },
+      {
+        "appId": "fed00cde-73e7-4881-b818-6b2ab5cfabdb",
+        "persona": null,
+        "publishedWorkflowId": "ab31c0f1-b6d8-4081-b8cc-c916937ff73a",
+        "role": "specialist",
+        "taskId": "J09",
+        "toolProviderId": null
+      },
+      {
+        "appId": "bf6a5e06-3168-4e81-a02a-c4b8eb4c8066",
+        "persona": null,
+        "publishedWorkflowId": "25f1142d-00f4-41dd-b28d-a2ed7a04bfc5",
+        "role": "specialist",
+        "taskId": "J10",
+        "toolProviderId": null
+      },
+      {
+        "appId": "46572ccb-d954-45e5-b73d-90fd0995cdb6",
+        "persona": null,
+        "publishedWorkflowId": "64d08408-4ab7-4413-a5a1-0fccadd2ff26",
+        "role": "manager",
+        "taskId": null,
+        "toolProviderId": null
+      },
+      {
+        "appId": "bf57a8ea-1be6-4a97-a5c0-023cfde794f8",
+        "persona": "playful_kid",
+        "publishedWorkflowId": "9dbcf07b-4460-4549-9133-fe40e5b1d96c",
+        "role": "tester",
+        "taskId": null,
+        "toolProviderId": null
+      },
+      {
+        "appId": "593fb610-624e-404c-92de-57f54e9a47fb",
+        "persona": "enthusiast_parent",
+        "publishedWorkflowId": "d2993e3f-c7f5-4e21-bf43-858b80c4629f",
+        "role": "tester",
+        "taskId": null,
+        "toolProviderId": null
+      },
+      {
+        "appId": "cd284244-63d5-4169-95c3-9790001a5240",
+        "persona": "professional_creator",
+        "publishedWorkflowId": "2c1f40a6-e341-4910-893b-16598b003f59",
+        "role": "tester",
+        "taskId": null,
+        "toolProviderId": null
+      },
+      {
+        "appId": "4f4704ca-de02-4a6d-8051-ba6849fdda56",
+        "persona": null,
+        "publishedWorkflowId": "6f16b929-f6ac-42e6-9abd-0e1c76cc1eda",
+        "role": "specialist",
+        "taskId": "J11",
+        "toolProviderId": null
+      },
+      {
+        "appId": "f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1",
+        "persona": null,
+        "publishedWorkflowId": "64c12650-2fd0-4d21-8c67-114f89243dae",
+        "role": "specialist",
+        "taskId": "J12",
+        "toolProviderId": null
+      },
+      {
+        "appId": "89f1adcd-1073-460d-98a3-e4df35c4263c",
+        "persona": null,
+        "publishedWorkflowId": "06d8dc45-1bb4-4c88-97be-1b5ebbd8bef2",
+        "role": "judge",
+        "taskId": null,
+        "toolProviderId": null
+      },
+      {
+        "appId": "923566e9-c6fd-4936-836f-b21704d39628",
+        "finalPageIllustration": true,
+        "persona": null,
+        "publishedWorkflowId": "2d76a276-9cd7-4354-8951-50bb2aa2118d",
+        "role": "image",
+        "taskId": null,
+        "toolProviderId": null
+      }
+    ],
+    "requestDefinitionHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
+    "retries": 0,
+    "schemaVersion": "m4_v1",
+    "serviceTier": "default",
+    "tools": false
+  }
 }

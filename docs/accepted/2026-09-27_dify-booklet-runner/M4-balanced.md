@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Model/budget decisions recorded; application integration and updated provider implemented locally. Full offline Kid completion passes. Integration publication is tracked in PR #191; live delivery and paid acceptance remain pending. Installed provider is still dev1, with signature verification restored. Balanced paid execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Application integration passes offline. OpenAI dev2 is installed and all eighteen reviewed graphs are published and read back. Signature verification is restored. The non-secret ready manifest records those identities without an execution grant. PR #191 review/CI and staging delivery of the final configuration remain pending. Balanced paid execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -615,7 +615,51 @@ cases; 20 socket-denied provider cases; and 48 exact Node/Python request transla
 Typecheck, focused lint, agent fixtures, 77 local documentation links/anchors and
 whitespace checks passed. These are non-billable fixtures, not M4 persona acceptance.
 
-#### Current local integration candidate - 2026-10-15
+#### Current delivery record - 2026-10-15
+
+This current section supersedes earlier installation/publication pending statements.
+The reviewed integration at `7b590edd0e4acd268d1416d2aadbc2b34dce51e9`
+passed two independent reviews and lean CI `38728250672` in PR #191.
+OpenAI `1.0.7-dev2` is now installed in Community workspace
+`ffac910f-2786-490e-90d8-07243d49741b`, from the reviewed package with SHA-256
+`015884036390e78469e1190db677b3bd20bad957cfefde28c64b33356c28e15d`.
+MCP readback identifies
+`langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d`.
+The operator restored signature verification to `true`; protected configuration
+backup: `/var/lib/kids-booklet/issue65-m4-plugin-policy.kMgTf9MY/runtime.env.before`.
+The existing provider credential remains present; its value was not retrieved.
+The prior Unibase app IDs no longer resolve. Current Unibase app
+`cf2b1066-319e-42c1-84bc-6bfc558d91e2` retains four `gpt-4.1-mini` binding nodes;
+metadata readback is not an execution or unchanged-history proof.
+
+All eighteen graphs passed server-aware validation, publication and semantic
+readback against the reviewed UTF-8 source. App identities, existing variables
+and features are preserved. Exact publication IDs and frozen model/token/price
+policy are in the [ready manifest](../../../lib/experiment-runner/m4-campaign-manifest.json).
+Manager publication: `64d08408-4ab7-4413-a5a1-0fccadd2ff26`.
+Request bundle: `293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a`.
+Policy hash: `b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3`.
+No tool-provider synchronization is needed: the eighteen existing runtime bindings
+have null tool-provider IDs. Existing staging bindings still select prior publications.
+
+The installed MCP bridge rejects graph saves because it replays an unsupported
+legacy environment-variable field. The inspected CLI export/import fallback
+preserved the existing variables. Private before/reviewed DSL copies remain under
+`%LOCALAPPDATA%\DifyWf-Community-Codex\issue65-m4-before-publication-20261015`;
+they contain existing Booklet callback variables, not the OpenAI provider key.
+The user explicitly approved these protected copies after automatic review stopped
+that transfer step. Never print or commit these files. Non-secret graph backups
+and publication evidence are retained separately. No workflow execution occurred.
+
+Remaining gates: two clean reviews and lean CI for the final manifest/documentation
+delta; selective Booklet staging delivery; protected binding update and read-only
+application preflight. Then request the explicit three-run paid grant, including
+the assumed count charge and unresolved account entitlement/permission disclosure.
+`ready` supplies no authority and cannot admit Balanced execution. Seven focused
+configuration/policy units pass, including the actual release manifest and drift
+rejection. No paid call or live model reliability is inferred.
+
+#### Local integration evidence - 2026-10-15
 
 This section supersedes earlier pending statements for local implementation only.
 Published commit `188fcc7ec974484ce1575a7247b1cd02a2a00db1` in PR #191 has two
