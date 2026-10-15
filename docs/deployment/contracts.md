@@ -84,6 +84,10 @@ Preparation scripts retain DPAPI-encrypted files under
 `issue65-m3-j13-bindings.dpapi.xml` and `issue65-m3-j13-settings.dpapi.xml`;
 earlier M1/M2/M3/J12 files may retain previous keys. DPAPI copies depend on the
 Windows user/machine context; do not treat them as portable recovery copies.
+M4 activation reuses these eighteen keys. The reviewed local helper updates only
+publication IDs in memory and uploads to the existing Actions settings secret;
+it creates no additional credential file. The retained M3 DPAPI source remains
+unchanged and contains historical publication IDs, not the active M4 versions.
 The approved M4 graph publication also retains private before/reviewed DSL files
 under `issue65-m4-before-publication-20261015` in this protected directory. These
 files contain existing Dify `BOOKLET_TOOL_KEY` variables so CLI import preserves

@@ -105,7 +105,8 @@ The UI and CLI retain Simulated defaults and expose grant-gated Balanced control
 The candidate provider transports the exact prepared request in a plain text
 carrier, then unwraps it before OpenAI; static role/model limits and original
 deadlines remain enforced. The provider and graphs are installed/published;
-Booklet staging delivery and rebinding remain pending. No M4 paid execution is enabled.
+Booklet staging delivery, eighteen-binding activation and read-only preflight
+are verified. The ready manifest still provides no paid execution authority.
 Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 
