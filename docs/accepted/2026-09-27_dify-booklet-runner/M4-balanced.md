@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Non-billable implementation, provider/workflow publication, staging delivery, binding activation and read-only preflight are complete. The ready manifest contains no execution grant. Paid acceptance has not started; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Non-billable readiness is verified. The user authorized the bounded paid campaign on 2026-10-16, including the input-count fee assumption. The grant manifest requires reviewed staging delivery before execution. Paid acceptance has not started; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -616,6 +616,24 @@ Typecheck, focused lint, agent fixtures, 77 local documentation links/anchors an
 whitespace checks passed. These are non-billable fixtures, not M4 persona acceptance.
 
 #### Current delivery record - 2026-10-15
+
+**Current authorization - 2026-10-16:** The user explicitly approved the three-run
+campaign and required reviewed activation delivery, merging PR #193 at
+`b2f63e3887accda3ffc7efec70e79b2d363cbc69`, and Booklet browser submission/monitoring.
+PR #193 merged as `444950c9812aa685cf0c9d01e681a760d9d1fe10` after two clean reviews
+and lean CI `38765776275`. Campaign `690b0237-9c0d-4eb2-99ec-edf02356b70a` records
+this grant without changing policy hash
+`b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3`.
+Deliver the reviewed `granted` manifest before submitting Kid, then Parent, then
+Creator, one initial run each, no successors. Request ceilings are 120/160/220,
+500 total and three judges. The USD 5 incremental ceiling is conditional on frozen
+prices and the assumed USD 0.0009 input-count fee per invocation; its actual fee
+remains unverified. The first Kid invocation checks model access/count permission,
+without an extra smoke allowance. Images stay simulated. No automatic retries,
+tools or escalation are permitted. Stop the campaign on technical failure and
+preserve all results, uncertain reservations and saved predecessors. No credential
+storage or transfer changes are needed. This authorization supersedes pending-grant
+statements below; it does not establish paid acceptance or live model reliability.
 
 This current section supersedes earlier installation/publication pending statements.
 The final application candidate `481ca7b900ca8a0c6d055b583e650e7f76fe6691`
