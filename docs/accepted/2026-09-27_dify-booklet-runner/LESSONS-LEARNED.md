@@ -566,3 +566,15 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [HTTP regression](../../../tests/integration/experiment-m4-http.test.ts)
   and [campaign regressions](../../../tests/integration/experiment-m4-campaign.test.ts).
 - **Promotion target:** Documentation for frozen configuration admission.
+
+
+### Paid failure recovery must also satisfy accounting exit
+
+Context: Balanced Kid retained attributable usage for an incomplete manager
+response. Closure safely released operation ownership, but ordinary Resume and
+accounting exit both rejected paid failed history. A recovery change must preserve
+the failed operation, approve only an inspected new invocation, and include both
+requests in final counters and money totals. Test continuation together with exit
+accounting and late historical inspection. Evidence: the focused same-campaign
+manager continuation cases in `experiment-m4-provider-results.test.ts`. Promotion
+target: application recovery and accounting guidance; no new runtime platform.

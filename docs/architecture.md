@@ -4,6 +4,17 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+A protected M4 grant can name an exact inspected terminal manager failure for
+one same-run continuation. Resume verifies its original provider evidence,
+settlement and retained count liability, excludes unresolved work, and atomically
+records provenance before reopening the existing campaign and run. The next
+operation links once to that failed operation and reserves normally. Failed output,
+charges, counters and approved artifacts remain saved. Accounting exit includes
+these explicitly continued failed requests and revalidates their proof. Ordinary
+blocked runs remain blocked; no automatic provider retry or budget reset is added.
+Optional continuation metadata is backward compatible and requires no migration.
+
+
 The delivered issue #65 efficiency cleanup separates current-version execution projections
 from full historical inspection/report context. Scheduling reads exact operation
 heads/parents, reuses a projection within an unchanged run revision, and records

@@ -26,6 +26,8 @@ import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-tex
 import { m4Hash, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
+import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -294,7 +296,25 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       if (run.status === "completed" || run.status === "failed") throw new ExperimentRepositoryError("invalid_state", "Terminal run cannot resume.");
-      if (run.status === "blocked") throw new ExperimentRepositoryError("invalid_state", "Blocked run needs inspection before recovery.");
+      if (run.status === "blocked") {
+        const permitted = campaignLedger?.grant.continuations?.filter((item) => item.runId === run._id).map((item) => item.operationId) ?? [];
+        const failed = permitted.length ? await operations.findOne({ _id: { $in: permitted }, runId: run._id,
+          m4Continuation: { $exists: false } }, { session, sort: { createdAtMs: -1, _id: -1 } }) : null;
+        if (!campaignLedger || !options.m4Authority || !options.m4ExecutionEnabled || run.safeFailure !== "definite_failure" ||
+            run.activeOperationId !== null || run.preparation || !hasM4SimulatedImagePolicy(run) || !failed ||
+            failed.state !== "failed" || failed.safeFailure !== "definite_failure" || failed.role !== "manager" ||
+            failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false || failed.lifecycle.stop ||
+            !await hasM4KnownFailure(database, session, options.m4Authority, run, failed, input.nowMs)) {
+          throw new ExperimentRepositoryError("invalid_state", "Blocked run needs an exact inspected continuation grant.");
+        }
+        await campaignLedger.continueFailure(session, run, failed, input.nowMs);
+        const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, status: "blocked", activeOperationId: null },
+          { $set: { status: "queued", safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs }, $inc: { revision: 1 } },
+          { session, returnDocument: "after" });
+        if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed during continuation.");
+        await verifyM4Accounting(database, session, updated);
+        return updated;
+      }
       if (!run.pauseRequested) return run;
       const active = run.activeOperationId ? await operations.findOne({ _id: run.activeOperationId }, { session }) : null;
       const status = active?.state === "started" || active?.state === "unknown" ? "running" : "queued";
@@ -349,6 +369,15 @@ export function createExperimentRepository(database: Database, options: { store?
         if (j13) {
           const admission = await assertJ13Admission(session, run, operation, input.parentWorkflowRunId!, "prepare");
           operation.expectedTargetVersionId = admission.expectedTargetVersionId;
+        }
+        if (run.mode === "balanced") {
+          const continued = await operations.findOne({ runId: run._id, m4Continuation: { $exists: true }, "m4Continuation.nextOperationId": null }, { session });
+          if (continued?.m4Continuation) {
+            const linked = await operations.updateOne({ _id: continued._id, "m4Continuation.nextOperationId": null },
+              { $set: { "m4Continuation.nextOperationId": operation._id } }, { session });
+            if (linked.modifiedCount !== 1) throw new ExperimentRepositoryError("conflict", "Continuation changed before preparation.");
+            operation.m4ContinuedFromOperationId = continued._id;
+          }
         }
         await operations.insertOne(operation, { session });
         const changed = await runs.updateOne({ _id: input.runId, revision: input.expectedRevision, activeOperationId: null }, { $set: { activeOperationId: input.operationId, preparation: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });

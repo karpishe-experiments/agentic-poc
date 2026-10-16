@@ -1,7 +1,48 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Binding-order correction is delivered. The authorized Kid run stopped after eight paid text invocations because its fourth manager response was incomplete at the 2,048-token output ceiling and contained invalid trailing output. Parent and Creator were not started. No successor or additional paid attempt is authorized; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** M4 continuation is authorized by the latest user instruction to complete M4 and stop only for necessary private intervention. The Kid failure remains saved. The bounded continuation below supersedes earlier pending/stop-on-failure statements; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## Authorized same-run continuation - 2026-10-16
+
+The latest user grant permits necessary reviewed corrections, staging delivery and
+M4 execution within the existing USD 5 conditional campaign ceiling. Preserve the
+same campaign, its frozen models/prices/request definitions, all reservations and
+120/160/220 persona, 500 campaign and three judge request ceilings. No new budget,
+successor, automatic provider retry, model escalation or paid image is introduced.
+
+The current exact continuation is Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`,
+failed manager `ac39211f-4e61-4c08-a3b6-81f922bf9be4`. Eight requests already count;
+112 Kid and 492 campaign requests remain. Retain J01-J03 and the failed response.
+Do not salvage its JSON prefix or increase output limits without measured cause.
+
+Change-surface forecast: extend the protected non-secret grant with exact
+run/operation continuation identities. The existing authenticated Resume route
+consumes one matching authorization transactionally. Require a stopped campaign,
+blocked definite failure, matching frozen identities, no active/unresolved work,
+authenticated terminal failure evidence, attributable settlement and retained count
+liability. Reopen the same campaign and queue the same run; leave the failed
+operation unchanged except for appended continuation provenance. Never clear its
+result evidence, counters or reservations. New preparation links the next operation
+once to that provenance and reserves it normally. A later failure requires a new
+reviewed exact continuation record under this user grant, not an automatic replay.
+
+Extract the existing terminal failure proof for read-only reuse. Final accounting
+must include authorized failed requests and independently revalidate their retained
+proof. Late inspection must leave continued historical failures resolved while
+rejecting conflicting execution identities. Historical runs without provenance keep
+existing behavior. Public routes and Dify envelopes/publications remain unchanged;
+optional persisted metadata needs no migration. Credential use/storage is unchanged.
+
+Focused verification: duplicate/concurrent Resume consumes one grant, exact
+identity/evidence and budget guards reject drift, no unresolved work can continue,
+old operations/approvals/charges remain, one new operation links to the failure,
+late inspection cannot re-block or replay it, and exit accounting includes its charge.
+Run affected integration/units, typecheck, focused lint, links and whitespace; obtain
+two clean independent reviews and lean CI for the selective staging delivery. Then
+resume Kid, inspect any measured failure before correction, and proceed sequentially
+to Parent and Creator. M4 passes only after all three retain complete outputs/reports.
+
 
 Track private setup and paid permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
