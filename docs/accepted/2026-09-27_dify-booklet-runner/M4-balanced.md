@@ -1,7 +1,48 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The authorized grant is delivered. M4 stopped at Kid creation on 2026-10-16: valid bindings in a different order fail campaign admission. No new run was saved and provider execution was not reached. No creation retry, Parent or Creator submission occurred. The user approved the bounded correction and same-campaign continuation. Reviewed correction delivery and fresh no-run/preflight checks precede the same-key retry; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** M4 continuation is authorized by the latest user instruction to complete M4 and stop only for necessary private intervention. The Kid failure remains saved. The bounded continuation below supersedes earlier pending/stop-on-failure statements; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## Authorized same-run continuation - 2026-10-16
+
+The latest user grant permits necessary reviewed corrections, staging delivery and
+M4 execution within the existing USD 5 conditional campaign ceiling. Preserve the
+same campaign, its frozen models/prices/request definitions, all reservations and
+120/160/220 persona, 500 campaign and three judge request ceilings. No new budget,
+successor, automatic provider retry, model escalation or paid image is introduced.
+
+The current exact continuation is Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`,
+failed manager `ac39211f-4e61-4c08-a3b6-81f922bf9be4`. Eight requests already count;
+112 Kid and 492 campaign requests remain. Retain J01-J03 and the failed response.
+Do not salvage its JSON prefix or increase output limits without measured cause.
+
+Change-surface forecast: extend the protected non-secret grant with exact
+run/operation continuation identities. The existing authenticated Resume route
+consumes one matching authorization transactionally. Require a stopped campaign,
+blocked definite failure, matching frozen identities, no active/unresolved work,
+authenticated terminal failure evidence, attributable settlement and retained count
+liability. Reopen the same campaign and queue the same run; leave the failed
+operation unchanged except for appended continuation provenance. Never clear its
+result evidence, counters or reservations. New preparation links the next operation
+once to that provenance and reserves it normally. A later failure requires a new
+reviewed exact continuation record under this user grant, not an automatic replay.
+
+Extract the existing terminal failure proof for read-only reuse. Final accounting
+must include authorized failed requests and independently revalidate their retained
+proof. Late inspection must leave continued historical failures resolved while
+rejecting conflicting execution identities. Historical runs without provenance keep
+existing behavior. Public routes and Dify envelopes/publications remain unchanged;
+optional persisted metadata needs no migration. Credential use/storage is unchanged.
+
+Focused verification: duplicate/concurrent Resume consumes one grant, exact
+identity/evidence and budget guards reject drift, no unresolved work can continue,
+old operations/approvals/charges remain, one new operation links to the failure,
+late inspection cannot re-block or replay it, and exit accounting includes its charge.
+Run affected integration/units, typecheck, focused lint, links and whitespace; obtain
+two clean independent reviews and lean CI for the selective staging delivery. Then
+resume Kid, inspect any measured failure before correction, and proceed sequentially
+to Parent and Creator. M4 passes only after all three retain complete outputs/reports.
+
 
 Track private setup and paid permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
@@ -617,38 +658,66 @@ whitespace checks passed. These are non-billable fixtures, not M4 persona accept
 
 #### Current delivery record - 2026-10-15
 
-**Current blocker - 2026-10-16:** Grant PR #194 (`49f55b5`) and selective staging
-PR #195 (`8bf6b77`) passed two clean independent reviews, seven focused units and
-typecheck on both actual candidates; lean CI `38917614285` and `38917627599` passed.
-Master merge: `9603fe50c3d654daec5685e1485af1a6bac3e902`.
-Staging release: `fa9ad887555b59c5040170a237d0356896efa190`; image:
-`ghcr.io/karpishe-experiments/agentic-poc@sha256:903e6858df9fd5f5a81f9f598592ee2d06d2d8789e1102307989e8caeb152b97`.
-Deploy `38918056550` reached its client wait bound; original host request
-`38918056550-1` completed/archived without replay, read back by `38919526656`.
-Backup: `staging-20261016T144752Z-7a52a2d565f9771b`. Check `38919724709` passed.
-Fresh authenticated preflight returned ready/idle and the exact manager publication.
-One Kid creation submission returned HTTP 503. Latest saved-run metadata still
-identifies the preceding Simulated Kid; no new run is available. Creation was not
-retried. Parent and Creator were not submitted, and model/count permission remains
-untested. No paid provider request was reached.
+**Current campaign result - 2026-10-16: STOPPED.** Kid run
+`c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`, booklet
+`59318286-36f3-4be6-8264-8ef00423f3b3`, is `blocked/definite_failure`.
+Seven text operations succeeded; the eighth failed. J01–J03 are saved and approved.
+There are no generated images or final reports. Parent and Creator were not
+submitted. All eight operations retain one reservation each, their lifecycles are
+resolved, and the active-operation pointer is null. No paid replay, successor or
+saved-output repair occurred. This result supersedes pending delivery/retry statements
+below. The authorized initial Kid run is consumed; another paid attempt needs a
+new explicit decision. Remaining allowance does not authorize another attempt.
 
-Diagnosis: protected prepared settings retain image-before-manager order, while
-the policy lists image last. The publication identities match. Configuration
-preflight compares identities without order, but `claimPersona` compares serialized
-arrays with order. A focused fake-provider HTTP/isolated-Mongo reproduction yields
-the exact `Run publications differ from the frozen manifest.` admission error,
-HTTP 503 and zero saved runs/campaigns/operations/provider actions. The needed
-correction is to compare complete binding identities independent of array order,
-while preserving saved configuration serialization/hashes and all mismatch checks.
-The user subsequently approved the bounded correction and same-campaign
-continuation. The candidate compares complete binding entries independent of order
-without changing saved serialization/hashes. Focused coverage checks reordered
-creation, same-key reuse and missing/duplicate/changed identities. Reviewed selective
-delivery, fresh no-run readback and preflight must precede retrying the pending Kid
-creation with its retained request key. No successor or extra paid allowance is
-implied. Existing provider, graph and accounting evidence is reused. Retained local evidence:
-`output/issue65-m4-binding-order.json` (non-secret identities only) and
-`output/m4-creation-failure-reproduction.log`.
+Failed manager operation: `ac39211f-4e61-4c08-a3b6-81f922bf9be4`; Dify execution:
+`0e1597d7-b917-4fd5-ae55-59e89bdbe206`. Its decoded request matches the provider
+request digest and selects `gpt-6-luna`, reasoning `none`, strict JSON schema,
+`max_output_tokens=2048` and disabled truncation. The provider returned
+`status=incomplete`, `incompleteReason=max_output_tokens`, 2,900 input tokens,
+2,048 output tokens and zero reasoning tokens. The content begins with a J04
+routing decision, then contains invalid trailing output. Dify marked the outer
+workflow succeeded; Booklet rejected the incomplete provider result and stopped
+campaign admission. Model access and input-count permission worked for these eight
+Luna calls; Sol access and count-endpoint invoice fees remain unverified.
+
+| Measured Kid result | Value |
+|---|---:|
+| Text invocations / image invocations | 8 / 0 |
+| Provider input / output tokens | 10,961 / 3,864 |
+| Reasoning tokens (included in output) | 205 |
+| Creation-to-block wall time | 167.865 s |
+| Sum of operation elapsed times | 150.345 s |
+| Sum of Dify workflow elapsed times | 75.231 s |
+| Derived frozen-price model estimate | USD 0.003305 |
+| Assumed count-fee allowance, eight times USD 0.0009 | USD 0.007200 |
+| Combined conditional estimate/allowance | USD 0.010505 |
+| Saved campaign remaining allowance | USD 4.989495 |
+
+Monetary values are calculated from attributable provider usage and frozen prices,
+with per-request microdollar rounding. Booklet's saved accounting readback matches:
+campaign `stopped`, eight requests, 3,305 microdollars settled, 7,200 reserved and
+4,989,495 remaining. These are upper-charge/allowance values, not an invoice. Count
+fees remain an assumption and their liability stays reserved. No token, request or
+dollar allowance was increased. Retained sanitized
+evidence: `output/issue65-m4-kid-booklet-summary.json` and
+`output/issue65-m4-kid-usage-evidence.json` contain identities, usage and timings,
+without prompts, credential values or raw model content.
+
+The preceding creation-order defect is corrected by PR #196 (`d2419c3`) and
+selective staging PR #197 (`076db92`), each with two clean reviews and lean CI
+`38946321320` / `38946333987`. Nineteen affected integration cases, seven units,
+typecheck, focused lint and documentation checks passed; actual staging typecheck
+and seven units passed. Staging release `810bb7d806a3f4a01ecc25a7c92b2fd9b83efc91`
+uses image `ghcr.io/karpishe-experiments/agentic-poc@sha256:ff556a8adaf11770ed417a702a40321ee72c50e77020327ccb009167a039aff1`.
+Deploy `38946688084` reached its client wait bound; original host request
+`38946688084-1` completed/archived without replay, read back by `38948062986`.
+Backup: `staging-20261016T182551Z-48675a61d6579613`; Check `38948198271` passed.
+Fresh no-run readback and ready/idle preflight preceded the explicitly approved
+same-key creation retry, which saved this one initial run. Complete binding entries
+are now compared independently of order; historical serialization/hashes and
+missing/duplicate/changed identity rejection remain intact. Policy, workflow
+publications and credentials are unchanged. Failed creation evidence is retained
+in `output/m4-creation-failure-reproduction.log`.
 
 **Current authorization - 2026-10-16:** The user explicitly approved the three-run
 campaign and required reviewed activation delivery, merging PR #193 at

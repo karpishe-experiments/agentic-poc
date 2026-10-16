@@ -6,6 +6,7 @@ import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { assessM4ProviderResult } from "@/lib/experiment-runner/m4-provider-result";
 import { m4MaximumCharge, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4Hash } from "@/lib/experiment-runner/m4-request";
+import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 
 function invalid(): never { throw new ExperimentRepositoryError("invalid_state", "Balanced completion requires complete attributable accounting."); }
 
@@ -52,6 +53,20 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
         operation.reservationCount === 0 && operation.remoteStatus === "succeeded" && operation.workflowRunId && operation.verifiedWorkflowId &&
         !operation.m4Reservation && !operation.m4Observation && !operation.resultJson && !operation.materializationJson &&
         !operation.imageCompletionDigest && !operation.authorizationClaim && !operation.resultFinalizationClaim && !operation.imageCompletionClaim) continue;
+    if (operation.state === "failed") {
+      // Only inspected, explicitly continued terminal failures count as retained
+      // paid history. Load their full proof on this exceptional path only.
+      const failed = await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
+      const provenance = failed?.m4Continuation;
+      if (!failed || !provenance || failed.safeFailure !== "definite_failure" || failed.role !== "manager" ||
+          failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false || failed.lifecycle.stop ||
+          provenance.evidenceDigest !== failed.m4Observation?.evidenceDigest || provenance.requestDigest !== failed.m4Reservation?.requestDigest ||
+          !provenance.reference || !Number.isSafeInteger(provenance.resumedAtMs) ||
+          !await hasM4KnownFailure(database, session, { policy, grant: { campaignId: campaign._id, reference: campaign.grantReference } },
+            run, failed, provenance.resumedAtMs)) invalid();
+      texts++;
+      continue;
+    }
     if (operation.mode !== "balanced" || operation.reservationCount !== 1 || !operation.workflowRunId || !operation.verifiedWorkflowId ||
         operation.state !== "succeeded" && !(operation._id === reportOperationId && ["tester", "judge"].includes(operation.role) && ["started", "unknown"].includes(operation.state))) invalid();
     if (operation.providerKind === "image") {

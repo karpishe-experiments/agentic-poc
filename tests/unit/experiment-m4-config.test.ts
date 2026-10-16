@@ -39,6 +39,13 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(readM4RunnerConfig({ ...env, DEPLOYMENT_ENV: "local" }, granted)).toMatchObject({ enabled: true, config: { m4: { state: "invalid" } } });
     expect(readM4RunnerConfig({ ...env, DEPLOYMENT_ENV: "_prod" }, granted)).toEqual({ enabled: false, reason: "production" });
   });
+  it("accepts exact protected continuations and rejects duplicate operation grants", () => {
+    const continuation = { runId: id(10), operationId: id(12), reference: "inspected-failure-only" };
+    expect(readM4RunnerConfig(env, { ...granted, grant: { ...granted.grant, continuations: [continuation] } }))
+      .toMatchObject({ config: { m4: { authority: { grant: { continuations: [continuation] } } } } });
+    expect(readM4RunnerConfig(env, { ...granted, grant: { ...granted.grant, continuations: [continuation, continuation] } }))
+      .toMatchObject({ config: { m4: { state: "invalid" } } });
+  });
   it("ignores environment spending instructions and requires an exact reviewed manifest", () => {
     expect(readM4RunnerConfig({ ...env, M4_EXECUTION_GRANTED: "true", M4_BUDGET: "100" }, { state: "disabled" })).toMatchObject({ config: { m4: { state: "disabled" } } });
     expect(readM4RunnerConfig(env, { ...granted, budget: 100 })).toMatchObject({ config: { m4: { state: "invalid" } } });
