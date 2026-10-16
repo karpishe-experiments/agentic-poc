@@ -1,5 +1,5 @@
 {
-  "state": "ready",
+  "state": "granted",
   "policy": {
     "apiBaseUrl": "https://api.openai.com/v1",
     "countChargeCeilingMicrodollars": 900,
@@ -198,5 +198,9 @@
     "schemaVersion": "m4_v1",
     "serviceTier": "default",
     "tools": false
+  },
+  "grant": {
+    "campaignId": "690b0237-9c0d-4eb2-99ec-edf02356b70a",
+    "reference": "User grant 2026-10-16: Kid-Parent-Creator initial only; USD5 conditional on frozen prices and assumed USD0.0009 count fee; 120/160/220 requests,500 total,3 judges; simulated images; stop on technical failure; no retries/tools/escalation/smoke/successors."
   }
 }
