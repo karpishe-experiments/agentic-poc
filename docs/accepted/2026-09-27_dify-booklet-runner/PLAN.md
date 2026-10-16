@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 and the efficiency follow-up are complete. M4 non-billable readiness is verified. The user granted the bounded USD 5 campaign on 2026-10-16 with the documented fee assumption. Reviewed grant delivery and three-run paid acceptance remain; M4 is not complete. See the [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15).
+**Status:** M3 and the efficiency follow-up are complete. M4 non-billable readiness is verified. The user granted the bounded USD 5 campaign on 2026-10-16 with the documented fee assumption. Grant delivery passed. Kid creation failed on binding-array order before any saved run/provider request; the user approved the bounded correction and same-campaign continuation after reviewed delivery/fresh checks. M4 is not complete. See the [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 

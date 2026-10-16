@@ -40,6 +40,18 @@ async function setup(assumedCount = false) {
 }
 
 describe("M4 campaign ledger with real persistence and no providers", () => {
+  it("still rejects missing, duplicate or changed binding identities before saving the run", async () => {
+    const { db, repo, creation } = await setup();
+    const input = creation(10);
+    const expected = input.configuration;
+    for (const configuration of [expected.slice(1), [expected[0], ...expected.slice(0, -1)],
+      expected.map((binding, i) => i ? binding : { ...binding, publishedWorkflowId: id(999) }),
+      expected.map((binding) => binding.role === "image" ? { ...binding, finalPageIllustration: undefined } : binding)]) {
+      await expect(repo.createRun({ ...input, configuration })).rejects.toThrow();
+      expect(await db.collections.experiment_runs.countDocuments({})).toBe(0);
+      expect(await db.collections.experiment_campaigns.countDocuments({})).toBe(0);
+    }
+  });
   it("retains the unverified count allowance after attributable model usage settles", async () => {
     const { db, repo, creation, prepare, reserve, settle } = await setup(true);
     await repo.createRun(creation(10)); await prepare(10, 12); await reserve(10, 12);
