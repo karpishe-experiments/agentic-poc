@@ -56,9 +56,11 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     const expected = snapshot.policy.publications.filter((p) => p.persona === null || p.persona === run.persona)
       .map(({ role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) => ({ role, taskId, appId, publishedWorkflowId, toolProviderId,
         ...(finalPageIllustration === true ? { finalPageIllustration } : {}) }));
-    // Historical configuration serialization stays unchanged. Compare values, not its byte hash.
-    const normalize = (value: unknown) => JSON.stringify(value, (_k, v: unknown) => v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
+    // Binding order is not identity. Compare complete entries as a multiset so
+    // duplicates/missing entries still fail. Never reorder the saved snapshot:
+    // its historical serialization and hash remain authoritative for that run.
+    const normalize = (value: unknown[]) => JSON.stringify(value.map((entry) => JSON.stringify(entry, (_k, v: unknown) => v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v)).sort());
     requireState(normalize(JSON.parse(run.configurationJson)) === normalize(expected), "Run publications differ from the frozen manifest.");
     if (slot === null) await touch(campaign, session, { slots: { ...campaign.slots, [run.persona]: run._id } }, nowMs);
     return { campaignId: campaign._id, policyHash: snapshot.hash, policyJson: snapshot.json };

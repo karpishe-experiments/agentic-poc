@@ -97,6 +97,9 @@ API and no automatic uncertain-reservation release. The checked-in non-secret
 campaign manifest records the eighteen verified publications and the user's
 2026-10-16 bounded campaign grant. Only a reviewed staging manifest with an
 explicit grant enables Balanced creation and dispatch; Real remains blocked.
+Campaign admission compares complete publication entries independently of binding
+array order, retaining duplicate/missing/changed identity rejection. This validation
+does not reorder or rewrite saved configuration serialization and hashes.
 A protected text preparation path
 now saves the exact role request before dispatch, rechecks source/approval and
 publication identities, and reserves operation/run/campaign allowances atomically
