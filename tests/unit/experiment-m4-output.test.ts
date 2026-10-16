@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 import { styleModuleHash } from "@/lib/contracts/experiment-references";
 import { m4TestId as id } from "@/tests/helpers/m4-policy";
+import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
+import { paginationSources } from "@/tests/helpers/pagination-fixtures";
+import { parsePageProposal } from "@/lib/contracts/experiment-pages";
 
 const style = { schemaVersion: "2", title: "Warm ink", styleDefinition: { mediumAndLineWork: "ink", shapeLanguageAndProportions: "round",
   colourAndContrast: "warm", textureAndRendering: "paper", lightingAndAtmosphere: "sunny", emotionalTone: "hopeful", accessibilityAndReadability: "clear" },
@@ -24,6 +27,26 @@ const context = { role: "specialist", subjectId: id(8), approvedSources: [
 const proposal = (taskId: string, content: unknown) => JSON.stringify({ result: { kind: "proposal", payload: { taskId, content } } });
 
 describe("M4 trusted creative output assembly", () => {
+  it("rejects the observed center-coordinate rectangles and Kid multi-panel layout without rewriting either", () => {
+    const sources = paginationSources("playful_kid");
+    const fixture = simulatePaginationProposal({ persona: "playful_kid", sources });
+    if (fixture.kind !== "proposal") throw new Error("Expected deterministic layout");
+    const layout = structuredClone(fixture.content);
+    const savedContext = JSON.stringify({ role: "specialist", subjectId: id(1), approvedSources: sources });
+    const layoutSelector = { ...selector, taskId: "J11" as const };
+    for (const page of layout.pages) for (const panel of page.panels) panel.liveTextSafeRegion = { x: 0.5, y: 0.5, width: 1, height: 1 };
+    const invalid = proposal("J11", layout);
+    expect(() => parseM4CreativeOutput(layoutSelector, invalid, savedContext)).toThrow();
+    expect(proposal("J11", layout)).toBe(invalid);
+    const multi = structuredClone(fixture.content);
+    multi.pages[1].panels.push({ ...multi.pages[1].panels[0], panelKey: "second" });
+    expect(() => parsePageProposal("J11", "playful_kid", multi)).toThrow("single-scene");
+    for (const persona of ["playful_kid", "enthusiast_parent", "professional_creator"] as const) {
+      const valid = simulatePaginationProposal({ persona, sources: paginationSources(persona) });
+      if (valid.kind !== "proposal") throw new Error("Expected valid layout");
+      expect(() => parsePageProposal("J11", persona, valid.content)).not.toThrow();
+    }
+  });
   it("computes the style hash from exact creative bytes", () => {
     const result = parseM4CreativeOutput({ ...selector, taskId: "J08" }, proposal("J08", style), JSON.stringify({ ...context, approvedSources: [] }));
     expect(result).toMatchObject({ kind: "proposal", payload: { content: { stylePromptModuleHash: styleModuleHash(style.stylePromptModule) } } });

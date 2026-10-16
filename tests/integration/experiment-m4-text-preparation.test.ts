@@ -12,10 +12,12 @@ import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
-async function setup() {
+async function setup(amended = false) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
-  const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
-  const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-only" } };
+  const policy = { ...m4TestPolicy(), requestDefinitionHash: amended ? "a".repeat(64) : m4RequestBundleHash() };
+  const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-only",
+    ...(amended ? { requestDefinitionUpdate: { fromBundleHash: policy.requestDefinitionHash,
+      toBundleHash: m4RequestBundleHash(), reference: "reviewed-definition-amendment" } } : {}) } };
   const repository = createExperimentRepository(db, { m4Authority: authority, m4ExecutionEnabled: true, elapsedNow: () => 0 });
   const preparation = createM4TextPreparation(db, authority, { elapsedNow: () => 0 });
   await repository.createRun({ runId: id(10), bookletId: id(11), persona: "playful_kid", mode: "balanced", campaignId: id(1), nowMs: 1,
@@ -171,5 +173,31 @@ describe("protected M4 preparation and atomic text claim", () => {
       expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ state: "stopped", reservedMicrodollars: 0 });
       expect(await repository.claimOperation(claim)).toMatchObject({ started: false, reason: "blocked" });
     }
+  });
+});
+
+
+describe("protected request-definition amendment", () => {
+  it("prepares against the original policy and rejects missing or changed authority before any reservation", async () => {
+    const env = await setup(true);
+    const originalRun = (await env.repository.getRun(id(10)))!;
+    const prepared = await env.preparation.prepare(env.input);
+    expect(prepared.definitionUpdate).toEqual(env.authority.grant.requestDefinitionUpdate);
+    expect((await env.repository.getRun(id(10)))!.m4).toEqual(originalRun.m4);
+    for (const grant of [{ campaignId: id(1), reference: env.authority.grant.reference },
+      { ...env.authority.grant, requestDefinitionUpdate: { ...env.authority.grant.requestDefinitionUpdate!, reference: "changed-before-dispatch" } }]) {
+      await expect(createM4TextPreparation(env.db, { policy: env.policy, grant }, { elapsedNow: () => 0 }).prepare(env.input)).rejects.toThrow();
+      expect((await env.repository.getOperation(id(12)))!.m4Preparation).toEqual(prepared);
+    }
+    await env.dispatch();
+    for (const grant of [{ campaignId: id(1), reference: env.authority.grant.reference },
+      { ...env.authority.grant, requestDefinitionUpdate: { ...env.authority.grant.requestDefinitionUpdate!, reference: "changed-after-preparation" } }]) {
+      const changed = createExperimentRepository(env.db, { m4Authority: { policy: env.policy, grant }, m4ExecutionEnabled: true, elapsedNow: () => 0 });
+      await expect(changed.claimOperation(env.claim)).rejects.toThrow("not current");
+      expect(await env.db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ requests: 0, reservedMicrodollars: 0 });
+    }
+    expect(await env.repository.claimOperation(env.claim)).toMatchObject({ started: true });
+    expect(await env.db.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ requests: 1 });
+    expect((await env.repository.getRun(id(10)))!.m4).toEqual(originalRun.m4);
   });
 });
