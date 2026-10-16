@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Application integration passes offline. OpenAI dev2 is installed and all eighteen reviewed graphs are published and read back. Signature verification is restored. The non-secret ready manifest records those identities without an execution grant. PR #191 review/CI and staging delivery of the final configuration remain pending. Balanced paid execution remains closed. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Non-billable readiness is verified. The user authorized the bounded paid campaign on 2026-10-16, including the input-count fee assumption. The grant manifest requires reviewed staging delivery before execution. Paid acceptance has not started; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -617,9 +617,33 @@ whitespace checks passed. These are non-billable fixtures, not M4 persona accept
 
 #### Current delivery record - 2026-10-15
 
+**Current authorization - 2026-10-16:** The user explicitly approved the three-run
+campaign and required reviewed activation delivery, merging PR #193 at
+`b2f63e3887accda3ffc7efec70e79b2d363cbc69`, and Booklet browser submission/monitoring.
+PR #193 merged as `444950c9812aa685cf0c9d01e681a760d9d1fe10` after two clean reviews
+and lean CI `38765776275`. Campaign `690b0237-9c0d-4eb2-99ec-edf02356b70a` records
+this grant without changing policy hash
+`b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3`.
+Deliver the reviewed `granted` manifest before submitting Kid, then Parent, then
+Creator, one initial run each, no successors. Request ceilings are 120/160/220,
+500 total and three judges. The USD 5 incremental ceiling is conditional on frozen
+prices and the assumed USD 0.0009 input-count fee per invocation; its actual fee
+remains unverified. The first Kid invocation checks model access/count permission,
+without an extra smoke allowance. Images stay simulated. No automatic retries,
+tools or escalation are permitted. Stop the campaign on technical failure and
+preserve all results, uncertain reservations and saved predecessors. No credential
+storage or transfer changes are needed. This authorization supersedes pending-grant
+statements below; it does not establish paid acceptance or live model reliability.
+
 This current section supersedes earlier installation/publication pending statements.
-The reviewed integration at `7b590edd0e4acd268d1416d2aadbc2b34dce51e9`
-passed two independent reviews and lean CI `38728250672` in PR #191.
+The final application candidate `481ca7b900ca8a0c6d055b583e650e7f76fe6691`
+passed two clean independent reviews and lean CI `38735679197` in PR #191,
+merged to master as `9a2574d0811c90943120dcb0ea76171944961d14`.
+Staging PR #192 carried the selective port at
+`ab2df91e9a168c0bc923fae40dc9783362cc6a00`, with two clean independent reviews,
+actual staging typecheck, seven focused configuration/policy units and lean CI
+`38736888137`. Staging Cloud differences and the 53 unrelated unstaged deletions
+were preserved. The user explicitly approved both exact merges and delivery.
 OpenAI `1.0.7-dev2` is now installed in Community workspace
 `ffac910f-2786-490e-90d8-07243d49741b`, from the reviewed package with SHA-256
 `015884036390e78469e1190db677b3bd20bad957cfefde28c64b33356c28e15d`.
@@ -640,7 +664,7 @@ Manager publication: `64d08408-4ab7-4413-a5a1-0fccadd2ff26`.
 Request bundle: `293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a`.
 Policy hash: `b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3`.
 No tool-provider synchronization is needed: the eighteen existing runtime bindings
-have null tool-provider IDs. Existing staging bindings still select prior publications.
+have null tool-provider IDs. The eighteen reviewed publications are now active in staging.
 
 The installed MCP bridge rejects graph saves because it replays an unsupported
 legacy environment-variable field. The inspected CLI export/import fallback
@@ -651,10 +675,60 @@ The user explicitly approved these protected copies after automatic review stopp
 that transfer step. Never print or commit these files. Non-secret graph backups
 and publication evidence are retained separately. No workflow execution occurred.
 
-Remaining gates: two clean reviews and lean CI for the final manifest/documentation
-delta; selective Booklet staging delivery; protected binding update and read-only
-application preflight. Then request the explicit three-run paid grant, including
-the assumed count charge and unresolved account entitlement/permission disclosure.
+Release `e9881fa59088e49eddaf377a90a5cf991411e9a8` uses image
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:d07768bcdef219a223654d155164f60c0e8ff05337e2d631d61907aab7dd1763`.
+Deploy `38758478279` reached its client wait limit during backup. The original
+host request `38758478279-1` completed and was archived without stop or replay,
+confirmed by read-only status `38760486852`. Retained deployment backup:
+`staging-20261015T152033Z-9146c600793d6b6d`.
+The reviewed protected helper preserved all eighteen keys and changed only
+publication IDs in the existing Actions secret; it created no credential file.
+Activation `38760684688` passed and retained the same image, with backup
+`staging-20261015T152924Z-5b7ea79384c834e4`. Check deployment `38761539391` passed.
+One authenticated read-only application preflight returned `ready=true`,
+`callbackConfigured=true`, `idle=true` for the exact manager app/publication above.
+The UI reports `ready`, which requires all eighteen runtime bindings to match the
+frozen manifest. Balanced and Real creation remain unavailable. Workspace graph
+readback establishes retained Dify variable presence; runtime preflight does not
+independently attest their values. No acceptance run was submitted.
+
+The post-publication rehearsal retrieved the exact manager, J01 and Kid tester
+versions above and compared their graphs with reviewed source before executing
+their Python decoder and conditional/end selectors. Actual Booklet HTTP
+authorization, original saved-result GET observation, accounting and report
+materialization passed against isolated MongoDB with scripted provider responses.
+The existing offline generation fixture supplied valid report prerequisites;
+no live persona campaign or provider request ran. The tester used its separate
+report model/return branch. All original operation deadlines were preserved.
+An additional synthetic payload exercised the exact 1,048,576-byte escaped HTTP
+envelope and lossless graph carrier; it does not establish provider token capacity.
+Ordinary affected integration cases, typecheck and focused lint also pass.
+These are local graph-path measurements, not live Dify engine execution, staging
+latency or evidence of model reliability. Balanced callbacks remain notification
+hints; authenticated original GET owns results. Retained notification/failure,
+provider retry and Graphon parameter checks remain applicable without another run.
+
+| Local rehearsal path | Authorization bytes / ms | Result bytes / decode-return ms | Completion reconciliation ms |
+|---|---:|---:|---:|
+| Manager | 4,527 / 62 | 886 / 95 | 65 |
+| J01 specialist | 4,540 / 35 | 1,939 / 84 | 75 |
+| Final tester report | 172,818 / 51 | 1,575 / 97 | 346 |
+| Synthetic envelope boundary | 1,048,576 / 164 | 33 / 130 | Not a completion fixture |
+
+Original GET readback used the scripted in-process transport and rounded to 0 ms.
+The 16 affected HTTP/dispatch cases and six graph units pass. Explicit local
+publication mode also passes the two focused graph-path/payload cases. Retained
+non-secret inputs/timings are under `output/issue65-m4-published-rehearsal.json`,
+`output/issue65-m4-rehearsal-phases.json` and
+`output/issue65-m4-rehearsal-payload.json`; these ignored local files contain no
+credential, prompt or image contents in the timing records. The graph input
+contains reviewed code only. No new credential storage or transfer is introduced
+by the rehearsal tests.
+
+Remaining execution gate: the explicit three-run paid grant, including the assumed
+count charge and unresolved account entitlement/permission disclosure. The first
+authorized Kid invocation checks model access and input-count permission; it does
+not verify the count-fee assumption. No separate paid smoke call or successor is authorized.
 `ready` supplies no authority and cannot admit Balanced execution. Seven focused
 configuration/policy units pass, including the actual release manifest and drift
 rejection. No paid call or live model reliability is inferred.
@@ -818,15 +892,15 @@ verification pass; retain the repository's repeated-blocking-review stop rule.
 
 **Minimum rehearsal:** In the changed text-node adapter, replace only the provider
 transport with scripted non-billable responses. Exercise the actual new request,
-result parsing, usage and callback path; the unchanged deterministic branch alone
+result parsing, usage and authenticated GET-result path; the unchanged deterministic branch alone
 is insufficient. Cover one normal manager-to-specialist handoff, final report and
 largest valid payload through the HTTP boundary, plus the failure cases above.
 After reviewed publication in the later implementation task, exercise the changed
 selectors and separate report-return route once with the same provider-shaped fake
 response path and real Booklet persistence, with provider execution disabled.
-Verify non-empty callback bodies and the active publication identity. This bounded
+Verify non-empty authorization/result bodies and the active publication identity. This bounded
 graph-path check must execute zero provider requests and consume no paid allowance.
-Reuse all unchanged persona/image evidence. Measure callback and authorization
+Reuse all unchanged persona/image evidence. Measure result observation and authorization
 phases for that payload so configured timeouts cover the application work without
 extending original operation deadlines. This is a focused integration rehearsal,
 not a new live persona campaign or a reliability claim about real model outputs.

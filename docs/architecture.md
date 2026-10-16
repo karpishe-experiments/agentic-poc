@@ -94,8 +94,8 @@ monetary reservations. Protected repository injection is required for new Balanc
 runs. The ledger owns persona slots, request/judge counts and integer microdollar
 reservation/settlement in caller-owned transactions. It has no public grant/budget
 API and no automatic uncertain-reservation release. The checked-in non-secret
-campaign manifest records the eighteen verified publications as ready, without
-execution authority. Only a reviewed staging manifest with an
+campaign manifest records the eighteen verified publications and the user's
+2026-10-16 bounded campaign grant. Only a reviewed staging manifest with an
 explicit grant enables Balanced creation and dispatch; Real remains blocked.
 A protected text preparation path
 now saves the exact role request before dispatch, rechecks source/approval and
@@ -115,7 +115,8 @@ The UI and CLI retain Simulated defaults and expose grant-gated Balanced control
 The candidate provider transports the exact prepared request in a plain text
 carrier, then unwraps it before OpenAI; static role/model limits and original
 deadlines remain enforced. The provider and graphs are installed/published;
-Booklet staging delivery and rebinding remain pending. No M4 paid execution is enabled.
+Booklet staging delivery, eighteen-binding activation and read-only preflight
+are verified. The grant manifest requires reviewed staging delivery before paid execution.
 Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 
