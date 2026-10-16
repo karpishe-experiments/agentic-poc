@@ -549,3 +549,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
   [accounting tests](../../../tests/integration/experiment-m4-accounting.test.ts) and
   [dispatch tests](../../../tests/integration/experiment-m4-dispatch.test.ts).
 - **Promotion target:** Documentation for bounded paid-provider execution.
+
+### Verify equivalent configuration order across admission boundaries
+
+- **Context:** Prepared bindings and a frozen manifest can contain the same
+  publication identities in different array orders.
+- **Observation:** Identity-only preflight passed, but ordered campaign comparison
+  rejected creation before a run/provider action. Earlier fixtures derived both
+  arrays from the same policy order and did not expose the mismatch.
+- **Guidance:** Compare complete binding entries independent of array order while
+  retaining multiplicity and all identity fields. Preserve historical saved bytes
+  and hashes. Include a reordered configuration in the HTTP creation regression,
+  alongside missing, duplicate and changed identities.
+- **Evidence:** [HTTP regression](../../../tests/integration/experiment-m4-http.test.ts)
+  and [campaign regressions](../../../tests/integration/experiment-m4-campaign.test.ts).
+- **Promotion target:** Documentation for frozen configuration admission.
