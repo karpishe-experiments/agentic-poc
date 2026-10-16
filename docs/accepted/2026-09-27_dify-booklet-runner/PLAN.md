@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 Simulated acceptance and the efficiency follow-up are complete. M4 application integration passes offline; OpenAI dev2 is installed and eighteen graphs are published/read back. The ready manifest contains no paid grant. Final configuration review/CI, staging delivery/rebinding and application preflight remain. See the [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15).
+**Status:** M3 and the efficiency follow-up are complete. M4 non-billable readiness is verified. The user granted the bounded USD 5 campaign on 2026-10-16 with the documented fee assumption. Reviewed grant delivery and three-run paid acceptance remain; M4 is not complete. See the [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 

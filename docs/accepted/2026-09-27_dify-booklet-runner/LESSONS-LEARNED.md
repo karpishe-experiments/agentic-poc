@@ -531,7 +531,7 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [graph tests](../../../tests/unit/experiment-m4-workflow-graph.test.ts),
   [pinned Graphon rehearsal](../../../tests/helpers/m4-graphon-rehearsal.py) and
   [HTTP cases](../../../tests/integration/experiment-m4-http.test.ts) verify the
-  source/local boundary with fake providers. Live delivery remains pending.
+  source/local boundary with fake providers. The published graph decoder, selectors and report return were also rehearsed through HTTP and isolated persistence; this does not prove live engine latency or provider reliability.
 - **Promotion target:** Documentation for externally hosted workflow adapters.
 
 ### Separate terminal notification from authoritative provider output

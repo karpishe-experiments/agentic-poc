@@ -3,6 +3,7 @@ import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import releaseManifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
+import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 
 const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
 const env = { DEPLOYMENT_ENV: "_staging", DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: "https://dify.test",
@@ -19,12 +20,15 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(Object.isFrozen(state.config.m4!.authority!.policy)).toBe(true);
     expect(Object.isFrozen(state.config.m4!.authority!.grant)).toBe(true);
   });
-  it("pins the released publications without granting execution authority", () => {
+  it("pins the authorized campaign and unchanged released policy for staging only", () => {
     const releaseEnv = { ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(releaseManifest.policy.publications.map(binding => ({ ...binding, apiKey: "fake-only" }))) };
     const state = readM4RunnerConfig(releaseEnv);
-    expect(state).toMatchObject({ enabled: true, config: { m4: { state: "ready" } } });
+    expect(state).toMatchObject({ enabled: true, config: { m4: { state: "granted", authority: { grant: releaseManifest.grant } } } });
     if (!state.enabled) throw new Error("Missing ready configuration");
-    expect(state.config.m4?.authority).toBeUndefined();
+    expect(m4PolicySnapshot(releaseManifest.policy).hash).toBe("b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3");
+    expect(releaseManifest.grant.reference).toContain("User grant 2026-10-16");
+    expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "local" })).toMatchObject({ config: { m4: { state: "invalid" } } });
+    expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "_prod" })).toEqual({ enabled: false, reason: "production" });
     expect(readM4RunnerConfig(env)).toMatchObject({ config: { m4: { state: "invalid" } } });
   });
   it("rejects policy/publication/definition drift without disabling Simulated", () => {
