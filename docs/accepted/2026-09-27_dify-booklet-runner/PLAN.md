@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 and efficiency acceptance remain complete. The M4 binding-order correction is delivered. The authorized initial Kid run stopped after eight paid text invocations on an incomplete manager response; Parent and Creator remain unstarted. The latest user grant authorizes necessary reviewed corrections, delivery and same-campaign continuation within the unchanged USD 5 conditional and cumulative request limits. M4 is not complete. See the [current M4 record](M4-balanced.md#current-delivery-record---2026-10-15).
+**Status:** M3 and efficiency acceptance remain complete. The reviewed M4 manager continuation is delivered and passed. Kid reached 26 text requests and five simulated images, then stopped on an invalid J11 layout. The J11 correction and exact request-definition amendment are being verified under the latest completion grant, with unchanged USD 5 conditional and cumulative limits. Parent/Creator remain unstarted; M4 is not complete. See the [current M4 record](M4-balanced.md#measured-j11-correction-and-request-definition-amendment).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 

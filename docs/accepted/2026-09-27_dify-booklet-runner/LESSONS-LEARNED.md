@@ -578,3 +578,16 @@ requests in final counters and money totals. Test continuation together with exi
 accounting and late historical inspection. Evidence: the focused same-campaign
 manager continuation cases in `experiment-m4-provider-results.test.ts`. Promotion
 target: application recovery and accounting guidance; no new runtime platform.
+
+
+### Structured layout output still needs explicit coordinate semantics
+
+Context: the first real-text J11 response completed as JSON but treated normalized
+x/y as centers, producing x=y=0.5 and width=height=1 for every text-safe region.
+The parser correctly rejected all rectangles; the same response also used two
+multi-panel Kid story pages. State top-left coordinate semantics with a valid
+example, constrain simple persona cardinalities in provider schemas, and retain
+independent cross-field/persona validation. Preserve failed output and account for
+its charge; do not silently clamp geometry or discard panels. Evidence: retained
+Dify execution `e45b4b23-797b-4992-9f3f-eab7b1bb81bf` and focused J11 request/output
+regressions. Promotion target: structured-generation and bounded repair guidance.

@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** M4 continuation is authorized by the latest user instruction to complete M4 and stop only for necessary private intervention. The Kid failure remains saved. The bounded continuation below supersedes earlier pending/stop-on-failure statements; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** The inspected manager continuation is delivered and passed. Kid reached 26 text requests and five simulated images, then stopped on an invalid J11 layout. The exact J11 correction and request-definition amendment are being verified under the latest M4 completion grant. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Authorized same-run continuation - 2026-10-16
@@ -43,6 +43,44 @@ two clean independent reviews and lean CI for the selective staging delivery. Th
 resume Kid, inspect any measured failure before correction, and proceed sequentially
 to Parent and Creator. M4 passes only after all three retain complete outputs/reports.
 
+
+
+### Measured J11 correction and request-definition amendment
+
+The resumed Kid reached 26 text requests and five simulated images, then stopped
+at specialist operation `e46b6b9b-a751-4809-87a5-f4aa8df49903` (Dify
+`e45b4b23-797b-4992-9f3f-eab7b1bb81bf`). Its completed response placed every
+normalized text-safe rectangle at x=y=0.5 with width=height=1, outside the page.
+It also supplied two two-panel Kid story pages. Original output remains saved;
+J01-J10 approvals/assets and earlier failure evidence remain unchanged. The ledger
+retains 26 requests, 24,592 settled microdollars and 23,400 assumed count liability.
+
+Extend the existing exact continuation to inspected pre-generation specialist
+failures using the same terminal proof and accounting guards. Add this exact J11
+identity to the protected grant. No report/judge retry or automatic replay is added.
+
+Clarify the J11 request: x/y are top-left normalized coordinates, width/height are
+sizes, x+width and y+height must be <=1; include a valid fractional example. Pin
+persona page counts and Kid single-panel structure in the generated output schema;
+state Parent's exactly one two-panel page and Creator's at least two multi-panel
+pages. Preserve all ordinary owning-service source and semantic validation.
+
+Request-definition amendment boundary: keep the campaign's original frozen policy,
+prices, models, limits and grant reference unchanged. A reviewed grant may declare
+one exact from/to request-bundle hash plus authorization reference. Configuration
+and preparation require that amendment to match the running request code; absent,
+wrong or revoked amendments prevent new claims. New preparations retain the
+amendment and effective definition/request digests. Historical preparations and
+failure evidence keep their original bytes and remain readable; never rewrite
+the campaign policy or old output to match new prompts. Reject stale corrected
+preparations when authority changes. Dify's generic decoder consumes the newly
+saved request; no graph, plugin or credential change is needed.
+
+Focused proof covers the captured rectangle/Kid-panel failure, valid layouts for
+all personas, old-policy preparation under the exact amendment, absent/mismatched
+amendment rejection, specialist continuation with inclusive charges and unchanged
+prior work, then typecheck/lint/links and two clean reviews/lean CI of both diffs.
+Deliver once through the existing staging process and continue the same Kid.
 
 Track private setup and paid permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
