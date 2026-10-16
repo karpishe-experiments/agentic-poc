@@ -253,6 +253,13 @@ export function createExperimentDispatcher(deps: {
       await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
       return;
     }
+    if (current.m4Continuation && result.kind === "execution" && (result.execution.id !== current.workflowRunId ||
+        result.execution.workflow_id !== current.verifiedWorkflowId || result.execution.status !== current.m4Observation?.remoteStatus ||
+        typeof result.execution.outputs?.booklet_provider_result !== "string" ||
+        createHash("sha256").update(result.execution.outputs.booklet_provider_result).digest("hex") !== current.m4Observation.wrapperDigest)) {
+      await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+      return;
+    }
     // A failed lookup cannot reopen a previously proved terminal failure.
     // Revalidate its retained evidence before handling observation uncertainty.
     if (authority && run.mode === "balanced" && current.providerKind === "text" && current.state === "failed" &&

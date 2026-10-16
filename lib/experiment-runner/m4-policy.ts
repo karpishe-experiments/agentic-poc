@@ -49,7 +49,14 @@ export const m4PolicySchema = z.strictObject({
 });
 export type M4Policy = z.infer<typeof m4PolicySchema>;
 export type M4ModelBucket = keyof M4Policy["models"];
-export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, reference: z.string().min(1).max(500) });
+export const m4ContinuationGrantSchema = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
+  reference: z.string().min(1).max(500) });
+export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, reference: z.string().min(1).max(500),
+  continuations: z.array(m4ContinuationGrantSchema).max(20).optional(),
+}).superRefine((grant, context) => {
+  const keys = grant.continuations?.map((item) => item.operationId) ?? [];
+  if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: "Continuation operations must be unique." });
+});
 export type M4Grant = z.infer<typeof m4GrantSchema>;
 
 function freezeJson(value: unknown): void {
