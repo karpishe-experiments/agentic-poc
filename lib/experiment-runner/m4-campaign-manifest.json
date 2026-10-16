@@ -207,7 +207,17 @@
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "ac39211f-4e61-4c08-a3b6-81f922bf9be4",
         "reference": "User grant 2026-10-16: all necessary actions to complete M4; exact inspected Kid manager continuation; preserve same USD5 conditional campaign, cumulative limits, failed operation and charges; no automatic retries or paid images."
+      },
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "e46b6b9b-a751-4809-87a5-f4aa8df49903",
+        "reference": "Latest user M4 completion grant: inspected J11 invalid normalized rectangles and Kid multi-panel output; reviewed definition amendment and exact same-campaign continuation; preserve charges and limits."
       }
-    ]
+    ],
+    "requestDefinitionUpdate": {
+      "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
+      "toBundleHash": "49607704d86ac437af6bc14ad3948e4b9b22783ca6f506bf497f0c2eecc90607",
+      "reference": "Latest user M4 completion grant: reviewed J11 normalized top-left geometry, exact page counts and Kid single-panel provider constraints; monetary policy and models unchanged."
+    }
   }
 }

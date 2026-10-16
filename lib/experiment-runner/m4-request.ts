@@ -3,12 +3,12 @@ import { z } from "zod";
 import {
   conceptBriefSchema, storyOutlineSchema, draftCharacterListSchema, draftLocationListSchema, manuscriptSchema,
   finalCharacterListSchema, finalLocationListSchema, roleResultSchema, specialistTaskSchema, personaSchema,
-  type Persona, type SpecialistTask,
+  CASES, type Persona, type SpecialistTask,
 } from "@/lib/contracts/experiment-runner";
 import { visualStyleProposalSchema, characterSheetProposalSchema, locationSheetProposalSchema } from "@/lib/contracts/experiment-references";
 import { pageLayoutProposalSchema, pageSubjectProposalSchema } from "@/lib/contracts/experiment-pages";
 import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
-import { m4ModelBucket, type M4Policy } from "@/lib/experiment-runner/m4-policy";
+import { m4ModelBucket, type M4Policy, type M4Grant } from "@/lib/experiment-runner/m4-policy";
 
 // The restricted wire format deliberately permits only integer JSON numbers.
 // Fractional story/layout values live inside the exact user-context STRING.
@@ -152,10 +152,24 @@ export type M4RequestSelector = { role: M4RequestRole; taskId: SpecialistTask | 
 // Shared by provider schema generation and the trusted output parser. Parsing
 // does not authorize completion; the owning services recheck all saved sources.
 export function m4ModelOutputSchema(selector: M4RequestSelector): z.ZodType {
+  return modelOutputSchema(selector, false);
+}
+
+function modelOutputSchema(selector: M4RequestSelector, providerLayout: boolean): z.ZodType {
   if (selector.role === "specialist") {
     const taskId = specialistTaskSchema.parse(selector.taskId);
+    let content = contentSchemas[taskId];
+    if (providerLayout && taskId === "J11") {
+      const page = pageLayoutProposalSchema.shape.pages.element;
+      const panel = page.shape.panels.element;
+      content = pageLayoutProposalSchema.extend({ pages: z.array(page.extend({
+        panels: z.array(panel.extend({ liveTextSafeRegion: panel.shape.liveTextSafeRegion.describe(
+          "Normalized top-left x/y and width/height sizes; x+width <= 1 and y+height <= 1. Example: x=0.05, y=0.05, width=0.9, height=0.9.") }))
+          .min(1).max(selector.persona === "playful_kid" ? 1 : 4),
+      })).length(CASES[selector.persona].storyPages + 1) });
+    }
     return z.strictObject({ result: z.discriminatedUnion("kind", [
-      z.strictObject({ kind: z.literal("proposal"), payload: z.strictObject({ taskId: z.literal(taskId), content: contentSchemas[taskId] }) }),
+      z.strictObject({ kind: z.literal("proposal"), payload: z.strictObject({ taskId: z.literal(taskId), content }) }),
       z.strictObject({ kind: z.literal("clarification"), payload: z.strictObject({ question: z.string().min(1).max(16000) }) }),
     ]) });
   }
@@ -237,6 +251,7 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
   if (role === "specialist") {
     specialistTaskSchema.parse(taskId);
     instruction = taskInstructions[taskId!];
+    if (taskId === "J11") instruction += ` For ${persona}, supply exactly ${CASES[persona].storyPages + 1} pages, ordered from cover index 0. Kid story pages must each have exactly one panel. Parent must have exactly one two-panel story page; all other story pages have one panel. Creator must have at least two multi-panel story pages. liveTextSafeRegion x and y are normalized TOP-LEFT coordinates, not the center; width and height are sizes. Require x+width <= 1 and y+height <= 1. A valid safe region is {"x":0.05,"y":0.05,"width":0.9,"height":0.9}; {"x":0.5,"y":0.5,"width":1,"height":1} is invalid. Keep trim, aspect ratio, working pixels and orientation consistent.`;
   } else if (report) {
     instruction = "Give an independent advisory assessment of intent, textual consistency, interaction and cost evidence. Images are simulated and this request is text-only: visual consistency must be not_assessed. Findings must use current supplied artifact/version targets or this run. Do not approve, revise or regenerate anything. Identity, evidence lists and monetary fields are supplied by trusted workflow code.";
   } else if (role === "manager") {
@@ -246,7 +261,7 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
   }
   const definition = { version: "m4_request_v1", rendering: "exact-context-string-v1", role, taskId, persona, report,
     projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [] },
-    systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(m4ModelOutputSchema(selector)) };
+    systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
   return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
 }
 
@@ -279,8 +294,14 @@ export function m4RequestBundleHash(): string {
   return bundleHash = m4Hash(m4CanonicalJson(selectors.map(m4RequestDefinition)));
 }
 
-export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, contextJson: string, allowed: M4AllowedValues) {
-  if (policy.requestDefinitionHash !== m4RequestBundleHash()) throw new Error("M4 request definitions differ from the frozen policy.");
+export function m4RequestBundleMatches(policy: M4Policy, grant?: M4Grant): boolean {
+  const update = grant?.requestDefinitionUpdate;
+  return update ? update.fromBundleHash === policy.requestDefinitionHash && update.toBundleHash === m4RequestBundleHash() &&
+    update.fromBundleHash !== update.toBundleHash : policy.requestDefinitionHash === m4RequestBundleHash();
+}
+
+export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, contextJson: string, allowed: M4AllowedValues, grant?: M4Grant) {
+  if (!m4RequestBundleMatches(policy, grant)) throw new Error("M4 request definitions differ from the frozen policy or reviewed amendment.");
   // Validate JSON without rebuilding its bytes: Dify must receive this exact string.
   if (!contextJson.trim() || Buffer.byteLength(contextJson, "utf8") > 2 * 1024 * 1024) throw new Error("M4 context exceeds the preparation byte limit.");
   const context = JSON.parse(contextJson) as unknown;

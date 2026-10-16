@@ -23,7 +23,7 @@ import { OPERATION_LIMIT_MS } from "@/lib/operations/budget";
 import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
 import { CampaignAdmissionError, createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
-import { m4Hash, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+import { m4Hash, m4RequestBundleMatches, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
@@ -117,6 +117,8 @@ export function createExperimentRepository(database: Database, options: { store?
         run.m4.policyJson !== campaignLedger.snapshot.json || prepared.policyHash !== run.m4.policyHash || prepared.configurationHash !== run.configurationHash ||
         !binding || operation.lifecycle?.stop != null || prepared.publishedWorkflowId !== binding.publishedWorkflowId || prepared.parentWorkflowRunId !== parent ||
         prepared.requestDigest !== m4Hash(prepared.requestJson) || prepared.operationFingerprint !== m4OperationFingerprint(operation) ||
+        !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant) ||
+        canonical(prepared.definitionUpdate ?? null) !== canonical(campaignLedger.grant.requestDefinitionUpdate ?? null) ||
         prepared.definitionHash !== m4RequestDefinition(selector).hash ||
         phase === "claim" && operation.verifiedWorkflowId !== prepared.publishedWorkflowId ||
         prepared.sourceFingerprint !== await m4SourceFingerprint(database, session, run)) {
@@ -300,9 +302,11 @@ export function createExperimentRepository(database: Database, options: { store?
         const permitted = campaignLedger?.grant.continuations?.filter((item) => item.runId === run._id).map((item) => item.operationId) ?? [];
         const failed = permitted.length ? await operations.findOne({ _id: { $in: permitted }, runId: run._id,
           m4Continuation: { $exists: false } }, { session, sort: { createdAtMs: -1, _id: -1 } }) : null;
-        if (!campaignLedger || !options.m4Authority || !options.m4ExecutionEnabled || run.safeFailure !== "definite_failure" ||
+        if (!campaignLedger || !options.m4Authority || !options.m4ExecutionEnabled ||
+            !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant) || run.safeFailure !== "definite_failure" ||
             run.activeOperationId !== null || run.preparation || !hasM4SimulatedImagePolicy(run) || !failed ||
-            failed.state !== "failed" || failed.safeFailure !== "definite_failure" || failed.role !== "manager" ||
+            failed.state !== "failed" || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
+            run.generationCompletedAtMs != null ||
             failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false || failed.lifecycle.stop ||
             !await hasM4KnownFailure(database, session, options.m4Authority, run, failed, input.nowMs)) {
           throw new ExperimentRepositoryError("invalid_state", "Blocked run needs an exact inspected continuation grant.");

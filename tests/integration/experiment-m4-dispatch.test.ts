@@ -61,7 +61,7 @@ async function setup() {
   await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "balanced", campaignId: id(1),
     configuration: configurationSnapshot(config, "playful_kid"), nowMs: clock });
   const saved = new Map<string, RuntimeExecution>();
-  let pending = false, badCreative = false;
+  let pending = false, badCreative = false, badLayout = false;
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
       expect(input.mode).toBe("balanced");
@@ -136,7 +136,14 @@ async function setup() {
         }
         creative = { result };
       }
-      const content = JSON.stringify(m4ModelOutputSchema(selector).parse(creative));
+      let content = JSON.stringify(m4ModelOutputSchema(selector).parse(creative));
+      if (badLayout && binding.taskId === "J11") {
+        const invalid = JSON.parse(content);
+        for (const page of invalid.result.payload.content.pages) for (const panel of page.panels) {
+          panel.liveTextSafeRegion = { x: 0.5, y: 0.5, width: 1, height: 1 };
+        }
+        content = JSON.stringify(invalid);
+      }
       const wrapper = { schemaVersion: "booklet_provider_v1", content: badCreative ? '{"result":{"kind":"not-a-role-result"}}' : content, providerEvidence: {
         provider: "openai", apiBaseUrl: "https://api.openai.com/v1",
         stdioSdk: { version: "0.10.2", readerSha256: "546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22" },
@@ -168,9 +175,10 @@ async function setup() {
     kind: "uploaded", id: randomUUID(), byteLength: bytes.byteLength, mimeType: "image/png", sha256: createHash("sha256").update(bytes).digest("hex"),
   }));
   const dispatcher = createExperimentDispatcher({ database, config, runtime, now: () => clock, mutate: async (action) => action(), store: () => store, uploadReference });
-  return { database, repository, dispatcher, runtime, runId, bookletId, store, context, uploadReference, phases,
+  return { database, repository, dispatcher, runtime, runId, bookletId, store, context, uploadReference, phases, authority, config,
     tick: () => { clock += 6_000; }, now: () => clock,
-    pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; } };
+    pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; },
+    badLayout: (value: boolean) => { badLayout = value; } };
 }
 
 describe("offline Balanced dispatcher", () => {
@@ -376,5 +384,52 @@ describe("offline Balanced dispatcher", () => {
       expect(new Set(observation.map((event) => event.operationId)).size).toBe(3);
       writeFileSync("output/issue65-m4-rehearsal-phases.json", JSON.stringify({ providerRequests: 0, phases: env.phases, observation }, null, 2));
     }
+  }, 120_000);
+});
+
+
+describe("focused J11 paid-failure continuation", () => {
+  it("retains approved sources/assets and the failed charge while a new manager and J11 request complete layout", async () => {
+    const env = await setup(); env.badLayout(true);
+    for (let i = 0; i < 85 && (await env.repository.getRun(env.runId))!.status !== "blocked"; i++) {
+      env.tick(); await env.dispatcher.advance(env.runId);
+    }
+    const blocked = (await env.repository.getRun(env.runId))!;
+    const history = await env.repository.listOperations(env.runId);
+    const failed = history.at(-1)!;
+    expect(failed).toMatchObject({ role: "specialist", taskId: "J11", state: "failed", safeFailure: "definite_failure",
+      lifecycle: { unresolved: false }, m4Observation: { issue: "creative_invalid" } });
+    expect(blocked.activeOperationId).toBeNull();
+    const beforeArtifacts = await env.database.collections.artifacts.find({ experimentRunId: env.runId }).toArray();
+    const beforeVersions = await env.database.collections.artifact_versions.find({ artifactId: { $in: beforeArtifacts.map(a => a._id) } }).sort({ _id: 1 }).toArray();
+    const beforeAssets = [...env.store.files.entries()];
+    const beforeCampaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    const authority = { ...env.authority, grant: { ...env.authority.grant,
+      continuations: [{ runId: env.runId, operationId: failed._id, reference: "inspected-J11-fixture-only" }] } };
+    const recovery = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
+    const resumed = await recovery.resume({ runId: env.runId, expectedRevision: blocked.revision, nowMs: env.now() });
+    expect(resumed.counters).toEqual(blocked.counters);
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({
+      state: "active", requests: beforeCampaign.requests, settledMicrodollars: beforeCampaign.settledMicrodollars,
+      reservedMicrodollars: beforeCampaign.reservedMicrodollars });
+    env.badLayout(false);
+    const dispatcher = createExperimentDispatcher({ database: env.database, config: { ...env.config, m4: { state: "granted", authority } },
+      runtime: env.runtime, now: env.now, mutate: async (action) => action(), store: () => env.store, uploadReference: env.uploadReference });
+    for (let i = 0; i < 8 && !await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J11", state: "approved" }); i++) {
+      env.tick(); await dispatcher.advance(env.runId);
+    }
+    expect(await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J11", state: "approved" })).not.toBeNull();
+    const after = await env.repository.listOperations(env.runId);
+    expect(after.slice(history.length).map(op => [op.role, op.taskId, op.state])).toEqual([
+      ["manager", null, "succeeded"], ["specialist", "J11", "succeeded"] ]);
+    expect(after[history.length].m4ContinuedFromOperationId).toBe(failed._id);
+    const retained = (await env.repository.getOperation(failed._id))!;
+    expect(retained.m4Observation).toEqual(failed.m4Observation); expect(retained.m4Reservation).toEqual(failed.m4Reservation);
+    expect(retained.state).toBe("failed");
+    expect(await env.database.collections.artifact_versions.find({ _id: { $in: beforeVersions.map(v => v._id) } }).sort({ _id: 1 }).toArray()).toEqual(beforeVersions);
+    expect([...env.store.files.entries()]).toEqual(beforeAssets);
+    await withMongoTransaction(env.database, async session => verifyM4Accounting(env.database, session, (await env.repository.getRun(env.runId))!));
+    expect((await env.repository.getRun(env.runId))!.counters.payableText).toBe(blocked.counters.payableText + 2);
+    expect((await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!.requests).toBe(beforeCampaign.requests + 2);
   }, 120_000);
 });

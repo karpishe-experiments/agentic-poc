@@ -7,7 +7,8 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentTaskSchema, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { m4GrantSchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { prepareM4Request, projectM4Context, type M4AllowedValues, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+import { prepareM4Request, projectM4Context, m4RequestBundleMatches, m4RequestDefinition, m4CanonicalJson,
+  type M4AllowedValues, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
@@ -95,6 +96,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
   const contexts = createExperimentContextService(database, options);
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   async function prepare(raw: unknown): Promise<NonNullable<ExperimentOperationDocument["m4Preparation"]>> {
+    if (!m4RequestBundleMatches(snapshot.policy, grant)) conflict("M4 request definitions or amendment are not current.");
     const input = identity.parse(raw); const started = elapsedNow();
     const now = () => input.nowMs + Math.floor(elapsedNow() - started);
     const load = async (session: ClientSession) => {
@@ -107,20 +109,22 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       return { run, operation, sourceFingerprint: await m4SourceFingerprint(database, session, run) };
     };
     const before = await withMongoTransaction(database, load);
+    const selector: M4RequestSelector = { role: before.operation.role as M4RequestSelector["role"], taskId: before.operation.taskId as SpecialistTask | null,
+      persona: before.run.persona, report: (before.operation.role === "tester" || before.operation.role === "judge") && before.run.generationCompletedAtMs != null };
     if (before.operation.m4Preparation) {
       const saved = before.operation.m4Preparation;
       if (saved.policyHash !== snapshot.hash || saved.sourceFingerprint !== before.sourceFingerprint ||
+          saved.definitionHash !== m4RequestDefinition(selector).hash ||
+          m4CanonicalJson(saved.definitionUpdate ?? null) !== m4CanonicalJson(grant.requestDefinitionUpdate ?? null) ||
           saved.operationFingerprint !== m4OperationFingerprint(before.operation)) conflict("Saved M4 preparation became stale; do not replay it.");
       return saved;
     }
     if (before.operation.dispatchStartedAtMs != null) conflict("M4 preparation must precede dispatch.");
-    const selector: M4RequestSelector = { role: before.operation.role as M4RequestSelector["role"], taskId: before.operation.taskId as SpecialistTask | null,
-      persona: before.run.persona, report: (before.operation.role === "tester" || before.operation.role === "judge") && before.run.generationCompletedAtMs != null };
     const rawContext = await contexts.getPreparationContext({ ...input, nowMs: now() });
     const context = projectM4Context(selector, { ...rawContext,
       revisionCounts: { text: before.run.textRevisions, image: before.run.imageRevisions } }, input.operationId);
     const contextJson = JSON.stringify(context);
-    const request = prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context));
+    const request = prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context), grant);
     const publication = snapshot.policy.publications.find((p) => p.role === selector.role && p.taskId === selector.taskId &&
       p.persona === (selector.role === "tester" ? selector.persona : null));
     if (!publication) conflict("M4 publication is not in the frozen policy.");
@@ -137,6 +141,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       }
     }
     const saved = { policyHash: snapshot.hash, configurationHash: before.run.configurationHash, definitionHash: request.definitionHash,
+      ...(grant.requestDefinitionUpdate ? { definitionUpdate: grant.requestDefinitionUpdate } : {}),
       requestDigest: request.requestDigest, requestJson: request.requestJson, contextJson, systemPrompt: request.systemPrompt,
       modelParametersJson: JSON.stringify(request.modelParameters), sourceFingerprint: before.sourceFingerprint,
       operationFingerprint: m4OperationFingerprint(before.operation),

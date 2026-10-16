@@ -5,14 +5,20 @@ This document describes the current implementation for contributors and coding a
 ## System boundaries
 
 A protected M4 grant can name an exact inspected terminal manager failure for
-one same-run continuation. Resume verifies its original provider evidence,
+one same-run continuation. Pre-generation specialists use the same proof as managers. Resume verifies its original provider evidence,
 settlement and retained count liability, excludes unresolved work, and atomically
 records provenance before reopening the existing campaign and run. The next
 operation links once to that failed operation and reserves normally. Failed output,
 charges, counters and approved artifacts remain saved. Accounting exit includes
 these explicitly continued failed requests and revalidates their proof. Ordinary
 blocked runs remain blocked; no automatic provider retry or budget reset is added.
-Optional continuation metadata is backward compatible and requires no migration.
+Optional continuation metadata is backward compatible and requires no migration. A protected
+request-definition amendment can bind the frozen policy's original bundle hash to
+one reviewed replacement. New preparation/claim requires that exact amendment and
+retains it with the effective request/definition digests. Historical requests and
+monetary policy bytes remain unchanged; absent or revoked amendments block new
+work. J11 provider schemas pin page counts and Kid single panels; explicit top-left
+coordinate instructions support the independent owning-service geometry checks.
 
 
 The delivered issue #65 efficiency cleanup separates current-version execution projections

@@ -58,7 +58,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
       // paid history. Load their full proof on this exceptional path only.
       const failed = await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
       const provenance = failed?.m4Continuation;
-      if (!failed || !provenance || failed.safeFailure !== "definite_failure" || failed.role !== "manager" ||
+      if (!failed || !provenance || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
           failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false || failed.lifecycle.stop ||
           provenance.evidenceDigest !== failed.m4Observation?.evidenceDigest || provenance.requestDigest !== failed.m4Reservation?.requestDigest ||
           !provenance.reference || !Number.isSafeInteger(provenance.resumedAtMs) ||
