@@ -201,6 +201,13 @@
   },
   "grant": {
     "campaignId": "690b0237-9c0d-4eb2-99ec-edf02356b70a",
-    "reference": "User grant 2026-10-16: Kid-Parent-Creator initial only; USD5 conditional on frozen prices and assumed USD0.0009 count fee; 120/160/220 requests,500 total,3 judges; simulated images; stop on technical failure; no retries/tools/escalation/smoke/successors."
+    "reference": "User grant 2026-10-16: Kid-Parent-Creator initial only; USD5 conditional on frozen prices and assumed USD0.0009 count fee; 120/160/220 requests,500 total,3 judges; simulated images; stop on technical failure; no retries/tools/escalation/smoke/successors.",
+    "continuations": [
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "ac39211f-4e61-4c08-a3b6-81f922bf9be4",
+        "reference": "User grant 2026-10-16: all necessary actions to complete M4; exact inspected Kid manager continuation; preserve same USD5 conditional campaign, cumulative limits, failed operation and charges; no automatic retries or paid images."
+      }
+    ]
   }
 }

@@ -130,5 +130,31 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     const campaign = await current(session);
     if (campaign.state === "active") await touch(campaign, session, { state: "stopped" }, nowMs);
   }
-  return { snapshot, grant, create, claimPersona, reserve, settle, stop };
+  async function continueFailure(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, nowMs: number) {
+    const permission = grant.continuations?.find((item) => item.runId === run._id && item.operationId === operation._id);
+    requireState(permission && !operation.m4Continuation && run.m4?.campaignId === grant.campaignId &&
+      run.m4.policyHash === snapshot.hash && run.m4.policyJson === snapshot.json, "No unused continuation grant matches this failure.");
+    const campaign = await current(session);
+    requireState(campaign.state === "stopped" && campaign.slots[run.persona] === run._id, "Campaign cannot continue this run.");
+    requireAllowance(campaign.requests < snapshot.policy.maxRequests && campaign.requestCounts[run.persona] < CASES[run.persona].llmLimit &&
+      run.counters.steps < run.limits.steps && run.counters.logicalText < run.limits.text &&
+      campaign.settledMicrodollars + campaign.reservedMicrodollars + m4MaximumCharge(snapshot.policy, "decision") <= snapshot.policy.maxMicrodollars,
+      "Continuation has no remaining allowance.");
+    const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
+    requireState(!await database.collections.experiment_operations.findOne({ runId: { $in: runIds }, $or: [
+      { state: { $in: ["prepared", "started", "unknown"] } }, { "lifecycle.unresolved": true },
+      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map((key) => ({ [`${key}.expiresAtMs`]: { $gt: nowMs } })),
+    ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved operation work.");
+    requireState(!await database.collections.experiment_runs.findOne({ _id: { $in: runIds }, $or: [
+      { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
+    ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
+    const provenance = { reference: permission!.reference, evidenceDigest: operation.m4Observation!.evidenceDigest!,
+      requestDigest: operation.m4Reservation!.requestDigest, resumedAtMs: nowMs, runRevision: run.revision,
+      campaignRevision: campaign.revision, nextOperationId: null };
+    const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
+      state: "failed", m4Continuation: { $exists: false } }, { $set: { m4Continuation: provenance } }, { session });
+    requireState(saved.modifiedCount === 1, "Continuation was already consumed.");
+    await touch(campaign, session, { state: "active" }, nowMs);
+  }
+  return { snapshot, grant, create, claimPersona, reserve, settle, stop, continueFailure };
 }

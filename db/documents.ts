@@ -60,6 +60,9 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  m4Continuation?: { reference: string; evidenceDigest: string; requestDigest: string; resumedAtMs: number;
+    runRevision: number; campaignRevision: number; nextOperationId: string | null };
+  m4ContinuedFromOperationId?: string;
   m4Observation?: { workflowRunId: string; publishedWorkflowId: string; wrapperDigest: string | null;
     content: string | null; evidenceJson: string | null; evidenceDigest: string | null;
     costEvidence?: ExperimentReport["costEvidence"];

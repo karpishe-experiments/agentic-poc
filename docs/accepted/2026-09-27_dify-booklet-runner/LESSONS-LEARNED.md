@@ -541,6 +541,8 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Observation:** The Balanced observer saves original authenticated GET content
   and attributable usage before parsing creative output. Malformed output can
   still consume money. Duplicate notification cannot authorize another request.
+  The live M4 Kid trace confirms that Dify workflow success can carry an incomplete
+  provider response at its output ceiling; Booklet stops and retains its usage.
 - **Guidance:** Let notifications request observation. Retain maximum liability
   for unknown usage, stop new campaign work on technical failure, and preserve
   late-result inspection without automatic replay. Reconcile exit counters with
@@ -564,3 +566,15 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Evidence:** [HTTP regression](../../../tests/integration/experiment-m4-http.test.ts)
   and [campaign regressions](../../../tests/integration/experiment-m4-campaign.test.ts).
 - **Promotion target:** Documentation for frozen configuration admission.
+
+
+### Paid failure recovery must also satisfy accounting exit
+
+Context: Balanced Kid retained attributable usage for an incomplete manager
+response. Closure safely released operation ownership, but ordinary Resume and
+accounting exit both rejected paid failed history. A recovery change must preserve
+the failed operation, approve only an inspected new invocation, and include both
+requests in final counters and money totals. Test continuation together with exit
+accounting and late historical inspection. Evidence: the focused same-campaign
+manager continuation cases in `experiment-m4-provider-results.test.ts`. Promotion
+target: application recovery and accounting guidance; no new runtime platform.
