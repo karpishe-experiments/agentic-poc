@@ -541,6 +541,8 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 - **Observation:** The Balanced observer saves original authenticated GET content
   and attributable usage before parsing creative output. Malformed output can
   still consume money. Duplicate notification cannot authorize another request.
+  The live M4 Kid trace confirms that Dify workflow success can carry an incomplete
+  provider response at its output ceiling; Booklet stops and retains its usage.
 - **Guidance:** Let notifications request observation. Retain maximum liability
   for unknown usage, stop new campaign work on technical failure, and preserve
   late-result inspection without automatic replay. Reconcile exit counters with
