@@ -69,6 +69,7 @@ export type ExperimentOperationDocument = BaseDocument & {
     remoteStatus: "succeeded" | "failed" | "stopped"; observedAtMs: number;
     issue: "missing_wrapper" | "invalid_evidence" | "provider_failure" | "creative_invalid" | "conflicting_evidence" | null };
   m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
+    definitionUpdate?: { fromBundleHash: string; toBundleHash: string; reference: string };
     requestJson: string; contextJson: string; systemPrompt: string; modelParametersJson: string;
     sourceFingerprint: string; operationFingerprint: string; publishedWorkflowId: string; parentWorkflowRunId: string | null; preparedAtMs: number };
   m4Reservation?: { campaignId: string; policyHash: string; requestDigest: string; bucket: M4ModelBucket;

@@ -79,4 +79,33 @@ describe("M4 reviewed request contract", () => {
     for (let i = 0; i < 11; i++) schema = { type: "object", properties: { child: schema } };
     expect(() => assertM4SchemaLimits(schema)).toThrow("ten object levels");
   });
+  it("constrains J11 page cardinality and explains top-left geometry for each persona", () => {
+    for (const [persona, count] of [["playful_kid", 4], ["enthusiast_parent", 6], ["professional_creator", 9]] as const) {
+      const definition = m4RequestDefinition({ role: "specialist", taskId: "J11", persona, report: false });
+      const schema = JSON.parse(JSON.stringify(definition.outputSchema));
+      const proposal = schema.properties.result.anyOf.find((item: { properties: { kind: { enum: string[] } } }) => item.properties.kind.enum.includes("proposal"));
+      const pages = proposal.properties.payload.properties.content.properties.pages;
+      expect(pages).toMatchObject({ minItems: count, maxItems: count });
+      expect(pages.items.properties.panels.maxItems).toBe(persona === "playful_kid" ? 1 : 4);
+      expect(pages.items.properties.panels.items.properties.liveTextSafeRegion.description).toContain("top-left");
+      expect(definition.systemPrompt).toContain("x+width <= 1");
+      expect(definition.systemPrompt).toContain("Kid story pages must each have exactly one panel");
+      expect(definition.systemPrompt).toContain("exactly one two-panel story page");
+    }
+  });
+  it("requires an exact reviewed request-bundle amendment while retaining the old monetary policy", () => {
+    const policy = { ...m4TestPolicy(), requestDefinitionHash: "a".repeat(64) };
+    const grant = { campaignId: m4TestId(1), reference: "same-campaign", requestDefinitionUpdate: {
+      fromBundleHash: policy.requestDefinitionHash, toBundleHash: m4RequestBundleHash(), reference: "reviewed-J11-correction" } };
+    const selector = { role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false };
+    const allowed = { taskId: ["J01"], subjectKind: ["book"], subjectId: [m4TestId(1)] };
+    const before = structuredClone(policy);
+    expect(prepareM4Request(policy, selector, "{}", allowed, grant).definitionHash).toBe(m4RequestDefinition(selector).hash);
+    expect(policy).toEqual(before);
+    expect(() => prepareM4Request(policy, selector, "{}", allowed)).toThrow("definitions differ");
+    for (const update of [{ ...grant.requestDefinitionUpdate, fromBundleHash: "b".repeat(64) },
+      { ...grant.requestDefinitionUpdate, toBundleHash: "b".repeat(64) }]) {
+      expect(() => prepareM4Request(policy, selector, "{}", allowed, { ...grant, requestDefinitionUpdate: update })).toThrow("definitions differ");
+    }
+  });
 });

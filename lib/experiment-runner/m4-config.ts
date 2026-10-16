@@ -2,7 +2,7 @@ import { z } from "zod";
 import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import { readBookletRunnerConfig, type ConfigState } from "@/lib/experiment-runner/config";
 import { m4GrantSchema, m4PolicySchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
+import { m4RequestBundleMatches } from "@/lib/experiment-runner/m4-request";
 
 // Non-secret reviewed release input. Ready records technical configuration;
 // granted additionally records the user's later explicit campaign instruction.
@@ -24,7 +24,7 @@ export function readM4RunnerConfig(env: Record<string, string | undefined> = pro
   // private authority, rather than enabling this production entry point.
   if (env.DEPLOYMENT_ENV !== "_staging") return unavailable();
   const snapshot = m4PolicySnapshot(parsed.data.policy);
-  if (snapshot.policy.requestDefinitionHash !== m4RequestBundleHash() ||
+  if (!m4RequestBundleMatches(snapshot.policy, parsed.data.state === "granted" ? parsed.data.grant : undefined) ||
       snapshot.policy.publications.length !== base.config.bindings.length || snapshot.policy.publications.some((expected) =>
         !base.config.bindings.some((actual) => actual.role === expected.role && actual.taskId === expected.taskId &&
           actual.persona === expected.persona && actual.appId === expected.appId &&
