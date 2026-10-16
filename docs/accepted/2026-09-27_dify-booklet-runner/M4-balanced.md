@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Non-billable readiness is verified. The user authorized the bounded paid campaign on 2026-10-16, including the input-count fee assumption. The grant manifest requires reviewed staging delivery before execution. Paid acceptance has not started; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** The authorized grant is delivered. M4 stopped at Kid creation on 2026-10-16: valid bindings in a different order fail campaign admission. No new run was saved and provider execution was not reached. No creation retry, Parent or Creator submission occurred. The user approved the bounded correction and same-campaign continuation. Reviewed correction delivery and fresh no-run/preflight checks precede the same-key retry; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 Track private setup and paid permissions only in the
@@ -616,6 +616,39 @@ Typecheck, focused lint, agent fixtures, 77 local documentation links/anchors an
 whitespace checks passed. These are non-billable fixtures, not M4 persona acceptance.
 
 #### Current delivery record - 2026-10-15
+
+**Current blocker - 2026-10-16:** Grant PR #194 (`49f55b5`) and selective staging
+PR #195 (`8bf6b77`) passed two clean independent reviews, seven focused units and
+typecheck on both actual candidates; lean CI `38917614285` and `38917627599` passed.
+Master merge: `9603fe50c3d654daec5685e1485af1a6bac3e902`.
+Staging release: `fa9ad887555b59c5040170a237d0356896efa190`; image:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:903e6858df9fd5f5a81f9f598592ee2d06d2d8789e1102307989e8caeb152b97`.
+Deploy `38918056550` reached its client wait bound; original host request
+`38918056550-1` completed/archived without replay, read back by `38919526656`.
+Backup: `staging-20261016T144752Z-7a52a2d565f9771b`. Check `38919724709` passed.
+Fresh authenticated preflight returned ready/idle and the exact manager publication.
+One Kid creation submission returned HTTP 503. Latest saved-run metadata still
+identifies the preceding Simulated Kid; no new run is available. Creation was not
+retried. Parent and Creator were not submitted, and model/count permission remains
+untested. No paid provider request was reached.
+
+Diagnosis: protected prepared settings retain image-before-manager order, while
+the policy lists image last. The publication identities match. Configuration
+preflight compares identities without order, but `claimPersona` compares serialized
+arrays with order. A focused fake-provider HTTP/isolated-Mongo reproduction yields
+the exact `Run publications differ from the frozen manifest.` admission error,
+HTTP 503 and zero saved runs/campaigns/operations/provider actions. The needed
+correction is to compare complete binding identities independent of array order,
+while preserving saved configuration serialization/hashes and all mismatch checks.
+The user subsequently approved the bounded correction and same-campaign
+continuation. The candidate compares complete binding entries independent of order
+without changing saved serialization/hashes. Focused coverage checks reordered
+creation, same-key reuse and missing/duplicate/changed identities. Reviewed selective
+delivery, fresh no-run readback and preflight must precede retrying the pending Kid
+creation with its retained request key. No successor or extra paid allowance is
+implied. Existing provider, graph and accounting evidence is reused. Retained local evidence:
+`output/issue65-m4-binding-order.json` (non-secret identities only) and
+`output/m4-creation-failure-reproduction.log`.
 
 **Current authorization - 2026-10-16:** The user explicitly approved the three-run
 campaign and required reviewed activation delivery, merging PR #193 at

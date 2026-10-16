@@ -53,6 +53,23 @@ async function setup(prepare = true) {
 }
 
 describe("granted M4 HTTP boundary with fake Dify reads", () => {
+  it("creates once when valid binding order differs from the manifest without rewriting its snapshot", async () => {
+    const { http, db, config, runtime } = await setup(false);
+    // The protected prepared settings place image before manager; the frozen
+    // manifest places image last. Both contain exactly the same identities.
+    const image = config.bindings.find((binding) => binding.role === "image")!;
+    config.bindings = [image, ...config.bindings.filter((binding) => binding !== image)];
+    const response = await http.create(create({ persona: "playful_kid", mode: "balanced" }));
+    expect(response.status).toBe(201);
+    const saved = await db.collections.experiment_runs.findOne({});
+    expect(JSON.parse(saved!.configurationJson)).toEqual(configurationSnapshot(config, "playful_kid"));
+    expect(saved!.configurationHash).toBe(m4Hash(saved!.configurationJson));
+    expect((await http.create(create({ persona: "playful_kid", mode: "balanced" }))).status).toBe(200);
+    expect(await db.collections.experiment_runs.countDocuments({})).toBe(1);
+    expect(await db.collections.experiment_campaigns.countDocuments({})).toBe(1);
+    expect(await db.collections.experiment_operations.countDocuments({})).toBe(0);
+    expect(runtime.start).not.toHaveBeenCalled();
+  });
   it("admits the largest escaped authorization envelope and preserves its bytes through the graph carrier", async () => {
     const { http, db, repository } = await setup();
     const operation = (await repository.getOperation(id(12)))!;
