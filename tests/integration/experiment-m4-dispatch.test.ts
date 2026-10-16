@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -18,6 +19,11 @@ import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-tr
 import type { RuntimeExecution, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
+import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
+import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-published-rehearsal";
+import { m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
+import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -39,8 +45,11 @@ const workflowOwnedFields: Record<string, string[]> = {
 };
 
 async function setup() {
+  const published = process.env.M4_PUBLICATION_REHEARSAL === "1" ? await loadPublishedRehearsal() : null;
+  const phases: { operationId: string; role: string; report: boolean; publicationId: string; authorizationBytes: number; resultBytes: number; authorizationMs: number; decodeReturnMs: number }[] = [];
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
-  const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
+  const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash(),
+    ...(published ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
   const authority = { policy, grant: { campaignId: id(1), reference: "offline-dispatch-fixture-only" } };
   const store = new MemoryStore();
   const repository = createExperimentRepository(database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => store });
@@ -62,11 +71,36 @@ async function setup() {
       const workflowRunId = randomUUID();
       const identity = { runId, operationId: input.operationId, workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId };
       const running: RuntimeExecution = { id: workflowRunId, task_id: randomUUID(), workflow_id: binding.publishedWorkflowId, status: "running", outputs: {} };
+      saved.set(workflowRunId, running);
       await options?.onStarted?.(running);
+      const isReport = ["tester", "judge"].includes(binding.role) && (await repository.getRun(runId))!.generationCompletedAtMs != null;
+      const graph = published?.find((item) => item.role === binding.role &&
+        (binding.role === "tester" ? isReport : binding.role === "specialist" ? binding.taskId === "J01" : !phases.some((phase) => phase.role === "manager")));
+      let authorizationBody = "", authorizationMs = 0;
+      if (graph) {
+        const http = createBookletRunnerHttp({ database: () => database, config: () => ({ enabled: true, config }),
+          runtime: () => runtime, store: () => store, mutate: (action) => action() });
+        const started = performance.now();
+        // HTTP uses the wall clock; keep it on the same monotonically advanced
+        // fixture time as dispatcher preparation and report accounting.
+        const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+        let response: Response;
+        try {
+          response = await http.tool(new Request("https://booklet.invalid/api/experiments/booklet-tools/authorize", {
+            method: "POST", headers: { "x-booklet-tool-key": config.callbackKey }, body: JSON.stringify(identity),
+          }), "authorize");
+        } finally { now.mockRestore(); }
+        authorizationBody = await response.text(); authorizationMs = performance.now() - started;
+        expect(response.status, authorizationBody).toBe(200);
+        expect(JSON.parse(authorizationBody).data.started).toBe(true);
+        expect(authorizationBody.length).toBeGreaterThan(0);
+      } else {
       // Emulate the protected authorization endpoint's original publication GET.
       await repository.verifyDispatchPublication({ ...identity, workflowId: binding.publishedWorkflowId, nowMs: clock });
       expect((await repository.claimOperation({ ...identity, nowMs: clock })).started).toBe(true);
+      }
       const operation = (await repository.getOperation(input.operationId))!;
+      expect(operation.deadlineAtMs).toBe(before.deadlineAtMs);
       const report = ["tester", "judge"].includes(binding.role) && (await repository.getRun(runId))!.generationCompletedAtMs != null;
       // Balanced reports consume the pre-claim projection carried in the exact
       // prepared request. Execution-context accounting cannot precede its GET.
@@ -110,7 +144,16 @@ async function setup() {
         refused: false, incompleteReason: null, requestDigest: operation.m4Preparation!.requestDigest, countedInputTokens: 100,
         usage: { source: "provider_reported", inputTokens: 100, outputTokens: 100, cachedInputTokens: 0, cacheWriteInputTokens: null, reasoningOutputTokens: 0 },
       } };
-      saved.set(workflowRunId, { ...running, status: "succeeded", outputs: { booklet_provider_result: JSON.stringify(wrapper) } });
+      let output = JSON.stringify(wrapper);
+      if (graph) {
+        expect(operation.verifiedWorkflowId).toBe(graph.publicationId);
+        const returned = publishedReturn(graph.graph, authorizationBody, output, operation.m4Preparation!.requestJson, isReport);
+        output = returned.output;
+        phases.push({ operationId: operation._id, role: binding.role, report: isReport, publicationId: graph.publicationId,
+          authorizationBytes: Buffer.byteLength(authorizationBody), resultBytes: Buffer.byteLength(output),
+          authorizationMs, decodeReturnMs: returned.decodeReturnMs });
+      }
+      saved.set(workflowRunId, { ...running, status: "succeeded", outputs: { booklet_provider_result: output } });
       // Even plausible stream output must not materialize before an original GET.
       return { kind: "accepted", execution: { ...running, outputs: { booklet_provider_result: "untrusted-stream-output" } } };
     }),
@@ -125,7 +168,7 @@ async function setup() {
     kind: "uploaded", id: randomUUID(), byteLength: bytes.byteLength, mimeType: "image/png", sha256: createHash("sha256").update(bytes).digest("hex"),
   }));
   const dispatcher = createExperimentDispatcher({ database, config, runtime, now: () => clock, mutate: async (action) => action(), store: () => store, uploadReference });
-  return { database, repository, dispatcher, runtime, runId, bookletId, store, context, uploadReference,
+  return { database, repository, dispatcher, runtime, runId, bookletId, store, context, uploadReference, phases,
     tick: () => { clock += 6_000; }, now: () => clock,
     pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; } };
 }
@@ -258,6 +301,9 @@ describe("offline Balanced dispatcher", () => {
     let testerSnapshot: unknown, testerResult: string | null = null;
     for (let step = 0; step < 120; step++) {
       const outcome = await env.dispatcher.advance(env.runId);
+      // Surface fixture assertions that the dispatcher correctly converts into
+      // uncertain dispatch, rather than hiding their cause behind "blocked".
+      for (const result of vi.mocked(env.runtime.start).mock.results) await result.value;
       const run = (await env.repository.getRun(env.runId))!;
       expect(outcome, `Offline step ${step}: ${run.status}/${run.safeFailure}`).not.toBe("blocked");
       const operations = await env.repository.listOperations(env.runId);
@@ -318,5 +364,17 @@ describe("offline Balanced dispatcher", () => {
     const completion = createExperimentCompletionService(env.database, env.store);
     expect((await completion.completeEvaluation({ runId: env.runId, expectedRevision: run.revision, nowMs: env.now() })).revision).toBe(run.revision);
     expect(env.runtime.stop).not.toHaveBeenCalled();
+    if (process.env.M4_PUBLICATION_REHEARSAL === "1") {
+      expect(env.phases.map(({ role, report }) => ({ role, report }))).toEqual([
+        { role: "manager", report: false }, { role: "specialist", report: false }, { role: "tester", report: true },
+      ]);
+      console.info("M4 publication rehearsal (fake providers; isolated persistence)", JSON.stringify(env.phases));
+      const observation = recentDiagnostics(env.runId, 5000).events.filter((event) =>
+        env.phases.some((phase) => phase.operationId === event.operationId) &&
+        ["publication_readback", "completion_reconciliation"].includes(event.phase));
+      expect(observation.every((event) => event.outcome === "succeeded")).toBe(true);
+      expect(new Set(observation.map((event) => event.operationId)).size).toBe(3);
+      writeFileSync("output/issue65-m4-rehearsal-phases.json", JSON.stringify({ providerRequests: 0, phases: env.phases, observation }, null, 2));
+    }
   }, 120_000);
 });

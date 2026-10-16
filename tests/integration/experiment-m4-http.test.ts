@@ -10,6 +10,10 @@ import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { RECONCILIATION_RESERVE_MS } from "@/lib/operations/budget";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-published-rehearsal";
+import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
+import { m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
+import { writeFileSync } from "node:fs";
 
 const databases: Database[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -24,14 +28,15 @@ function create(body: unknown, key = id(50)) {
 }
 async function setup(prepare = true) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
-  const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
+  const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash(),
+    ...(process.env.M4_PUBLICATION_REHEARSAL === "1" ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
   const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-only" } };
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "http://localhost:3000", callbackKey: "x".repeat(32),
     bindings: policy.publications.map((binding) => ({ ...binding, taskId: specialistTaskSchema.nullable().parse(binding.taskId), apiKey: "fake-test-key" })),
     m4: { state: "granted", authority } };
   const repository = createExperimentRepository(db, { m4Authority: authority, m4ExecutionEnabled: true });
   const retrieve = vi.fn(async (): Promise<RuntimeResult> => ({ kind: "execution", execution: {
-    id: id(13), workflow_id: policy.publications[0].publishedWorkflowId, status: "running", task_id: id(14),
+    id: id(13), workflow_id: policy.publications.find((item) => item.role === "manager")!.publishedWorkflowId, status: "running", task_id: id(14),
   } }));
   const runtime: WorkflowRuntime = { retrieve, start: vi.fn(async () => { throw new Error("No POST allowed"); }) };
   const http = createBookletRunnerHttp({ database: () => db, config: () => ({ enabled: true, config }), runtime: () => runtime, mutate: (operation) => operation() });
@@ -48,6 +53,43 @@ async function setup(prepare = true) {
 }
 
 describe("granted M4 HTTP boundary with fake Dify reads", () => {
+  it("admits the largest escaped authorization envelope and preserves its bytes through the graph carrier", async () => {
+    const { http, db, repository } = await setup();
+    const operation = (await repository.getOperation(id(12)))!;
+    const payload = JSON.parse(operation.m4Preparation!.requestJson);
+    // Synthetic boundary input, not a claim that 1 MiB fits the provider token
+    // limit. Provider input counting remains an independent admission boundary.
+    payload.input[0].content = "";
+    const encode = (padding: number) => {
+      payload.input[0].content = "x".repeat(padding);
+      // Keep canonical ordering from the original prepared object.
+      return JSON.stringify(payload);
+    };
+    const envelope = (requestJson: string) => JSON.stringify({ data: { started: true, reason: null,
+      role: operation.role, taskId: operation.taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId,
+      mode: operation.mode, inputFingerprint: operation.inputFingerprint,
+      m4: { requestJson, requestDigest: m4Hash(requestJson), timeoutSeconds: 120,
+        deadlineAtMs: operation.deadlineAtMs! - RECONCILIATION_RESERVE_MS, report: false } } });
+    const requestJson = encode(1_048_576 - Buffer.byteLength(envelope(encode(0))));
+    expect(Buffer.byteLength(envelope(requestJson))).toBe(1_048_576);
+    await db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: {
+      "m4Preparation.requestJson": requestJson, "m4Preparation.requestDigest": m4Hash(requestJson),
+    } });
+    const started = performance.now();
+    const response = await http.tool(callback(), "authorize");
+    const body = await response.text();
+    const authorizationMs = performance.now() - started;
+    expect(response.status).toBe(200);
+    expect(Buffer.byteLength(body)).toBe(1_048_576);
+    expect((await repository.getOperation(id(12)))!.deadlineAtMs).toBe(operation.deadlineAtMs);
+    if (process.env.M4_PUBLICATION_REHEARSAL === "1") {
+      const graph = (await loadPublishedRehearsal()).find((item) => item.role === "manager")!;
+      const returned = publishedReturn(graph.graph, body, "scripted-provider-boundary-result", requestJson, false);
+      writeFileSync("output/issue65-m4-rehearsal-payload.json", JSON.stringify({ providerRequests: 0,
+        publicationId: graph.publicationId, authorizationBytes: Buffer.byteLength(body),
+        resultBytes: Buffer.byteLength(returned.output), authorizationMs, decodeReturnMs: returned.decodeReturnMs }, null, 2));
+    }
+  });
   it("owns the campaign identity and denies ungranted, Real, successors and extra campaign inputs", async () => {
     const { http, db, config } = await setup(false);
     config.m4 = { state: "ready" };
