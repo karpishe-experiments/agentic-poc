@@ -14,7 +14,13 @@ describe("J11 saved layout routing", () => {
   it("allows a unit across panels and pages, source-free panels, and cover reuse", () => {
     expect(() => validatePaginationRouting(layout, sources)).not.toThrow();
   });
-  it("requires complete story coverage and known manuscript units", () => {
+  it("allows a manuscript unit routed only to the cover while story units remain on story pages", () => {
+    const coverAndStory = structuredClone(layout);
+    coverAndStory.pages[1].panels[0].manuscriptUnitIds = [id(11)];
+    coverAndStory.pages[2].panels[0].manuscriptUnitIds = [id(11)];
+    expect(() => validatePaginationRouting(coverAndStory, sources)).not.toThrow();
+  });
+  it("requires complete booklet coverage and known manuscript units", () => {
     const coverOnly = structuredClone(layout);
     coverOnly.pages[2].panels[0].manuscriptUnitIds = [id(10)];
     expect(() => validatePaginationRouting(coverOnly, sources)).toThrow(/cover every/);

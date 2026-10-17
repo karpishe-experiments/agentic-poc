@@ -617,8 +617,10 @@ corrupt saved sheets rejected admission. Two independent reviews and Validate
 `37329273541` passed; [PR #136](https://github.com/karpishe-experiments/agentic-poc/pull/136)
 merged the reviewed local implementation. Publication and private J11 key
 preparation passed; reviewed staging activation is recorded below. These local tests are not full-booklet or
-live Dify acceptance. Manuscript units can span panels/pages; coverage is required
-on story pages, not satisfied by the cover alone.
+live Dify acceptance. Manuscript units can span panels/pages. The original
+implementation required coverage on story pages. M4 identified an approved
+cover-only manuscript unit; the corrected rule requires complete coverage across
+the booklet, including its cover, without classifying free-form unit keys.
 
 Final local validation passed 137 tests across twelve affected suites without
 retries, clean-checkout typecheck and lint, and twelve legacy agent fixtures.

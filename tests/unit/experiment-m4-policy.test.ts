@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { m4MaximumCharge, m4ModelBucket, m4PolicySchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 describe("frozen M4 policy", () => {
+  it("keeps completion recovery exact, bounded and separate from failure continuation", () => {
+    const entry = { runId: "00000000-0000-4000-8000-000000000001", operationId: "00000000-0000-4000-8000-000000000002", reference: "reviewed-exact-recovery" };
+    const grant = { campaignId: "00000000-0000-4000-8000-000000000003", reference: "frozen-grant", completionRecoveries: [entry] };
+    expect(m4GrantSchema.parse(grant).completionRecoveries).toEqual([entry]);
+    expect(m4GrantSchema.safeParse({ ...grant, completionRecoveries: [entry, entry] }).success).toBe(false);
+    expect(m4GrantSchema.safeParse({ ...grant, continuations: [entry] }).success).toBe(false);
+    expect(m4GrantSchema.safeParse({ ...grant, completionRecoveries: [{ ...entry, operationId: "*" }] }).success).toBe(false);
+    expect(m4GrantSchema.safeParse({ ...grant, completionRecoveries: Array(21).fill(entry) }).success).toBe(false);
+  });
   it("freezes the selected model mix and includes count charges in each maximum", () => {
     const policy = m4TestPolicy();
     expect(m4MaximumCharge(policy, "specialist")).toBe(8096);
