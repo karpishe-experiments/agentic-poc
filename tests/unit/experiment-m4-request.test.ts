@@ -91,6 +91,9 @@ describe("M4 reviewed request contract", () => {
       expect(definition.systemPrompt).toContain("x+width <= 1");
       expect(definition.systemPrompt).toContain("Kid story pages must each have exactly one panel");
       expect(definition.systemPrompt).toContain("exactly one two-panel story page");
+      expect(definition.systemPrompt).toContain("one complete compact JSON object");
+      expect(definition.systemPrompt).toContain("no indentation or blank lines outside strings");
+      expect(definition.systemPrompt).toContain("Stop immediately after the final closing brace");
     }
   });
   it("requires an exact reviewed request-bundle amendment while retaining the old monetary policy", () => {
