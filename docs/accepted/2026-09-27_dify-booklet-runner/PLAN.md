@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 and efficiency acceptance remain complete. M4's J11 geometry correction is deployed; Kid's next J11 response stopped incomplete after 28 paid text requests and five simulated images. The J11-only compact-output mitigation and exact same-run continuation are being verified under unchanged USD 5 conditional and cumulative limits. Parent/Creator remain unstarted; M4 is not complete. See the [current M4 record](M4-balanced.md#current-j11-incomplete-output-correction---2026-10-17).
+**Status:** M3 and efficiency acceptance remain complete. M4 compact J11 is deployed. Kid retains complete JSON but is blocked by story-only manuscript routing after 30 paid text requests and five simulated images. Complete-booklet coverage and exact same-operation completion recovery are being verified under unchanged USD 5 conditional and cumulative limits. Parent/Creator remain unstarted; M4 is not complete. See the [current M4 record](M4-balanced.md#current-j11-cover-routing-recovery---2026-10-17).
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 

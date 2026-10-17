@@ -4,6 +4,15 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+J11 manuscript routing covers the complete booklet, including cover-only units;
+unknown units and exact approved sheet tuples remain independent gates. A protected
+M4 `completionRecoveries` grant permits only a named active pre-generation J11
+operation to recover its retained authenticated result from a definite blocker.
+Normal source/byte/usage checks and materialization remain required. Completion,
+provenance and stopped-campaign reopening are atomic, without another provider
+request or changed charges/deadline. Other definite blockers stay blocked; late
+recovery preserves attempt history and pauses before new work.
+
 A protected M4 grant can name an exact inspected terminal manager failure for
 one same-run continuation. Pre-generation specialists use the same proof as managers. Resume verifies its original provider evidence,
 settlement and retained count liability, excludes unresolved work, and atomically
