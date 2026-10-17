@@ -19,6 +19,9 @@ retains it with the effective request/definition digests. Historical requests an
 monetary policy bytes remain unchanged; absent or revoked amendments block new
 work. J11 provider schemas pin page counts and Kid single panels; explicit top-left
 coordinate instructions support the independent owning-service geometry checks.
+J11 also requests concise, complete compact JSON to mitigate observed whitespace
+exhaustion. Incomplete provider output remains rejected and charged; no parser
+repair, automatic retry or increased token ceiling is introduced.
 
 
 The delivered issue #65 efficiency cleanup separates current-version execution projections

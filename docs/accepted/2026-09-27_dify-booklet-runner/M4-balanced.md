@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The inspected manager continuation is delivered and passed. Kid reached 26 text requests and five simulated images, then stopped on an invalid J11 layout. The exact J11 correction and request-definition amendment are being verified under the latest M4 completion grant. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** The J11 geometry correction is deployed. Kid retains J01-J10 and five simulated images; its next J11 response stopped incomplete after 28 paid text requests. A J11-only compact-JSON instruction mitigation and exact same-run continuation are being verified. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Authorized same-run continuation - 2026-10-16
@@ -11,7 +11,7 @@ same campaign, its frozen models/prices/request definitions, all reservations an
 120/160/220 persona, 500 campaign and three judge request ceilings. No new budget,
 successor, automatic provider retry, model escalation or paid image is introduced.
 
-The current exact continuation is Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`,
+The first inspected continuation was Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`,
 failed manager `ac39211f-4e61-4c08-a3b6-81f922bf9be4`. Eight requests already count;
 112 Kid and 492 campaign requests remain. Retain J01-J03 and the failed response.
 Do not salvage its JSON prefix or increase output limits without measured cause.
@@ -81,6 +81,49 @@ all personas, old-policy preparation under the exact amendment, absent/mismatche
 amendment rejection, specialist continuation with inclusive charges and unchanged
 prior work, then typecheck/lint/links and two clean reviews/lean CI of both diffs.
 Deliver once through the existing staging process and continue the same Kid.
+
+### Current J11 incomplete-output correction - 2026-10-17
+
+PRs #200/#201 delivered the geometry/cardinality correction at release
+`e48d38648d273242d83354ee0907b6aed03c6c84`, image
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:d1f092887c7bef0f00d2336abf3af72bb73a9279a76460598179e8701e050523`.
+Deploy `39030111095`, archived host readback `39030453642` and Check `39030471545`
+passed. Preflight read the normal manager `46572ccb-d954-45e5-b73d-90fd0995cdb6`,
+publication `64d08408-4ab7-4413-a5a1-0fccadd2ff26`, ready=true and idle=true.
+The approved operator recovery retained the original failed deployment journal
+and deadline unchanged; backup `staging-20261016T202602Z-eb767c57208dac24` was
+verified. The successful separate deployment retained its new backup
+`staging-20261017T114932Z-61c1f7d0730293ca`. No recovery gate is added to acceptance.
+
+The same Kid continued once. J11 operation `cbc18fd7-7aa5-475e-bc0a-a312e584d25c`,
+Dify execution `4ef7f9bf-f48e-4634-8e73-5d33b3820c1e`, returned provider status
+incomplete/max_output_tokens: 15,874 input tokens, 8,192 output tokens including
+78 reasoning tokens. Its 30,807-character response has 6,729 non-trailing-whitespace
+characters followed by 24,078 whitespace characters; JSON remains unfinished.
+Do not salvage it or increase token limits. Kid is blocked at revision 200 with
+28 text requests, five simulated images and all J01-J10 approvals retained.
+The stopped campaign retains 32,847 settled and 25,200 reserved microdollars;
+remaining conditional allowance is 4,941,953 microdollars. Parent/Creator remain
+unstarted. Original failed responses, preparations and charges stay saved.
+
+Amend only J11 instructions to require a complete compact JSON object, concise
+field values, no indentation/blank lines outside strings, closure of every array
+and object, and an immediate stop after the final brace. This mitigates the observed
+whitespace exhaustion; it is not a proven cure for provider/constrained-decoding
+behavior. Keep every output schema, owning parser, model, token limit, price,
+workflow and credential unchanged. Append only the exact inspected operation to
+the continuation grant. Keep the original request-bundle hash `293dce28…` as the
+amendment source; new preparations use the reviewed replacement, while prior
+`49607704…` preparations remain immutable and independently attributable.
+
+Focused proof: compare all 48 definition/schema identities; reject and charge
+incomplete whitespace-heavy output; retain prior approvals/assets/accounting
+through exact continuation; verify historical amended preparation proof under a
+changed amendment; reject stale/revoked preparation authority. Run affected units,
+J11-only local integration and preparation checks, typecheck/lint/links; then two
+clean reviews, lean CI and selective staging delivery. No paid smoke, successor,
+new allowance, provider retry or persona campaign is added. Credential-inventory
+impact: none; existing Dify-only storage and consumers remain unchanged.
 
 Track private setup and paid permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
