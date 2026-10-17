@@ -26,6 +26,17 @@ describe("M4 attributable provider evidence", () => {
     const raw = wrapper(); Object.assign(raw.providerEvidence, { status: "incomplete", incompleteReason: "max_output_tokens", refused: true });
     expect(assessM4ProviderResult(raw, m4TestPolicy(), operation)).toMatchObject({ chargeUpperMicrodollars: 63, canMaterialize: false });
   });
+  it("rejects an unfinished whitespace-heavy specialist response while retaining its full token charge", () => {
+    const raw = wrapper();
+    raw.content = '{"result":{"kind":"proposal","payload":' + "   \n".repeat(6019);
+    Object.assign(raw.providerEvidence, { status: "incomplete", incompleteReason: "max_output_tokens", countedInputTokens: 15874 });
+    Object.assign(raw.providerEvidence.usage, { inputTokens: 15874, outputTokens: 8192, cachedInputTokens: 0, reasoningOutputTokens: 78 });
+    const specialist = { ...operation, role: "specialist", m4Reservation: { ...operation.m4Reservation, bucket: "specialist" } } as ExperimentOperationDocument;
+    expect(assessM4ProviderResult(raw, m4TestPolicy(), specialist)).toMatchObject({
+      canMaterialize: false, chargeUpperMicrodollars: 6081, violations: [], content: raw.content,
+    });
+    expect(() => JSON.parse(raw.content)).toThrow();
+  });
   it("retains maximum allocation when usage, price identity or request attribution is unavailable", () => {
     for (const change of [{ model: "other" }, { serviceTier: "priority" }, { requestId: null },
       { usage: { ...wrapper().providerEvidence.usage, source: "unavailable", inputTokens: null } }]) {

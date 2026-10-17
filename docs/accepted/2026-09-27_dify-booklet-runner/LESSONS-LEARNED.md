@@ -4,6 +4,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Distinguish content size from whitespace token exhaustion
+
+- **Observation:** A paid J11 response exhausted 8,192 output tokens with 24,078
+  trailing whitespace characters after 6,729 non-trailing-whitespace characters.
+  The provider marked it incomplete; the application rejected it and retained the
+  charge. This does not establish a schema contradiction or justify a larger limit.
+- **Guidance:** Inspect attributable output and usage before changing a ceiling.
+  Request concise compact JSON and explicit closure as a bounded mitigation, not a
+  proven cure. Preserve failed output; never salvage its prefix as completion.
+- **Evidence:** [Current J11 record](M4-balanced.md#current-j11-incomplete-output-correction---2026-10-17).
+- **Promotion target:** Bounded structured-output experiment guidance.
+
 ### Compare equivalent completion boundaries when optimizing delegation
 
 - **Context:** Booklet separates provider output, image assembly and creator approval.

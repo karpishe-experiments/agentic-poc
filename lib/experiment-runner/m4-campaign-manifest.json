@@ -212,12 +212,17 @@
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "e46b6b9b-a751-4809-87a5-f4aa8df49903",
         "reference": "Latest user M4 completion grant: inspected J11 invalid normalized rectangles and Kid multi-panel output; reviewed definition amendment and exact same-campaign continuation; preserve charges and limits."
+      },
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "cbc18fd7-7aa5-475e-bc0a-a312e584d25c",
+        "reference": "User M4 completion grant: inspected J11 incomplete max_output_tokens with whitespace-heavy unfinished JSON; reviewed compact-output instruction mitigation and exact same-campaign continuation; retain all charges, outputs and cumulative limits."
       }
     ],
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
-      "toBundleHash": "49607704d86ac437af6bc14ad3948e4b9b22783ca6f506bf497f0c2eecc90607",
-      "reference": "Latest user M4 completion grant: reviewed J11 normalized top-left geometry, exact page counts and Kid single-panel provider constraints; monetary policy and models unchanged."
+      "toBundleHash": "a47239bc1bb7f15fc0b85cac43de3baa3af5ca9ceeacb640b87f168e153d1883",
+      "reference": "User M4 completion grant: reviewed J11 geometry/cardinality constraints plus compact complete JSON and concise field instructions; monetary policy, models and token limits unchanged; prior request amendments remain retained with historical preparations."
     }
   }
 }
