@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The J11 geometry correction is deployed. Kid retains J01-J10 and five simulated images; its next J11 response stopped incomplete after 28 paid text requests. A J11-only compact-JSON instruction mitigation and exact same-run continuation are being verified. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** The compact J11 correction is deployed. Kid's retained response is complete; Booklet blocks its cover-only manuscript routing after 30 paid text requests and five simulated images. Complete-booklet coverage and exact same-operation completion recovery are being verified. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Authorized same-run continuation - 2026-10-16
@@ -82,7 +82,7 @@ amendment rejection, specialist continuation with inclusive charges and unchange
 prior work, then typecheck/lint/links and two clean reviews/lean CI of both diffs.
 Deliver once through the existing staging process and continue the same Kid.
 
-### Current J11 incomplete-output correction - 2026-10-17
+### J11 incomplete-output correction - 2026-10-17
 
 PRs #200/#201 delivered the geometry/cardinality correction at release
 `e48d38648d273242d83354ee0907b6aed03c6c84`, image
@@ -124,6 +124,56 @@ J11-only local integration and preparation checks, typecheck/lint/links; then tw
 clean reviews, lean CI and selective staging delivery. No paid smoke, successor,
 new allowance, provider retry or persona campaign is added. Credential-inventory
 impact: none; existing Dify-only storage and consumers remain unchanged.
+
+### Current J11 cover-routing recovery - 2026-10-17
+
+PRs #202/#203 passed two clean independent reviews and lean CI
+`39032038325`/`39032047644`. Release `5335746bf11e1af1f1d2f429ea3ee3708b7b8b18`
+uses image `sha256:d79882c41256316fabad292443d75b0675391e02c853dd189b5b433843497b03`.
+Deploy `39032272766` reached its client wait limit; the original host request
+completed and archived without replay, verified by `39032868955`. Backup
+`staging-20261017T122714Z-ba99c94444a315a2`, Check `39032956244` and ready/idle
+normal-binding preflight are retained.
+
+The exact continuation produced a successful manager and completed J11 operation
+`48e69de1-cbc9-4ac6-a5d2-bd81dddffad9`, Dify
+`055c52c5-35c5-4a70-be1d-f126139a58d8`: 15,909 input and 2,334 output tokens,
+including 66 reasoning tokens, 22.431 seconds in Dify. Its 7,422-character JSON
+passes provider schema and layout validation. J05 contains a cover unit and three
+story units; J11 routes all four known units across pages 0-3. Booklet's story-only
+coverage check rejects the cover unit despite complete booklet coverage. The
+operation remains active/started, run revision 212 blocked/definite_failure, and
+campaign stopped. Retain 30 requests, 38,177 settled plus 27,000 assumed-count
+microdollars; remaining conditional allowance is 4,934,823 microdollars.
+
+Change-surface forecast: require manuscript coverage across the complete booklet,
+including cover, with unknown-unit and exact approved-sheet checks unchanged.
+Do not classify free-form unit keys or rewrite J05/J11. Add a protected exact
+`completionRecoveries` grant for this active J11 operation. Original authenticated
+GET evidence, request/usage identities, approvals, dependencies and bytes must pass
+normal completion. Only that named pre-generation J11 operation may cross the
+definite-blocker gate. Materialization, recovery provenance and reopening of its
+matching stopped campaign commit atomically; other unresolved work prevents it.
+Preserve every request, reservation, counter, charge, failed predecessor and original
+deadline. Expired completion retains failed-attempt history and pauses normally;
+explicit Resume can then continue without regenerating J11. Ordinary definite
+blockers, Stop, missing/revoked grants and conflicting evidence remain blocked.
+
+No prompt, workflow, model, token limit, price or credential changes are needed.
+Focused checks cover complete cover/story routing, missing/unknown units and stale
+references; exact saved-result recovery, duplicate inspection, unchanged accounting
+and deadline, late pause and changed-source/evidence rejection. Run affected checks,
+typecheck/lint/links, two clean reviews and lean CI before selective delivery.
+Delivery constraint: the old application cannot materialize this result and normal
+drain counts its active operation. Do not start a deployment known to fail. Prepare
+one bounded operator execution of the reviewed recovery code after verified backup
+and fresh identity/admission checks; preserve evidence and stop on uncertain
+execution. This is a necessary manual checkpoint, not a permanent host action.
+Normal selective deployment follows only after the operation is safely resolved.
+Credential-inventory impact: none. The Simulated J12 fixture assumes title-only
+cover lettering; it is not used by live Balanced J12 and remains a documented
+fixture limitation. Do not claim whole-manuscript word equality from structural
+J12 checks. M3/efficiency acceptance remains complete.
 
 Track private setup and paid permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).

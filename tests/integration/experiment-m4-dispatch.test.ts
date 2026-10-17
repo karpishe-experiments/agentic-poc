@@ -24,6 +24,7 @@ import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-published-rehearsal";
 import { m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
+import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 
 const databases: Database[] = [];
@@ -65,6 +66,7 @@ async function setup(amended = false) {
     configuration: configurationSnapshot(config, "playful_kid"), nowMs: clock });
   const saved = new Map<string, RuntimeExecution>();
   let pending = false, badCreative = false, badLayout = false, incompleteLayout = false;
+  let blockCompletionTask: string | null = null;
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
       expect(input.mode).toBe("balanced");
@@ -175,6 +177,15 @@ async function setup(amended = false) {
     retrieve: vi.fn<WorkflowRuntime["retrieve"]>(async (_binding, workflowRunId) => {
       const execution = saved.get(workflowRunId);
       if (!execution) throw new Error("Unexpected fake workflow lookup");
+      if (blockCompletionTask && _binding.role === "specialist" && typeof execution.outputs?.booklet_provider_result === "string") {
+        const wrapper = JSON.parse(execution.outputs.booklet_provider_result);
+        if (JSON.parse(wrapper.content).result?.payload?.taskId === blockCompletionTask) {
+          blockCompletionTask = null;
+          // Reproduce the earlier application's definite materialization blocker
+          // while retaining the same successful provider GET and claimed request.
+          await repository.blockRun({ runId, category: "definite_failure", nowMs: clock });
+        }
+      }
       return { kind: "execution", execution: pending ? { ...execution, status: "running", outputs: {} } : execution };
     }),
     stop: vi.fn<NonNullable<WorkflowRuntime["stop"]>>(async () => ({ kind: "acknowledged" })),
@@ -186,6 +197,7 @@ async function setup(amended = false) {
   return { database, repository, dispatcher, runtime, runId, bookletId, store, context, uploadReference, phases, authority, config,
     tick: () => { clock += 6_000; }, now: () => clock,
     pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; },
+    blockCompletion: (taskId: string) => { blockCompletionTask = taskId; },
     badLayout: (value: boolean) => { badLayout = value; }, incompleteLayout: (value: boolean) => { incompleteLayout = value; } };
 }
 
@@ -449,5 +461,110 @@ describe("focused J11 paid-failure continuation", () => {
     await withMongoTransaction(env.database, async session => verifyM4Accounting(env.database, session, (await env.repository.getRun(env.runId))!));
     expect((await env.repository.getRun(env.runId))!.counters.payableText).toBe(blocked.counters.payableText + 2);
     expect((await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!.requests).toBe(beforeCampaign.requests + 2);
+  }, 120_000);
+});
+
+describe("focused J11 retained completion recovery", () => {
+  async function blockedCompletion(taskId = "J11") {
+    const env = await setup(); env.blockCompletion(taskId);
+    for (let i = 0; i < 85 && (await env.repository.getRun(env.runId))!.status !== "blocked"; i++) {
+      env.tick(); await env.dispatcher.advance(env.runId);
+    }
+    const run = (await env.repository.getRun(env.runId))!;
+    const operation = (await env.repository.listOperations(env.runId)).at(-1)!;
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "definite_failure", activeOperationId: operation._id });
+    expect(operation).toMatchObject({ taskId, state: "started", reservationCount: 1, resultJson: null,
+      m4Observation: { remoteStatus: "succeeded", issue: null }, m4Reservation: { settledMicrodollars: 63 } });
+    const result = m4ObservedRoleResult(run, operation);
+    const input = () => ({ envelope: { runId: env.runId, operationId: operation._id,
+      workflowRunId: operation.workflowRunId!, inputFingerprint: operation.inputFingerprint, result },
+      parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: env.now() });
+    const permission = { runId: env.runId, operationId: operation._id, reference: "inspected-retained-J11-completion" };
+    const authority = { ...env.authority, grant: { ...env.authority.grant, completionRecoveries: [permission] } };
+    const recovery = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
+    return { ...env, run, operation, input, permission, recovery, recoveryAuthority: authority };
+  }
+
+  it("requires exact authority and current sources, then saves the original expired result once without another request", async () => {
+    const env = await blockedCompletion();
+    const beforeCampaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    expect(beforeCampaign.state).toBe("stopped");
+    const beforeCalls = vi.mocked(env.runtime.start).mock.calls.length;
+    const beforeHistory = await env.repository.listOperations(env.runId);
+    const beforeAssets = [...env.store.files.entries()];
+    const beforeVersions = await env.database.collections.artifact_versions.find({}).sort({ _id: 1 }).toArray();
+    const beforeApprovals = await env.database.collections.approvals.find({}).sort({ _id: 1 }).toArray();
+    await expect(env.repository.completeOperation(env.input())).rejects.toThrow();
+    const wrong = createExperimentRepository(env.database, { m4Authority: { ...env.recoveryAuthority,
+      grant: { ...env.recoveryAuthority.grant, completionRecoveries: [{ ...env.permission, operationId: id(999) }] } },
+      m4ExecutionEnabled: true, store: () => env.store });
+    await expect(wrong.completeOperation(env.input())).rejects.toThrow();
+    expect(env.operation.lifecycle?.stop).toBeUndefined();
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operation._id }, { $set: {
+      "lifecycle.stop": { requestedAtMs: env.now(), reason: "manual", delivery: "acknowledged" },
+    } });
+    await expect(env.recovery.completeOperation(env.input())).rejects.toThrow(/definite blocker/);
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(beforeCampaign);
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operation._id }, { $unset: { "lifecycle.stop": "" } });
+    const conflicting = structuredClone(env.input());
+    if (conflicting.envelope.result.kind !== "proposal") throw new Error("Expected saved J11 proposal");
+    (conflicting.envelope.result.payload.content as { title: string }).title = "Conflicting callback output";
+    await expect(env.recovery.completeOperation(conflicting)).rejects.toThrow(/retained provider evidence/);
+    const source = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J05" }))!;
+    await env.database.collections.artifacts.updateOne({ _id: source._id }, { $set: { state: "needs_review" } });
+    await expect(env.recovery.completeOperation(env.input())).rejects.toThrow();
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(beforeCampaign);
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+    await env.database.collections.artifacts.updateOne({ _id: source._id }, { $set: { state: source.state } });
+    // Accounting is checked after transaction-local materialization/reopening.
+    // A mismatch must roll back both, not expose a runnable partial recovery.
+    await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $inc: { settledMicrodollars: 1 } });
+    await expect(env.recovery.completeOperation(env.input())).rejects.toThrow(/attributable accounting/);
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))
+      .toEqual({ ...beforeCampaign, settledMicrodollars: beforeCampaign.settledMicrodollars + 1 });
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+    expect(await env.repository.getOperation(env.operation._id)).not.toHaveProperty("m4CompletionRecovery");
+    await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { settledMicrodollars: beforeCampaign.settledMicrodollars } });
+    while (env.now() <= env.operation.deadlineAtMs!) env.tick();
+    const dispatcher = createExperimentDispatcher({ database: env.database,
+      config: { ...env.config, m4: { state: "granted", authority: env.recoveryAuthority } }, runtime: env.runtime,
+      now: env.now, mutate: async (action) => action(), store: () => env.store, uploadReference: env.uploadReference });
+    await dispatcher.inspect({ runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision });
+    const saved = (await env.repository.getOperation(env.operation._id))!;
+    expect(saved).toMatchObject({ state: "succeeded", reservationCount: 1, deadlineAtMs: env.operation.deadlineAtMs,
+      m4Preparation: env.operation.m4Preparation, m4Observation: env.operation.m4Observation,
+      m4Reservation: env.operation.m4Reservation,
+      m4CompletionRecovery: { reference: env.permission.reference, evidenceDigest: env.operation.m4Observation!.evidenceDigest,
+        requestDigest: env.operation.m4Preparation!.requestDigest, recoveredAtMs: env.now() } });
+    const recoveredRun = (await env.repository.getRun(env.runId))!;
+    expect(recoveredRun).toMatchObject({ status: "paused", pauseRequested: true, activeOperationId: null, counters: env.run.counters });
+    const campaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    expect(campaign).toMatchObject({ state: "active", requests: beforeCampaign.requests, requestCounts: beforeCampaign.requestCounts,
+      settledMicrodollars: beforeCampaign.settledMicrodollars, reservedMicrodollars: beforeCampaign.reservedMicrodollars });
+    expect(await env.database.collections.artifact_versions.find({ _id: { $in: beforeVersions.map(v => v._id) } }).sort({ _id: 1 }).toArray()).toEqual(beforeVersions);
+    expect(await env.database.collections.approvals.find({ _id: { $in: beforeApprovals.map(a => a._id) } }).sort({ _id: 1 }).toArray()).toEqual(beforeApprovals);
+    expect([...env.store.files.entries()]).toEqual(beforeAssets);
+    await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, recoveredRun));
+    await dispatcher.inspect({ runId: env.runId, operationId: env.operation._id, expectedRevision: recoveredRun.revision });
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(saved);
+    expect(await env.repository.getRun(env.runId)).toEqual(recoveredRun);
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(1);
+    expect(await env.repository.listOperations(env.runId)).toHaveLength(beforeHistory.length);
+    expect(env.runtime.start).toHaveBeenCalledTimes(beforeCalls);
+    expect(env.runtime.stop).not.toHaveBeenCalled();
+    const resumed = await env.recovery.resume({ runId: env.runId, expectedRevision: recoveredRun.revision, nowMs: env.now() });
+    expect(resumed).toMatchObject({ status: "queued", pauseRequested: false, counters: env.run.counters });
+    expect(env.runtime.start).toHaveBeenCalledTimes(beforeCalls);
+  }, 120_000);
+
+  it("keeps the ordinary definite-blocker guard for a non-J11 operation even with an exact completion grant", async () => {
+    const env = await blockedCompletion("J01");
+    await expect(env.recovery.completeOperation(env.input())).rejects.toThrow();
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+    expect(await env.repository.getOperation(env.operation._id)).toMatchObject({ state: "started", resultJson: null, reservationCount: 1 });
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ state: "stopped" });
   }, 120_000);
 });

@@ -219,6 +219,13 @@
         "reference": "User M4 completion grant: inspected J11 incomplete max_output_tokens with whitespace-heavy unfinished JSON; reviewed compact-output instruction mitigation and exact same-campaign continuation; retain all charges, outputs and cumulative limits."
       }
     ],
+    "completionRecoveries": [
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "48e69de1-cbc9-4ac6-a5d2-bd81dddffad9",
+        "reference": "User M4 completion grant: inspected complete J11 output blocked by story-only manuscript coverage; recover this exact retained result through normal source checks and materialization, preserving deadline, requests and charges."
+      }
+    ],
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
       "toBundleHash": "a47239bc1bb7f15fc0b85cac43de3baa3af5ca9ceeacb640b87f168e153d1883",

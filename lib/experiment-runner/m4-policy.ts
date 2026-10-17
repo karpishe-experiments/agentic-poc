@@ -53,10 +53,11 @@ export const m4ContinuationGrantSchema = z.strictObject({ runId: opaqueIdSchema,
   reference: z.string().min(1).max(500) });
 export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, reference: z.string().min(1).max(500),
   continuations: z.array(m4ContinuationGrantSchema).max(20).optional(),
+  completionRecoveries: z.array(m4ContinuationGrantSchema).max(20).optional(),
   requestDefinitionUpdate: z.strictObject({ fromBundleHash: m4Digest, toBundleHash: m4Digest,
     reference: z.string().min(1).max(500) }).optional(),
 }).superRefine((grant, context) => {
-  const keys = grant.continuations?.map((item) => item.operationId) ?? [];
+  const keys = [...grant.continuations ?? [], ...grant.completionRecoveries ?? []].map((item) => item.operationId);
   if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: "Continuation operations must be unique." });
 });
 export type M4Grant = z.infer<typeof m4GrantSchema>;

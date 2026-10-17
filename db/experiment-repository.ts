@@ -771,19 +771,43 @@ export function createExperimentRepository(database: Database, options: { store?
         if (operation.resultDigest === resultDigest) return { operation, reused: true };
         throw new ExperimentRepositoryError("conflict", "Completed operation has a different result.");
       }
-      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
+      const recoveryPermission = campaignLedger?.grant.completionRecoveries?.find(item => item.runId === run._id && item.operationId === operation._id);
+      const recovering = run.status === "blocked" && run.safeFailure === "definite_failure" &&
+        options.m4ExecutionEnabled === true && run.mode === "balanced" && operation.providerKind === "text" &&
+        operation.role === "specialist" && operation.taskId === "J11" && run.generationCompletedAtMs == null &&
+        !operation.lifecycle?.stop && !operation.m4CompletionRecovery && recoveryPermission &&
+        operation.resultJson === null && operation.resultDigest === null && operation.materializationJson === null &&
+        operation.authorizationClaim == null && operation.imageCompletionClaim == null &&
+        operation.m4Observation?.issue === null && m4RequestBundleMatches(campaignLedger!.snapshot.policy, campaignLedger!.grant);
+      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome" && !recovering) throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
       if ((operation.state !== "started" && operation.state !== "unknown") || operation.reservationCount !== 1 || run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting authorized completion.");
       const lease = operation.resultFinalizationClaim;
       if (!claimed || lease?.id !== claimId || lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Result finalization is already active or its lease expired.");
       if (operation.role === "image") await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "claim");
-      const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs, options.store);
+      // Existing source verifiers load the run in this same transaction. Give
+      // only the exact authorized recovery ordinary in-flight eligibility; a
+      // failed source/materialization check rolls this change back with it.
+      if (recovering) {
+        const admitted = await runs.updateOne({ _id: run._id, revision: run.revision, status: "blocked",
+          safeFailure: "definite_failure", activeOperationId: operation._id },
+          { $set: { status: "running", safeFailure: null } }, { session });
+        if (admitted.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Recovery admission changed.");
+      }
+      const materializationRun = recovering ? { ...run, status: "running" as const, safeFailure: null } : run;
+      const materialized = await materializeNarrativeResult(database, session, materializationRun, operation, result, warnings, input.nowMs, options.store);
       if (lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Result finalization lease expired before saving.");
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, nowMs()), resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, nowMs()), resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs,
+        ...(recovering ? { m4CompletionRecovery: { reference: recoveryPermission!.reference, evidenceDigest: operation.m4Observation!.evidenceDigest!,
+          requestDigest: operation.m4Preparation!.requestDigest, recoveredAtMs: input.nowMs } } : {}) } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation completion changed concurrently.");
       const pauseRequested = run.pauseRequested || isRecoveredAttempt(operation, nowMs());
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { ...materialized.runPatch, activeOperationId: null, pauseRequested, status: pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
+      if (recovering) {
+        await campaignLedger!.recoverCompletion(session, run, operation, input.nowMs);
+        await verifyM4Accounting(database, session, must(await runs.findOne({ _id: run._id }, { session }), "Run"));
+      }
       return { operation: updated, reused: false };
       }));
       committed = true;

@@ -4,6 +4,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Validate manuscript coverage at the booklet boundary
+
+Context: real-text J05 supplied an approved cover unit and three story units.
+Completed J11 routed each once, but the story-only coverage validator rejected the
+cover allocation. Require complete booklet coverage without guessing placement
+from free-form unit keys; retain unknown-unit and exact reference checks. Recover
+valid retained output through normal materialization and an exact protected grant,
+without regenerating it or changing its charge/deadline. Evidence: saved Kid J11
+`055c52c5-35c5-4a70-be1d-f126139a58d8` and focused routing/recovery checks.
+Promotion target: application boundary and recovery guidance. Simulated fixture
+coverage alone did not expose the mismatch; its cover contains no manuscript unit.
+
 ### Distinguish content size from whitespace token exhaustion
 
 - **Observation:** A paid J11 response exhausted 8,192 output tokens with 24,078
