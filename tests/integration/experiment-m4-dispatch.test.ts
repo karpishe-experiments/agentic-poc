@@ -6,6 +6,7 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
+import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
@@ -44,13 +45,15 @@ const workflowOwnedFields: Record<string, string[]> = {
   J12: ["pageId", "pageIndex", "layoutVersionId", "manuscriptVersionId", "styleVersionId"],
 };
 
-async function setup() {
+async function setup(amended = false) {
   const published = process.env.M4_PUBLICATION_REHEARSAL === "1" ? await loadPublishedRehearsal() : null;
   const phases: { operationId: string; role: string; report: boolean; publicationId: string; authorizationBytes: number; resultBytes: number; authorizationMs: number; decodeReturnMs: number }[] = [];
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
-  const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash(),
+  const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: amended ? "a".repeat(64) : m4RequestBundleHash(),
     ...(published ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
-  const authority = { policy, grant: { campaignId: id(1), reference: "offline-dispatch-fixture-only" } };
+  const authority = { policy, grant: { campaignId: id(1), reference: "offline-dispatch-fixture-only",
+    ...(amended ? { requestDefinitionUpdate: { fromBundleHash: policy.requestDefinitionHash,
+      toBundleHash: m4RequestBundleHash(), reference: "prior-reviewed-amendment" } } : {}) } };
   const store = new MemoryStore();
   const repository = createExperimentRepository(database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => store });
   const context = createExperimentContextService(database, { store: () => store });
@@ -61,7 +64,7 @@ async function setup() {
   await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "balanced", campaignId: id(1),
     configuration: configurationSnapshot(config, "playful_kid"), nowMs: clock });
   const saved = new Map<string, RuntimeExecution>();
-  let pending = false, badCreative = false, badLayout = false;
+  let pending = false, badCreative = false, badLayout = false, incompleteLayout = false;
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
       expect(input.mode).toBe("balanced");
@@ -151,6 +154,11 @@ async function setup() {
         refused: false, incompleteReason: null, requestDigest: operation.m4Preparation!.requestDigest, countedInputTokens: 100,
         usage: { source: "provider_reported", inputTokens: 100, outputTokens: 100, cachedInputTokens: 0, cacheWriteInputTokens: null, reasoningOutputTokens: 0 },
       } };
+      if (incompleteLayout && binding.taskId === "J11") {
+        wrapper.content = '{"result":{"kind":"proposal","payload":' + "   \n".repeat(6019);
+        Object.assign(wrapper.providerEvidence, { status: "incomplete", incompleteReason: "max_output_tokens" });
+        wrapper.providerEvidence.usage.outputTokens = 8192;
+      }
       let output = JSON.stringify(wrapper);
       if (graph) {
         expect(operation.verifiedWorkflowId).toBe(graph.publicationId);
@@ -178,7 +186,7 @@ async function setup() {
   return { database, repository, dispatcher, runtime, runId, bookletId, store, context, uploadReference, phases, authority, config,
     tick: () => { clock += 6_000; }, now: () => clock,
     pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; },
-    badLayout: (value: boolean) => { badLayout = value; } };
+    badLayout: (value: boolean) => { badLayout = value; }, incompleteLayout: (value: boolean) => { incompleteLayout = value; } };
 }
 
 describe("offline Balanced dispatcher", () => {
@@ -389,8 +397,9 @@ describe("offline Balanced dispatcher", () => {
 
 
 describe("focused J11 paid-failure continuation", () => {
-  it("retains approved sources/assets and the failed charge while a new manager and J11 request complete layout", async () => {
-    const env = await setup(); env.badLayout(true);
+  it.each(["layout", "incomplete"] as const)("retains sources/assets and the %s failure charge while new work completes layout", async (failure) => {
+    const env = await setup(failure === "incomplete");
+    env.badLayout(failure === "layout"); env.incompleteLayout(failure === "incomplete");
     for (let i = 0; i < 85 && (await env.repository.getRun(env.runId))!.status !== "blocked"; i++) {
       env.tick(); await env.dispatcher.advance(env.runId);
     }
@@ -398,7 +407,15 @@ describe("focused J11 paid-failure continuation", () => {
     const history = await env.repository.listOperations(env.runId);
     const failed = history.at(-1)!;
     expect(failed).toMatchObject({ role: "specialist", taskId: "J11", state: "failed", safeFailure: "definite_failure",
-      lifecycle: { unresolved: false }, m4Observation: { issue: "creative_invalid" } });
+      lifecycle: { unresolved: false }, m4Observation: { issue: failure === "layout" ? "creative_invalid" : "provider_failure" } });
+    if (failure === "incomplete") {
+      expect(failed.m4Preparation?.definitionUpdate).toEqual(env.authority.grant.requestDefinitionUpdate);
+      const revisedAuthority = { ...env.authority, grant: { ...env.authority.grant,
+        requestDefinitionUpdate: { ...env.authority.grant.requestDefinitionUpdate!, reference: "new-reviewed-amendment" } } };
+      await withMongoTransaction(env.database, async session => {
+        expect(await hasM4KnownFailure(env.database, session, revisedAuthority, blocked, failed, env.now())).toBe(true);
+      });
+    }
     expect(blocked.activeOperationId).toBeNull();
     const beforeArtifacts = await env.database.collections.artifacts.find({ experimentRunId: env.runId }).toArray();
     const beforeVersions = await env.database.collections.artifact_versions.find({ artifactId: { $in: beforeArtifacts.map(a => a._id) } }).sort({ _id: 1 }).toArray();
@@ -413,6 +430,7 @@ describe("focused J11 paid-failure continuation", () => {
       state: "active", requests: beforeCampaign.requests, settledMicrodollars: beforeCampaign.settledMicrodollars,
       reservedMicrodollars: beforeCampaign.reservedMicrodollars });
     env.badLayout(false);
+    env.incompleteLayout(false);
     const dispatcher = createExperimentDispatcher({ database: env.database, config: { ...env.config, m4: { state: "granted", authority } },
       runtime: env.runtime, now: env.now, mutate: async (action) => action(), store: () => env.store, uploadReference: env.uploadReference });
     for (let i = 0; i < 8 && !await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J11", state: "approved" }); i++) {
