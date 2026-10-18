@@ -10,6 +10,7 @@ import { m4CanonicalJson } from "@/lib/experiment-runner/m4-request";
 import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import { ExperimentRepositoryError } from "@/db/experiment-repository";
 
 export const BOOKLET_RECOVERY_CONTRACT = "booklet-recovery-v1";
 export class BookletRecoveryError extends Error {
@@ -24,6 +25,7 @@ async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<
   try { return await action(); }
   catch (error) {
     if (error instanceof BookletRecoveryError) throw error;
+    if (error instanceof ExperimentRepositoryError) throw new BookletRecoveryError(`repository_${error.code}`, stage, "ExperimentRepositoryError");
     const kind = error instanceof Error && inspectionErrorKinds.has(error.name) ? error.name : "Error";
     throw new BookletRecoveryError("inspection_or_verification_failed", stage, kind);
   }
@@ -68,6 +70,8 @@ export async function readRecoveryInventory(collections: Pick<Database["collecti
   return Object.fromEntries(inventoryNames.map((name, index) => [name, results[index]]));
 }
 export type RecoveryTarget = { runId: string; operationId: string; expectedRevision: number };
+export type ClaimReleaseProof = { previewDigest: string; claim: { id: string; expiresAtMs: number }; operationDigest: string;
+  restoreAs: "missing" | "null" };
 export type RecoverySnapshot = {
   rows: Record<string, Record<string, string>>;
   runInvariant: string; operationInvariant: string; campaignInvariant: string; bookletInvariant: string;
@@ -126,7 +130,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     requireProof(report.admission?.maintenance === closed && !report.admission.draining, "admission_changed");
     return report;
   }
-  async function eligible(target: RecoveryTarget) {
+  async function eligible(target: RecoveryTarget, releasingClaim = false) {
     const grant = authority(target);
     const { run, op, campaign } = await state(target);
     requireProof(run.revision === target.expectedRevision, "revision_changed");
@@ -135,7 +139,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     requireProof(op.state === "started" && op.mode === "balanced" && op.role === "specialist" && op.taskId === "J11" && op.providerKind === "text" &&
       op.reservationCount === 1 && op.deadlineAtMs !== null && op.deadlineAtMs < now() && op.workflowRunId && op.verifiedWorkflowId &&
       op.lifecycle && !op.lifecycle.stop && !op.m4CompletionRecovery && !op.resultJson && !op.materializationJson &&
-      !op.authorizationClaim && !op.resultFinalizationClaim && !op.imageCompletionClaim, "unsupported_operation");
+      !op.authorizationClaim && (releasingClaim || !op.resultFinalizationClaim) && !op.imageCompletionClaim, "unsupported_operation");
     requireProof(op.m4Observation?.remoteStatus === "succeeded" && !op.m4Observation.issue && op.m4Observation.wrapperDigest &&
       op.m4Observation.evidenceDigest && op.m4Preparation?.requestDigest, "retained_evidence_missing");
     requireProof(campaign.state === "stopped" && campaign._id === grant.campaignId && run.m4?.policyHash === campaign.policyHash &&
@@ -213,7 +217,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     // ownership checks, then use the normal source/approval/accounting services.
     await eligible(target);
     await quiet(target, true);
-    await createExperimentDispatcher({ database, config, runtime, now, store: deps.store, uploadReference: deny, mutate: deny }).inspect(target);
+    await inspectStep("completion_reconciliation", () => createExperimentDispatcher({ database, config, runtime, now, store: deps.store, uploadReference: deny, mutate: deny }).inspect(target));
     return proof;
   }
   async function verifyUnapplied(target: RecoveryTarget, expectedDigest: string) {
@@ -223,5 +227,52 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     requireProof(recoveryDigest({ target, snapshot: current, grant: authority(target) }) === expectedDigest, "state_changed");
     return { verified: true as const, outcome: "unapplied" as const, admission: "closed" as const, providerPosts: 0 };
   }
-  return { preview, verifyCompleted, verifyUnapplied, apply };
+  async function previewClaimRelease(target: RecoveryTarget, before: RecoverySnapshot): Promise<ClaimReleaseProof> {
+    const { op } = await eligible(target, true);
+    const claim = op.resultFinalizationClaim;
+    requireProof(claim && typeof claim.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(claim.id) &&
+      Number.isSafeInteger(claim.expiresAtMs) && claim.expiresAtMs >= 0 && claim.expiresAtMs <= now() && !op.resultDigest,
+    "claim_not_releasable");
+    await quiet(target, true);
+    const current = await snapshot(target);
+    requireProof(current.rows.experiment_operations[target.operationId] === recoveryDigest(op), "claim_state_changed");
+    const originalDigest = before.rows.experiment_operations?.[target.operationId];
+    const missing = omit(op, ["resultFinalizationClaim"]);
+    const restoreAs = recoveryDigest(missing) === originalDigest ? "missing"
+      : recoveryDigest({ ...missing, resultFinalizationClaim: null }) === originalDigest ? "null" : null;
+    requireProof(restoreAs, "claim_not_only_change");
+    current.rows.experiment_operations[target.operationId] = originalDigest;
+    requireProof(recoveryDigest(current) === recoveryDigest(before), "claim_not_only_change");
+    const proof: Omit<ClaimReleaseProof, "previewDigest"> = { claim, restoreAs, operationDigest: recoveryDigest(op) };
+    return { ...proof, previewDigest: recoveryDigest({ target, before, proof, grant: authority(target) }) };
+  }
+  async function verifyClaimRelease(target: RecoveryTarget, before: RecoverySnapshot) {
+    await eligible(target);
+    await quiet(target, true);
+    requireProof(recoveryDigest(await snapshot(target)) === recoveryDigest(before), "claim_release_unverified");
+    return { verified: true as const, outcome: "claim_released" as const, admission: "closed" as const,
+      accounting: "preserved" as const, providerPosts: 0 };
+  }
+  async function applyClaimRelease(target: RecoveryTarget, before: RecoverySnapshot, expectedDigest: string,
+    beforeMutation: (proof: ClaimReleaseProof) => Promise<void>) {
+    const proof = await previewClaimRelease(target, before);
+    requireProof(proof.previewDigest === expectedDigest, "preview_changed");
+    await beforeMutation(proof);
+    requireProof((await previewClaimRelease(target, before)).previewDigest === expectedDigest, "preview_changed");
+    await withMongoTransaction(database, async session => {
+      const op = await c.experiment_operations.findOne({ _id: target.operationId, runId: target.runId }, { session });
+      const run = await c.experiment_runs.findOne({ _id: target.runId }, { session });
+      const control = await c.deployment_control.findOne({ environment: "_staging" }, { session });
+      requireProof(op && recoveryDigest(op) === proof.operationDigest && run?.revision === target.expectedRevision &&
+        recoveryDigest(run) === before.rows.experiment_runs[target.runId], "claim_state_changed");
+      requireProof(control?.maintenance && !control.draining && control.activeMutations === 0 &&
+        (control.interruptedMutations ?? 0) === 0 && !(control.mutationOwners ?? []).length, "admission_changed");
+      const result = await c.experiment_operations.updateOne({ _id: target.operationId, runId: target.runId,
+        state: "started", resultFinalizationClaim: proof.claim }, proof.restoreAs === "missing"
+        ? { $unset: { resultFinalizationClaim: "" } } : { $set: { resultFinalizationClaim: null } }, { session });
+      requireProof(result.modifiedCount === 1, "claim_state_changed");
+    });
+    return verifyClaimRelease(target, before);
+  }
+  return { preview, verifyCompleted, verifyUnapplied, apply, previewClaimRelease, applyClaimRelease, verifyClaimRelease };
 }

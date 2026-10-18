@@ -15,7 +15,8 @@ import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, createBookletRecovery,
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const inputSchema = z.strictObject({
-  phase: z.enum(["capabilities", "preview", "verify-closed", "apply", "verify-completed", "verify-unapplied", "inspect-blockers", "verify-prior-compatible"]),
+  phase: z.enum(["capabilities", "preview", "verify-closed", "apply", "verify-completed", "verify-unapplied", "inspect-blockers", "verify-prior-compatible",
+    "preview-claim-release", "apply-claim-release", "verify-claim-release"]),
   "run-id": id.optional(), "operation-id": id.optional(), "expected-revision": z.coerce.number().int().nonnegative().optional(),
   "evidence-dir": z.literal("/recovery").optional(), "preview-digest": sha.optional(),
   page: z.coerce.number().int().min(0).max(10000).optional(), limit: z.coerce.number().int().min(1).max(50).optional(),
@@ -45,7 +46,7 @@ async function main() {
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
     emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", initializationRequired: false,
-      supported: ["granted-j11-completion", "inspect-blockers", "verify-prior-compatible"], providerPosts: 0 }); return;
+      supported: ["granted-j11-completion", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = getServerEnv();
   if (env.RUNNER_ENABLED !== "false" || env.DEPLOYMENT_ENV !== "_staging" || env.MONGODB_DATABASE !== "kids_booklet" ||
@@ -68,6 +69,42 @@ async function main() {
   const profile = readM4RunnerConfig();
   if (!profile.enabled) throw new BookletRecoveryError("configuration_invalid");
   const service = createBookletRecovery({ database, config: profile.config });
+  if (input.phase.endsWith("-claim-release")) {
+    const originalPath = "/original-recovery/application-recovery.json";
+    const originalFile = await lstat(originalPath);
+    if (!originalFile.isFile() || originalFile.isSymbolicLink() || (originalFile.mode & 0o077) !== 0) throw new BookletRecoveryError("checkpoint_permissions");
+    const original = checkpointSchema.parse(JSON.parse(await readFile(originalPath, "utf8")));
+    if (original.phase !== "started" || recoveryDigest(original.target) !== recoveryDigest(target) ||
+      recoveryDigest(original.snapshot) !== original.snapshotDigest) throw new BookletRecoveryError("checkpoint_mismatch");
+    const originalDigest = recoveryDigest(original);
+    if (input.phase === "preview-claim-release") {
+      const proof = await service.previewClaimRelease(target, original.snapshot);
+      emit({ verified: true, phase, previewDigest: proof.previewDigest, providerPosts: 0 }); return;
+    }
+    if (!input["evidence-dir"] || !input["preview-digest"]) throw new BookletRecoveryError("evidence_required");
+    const dir = await lstat(input["evidence-dir"]);
+    if (!dir.isDirectory() || dir.isSymbolicLink() || (dir.mode & 0o077) !== 0) throw new BookletRecoveryError("evidence_permissions");
+    const releasePath = join(input["evidence-dir"], "claim-release.json");
+    let checkpoint: { originalDigest: string; previewDigest: string; target: typeof target; phase: "started" | "completed" } | undefined;
+    try {
+      checkpoint = z.object({ originalDigest: sha, previewDigest: sha, target: checkpointSchema.shape.target,
+        phase: z.enum(["started", "completed"]) }).parse(JSON.parse(await readFile(releasePath, "utf8")));
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new BookletRecoveryError("checkpoint_invalid"); }
+    if (checkpoint) {
+      if (checkpoint.originalDigest !== originalDigest || checkpoint.previewDigest !== input["preview-digest"] ||
+        recoveryDigest(checkpoint.target) !== recoveryDigest(target)) throw new BookletRecoveryError("checkpoint_mismatch");
+      emit({ ...await service.verifyClaimRelease(target, original.snapshot), phase, repeated: true }); return;
+    }
+    if (input.phase !== "apply-claim-release") throw new BookletRecoveryError("checkpoint_missing");
+    const checkpointBase = { originalDigest, previewDigest: input["preview-digest"], target };
+    let releaseProof: unknown;
+    const result = await service.applyClaimRelease(target, original.snapshot, input["preview-digest"], async proof => {
+      releaseProof = proof;
+      await saveCheckpoint(releasePath, { ...checkpointBase, phase: "started", proof }, true);
+    });
+    await saveCheckpoint(releasePath, { ...checkpointBase, phase: "completed", proof: releaseProof }, false);
+    emit({ ...result, phase, repeated: false }); return;
+  }
   if (input.phase === "verify-unapplied") {
     if (!input["preview-digest"]) throw new BookletRecoveryError("preview_required");
     emit({ ...await service.verifyUnapplied(target, input["preview-digest"]), phase }); return;
@@ -117,6 +154,6 @@ await withOperationBudget(Date.now() + 150_000, main).catch(async error => {
     : ["MongoOperationTimeoutError", "MongoServerError", "AbortError"].includes(error?.name) ? error.name : "Error";
   emit({ verified: false, phase, code: error instanceof BookletRecoveryError ? error.code : "inspection_or_verification_failed", errorKind,
     ...(error instanceof BookletRecoveryError && error.stage ? { stage: error.stage } : {}),
-    outcome: phase === "apply" || phase === "verify-completed" ? "requires_inspection" : "blocked", providerPosts: 0 });
+    outcome: ["apply", "verify-completed", "apply-claim-release", "verify-claim-release"].includes(phase) ? "requires_inspection" : "blocked", providerPosts: 0 });
   process.exitCode = 1;
 }).finally(async () => { await database?.close(); });

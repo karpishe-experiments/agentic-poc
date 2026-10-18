@@ -24,6 +24,16 @@ state/role, claim presence and expiry, and saved-result/materialization/recovery
 presence. MongoDB projects content fields to type markers before returning them;
 no prompts, outputs or claim identities enter the diagnostic result. Expired claims
 remain blockers. These observations do not grant permission to clear ownership.
+An explicit linked claim-release request can restore only an expired finalization
+claim that is the sole difference from an interrupted recovery's full checkpoint.
+The original request/checkpoint remain unchanged. A separate child checkpoint
+precedes the exact compare-and-set; lost responses use verification only. The host
+keeps the serving app stopped and admission closed. An explicit child abort can
+close an interrupted pre-write request only when the original preview still proves
+the same complete state and exact claim. A committed release rejects that abort.
+Original-request abort and any
+later reconciliation remain separate actions. Failed ordinary completion cleanup
+uses a separate five-second budget and still matches only its own claim identity.
 A durable host checkpoint precedes reconciliation; a repeated request verifies saved
 completion rather than replaying it. Original deadlines, charges and failure
 history remain unchanged, and the recovered run remains paused.
