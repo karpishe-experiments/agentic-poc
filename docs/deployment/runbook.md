@@ -48,6 +48,23 @@ service with admission closed and retains the failed phase as `aborted-closed`.
 Then inspect the cause and preview a new recovery request. It does not reopen
 paid execution or retry a failed backup automatically.
 
+If inspection establishes that an interrupted request retained only an expired
+finalization claim, use a new reviewed candidate and request ID with
+`release_expired_claim="true"`, `original_request_id` and the exact original
+run/operation/revision in the recovery JSON. Preview first; apply adds its digest
+and confirmation normally. The action requires the original verified backup,
+unchanged original journal/checkpoint, stopped writers and no unrelated work.
+Only full snapshot equality after removing that exact claim permits release.
+It leaves admission closed and the app stopped. A repeated child request verifies
+only. After successful release, invoke the original request's supported abort;
+diagnose the original failure before a separate reconciliation preview. Claim
+expiry alone never authorizes release, and this is not a general record editor.
+For an interrupted child that has not released its claim, explicitly add
+`abort_recovery="true"` to that child's apply request. Read-only preview must match
+the saved application digest before the child can become `aborted-closed`.
+It does not restore the service, reopen admission or change parent evidence.
+Changed claims or committed release reject abort; inspect or verify the outcome.
+
 Build a recovery artifact through **Deploy**, selecting the reviewed staging
 delivery branch, `environment=staging` and `recovery_candidate=true`. This only
 builds the immutable image; it does not contact the VPS or update the environment
@@ -61,8 +78,9 @@ clear a blocker or extend an expired original deadline. Expired-deployment recov
 requires the exact prior release, verified backup and compatibility evidence; it
 does not restore data. Unsupported initializer drift stays blocked.
 
-The issue #65 bounded-recovery candidate is not deployed. Its current work and
-remaining gates are in [M3 current progress](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-progress-and-blockers--2026-10-12).
+The issue #65 recovery dispatcher is installed; new candidate capabilities require
+separate verification. Its current work and remaining gates are in
+[M4 supported recovery](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#supported-recovery-follow-up---2026-10-18).
 The historical status below does not supersede that section.
 
 ### Candidate recovery controls

@@ -19,7 +19,7 @@ import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-pag
 import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
-import { OPERATION_LIMIT_MS } from "@/lib/operations/budget";
+import { OPERATION_LIMIT_MS, withCleanupBudget } from "@/lib/operations/budget";
 import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
 import { CampaignAdmissionError, createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
@@ -816,8 +816,8 @@ export function createExperimentRepository(database: Database, options: { store?
       if (claimed && !committed) {
         // A failed cleanup leaves only a bounded lease. Never mask the original
         // callback failure, erase a successor lease, or replay execution.
-        await operations.updateOne({ _id: envelope.operationId, "resultFinalizationClaim.id": claimId },
-          { $set: { resultFinalizationClaim: null } }).catch(() => undefined);
+        await withCleanupBudget(() => operations.updateOne({ _id: envelope.operationId, "resultFinalizationClaim.id": claimId },
+          { $set: { resultFinalizationClaim: null } })).catch(() => undefined);
       }
     }
   }

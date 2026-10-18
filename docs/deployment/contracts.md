@@ -7,6 +7,17 @@ application recovery from an immutable image without changing the serving releas
 `expired-deployment-recover` uses a separate request linked to the unchanged
 original journal and deadline. Both default to preview and retain closed admission
 after ambiguous mutations. No automatic restore or provider replay is permitted.
+The explicit `release_expired_claim` purpose under `candidate-reconcile` uses a new
+request linked to an interrupted original recovery. It requires stopped writers,
+closed quiet admission, verified original backup and byte-pinned parent journal/
+checkpoint. The application proves the exact expired finalization claim is the
+only snapshot difference before restoring its original null/missing representation.
+The child records provenance and verifies its outcome; it neither replays
+reconciliation nor changes the original journal, serving release or admission.
+An interrupted child can be explicitly aborted only when read-only preview matches
+its saved application digest, including the exact retained claim. This marks only
+the child `aborted-closed`; committed release requires outcome verification instead.
+After release, original-request abort must prove unchanged state independently.
 
 The recovery command's private checkpoint stores target identities, hashes,
 phase and preservation evidence; it does not export prompts or credentials.

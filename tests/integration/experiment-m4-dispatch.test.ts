@@ -28,6 +28,7 @@ import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result
 import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { createBookletRecovery } from "@/lib/operations/booklet-recovery";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
+import { OperationBudgetExpired, withOperationBudget } from "@/lib/operations/budget";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -497,6 +498,26 @@ describe("focused J11 retained completion recovery", () => {
     return { ...env, service, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
   }
 
+  it.each([false, true])("failed completion cleans only its own claim after budget cancellation (replaced=%s)", async replaced => {
+    const env = await blockedCompletion();
+    const controller = new AbortController();
+    const operations = env.database.collections.experiment_operations;
+    const originalFind = operations.findOne.bind(operations);
+    const find = vi.spyOn(operations, "findOne").mockImplementationOnce(async () => {
+      if (replaced) await operations.updateOne({ _id: env.operation._id }, { $set: {
+        resultFinalizationClaim: { id: "successor-owner", expiresAtMs: env.now() + 1000 } } });
+      const error = new OperationBudgetExpired(); controller.abort(error); throw error;
+    });
+    try {
+      await expect(withOperationBudget(Date.now() + 60_000, () => env.recovery.completeOperation(env.input()), { signal: controller.signal }))
+        .rejects.toThrow("budget expired");
+    } finally { find.mockRestore(); }
+    const operation = await originalFind({ _id: env.operation._id });
+    expect(operation?.resultFinalizationClaim?.id ?? null).toBe(replaced ? "successor-owner" : null);
+    expect(operation).toMatchObject({ state: "started", resultJson: null, materializationJson: null });
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+  }, 120_000);
+
   it("supported recovery preview is read only and changed retained data changes its proof", async () => {
     const env = await supportedRecovery();
     const calls = vi.mocked(env.runtime.start).mock.calls.length;
@@ -527,6 +548,61 @@ describe("focused J11 retained completion recovery", () => {
     expect(env.runtime.start).toHaveBeenCalledTimes(calls);
     await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $inc: { revision: 1 } });
     await expect(env.service.preview(env.target)).rejects.toThrow("revision_changed");
+  }, 120_000);
+
+  it.each(["missing", "null"] as const)("supported claim release restores the exact %s representation without provider work", async restoreAs => {
+    const env = await supportedRecovery();
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operation._id }, restoreAs === "null"
+      ? { $set: { resultFinalizationClaim: null } } : { $unset: { resultFinalizationClaim: "" } });
+    const before = await env.service.preview(env.target);
+    const gets = vi.mocked(env.runtime.retrieve).mock.calls.length;
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const claim = { id: "interrupted-owner", expiresAtMs: env.now() - 1 };
+    await env.database.collections.experiment_operations.updateOne({ _id: env.operation._id }, { $set: { resultFinalizationClaim: claim } });
+    const proof = await env.service.previewClaimRelease(env.target, before.snapshot);
+    expect(proof.restoreAs).toBe(restoreAs);
+    const checkpoint = vi.fn();
+    expect(await env.service.applyClaimRelease(env.target, before.snapshot, proof.previewDigest, checkpoint)).toMatchObject({
+      verified: true, outcome: "claim_released", accounting: "preserved", admission: "closed", providerPosts: 0 });
+    expect(checkpoint).toHaveBeenCalledOnce();
+    expect(await env.service.verifyClaimRelease(env.target, before.snapshot)).toMatchObject({ verified: true });
+    expect(await env.service.verifyUnapplied(env.target, before.previewDigest)).toMatchObject({ verified: true });
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    expect(env.runtime.stop).not.toHaveBeenCalled();
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+  }, 120_000);
+
+  it("supported claim release rejects active ownership, retained output and any preservation drift", async () => {
+    const env = await supportedRecovery();
+    const before = await env.service.preview(env.target);
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const ops = env.database.collections.experiment_operations;
+    const claim = { id: "interrupted-owner", expiresAtMs: env.now() - 1 };
+    await ops.updateOne({ _id: env.operation._id }, { $set: { resultFinalizationClaim: { ...claim, expiresAtMs: env.now() + 1000 } } });
+    await expect(env.service.previewClaimRelease(env.target, before.snapshot)).rejects.toThrow("claim_not_releasable");
+    await ops.updateOne({ _id: env.operation._id }, { $set: { resultFinalizationClaim: claim, resultJson: "retained-output" } });
+    await expect(env.service.previewClaimRelease(env.target, before.snapshot)).rejects.toThrow("unsupported_operation");
+    await ops.updateOne({ _id: env.operation._id }, { $set: { resultJson: null } });
+    const artifact = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J05" }))!;
+    const source = (await env.database.collections.artifact_versions.findOne({ _id: artifact.currentVersionId! }))!;
+    await env.database.collections.artifact_versions.updateOne({ _id: source._id }, { $set: { contentJson: "changed-source" } });
+    await expect(env.service.previewClaimRelease(env.target, before.snapshot)).rejects.toThrow("claim_not_only_change");
+    await env.database.collections.artifact_versions.replaceOne({ _id: source._id }, source);
+    const approval = (await env.database.collections.approvals.findOne({ artifactVersionId: source._id }))!;
+    await env.database.collections.approvals.updateOne({ _id: approval._id }, { $set: { state: "revoked" } } as never);
+    await expect(env.service.previewClaimRelease(env.target, before.snapshot)).rejects.toThrow("claim_not_only_change");
+    await env.database.collections.approvals.replaceOne({ _id: approval._id }, approval);
+    const campaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $inc: { reservedMicrodollars: 1 } });
+    await expect(env.service.previewClaimRelease(env.target, before.snapshot)).rejects.toThrow("claim_not_only_change");
+    await env.database.collections.experiment_campaigns.replaceOne({ _id: id(1) }, campaign);
+    const proof = await env.service.previewClaimRelease(env.target, before.snapshot);
+    await expect(env.service.applyClaimRelease(env.target, before.snapshot, proof.previewDigest, async () => {
+      await ops.updateOne({ _id: env.operation._id }, { $set: { resultFinalizationClaim: { ...claim, id: "successor-owner" } } });
+    })).rejects.toThrow("preview_changed");
+    expect((await env.repository.getOperation(env.operation._id))?.resultFinalizationClaim?.id).toBe("successor-owner");
   }, 120_000);
 
   it.each(["MongoOperationTimeoutError", "OperationBudgetExpired"])("supported recovery identifies %s without mutation or remote replay", async (errorKind) => {

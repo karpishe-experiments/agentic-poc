@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   files: new Map<string, string>(), events: [] as string[],
   mutationError: undefined as Error | undefined,
   preview: vi.fn(), apply: vi.fn(), verify: vi.fn(), verifyUnapplied: vi.fn(), close: vi.fn(), inspect: vi.fn(),
+  previewClaim: vi.fn(), applyClaim: vi.fn(), verifyClaim: vi.fn(),
 }));
 vi.mock("@/db/client", () => ({ getDatabase: () => ({ close: mocks.close,
   collections: { deployment_control: { findOne: async () => ({ maintenance: false }) } } }) }));
@@ -20,11 +21,12 @@ vi.mock("@/lib/operations/booklet-recovery", async () => {
   return { BOOKLET_RECOVERY_CONTRACT: "booklet-recovery-v1",
     BookletRecoveryError: class extends Error { constructor(public code: string, public stage?: string, public errorKind?: string) { super(code); } },
     recoveryDigest: (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex"),
-    createBookletRecovery: () => ({ preview: mocks.preview, apply: mocks.apply, verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied }),
+    createBookletRecovery: () => ({ preview: mocks.preview, apply: mocks.apply, verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
+      previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim }),
   };
 });
 vi.mock("node:fs/promises", () => ({
-  lstat: async () => ({ isDirectory: () => true, isSymbolicLink: () => false, mode: 0o700 }),
+  lstat: async () => ({ isDirectory: () => true, isFile: () => true, isSymbolicLink: () => false, mode: 0o700 }),
   readFile: async (path: string) => { path = path.replaceAll("\\", "/"); if (!mocks.files.has(path)) throw Object.assign(new Error(), { code: "ENOENT" }); return mocks.files.get(path); },
   rename: async (from: string, to: string) => { from = from.replaceAll("\\", "/"); to = to.replaceAll("\\", "/"); mocks.files.set(to, mocks.files.get(from)!); mocks.files.delete(from); },
   open: async (path: string, flags: string) => {
@@ -54,10 +56,52 @@ beforeEach(() => {
   mocks.verify.mockResolvedValue({ verified: true, outcome: "completed" });
   mocks.verifyUnapplied.mockResolvedValue({ verified: true, outcome: "unapplied", admission: "closed", providerPosts: 0 });
   mocks.inspect.mockResolvedValue({ outcome: "clear" });
+  mocks.previewClaim.mockResolvedValue({ previewDigest: digest });
+  mocks.verifyClaim.mockResolvedValue({ verified: true, outcome: "claim_released", providerPosts: 0 });
+  mocks.applyClaim.mockImplementation(async (_target, _before, _digest, checkpoint) => {
+    await checkpoint({ previewDigest: digest, claim: { id: "private-owner", expiresAtMs: 1 } });
+    if (mocks.mutationError) throw mocks.mutationError;
+    return { verified: true, outcome: "claim_released", providerPosts: 0 };
+  });
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 afterEach(() => { process.argv = originalArgv; process.exitCode = 0; vi.restoreAllMocks(); });
 describe("supported booklet recovery command", () => {
+  async function originalCheckpoint() {
+    const { recoveryDigest } = await import("@/lib/operations/booklet-recovery");
+    const snapshot = { rows: {} };
+    const original = JSON.stringify({ contract: "booklet-recovery-v1", phase: "started", target: { runId: "run", operationId: "operation", expectedRevision: 2 },
+      previewDigest: digest, snapshot, snapshotDigest: recoveryDigest(snapshot) });
+    mocks.files.set("/original-recovery/application-recovery.json", original);
+    return original;
+  }
+  it("previews claim release without writes and keeps the parent checkpoint unchanged", async () => {
+    const original = await originalCheckpoint();
+    argumentsFor("preview-claim-release"); await import("@/scripts/booklet-recovery");
+    expect(mocks.files.size).toBe(1);
+    expect(mocks.files.get("/original-recovery/application-recovery.json")).toBe(original);
+    expect(mocks.applyClaim).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain("private-owner");
+  });
+  it.each([false, true])("checkpoints claim release and verifies duplicates without replay (interrupted=%s)", async interrupted => {
+    const original = await originalCheckpoint();
+    if (interrupted) mocks.mutationError = new Error("private error");
+    argumentsFor("apply-claim-release"); await import("@/scripts/booklet-recovery");
+    expect(JSON.parse(mocks.files.get("/recovery/claim-release.json")!).phase).toBe(interrupted ? "started" : "completed");
+    if (interrupted) mocks.verifyClaim.mockRejectedValueOnce(new Error("not verified"));
+    vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(mocks.applyClaim).toHaveBeenCalledOnce(); expect(mocks.verifyClaim).toHaveBeenCalledOnce();
+    expect(mocks.files.get("/original-recovery/application-recovery.json")).toBe(original);
+    expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain("private");
+  });
+  it("rejects a completed or changed original checkpoint before claim release", async () => {
+    await originalCheckpoint();
+    const path = "/original-recovery/application-recovery.json";
+    const original = JSON.parse(mocks.files.get(path)!); original.phase = "completed";
+    mocks.files.set(path, JSON.stringify(original));
+    argumentsFor("apply-claim-release"); await import("@/scripts/booklet-recovery");
+    expect(mocks.applyClaim).not.toHaveBeenCalled(); expect(mocks.files.size).toBe(1); expect(process.exitCode).toBe(1);
+  });
   it("previews without checkpoint or business writes", async () => {
     argumentsFor("preview"); await import("@/scripts/booklet-recovery");
     expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(0);
