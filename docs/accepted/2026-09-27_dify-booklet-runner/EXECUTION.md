@@ -1,5 +1,16 @@
 # Shared milestone execution procedure
 
+## Supported recovery scope amendment - 2026-10-18
+
+The user authorized implementing supported staging recovery before further paid
+M4 work. This narrowly adds candidate-image reconciliation and expired-deployment
+recovery through the existing protected workflow and dispatcher. It supersedes
+the no-new-host-action restriction for these two actions only. It does not add
+automatic provider retries, paid probes, infrastructure campaigns or production
+changes. Preserve all original deadlines, failures, assets and campaign charges.
+The [M4 recovery record](M4-balanced.md#supported-recovery-follow-up---2026-10-18)
+owns current implementation and verification status.
+
 Applies to M0–M6. [PRD.md](PRD.md) is the product contract; [PLAN.md](PLAN.md)
 is the roadmap. Read this file and the selected milestone, not a second competing
 implementation plan. Target staging only; no production promotion.
