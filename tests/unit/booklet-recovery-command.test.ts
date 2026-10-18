@@ -17,7 +17,7 @@ vi.mock("@/lib/operations/recovery-inspection", () => ({ inspectRecoveryWork: mo
 vi.mock("@/lib/operations/booklet-recovery", async () => {
   const { createHash } = await import("node:crypto");
   return { BOOKLET_RECOVERY_CONTRACT: "booklet-recovery-v1",
-    BookletRecoveryError: class extends Error { constructor(public code: string) { super(code); } },
+    BookletRecoveryError: class extends Error { constructor(public code: string, public stage?: string, public errorKind?: string) { super(code); } },
     recoveryDigest: (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex"),
     createBookletRecovery: () => ({ preview: mocks.preview, apply: mocks.apply, verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied }),
   };
@@ -53,6 +53,15 @@ describe("supported booklet recovery command", () => {
   it("previews without checkpoint or business writes", async () => {
     argumentsFor("preview"); await import("@/scripts/booklet-recovery");
     expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(0);
+  });
+  it("reports the failing inspection phase without private database details", async () => {
+    const { BookletRecoveryError } = await import("@/lib/operations/booklet-recovery");
+    mocks.preview.mockRejectedValueOnce(new BookletRecoveryError("inspection_or_verification_failed", "snapshot.experiment_operations", "MongoOperationTimeoutError"));
+    argumentsFor("preview"); await import("@/scripts/booklet-recovery");
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toMatchObject({
+      verified: false, phase: "preview", stage: "snapshot.experiment_operations", errorKind: "MongoOperationTimeoutError", outcome: "blocked",
+    });
+    expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
   });
   it("durably checkpoints before mutation and returns a duplicate without replay", async () => {
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
