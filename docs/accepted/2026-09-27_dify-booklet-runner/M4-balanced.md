@@ -5,9 +5,27 @@
 
 ## Supported recovery follow-up - 2026-10-18
 
+**Current live state:** recovery request `issue65-m4-j11-20261018-v4` is interrupted
+at reconciliation. Staging admission remains closed and its serving application
+is stopped. Preview `39117877394` passed; apply `39118151943` failed during the
+result transaction after backup `staging-recovery-issue65-m4-j11-20261018-v4`
+was verified. Status `39118995350` confirms the retained `reconciling` phase.
+Saved-completion verification `39119169276` returned `completion_unverified`;
+the supported abort check `39119284111` returned `unsupported_operation`.
+Neither check replayed reconciliation or restored admission. The exact changed
+operation condition and transaction failure cause remain unproven. No new paid
+request was made. PR #205 and normal deployment remain gated on safe recovery.
+
+The bounded diagnostic follow-up adds paginated operation state and claim/presence
+flags to existing read-only inspection. MongoDB returns content type markers,
+not saved output; claim expiry is diagnostic only. One real-persistence fixture
+checks missing/null content, retained expired claims and sanitization. Use a new
+inspection-only request before selecting another recovery action. Preserve the
+interrupted request, checkpoint, backup and all private phase evidence.
+
 The user approved replacing repeated manual repair scripts with supported narrow
 operator actions before paid M4 work resumes. Implementation is in progress;
-no live recovery or additional provider call is claimed. Supported inspection
+no successful live recovery or additional provider call is claimed. Supported inspection
 `39111819466` found only the retained Kid run and J11 operation, with no unrelated
 work or mutation ownership. The reviewed dispatcher was installed with backup
 `/var/lib/kids-booklet/issue65-recovery-dispatcher.tLAD2Xzq/dispatcher.before`.

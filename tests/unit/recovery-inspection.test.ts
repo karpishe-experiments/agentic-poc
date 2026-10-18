@@ -18,7 +18,8 @@ function fixture() {
       calls.push(call);
       const cursor = { sort: vi.fn(() => cursor), skip: vi.fn((value: number) => { call.skip = value; return cursor; }),
         limit: vi.fn((value: number) => { call.limit = value; return cursor; }),
-        toArray: vi.fn(async () => (rows.get(name) ?? []).slice(call.skip, call.skip + call.limit).map((_id) => ({ _id }))) };
+        toArray: vi.fn(async () => (rows.get(name) ?? []).slice(call.skip, call.skip + call.limit).map((_id) =>
+          _id && typeof _id === "object" && "_id" in _id ? _id : { _id })) };
       return cursor;
     }),
   });
@@ -94,6 +95,20 @@ describe("read-only recovery inspection", () => {
     const filter = state.calls.find((call) => call.name === "experiment_operations")?.filter as { $or: unknown[] };
     expect(filter.$or).toContainEqual({ resultFinalizationClaim: { $exists: true, $ne: null } });
     expect(JSON.stringify(filter)).not.toContain("expiresAtMs");
+  });
+
+  it("reports bounded operation state and expired claims without saved content or claim identity", async () => {
+    const state = fixture();
+    state.rows.set("experiment_operations", [{ _id: "operation", runId: "run", state: "started", role: "specialist", taskId: "J11",
+      resultFinalizationClaim: { id: "private-claim", expiresAtMs: 99 }, resultJson: "string", materializationJson: "null",
+      m4CompletionRecovery: "missing", prompt: "private-content" }]);
+    const result = await inspectRecoveryWork(state.context, { environment: "_staging", nowMs: 100, limit: 1 });
+    expect(result.blockers[0].operations).toEqual([{ id: "operation", runId: "run", state: "started", role: "specialist", taskId: "J11",
+      claims: [{ kind: "resultFinalizationClaim", expired: true }], hasResult: true, hasMaterialization: false, hasRecovery: false }]);
+    expect(JSON.stringify(result)).not.toContain("private");
+    expect(state.calls.find(call => call.name === "experiment_operations" && call.projection)?.projection).toMatchObject({
+      projection: { resultJson: { $type: "$resultJson" }, "resultFinalizationClaim.expiresAtMs": 1 },
+    });
   });
 
   it.each([{ page: -1 }, { page: 10_001 }, { limit: 0 }, { limit: 51 }, { page: 0.5 }, { environment: "_prod" }, { nowMs: NaN }])("rejects invalid options before reading: %j", async (invalid) => {
