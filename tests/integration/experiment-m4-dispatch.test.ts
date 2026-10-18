@@ -527,6 +527,28 @@ describe("focused J11 retained completion recovery", () => {
     await expect(env.service.preview(env.target)).rejects.toThrow("revision_changed");
   }, 120_000);
 
+  it("supported recovery identifies a timed-out snapshot read without mutation or remote replay", async () => {
+    const env = await supportedRecovery();
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    const gets = vi.mocked(env.runtime.retrieve).mock.calls.length;
+    const originalFind = env.database.collections.experiment_operations.find.bind(env.database.collections.experiment_operations);
+    const read = vi.spyOn(env.database.collections.experiment_operations, "find").mockImplementation((...args) => {
+      if (!args[0] || Object.keys(args[0]).length === 0) {
+        throw Object.assign(new Error("private database details"), { name: "MongoOperationTimeoutError" });
+      }
+      return originalFind(...args);
+    });
+    try {
+      await expect(env.service.preview(env.target)).rejects.toMatchObject({
+        code: "inspection_or_verification_failed", stage: "snapshot.experiment_operations", errorKind: "MongoOperationTimeoutError",
+      });
+      expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+      expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+      expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+      expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets);
+    } finally { read.mockRestore(); }
+  }, 120_000);
+
   it("supported recovery preserves charges and bytes, then verifies duplicate completion without provider dispatch", async () => {
     const env = await supportedRecovery();
     const calls = vi.mocked(env.runtime.start).mock.calls.length;

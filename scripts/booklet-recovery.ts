@@ -111,8 +111,10 @@ await withOperationBudget(Date.now() + 90_000, main).catch(async error => {
     // No exclusions: show all identities for diagnosis, including the target.
     emit(await inspectRecoveryWork(database, { environment: "_staging" }).catch(() => ({ outcome: "inspection_error" })));
   }
-  const errorKind = ["MongoOperationTimeoutError", "MongoServerError", "AbortError"].includes(error?.name) ? error.name : "Error";
+  const errorKind = error instanceof BookletRecoveryError && error.errorKind ? error.errorKind
+    : ["MongoOperationTimeoutError", "MongoServerError", "AbortError"].includes(error?.name) ? error.name : "Error";
   emit({ verified: false, phase, code: error instanceof BookletRecoveryError ? error.code : "inspection_or_verification_failed", errorKind,
+    ...(error instanceof BookletRecoveryError && error.stage ? { stage: error.stage } : {}),
     outcome: phase === "apply" || phase === "verify-completed" ? "requires_inspection" : "blocked", providerPosts: 0 });
   process.exitCode = 1;
 }).finally(async () => { await database?.close(); });

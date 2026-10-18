@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Collection } from "mongodb";
 import type { Database } from "@/db/client";
 import { withMongoTransaction } from "@/db/client";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
@@ -12,12 +13,38 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 
 export const BOOKLET_RECOVERY_CONTRACT = "booklet-recovery-v1";
 export class BookletRecoveryError extends Error {
-  constructor(public readonly code: string) { super(code); }
+  constructor(public readonly code: string, public readonly stage?: string, public readonly errorKind?: string) { super(code); }
 }
 function requireProof(value: unknown, code: string): asserts value {
   if (!value) throw new BookletRecoveryError(code);
 }
 export const recoveryDigest = (value: unknown) => createHash("sha256").update(m4CanonicalJson(value)).digest("hex");
+const inspectionErrorKinds = new Set(["MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError", "MongoServerSelectionError", "AbortError"]);
+async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<T> {
+  try { return await action(); }
+  catch (error) {
+    if (error instanceof BookletRecoveryError) throw error;
+    const kind = error instanceof Error && inspectionErrorKinds.has(error.name) ? error.name : "Error";
+    throw new BookletRecoveryError("inspection_or_verification_failed", stage, kind);
+  }
+}
+
+/** Keep the complete preservation proof, but do not retain one long history cursor. */
+export async function readRecoveryFingerprints(collection: Collection<{ _id: string }>): Promise<Record<string, string>> {
+  const rows: Record<string, string> = {};
+  const pageSize = 32;
+  let after: string | undefined;
+  for (;;) {
+    const page = await collection.find(after === undefined ? {} : { _id: { $gt: after } }, { batchSize: pageSize })
+      .sort({ _id: 1 }).limit(pageSize).toArray();
+    for (const row of page) {
+      requireProof(typeof row._id === "string" && (after === undefined || row._id > after), "snapshot_identity_order_invalid");
+      rows[row._id] = recoveryDigest(row);
+      after = row._id;
+    }
+    if (page.length < pageSize) return rows;
+  }
+}
 const omit = (value: object, keys: string[]) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
 const inventoryNames = ["experiment_runs", "experiment_operations", "experiment_campaigns", "experiment_delegations",
   "booklets", "artifacts", "artifact_versions", "artifact_dependencies", "approvals", "assets", "messages"] as const;
@@ -59,12 +86,11 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     return grant;
   }
   async function snapshot(target: RecoveryTarget): Promise<RecoverySnapshot> {
-    const { run, op, campaign, booklet } = await state(target);
+    const { run, op, campaign, booklet } = await inspectStep("snapshot.target_state", () => state(target));
     const rows: RecoverySnapshot["rows"] = {};
     // Recovery is deliberately infrequent. Hash the retained data without exporting its contents.
     for (const name of inventoryNames) {
-      rows[name] = {};
-      for (const row of await c[name].find({}).sort({ _id: 1 }).toArray()) rows[name][row._id] = recoveryDigest(row);
+      rows[name] = await inspectStep(`snapshot.${name}`, () => readRecoveryFingerprints(c[name] as unknown as Collection<{ _id: string }>));
     }
     return { rows, campaignId: campaign._id, bookletId: booklet._id,
       runInvariant: recoveryDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "progressFingerprint", "progressOperationId", "noProgressCount"])),
@@ -79,7 +105,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   }
   async function quiet(target: RecoveryTarget, closed: boolean) {
     const report = await inspectRecoveryWork(database, { environment: "_staging", nowMs: now(), validatedTargets: [{ runId: target.runId, operationId: target.operationId }] });
-    requireProof(report.outcome !== "inspection_error", "inspection_error");
+    if (report.outcome === "inspection_error") throw new BookletRecoveryError("inspection_error", report.inspectionError?.stage, report.inspectionError?.errorKind);
     requireProof(report.outcome === "clear", "other_work");
     requireProof(report.admission?.maintenance === closed && !report.admission.draining, "admission_changed");
     return report;
@@ -112,11 +138,11 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
       "remote_evidence_changed");
   }
   async function preview(target: RecoveryTarget, closed = false) {
-    await verifyMongoStructure(database);
-    await eligible(target);
+    await inspectStep("catalog", () => verifyMongoStructure(database));
+    await inspectStep("eligibility", () => eligible(target));
     await quiet(target, closed);
     const before = await snapshot(target);
-    await observe(target);
+    await inspectStep("remote_observation", () => observe(target));
     await quiet(target, closed);
     requireProof(recoveryDigest(await snapshot(target)) === recoveryDigest(before), "state_changed");
     return { contract: BOOKLET_RECOVERY_CONTRACT, previewDigest: recoveryDigest({ target, snapshot: before, grant: authority(target) }), snapshot: before };

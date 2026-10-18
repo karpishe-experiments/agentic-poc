@@ -8,8 +8,11 @@ The supported issue #65 recovery candidate adds a maintenance-only
 `booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
 an exact granted J11 completion through the existing dispatcher with provider
 starts, uploads and stops disabled. Preview fingerprints retained business data
-and authority. Apply rechecks that fingerprint with admission closed. A durable
-host checkpoint precedes reconciliation; a repeated request verifies saved
+and authority. Apply rechecks that fingerprint with admission closed. The
+preservation snapshot reads all retained rows in bounded keyset pages. A failed
+inspection reports its sanitized phase and error kind; it does not classify a
+database timeout as unrelated work. No preservation evidence is omitted.
+A durable host checkpoint precedes reconciliation; a repeated request verifies saved
 completion rather than replaying it. Original deadlines, charges and failure
 history remain unchanged, and the recovered run remains paused.
 Successful operation Inspect/Stop responses retain their run view and add a
