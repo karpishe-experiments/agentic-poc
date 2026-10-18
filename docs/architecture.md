@@ -9,9 +9,12 @@ The supported issue #65 recovery candidate adds a maintenance-only
 an exact granted J11 completion through the existing dispatcher with provider
 starts, uploads and stops disabled. Preview fingerprints retained business data
 and authority. Apply rechecks that fingerprint with admission closed. The
-preservation snapshot reads all retained rows in bounded keyset pages. A failed
+preservation snapshot reads all retained rows in bounded 256-row keyset pages.
+This avoids the round trips of the initial 32-row implementation without
+extending the recovery deadline. A failed
 inspection reports its sanitized phase and error kind; it does not classify a
-database timeout as unrelated work. No preservation evidence is omitted.
+database timeout as unrelated work. Operation-budget expiry is reported explicitly.
+No preservation evidence is omitted.
 A durable host checkpoint precedes reconciliation; a repeated request verifies saved
 completion rather than replaying it. Original deadlines, charges and failure
 history remain unchanged, and the recovered run remains paused.

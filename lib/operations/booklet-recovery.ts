@@ -19,7 +19,7 @@ function requireProof(value: unknown, code: string): asserts value {
   if (!value) throw new BookletRecoveryError(code);
 }
 export const recoveryDigest = (value: unknown) => createHash("sha256").update(m4CanonicalJson(value)).digest("hex");
-const inspectionErrorKinds = new Set(["MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError", "MongoServerSelectionError", "AbortError"]);
+const inspectionErrorKinds = new Set(["MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError", "MongoServerSelectionError", "AbortError", "OperationBudgetExpired"]);
 async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<T> {
   try { return await action(); }
   catch (error) {
@@ -32,7 +32,9 @@ async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<
 /** Keep the complete preservation proof, but do not retain one long history cursor. */
 export async function readRecoveryFingerprints(collection: Collection<{ _id: string }>): Promise<Record<string, string>> {
   const rows: Record<string, string> = {};
-  const pageSize = 32;
+  // Each query finishes its own bounded cursor. Larger pages reduce sequential
+  // round trips over retained history without extending the operation budget.
+  const pageSize = 256;
   let after: string | undefined;
   for (;;) {
     const page = await collection.find(after === undefined ? {} : { _id: { $gt: after } }, { batchSize: pageSize })
