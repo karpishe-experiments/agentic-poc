@@ -9,9 +9,13 @@ The supported issue #65 recovery candidate adds a maintenance-only
 an exact granted J11 completion through the existing dispatcher with provider
 starts, uploads and stops disabled. Preview fingerprints retained business data
 and authority. Apply rechecks that fingerprint with admission closed. The
-preservation snapshot reads all retained rows in bounded 256-row keyset pages.
-This avoids the round trips of the initial 32-row implementation without
-extending the recovery deadline. A failed
+preservation snapshot reads all retained rows in bounded 256-row keyset pages,
+with at most four collections read concurrently. A failed read stops new scheduling
+and settles every started read. Fresh apply owns one preview and awaits the durable
+checkpoint before rechecking eligibility/admission and calling normal reconciliation.
+This requires three complete snapshots rather than five. The maintenance command
+has a 150-second budget within the host's 180-second bound; persisted provider
+deadlines and claims are unchanged. A failed
 inspection reports its sanitized phase and error kind; it does not classify a
 database timeout as unrelated work. Operation-budget expiry is reported explicitly.
 No preservation evidence is omitted.
