@@ -19,6 +19,11 @@ deadlines and claims are unchanged. A failed
 inspection reports its sanitized phase and error kind; it does not classify a
 database timeout as unrelated work. Operation-budget expiry is reported explicitly.
 No preservation evidence is omitted.
+Read-only blocker inspection includes paginated operation identities, allowlisted
+state/role, claim presence and expiry, and saved-result/materialization/recovery
+presence. MongoDB projects content fields to type markers before returning them;
+no prompts, outputs or claim identities enter the diagnostic result. Expired claims
+remain blockers. These observations do not grant permission to clear ownership.
 A durable host checkpoint precedes reconciliation; a repeated request verifies saved
 completion rather than replaying it. Original deadlines, charges and failure
 history remain unchanged, and the recovered run remains paused.
