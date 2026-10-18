@@ -12,8 +12,10 @@ result transaction after backup `staging-recovery-issue65-m4-j11-20261018-v4`
 was verified. Status `39118995350` confirms the retained `reconciling` phase.
 Saved-completion verification `39119169276` returned `completion_unverified`;
 the supported abort check `39119284111` returned `unsupported_operation`.
-Neither check replayed reconciliation or restored admission. The exact changed
-operation condition and transaction failure cause remain unproven. No new paid
+Neither check replayed reconciliation or restored admission. Read-only inspection
+`39120261970` confirms an expired result-finalization claim, with J11 still started
+and no saved result, materialization or recovery marker. There is no unrelated
+work or active mutation ownership. The original transaction failure remains unproven. No new paid
 request was made. PR #205 and normal deployment remain gated on safe recovery.
 
 The bounded diagnostic follow-up adds paginated operation state and claim/presence
@@ -22,6 +24,24 @@ not saved output; claim expiry is diagnostic only. One real-persistence fixture
 checks missing/null content, retained expired claims and sanitization. Use a new
 inspection-only request before selecting another recovery action. Preserve the
 interrupted request, checkpoint, backup and all private phase evidence.
+
+The next bounded correction adds an explicit linked claim-release purpose to the
+existing candidate-reconcile control. A new reviewed image must prove that the
+exact expired claim is the only difference from the interrupted request's complete
+checkpoint. It restores the original null/missing representation with an exact
+compare-and-set, records provenance in a separate child checkpoint and leaves
+the original journal/checkpoint, stopped service and closed admission unchanged.
+Repeated requests verify only; they cannot clear a successor claim or replay J11.
+An explicit child abort requires unchanged full pre-write state and the exact
+retained claim; it closes only that child and rejects a committed release.
+Then the original request's supported abort must independently prove unchanged
+state before restoring the prior service with admission closed. Diagnose the
+transaction failure before another separately previewed reconciliation attempt.
+Normal failed-completion cleanup gets its own existing five-second cleanup budget;
+sanitized repository error codes remain visible at the recovery boundary. Required
+verification covers original snapshot equality, source/approval/accounting drift,
+active/replaced claims, cancelled cleanup and interrupted/duplicate child requests.
+Credential inventory impact: none; no secret storage, transfer or consumer changes.
 
 The user approved replacing repeated manual repair scripts with supported narrow
 operator actions before paid M4 work resumes. Implementation is in progress;

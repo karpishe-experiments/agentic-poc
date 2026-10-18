@@ -16,7 +16,9 @@ CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 SECRET_NAME=''
 RUN_ID=''
 OPERATION_ID='' EXPECTED_REVISION='' PREVIEW_DIGEST='' ORIGINAL_REQUEST_ID=''
-ABORT_RECOVERY=false INSPECTION_ONLY=false RECOVERY_PAGE=0 RECOVERY_LIMIT=5
+ABORT_RECOVERY=false RELEASE_EXPIRED_CLAIM=false
+RECOVERY_ORIGINAL_EVIDENCE=''
+INSPECTION_ONLY=false RECOVERY_PAGE=0 RECOVERY_LIMIT=5
 COMPOSE_TIMEOUT_SECONDS=300
 CONTROL_DEADLINE_SECONDS=0
 COMPOSE_SECRET_FILE=''
@@ -64,6 +66,7 @@ Options:
   --vps-host HOST --vps-user USER    SSH destination (default user kids-booklet-deploy)
   --request-id ID                   identifies an operation; reused by resume/status
                                    required exact retained/completed ID for operation-status/operation-stop
+  --release-expired-claim           linked recovery for an exact retained expired claim
   --abort-recovery                  apply: close and archive an unstarted repair
   --inspection-only --page N --limit N  read-only paginated candidate inspection
   --operation-id UUID --expected-revision N  exact candidate recovery target
@@ -93,6 +96,7 @@ parse_arguments() {
       --generate-password) GENERATE_PASSWORD=true; shift ;;
       --inspection-only) INSPECTION_ONLY=true; shift ;;
       --abort-recovery) ABORT_RECOVERY=true; shift ;;
+      --release-expired-claim) RELEASE_EXPIRED_CLAIM=true; shift ;;
       --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--operation-id|--expected-revision|--preview-digest|--original-request-id|--page|--limit|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
@@ -165,13 +169,14 @@ validate_arguments() {
     [[ "$ENVIRONMENT" == staging && -n "$REQUEST_ID" && -n "$COMMIT" && -n "$IMAGE_DIGEST" ]] || die 'Recovery requires staging, new request ID and pinned commit/image'
     [[ "$APPLY" == false || ( "$CONFIRMATION" == kids_booklet && "$PREVIEW_DIGEST" =~ ^[a-f0-9]{64}$ ) ]] || die 'Recovery apply requires confirmation and preview digest'
     if [[ "$ACTION" == candidate-reconcile && "$INSPECTION_ONLY" == false ]]; then
-      [[ -n "$RUN_ID" && "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ && "$EXPECTED_REVISION" =~ ^[0-9]{1,10}$ && -z "$ORIGINAL_REQUEST_ID" ]] || die 'Candidate recovery requires exact run, operation and revision'
+      [[ -n "$RUN_ID" && "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ && "$EXPECTED_REVISION" =~ ^[0-9]{1,10}$ && ( -z "$ORIGINAL_REQUEST_ID" || "$RELEASE_EXPIRED_CLAIM" == true ) ]] || die 'Candidate recovery requires exact run, operation and revision'
     elif [[ "$ACTION" == expired-deployment-recover ]]; then
       [[ "$ORIGINAL_REQUEST_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ && "$ORIGINAL_REQUEST_ID" != "$REQUEST_ID" && -z "$RUN_ID$OPERATION_ID$EXPECTED_REVISION" ]] || die 'Expired recovery requires a distinct original request ID'
     fi
   else
     [[ -z "$OPERATION_ID$EXPECTED_REVISION$PREVIEW_DIGEST$ORIGINAL_REQUEST_ID" ]] || die 'Recovery arguments require a recovery action'
   fi
+  [[ "$RELEASE_EXPIRED_CLAIM" == false || ( "$ACTION" == candidate-reconcile && "$INSPECTION_ONLY" == false && "$ORIGINAL_REQUEST_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ && "$ORIGINAL_REQUEST_ID" != "$REQUEST_ID" ) ]] || die 'Claim release requires a distinct original recovery request'
   [[ "$ABORT_RECOVERY" == false || ( "$ACTION" == candidate-reconcile && "$APPLY" == true && "$INSPECTION_ONLY" == false ) ]] || die 'Abort requires candidate recovery apply'
   [[ "$RECOVERY_PAGE" =~ ^[0-9]{1,5}$ && "$RECOVERY_LIMIT" =~ ^[0-9]{1,2}$ && "$RECOVERY_PAGE" -le 10000 && "$RECOVERY_LIMIT" -ge 1 && "$RECOVERY_LIMIT" -le 50 ]] || die 'Invalid recovery inspection page or limit'
   [[ "$INSPECTION_ONLY" == false || ( "$ACTION" == candidate-reconcile && "$APPLY" == false && -z "$RUN_ID$OPERATION_ID$EXPECTED_REVISION$ORIGINAL_REQUEST_ID$PREVIEW_DIGEST" ) ]] || die 'Inspection-only is candidate preview without a mutation target'
@@ -246,6 +251,7 @@ host_call() {
   [[ -z "$PREVIEW_DIGEST" ]] || remote+=(--preview-digest "$PREVIEW_DIGEST")
   [[ -z "$ORIGINAL_REQUEST_ID" ]] || remote+=(--original-request-id "$ORIGINAL_REQUEST_ID")
   [[ "$ABORT_RECOVERY" == false ]] || remote+=(--abort-recovery)
+  [[ "$RELEASE_EXPIRED_CLAIM" == false ]] || remote+=(--release-expired-claim)
   if [[ "$INSPECTION_ONLY" == true ]]; then remote+=(--inspection-only --page "$RECOVERY_PAGE" --limit "$RECOVERY_LIMIT"); fi
   [[ "$APPLY" == false ]] || remote+=(--apply)
   printf -v remote_command ' %s' "${remote[@]}"
@@ -557,13 +563,14 @@ recovery_phase() {
   mv "$path.next" "$path"
 }
 recovery_result() {
-  jq -c '{requestId,action,phase,environment,commit,image,priorRelease,runId,operationId,originalRequestId,backupId,previewDigest}' "$1"
+  jq -c '{requestId,action,purpose,phase,environment,commit,image,priorRelease,runId,operationId,originalRequestId,backupId,previewDigest}' "$1"
 }
 recovery_oneoff() {
   local release="$1" evidence="$2" phase="$3"; shift 3
   local name="booklet-operation-staging-${REQUEST_ID}-$$-$RANDOM" status=0
   local -a mounts=() command=(node --import tsx scripts/booklet-recovery.ts "$phase")
   [[ -z "$evidence" ]] || mounts=(--user 0:0 -v "$evidence:/recovery")
+  [[ -z "$RECOVERY_ORIGINAL_EVIDENCE" ]] || mounts+=(--user 0:0 -v "$RECOVERY_ORIGINAL_EVIDENCE:/original-recovery:ro")
   if [[ "$phase" == legacy-compatibility ]]; then
     command=(node --import tsx --input-type=module -e '
       import {getDatabase} from "./db/client.ts";
@@ -649,21 +656,105 @@ expired_recovery_finish() {
   jq -e '.maintenance==false and .draining==false and .activeMutations==0 and ((.mutationOwners // [])|length==0) and (.interruptedMutations // 0)==0' "$evidence/admission-open.json" >/dev/null || die 'Admission reopen is unverified'
 }
 recovery_unresolved_guard() {
-  local allowed="${1:-}" record id
+  local allowed="${1:-}" original="${2:-}" record id
   [[ "$ENVIRONMENT" == staging ]] || return 0
   for record in "$STATE"/recoveries/*/host.json; do
     [[ -e "$record" ]] || continue
     [[ -f "$record" && ! -L "$record" ]] || die 'Recovery journal is invalid'
     id="$(jq -er .requestId "$record")"
     [[ "$id" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]] || die 'Recovery journal identity invalid'
-    [[ "$id" == "$allowed" || "$(jq -r .phase "$record")" =~ ^(complete|aborted-closed)$ ]] || die "Unresolved recovery $id; inspect that request before another mutation"
+    [[ "$id" == "$allowed" || "$id" == "$original" || "$(jq -r .phase "$record")" =~ ^(complete|aborted-closed)$ ]] || die "Unresolved recovery $id; inspect that request before another mutation"
   done
+}
+# A linked claim release never adopts or rewrites its parent's interrupted journal.
+recovery_release_expired_claim() {
+  local current="$1" image="$2" evidence="$3" journal="$4" parent="$STATE/recoveries/$ORIGINAL_REQUEST_ID"
+  local parent_hash checkpoint_hash parent_image candidate tree app_digest digest binding_hash phase container_ids
+  [[ ! -e "$STATE/operation.json" && ! -e "$STATE/recovery-handoff-staging.json" ]] || die 'Host operation or handoff remains'
+  container_ids="$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging)" || die 'Claim release container inspection failed'
+  [[ -z "$container_ids" ]] || die 'Claim release requires the serving application and all maintenance containers stopped'
+  [[ -d "$parent" && ! -L "$parent" && -f "$parent/host.json" && ! -L "$parent/host.json" && -f "$parent/application-recovery.json" && ! -L "$parent/application-recovery.json" ]] || die 'Original recovery evidence is missing or linked'
+  jq -e --arg id "$ORIGINAL_REQUEST_ID" --arg run "$RUN_ID" --arg op "$OPERATION_ID" --arg rev "$EXPECTED_REVISION" --arg prior "$current" --arg image "$image" '
+    .requestId==$id and .action=="candidate-reconcile" and .environment=="staging" and .phase=="reconciling" and
+    .runId==$run and .operationId==$op and .expectedRevision==$rev and .priorRelease==$prior and .priorImage==$image' "$parent/host.json" >/dev/null || die 'Original recovery identity changed'
+  jq -e --arg run "$RUN_ID" --arg op "$OPERATION_ID" --argjson rev "$EXPECTED_REVISION" '
+    .contract=="booklet-recovery-v1" and .phase=="started" and .target.runId==$run and .target.operationId==$op and .target.expectedRevision==$rev' "$parent/application-recovery.json" >/dev/null || die 'Original application checkpoint differs'
+  [[ "$(jq -er .previewDigest "$parent/application-recovery.json")" == "$(jq -er .appPreviewDigest "$parent/host.json")" ]] || die 'Original proof identity differs'
+  BACKUP_ID="$(jq -er .backupId "$parent/host.json")"
+  [[ "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ && -f "$parent/backup-verify.log" && ! -L "$parent/backup-verify.log" ]] || die 'Original backup evidence missing'
+  jq -Rse --arg id "$BACKUP_ID" 'split("\n") | map(fromjson? | select(type=="object")) | any(.verified==true and .backupId==$id and .database=="kids_booklet" and .environment=="_staging")' "$parent/backup-verify.log" >/dev/null || die 'Original backup was not verified'
+  parent_hash="$(sha256sum "$parent/host.json" | awk '{print $1}')"
+  checkpoint_hash="$(sha256sum "$parent/application-recovery.json" | awk '{print $1}')"
+  binding_hash="$(sha256sum "$current/manifest.sha256" "$SECRETS/staging/secrets.json" "$CONFIG_FILE" | sha256sum | awk '{print $1}')"
+  private_temp; candidate="$(mktemp -d "$TEMP_DIR/claim-candidate.XXXXXXXX")"
+  cp "$current/compose.yml" "$current/environment.yml" "$current/runtime.env" "$candidate/"
+  [[ "$IMAGE_DIGEST" == "$(jq -er .image "$CONFIG_FILE")"@sha256:* ]] || die 'Candidate repository differs'
+  mkdir -p "$TEMP_DIR/docker"
+  DOCKER_CONFIG="$TEMP_DIR/docker" timeout --kill-after=5s 300s docker pull "$IMAGE_DIGEST" >/dev/null
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE_DIGEST")" == "$COMMIT" ]] || die 'Candidate revision differs'
+  tree="$(docker image inspect --format '{{index .Config.Labels "uk.co.uniwares.booklet.source-tree"}}' "$IMAGE_DIGEST")"
+  [[ "$tree" =~ ^[a-f0-9]{40}$ ]] || die 'Candidate tree missing'
+  parent_image="$(jq -er .image "$parent/host.json")"
+  [[ "$parent_image" == "$(jq -er .image "$CONFIG_FILE")"@sha256:* ]] || die 'Original candidate repository differs'
+  local parent_schema candidate_schema
+  parent_schema="$(recovery_schema_digest "$parent_image")" || die 'Original candidate schema inspection failed'
+  candidate_schema="$(recovery_schema_digest "$IMAGE_DIGEST")" || die 'Claim candidate schema inspection failed'
+  [[ "$parent_schema" =~ ^[a-f0-9]{64}$ && "$parent_schema" == "$candidate_schema" ]] || die 'Claim candidate schema differs'
+  jq -n --arg image "$IMAGE_DIGEST" '{services:{app:{image:$image}}}' > "$candidate/image.json"
+  RECOVERY_ORIGINAL_EVIDENCE="$parent"
+  recovery_oneoff "$candidate" '' capabilities > "$TEMP_DIR/capabilities.json" 2> "$TEMP_DIR/capabilities.stderr"
+  jq -e '.contract=="booklet-recovery-v1" and .environment=="_staging" and .initializationRequired==false and (.supported|index("expired-finalization-claim-release"))!=null' "$TEMP_DIR/capabilities.json" >/dev/null || die 'Claim release capability missing'
+  if [[ -e "$evidence" ]]; then
+    [[ -d "$evidence" && ! -L "$evidence" && -f "$journal" && ! -L "$journal" ]] || die 'Child evidence invalid'
+    jq -e --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg parent "$parent_hash" --arg checkpoint "$checkpoint_hash" --arg binding "$binding_hash" --arg tree "$tree" '
+      .requestId==$id and .purpose=="release-expired-claim" and .originalRequestId==$original and .commit==$commit and .image==$image and
+      .parentJournalSha256==$parent and .parentCheckpointSha256==$checkpoint and .bindingHash==$binding and .sourceTree==$tree' "$journal" >/dev/null || die 'Child recovery identity changed'
+    recovery_result "$journal"
+    [[ "$APPLY" == true ]] || return 0
+    [[ "$PREVIEW_DIGEST" == "$(jq -er .previewDigest "$journal")" ]] || die 'Child preview differs'
+    phase="$(jq -er .phase "$journal")"
+    if [[ "$phase" == aborted-closed ]]; then
+      [[ "$ABORT_RECOVERY" == true ]] || die 'Aborted claim release requires a new request'
+      return 0
+    fi
+    [[ "$phase" == releasing-claim || "$phase" == complete ]] || die 'Child phase requires inspection'
+    app_digest="$(jq -er .appPreviewDigest "$journal")"
+    if [[ "$ABORT_RECOVERY" == true ]]; then
+      [[ "$phase" == releasing-claim ]] || die 'Completed claim release cannot be aborted'
+      recovery_app_json "$candidate" '' preview-claim-release "$evidence/abort-proof.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION"
+      [[ "$(jq -er .previewDigest "$evidence/abort-proof.json")" == "$app_digest" ]] || die 'Original claim or business proof changed; abort forbidden'
+      [[ "$(sha256sum "$parent/host.json" | awk '{print $1}')" == "$parent_hash" && "$(sha256sum "$parent/application-recovery.json" | awk '{print $1}')" == "$checkpoint_hash" ]] || die 'Original evidence changed'
+      recovery_phase "$journal" aborted-closed
+      recovery_result "$journal"
+      return 0
+    fi
+    recovery_app_json "$candidate" "$evidence" verify-claim-release "$evidence/verified.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest" --evidence-dir /recovery
+  else
+    [[ "$ABORT_RECOVERY" == false ]] || die 'No child claim recovery exists to abort'
+    recovery_app_json "$candidate" '' preview-claim-release "$TEMP_DIR/claim-preview.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION"
+    app_digest="$(jq -er .previewDigest "$TEMP_DIR/claim-preview.json")"
+    [[ "$app_digest" =~ ^[a-f0-9]{64}$ ]] || die 'Claim preview proof missing'
+    digest="$(printf '%s\n' "$REQUEST_ID" "$ORIGINAL_REQUEST_ID" "$parent_hash" "$checkpoint_hash" "$binding_hash" "$COMMIT" "$IMAGE_DIGEST" "$tree" "$app_digest" | sha256sum | awk '{print $1}')"
+    printf 'result: recovery preview request=%s action=candidate-reconcile digest=%s\n' "$REQUEST_ID" "$digest"
+    [[ "$APPLY" == true ]] || return 0
+    [[ "$PREVIEW_DIGEST" == "$digest" ]] || die 'Claim preview changed'
+    mkdir "$evidence"; chmod 700 "$evidence"
+    jq -n --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg parent "$parent_hash" --arg checkpoint "$checkpoint_hash" --arg binding "$binding_hash" --arg tree "$tree" --arg digest "$digest" --arg appDigest "$app_digest" --arg run "$RUN_ID" --arg op "$OPERATION_ID" --arg backup "$BACKUP_ID" --arg prior "$current" '
+      {requestId:$id,action:"candidate-reconcile",priorRelease:$prior,purpose:"release-expired-claim",environment:"staging",phase:"releasing-claim",originalRequestId:$original,commit:$commit,image:$image,parentJournalSha256:$parent,parentCheckpointSha256:$checkpoint,bindingHash:$binding,sourceTree:$tree,previewDigest:$digest,appPreviewDigest:$appDigest,runId:$run,operationId:$op,backupId:$backup}' > "$journal"
+    recovery_app_json "$candidate" "$evidence" apply-claim-release "$evidence/applied.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest" --evidence-dir /recovery
+    recovery_app_json "$candidate" "$evidence" verify-claim-release "$evidence/verified.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest" --evidence-dir /recovery
+  fi
+  [[ "$(sha256sum "$parent/host.json" | awk '{print $1}')" == "$parent_hash" && "$(sha256sum "$parent/application-recovery.json" | awk '{print $1}')" == "$checkpoint_hash" ]] || die 'Original evidence changed'
+  recovery_phase "$journal" complete
+  recovery_result "$journal"
 }
 supported_recovery_host() (
   require_root
   dify_diagnostic_identity
   exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
-  if [[ "$INSPECTION_ONLY" == false ]]; then recovery_unresolved_guard "$REQUEST_ID"; fi
+  if [[ "$INSPECTION_ONLY" == false ]]; then
+    if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_unresolved_guard "$REQUEST_ID" "$ORIGINAL_REQUEST_ID"; else recovery_unresolved_guard "$REQUEST_ID"; fi
+  fi
   [[ -z "$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.oneoff=True)" ]] || die 'Staging maintenance container remains active; inspect its owning request, do not replay'
   local CONTROL_DEADLINE_SECONDS=$((SECONDS + 2520)) current image candidate evidence journal digest app_digest='' old_hash='' failed_image='' host_fingerprint source_tree='' prior_schema failed_schema
   read -r current < "$STATE/releases/staging/current"
@@ -671,6 +762,7 @@ supported_recovery_host() (
   (cd "$current" && sha256sum -c manifest.sha256 >/dev/null) || die 'Selected release files changed'
   image="$(jq -er .services.app.image "$current/image.json")"
   evidence="$STATE/recoveries/$REQUEST_ID"; journal="$evidence/host.json"
+  if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_release_expired_claim "$current" "$image" "$evidence" "$journal"; return; fi
   if [[ -e "$evidence" ]]; then
     [[ -f "$journal" && ! -L "$evidence" ]] || die 'Recovery evidence is incomplete'
     jq -e --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" \

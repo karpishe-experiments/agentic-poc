@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -47,6 +47,109 @@ verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
+  claim-release-mount)
+    RECOVERY_ORIGINAL_EVIDENCE="$TEMP_DIR/original"
+    recovery_oneoff "$STATE/releases/staging/old" "$TEMP_DIR/child" verify-claim-release
+    grep -F -- "$TEMP_DIR/original:/original-recovery:ro" "$CALLS"
+    grep -F -- "$TEMP_DIR/child:/recovery" "$CALLS"
+    grep -F -- 'RUNNER_ENABLED=false' "$CALLS"
+    ;;
+  claim-release-guards)
+    mkdir -p "$STATE/recoveries/parent" "$STATE/recoveries/child" "$STATE/recoveries/other"
+    printf '{"requestId":"parent","phase":"reconciling"}' > "$STATE/recoveries/parent/host.json"
+    printf '{"requestId":"child","phase":"releasing-claim"}' > "$STATE/recoveries/child/host.json"
+    printf '{"requestId":"other","phase":"complete"}' > "$STATE/recoveries/other/host.json"
+    recovery_unresolved_guard child parent
+    printf '{"requestId":"other","phase":"reconciling"}' > "$STATE/recoveries/other/host.json"
+    if (recovery_unresolved_guard child parent); then exit 1; fi
+    ;;
+  claim-release-*)
+    if command -v cygpath >/dev/null; then
+      TEMP_DIR="$(cygpath -m "$TEMP_DIR")"; STATE="$(cygpath -m "$STATE")"; SECRETS="$(cygpath -m "$SECRETS")"; CONFIG_FILE="$(cygpath -m "$CONFIG_FILE")"; CALLS="$(cygpath -m "$CALLS")"
+    fi
+    scenario="$1"; rm "$STATE/operation.json"
+    current="$STATE/releases/staging/old"; parent="$STATE/recoveries/original"; child="$STATE/recoveries/child"
+    mkdir -p "$parent"
+    for file in compose.yml environment.yml runtime.env; do printf 'fixture\n' > "$current/$file"; done
+    printf '{}\n' > "$SECRETS/staging/secrets.json"
+    REQUEST_ID=child ORIGINAL_REQUEST_ID=original RUN_ID=run OPERATION_ID=operation EXPECTED_REVISION=212 RELEASE_EXPIRED_CLAIM=true APPLY=false
+    jq -n --arg prior "$current" --arg image "$IMAGE_DIGEST" '{requestId:"original",action:"candidate-reconcile",environment:"staging",phase:"reconciling",runId:"run",operationId:"operation",expectedRevision:"212",priorRelease:$prior,priorImage:$image,image:$image,backupId:"verified-backup",appPreviewDigest:"original-proof"}' > "$parent/host.json"
+    printf '{"contract":"booklet-recovery-v1","phase":"started","target":{"runId":"run","operationId":"operation","expectedRevision":212},"previewDigest":"original-proof"}\n' > "$parent/application-recovery.json"
+    printf '{"verified":true,"backupId":"verified-backup","database":"kids_booklet","environment":"_staging"}\n' > "$parent/backup-verify.log"
+    parent_before="$(sha256sum "$parent/host.json" "$parent/application-recovery.json")"
+    private_temp() { :; }
+    docker() {
+      if [[ "$1:$2" == ps:-q && "$scenario" == claim-release-read-error ]]; then return 1; fi
+      if [[ "$1:$2" == ps:-q && "$scenario" == claim-release-running ]]; then printf 'abcd1234\n'; fi
+      if [[ "$1:$2" == image:inspect ]]; then
+        if [[ "$*" == *source-tree* ]]; then printf '%040d\n' 3; else printf '%s\n' "$COMMIT"; fi
+      fi
+    }
+    recovery_schema_digest() { printf '%064d\n' 2; }
+    recovery_oneoff() {
+      printf '%s\n' "$3" >> "$CALLS"
+      [[ "$RECOVERY_ORIGINAL_EVIDENCE" == "$parent" ]]
+      case "$3" in
+        capabilities) printf '{"contract":"booklet-recovery-v1","environment":"_staging","initializationRequired":false,"supported":["expired-finalization-claim-release"]}\n';;
+        preview-claim-release) [[ "$scenario" != claim-release-abort-committed || ! -e "$child/host.json" ]] || return 1; if [[ "$scenario" == claim-release-abort-changed && -e "$child/host.json" ]]; then printf '{"verified":true,"previewDigest":"%064d"}\n' 9; else printf '{"verified":true,"previewDigest":"%064d"}\n' 1; fi;;
+        apply-claim-release) if [[ "$scenario" == claim-release-abort-postcheckpoint || "$scenario" == claim-release-abort-committed ]]; then printf '{"started":true}\n' > "$2/claim-release.json"; return 1; fi; [[ "$scenario" != claim-release-abort && "$scenario" != claim-release-abort-changed ]] || return 1; printf '{"started":true}\n' > "$2/claim-release.json"; printf '{"verified":true}\n';;
+        verify-claim-release) [[ "$scenario" != claim-release-failed-proof ]] || return 1; printf '{"verified":true}\n';;
+        *) return 1;;
+      esac
+    }
+    if [[ "$scenario" == claim-release-running || "$scenario" == claim-release-read-error ]]; then
+      if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+      [[ ! -e "$child" ]]; exit 0
+    fi
+    recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json" > "$TEMP_DIR/preview"
+    [[ ! -e "$child" ]]
+    PREVIEW_DIGEST="$(sed -n 's/.*digest=//p' "$TEMP_DIR/preview")"
+    [[ "$scenario" != claim-release-preview ]] || exit 0
+    APPLY=true
+    if [[ "$scenario" == claim-release-abort-no-child ]]; then
+      ABORT_RECOVERY=true
+      if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+      [[ ! -e "$child" ]]; exit 0
+    fi
+    if [[ "$scenario" == claim-release-abort || "$scenario" == claim-release-abort-changed || "$scenario" == claim-release-abort-postcheckpoint || "$scenario" == claim-release-abort-committed ]]; then
+      if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+      [[ "$(jq -r .phase "$child/host.json")" == releasing-claim ]]
+      if [[ "$scenario" == claim-release-abort-postcheckpoint || "$scenario" == claim-release-abort-committed ]]; then [[ -f "$child/claim-release.json" ]]; else [[ ! -e "$child/claim-release.json" ]]; fi
+      ABORT_RECOVERY=true
+      if [[ "$scenario" == claim-release-abort-changed || "$scenario" == claim-release-abort-committed ]]; then
+        if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+        [[ "$(jq -r .phase "$child/host.json")" == releasing-claim ]]
+      else
+        recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"
+        [[ "$(jq -r .phase "$child/host.json")" == aborted-closed ]]
+        recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"
+        ABORT_RECOVERY=false
+        if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+      fi
+      [[ "$(grep -c '^apply-claim-release$' "$CALLS")" == 1 ]]
+      [[ "$(sha256sum "$parent/host.json" "$parent/application-recovery.json")" == "$parent_before" ]]
+      ! grep -Eq 'compose|deployment-control|verify-claim-release' "$CALLS"
+      exit 0
+    fi
+    if [[ "$scenario" == claim-release-failed-proof ]]; then
+      if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+      [[ "$(jq -r .phase "$child/host.json")" == releasing-claim ]]
+      if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+    else
+      recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"
+      [[ "$(jq -r .phase "$child/host.json")" == complete ]]
+      if [[ "$scenario" == claim-release-repeat ]]; then recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"; fi
+      if [[ "$scenario" == claim-release-parent-drift ]]; then
+        printf '\n' >> "$parent/application-recovery.json"
+        if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+        exit 0
+      fi
+    fi
+    [[ "$(grep -c '^apply-claim-release$' "$CALLS")" == 1 ]]
+    [[ "$(sha256sum "$parent/host.json" "$parent/application-recovery.json")" == "$parent_before" ]]
+    [[ ! -e "$STATE/recovery-handoff-staging.json" ]]
+    ! grep -Eq 'compose|deployment-control' "$CALLS"
+    ;;
   legacy-recovery-claims)
     node --input-type=module <<'LEGACY_CLAIMS'
 import {readFileSync} from "node:fs";
