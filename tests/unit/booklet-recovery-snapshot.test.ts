@@ -4,10 +4,10 @@ import { readRecoveryFingerprints, recoveryDigest } from "@/lib/operations/bookl
 
 describe("recovery preservation snapshot", () => {
   it("hashes every retained row with bounded keyset pages", async () => {
-    const rows = Array.from({ length: 75 }, (_, index) => ({ _id: String(index).padStart(4, "0"), retained: `evidence-${index}` }));
+    const rows = Array.from({ length: 600 }, (_, index) => ({ _id: String(index).padStart(4, "0"), retained: `evidence-${index}` }));
     const limits: number[] = [];
     const find = vi.fn((filter, options) => {
-      expect(options).toEqual({ batchSize: 32 });
+      expect(options).toEqual({ batchSize: 256 });
       const cursor = {
         sort(order: unknown) { expect(order).toEqual({ _id: 1 }); return cursor; },
         limit(size: number) { limits.push(size); return cursor; },
@@ -17,8 +17,10 @@ describe("recovery preservation snapshot", () => {
     });
     const result = await readRecoveryFingerprints({ find } as unknown as Collection<{ _id: string }>);
     expect(result).toEqual(Object.fromEntries(rows.map(row => [row._id, recoveryDigest(row)])));
-    expect(find.mock.calls.map(([filter]) => filter)).toEqual([{}, { _id: { $gt: "0031" } }, { _id: { $gt: "0063" } }]);
-    expect(limits).toEqual([32, 32, 32]);
+    expect(find.mock.calls.map(([filter]) => filter)).toEqual([{}, { _id: { $gt: "0255" } }, { _id: { $gt: "0511" } }]);
+    expect(limits).toEqual([256, 256, 256]);
+    // The previous 32-row pages needed 19 database requests for these same rows.
+    expect(find).toHaveBeenCalledTimes(3);
   });
 
   it("rejects repeated identities instead of silently overwriting preservation evidence", async () => {

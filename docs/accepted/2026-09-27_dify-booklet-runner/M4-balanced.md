@@ -17,7 +17,15 @@ failing read was not identified. The bounded correction reads the same complete
 preservation evidence in keyset pages and reports the failing inspection phase.
 It does not assert that pagination resolves the live timeout; live readback is
 still required. No dispatcher change, credential change or provider request is
-needed for this correction.
+needed for this correction. Candidate preview `39115827216` then failed at
+`snapshot.assets` with generic `Error`, still before admission closure or apply.
+Inspection found that budget expiry was omitted from the diagnostic allowlist;
+the phase is consistent with cumulative budget exhaustion, but does not prove it.
+The follow-up retains explicit `OperationBudgetExpired` diagnostics and increases
+bounded pages from 32 to 256. A 600-row unit fixture now needs three requests
+instead of nineteen, with identical complete hashes. The 90-second budget and
+all preservation, grant and accounting gates remain unchanged. Live resolution
+remains unverified.
 
 Change-surface forecast: shared sanitized inspection and a maintenance-only
 recovery CLI; staging candidate-image and expired-deployment actions in the
