@@ -25,6 +25,7 @@ import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { readStreamChunk } from "@/lib/operations/read-stream";
 import { RECONCILIATION_RESERVE_MS, withOperationBudget } from "@/lib/operations/budget";
 import { checkProbeReadiness, probeIdentitySchema } from "@/lib/experiment-runner/probe-preflight";
+import { operationRecoveryOutcome } from "@/lib/operations/operation-recovery-outcome";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -186,7 +187,14 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       await mutate(async () => { if ("preparationId" in body) await dispatcher.inspectPreparation({ runId: opaqueIdSchema.parse(runId), ...body, stop: action === "stop" });
         else await dispatcher.inspect({ runId: opaqueIdSchema.parse(runId), ...body, ...(action === "stop" ? { stop: "manual" as const } : {}) }); },
       { admitted: true, runId, ...("operationId" in body ? { operationId: body.operationId } : {}) });
-      return data(await services(state).context.getRunView(runId));
+      const view = await services(state).context.getRunView(runId);
+      if (!("operationId" in body) || !view) return data(view);
+      const [savedRun, savedOperation] = await Promise.all([
+        database().collections.experiment_runs.findOne({ _id: runId }),
+        database().collections.experiment_operations.findOne({ _id: body.operationId, runId }),
+      ]);
+      return data({ ...view, recovery: operationRecoveryOutcome({ run: savedRun, operation: savedOperation,
+        completionRecoveries: state.config.m4?.state === "granted" ? state.config.m4.authority?.grant.completionRecoveries : undefined }) });
     }); },
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;

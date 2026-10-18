@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -47,6 +47,168 @@ verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
+  legacy-recovery-claims)
+    node --input-type=module <<'LEGACY_CLAIMS'
+import {readFileSync} from "node:fs";
+import assert from "node:assert/strict";
+const source=readFileSync("scripts/deploy/vps-deployment.sh","utf8");
+const start=source.indexOf('command=(node --import tsx --input-type=module -e');
+const program=source.slice(start).split("-e '")[1].split("')")[0].replace(/^\s*import .*;$/gm,"");
+const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+const run=new AsyncFunction("getDatabase","verifyMongoStructure","verifyExperimentData","verifyMongoData","readBookletRunnerConfig",program);
+Object.assign(process.env,{RUNNER_ENABLED:"false",DEPLOYMENT_ENV:"_staging",MONGODB_DATABASE:"kids_booklet",ASSETS_BUCKET:"kids-booklet-staging-assets"});
+for(const claim of ["authorizationClaim","resultFinalizationClaim","imageCompletionClaim"]){
+  let closed=false;
+  const empty={countDocuments:async()=>0};
+  const collections=new Proxy({
+    deployment_control:{findOne:async()=>({maintenance:true,draining:false,activeMutations:0})},
+    experiment_operations:{countDocuments:async filter=>filter.$or.some(row=>row[claim]?.$exists===true && row[claim]?.$ne===null)?1:0},
+  },{get:(target,key)=>target[key]??empty});
+  await assert.rejects(run(()=>({collections,close:async()=>{closed=true;}}),async()=>{},async()=>{},async()=>{},()=>({enabled:true})),/Unresolved operation/);
+  assert.equal(closed,true);
+}
+process.env.MONGODB_DATABASE="kids_booklet_prod";
+await assert.rejects(run(()=>{throw new Error("Database must not be accessed");},async()=>{},async()=>{},async()=>{},()=>({enabled:true})),/Wrong recovery environment/);
+console.log("legacy recovery retains expired claims and rejects cross-environment access");
+LEGACY_CLAIMS
+    ;;
+  candidate-recovery-*|expired-recovery-*)
+    if command -v cygpath >/dev/null; then
+      # Native jq on Windows serializes paths in drive form. Keep fixture
+      # identities in that form so byte identity checks match Linux semantics.
+      TEMP_DIR="$(cygpath -m "$TEMP_DIR")"; ROOT="$(cygpath -m "$ROOT")"; STATE="$(cygpath -m "$STATE")"
+      SECRETS="$(cygpath -m "$SECRETS")"; CONFIG_FILE="$(cygpath -m "$CONFIG_FILE")"; CALLS="$(cygpath -m "$CALLS")"
+    fi
+    scenario="$1"
+    require_root() { :; }; dify_diagnostic_identity() { :; }; flock() { :; }
+    cleanup() { :; }
+    rm "$STATE/operation.json"
+    prior="$STATE/releases/staging/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    mv "$STATE/releases/staging/old" "$prior"
+    printf '%s\n' "$prior" > "$STATE/releases/staging/current"
+    for file in compose.yml environment.yml runtime.env; do printf 'fixture\n' > "$prior/$file"; done
+    (cd "$prior" && sha256sum compose.yml environment.yml runtime.env image.json > manifest.sha256)
+    printf '{}\n' > "$SECRETS/staging/secrets.json"
+    REQUEST_ID=recovery-one RUN_ID=11111111-1111-1111-1111-111111111111 OPERATION_ID=22222222-2222-2222-2222-222222222222 EXPECTED_REVISION=212
+    ACTION=candidate-reconcile APPLY=false BACKUP_ID='' CONFIRMATION=kids_booklet
+    maintenance() {
+      printf 'maintenance %s\n' "$*" >> "$CALLS"
+      [[ ! "$scenario" =~ ^candidate-recovery-backup-(failed|abort)$ || "$2:${3:-}" != recovery:backup ]] || return 1
+      if [[ "$2:${3:-}" == deployment-control:status ]]; then printf '{"maintenance":true,"draining":false,"activeMutations":0}\n'; fi
+      if [[ "$2:${3:-}" == deployment-control:disable ]]; then printf '{"maintenance":false,"draining":false,"activeMutations":0}\n'; fi
+    }
+    verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; [[ "$scenario" != candidate-recovery-readiness-failed ]]; }
+    docker() {
+      printf 'docker %s\n' "$*" >> "$CALLS"
+      if [[ "$1:$2" == image:inspect ]]; then if [[ "$*" == *source-tree* ]]; then printf '%040d\n' 3; else printf '%s\n' "$COMMIT"; fi; fi
+    }
+    recovery_oneoff() {
+      printf 'recovery %s\n' "$3" >> "$CALLS"
+      case "$3" in
+        capabilities) printf '{"contract":"booklet-recovery-v1","environment":"_staging","schemaVersion":"1","initializationRequired":false}\n';;
+        preview) printf '{"verified":true,"previewDigest":"%064d"}\n' 1;;
+        verify-unapplied) if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then printf '{"verified":false,"phase":"verify-unapplied","code":"snapshot_changed"}\n'; return 1; fi; printf '{"verified":true,"outcome":"unapplied","providerPosts":0}\n';;
+        apply) if [[ "$scenario" == candidate-recovery-unapplied-* ]]; then printf '{"phase":"started","retained":"original"}\n' > "$2/application-recovery.json"; return 1; fi; if [[ "$scenario" == candidate-recovery-failure ]]; then printf '{"verified":false,"phase":"apply","code":"snapshot_changed","privateMessage":"do-not-print"}\n'; return 1; fi; printf '{"verified":true}\n';;
+        *) printf '{"verified":true}\n';;
+      esac
+    }
+    if [[ "$scenario" == expired-recovery-* ]]; then
+      ACTION=expired-deployment-recover ORIGINAL_REQUEST_ID=old-deploy RUN_ID='' OPERATION_ID='' EXPECTED_REVISION='' COMMIT=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      jq -n --arg image "$IMAGE_DIGEST" --arg prior "$prior" '{requestId:"old-deploy",action:"deploy",environment:"staging",priorRelease:$prior,budgetDeadlineAtSeconds:1,step:"initializing",image:$image,backupId:"retained-backup"}' > "$STATE/operation.json"
+      cp "$STATE/operation.json" "$TEMP_DIR/original.json"
+      systemctl() { printf 'failed\n'; }
+      recovery_schema_digest() { printf '%064d\n' 2; }
+      if [[ "$scenario" == expired-recovery-drift ]]; then
+        recovery_schema_digest() { printf '%s\n' "$RANDOM"; }
+        if (supported_recovery_host); then exit 1; fi
+        [[ ! -e "$STATE/recoveries" ]]
+        exit 0
+      fi
+    fi
+    supported_recovery_host > "$TEMP_DIR/preview-output"
+    rm -rf "$TEMP_DIR/candidate"
+    [[ ! -e "$STATE/recoveries" && ! -e "$STATE/recovery-handoff-staging.json" ]]
+    ! grep -q 'deployment-control enable' "$CALLS"
+    PREVIEW_DIGEST="$(sed -n 's/.*digest=//p' "$TEMP_DIR/preview-output")"
+    if [[ "$scenario" == *-preview ]]; then exit 0; fi
+    APPLY=true
+    if [[ "$scenario" == candidate-recovery-mismatch ]]; then
+      PREVIEW_DIGEST="$(printf '%064d' 9)"
+      if (supported_recovery_host); then exit 1; fi
+      [[ ! -e "$STATE/recoveries" ]]
+    elif [[ "$scenario" =~ ^candidate-recovery-backup-(failed|abort)$ || "$scenario" == candidate-recovery-readiness-failed ]]; then
+      if (supported_recovery_host); then exit 1; fi
+      ! grep -q 'deployment-control disable' "$CALLS"
+      if [[ "$scenario" =~ ^candidate-recovery-backup-(failed|abort)$ ]]; then
+        ! grep -q '^recovery apply$' "$CALLS"
+        [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == backup ]]
+        if [[ "$scenario" == candidate-recovery-backup-abort ]]; then
+          ABORT_RECOVERY=true
+          supported_recovery_host
+          [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == aborted-closed ]]
+          ! grep -q '^recovery apply$' "$CALLS"
+          ! grep -q 'deployment-control disable' "$CALLS"
+          recovery_unresolved_guard
+        fi
+      else
+        [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == restoring-closed ]]
+      fi
+    elif [[ "$scenario" == candidate-recovery-unapplied-* ]]; then
+      if (supported_recovery_host); then exit 1; fi
+      [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == reconciling ]]
+      cp "$STATE/recoveries/$REQUEST_ID/application-recovery.json" "$TEMP_DIR/original-checkpoint.json"
+      ABORT_RECOVERY=true
+      if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then
+        if (supported_recovery_host); then exit 1; fi
+        [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == reconciling ]]
+        ! grep -q 'compose .*up ' "$CALLS"
+      else
+        supported_recovery_host
+        [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == aborted-closed ]]
+        # Interrupted abort must re-prove unchanged state, not reuse a cached verdict.
+        recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" aborting-closed
+        supported_recovery_host
+        [[ "$(grep -c '^recovery verify-unapplied$' "$CALLS")" == 2 ]]
+      fi
+      cmp -s "$TEMP_DIR/original-checkpoint.json" "$STATE/recoveries/$REQUEST_ID/application-recovery.json"
+      [[ "$(grep -c '^recovery apply$' "$CALLS")" == 1 ]]
+      ! grep -q 'deployment-control disable' "$CALLS"
+    elif [[ "$scenario" == candidate-recovery-failure ]]; then
+      if (supported_recovery_host) > "$TEMP_DIR/sanitized-error" 2>&1; then exit 1; fi
+      grep -q '"code":"snapshot_changed"' "$TEMP_DIR/sanitized-error"
+      ! grep -q 'do-not-print' "$TEMP_DIR/sanitized-error"
+      [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == reconciling ]]
+      ! grep -q 'deployment-control disable' "$CALLS"
+      ! grep -q 'compose .*up ' "$CALLS"
+    else
+      supported_recovery_host
+      [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == complete ]]
+      if [[ "$scenario" == expired-recovery-apply || "$scenario" == expired-recovery-resume ]]; then
+        cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
+        [[ ! -e "$STATE/operation.json" ]]
+        grep -q 'deployment-control disable' "$CALLS"
+        if [[ "$scenario" == expired-recovery-resume ]]; then
+          recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" archived-closed
+          supported_recovery_host
+          cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
+          [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == complete ]]
+        fi
+      else
+        [[ -e "$STATE/recovery-handoff-staging.json" ]]
+        ! grep -q 'deployment-control disable' "$CALLS"
+        [[ "$(grep -c '^recovery apply$' "$CALLS")" == 1 ]]
+        if [[ "$scenario" == candidate-recovery-repeat || "$scenario" == candidate-recovery-resume ]]; then
+          if [[ "$scenario" == candidate-recovery-resume ]]; then
+            recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" reconciling
+            rm "$STATE/recovery-handoff-staging.json"
+            rm -rf "$TEMP_DIR/candidate"
+          fi
+          supported_recovery_host
+          [[ "$(grep -c '^recovery apply$' "$CALLS")" == 1 ]]
+        fi
+      fi
+    fi
+    ;;
   bootstrap-preview|bootstrap-backup-failed|bootstrap-repair|bootstrap-candidate)
     scenario="$1"
     require_root() { :; }

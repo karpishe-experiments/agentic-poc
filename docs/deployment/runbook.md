@@ -15,6 +15,52 @@ those resources or production configuration.
 
 ## Current deployment status
 
+### Supported recovery candidate
+
+The issue #65 supported-recovery implementation is under verification. Installation
+and live execution must be recorded separately; the commands below require the
+matching dispatcher capabilities and application image.
+
+Use **VPS operation control** with `candidate-reconcile` for a granted retained
+completion, or `expired-deployment-recover` for a stopped expired deployment.
+Preview first, retain its digest, then apply the same exact target. The protected
+workflow exposes structured blocker IDs and phases. Inspection failure is not a
+clear work inventory. Use bounded blocker pages instead of copying private logs.
+
+For candidate preview, the workflow's `recovery` input is a JSON object containing
+string fields `run_id`, `operation_id` and `expected_revision`. Supply a new
+`request_id`, reviewed candidate `commit` and immutable `image_digest`. Apply adds
+`preview_digest`, sets `apply=true` and confirms `kids_booklet`. For diagnosis
+only, use `{"inspection_only":"true","page":"0","limit":"5"}` without target
+fields. Pages are zero-based; limit is at most 50. Expired-deployment recovery uses
+`original_request_id` instead of run/operation fields and pins the selected prior
+commit/image. Preview does not create a durable recovery journal; retain its digest
+from the workflow summary. Apply does create one. Use `operation-status` with its
+exact request ID after interruption.
+
+If candidate recovery stopped before committing business changes, use the same
+target and preview digest with `abort_recovery="true"` in the recovery JSON and
+`apply=true`. This requires no active maintenance container. Pre-write phases
+must have no application checkpoint. A `reconciling` phase additionally requires
+the candidate's read-only `verify-unapplied` proof: unchanged business snapshot
+and grant, eligible target and no claims. It restores the prior
+service with admission closed and retains the failed phase as `aborted-closed`.
+Then inspect the cause and preview a new recovery request. It does not reopen
+paid execution or retry a failed backup automatically.
+
+Build a recovery artifact through **Deploy**, selecting the reviewed staging
+delivery branch, `environment=staging` and `recovery_candidate=true`. This only
+builds the immutable image; it does not contact the VPS or update the environment
+alias. Candidate recovery pins this commit/image and rejects migrations. After
+verified completion, deploy the same source tree through the normal reviewed
+staging process. Keep the recovered persona paused until application preflight.
+
+If an action is interrupted, inspect its exact recovery request. A saved completion
+can be verified without replay. Do not repeat an uncertain application mutation,
+clear a blocker or extend an expired original deadline. Expired-deployment recovery
+requires the exact prior release, verified backup and compatibility evidence; it
+does not restore data. Unsupported initializer drift stays blocked.
+
 The issue #65 bounded-recovery candidate is not deployed. Its current work and
 remaining gates are in [M3 current progress](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-progress-and-blockers--2026-10-12).
 The historical status below does not supersede that section.

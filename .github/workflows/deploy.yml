@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment: {description: Target environment, type: choice, options: [staging, prod], required: true}
+      recovery_candidate: {description: 'Build reviewed staging recovery image only; no VPS contact or deployment', type: boolean, default: false}
 permissions: {contents: read, packages: write}
 defaults: {run: {shell: bash}}
 concurrency: {group: kids-booklet-vps-operation, cancel-in-progress: false}
@@ -14,6 +15,7 @@ jobs:
     env:
       TARGET: ${{ inputs.environment || (github.ref_name == '_staging' && 'staging' || 'prod') }}
       GH_TOKEN: ${{ github.token }}
+      RECOVERY_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_candidate == true }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify current branch commit
@@ -27,7 +29,11 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$TARGET" =~ ^(staging|prod)$ ]]
-          test "$GITHUB_REF_NAME" = "_$TARGET"
+          if [[ "$RECOVERY_CANDIDATE" == true ]]; then
+            [[ "$TARGET" == staging && "$GITHUB_REF_NAME" == agent/issue-65-community-probe-staging ]]
+          else
+            test "$GITHUB_REF_NAME" = "_$TARGET"
+          fi
           for name in VPS_HOST DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_HOST_KEY CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
             [[ -n "${!name}" ]] || { printf 'Missing required configuration: %s\n' "$name" >&2; exit 1; }
           done
@@ -43,17 +49,21 @@ jobs:
           set -euo pipefail
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           tag="$TARGET-$GITHUB_SHA"
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          [[ "$tree" =~ ^[a-f0-9]{40}$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.tree.sha)" = "$tree"
           # Only a confirmed manifest absence permits a build; auth/network errors fail.
           if docker buildx imagetools inspect "$image:$tag" > "$RUNNER_TEMP/manifest" 2> "$RUNNER_TEMP/manifest-error"; then
             digest="$(awk '$1=="Digest:" {print $2; exit}' "$RUNNER_TEMP/manifest")"
           else
             grep -Eqi 'manifest unknown|not found' "$RUNNER_TEMP/manifest-error" || { cat "$RUNNER_TEMP/manifest-error"; exit 1; }
-            docker buildx build --push --tag "$image:$tag" --label "org.opencontainers.image.revision=$GITHUB_SHA" --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --metadata-file "$RUNNER_TEMP/image.json" .
+            docker buildx build --push --tag "$image:$tag" --label "org.opencontainers.image.revision=$GITHUB_SHA" --label "uk.co.uniwares.booklet.source-tree=$tree" --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --metadata-file "$RUNNER_TEMP/image.json" .
             digest="$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/image.json")"
           fi
           [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           docker buildx imagetools inspect "$image@$digest" --format '{{json .Image}}' > "$RUNNER_TEMP/image-config.json"
           jq -e --arg sha "$GITHUB_SHA" '.config.Labels["org.opencontainers.image.revision"]==$sha' "$RUNNER_TEMP/image-config.json" >/dev/null || { echo 'Image revision label does not match the immutable commit tag' >&2; exit 1; }
+          jq -e --arg tree "$tree" '.config.Labels["uk.co.uniwares.booklet.source-tree"]==$tree' "$RUNNER_TEMP/image-config.json" >/dev/null || { echo 'Image source tree does not match the reviewed commit' >&2; exit 1; }
           owner="${GITHUB_REPOSITORY%%/*}"
           package="$(jq -rn --arg value "${GITHUB_REPOSITORY#*/}" '$value|@uri')"
           printf 'digest=%s@%s\n' "$image" "$digest" >> "$GITHUB_OUTPUT"
@@ -67,10 +77,12 @@ jobs:
             DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$image@$digest" >/dev/null
           fi
       - uses: ./.github/actions/vps-access
+        if: env.RECOVERY_CANDIDATE != 'true'
         with:
           ssh-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           host-key: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
       - name: Release and verify
+        if: env.RECOVERY_CANDIDATE != 'true'
         id: release
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -82,6 +94,7 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
           bash scripts/deploy/vps-deployment.sh --action deploy --environment "$TARGET" --image-digest "$DIGEST" --commit "$GITHUB_SHA" --request-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --vps-host "$VPS_HOST" --apply 2>&1 | tee "$RUNNER_TEMP/deploy-output.txt"
       - name: Publish successful environment alias
+        if: env.RECOVERY_CANDIDATE != 'true'
         env: {DIGEST: '${{ steps.image.outputs.digest }}', IMAGE: '${{ steps.image.outputs.image }}'}
         run: docker buildx imagetools create --tag "$IMAGE:$TARGET" "$DIGEST"
       - name: Publish deployment summary
@@ -96,6 +109,9 @@ jobs:
             printf "| Environment | Commit | Image digest | Outcome |\n"
             printf "| --- | --- | --- | --- |\n"
             printf "| \`%s\` | \`%s\` | \`%s\` | **%s** |\n\n" "$TARGET" "$GITHUB_SHA" "${DIGEST:-unavailable}" "$OUTCOME"
+            if [[ "$RECOVERY_CANDIDATE" == true ]]; then
+              printf 'Recovery candidate artifact only. No VPS contact, deployment or environment alias update.\n'
+            fi
             if [[ -s "$RUNNER_TEMP/deploy-output.txt" ]]; then
               printf "\`\`\`text\n"
               grep -E "^(exists|verified|created|updated|failed|error|result): " "$RUNNER_TEMP/deploy-output.txt" || true
@@ -105,5 +121,5 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove SSH material
-        if: always()
+        if: always() && env.RECOVERY_CANDIDATE != 'true'
         run: rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

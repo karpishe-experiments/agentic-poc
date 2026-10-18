@@ -4,6 +4,27 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+The supported issue #65 recovery candidate adds a maintenance-only
+`booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
+an exact granted J11 completion through the existing dispatcher with provider
+starts, uploads and stops disabled. Preview fingerprints retained business data
+and authority. Apply rechecks that fingerprint with admission closed. A durable
+host checkpoint precedes reconciliation; a repeated request verifies saved
+completion rather than replaying it. Original deadlines, charges and failure
+history remain unchanged, and the recovered run remains paused.
+Successful operation Inspect/Stop responses retain their run view and add a
+sanitized `recovery` diagnostic. Its code describes saved completion, an existing
+execution to inspect, a required reviewed recovery, or unresolved/conflicting
+evidence. It never grants provider replay or continuation authority.
+
+The staging host can execute this command from an immutable reviewed candidate
+image before normal deployment. The candidate must use the current schema and
+must not require initialization. Host recovery owns admission, backup, process
+quiescence and its journal; application services retain ownership of result
+validation, source/approval checks, materialization and accounting. Read errors
+are distinct from nonzero work counts. Unknown or unsupported state remains
+blocked. This candidate is not evidence of live recovery or production readiness.
+
 J11 manuscript routing covers the complete booklet, including cover-only units;
 unknown units and exact approved sheet tuples remain independent gates. A protected
 M4 `completionRecoveries` grant permits only a named active pre-generation J11

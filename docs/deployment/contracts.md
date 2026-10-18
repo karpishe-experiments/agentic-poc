@@ -2,6 +2,26 @@
 
 ## Ownership
 
+Supported Booklet recovery is staging-only. `candidate-reconcile` runs reviewed
+application recovery from an immutable image without changing the serving release.
+`expired-deployment-recover` uses a separate request linked to the unchanged
+original journal and deadline. Both default to preview and retain closed admission
+after ambiguous mutations. No automatic restore or provider replay is permitted.
+
+The recovery command's private checkpoint stores target identities, hashes,
+phase and preservation evidence; it does not export prompts or credentials.
+Preview has no business writes. Artifact acquisition may populate the Docker
+cache. Candidate apply requires a verified backup, quiet ownership and compatible
+schema; application initialization is not part of recovery. A different normal
+deployment merge commit must have exactly the recovered candidate's Git tree.
+The build verifies that tree against GitHub and records it in the immutable image
+label, alongside the selected commit. Host recovery compares those identities.
+
+Credential-inventory impact: recovery reuses existing staging runtime, Dify
+application and deployment credentials in their existing protected locations.
+It introduces no secret, credential copy or OpenAI-key transfer. Candidate reads
+use existing Dify application credentials; provider execution remains forbidden.
+
 Staging reset previews inventory by default. Apply requires confirmation of
 `kids_booklet`, the exact `kids-booklet-staging-assets` bucket and a completed
 backup covering every bucket object. With prepared runner bindings, the host
