@@ -7,8 +7,17 @@
 
 The user approved replacing repeated manual repair scripts with supported narrow
 operator actions before paid M4 work resumes. Implementation is in progress;
-no live recovery or additional provider call is claimed. The unresolved
-`other-work` preview guard still requires exact-record inspection.
+no live recovery or additional provider call is claimed. Supported inspection
+`39111819466` found only the retained Kid run and J11 operation, with no unrelated
+work or mutation ownership. The reviewed dispatcher was installed with backup
+`/var/lib/kids-booklet/issue65-recovery-dispatcher.tLAD2Xzq/dispatcher.before`.
+Read-only previews `39111874396` and `39114863072` failed with
+`MongoOperationTimeoutError` before admission closure or recovery apply. The
+failing read was not identified. The bounded correction reads the same complete
+preservation evidence in keyset pages and reports the failing inspection phase.
+It does not assert that pagination resolves the live timeout; live readback is
+still required. No dispatcher change, credential change or provider request is
+needed for this correction.
 
 Change-surface forecast: shared sanitized inspection and a maintenance-only
 recovery CLI; staging candidate-image and expired-deployment actions in the
