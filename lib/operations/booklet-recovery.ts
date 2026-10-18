@@ -50,6 +50,23 @@ export async function readRecoveryFingerprints(collection: Collection<{ _id: str
 const omit = (value: object, keys: string[]) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
 const inventoryNames = ["experiment_runs", "experiment_operations", "experiment_campaigns", "experiment_delegations",
   "booklets", "artifacts", "artifact_versions", "artifact_dependencies", "approvals", "assets", "messages"] as const;
+/** Bound concurrency, stop scheduling after failure, and settle every started read. */
+export async function readRecoveryInventory(collections: Pick<Database["collections"], typeof inventoryNames[number]>) {
+  const results: Record<string, string>[] = [];
+  const failures: { index: number; error: unknown }[] = [];
+  let next = 0;
+  const worker = async () => {
+    while (!failures.length && next < inventoryNames.length) {
+      const index = next++; const name = inventoryNames[index];
+      try {
+        results[index] = await inspectStep(`snapshot.${name}`, () => readRecoveryFingerprints(collections[name] as unknown as Collection<{ _id: string }>));
+      } catch (error) { failures.push({ index, error }); }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  if (failures.length) throw failures.sort((a, b) => a.index - b.index)[0].error;
+  return Object.fromEntries(inventoryNames.map((name, index) => [name, results[index]]));
+}
 export type RecoveryTarget = { runId: string; operationId: string; expectedRevision: number };
 export type RecoverySnapshot = {
   rows: Record<string, Record<string, string>>;
@@ -89,11 +106,8 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   }
   async function snapshot(target: RecoveryTarget): Promise<RecoverySnapshot> {
     const { run, op, campaign, booklet } = await inspectStep("snapshot.target_state", () => state(target));
-    const rows: RecoverySnapshot["rows"] = {};
     // Recovery is deliberately infrequent. Hash the retained data without exporting its contents.
-    for (const name of inventoryNames) {
-      rows[name] = await inspectStep(`snapshot.${name}`, () => readRecoveryFingerprints(c[name] as unknown as Collection<{ _id: string }>));
-    }
+    const rows = await readRecoveryInventory(c);
     return { rows, campaignId: campaign._id, bookletId: booklet._id,
       runInvariant: recoveryDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "progressFingerprint", "progressOperationId", "noProgressCount"])),
       operationInvariant: recoveryDigest(omit(op, ["state", "remoteStatus", "lifecycle", "resultFinalizationClaim", "resultJson", "resultDigest", "warningsJson", "materializationJson", "safeFailure", "updatedAtMs", "m4CompletionRecovery"])),
@@ -190,9 +204,17 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     return { verified: true as const, outcome: "completed" as const, accounting: "preserved" as const,
       admission: "closed" as const, runId: target.runId, operationId: target.operationId, providerPosts: 0 };
   }
-  async function apply(target: RecoveryTarget, expectedDigest: string) {
-    requireProof((await preview(target, true)).previewDigest === expectedDigest, "preview_changed");
+  async function apply(target: RecoveryTarget, expectedDigest: string,
+    beforeMutation: (proof: { contract: string; previewDigest: string; snapshot: RecoverySnapshot }) => Promise<void>) {
+    const proof = await preview(target, true);
+    requireProof(proof.previewDigest === expectedDigest, "preview_changed");
+    await beforeMutation(proof);
+    // Checkpoint I/O grants no permission to mutate: repeat currentness and
+    // ownership checks, then use the normal source/approval/accounting services.
+    await eligible(target);
+    await quiet(target, true);
     await createExperimentDispatcher({ database, config, runtime, now, store: deps.store, uploadReference: deny, mutate: deny }).inspect(target);
+    return proof;
   }
   async function verifyUnapplied(target: RecoveryTarget, expectedDigest: string) {
     await eligible(target);

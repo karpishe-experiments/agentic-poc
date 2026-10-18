@@ -24,8 +24,21 @@ the phase is consistent with cumulative budget exhaustion, but does not prove it
 The follow-up retains explicit `OperationBudgetExpired` diagnostics and increases
 bounded pages from 32 to 256. A 600-row unit fixture now needs three requests
 instead of nineteen, with identical complete hashes. The 90-second budget and
-all preservation, grant and accounting gates remain unchanged. Live resolution
-remains unverified.
+all preservation, grant and accounting gates remain unchanged in that correction.
+Preview `39116827001` then reached `remote_observation` and explicitly reported
+`OperationBudgetExpired`, before admission closure or apply. No slow-provider
+diagnosis follows from this: earlier work consumes the same maintenance budget.
+
+The next correction removes duplicate fresh-apply preview work: one service-owned
+preview awaits its durable checkpoint, rechecks current eligibility and closed
+admission, then uses normal reconciliation. Full pre/post proof remains; fresh
+apply needs three snapshots instead of five. Each snapshot reads at most four
+collections concurrently, stopping new scheduling after a failure and settling
+started reads. A deterministic delayed-read fixture completes eleven 10ms reads
+in 30ms instead of 110ms serially; this is local evidence, not live latency.
+The maintenance budget is 150 seconds, leaving 30 seconds within the existing
+180-second host bound for cancellation/shutdown. This changes no persisted provider
+deadline or claim lease. Live resolution remains unverified.
 
 Change-surface forecast: shared sanitized inspection and a maintenance-only
 recovery CLI; staging candidate-image and expired-deployment actions in the
