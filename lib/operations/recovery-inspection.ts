@@ -18,7 +18,10 @@ export type RecoveryInspectionOptions = z.input<typeof optionsSchema>;
 export type RecoveryBlockerCode = "admission_missing" | "admission_invalid" | "active_mutations" | "interrupted_mutations" | "mutation_owners"
   | "generation_jobs" | "generation_items" | "execution_items" | "model_calls" | "card_responses"
   | "runnable_runs" | "preparations" | "unresolved_runs" | "operations";
-export type RecoveryBlocker = { code: RecoveryBlockerCode; count: number; ids: string[]; page: number; limit: number; hasMore: boolean };
+export type RecoveryOperationDetail = { id: string; runId: string; state: string; role: string; taskId: string;
+  claims: { kind: string; expired: boolean | null }[]; hasResult: boolean; hasMaterialization: boolean; hasRecovery: boolean };
+export type RecoveryBlocker = { code: RecoveryBlockerCode; count: number; ids: string[]; page: number; limit: number; hasMore: boolean;
+  operations?: RecoveryOperationDetail[] };
 export type RecoveryAdmission = { maintenance: boolean; draining: boolean; activeMutations: number; interruptedMutations: number; mutationOwnerCount: number; updatedAtMs: number };
 export type RecoveryInspection = {
   schemaVersion: "1"; environment: "_staging"; inspectedAtMs: number;
@@ -28,7 +31,7 @@ export type RecoveryInspection = {
 };
 
 const safeId = (value: unknown) => identifier.safeParse(value).success ? value as string : "unavailable";
-const errorKinds = new Set(["MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError", "MongoServerSelectionError", "AbortError", "TypeError", "Error"]);
+const errorKinds = new Set(["MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError", "MongoServerSelectionError", "AbortError", "OperationBudgetExpired", "TypeError", "Error"]);
 const counter = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
 /** Read-only diagnostics, not an admission grant or an atomic quiescence proof.
@@ -65,8 +68,25 @@ export async function inspectRecoveryWork(context: MongoDatabaseContext, input: 
     const inspect = async (code: RecoveryBlockerCode, collection: Collection<RecoveryRow>, filter: Filter<RecoveryRow>) => {
       stage = code;
       const count = await collection.countDocuments(filter);
-      const rows = count > 0 ? await collection.find(filter, { projection: { _id: 1 } }).sort({ _id: 1 }).skip(page * limit).limit(limit).toArray() : [];
+      const projection = code === "operations" ? { _id: 1, runId: 1, state: 1, role: 1, taskId: 1,
+        "authorizationClaim.expiresAtMs": 1, "resultFinalizationClaim.expiresAtMs": 1, "imageCompletionClaim.expiresAtMs": 1,
+        resultJson: { $type: "$resultJson" }, materializationJson: { $type: "$materializationJson" },
+        m4CompletionRecovery: { $type: "$m4CompletionRecovery" } } : { _id: 1 };
+      const rows = count > 0 ? await collection.find(filter, { projection }).sort({ _id: 1 }).skip(page * limit).limit(limit).toArray() : [];
       add(code, count, rows.map((row) => row._id));
+      if (code === "operations" && count > 0) {
+        const present = (value: unknown) => typeof value === "string" && value !== "missing" && value !== "null";
+        result.blockers.at(-1)!.operations = rows.map(row => ({ id: safeId(row._id), runId: safeId(row.runId),
+          state: ["prepared", "started", "unknown", "succeeded", "failed"].includes(String(row.state)) ? String(row.state) : "unavailable",
+          role: ["manager", "specialist", "tester", "judge", "image"].includes(String(row.role)) ? String(row.role) : "unavailable",
+          taskId: safeId(row.taskId),
+          claims: ["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].flatMap(kind => {
+            const claim = row[kind];
+            if (!claim || typeof claim !== "object") return [];
+            const expires = (claim as { expiresAtMs?: unknown }).expiresAtMs;
+            return [{ kind, expired: counter(expires) ? expires <= result.inspectedAtMs : null }];
+          }), hasResult: present(row.resultJson), hasMaterialization: present(row.materializationJson), hasRecovery: present(row.m4CompletionRecovery) }));
+      }
     };
     const collections = context.collections;
     for (const name of ["generation_jobs", "generation_items", "execution_items", "model_calls"] as const) {

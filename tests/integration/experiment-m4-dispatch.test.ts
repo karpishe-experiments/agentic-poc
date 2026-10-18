@@ -706,7 +706,9 @@ describe("supported recovery Mongo inspection", () => {
     await database.database.collection("experiment_operations").insertMany([
       { _id: "target-op", runId: "target-run", state: "started" },
       { _id: "other-op", runId: "target-run", state: "started" },
-      { _id: "expired-claim", runId: "other-run", state: "failed", resultFinalizationClaim: { expiresAtMs: 1 } },
+      { _id: "expired-claim", runId: "other-run", state: "failed", role: "specialist", taskId: "J11",
+        resultFinalizationClaim: { id: "private-claim", expiresAtMs: 1 }, resultJson: "private-result", materializationJson: null,
+        m4CompletionRecovery: { private: "private-recovery" } },
     ].map((row) => ({ ...row, idempotencyKey: `key-${row._id}` })) as never);
     const report = await inspectRecoveryWork(database, { environment: "_staging", validatedTargets: [{ runId: "target-run", operationId: "target-op" }] });
     expect(report.outcome).toBe("blocked");
@@ -715,6 +717,13 @@ describe("supported recovery Mongo inspection", () => {
       { code: "unresolved_runs", count: 1, ids: ["other-run"] },
       { code: "operations", count: 2, ids: ["expired-claim", "other-op"] },
     ]);
+    expect(report.blockers.find(({ code }) => code === "operations")?.operations).toEqual([
+      { id: "expired-claim", runId: "other-run", state: "failed", role: "specialist", taskId: "J11",
+        claims: [{ kind: "resultFinalizationClaim", expired: true }], hasResult: true, hasMaterialization: false, hasRecovery: true },
+      { id: "other-op", runId: "target-run", state: "started", role: "unavailable", taskId: "unavailable",
+        claims: [], hasResult: false, hasMaterialization: false, hasRecovery: false },
+    ]);
+    expect(JSON.stringify(report)).not.toContain("private");
     const page = await inspectRecoveryWork(database, { environment: "_staging", validatedTargets: [{ runId: "target-run", operationId: "target-op" }], page: 1, limit: 1 });
     expect(page.blockers.find(({ code }) => code === "operations")).toMatchObject({ count: 2, ids: ["other-op"], hasMore: false });
   });
