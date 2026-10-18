@@ -3,6 +3,34 @@
 **State:** The compact J11 correction is deployed. Kid's retained response is complete; Booklet blocks its cover-only manuscript routing after 30 paid text requests and five simulated images. Complete-booklet coverage and exact same-operation completion recovery are being verified. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
+## Supported recovery follow-up - 2026-10-18
+
+The user approved replacing repeated manual repair scripts with supported narrow
+operator actions before paid M4 work resumes. Implementation is in progress;
+no live recovery or additional provider call is claimed. The unresolved
+`other-work` preview guard still requires exact-record inspection.
+
+Change-surface forecast: shared sanitized inspection and a maintenance-only
+recovery CLI; staging candidate-image and expired-deployment actions in the
+existing dispatcher/workflow; an artifact-only path in Deploy; and focused
+application/host tests. Existing materialization, approval and accounting services
+remain authoritative. Public routes, workflow publications, credentials, schema,
+campaign limits and persona counts remain unchanged. Recovery provenance is held
+in protected host checkpoints and existing operation metadata, without migration.
+
+Candidate recovery is limited to an exact granted retained J11 completion. Normal
+Inspect/Stop cover supported uncertain/stopped executions. Unknown identities,
+invalid outputs and unrelated or unsupported bookkeeping remain explicit blockers;
+there is no general record editor. Preview pins retained data and grant identities.
+Apply requires quiescence, a verified backup and the same fingerprint. Interrupted
+application writes are inspected, never automatically replayed. Recovery leaves
+the Kid paused until separate normal delivery and preflight succeed.
+
+Acceptance requires focused fake-provider/real-persistence proof, shell lifecycle
+tests, storage checks, typecheck, focused lint, documentation checks, two clean
+independent reviews and lean CI. Installed capability and live recovery evidence
+remain separate gates. Existing M3 and efficiency evidence remains valid.
+
 ## Authorized same-run continuation - 2026-10-16
 
 The latest user grant permits necessary reviewed corrections, staging delivery and

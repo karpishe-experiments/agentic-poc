@@ -4,6 +4,16 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Separate recovery observation from permission to repeat work
+
+A failed control process does not prove that its database transaction failed.
+Checkpoint the exact target before mutation, then verify saved completion after
+an interrupted response. Keep provider starts unavailable to that recovery path.
+Focused recovery fixtures verify one materialization with unchanged reservation
+and charge evidence after repeated observation. Blocker diagnostics must distinguish
+a database read failure from actual work and identify the bounded set of records.
+Promotion candidate: **Documentation**, after supported live delivery is verified.
+
 ### Validate manuscript coverage at the booklet boundary
 
 Context: real-text J05 supplied an approved cover unit and three story units.
