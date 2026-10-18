@@ -96,17 +96,19 @@ async function main() {
     emit({ ...result, phase, repeated: true }); return;
   }
   if (input.phase !== "apply") throw new BookletRecoveryError("checkpoint_missing");
-  const preview = await service.preview(target, true);
-  if (preview.previewDigest !== input["preview-digest"]) throw new BookletRecoveryError("preview_changed");
-  const checkpoint = { contract: BOOKLET_RECOVERY_CONTRACT, phase: "started", target, previewDigest: preview.previewDigest,
-    snapshotDigest: recoveryDigest(preview.snapshot), snapshot: preview.snapshot };
-  await saveCheckpoint(checkpointPath, checkpoint, true);
-  await service.apply(target, preview.previewDigest);
+  const preview = await service.apply(target, input["preview-digest"], async proof => {
+    const checkpoint = { contract: BOOKLET_RECOVERY_CONTRACT, phase: "started", target, previewDigest: proof.previewDigest,
+      snapshotDigest: recoveryDigest(proof.snapshot), snapshot: proof.snapshot };
+    await saveCheckpoint(checkpointPath, checkpoint, true);
+  });
   const result = await service.verifyCompleted(target, preview.snapshot);
-  await saveCheckpoint(checkpointPath, { ...checkpoint, phase: "completed" }, false);
+  await saveCheckpoint(checkpointPath, { contract: BOOKLET_RECOVERY_CONTRACT, phase: "completed", target, previewDigest: preview.previewDigest,
+    snapshotDigest: recoveryDigest(preview.snapshot), snapshot: preview.snapshot }, false);
   emit({ ...result, phase, repeated: false });
 }
-await withOperationBudget(Date.now() + 90_000, main).catch(async error => {
+// This maintenance budget is separate from persisted provider deadlines. Keep
+// 30 seconds inside the host's 180-second bound for cancellation and shutdown.
+await withOperationBudget(Date.now() + 150_000, main).catch(async error => {
   if (error instanceof BookletRecoveryError && error.code === "other_work" && database) {
     // No exclusions: show all identities for diagnosis, including the target.
     emit(await inspectRecoveryWork(database, { environment: "_staging" }).catch(() => ({ outcome: "inspection_error" })));

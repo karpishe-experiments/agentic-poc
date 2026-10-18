@@ -520,7 +520,9 @@ describe("focused J11 retained completion recovery", () => {
     const changed = await env.service.preview(env.target, true);
     expect(changed.previewDigest).not.toBe(before.previewDigest);
     await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
-    await expect(env.service.apply(env.target, before.previewDigest)).rejects.toThrow("preview_changed");
+    const checkpoint = vi.fn();
+    await expect(env.service.apply(env.target, before.previewDigest, checkpoint)).rejects.toThrow("preview_changed");
+    expect(checkpoint).not.toHaveBeenCalled();
     expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
     expect(env.runtime.start).toHaveBeenCalledTimes(calls);
     await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $inc: { revision: 1 } });
@@ -549,6 +551,19 @@ describe("focused J11 retained completion recovery", () => {
     } finally { read.mockRestore(); }
   }, 120_000);
 
+  it("supported recovery rechecks revision after its durable checkpoint", async () => {
+    const env = await supportedRecovery();
+    const proof = await env.service.preview(env.target);
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    await expect(env.service.apply(env.target, proof.previewDigest, async () => {
+      await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $inc: { revision: 1 } });
+    })).rejects.toThrow("revision_changed");
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
+    expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+  }, 120_000);
+
   it("supported recovery preserves charges and bytes, then verifies duplicate completion without provider dispatch", async () => {
     const env = await supportedRecovery();
     // Cross page boundaries with historical rows using the real MongoDB cursor.
@@ -562,8 +577,15 @@ describe("focused J11 retained completion recovery", () => {
     const bytes = [...env.store.files.entries()];
     await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
     await env.service.preview(env.target, true);
-    await env.service.apply(env.target, before.previewDigest);
+    const assetReads = vi.spyOn(env.database.collections.assets, "find");
+    const checkpoint = vi.fn(async proof => { expect(proof.snapshot).toEqual(before.snapshot); });
+    const applied = await env.service.apply(env.target, before.previewDigest, checkpoint);
+    expect(applied.snapshot).toEqual(before.snapshot);
+    expect(checkpoint).toHaveBeenCalledOnce();
     expect(await env.service.verifyCompleted(env.target, before.snapshot)).toMatchObject({ verified: true, outcome: "completed", accounting: "preserved", admission: "closed", providerPosts: 0 });
+    // Two pre-write snapshots and one post-write snapshot, three pages each.
+    expect(assetReads.mock.calls.filter(([, options]) => options?.batchSize === 256)).toHaveLength(9);
+    assetReads.mockRestore();
     const savedRun = await env.repository.getRun(env.runId);
     const savedOperation = await env.repository.getOperation(env.operation._id);
     const getsAfterCommit = vi.mocked(env.runtime.retrieve).mock.calls.length;

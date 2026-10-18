@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   files: new Map<string, string>(), events: [] as string[],
+  mutationError: undefined as Error | undefined,
   preview: vi.fn(), apply: vi.fn(), verify: vi.fn(), verifyUnapplied: vi.fn(), close: vi.fn(), inspect: vi.fn(),
 }));
 vi.mock("@/db/client", () => ({ getDatabase: () => ({ close: mocks.close,
@@ -40,9 +41,16 @@ function argumentsFor(phase: string) {
     "--expected-revision", "2", "--preview-digest", digest, "--evidence-dir", "/recovery"];
 }
 beforeEach(() => {
-  vi.resetModules(); vi.clearAllMocks(); mocks.files.clear(); mocks.events.length = 0; process.exitCode = 0;
+  vi.resetModules(); vi.clearAllMocks(); mocks.files.clear(); mocks.events.length = 0; mocks.mutationError = undefined; process.exitCode = 0;
   mocks.preview.mockResolvedValue({ contract: "booklet-recovery-v1", previewDigest: digest, snapshot: { rows: {} } });
-  mocks.apply.mockImplementation(async () => { mocks.events.push("apply"); });
+  mocks.apply.mockImplementation(async (_target, expectedDigest, beforeMutation) => {
+    const proof = await mocks.preview();
+    if (proof.previewDigest !== expectedDigest) throw new Error("preview_changed");
+    await beforeMutation(proof);
+    mocks.events.push("apply");
+    if (mocks.mutationError) throw mocks.mutationError;
+    return proof;
+  });
   mocks.verify.mockResolvedValue({ verified: true, outcome: "completed" });
   mocks.verifyUnapplied.mockResolvedValue({ verified: true, outcome: "unapplied", admission: "closed", providerPosts: 0 });
   mocks.inspect.mockResolvedValue({ outcome: "clear" });
@@ -61,7 +69,7 @@ describe("supported booklet recovery command", () => {
     expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toMatchObject({
       verified: false, phase: "preview", stage: "snapshot.experiment_operations", errorKind: "MongoOperationTimeoutError", outcome: "blocked",
     });
-    expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+    expect(mocks.files.size).toBe(0); expect(mocks.events).not.toContain("apply"); expect(process.exitCode).toBe(1);
   });
   it("durably checkpoints before mutation and returns a duplicate without replay", async () => {
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
@@ -71,7 +79,7 @@ describe("supported booklet recovery command", () => {
     expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).toHaveBeenCalledTimes(2);
   });
   it("does not replay an uncertain mutation or falsely complete its checkpoint", async () => {
-    mocks.apply.mockRejectedValueOnce(new Error("private details"));
+    mocks.mutationError = new Error("private details");
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
     expect(JSON.parse(mocks.files.get("/recovery/application-recovery.json")!).phase).toBe("started");
     mocks.verify.mockRejectedValueOnce(new Error("not committed"));
@@ -88,7 +96,7 @@ describe("supported booklet recovery command", () => {
     expect(mocks.events.length).toBe(writes); expect(mocks.apply).toHaveBeenCalledOnce();
   });
   it("proves an interrupted apply stayed unapplied without replay or checkpoint mutation", async () => {
-    mocks.apply.mockRejectedValueOnce(new Error("pre-write failure"));
+    mocks.mutationError = new Error("pre-write failure");
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
     const checkpoint = mocks.files.get("/recovery/application-recovery.json");
     expect(JSON.parse(checkpoint!).phase).toBe("started");
@@ -105,7 +113,7 @@ describe("supported booklet recovery command", () => {
   it("rejects changed preview before writing a checkpoint", async () => {
     mocks.preview.mockResolvedValueOnce({ previewDigest: "b".repeat(64) });
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
-    expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+    expect(mocks.files.size).toBe(0); expect(mocks.events).not.toContain("apply"); expect(process.exitCode).toBe(1);
   });
   it("rejects mismatched or corrupt checkpoint without mutation", async () => {
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
