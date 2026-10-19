@@ -166,15 +166,21 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
       "remote_evidence_changed");
     return result;
   }
-  async function preparePreview(target: RecoveryTarget, closed: boolean) {
+  async function preparePreview(target: RecoveryTarget, closed: boolean, expectedDigest?: string) {
     await inspectStep("catalog", () => verifyMongoStructure(database));
     await inspectStep("eligibility", () => eligible(target));
     await quiet(target, closed);
-    const before = await snapshot(target);
+    // A fresh preview must prove stability across the GET. Apply already pins
+    // that complete snapshot in expectedDigest, so compare one fresh post-GET
+    // snapshot to it rather than scanning the same inventory twice again.
+    const before = expectedDigest === undefined ? await snapshot(target) : undefined;
     const observed = await inspectStep("remote_observation", () => observe(target));
     await quiet(target, closed);
-    requireProof(recoveryDigest(await snapshot(target)) === recoveryDigest(before), "state_changed");
-    return { proof: { contract: BOOKLET_RECOVERY_CONTRACT, previewDigest: recoveryDigest({ target, snapshot: before, grant: authority(target) }), snapshot: before }, observed };
+    const after = await snapshot(target);
+    if (before) requireProof(recoveryDigest(after) === recoveryDigest(before), "state_changed");
+    const proof = { contract: BOOKLET_RECOVERY_CONTRACT, previewDigest: recoveryDigest({ target, snapshot: after, grant: authority(target) }), snapshot: after };
+    if (expectedDigest !== undefined) requireProof(proof.previewDigest === expectedDigest, "preview_changed");
+    return { proof, observed };
   }
   async function preview(target: RecoveryTarget, closed = false) {
     // The authenticated response stays private to this invocation, never in a receipt.
@@ -223,8 +229,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   }
   async function apply(target: RecoveryTarget, expectedDigest: string,
     beforeMutation: (proof: { contract: string; previewDigest: string; snapshot: RecoverySnapshot }) => Promise<void>) {
-    const { proof, observed } = await preparePreview(target, true);
-    requireProof(proof.previewDigest === expectedDigest, "preview_changed");
+    const { proof, observed } = await preparePreview(target, true, expectedDigest);
     await beforeMutation(proof);
     // Checkpoint I/O grants no permission to mutate: repeat currentness and
     // ownership checks, then use the normal source/approval/accounting services.

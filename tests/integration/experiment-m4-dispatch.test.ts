@@ -547,6 +547,31 @@ describe("focused J11 retained completion recovery", () => {
     expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
   }, 120_000);
 
+  it.each(["foreign_asset", "approval", "grant"])("pinned apply rejects %s changes during its authenticated GET before checkpoint", async fault => {
+    const env = await supportedRecovery();
+    const proof = await env.service.preview(env.target);
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const originalGet = vi.mocked(env.runtime.retrieve).getMockImplementation()!;
+    vi.mocked(env.runtime.retrieve).mockImplementationOnce(async (...args) => {
+      const result = await originalGet(...args);
+      if (fault === "foreign_asset") {
+        const asset = (await env.database.collections.assets.findOne({}))!;
+        await env.database.collections.assets.updateOne({ _id: asset._id }, { $set: { metadataJson: '{"proofDrift":true}' } });
+      }
+      if (fault === "approval") {
+        const source = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J05" }))!;
+        await env.database.collections.approvals.deleteOne({ artifactVersionId: source.currentVersionId! });
+      }
+      if (fault === "grant") env.recoveryAuthority.grant.completionRecoveries[0].reference = "changed-during-read";
+      return result;
+    });
+    const checkpoint = vi.fn();
+    await expect(env.service.apply(env.target, proof.previewDigest, checkpoint)).rejects.toThrow("preview_changed");
+    expect(checkpoint).not.toHaveBeenCalled();
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
+  }, 120_000);
+
   it.each(["source", "approval", "budget"])("maintenance recovery rejects post-checkpoint %s drift without completion", async fault => {
     const env = await supportedRecovery();
     const proof = await env.service.preview(env.target);
@@ -877,8 +902,9 @@ describe("focused J11 retained completion recovery", () => {
     expect(applied.snapshot).toEqual(before.snapshot);
     expect(checkpoint).toHaveBeenCalledOnce();
     expect(await env.service.verifyCompleted(env.target, before.snapshot)).toMatchObject({ verified: true, outcome: "completed", accounting: "preserved", admission: "closed", providerPosts: 0 });
-    // Two pre-write snapshots and one post-write snapshot, three pages each.
-    expect(assetReads.mock.calls.filter(([, options]) => options?.batchSize === 256)).toHaveLength(9);
+    // One complete post-GET snapshot against pinned preview and one post-write
+    // verification snapshot, three pages each. No preservation rows omitted.
+    expect(assetReads.mock.calls.filter(([, options]) => options?.batchSize === 256)).toHaveLength(6);
     assetReads.mockRestore();
     const savedRun = await env.repository.getRun(env.runId);
     const savedOperation = await env.repository.getOperation(env.operation._id);
