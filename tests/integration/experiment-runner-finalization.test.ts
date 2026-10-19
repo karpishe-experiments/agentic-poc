@@ -3,6 +3,7 @@ import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { materializeNarrativeResult } from "@/db/experiment-narrative";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { OperationBudgetExpired, withOperationBudget } from "@/lib/operations/budget";
 
 vi.mock("@/db/experiment-narrative", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/db/experiment-narrative")>();
@@ -34,6 +35,38 @@ async function setup(claimImmediately = true, elapsedNow?: () => number) {
   parentWorkflowRunId: null, nowMs: 5 };
   return { repository, completion, claim };
 }
+
+it.each([false, true])("cleans only owned authorization after cancellation (successor=%s)", async successor => {
+  const { repository, claim } = await setup(false);
+  const controller = new AbortController();
+  const ops = database!.collections.experiment_operations;
+  vi.spyOn(ops, "findOne").mockImplementationOnce(async () => {
+    if (successor) await ops.updateOne({ _id: operationId }, { $set: { authorizationClaim: { id: "successor", expiresAtMs: 999 } } });
+    const error = new OperationBudgetExpired(); controller.abort(error); throw error;
+  });
+  await expect(withOperationBudget(Date.now() + 60_000, () => repository.claimOperation(claim), { signal: controller.signal }))
+    .rejects.toBeInstanceOf(OperationBudgetExpired);
+  vi.restoreAllMocks();
+  const operation = (await repository.getOperation(operationId))!;
+  expect(operation.authorizationClaim?.id ?? null).toBe(successor ? "successor" : null);
+  expect(operation.reservationCount).toBe(0);
+  expect((await repository.getRun(runId))!.counters.steps).toBe(0);
+});
+
+it.each(["authorization", "completion"] as const)("cleans the owned %s lease when acquisition acknowledgement is lost", async phase => {
+  const { repository, claim, completion } = await setup(phase === "completion");
+  const ops = database!.collections.experiment_operations;
+  const update = ops.findOneAndUpdate.bind(ops);
+  const failure = Object.assign(new Error("private acknowledgement"), { name: "MongoNetworkError" });
+  vi.spyOn(ops, "findOneAndUpdate").mockImplementationOnce(async (...args) => { await update(...args); throw failure; });
+  await expect(phase === "authorization" ? repository.claimOperation(claim) : repository.completeOperation(completion)).rejects.toBe(failure);
+  vi.restoreAllMocks();
+  const operation = (await repository.getOperation(operationId))!;
+  expect(operation.authorizationClaim ?? null).toBeNull();
+  expect(operation.resultFinalizationClaim ?? null).toBeNull();
+  expect(operation.reservationCount).toBe(phase === "authorization" ? 0 : 1);
+  expect(operation.resultJson).toBeNull();
+});
 
 it("does not repeat authorization when observation overlaps the claim transaction", async () => {
   const { repository, claim } = await setup(false);

@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+import { MongoServerError } from "mongodb";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
@@ -10,10 +11,11 @@ import { MAX_EXPERIMENT_IMAGE_BYTES, validateExperimentImage } from "@/lib/exper
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
+import { OperationBudgetExpired, withOperationBudget } from "@/lib/operations/budget";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const databases: Database[] = [];
-afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
+afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 class MemoryStore implements AssetStore {
   public readonly files = new Map<string, Uint8Array>();
@@ -53,6 +55,75 @@ async function setup(options: { skipPrepare?: boolean } = {}) {
 }
 
 describe("experiment image storage", () => {
+  it.each([false, true])("cleans its image claim after cancelled storage without clearing a successor (%s)", async successor => {
+    const env = await setup(); await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const controller = new AbortController();
+    env.store.afterPut = async () => {
+      if (successor) await env.database.collections.experiment_operations.updateOne({ _id: env.operationId }, { $set: {
+        imageCompletionClaim: { id: id(999), digest: (await validateExperimentImage(env.bytes)).sha256, expiresAtMs: 1000 } } });
+      controller.abort(new OperationBudgetExpired());
+    };
+    await expect(withOperationBudget(Date.now() + 60_000,
+      () => env.storage().complete({ identity: env.identity, content: env.bytes }), { signal: controller.signal }))
+      .rejects.toBeInstanceOf(OperationBudgetExpired);
+    const operation = await env.repository.getOperation(env.operationId);
+    expect(operation?.imageCompletionClaim?.id ?? null).toBe(successor ? id(999) : null);
+    expect(operation).toMatchObject({ state: "started", reservationCount: 1, resultJson: null });
+    expect(env.store.files.size).toBe(1);
+    expect(await env.database.collections.assets.countDocuments()).toBe(0);
+    expect((await env.repository.getRun(env.runId))?.counters).toMatchObject({ logicalImage: 1, payableImage: 0 });
+  });
+
+  it("cleans the image claim when its post-claim run read fails and preserves the original error", async () => {
+    const env = await setup(); await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const failure = new Error("private post-claim read failure");
+    const runs = env.database.collections.experiment_runs;
+    const original = runs.findOne.bind(runs);
+    const find = vi.spyOn(runs, "findOne").mockImplementation(async (filter, options) => {
+      if (!options?.session) throw failure;
+      return original(filter, options);
+    });
+    await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toBe(failure);
+    find.mockRestore();
+    expect((await env.repository.getOperation(env.operationId))?.imageCompletionClaim).toBeNull();
+    expect(env.store.files.size).toBe(0);
+    expect(await env.database.collections.assets.countDocuments()).toBe(0);
+  });
+
+  it("cleans the image claim after finalization rollback while preserving original bytes and error", async () => {
+    const env = await setup(); await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const failure = new Error("private image finalization failure");
+    vi.spyOn(env.database.collections.assets, "insertOne").mockRejectedValueOnce(failure);
+    await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toBe(failure);
+    const operation = await env.repository.getOperation(env.operationId);
+    expect(operation).toMatchObject({ state: "started", imageCompletionClaim: null, reservationCount: 1, resultJson: null });
+    expect(operation?.imageCompletionDigest).toBe((await validateExperimentImage(env.bytes)).sha256);
+    expect([...env.store.files.values()]).toEqual([Uint8Array.from(env.bytes)]);
+    expect(await env.database.collections.assets.countDocuments()).toBe(0);
+  });
+
+  it.each(["claim", "finalization"] as const)("preserves image state when the %s commit response is lost", async phase => {
+    const env = await setup(); await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });
+    const failure = new MongoServerError({ message: "private lost image commit response", code: 91 });
+    const start = env.database.client.startSession.bind(env.database.client);
+    let commits = 0;
+    vi.spyOn(env.database.client, "startSession").mockImplementation(options => {
+      const session = start(options);
+      const commit = session.commitTransaction.bind(session);
+      vi.spyOn(session, "commitTransaction").mockImplementation(async () => {
+        await commit(); if (++commits === (phase === "claim" ? 2 : 3)) throw failure;
+      });
+      return session;
+    });
+    await expect(env.storage().complete({ identity: env.identity, content: env.bytes })).rejects.toBe(failure);
+    expect(await env.repository.getOperation(env.operationId)).toMatchObject({ state: phase === "claim" ? "started" : "succeeded", imageCompletionClaim: null, reservationCount: 1 });
+    expect(await env.database.collections.assets.countDocuments()).toBe(phase === "claim" ? 0 : 1);
+    expect((await env.repository.getRun(env.runId))?.counters).toMatchObject({ logicalImage: 1, payableImage: 0 });
+    expect((await env.storage().complete({ identity: env.identity, content: env.bytes })).reused).toBe(phase === "finalization");
+    expect(env.store.files.size).toBe(1);
+    expect(await env.database.collections.assets.countDocuments()).toBe(1);
+  });
+
   it("accepts a late Balanced synthetic upload for the same retained unknown claim", async () => {
     const env = await setup();
     await env.repository.claimOperation({ ...env.claimIdentity, nowMs: 3 });

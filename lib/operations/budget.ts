@@ -51,6 +51,12 @@ export function remainingOperationMs(maximum = 30_000): number {
 
 export function operationSignal(): AbortSignal | undefined { return budgets.getStore()?.signal; }
 
+/** Diagnostics report the actual inherited bound, or null outside a request. */
+export function operationBudgetRemainingMs(): number | null {
+  const budget = budgets.getStore();
+  return budget ? budget.signal.aborted ? 0 : Math.max(0, budget.deadlineAtMs - budget.now()) : null;
+}
+
 /** Cleanup has its own short bound; it cannot renew the work's execution lease. */
 export function withCleanupBudget<T>(operation: () => Promise<T>): Promise<T> {
   return budgets.exit(() => withOperationBudget(Date.now() + 5_000, operation));

@@ -5,6 +5,16 @@
 
 ## Supported recovery follow-up - 2026-10-18
 
+**Current implementation follow-up - 2026-10-19:** PR #211 is merged and its
+staging candidate build/lean CI passed; it is not installed. The approved combined
+bundle adds authorization/image cleanup under cancellation, separates committed
+completion from progress errors, preserves original sanitized failure diagnostics,
+and closes related host inspection/reentry/receipt gaps. Focused failure fixtures
+replace another persona campaign. The original transaction cause remains unproven;
+measure the inherited 20-second Inspect budget rather than increasing timeouts.
+One combined reviewed dispatcher/candidate handoff precedes supported recovery.
+No live recovery, deployment or paid request is claimed by these local changes.
+
 **Current live state:** recovery request `issue65-m4-j11-20261018-v4` is interrupted
 at reconciliation. Staging admission remains closed and its serving application
 is stopped. Preview `39117877394` passed; apply `39118151943` failed during the

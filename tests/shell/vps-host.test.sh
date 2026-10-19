@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -47,6 +47,58 @@ verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
+  recovery-inspection-failure)
+    docker() { return 124; }
+    if (recovery_no_containers -q); then exit 1; fi
+    ! grep -q 'maintenance' "$CALLS"
+    ;;
+  recovery-fingerprint-*)
+    printf '{}' > "$SECRETS/staging/secrets.json"
+    current="$STATE/releases/staging/old"
+    if command -v cygpath >/dev/null; then current="$(cygpath -m "$current")"; fi
+    journal="$TEMP_DIR/fingerprint.json"
+    fingerprint="$(recovery_host_fingerprint "$current")"
+    preview_backup=''
+    [[ "$1" != recovery-fingerprint-legacy-explicit ]] || preview_backup="original-custom-backup"
+    digest="$(printf '%s\n' "$fingerprint" candidate-reconcile request "$current" prior-image commit candidate-image run operation 212 app-proof '' "$preview_backup" tree | sha256sum | awk '{print $1}')"
+    jq -n --arg prior "$current" --arg digest "$digest" '{action:"candidate-reconcile",requestId:"request",priorRelease:$prior,priorImage:"prior-image",commit:"commit",image:"candidate-image",runId:"run",operationId:"operation",expectedRevision:"212",appPreviewDigest:"app-proof",originalJournalSha256:"",backupId:"overwritten-backup",sourceTree:"tree",previewDigest:$digest}' > "$journal"
+    if [[ "$1" == recovery-fingerprint-new ]]; then
+      jq --arg fingerprint "$fingerprint" '.hostFingerprint=$fingerprint | .previewBackupId=""' "$journal" > "$journal.next"; mv "$journal.next" "$journal"
+    fi
+    BACKUP_ID="$preview_backup"
+    recovery_verify_fingerprint "$journal" "$current"
+    if [[ "$1" == recovery-fingerprint-new ]]; then
+      for file in "$CONFIG_FILE" "$SECRETS/staging/secrets.json" "$current/manifest.sha256"; do
+        cp "$file" "$TEMP_DIR/fingerprint-original"
+        printf 'changed' >> "$file"
+        if (recovery_verify_fingerprint "$journal" "$current"); then exit 1; fi
+        cp "$TEMP_DIR/fingerprint-original" "$file"
+      done
+    fi
+    if [[ "$1" == recovery-fingerprint-drift ]]; then
+      printf 'changed' >> "$CONFIG_FILE"
+      if (recovery_verify_fingerprint "$journal" "$current"); then exit 1; fi
+    fi
+    if [[ "$1" == recovery-fingerprint-legacy-explicit ]]; then
+      BACKUP_ID=wrong
+      if (recovery_verify_fingerprint "$journal" "$current"); then exit 1; fi
+    fi
+    ;;
+  recovery-historical-child)
+    REQUEST_ID=child ORIGINAL_REQUEST_ID=parent RUN_ID=run OPERATION_ID=op EXPECTED_REVISION=212 APPLY=false
+    mkdir -p "$STATE/recoveries/parent" "$STATE/recoveries/child"
+    parent="$STATE/recoveries/parent/application-recovery.json"; journal="$STATE/recoveries/child/host.json"
+    printf '{"target":{"expectedRevision":212}}' > "$parent"
+    hash="$(sha256sum "$parent" | awk '{print $1}')"
+    jq -n --arg hash "$hash" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" '{requestId:"child",originalRequestId:"parent",action:"candidate-reconcile",purpose:"release-expired-claim",environment:"staging",commit:$commit,image:$image,runId:"run",operationId:"op",phase:"complete",parentCheckpointSha256:$hash}' > "$journal"
+    printf '{"phase":"aborted-closed"}' > "$STATE/recoveries/parent/host.json"
+    docker() { return 1; }; maintenance() { return 1; }
+    recovery_child_receipt "$journal" | jq -e '.historical==true and .phase=="complete"'
+    EXPECTED_REVISION=213
+    if (recovery_child_receipt "$journal"); then exit 1; fi
+    EXPECTED_REVISION=212; RUN_ID=wrong
+    if (recovery_child_receipt "$journal"); then exit 1; fi
+    ;;
   claim-release-mount)
     RECOVERY_ORIGINAL_EVIDENCE="$TEMP_DIR/original"
     recovery_oneoff "$STATE/releases/staging/old" "$TEMP_DIR/child" verify-claim-release
@@ -124,7 +176,7 @@ case "$1" in
         [[ "$(jq -r .phase "$child/host.json")" == aborted-closed ]]
         recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"
         ABORT_RECOVERY=false
-        if (recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json"); then exit 1; fi
+        recovery_release_expired_claim "$current" "$IMAGE_DIGEST" "$child" "$child/host.json" | jq -e 'select(.historical==true)'
       fi
       [[ "$(grep -c '^apply-claim-release$' "$CALLS")" == 1 ]]
       [[ "$(sha256sum "$parent/host.json" "$parent/application-recovery.json")" == "$parent_before" ]]
@@ -211,7 +263,7 @@ LEGACY_CLAIMS
         capabilities) printf '{"contract":"booklet-recovery-v1","environment":"_staging","schemaVersion":"1","initializationRequired":false}\n';;
         preview) printf '{"verified":true,"previewDigest":"%064d"}\n' 1;;
         verify-unapplied) if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then printf '{"verified":false,"phase":"verify-unapplied","code":"snapshot_changed"}\n'; return 1; fi; printf '{"verified":true,"outcome":"unapplied","providerPosts":0}\n';;
-        apply) if [[ "$scenario" == candidate-recovery-unapplied-* ]]; then printf '{"phase":"started","retained":"original"}\n' > "$2/application-recovery.json"; return 1; fi; if [[ "$scenario" == candidate-recovery-failure ]]; then printf '{"verified":false,"phase":"apply","code":"snapshot_changed","privateMessage":"do-not-print"}\n'; return 1; fi; printf '{"verified":true}\n';;
+        apply) if [[ "$scenario" == candidate-recovery-unapplied-* ]]; then printf '{"phase":"started","retained":"original"}\n' > "$2/application-recovery.json"; return 1; fi; if [[ "$scenario" == candidate-recovery-failure ]]; then printf '{"verified":false,"phase":"apply","code":"snapshot_changed","stage":"snapshot_verification","errorKind":"operation_budget_expired","elapsedMs":149000,"remainingBudgetMs":1000,"cleanupOutcome":"verified","commitState":"not_started","privateMessage":"do-not-print"}\n'; return 1; fi; printf '{"verified":true}\n';;
         *) printf '{"verified":true}\n';;
       esac
     }
@@ -280,16 +332,23 @@ LEGACY_CLAIMS
       if (supported_recovery_host) > "$TEMP_DIR/sanitized-error" 2>&1; then exit 1; fi
       grep -q '"code":"snapshot_changed"' "$TEMP_DIR/sanitized-error"
       ! grep -q 'do-not-print' "$TEMP_DIR/sanitized-error"
+      jq -Rse '[split("\n")[] | fromjson? | select(.code=="snapshot_changed")] | length==1 and (.[0] | .stage=="snapshot_verification" and .errorKind=="operation_budget_expired" and .elapsedMs==149000 and .remainingBudgetMs==1000 and .cleanupOutcome=="verified" and .commitState=="not_started" and (has("privateMessage")|not))' "$TEMP_DIR/sanitized-error" >/dev/null
       [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == reconciling ]]
       ! grep -q 'deployment-control disable' "$CALLS"
       ! grep -q 'compose .*up ' "$CALLS"
     else
       supported_recovery_host
       [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == complete ]]
-      if [[ "$scenario" == expired-recovery-apply || "$scenario" == expired-recovery-resume ]]; then
+      if [[ "$scenario" == expired-recovery-apply || "$scenario" == expired-recovery-resume || "$scenario" == expired-recovery-prepared ]]; then
         cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
         [[ ! -e "$STATE/operation.json" ]]
         grep -q 'deployment-control disable' "$CALLS"
+        if [[ "$scenario" == expired-recovery-prepared ]]; then
+          cp "$TEMP_DIR/original.json" "$STATE/operation.json"
+          recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" prepared
+          supported_recovery_host
+          cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
+        fi
         if [[ "$scenario" == expired-recovery-resume ]]; then
           recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" archived-closed
           supported_recovery_host

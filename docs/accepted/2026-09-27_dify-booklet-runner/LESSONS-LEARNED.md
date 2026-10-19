@@ -625,3 +625,17 @@ independent cross-field/persona validation. Preserve failed output and account f
 its charge; do not silently clamp geometry or discard panels. Evidence: retained
 Dify execution `e45b4b23-797b-4992-9f3f-eab7b1bb81bf` and focused J11 request/output
 regressions. Promotion target: structured-generation and bounded repair guidance.
+
+### Persona completion does not prove failure-boundary coverage
+
+Context: Balanced reconciliation and operator recovery added paths that successful
+Simulated persona runs did not exercise. Cancellation can also disable cleanup;
+a lost commit reply or later progress-read failure does not prove failed completion.
+Test each ownership and durable-write boundary with the actual budget wrapper,
+fake providers and real persistence. Inject failures before and after commit and
+journal checkpoints; assert retained accounting and no replay. Keep diagnostic
+projections explicit because typed identity objects can carry extra runtime fields.
+Review the complete path through progress reads, preparation expiry and terminal
+bookkeeping; terminal state must take precedence over lease-expiry classification.
+Evidence: completion/finalization/image persistence fixtures and mocked host
+reentry scenarios. Promotion target: focused failure-test and diagnostic guidance.

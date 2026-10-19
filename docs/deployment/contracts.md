@@ -2,6 +2,20 @@
 
 ## Ownership
 
+Recovery inspections check command success before interpreting empty container
+lists. New generic journals retain `hostFingerprint` and `previewBackupId` separately
+from the actual backup ID. Every mutating reentry, including abort, verifies the
+original fingerprint. Legacy candidate journals test the original digest with an
+empty, saved or explicitly supplied original preview backup ID; expired journals
+use their retained backup. An exact digest match is required; otherwise report
+`legacy_preview_fingerprint_unverified` without mutation. No current state is adopted.
+Expired `prepared` recovery repeats stopped-process/container, original-journal,
+backup and compatibility checks before restoration; it never repeats initialization.
+Terminal child receipts validate request/target/candidate/revision and return
+`historical: true` without application reads or lifecycle changes. Old child
+revisions come from their hash-verified original checkpoint. Nonterminal paths
+retain current parent and configuration checks.
+
 Supported Booklet recovery is staging-only. `candidate-reconcile` runs reviewed
 application recovery from an immutable image without changing the serving release.
 `expired-deployment-recover` uses a separate request linked to the unchanged
