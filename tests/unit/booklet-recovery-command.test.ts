@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   files: new Map<string, string>(), events: [] as string[],
   mutationError: undefined as Error | undefined,
+  budgetError: undefined as Error | undefined,
   preview: vi.fn(), apply: vi.fn(), verify: vi.fn(), verifyUnapplied: vi.fn(), close: vi.fn(), inspect: vi.fn(),
   previewClaim: vi.fn(), applyClaim: vi.fn(), verifyClaim: vi.fn(),
 }));
@@ -14,7 +15,10 @@ vi.mock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => 
 vi.mock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true }) }));
 vi.mock("@/db/setup", () => ({ verifyMongoStructure: vi.fn() }));
 vi.mock("@/db/verify", () => ({ verifyExperimentData: vi.fn(), verifyMongoData: vi.fn() }));
-vi.mock("@/lib/operations/budget", () => ({ withOperationBudget: async (_deadline: number, action: () => unknown) => action() }));
+vi.mock("@/lib/operations/budget", () => ({ withOperationBudget: async (_deadline: number, action: () => unknown) => {
+  if (mocks.budgetError) throw mocks.budgetError;
+  return action();
+} }));
 vi.mock("@/lib/operations/recovery-inspection", () => ({ inspectRecoveryWork: mocks.inspect }));
 vi.mock("@/lib/operations/booklet-recovery", async () => {
   const { createHash } = await import("node:crypto");
@@ -114,6 +118,14 @@ describe("supported booklet recovery command", () => {
       verified: false, phase: "preview", stage: "snapshot.experiment_operations", errorKind: "MongoOperationTimeoutError", outcome: "blocked",
     });
     expect(mocks.files.size).toBe(0); expect(mocks.events).not.toContain("apply"); expect(process.exitCode).toBe(1);
+  });
+  it("reports a direct outer-budget expiry instead of generic Error", async () => {
+    mocks.budgetError = Object.assign(new Error("private budget detail"), { name: "OperationBudgetExpired" });
+    try {
+      argumentsFor("preview"); await import("@/scripts/booklet-recovery");
+      expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toMatchObject({ errorKind: "OperationBudgetExpired", outcome: "blocked" });
+      expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain("private");
+    } finally { mocks.budgetError = undefined; }
   });
   it("durably checkpoints before mutation and returns a duplicate without replay", async () => {
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");

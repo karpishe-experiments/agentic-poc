@@ -557,6 +557,44 @@ bootstrap_ready_for_deploy() {
 }
 # Recovery artifacts are separate from the original lifecycle journal. The
 # request ID is an idempotency key, never permission to repeat an uncertain write.
+recovery_no_containers() {
+  local ids
+  ids="$(timeout 10s docker ps "$@")" || die 'Recovery container inspection failed'
+  [[ -z "$ids" ]]
+}
+recovery_host_fingerprint() {
+  sha256sum "$1/manifest.sha256" "$SECRETS/staging/secrets.json" "$CONFIG_FILE" | sha256sum | awk '{print $1}'
+}
+recovery_verify_fingerprint() {
+  local journal="$1" current="$2" supplied="$BACKUP_ID" fingerprint backup digest
+  fingerprint="$(recovery_host_fingerprint "$current")" || die 'Recovery fingerprint inspection failed'
+  if jq -e 'has("hostFingerprint") and has("previewBackupId")' "$journal" >/dev/null; then
+    [[ "$(jq -er .hostFingerprint "$journal")" == "$fingerprint" ]] || die 'Recovery configuration changed'
+    return 0
+  fi
+  # Legacy candidate journals overwrite backupId after backup. Only a digest
+  # match proves the original value; never adopt today's protected files.
+  local -a backups=("$(jq -r '.backupId // ""' "$journal")")
+  if [[ "$(jq -er .action "$journal")" == candidate-reconcile ]]; then backups+=("" "$supplied"); fi
+  for backup in "${backups[@]}"; do
+    digest="$(printf '%s\n' "$fingerprint" "$(jq -r .action "$journal")" "$(jq -r .requestId "$journal")" "$(jq -r .priorRelease "$journal")" "$(jq -r .priorImage "$journal")" "$(jq -r .commit "$journal")" "$(jq -r .image "$journal")" "$(jq -r .runId "$journal")" "$(jq -r .operationId "$journal")" "$(jq -r .expectedRevision "$journal")" "$(jq -r .appPreviewDigest "$journal")" "$(jq -r .originalJournalSha256 "$journal")" "$backup" "$(jq -r .sourceTree "$journal")" | sha256sum | awk '{print $1}')"
+    [[ "$digest" != "$(jq -er .previewDigest "$journal")" ]] || return 0
+  done
+  die 'legacy_preview_fingerprint_unverified'
+}
+recovery_child_receipt() {
+  local journal="$1" parent="$STATE/recoveries/$ORIGINAL_REQUEST_ID/application-recovery.json" revision
+  [[ -f "$journal" && ! -L "$journal" ]] || return 1
+  [[ "$(jq -r .phase "$journal")" =~ ^(complete|aborted-closed)$ ]] || return 1
+  jq -e --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg run "$RUN_ID" --arg op "$OPERATION_ID" '
+    .requestId==$id and .originalRequestId==$original and .action=="candidate-reconcile" and .purpose=="release-expired-claim" and .environment=="staging" and .commit==$commit and .image==$image and .runId==$run and .operationId==$op' "$journal" >/dev/null || die 'Historical child identity differs'
+  [[ -f "$parent" && ! -L "$parent" && "$(sha256sum "$parent" | awk '{print $1}')" == "$(jq -er .parentCheckpointSha256 "$journal")" ]] || die 'Original checkpoint differs'
+  revision="$(jq -r '.expectedRevision // empty' "$journal")"
+  [[ -n "$revision" ]] || revision="$(jq -er .target.expectedRevision "$parent")"
+  [[ "$EXPECTED_REVISION" == "$revision" ]] || die 'Historical child revision differs'
+  if [[ "$APPLY" == true ]]; then [[ "$PREVIEW_DIGEST" == "$(jq -er .previewDigest "$journal")" ]] || die 'Historical child preview differs'; fi
+  jq -c '{requestId,action,purpose,phase,environment,commit,image,runId,operationId,originalRequestId,backupId,previewDigest,historical:true}' "$journal"
+}
 recovery_phase() {
   local path="$1" phase="$2"
   jq --arg phase "$phase" '.phase=$phase' "$path" > "$path.next"
@@ -605,7 +643,7 @@ recovery_app_json() {
   local release="$1" evidence="$2" phase="$3" output="$4"; shift 4
   if ! recovery_oneoff "$release" "$evidence" "$phase" "$@" > "$output" 2> "$output.stderr"; then
     # Never print arbitrary provider errors or private maintenance logs.
-    jq -Rc 'fromjson? | select(type=="object") | {environment:"_staging",verified,phase,stage,outcome,code:(if (.code|type)=="string" and (.code|test("^[a-z0-9_]{1,80}$")) then .code else null end),blockers,inspectionError,errorKind,observedCount,blockerIds}' "$output" || true
+    jq -Rc 'fromjson? | select(type=="object") | {environment:"_staging",verified,phase,stage,outcome,code:(if (.code|type)=="string" and (.code|test("^[a-z0-9_]{1,80}$")) then .code else null end),blockers,inspectionError,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,observedCount,blockerIds}' "$output" || true
     die "Recovery $phase failed; inspect private evidence; no automatic replay"
   fi
   jq -se 'length==1 and (.[0]|type=="object") and (.[0].verified==true)' "$output" >/dev/null || die 'Recovery result is missing or malformed'
@@ -624,14 +662,14 @@ expired_recovery_finish() {
   local current="$1" candidate="$2" evidence="$3" journal="$4" old_hash
   old_hash="$(jq -er .originalJournalSha256 "$journal")"
   [[ "$(timeout 10s systemctl show "kids-booklet-operation-$ORIGINAL_REQUEST_ID.service" --property=ActiveState --value)" =~ ^(inactive|failed)$ ]] || die 'Original deployment process is not stopped'
-  [[ -z "$(timeout 10s docker ps -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID")" ]] || die 'Original owned containers remain'
+  recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original owned containers remain'
   [[ ! -e "$STATE/operation.json" || "$(sha256sum "$STATE/operation.json" | awk '{print $1}')" == "$old_hash" ]] || die 'Original journal changed'
   [[ ! -e "$STATE/operations/$ORIGINAL_REQUEST_ID.json" || "$(sha256sum "$STATE/operations/$ORIGINAL_REQUEST_ID.json" | awk '{print $1}')" == "$old_hash" ]] || die 'Original journal archive changed'
   [[ -e "$STATE/operation.json" || -e "$STATE/operations/$ORIGINAL_REQUEST_ID.json" ]] || die 'Original journal evidence is missing'
   # The prior service may already have restarted before the client disconnected.
   local ids id expected
   expected="$(jq -er .services.app.image "$current/image.json")"
-  ids="$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging)"
+  ids="$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging)" || die 'Recovery container inspection failed'
   if [[ -n "$ids" ]]; then
     [[ "$ids" =~ ^[a-f0-9]{12,64}$ ]] || die 'Unexpected staging containers remain'
     id="$ids"
@@ -670,6 +708,7 @@ recovery_unresolved_guard() {
 recovery_release_expired_claim() {
   local current="$1" image="$2" evidence="$3" journal="$4" parent="$STATE/recoveries/$ORIGINAL_REQUEST_ID"
   local parent_hash checkpoint_hash parent_image candidate tree app_digest digest binding_hash phase container_ids
+  if recovery_child_receipt "$journal"; then return 0; fi
   [[ ! -e "$STATE/operation.json" && ! -e "$STATE/recovery-handoff-staging.json" ]] || die 'Host operation or handoff remains'
   container_ids="$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging)" || die 'Claim release container inspection failed'
   [[ -z "$container_ids" ]] || die 'Claim release requires the serving application and all maintenance containers stopped'
@@ -739,8 +778,8 @@ recovery_release_expired_claim() {
     [[ "$APPLY" == true ]] || return 0
     [[ "$PREVIEW_DIGEST" == "$digest" ]] || die 'Claim preview changed'
     mkdir "$evidence"; chmod 700 "$evidence"
-    jq -n --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg parent "$parent_hash" --arg checkpoint "$checkpoint_hash" --arg binding "$binding_hash" --arg tree "$tree" --arg digest "$digest" --arg appDigest "$app_digest" --arg run "$RUN_ID" --arg op "$OPERATION_ID" --arg backup "$BACKUP_ID" --arg prior "$current" '
-      {requestId:$id,action:"candidate-reconcile",priorRelease:$prior,purpose:"release-expired-claim",environment:"staging",phase:"releasing-claim",originalRequestId:$original,commit:$commit,image:$image,parentJournalSha256:$parent,parentCheckpointSha256:$checkpoint,bindingHash:$binding,sourceTree:$tree,previewDigest:$digest,appPreviewDigest:$appDigest,runId:$run,operationId:$op,backupId:$backup}' > "$journal"
+    jq -n --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg parent "$parent_hash" --arg checkpoint "$checkpoint_hash" --arg binding "$binding_hash" --arg tree "$tree" --arg digest "$digest" --arg appDigest "$app_digest" --arg run "$RUN_ID" --arg op "$OPERATION_ID" --arg backup "$BACKUP_ID" --arg prior "$current" --arg revision "$EXPECTED_REVISION" '
+      {requestId:$id,expectedRevision:$revision,action:"candidate-reconcile",priorRelease:$prior,purpose:"release-expired-claim",environment:"staging",phase:"releasing-claim",originalRequestId:$original,commit:$commit,image:$image,parentJournalSha256:$parent,parentCheckpointSha256:$checkpoint,bindingHash:$binding,sourceTree:$tree,previewDigest:$digest,appPreviewDigest:$appDigest,runId:$run,operationId:$op,backupId:$backup}' > "$journal"
     recovery_app_json "$candidate" "$evidence" apply-claim-release "$evidence/applied.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest" --evidence-dir /recovery
     recovery_app_json "$candidate" "$evidence" verify-claim-release "$evidence/verified.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest" --evidence-dir /recovery
   fi
@@ -752,10 +791,11 @@ supported_recovery_host() (
   require_root
   dify_diagnostic_identity
   exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+  if [[ "$RELEASE_EXPIRED_CLAIM" == true ]] && recovery_child_receipt "$STATE/recoveries/$REQUEST_ID/host.json"; then return 0; fi
   if [[ "$INSPECTION_ONLY" == false ]]; then
     if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_unresolved_guard "$REQUEST_ID" "$ORIGINAL_REQUEST_ID"; else recovery_unresolved_guard "$REQUEST_ID"; fi
   fi
-  [[ -z "$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.oneoff=True)" ]] || die 'Staging maintenance container remains active; inspect its owning request, do not replay'
+  recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.oneoff=True || die 'Staging maintenance container remains active; inspect its owning request, do not replay'
   local CONTROL_DEADLINE_SECONDS=$((SECONDS + 2520)) current image candidate evidence journal digest app_digest='' old_hash='' failed_image='' host_fingerprint source_tree='' prior_schema failed_schema
   read -r current < "$STATE/releases/staging/current"
   [[ "$current" =~ ^$STATE/releases/staging/[a-f0-9]{40}$ && ! -L "$current" ]] || die 'Selected staging release is invalid'
@@ -769,6 +809,7 @@ supported_recovery_host() (
       '.action==$action and .commit==$commit and .image==$image and .runId==$run and .operationId==$operation and .originalRequestId==$original' "$journal" >/dev/null || die 'Recovery request ID belongs to another target'
     recovery_result "$journal"
     if [[ "$(jq -r .phase "$journal")" =~ ^(complete|aborted-closed)$ ]]; then return 0; fi
+    if [[ "$APPLY" == true ]]; then recovery_verify_fingerprint "$journal" "$current"; fi
     if [[ "$ABORT_RECOVERY" == true ]]; then
       [[ "$PREVIEW_DIGEST" == "$(jq -er .previewDigest "$journal")" && "$EXPECTED_REVISION" == "$(jq -er .expectedRevision "$journal")" && "$current" == "$(jq -er .priorRelease "$journal")" && "$image" == "$(jq -er .priorImage "$journal")" ]] || die 'Abort recovery identity changed'
       local abort_phase interrupted_phase
@@ -799,8 +840,18 @@ supported_recovery_host() (
       return 0
     fi
     [[ "$APPLY" == true ]] || return 0
-    if [[ "$ACTION" == expired-deployment-recover && "$(jq -r .phase "$journal")" =~ ^(restoring-closed|archived-closed)$ ]]; then
+    if [[ "$ACTION" == expired-deployment-recover && "$(jq -r .phase "$journal")" =~ ^(prepared|restoring-closed|archived-closed)$ ]]; then
       [[ "$PREVIEW_DIGEST" == "$(jq -er .previewDigest "$journal")" && "$current" == "$(jq -er .priorRelease "$journal")" && "$image" == "$IMAGE_DIGEST" ]] || die 'Expired recovery identity changed'
+      if [[ "$(jq -r .phase "$journal")" == prepared ]]; then
+        [[ -f "$STATE/operation.json" && "$(sha256sum "$STATE/operation.json" | awk '{print $1}')" == "$(jq -er .originalJournalSha256 "$journal")" ]] || die 'Original prepared journal changed'
+        [[ "$(timeout 10s systemctl show "kids-booklet-operation-$ORIGINAL_REQUEST_ID.service" --property=ActiveState --value)" =~ ^(inactive|failed)$ ]] || die 'Original process remains active or unknown'
+        recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original owned containers remain'
+        recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging || die 'Staging containers remain active'
+        failed_image="$(jq -er .image "$STATE/operation.json")"
+        prior_schema="$(recovery_schema_digest "$image")" || die 'Prior schema inspection failed'
+        failed_schema="$(recovery_schema_digest "$failed_image")" || die 'Failed candidate schema inspection failed'
+        [[ "$prior_schema" =~ ^[a-f0-9]{64}$ && "$prior_schema" == "$failed_schema" ]] || die 'Initializer or schema changed'
+      fi
       BACKUP_ID="$(jq -er .backupId "$journal")"
       (REQUEST_ID=''; maintenance "$current" recovery verify) > "$evidence/resume-backup.log" 2>&1 || die 'Retained backup verification failed'
       trap 'status=$?; if [[ "$status" != 0 ]]; then (REQUEST_ID=""; CONTROL_DEADLINE_SECONDS=$((SECONDS + 120)); maintenance "$current" deployment-control enable recovery > "$evidence/fail-closed.log" 2>&1) || printf "error: Recovery admission closure is unverified\n" >&2; fi; cleanup' EXIT
@@ -856,8 +907,8 @@ supported_recovery_host() (
     jq -e --arg id "$ORIGINAL_REQUEST_ID" --arg prior "$current" --argjson now "$(date +%s)" \
       '.requestId==$id and .action=="deploy" and .environment=="staging" and .priorRelease==$prior and .budgetDeadlineAtSeconds<$now and (.step|IN("draining","stopping","backup","initializing"))' "$STATE/operation.json" >/dev/null || die 'Original deployment is not eligible'
     [[ "$(timeout 10s systemctl show "kids-booklet-operation-$ORIGINAL_REQUEST_ID.service" --property=ActiveState --value)" =~ ^(inactive|failed)$ ]] || die 'Original deployment service remains active or unknown'
-    [[ -z "$(timeout 10s docker ps -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID")" ]] || die 'Original owned maintenance containers remain'
-    [[ -z "$(timeout 10s docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging)" ]] || die 'Staging containers remain active'
+    recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original owned maintenance containers remain'
+    recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging || die 'Staging containers remain active'
     old_hash="$(sha256sum "$STATE/operation.json" | awk '{print $1}')"
     BACKUP_ID="$(jq -er .backupId "$STATE/operation.json")"
     [[ "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Verified backup identity required'
@@ -871,14 +922,14 @@ supported_recovery_host() (
     # Independent read-only backup proof does not inherit the expired deadline.
     (REQUEST_ID=''; maintenance "$current" recovery verify) > "$TEMP_DIR/backup.json" 2> "$TEMP_DIR/backup.stderr" || die 'Backup verification failed; inspect before recovery'
   fi
-  host_fingerprint="$(sha256sum "$current/manifest.sha256" "$SECRETS/staging/secrets.json" "$CONFIG_FILE" | sha256sum | awk '{print $1}')"
+  host_fingerprint="$(recovery_host_fingerprint "$current")"
   digest="$(printf '%s\n' "$host_fingerprint" "$ACTION" "$REQUEST_ID" "$current" "$image" "$COMMIT" "$IMAGE_DIGEST" "$RUN_ID" "$OPERATION_ID" "$EXPECTED_REVISION" "$app_digest" "$old_hash" "$BACKUP_ID" "$source_tree" | sha256sum | awk '{print $1}')"
   printf 'result: recovery preview request=%s action=%s digest=%s\n' "$REQUEST_ID" "$ACTION" "$digest"
   [[ "$APPLY" == true ]] || return 0
   [[ "$PREVIEW_DIGEST" == "$digest" ]] || die 'Recovery preview changed; obtain a fresh preview'
   mkdir -p "$STATE/recoveries"; mkdir "$evidence"; chmod 700 "$evidence"
-  jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" \
-    '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage}' > "$journal"
+  jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" --arg fingerprint "$host_fingerprint" --arg previewBackup "$BACKUP_ID" \
+    '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage,hostFingerprint:$fingerprint,previewBackupId:$previewBackup}' > "$journal"
   cp "$TEMP_DIR/"*.json "$evidence/"
   # An uncertain admission reopen must be closed again. Cleanup has its own
   # bounded budget; it cannot continue business recovery or alter old journals.

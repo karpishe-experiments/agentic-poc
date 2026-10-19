@@ -11,10 +11,12 @@ import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-ru
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
+import { CompletionReconciliationError } from "@/lib/operations/completion-failure";
 
 export const BOOKLET_RECOVERY_CONTRACT = "booklet-recovery-v1";
 export class BookletRecoveryError extends Error {
-  constructor(public readonly code: string, public readonly stage?: string, public readonly errorKind?: string) { super(code); }
+  constructor(public readonly code: string, public readonly stage?: string, public readonly errorKind?: string,
+    public readonly diagnostic?: Pick<CompletionReconciliationError["diagnostic"], "elapsedMs" | "remainingBudgetMs" | "cleanupOutcome" | "commitState">) { super(code); }
 }
 function requireProof(value: unknown, code: string): asserts value {
   if (!value) throw new BookletRecoveryError(code);
@@ -25,6 +27,10 @@ async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<
   try { return await action(); }
   catch (error) {
     if (error instanceof BookletRecoveryError) throw error;
+    if (error instanceof CompletionReconciliationError) {
+      const { code, stage: completionStage, errorKind, ...diagnostic } = error.diagnostic;
+      throw new BookletRecoveryError(code, completionStage, errorKind, diagnostic);
+    }
     if (error instanceof ExperimentRepositoryError) throw new BookletRecoveryError(`repository_${error.code}`, stage, "ExperimentRepositoryError");
     const kind = error instanceof Error && inspectionErrorKinds.has(error.name) ? error.name : "Error";
     throw new BookletRecoveryError("inspection_or_verification_failed", stage, kind);

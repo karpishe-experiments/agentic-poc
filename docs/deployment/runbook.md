@@ -60,6 +60,19 @@ For an interrupted child that has not released its claim, explicitly add
 the saved application digest before the child can become `aborted-closed`.
 It does not restore the service, reopen admission or change parent evidence.
 Changed claims or committed release reject abort; inspect or verify the outcome.
+Repeated terminal child requests return a historical receipt even after the
+parent advances. This proves the saved recovery outcome, not current admission or
+database state. Check current status separately before another action.
+
+Mutating reentry requires unchanged host configuration fingerprints. For an old
+candidate journal, the dispatcher reconstructs its original digest with bounded
+backup-ID candidates. If the original preview used a custom backup ID later
+replaced by the actual recovery backup, supply that original non-secret value
+through the existing `backup_id` input. A mismatch returns
+`legacy_preview_fingerprint_unverified`; retain the evidence and inspect the
+original invocation. Do not adopt new configuration or edit the journal.
+Expired recovery can continue from `prepared` only after repeating its original
+process, container, journal, backup and compatibility checks.
 
 Build a recovery artifact through **Deploy**, selecting the reviewed staging
 delivery branch, `environment=staging` and `recovery_candidate=true`. This only

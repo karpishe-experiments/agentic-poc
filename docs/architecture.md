@@ -4,6 +4,25 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Balanced completion separates the durable transaction from progress observation.
+A failed acknowledgement uses bounded, read-only verification of the exact saved
+result, materialization marker and accounting before classification. Progress
+failure cannot invalidate a committed result. Only explicit invalid-result/input
+rejection can create a definite completion blocker; transient database failures
+remain uncertain. Failure writes recheck the target identity and active ownership
+transactionally. Existing progress verification still precedes new dispatch.
+Transient scheduling reads without an admitted operation retain uncertainty.
+Expired preparation is inspectable and idempotent for both current and former
+owners. Terminal states and definite blockers take precedence over expiry;
+completed preparation bookkeeping can clear only after exact ownership and
+terminal, claim-free operation evidence are established.
+Authorization, text and image ownership cleanup use the independent five-second
+cleanup budget and exact claim identity, including lost claim acknowledgements.
+Image cleanup covers every post-claim exit and preserves original bytes/digest.
+Sanitized failure diagnostics retain the original stage, error kind, repository
+code, timing, remaining budget and cleanup outcome. The nested Inspect budget is
+measured; this correction does not extend deadlines or leases.
+
 The supported issue #65 recovery candidate adds a maintenance-only
 `booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
 an exact granted J11 completion through the existing dispatcher with provider
@@ -49,6 +68,11 @@ quiescence and its journal; application services retain ownership of result
 validation, source/approval checks, materialization and accounting. Read errors
 are distinct from nonzero work counts. Unknown or unsupported state remains
 blocked. This candidate is not evidence of live recovery or production readiness.
+Recovery journals retain immutable host fingerprints and preview backup identities.
+Mutating reentry verifies those pins; legacy journals must reproduce their original
+preview digest. Expired recovery supports interruption at `prepared`. Terminal
+child receipts are historical results after exact identity validation, independent
+of later parent progress; they do not assert current database state.
 
 J11 manuscript routing covers the complete booklet, including cover-only units;
 unknown units and exact approved sheet tuples remain independent gates. A protected
