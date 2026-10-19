@@ -27,12 +27,16 @@ indexed pages of at most 100 rows. Every existing integrity check and collection
 row remains covered. Saved outputs, prompts and preparation payloads are excluded
 from these reads. A failed read emits a fixed phase, collection, allowlisted error
 kind, elapsed time and completed-row count, then preserves the original error.
-No timeout, schema, initializer compatibility fingerprint, dispatcher or credential
-changes are included. Local fixtures verify pagination and final-page corruption;
+The related host correction pins and archives a completed recovery handoff only
+after expired-deployment compatibility/readiness pass. This avoids pinning the next
+corrective release to the failed candidate tree. Original journals/deadlines and
+saved results stay unchanged. No timeout, schema, initializer compatibility
+fingerprint or credential changes are included. Local fixtures verify pagination and final-page corruption;
 this is not proof of live latency or of the exact collection that timed out.
 
 Next: finish focused validation and two clean reviews, publish the correction,
-recover the expired delivery through supported controls, deploy normally and
+install the reviewed dispatcher correction, recover the expired delivery through
+supported controls, deploy normally and
 verify release/admission. Then explicitly Resume the same Kid run and continue
 Parent and Creator within the existing conditional $5 and no-successor limits.
 

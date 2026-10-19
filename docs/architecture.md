@@ -10,6 +10,11 @@ and reference checks without loading saved prompts, results or preparation data.
 Read failures preserve the original exception and emit sanitized collection/phase
 diagnostics. Page reads retain the existing operation and driver budgets; this
 does not increase a deployment deadline or change stored records.
+Expired-deployment recovery also pins any completed candidate-recovery handoff.
+It archives that exact handoff only after prior-release compatibility and readiness
+pass, preserving the original recovery and deployment evidence. This separates
+successful saved-result recovery from a later corrective release after failed
+initialization.
 
 Balanced completion separates the durable transaction from progress observation.
 A failed acknowledgement uses bounded, read-only verification of the exact saved
