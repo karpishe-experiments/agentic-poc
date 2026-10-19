@@ -151,9 +151,10 @@ await withOperationBudget(Date.now() + 150_000, main).catch(async error => {
     emit(await inspectRecoveryWork(database, { environment: "_staging" }).catch(() => ({ outcome: "inspection_error" })));
   }
   const errorKind = error instanceof BookletRecoveryError && error.errorKind ? error.errorKind
-    : ["MongoOperationTimeoutError", "MongoServerError", "AbortError"].includes(error?.name) ? error.name : "Error";
+    : ["MongoOperationTimeoutError", "MongoServerError", "AbortError", "OperationBudgetExpired"].includes(error?.name) ? error.name : "Error";
   emit({ verified: false, phase, code: error instanceof BookletRecoveryError ? error.code : "inspection_or_verification_failed", errorKind,
     ...(error instanceof BookletRecoveryError && error.stage ? { stage: error.stage } : {}),
+    ...(error instanceof BookletRecoveryError && error.diagnostic ? error.diagnostic : {}),
     outcome: ["apply", "verify-completed", "apply-claim-release", "verify-claim-release"].includes(phase) ? "requires_inspection" : "blocked", providerPosts: 0 });
   process.exitCode = 1;
 }).finally(async () => { await database?.close(); });

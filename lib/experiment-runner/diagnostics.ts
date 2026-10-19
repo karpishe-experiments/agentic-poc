@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import { budgetRemaining } from "@/lib/operations/completion-failure";
 
 type Identity = { runId: string; operationId?: string };
 type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number };
@@ -8,6 +9,7 @@ const current = new AsyncLocalStorage<Counters>();
 export type DiagnosticEvent = Identity & Counters & {
   event: "booklet_callback_phase"; timestamp: string; phase: string;
   elapsedMs: number; outcome: "succeeded" | "failed";
+  budgetAtStartMs: number | null; remainingBudgetMs: number | null;
 };
 type DiagnosticBuffer = { startedAt: string; dropped: number; events: DiagnosticEvent[] };
 // Next.js can bundle the handler and runner separately within the same process.
@@ -46,6 +48,7 @@ export function diagnosticAssetStore(store: AssetStore): AssetStore {
 // counters cover instrumented verification work, not all application queries.
 export async function measurePhase<T>(identity: Identity, phase: string, work: () => Promise<T>): Promise<T> {
   const start = performance.now();
+  const budgetAtStartMs = budgetRemaining();
   const counters = { queryCount: 0, storageCallCount: 0, transactionAttempts: 0 };
   let outcome: DiagnosticEvent["outcome"] = "failed";
   try {
@@ -61,7 +64,7 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
     }
     const event: DiagnosticEvent = { event: "booklet_callback_phase", timestamp: new Date().toISOString(), runId: identity.runId,
       ...(identity.operationId ? { operationId: identity.operationId } : {}), phase,
-      elapsedMs: Math.round(performance.now() - start), ...counters, outcome };
+      elapsedMs: Math.round(performance.now() - start), budgetAtStartMs, remainingBudgetMs: budgetRemaining(), ...counters, outcome };
     buffer.events.push(event);
     if (buffer.events.length > 5000) { buffer.events.shift(); buffer.dropped++; }
     console.info(JSON.stringify(event));

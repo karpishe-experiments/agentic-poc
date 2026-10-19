@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { withMongoTransaction, type Database } from "@/db/client";
-import { createExperimentRepository } from "@/db/experiment-repository";
+import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
@@ -497,6 +497,158 @@ describe("focused J11 retained completion recovery", () => {
       runtime: env.runtime, store: () => env.store, now: env.now });
     return { ...env, service, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
   }
+
+  it.each(["progress", "lost_commit", "transaction_unknown", "validation", "validation_secondary"] as const)(
+    "classifies completion %s without replay or invalidating committed output", async fault => {
+      const env = await blockedCompletion();
+      await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { status: "running", safeFailure: null } });
+      await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { state: "active" } });
+      const before = (await env.repository.getRun(env.runId))!;
+      const calls = vi.mocked(env.runtime.start).mock.calls.length;
+      const error = fault.startsWith("validation") ? new ExperimentRepositoryError("invalid_result", "private invalid output")
+        : Object.assign(new Error("private database failure"), { name: "MongoOperationTimeoutError" });
+      const ops = env.database.collections.experiment_operations;
+      const update = ops.findOneAndUpdate.bind(ops);
+      let armed = false, committed = false;
+      vi.spyOn(ops, "findOneAndUpdate").mockImplementation(async (...args) => {
+        if ((args[1] as { $set?: { state?: string } }).$set?.state === "succeeded") {
+          if (fault === "transaction_unknown" || fault.startsWith("validation")) throw error;
+          armed = true;
+        }
+        return update(...args);
+      });
+      const start = env.database.client.startSession.bind(env.database.client);
+      vi.spyOn(env.database.client, "startSession").mockImplementation(options => {
+        const session = start(options); const commit = session.commitTransaction.bind(session);
+        vi.spyOn(session, "commitTransaction").mockImplementation(async () => {
+          await commit(); if (armed) { armed = false; committed = true; if (fault === "lost_commit") throw error; }
+        });
+        return session;
+      });
+      const runs = env.database.collections.experiment_runs;
+      const read = runs.findOne.bind(runs), write = runs.updateOne.bind(runs);
+      vi.spyOn(runs, "findOne").mockImplementation(async (...args) => {
+        if (fault === "progress" && committed && !args[1]?.session) { committed = false; throw error; }
+        return read(...args);
+      });
+      vi.spyOn(runs, "updateOne").mockImplementation(async (...args) => {
+        if (fault === "validation_secondary" && (args[1] as { $set?: { safeFailure?: string } }).$set?.safeFailure === "definite_failure") {
+          throw new Error("private secondary write failure");
+        }
+        return write(...args);
+      });
+      const inspector = createExperimentDispatcher({ database: env.database, config: env.config, runtime: env.runtime,
+        now: env.now, store: () => env.store, mutate: async action => action() });
+      const observed = inspector.inspect({ runId: env.runId, operationId: env.operation._id });
+      if (fault === "lost_commit") await expect(observed).resolves.toMatchObject({ state: "succeeded" });
+      else await expect(observed).rejects.toMatchObject({ diagnostic: { stage: fault === "progress" ? "completion_progress" : "completion_transaction",
+        code: fault.startsWith("validation") ? "repository_invalid_result" : "completion_failed",
+        commitState: fault === "progress" ? "committed" : "uncommitted" } });
+      vi.restoreAllMocks();
+      const saved = (await env.repository.getOperation(env.operation._id))!;
+      const run = (await env.repository.getRun(env.runId))!;
+      expect(run.counters).toEqual(before.counters);
+      expect(saved.m4Reservation).toEqual(env.operation.m4Reservation);
+      expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+      if (fault === "progress" || fault === "lost_commit") {
+        expect(saved).toMatchObject({ state: "succeeded", resultFinalizationClaim: null });
+        expect(run.safeFailure).toBeNull();
+        expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: saved._id })).toBe(1);
+        expect(await env.repository.blockCompletionFailure(env.input())).toBe(false);
+        if (fault === "progress") {
+          const versions = env.database.collections.artifact_versions;
+          const find = versions.find.bind(versions);
+          const retry = vi.spyOn(versions, "find").mockImplementation((...args) => {
+            if (args[1]?.projection?.versionNumber === 1 && args[1]?.projection?.artifactId === 1) throw error;
+            return find(...args);
+          });
+          expect(await inspector.advance(env.runId)).toBe("waiting");
+          retry.mockRestore();
+          expect((await env.repository.getRun(env.runId))!.safeFailure).toBeNull();
+          expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+          const operations = env.database.collections.experiment_operations;
+          const readOperation = operations.findOne.bind(operations);
+          let preProgressFailed = false;
+          const preProgress = vi.spyOn(operations, "findOne").mockImplementation(async (...args) => {
+            if (args[1]?.sort && !(args[0] as { _id?: string })._id) { preProgressFailed = true; throw error; }
+            return readOperation(...args);
+          });
+          expect(await inspector.advance(env.runId)).toBe("waiting");
+          expect(preProgressFailed).toBe(true);
+          preProgress.mockRestore();
+          const runCollection = env.database.collections.experiment_runs;
+          const updateRun = runCollection.findOneAndUpdate.bind(runCollection);
+          const readRun = runCollection.findOne.bind(runCollection);
+          let progressSaved = false, postProgressFailed = false;
+          const progressWrite = vi.spyOn(runCollection, "findOneAndUpdate").mockImplementation(async (...args) => {
+            const result = await updateRun(...args);
+            if ((args[1] as { $set?: { progressOperationId?: string } }).$set?.progressOperationId === saved._id) progressSaved = true;
+            return result;
+          });
+          const postProgress = vi.spyOn(runCollection, "findOne").mockImplementation(async (...args) => {
+            if (progressSaved && !args[1]?.session) { progressSaved = false; postProgressFailed = true; throw error; }
+            return readRun(...args);
+          });
+          expect(await inspector.advance(env.runId)).toBe("waiting");
+          expect(postProgressFailed).toBe(true);
+          progressWrite.mockRestore(); postProgress.mockRestore();
+          expect((await env.repository.getRun(env.runId))!.safeFailure).toBeNull();
+          expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+        }
+      } else {
+        expect(saved).toMatchObject({ state: fault === "transaction_unknown" ? "unknown" : "started", resultJson: null, resultFinalizationClaim: null });
+        expect(run.safeFailure).toBe(fault === "validation" ? "definite_failure" : fault === "transaction_unknown" ? "unknown_outcome" : null);
+      }
+      expect((await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!.state).toBe(["validation", "transaction_unknown"].includes(fault) ? "stopped" : "active");
+      if (fault === "progress") {
+        const preparation = (await env.repository.getRun(env.runId))!.preparation!;
+        expect(preparation).not.toBeNull();
+        while (env.now() <= preparation.deadlineAtMs) env.tick();
+        expect(await inspector.advance(env.runId)).toBe("blocked");
+        expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome",
+          preparation: { unresolved: true, outcome: "failed", deadlineAtMs: preparation.deadlineAtMs } });
+        expect((await env.repository.getOperation(saved._id))!.state).toBe("succeeded");
+        expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+        const expired = await env.repository.getRun(env.runId);
+        expect(await inspector.advance(env.runId)).toBe("blocked");
+        expect(await env.repository.getRun(env.runId)).toEqual(expired);
+        await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { safeFailure: "definite_failure" } });
+        const definite = await env.repository.getRun(env.runId);
+        expect(await inspector.advance(env.runId)).toBe("blocked");
+        expect(await env.repository.getRun(env.runId)).toEqual(definite);
+        // Reproduce terminal commit followed by lost preparation-cleanup reply.
+        await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: {
+          status: "completed", safeFailure: null, generationCompletedAtMs: env.now(), evaluationStatus: "complete", preparation,
+        } });
+        const terminal = (await env.repository.getRun(env.runId))!;
+        const campaign = await env.database.collections.experiment_campaigns.findOne({ _id: id(1) });
+        await env.database.collections.experiment_operations.updateOne({ _id: saved._id }, { $set: {
+          resultFinalizationClaim: { id: "unresolved-owner", expiresAtMs: env.now() + 1000 },
+        } });
+        expect(await inspector.advance(env.runId)).toBe("boundary");
+        expect(await env.repository.getRun(env.runId)).toEqual(terminal);
+        await env.database.collections.experiment_operations.updateOne({ _id: saved._id }, { $set: { resultFinalizationClaim: null } });
+        const updateTerminal = env.database.collections.experiment_runs.updateOne.bind(env.database.collections.experiment_runs);
+        const failedCleanup = vi.spyOn(env.database.collections.experiment_runs, "updateOne").mockImplementation(async (...args) => {
+          if ((args[1] as { $set?: { preparation?: unknown } }).$set?.preparation === null) throw error;
+          return updateTerminal(...args);
+        });
+        expect(await inspector.advance(env.runId)).toBe("boundary");
+        expect(await env.repository.getRun(env.runId)).toEqual(terminal);
+        failedCleanup.mockRestore();
+        expect(await inspector.advance(env.runId)).toBe("boundary");
+        const cleaned = (await env.repository.getRun(env.runId))!;
+        expect(cleaned).toEqual({ ...terminal, revision: terminal.revision + 1, preparation: null });
+        expect(await inspector.advance(env.runId)).toBe("boundary");
+        expect(await env.repository.getRun(env.runId)).toEqual(cleaned);
+        expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(campaign);
+        expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+        await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { status: "failed", preparation } });
+        const failed = await env.repository.getRun(env.runId);
+        expect(await inspector.advance(env.runId)).toBe("blocked");
+        expect(await env.repository.getRun(env.runId)).toEqual(failed);
+      }
+    }, 120_000);
 
   it.each([false, true])("failed completion cleans only its own claim after budget cancellation (replaced=%s)", async replaced => {
     const env = await blockedCompletion();

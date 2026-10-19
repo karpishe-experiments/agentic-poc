@@ -34,7 +34,8 @@ import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { createOperationCoordinator } from "@/lib/experiment-runner/lifecycle";
-import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, remainingOperationMs, withOperationBudget } from "@/lib/operations/budget";
+import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, remainingOperationMs, withOperationBudget, withCleanupBudget } from "@/lib/operations/budget";
+import { CompletionReconciliationError, safeFailure } from "@/lib/operations/completion-failure";
 import { cancelOwnedControllers, withOwnedController } from "@/lib/operations/controllers";
 
 function canonical(value: unknown): string {
@@ -218,6 +219,8 @@ export function createExperimentDispatcher(deps: {
   }
 
   async function observeProgress(runId: string, operation: ExperimentOperationDocument) {
+    const startedAt = performance.now();
+    try {
     if (operation.state !== "succeeded" || (await repository.getRun(runId))?.progressOperationId === operation._id) return;
     const view = await measurePhase({ runId, operationId: operation._id }, "progress_context", () => context.getExecutionView(runId));
     if (!view) return;
@@ -237,6 +240,7 @@ export function createExperimentDispatcher(deps: {
       delegation: view.activeDelegation?.id ?? null, pending: view.pendingDecision, messages: view.creatorMessages.map((message) => message.id),
       ...(images.length ? { images } : {}),
     }) });
+    } catch (error) { throw new CompletionReconciliationError(error, "completion_progress", startedAt, "committed"); }
   }
 
   async function reconcile(run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult, observed = false) {
@@ -294,18 +298,31 @@ export function createExperimentDispatcher(deps: {
         const outcome = await createM4ProviderResults(deps.database, authority, deps.config, observationRuntime)
           .observe({ runId: run._id, operationId: current._id, nowMs: now() });
         if (outcome.kind === "result") {
+          const completion = { envelope: { runId: run._id, operationId: current._id,
+            workflowRunId: execution.id, inputFingerprint: current.inputFingerprint, result: outcome.result },
+            parentWorkflowRunId: current.parentWorkflowRunId, nowMs: now() };
+          const startedAt = performance.now();
+          let completed: ExperimentOperationDocument;
           try {
-            await repository.completeOperation({ envelope: { runId: run._id, operationId: current._id,
-              workflowRunId: execution.id, inputFingerprint: current.inputFingerprint, result: outcome.result },
-              parentWorkflowRunId: current.parentWorkflowRunId, nowMs: now() });
-            const saved = await repository.getOperation(current._id);
-            if (saved) await observeProgress(run._id, saved);
-          } catch {
-            // Retain the provider result and accounting; changed sources or
-            // materialization failure cannot authorize another paid request.
-            await withMongoTransaction(deps.database, (session) => createExperimentCampaignLedger(deps.database, authority).stop(session, now()));
-            await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+            completed = (await repository.completeOperation(completion)).operation;
+          } catch (error) {
+            let retained: Awaited<ReturnType<typeof repository.inspectCompletion>> | undefined;
+            try { retained = await withCleanupBudget(() => repository.inspectCompletion(completion)); }
+            catch { /* The original failure remains authoritative; unreadable state is uncertain. */ }
+            if (retained?.kind === "saved") completed = retained.operation;
+            else {
+              // Only an explicit rejected result is definite. Database failures,
+              // ownership conflicts and lost commit replies require observation.
+              if (retained?.kind === "pending") {
+                const category = error instanceof ExperimentRepositoryError && ["invalid_result", "invalid_input"].includes(error.code)
+                  ? "definite_failure" : "unknown_outcome";
+                try { await withCleanupBudget(() => repository.blockCompletionFailure(completion, category)); }
+                catch { /* Do not replace the original validation error with a secondary write failure. */ }
+              }
+              throw new CompletionReconciliationError(error, "completion_transaction", startedAt, retained?.kind === "pending" ? "uncommitted" : "unknown");
+            }
           }
+          await observeProgress(run._id, completed);
         } else if (outcome.kind === "pending" && now() >= (current.deadlineAtMs ?? Infinity)) {
           await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
         }
@@ -668,9 +685,38 @@ export function createExperimentDispatcher(deps: {
     let run = await repository.getRun(runId);
     if (!run) return "blocked";
     const operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
-    // Pause does not transfer a live preparation lease to another controller.
-    if (!operation && run.preparation && run.preparation.ownerId !== ownerId) {
-      if (now() < run.preparation.deadlineAtMs) return "waiting";
+    if (run.status === "completed" || run.status === "failed") {
+      // A lost bookkeeping acknowledgement cannot undo terminal business state.
+      // Clear only a stale, non-uncertain preparation after terminal evidence
+      // proves no operation can still own it. Leave unsupported residue visible.
+      if (run.status === "completed" && !operation && run.preparation && !run.preparation.unresolved &&
+          !run.preparation.stopRequestedAtMs && now() >= run.preparation.deadlineAtMs) {
+        try { await withCleanupBudget(() => withMongoTransaction(deps.database, async session => {
+          const saved = await deps.database.collections.experiment_runs.findOne({ _id: runId, revision: run!.revision,
+            status: "completed", activeOperationId: null, evaluationStatus: "complete",
+            "preparation.ownerId": run!.preparation!.ownerId }, { session });
+          if (!saved?.generationCompletedAtMs || saved.safeFailure || saved.preparation?.unresolved || saved.preparation?.stopRequestedAtMs) return;
+          const unfinished = await deps.database.collections.experiment_operations.findOne({ runId, $or: [
+            { state: { $nin: ["succeeded", "failed"] } }, { "lifecycle.unresolved": true },
+            { state: "failed", "lifecycle.unresolved": { $ne: false } },
+            { state: "succeeded", $or: [{ verifiedWorkflowId: null }, { resultJson: null }, { materializationJson: null }] },
+            ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map(key => ({ [key]: { $exists: true, $ne: null } })),
+          ] }, { session, projection: { _id: 1 } });
+          if (!unfinished) await deps.database.collections.experiment_runs.updateOne({ _id: runId, revision: saved.revision,
+            status: "completed", activeOperationId: null, "preparation.ownerId": saved.preparation!.ownerId },
+          { $set: { preparation: null }, $inc: { revision: 1 } }, { session });
+        })); } catch (error) {
+          console.info(JSON.stringify({ event: "booklet_preparation_cleanup", runId, preparationId: run.preparation.ownerId,
+            cleanupOutcome: "unresolved", ...safeFailure(error) }));
+        }
+      }
+      return run.status === "completed" ? "boundary" : "blocked";
+    }
+    if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") return "blocked";
+    // Expiry is uncertain regardless of controller identity. A retained own
+    // preparation must not loop on an already-expired I/O budget forever.
+    if (!operation && run.preparation && now() >= run.preparation.deadlineAtMs) {
+      if (run.status === "blocked" && run.preparation.unresolved && run.preparation.outcome === "failed") return "blocked";
       await withMongoTransaction(deps.database, async (session) => {
         const changed = await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null, revision: run!.revision, "preparation.ownerId": run!.preparation!.ownerId },
           { $set: { status: "blocked", safeFailure: "unknown_outcome", "preparation.outcome": "failed", "preparation.unresolved": true }, $inc: { revision: 1 } }, { session });
@@ -680,6 +726,8 @@ export function createExperimentDispatcher(deps: {
       });
       return "blocked";
     }
+    // Pause does not transfer a live preparation lease to another controller.
+    if (!operation && run.preparation && run.preparation.ownerId !== ownerId) return "waiting";
     if (operation?.deadlineAtMs && now() >= operation.deadlineAtMs - RECONCILIATION_RESERVE_MS) {
       if (operation.dispatchStartedAtMs == null) {
         await repository.failPreparation(runId, operation._id, now());
@@ -700,6 +748,7 @@ export function createExperimentDispatcher(deps: {
       }
     }
     const deadline = operation?.deadlineAtMs ?? run.preparation?.deadlineAtMs ?? now() + OPERATION_LIMIT_MS;
+    const startedAt = performance.now();
     try {
       const result = await withOwnedController(runId, (signal) => withOperationBudget(deadline - RECONCILIATION_RESERVE_MS,
         () => measurePhase({ runId, ...(operation ? { operationId: operation._id } : {}) }, "advance", () => advanceWork(runId)), { now, signal }));
@@ -707,6 +756,18 @@ export function createExperimentDispatcher(deps: {
         { $set: result === "blocked" ? { "preparation.outcome": "failed", "preparation.unresolved": false } : { preparation: null } });
       return result;
     } catch (error) {
+      const unownedReadFailure = !operation && run.mode === "balanced" && ["MongoOperationTimeoutError", "MongoNetworkError",
+        "MongoServerError", "MongoServerSelectionError", "AbortError", "OperationBudgetExpired"].includes(safeFailure(error).errorKind);
+      if (error instanceof CompletionReconciliationError || unownedReadFailure) {
+        // Without an admitted operation, a transient scheduling read cannot
+        // establish failure of the last committed result (or a new request).
+        // Keep uncertainty when the database cannot establish current state.
+        const diagnostic = error instanceof CompletionReconciliationError ? error.diagnostic
+          : new CompletionReconciliationError(error, "completion_readback", startedAt, "unknown").diagnostic;
+        console.info(JSON.stringify({ event: "booklet_completion_failure", runId,
+          ...(operation ? { operationId: operation._id } : {}), ...diagnostic }));
+        return "waiting";
+      }
       const current = await repository.getRun(runId);
       if (!current?.activeOperationId && current?.preparation?.ownerId === ownerId && current.preparation.stopRequestedAtMs) {
         await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null,
