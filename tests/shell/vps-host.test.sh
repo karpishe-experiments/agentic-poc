@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -285,6 +285,23 @@ LEGACY_CLAIMS
     [[ ! -e "$STATE/recoveries" && ! -e "$STATE/recovery-handoff-staging.json" ]]
     ! grep -q 'deployment-control enable' "$CALLS"
     PREVIEW_DIGEST="$(sed -n 's/.*digest=//p' "$TEMP_DIR/preview-output")"
+    if [[ "$scenario" == expired-recovery-handoff-* ]]; then
+      mkdir -p "$STATE/recoveries/original-recovery"
+      jq -n --arg prior "$prior" '{requestId:"original-recovery",action:"candidate-reconcile",environment:"staging",priorRelease:$prior,sourceTree:"0000000000000000000000000000000000000003",phase:"complete"}' > "$STATE/recoveries/original-recovery/host.json"
+      jq '.phase="restoring-closed"' "$STATE/recoveries/original-recovery/host.json" > "$STATE/recovery-handoff-staging.json"
+      cp "$STATE/recovery-handoff-staging.json" "$TEMP_DIR/original-handoff.json"
+      supported_recovery_host > "$TEMP_DIR/handoff-preview"
+      PREVIEW_DIGEST="$(sed -n 's/.*digest=//p' "$TEMP_DIR/handoff-preview")"
+      rm -rf "$TEMP_DIR/candidate"
+      if [[ "$scenario" == expired-recovery-handoff-drift ]]; then
+        printf '\n' >> "$STATE/recovery-handoff-staging.json"
+        APPLY=true
+        if (supported_recovery_host); then exit 1; fi
+        ! grep -q 'deployment-control enable' "$CALLS"
+        [[ -e "$STATE/operation.json" && -e "$STATE/recovery-handoff-staging.json" ]]
+        exit 0
+      fi
+    fi
     if [[ "$scenario" == *-preview ]]; then exit 0; fi
     APPLY=true
     if [[ "$scenario" == candidate-recovery-mismatch ]]; then
@@ -339,10 +356,19 @@ LEGACY_CLAIMS
     else
       supported_recovery_host
       [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == complete ]]
-      if [[ "$scenario" == expired-recovery-apply || "$scenario" == expired-recovery-resume || "$scenario" == expired-recovery-prepared ]]; then
+      if [[ "$scenario" == expired-recovery-* ]]; then
         cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
         [[ ! -e "$STATE/operation.json" ]]
         grep -q 'deployment-control disable' "$CALLS"
+        if [[ "$scenario" == expired-recovery-handoff-* ]]; then
+          [[ ! -e "$STATE/recovery-handoff-staging.json" ]]
+          cmp -s "$TEMP_DIR/original-handoff.json" "$STATE/operations/recovery-handoff-old-deploy.json"
+          if [[ "$scenario" == expired-recovery-handoff-resume ]]; then
+            recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" archived-closed
+            supported_recovery_host
+            cmp -s "$TEMP_DIR/original-handoff.json" "$STATE/operations/recovery-handoff-old-deploy.json"
+          fi
+        fi
         if [[ "$scenario" == expired-recovery-prepared ]]; then
           cp "$TEMP_DIR/original.json" "$STATE/operation.json"
           recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" prepared

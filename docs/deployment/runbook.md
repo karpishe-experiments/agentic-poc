@@ -29,6 +29,12 @@ allowlisted error kind without saved contents or connection details. Preserve th
 failed deployment journal and backup; a read timeout does not establish invalid
 data or authorize replay, data restoration or a deadline increase.
 
+When the expired deployment followed candidate recovery, its completed handoff is
+also pinned in preview. Supported restoration archives that exact handoff with the
+failed deployment after compatibility/readiness pass. This permits a separate
+reviewed corrective deployment without adopting another candidate's recovery
+evidence. Changed or unverified handoff provenance keeps admission closed.
+
 Use **VPS operation control** with `candidate-reconcile` for a granted retained
 completion, or `expired-deployment-recover` for a stopped expired deployment.
 Preview first, retain its digest, then apply the same exact target. The protected
