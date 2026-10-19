@@ -1,7 +1,148 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The J11 geometry correction is deployed. Kid retains J01-J10 and five simulated images; its next J11 response stopped incomplete after 28 paid text requests. A J11-only compact-JSON instruction mitigation and exact same-run continuation are being verified. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Kid remains blocked after 30 paid text requests and five simulated images. Its retained J11 response has not been committed. The reviewed recovery dispatcher is installed; interrupted recovery requests are safely aborted with the prior app ready and admission closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## Supported recovery follow-up - 2026-10-18
+
+**Current implementation - 2026-10-19:** PR #214 is merged at
+`165a36c3e3ca39d79f1a602da86b7c0f768d95a7`; reviewed head
+`0a0ef1d2ca974440dc3b6e7b9bcb34a736a247e8` passed two independent reviews.
+Linux CI `39246918885` and staging CI `39247011887` passed, including both
+full shell suites. Candidate-only build `39247005998` passed for staging
+`ba880437198f19f592968911f4b9a8f6a2be2e7f`, image digest
+`sha256:3b383b04eedbebd59200d7e6c3378fdca94f58d92c5248302a2aee6bd6929416`.
+The operator installed dispatcher SHA256
+`f00f752fe7257b39126641c8281a41964802f884f4db456c739c9d50f79ec265`
+with backup `/var/lib/kids-booklet/issue65-recovery-dispatcher.WWdV0x7G/dispatcher.before`.
+Normal staging deployment remains gated on successful J11 reconciliation.
+
+**Current live state:** exact claim-release preview `39239926407` passed.
+Apply `39240169978` exceeded its 150-second budget during post-write snapshot
+verification. Separate verification-only `39240852315` proved the exact claim
+release and complete preservation; no mutation was replayed. Supported abort
+`39241112378` closed original request `issue65-m4-j11-20261018-v4` safely.
+Fresh J11 preview `39241347236` passed. Apply `39241709069` for
+`issue65-m4-j11-20261019-v5` lost SSH with `Broken pipe` after reaching
+reconciliation; backup `staging-recovery-issue65-m4-j11-20261019-v5` is retained.
+Verification-only `39243360753` returned `completion_unverified`.
+Inspection `39243648536` found only the exact J11 run/operation: still started,
+no claims, no result/materialization/recovery, and zero mutation ownership.
+Proof-gated abort `39243855714` then restored the exact prior app, verified
+readiness and retained closed admission. Both original journals/deadlines and
+failed evidence are preserved. No further paid request was made.
+
+The operator's v5 diagnostic established uncommitted completion budget expiry,
+with cleanup completed. PR #214 (reviewed `0a0ef1d2ca974440dc3b6e7b9bcb34a736a247e8`)
+merged at `165a36c3e3ca39d79f1a602da86b7c0f768d95a7`. CI
+`39246918885`/`39247011887` and candidate build `39247005998` passed.
+The exact maintenance path now reuses its same-invocation authenticated response
+under the existing 150-second budget, preserving interactive Inspect/Stop caps.
+V6 preview `39247782828` passed. Apply `39248278539` then reached the
+outer budget: reconciliation 42,650 ms, result transaction 27,926 ms, remaining
+zero, uncommitted and cleanup completed. This identifies the constrained phase;
+it does not identify the slowest individual source/database read. Supported abort
+`39250015129` verified unchanged data and restored the prior app ready with
+admission closed. Backup `staging-recovery-issue65-m4-j11-20261019-v6`, original
+journal/deadline and failed evidence remain preserved. No additional paid call.
+
+The bounded correction compares one full post-GET snapshot directly with apply's
+already-pinned target/snapshot/grant digest. Fresh preview retains both scans;
+apply no longer repeats the first scan before comparing the complete proof.
+All preservation rows remain; changed foreign assets, approvals or grants still
+reject before checkpoint. Fresh mutable checks after checkpoint and all shared
+completion, source, approval, accounting, claim and progress checks remain.
+Apply plus independent post-write verification needs two full scans rather than
+three. Budgets, provider deadlines, leases, routes and schemas are unchanged.
+This follow-up is under verification, not live-proven. PR #205 remains gated.
+
+The same bundle gives only read-only status requests an independent workflow
+concurrency group. Mutating actions keep their existing group and host lock.
+Current phase can then be inspected during apply without stopping or replaying it.
+The separate claim-release path still has repeated scans; its earlier uncertain
+acknowledgement was recovered safely by verification only. Its phase split remains
+deferred. Credential-inventory impact: none; campaign/persona limits unchanged.
+
+The bounded diagnostic follow-up adds paginated operation state and claim/presence
+flags to existing read-only inspection. MongoDB returns content type markers,
+not saved output; claim expiry is diagnostic only. One real-persistence fixture
+checks missing/null content, retained expired claims and sanitization. Use a new
+inspection-only request before selecting another recovery action. Preserve the
+interrupted request, checkpoint, backup and all private phase evidence.
+
+The next bounded correction adds an explicit linked claim-release purpose to the
+existing candidate-reconcile control. A new reviewed image must prove that the
+exact expired claim is the only difference from the interrupted request's complete
+checkpoint. It restores the original null/missing representation with an exact
+compare-and-set, records provenance in a separate child checkpoint and leaves
+the original journal/checkpoint, stopped service and closed admission unchanged.
+Repeated requests verify only; they cannot clear a successor claim or replay J11.
+An explicit child abort requires unchanged full pre-write state and the exact
+retained claim; it closes only that child and rejects a committed release.
+Then the original request's supported abort must independently prove unchanged
+state before restoring the prior service with admission closed. Diagnose the
+transaction failure before another separately previewed reconciliation attempt.
+Normal failed-completion cleanup gets its own existing five-second cleanup budget;
+sanitized repository error codes remain visible at the recovery boundary. Required
+verification covers original snapshot equality, source/approval/accounting drift,
+active/replaced claims, cancelled cleanup and interrupted/duplicate child requests.
+Credential inventory impact: none; no secret storage, transfer or consumer changes.
+
+The user approved replacing repeated manual repair scripts with supported narrow
+operator actions before paid M4 work resumes. Implementation is in progress;
+no successful live recovery or additional provider call is claimed. Supported inspection
+`39111819466` found only the retained Kid run and J11 operation, with no unrelated
+work or mutation ownership. The reviewed dispatcher was installed with backup
+`/var/lib/kids-booklet/issue65-recovery-dispatcher.tLAD2Xzq/dispatcher.before`.
+Read-only previews `39111874396` and `39114863072` failed with
+`MongoOperationTimeoutError` before admission closure or recovery apply. The
+failing read was not identified. The bounded correction reads the same complete
+preservation evidence in keyset pages and reports the failing inspection phase.
+It does not assert that pagination resolves the live timeout; live readback is
+still required. No dispatcher change, credential change or provider request is
+needed for this correction. Candidate preview `39115827216` then failed at
+`snapshot.assets` with generic `Error`, still before admission closure or apply.
+Inspection found that budget expiry was omitted from the diagnostic allowlist;
+the phase is consistent with cumulative budget exhaustion, but does not prove it.
+The follow-up retains explicit `OperationBudgetExpired` diagnostics and increases
+bounded pages from 32 to 256. A 600-row unit fixture now needs three requests
+instead of nineteen, with identical complete hashes. The 90-second budget and
+all preservation, grant and accounting gates remain unchanged in that correction.
+Preview `39116827001` then reached `remote_observation` and explicitly reported
+`OperationBudgetExpired`, before admission closure or apply. No slow-provider
+diagnosis follows from this: earlier work consumes the same maintenance budget.
+
+The next correction removes duplicate fresh-apply preview work: one service-owned
+preview awaits its durable checkpoint, rechecks current eligibility and closed
+admission, then uses normal reconciliation. Full pre/post proof remains; fresh
+apply needs three snapshots instead of five. Each snapshot reads at most four
+collections concurrently, stopping new scheduling after a failure and settling
+started reads. A deterministic delayed-read fixture completes eleven 10ms reads
+in 30ms instead of 110ms serially; this is local evidence, not live latency.
+The maintenance budget is 150 seconds, leaving 30 seconds within the existing
+180-second host bound for cancellation/shutdown. This changes no persisted provider
+deadline or claim lease. Live resolution remains unverified.
+
+Change-surface forecast: shared sanitized inspection and a maintenance-only
+recovery CLI; staging candidate-image and expired-deployment actions in the
+existing dispatcher/workflow; an artifact-only path in Deploy; and focused
+application/host tests. Existing materialization, approval and accounting services
+remain authoritative. Public routes, workflow publications, credentials, schema,
+campaign limits and persona counts remain unchanged. Recovery provenance is held
+in protected host checkpoints and existing operation metadata, without migration.
+
+Candidate recovery is limited to an exact granted retained J11 completion. Normal
+Inspect/Stop cover supported uncertain/stopped executions. Unknown identities,
+invalid outputs and unrelated or unsupported bookkeeping remain explicit blockers;
+there is no general record editor. Preview pins retained data and grant identities.
+Apply requires quiescence, a verified backup and the same fingerprint. Interrupted
+application writes are inspected, never automatically replayed. Recovery leaves
+the Kid paused until separate normal delivery and preflight succeed.
+
+Acceptance requires focused fake-provider/real-persistence proof, shell lifecycle
+tests, storage checks, typecheck, focused lint, documentation checks, two clean
+independent reviews and lean CI. Installed capability and live recovery evidence
+remain separate gates. Existing M3 and efficiency evidence remains valid.
 
 ## Authorized same-run continuation - 2026-10-16
 
@@ -82,7 +223,7 @@ amendment rejection, specialist continuation with inclusive charges and unchange
 prior work, then typecheck/lint/links and two clean reviews/lean CI of both diffs.
 Deliver once through the existing staging process and continue the same Kid.
 
-### Current J11 incomplete-output correction - 2026-10-17
+### J11 incomplete-output correction - 2026-10-17
 
 PRs #200/#201 delivered the geometry/cardinality correction at release
 `e48d38648d273242d83354ee0907b6aed03c6c84`, image
@@ -124,6 +265,56 @@ J11-only local integration and preparation checks, typecheck/lint/links; then tw
 clean reviews, lean CI and selective staging delivery. No paid smoke, successor,
 new allowance, provider retry or persona campaign is added. Credential-inventory
 impact: none; existing Dify-only storage and consumers remain unchanged.
+
+### Current J11 cover-routing recovery - 2026-10-17
+
+PRs #202/#203 passed two clean independent reviews and lean CI
+`39032038325`/`39032047644`. Release `5335746bf11e1af1f1d2f429ea3ee3708b7b8b18`
+uses image `sha256:d79882c41256316fabad292443d75b0675391e02c853dd189b5b433843497b03`.
+Deploy `39032272766` reached its client wait limit; the original host request
+completed and archived without replay, verified by `39032868955`. Backup
+`staging-20261017T122714Z-ba99c94444a315a2`, Check `39032956244` and ready/idle
+normal-binding preflight are retained.
+
+The exact continuation produced a successful manager and completed J11 operation
+`48e69de1-cbc9-4ac6-a5d2-bd81dddffad9`, Dify
+`055c52c5-35c5-4a70-be1d-f126139a58d8`: 15,909 input and 2,334 output tokens,
+including 66 reasoning tokens, 22.431 seconds in Dify. Its 7,422-character JSON
+passes provider schema and layout validation. J05 contains a cover unit and three
+story units; J11 routes all four known units across pages 0-3. Booklet's story-only
+coverage check rejects the cover unit despite complete booklet coverage. The
+operation remains active/started, run revision 212 blocked/definite_failure, and
+campaign stopped. Retain 30 requests, 38,177 settled plus 27,000 assumed-count
+microdollars; remaining conditional allowance is 4,934,823 microdollars.
+
+Change-surface forecast: require manuscript coverage across the complete booklet,
+including cover, with unknown-unit and exact approved-sheet checks unchanged.
+Do not classify free-form unit keys or rewrite J05/J11. Add a protected exact
+`completionRecoveries` grant for this active J11 operation. Original authenticated
+GET evidence, request/usage identities, approvals, dependencies and bytes must pass
+normal completion. Only that named pre-generation J11 operation may cross the
+definite-blocker gate. Materialization, recovery provenance and reopening of its
+matching stopped campaign commit atomically; other unresolved work prevents it.
+Preserve every request, reservation, counter, charge, failed predecessor and original
+deadline. Expired completion retains failed-attempt history and pauses normally;
+explicit Resume can then continue without regenerating J11. Ordinary definite
+blockers, Stop, missing/revoked grants and conflicting evidence remain blocked.
+
+No prompt, workflow, model, token limit, price or credential changes are needed.
+Focused checks cover complete cover/story routing, missing/unknown units and stale
+references; exact saved-result recovery, duplicate inspection, unchanged accounting
+and deadline, late pause and changed-source/evidence rejection. Run affected checks,
+typecheck/lint/links, two clean reviews and lean CI before selective delivery.
+Delivery constraint: the old application cannot materialize this result and normal
+drain counts its active operation. Do not start a deployment known to fail. Prepare
+one bounded operator execution of the reviewed recovery code after verified backup
+and fresh identity/admission checks; preserve evidence and stop on uncertain
+execution. This is a necessary manual checkpoint, not a permanent host action.
+Normal selective deployment follows only after the operation is safely resolved.
+Credential-inventory impact: none. The Simulated J12 fixture assumes title-only
+cover lettering; it is not used by live Balanced J12 and remains a documented
+fixture limitation. Do not claim whole-manuscript word equality from structural
+J12 checks. M3/efficiency acceptance remains complete.
 
 Track private setup and paid permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).

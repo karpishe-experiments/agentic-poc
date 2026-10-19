@@ -3,17 +3,22 @@ on:
   workflow_dispatch:
     inputs:
       environment: {description: Exact operation target, type: choice, options: [staging, prod, dify], required: true}
-      action: {description: 'Inspect, stop, verify backup or reconcile exact staging bootstrap', type: choice, options: [operation-status, operation-stop, backup-verify, staging-bootstrap-reconcile], required: true}
+      action: {description: 'Inspect, stop, verify backup or reconcile exact staging bootstrap', type: choice, options: [operation-status, operation-stop, backup-verify, staging-bootstrap-reconcile, candidate-reconcile, expired-deployment-recover], required: true}
       request_id: {description: Exact retained or completed host request ID, required: true}
       commit: {description: Backup selected commit or bootstrap NEW reviewed staging commit, required: false}
       image_digest: {description: Backup selected image or bootstrap NEW reviewed staging image, required: false}
       backup_id: {description: Exact backup ID for verification; optional new ID for bootstrap backup, required: false}
+      recovery: {description: 'Recovery JSON: run_id, operation_id, expected_revision, preview_digest, original_request_id, inspection_only, abort_recovery, release_expired_claim, page, limit', required: false}
       confirmation: {description: Bootstrap apply requires kids_booklet, required: false}
       apply: {description: Apply exact stop or staging bootstrap; otherwise preview/read-only, type: boolean, default: false}
 permissions: {contents: read}
 # Control must remain available while the main host operation workflow is active.
 # The host dispatcher serializes journal writes after stopping the exact unit.
-concurrency: {group: 'vps-operation-control-${{ inputs.request_id }}', cancel-in-progress: false}
+concurrency:
+  # Status only reads the exact journal and must not wait behind its mutation.
+  # Keep the existing mutation group unchanged, including for in-flight runs.
+  group: ${{ inputs.action == 'operation-status' && format('vps-operation-status-{0}', github.run_id) || format('vps-operation-control-{0}', inputs.request_id) }}
+  cancel-in-progress: false
 defaults: {run: {shell: bash}}
 jobs:
   control:
@@ -30,7 +35,7 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_REF_NAME" == master ]]
           [[ "$TARGET" =~ ^(staging|prod|dify)$ ]]
-          [[ "$OPERATION" =~ ^(operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile)$ ]]
+          [[ "$OPERATION" =~ ^(operation-status|operation-stop|backup-verify|staging-bootstrap-reconcile|candidate-reconcile|expired-deployment-recover)$ ]]
           [[ "$REQUEST" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]]
           remote_sha="$(git ls-remote --heads origin refs/heads/master | awk '{print $1}')"
           [[ "$remote_sha" == "$GITHUB_SHA" ]] || { printf 'Reviewed master moved; rerun control.\n' >&2; exit 1; }
@@ -48,6 +53,7 @@ jobs:
           BACKUP: ${{ inputs.backup_id }}
           CONFIRMATION: ${{ inputs.confirmation }}
           APPLY: ${{ inputs.apply }}
+          RECOVERY: ${{ inputs.recovery }}
           VPS_HOST: ${{ vars.VPS_HOST }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
@@ -60,7 +66,24 @@ jobs:
           [[ -z "$IMAGE" ]] || args+=(--image-digest "$IMAGE")
           [[ -z "$BACKUP" ]] || args+=(--backup-id "$BACKUP")
           [[ -z "$CONFIRMATION" ]] || args+=(--confirmation "$CONFIRMATION")
-          if [[ "$OPERATION" =~ ^(operation-stop|staging-bootstrap-reconcile)$ && "$APPLY" == true ]]; then args+=(--apply); fi
+          if [[ "$OPERATION" == candidate-reconcile || "$OPERATION" == expired-deployment-recover ]]; then
+            [[ "$TARGET" == staging ]]
+            jq -e 'type=="object" and ((keys-["run_id","operation_id","expected_revision","preview_digest","original_request_id","inspection_only","abort_recovery","release_expired_claim","page","limit"])|length==0) and all(.[]; type=="string")' <<< "$RECOVERY" >/dev/null
+            release_claim="$(jq -r ' .release_expired_claim // "false"' <<< "$RECOVERY")"
+            [[ "$release_claim" == true || "$release_claim" == false ]]
+            [[ "$release_claim" == false ]] || args+=(--release-expired-claim)
+            abort="$(jq -r '.abort_recovery // "false"' <<< "$RECOVERY")"
+            [[ "$abort" == true || "$abort" == false ]]
+            [[ "$abort" == false ]] || args+=(--abort-recovery)
+            inspection="$(jq -r '.inspection_only // "false"' <<< "$RECOVERY")"
+            [[ "$inspection" == true || "$inspection" == false ]]
+            [[ "$inspection" == false ]] || args+=(--inspection-only)
+            for key in run_id operation_id expected_revision preview_digest original_request_id page limit; do
+              value="$(jq -r --arg key "$key" '.[$key] // ""' <<< "$RECOVERY")"
+              [[ -z "$value" ]] || args+=("--${key//_/-}" "$value")
+            done
+          fi
+          if [[ "$OPERATION" =~ ^(operation-stop|staging-bootstrap-reconcile|candidate-reconcile|expired-deployment-recover)$ && "$APPLY" == true ]]; then args+=(--apply); fi
           bash scripts/deploy/vps-deployment.sh "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/operation-control.txt"
       - name: Publish control summary
         if: always()
@@ -77,7 +100,9 @@ jobs:
             if [[ "$REQUEST" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]]; then printf 'Exact host request: \x60%s\x60.\n\n' "$REQUEST"; fi
             if [[ -s "$RUNNER_TEMP/operation-control.txt" ]]; then
               printf '```text\n'
-              grep -E '^(result: operation |result: backup verified |result: bootstrap (old|candidate) |exists: operation |would update: (stop exact operation|exact staging page bookkeeping) |updated: (exact operation stopped|exact staging bookkeeping repaired))' "$RUNNER_TEMP/operation-control.txt" || true
+              grep -E '^(result: recovery preview |result: operation |result: backup verified |result: bootstrap (old|candidate) |exists: operation |would update: (stop exact operation|exact staging page bookkeeping) |updated: (exact operation stopped|exact staging bookkeeping repaired))' "$RUNNER_TEMP/operation-control.txt" || true
+              jq -Rc 'fromjson? | select(.environment=="staging" and (.action=="candidate-reconcile" or .action=="expired-deployment-recover")) | {requestId,action,purpose,phase,environment,commit,image,runId,operationId,originalRequestId,backupId,previewDigest,historical}' "$RUNNER_TEMP/operation-control.txt"
+              jq -Rc 'fromjson? | select(.environment=="_staging" and (.outcome!=null or .code!=null)) | {schemaVersion,environment,inspectedAtMs,outcome,code,phase,stage,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,admission,blockers,inspectionError}' "$RUNNER_TEMP/operation-control.txt"
               printf '```\n'
             fi
             printf '\nStopping a process does not prove that its output failed. Inspect and reconcile the retained phase before resume.\n'

@@ -156,5 +156,29 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     requireState(saved.modifiedCount === 1, "Continuation was already consumed.");
     await touch(campaign, session, { state: "active" }, nowMs);
   }
-  return { snapshot, grant, create, claimPersona, reserve, settle, stop, continueFailure };
+  // Called after authenticated output, retained usage, sources and materialization
+  // pass. Final accounting still gates the same transaction's commit.
+  async function recoverCompletion(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, nowMs: number) {
+    const permission = grant.completionRecoveries?.find((item) => item.runId === run._id && item.operationId === operation._id);
+    requireState(permission && run.m4?.campaignId === grant.campaignId && run.m4.policyHash === snapshot.hash &&
+      run.m4.policyJson === snapshot.json, "No exact completion recovery grant matches this operation.");
+    const campaign = await current(session);
+    requireState(campaign.state === "stopped" && campaign.slots[run.persona] === run._id, "Campaign cannot recover this completion.");
+    requireState(await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id,
+      state: "succeeded", "m4CompletionRecovery.reference": permission!.reference,
+      "m4CompletionRecovery.evidenceDigest": operation.m4Observation!.evidenceDigest,
+      "m4CompletionRecovery.requestDigest": operation.m4Preparation!.requestDigest,
+      resultDigest: { $ne: null }, materializationJson: { $ne: null } }, { session, projection: { _id: 1 } }),
+      "Recovery requires its completed materialization in this transaction.");
+    const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
+    requireState(!await database.collections.experiment_operations.findOne({ runId: { $in: runIds }, $or: [
+      { state: { $in: ["prepared", "started", "unknown"] } }, { "lifecycle.unresolved": true },
+      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map(key => ({ [`${key}.expiresAtMs`]: { $gt: nowMs } })),
+    ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved operation work.");
+    requireState(!await database.collections.experiment_runs.findOne({ _id: { $in: runIds }, $or: [
+      { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
+    ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
+    await touch(campaign, session, { state: "active" }, nowMs);
+  }
+  return { snapshot, grant, create, claimPersona, reserve, settle, stop, continueFailure, recoverCompletion };
 }

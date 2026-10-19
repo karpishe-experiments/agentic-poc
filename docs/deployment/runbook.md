@@ -15,8 +15,88 @@ those resources or production configuration.
 
 ## Current deployment status
 
-The issue #65 bounded-recovery candidate is not deployed. Its current work and
-remaining gates are in [M3 current progress](../accepted/2026-09-27_dify-booklet-runner/M3-completion.md#current-progress-and-blockers--2026-10-12).
+### Supported recovery candidate
+
+The issue #65 supported-recovery implementation is under verification. Installation
+and live execution must be recorded separately; the commands below require the
+matching dispatcher capabilities and application image.
+
+Use **VPS operation control** with `candidate-reconcile` for a granted retained
+completion, or `expired-deployment-recover` for a stopped expired deployment.
+Preview first, retain its digest, then apply the same exact target. The protected
+workflow exposes structured blocker IDs and phases. Inspection failure is not a
+clear work inventory. Use bounded blocker pages instead of copying private logs.
+
+For candidate preview, the workflow's `recovery` input is a JSON object containing
+string fields `run_id`, `operation_id` and `expected_revision`. Supply a new
+`request_id`, reviewed candidate `commit` and immutable `image_digest`. Apply adds
+`preview_digest`, sets `apply=true` and confirms `kids_booklet`. For diagnosis
+only, use `{"inspection_only":"true","page":"0","limit":"5"}` without target
+fields. Pages are zero-based; limit is at most 50. Expired-deployment recovery uses
+`original_request_id` instead of run/operation fields and pins the selected prior
+commit/image. Preview does not create a durable recovery journal; retain its digest
+from the workflow summary. Apply does create one. Use `operation-status` with its
+exact request ID after interruption.
+Read-only `operation-status` runs independently of the same request's mutation
+queue. It reports the retained phase without stopping, replaying or acquiring the
+mutation lock. A phase is not proof that the application result committed.
+
+If candidate recovery stopped before committing business changes, use the same
+target and preview digest with `abort_recovery="true"` in the recovery JSON and
+`apply=true`. This requires no active maintenance container. Pre-write phases
+must have no application checkpoint. A `reconciling` phase additionally requires
+the candidate's read-only `verify-unapplied` proof: unchanged business snapshot
+and grant, eligible target and no claims. It restores the prior
+service with admission closed and retains the failed phase as `aborted-closed`.
+Then inspect the cause and preview a new recovery request. It does not reopen
+paid execution or retry a failed backup automatically.
+
+If inspection establishes that an interrupted request retained only an expired
+finalization claim, use a new reviewed candidate and request ID with
+`release_expired_claim="true"`, `original_request_id` and the exact original
+run/operation/revision in the recovery JSON. Preview first; apply adds its digest
+and confirmation normally. The action requires the original verified backup,
+unchanged original journal/checkpoint, stopped writers and no unrelated work.
+Only full snapshot equality after removing that exact claim permits release.
+It leaves admission closed and the app stopped. A repeated child request verifies
+only. After successful release, invoke the original request's supported abort;
+diagnose the original failure before a separate reconciliation preview. Claim
+expiry alone never authorizes release, and this is not a general record editor.
+For an interrupted child that has not released its claim, explicitly add
+`abort_recovery="true"` to that child's apply request. Read-only preview must match
+the saved application digest before the child can become `aborted-closed`.
+It does not restore the service, reopen admission or change parent evidence.
+Changed claims or committed release reject abort; inspect or verify the outcome.
+Repeated terminal child requests return a historical receipt even after the
+parent advances. This proves the saved recovery outcome, not current admission or
+database state. Check current status separately before another action.
+
+Mutating reentry requires unchanged host configuration fingerprints. For an old
+candidate journal, the dispatcher reconstructs its original digest with bounded
+backup-ID candidates. If the original preview used a custom backup ID later
+replaced by the actual recovery backup, supply that original non-secret value
+through the existing `backup_id` input. A mismatch returns
+`legacy_preview_fingerprint_unverified`; retain the evidence and inspect the
+original invocation. Do not adopt new configuration or edit the journal.
+Expired recovery can continue from `prepared` only after repeating its original
+process, container, journal, backup and compatibility checks.
+
+Build a recovery artifact through **Deploy**, selecting the reviewed staging
+delivery branch, `environment=staging` and `recovery_candidate=true`. This only
+builds the immutable image; it does not contact the VPS or update the environment
+alias. Candidate recovery pins this commit/image and rejects migrations. After
+verified completion, deploy the same source tree through the normal reviewed
+staging process. Keep the recovered persona paused until application preflight.
+
+If an action is interrupted, inspect its exact recovery request. A saved completion
+can be verified without replay. Do not repeat an uncertain application mutation,
+clear a blocker or extend an expired original deadline. Expired-deployment recovery
+requires the exact prior release, verified backup and compatibility evidence; it
+does not restore data. Unsupported initializer drift stays blocked.
+
+The issue #65 recovery dispatcher is installed; new candidate capabilities require
+separate verification. Its current work and remaining gates are in
+[M4 supported recovery](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#supported-recovery-follow-up---2026-10-18).
 The historical status below does not supersede that section.
 
 ### Candidate recovery controls

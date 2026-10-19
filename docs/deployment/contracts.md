@@ -2,6 +2,51 @@
 
 ## Ownership
 
+Recovery inspections check command success before interpreting empty container
+lists. New generic journals retain `hostFingerprint` and `previewBackupId` separately
+from the actual backup ID. Every mutating reentry, including abort, verifies the
+original fingerprint. Legacy candidate journals test the original digest with an
+empty, saved or explicitly supplied original preview backup ID; expired journals
+use their retained backup. An exact digest match is required; otherwise report
+`legacy_preview_fingerprint_unverified` without mutation. No current state is adopted.
+Expired `prepared` recovery repeats stopped-process/container, original-journal,
+backup and compatibility checks before restoration; it never repeats initialization.
+Terminal child receipts validate request/target/candidate/revision and return
+`historical: true` without application reads or lifecycle changes. Old child
+revisions come from their hash-verified original checkpoint. Nonterminal paths
+retain current parent and configuration checks.
+
+Supported Booklet recovery is staging-only. `candidate-reconcile` runs reviewed
+application recovery from an immutable image without changing the serving release.
+`expired-deployment-recover` uses a separate request linked to the unchanged
+original journal and deadline. Both default to preview and retain closed admission
+after ambiguous mutations. No automatic restore or provider replay is permitted.
+The explicit `release_expired_claim` purpose under `candidate-reconcile` uses a new
+request linked to an interrupted original recovery. It requires stopped writers,
+closed quiet admission, verified original backup and byte-pinned parent journal/
+checkpoint. The application proves the exact expired finalization claim is the
+only snapshot difference before restoring its original null/missing representation.
+The child records provenance and verifies its outcome; it neither replays
+reconciliation nor changes the original journal, serving release or admission.
+An interrupted child can be explicitly aborted only when read-only preview matches
+its saved application digest, including the exact retained claim. This marks only
+the child `aborted-closed`; committed release requires outcome verification instead.
+After release, original-request abort must prove unchanged state independently.
+
+The recovery command's private checkpoint stores target identities, hashes,
+phase and preservation evidence; it does not export prompts or credentials.
+Preview has no business writes. Artifact acquisition may populate the Docker
+cache. Candidate apply requires a verified backup, quiet ownership and compatible
+schema; application initialization is not part of recovery. A different normal
+deployment merge commit must have exactly the recovered candidate's Git tree.
+The build verifies that tree against GitHub and records it in the immutable image
+label, alongside the selected commit. Host recovery compares those identities.
+
+Credential-inventory impact: recovery reuses existing staging runtime, Dify
+application and deployment credentials in their existing protected locations.
+It introduces no secret, credential copy or OpenAI-key transfer. Candidate reads
+use existing Dify application credentials; provider execution remains forbidden.
+
 Staging reset previews inventory by default. Apply requires confirmation of
 `kids_booklet`, the exact `kids-booklet-staging-assets` bucket and a completed
 backup covering every bucket object. With prepared runner bindings, the host

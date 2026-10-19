@@ -100,19 +100,19 @@ export async function verifyCurrentPaginationSources(database: Database, session
 }
 
 export function validatePaginationRouting(layout: StoredPageLayout, sources: Awaited<ReturnType<typeof verifyCurrentPaginationSources>>): void {
-  const seenStory = new Set<string>();
+  const seen = new Set<string>();
   const units = new Set(sources.manuscriptUnitIds);
   const refs = new Map(sources.references.map((ref) => [`${ref.subjectKind}:${ref.subjectId}`, ref]));
   for (const page of layout.pages) for (const panel of page.panels) {
     for (const unitId of panel.manuscriptUnitIds) {
       if (!units.has(unitId)) reject("J11 routes an unknown manuscript unit.");
-      if (page.pageIndex > 0) seenStory.add(unitId);
+      seen.add(unitId);
     }
     for (const ref of panel.sheetReferences) {
       if (canonical(ref) !== canonical(refs.get(`${ref.subjectKind}:${ref.subjectId}`))) reject("J11 panel uses an unknown or stale sheet reference.");
     }
   }
-  if (seenStory.size !== units.size) reject("J11 story pages must cover every manuscript unit.");
+  if (seen.size !== units.size) reject("J11 booklet pages must cover every manuscript unit.");
 }
 
 // J12 reads only the selected page's sheet bytes. J11's full source set is

@@ -2,6 +2,30 @@
 set -euo pipefail
 script=scripts/deploy/vps-deployment.sh
 
+# Recovery scope and apply are explicit; pagination never grants mutation.
+VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -s -- "$script" <<'RECOVERY_ARGUMENTS'
+set -euo pipefail
+source "$1"
+parse_arguments --action candidate-reconcile --environment staging --request-id recovery-new --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --image-digest ghcr.io/example/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --inspection-only --page 2 --limit 5
+validate_arguments
+if (APPLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+if (ENVIRONMENT=prod; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+INSPECTION_ONLY=false RUN_ID=11111111-1111-1111-1111-111111111111 OPERATION_ID=22222222-2222-2222-2222-222222222222 EXPECTED_REVISION=212
+validate_arguments
+APPLY=true CONFIRMATION=kids_booklet PREVIEW_DIGEST=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+validate_arguments
+if (PREVIEW_DIGEST=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+RELEASE_EXPIRED_CLAIM=true ORIGINAL_REQUEST_ID=parent-recovery
+validate_arguments
+if (ORIGINAL_REQUEST_ID="$REQUEST_ID"; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+(ABORT_RECOVERY=true; validate_arguments)
+if (INSPECTION_ONLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+RELEASE_EXPIRED_CLAIM=false
+ACTION=expired-deployment-recover ORIGINAL_REQUEST_ID=old-id RUN_ID='' OPERATION_ID='' EXPECTED_REVISION=''
+validate_arguments
+if (ORIGINAL_REQUEST_ID="$REQUEST_ID"; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+RECOVERY_ARGUMENTS
+
 # Exact-request controls use the existing restricted entrypoint. No lifecycle
 # mutation is available merely because a request or environment was omitted.
 VPS_DEPLOYMENT_LIBRARY_ONLY=true bash -s -- "$script" <<'CONTROL_ARGUMENTS'

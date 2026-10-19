@@ -19,7 +19,7 @@ import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-pag
 import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
-import { OPERATION_LIMIT_MS } from "@/lib/operations/budget";
+import { OPERATION_LIMIT_MS, withCleanupBudget } from "@/lib/operations/budget";
 import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
 import { CampaignAdmissionError, createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
@@ -28,6 +28,7 @@ import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { reportCleanup } from "@/lib/operations/completion-failure";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -463,7 +464,11 @@ export function createExperimentRepository(database: Database, options: { store?
     const startedAt = elapsedNow();
     const nowMs = () => input.nowMs + Math.floor(elapsedNow() - startedAt);
     const claimId = randomUUID();
-    const claimed = await operations.findOneAndUpdate({ _id: input.operationId, runId: input.runId,
+    let committed = false;
+    let failure: unknown;
+    let claimed: ExperimentOperationDocument | null = null;
+    try {
+    claimed = await operations.findOneAndUpdate({ _id: input.operationId, runId: input.runId,
       state: "prepared", reservationCount: 0,
       $and: [
         { $or: [{ workflowRunId: null }, { workflowRunId: input.workflowRunId }] },
@@ -471,8 +476,6 @@ export function createExperimentRepository(database: Database, options: { store?
         { $or: [{ authorizationClaim: null }, { "authorizationClaim.expiresAtMs": { $lte: input.nowMs } }] },
       ],
     }, { $set: { authorizationClaim: { id: claimId, expiresAtMs: input.nowMs + 60_000 } } }, { returnDocument: "after" });
-    let committed = false;
-    try {
       const completed = await withMongoTransaction<Awaited<ReturnType<typeof claimOperation>>>(database, async (session) => measurePhase(
         { runId: input.runId, operationId: input.operationId }, "authorization_transaction", async () => {
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
@@ -551,9 +554,15 @@ export function createExperimentRepository(database: Database, options: { store?
       }));
       committed = completed.started;
       return completed;
-    } finally {
-      if (claimed && !committed) await operations.updateOne({ _id: input.operationId, "authorizationClaim.id": claimId },
-        { $set: { authorizationClaim: null } }).catch(() => undefined);
+    } catch (error) { failure = error; throw error; }
+    finally {
+      if (!committed) {
+        try {
+          await withCleanupBudget(() => operations.updateOne({ _id: input.operationId, "authorizationClaim.id": claimId },
+            { $set: { authorizationClaim: null } }));
+          reportCleanup(input, "completed", failure);
+        } catch { reportCleanup(input, "unresolved", failure); }
+      }
     }
   }
 
@@ -727,17 +736,19 @@ export function createExperimentRepository(database: Database, options: { store?
     const startedAt = elapsedNow();
     const nowMs = () => input.nowMs + Math.floor(elapsedNow() - startedAt);
     const claimId = randomUUID();
+    let committed = false;
+    let failure: unknown;
+    let claimed: ExperimentOperationDocument | null = null;
+    try {
     // Acquire outside the long transaction so observers see the lease before
     // snapshot/source reads. A process interruption leaves it recoverable after
     // 60 seconds, without changing dispatch identity, budget or deadline.
-    const claimed = await operations.findOneAndUpdate({ _id: envelope.operationId, runId: envelope.runId,
+    claimed = await operations.findOneAndUpdate({ _id: envelope.operationId, runId: envelope.runId,
       workflowRunId: envelope.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,
       inputFingerprint: envelope.inputFingerprint, reservationCount: 1,
       state: { $in: ["started", "unknown"] }, imageCompletionClaim: null,
       $or: [{ resultFinalizationClaim: null }, { "resultFinalizationClaim.expiresAtMs": { $lte: input.nowMs } }],
     }, { $set: { resultFinalizationClaim: { id: claimId, expiresAtMs: input.nowMs + 60_000 } } }, { returnDocument: "after" });
-    let committed = false;
-    try {
       const completed = await withMongoTransaction(database, async (session) => measurePhase(
         { runId: envelope.runId, operationId: envelope.operationId }, "result_transaction", async () => {
       const operation = must(await operations.findOne({ _id: envelope.operationId, runId: envelope.runId }, { session }), "Operation");
@@ -771,31 +782,106 @@ export function createExperimentRepository(database: Database, options: { store?
         if (operation.resultDigest === resultDigest) return { operation, reused: true };
         throw new ExperimentRepositoryError("conflict", "Completed operation has a different result.");
       }
-      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
+      const recoveryPermission = campaignLedger?.grant.completionRecoveries?.find(item => item.runId === run._id && item.operationId === operation._id);
+      const recovering = run.status === "blocked" && run.safeFailure === "definite_failure" &&
+        options.m4ExecutionEnabled === true && run.mode === "balanced" && operation.providerKind === "text" &&
+        operation.role === "specialist" && operation.taskId === "J11" && run.generationCompletedAtMs == null &&
+        !operation.lifecycle?.stop && !operation.m4CompletionRecovery && recoveryPermission &&
+        operation.resultJson === null && operation.resultDigest === null && operation.materializationJson === null &&
+        operation.authorizationClaim == null && operation.imageCompletionClaim == null &&
+        operation.m4Observation?.issue === null && m4RequestBundleMatches(campaignLedger!.snapshot.policy, campaignLedger!.grant);
+      if (run.status === "blocked" && run.safeFailure !== "unknown_outcome" && !recovering) throw new ExperimentRepositoryError("invalid_state", "A definite blocker requires inspection before completion.");
       if ((operation.state !== "started" && operation.state !== "unknown") || operation.reservationCount !== 1 || run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting authorized completion.");
       const lease = operation.resultFinalizationClaim;
       if (!claimed || lease?.id !== claimId || lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Result finalization is already active or its lease expired.");
       if (operation.role === "image") await assertJ13Admission(session, run, operation, input.parentWorkflowRunId, "claim");
-      const materialized = await materializeNarrativeResult(database, session, run, operation, result, warnings, input.nowMs, options.store);
+      // Existing source verifiers load the run in this same transaction. Give
+      // only the exact authorized recovery ordinary in-flight eligibility; a
+      // failed source/materialization check rolls this change back with it.
+      if (recovering) {
+        const admitted = await runs.updateOne({ _id: run._id, revision: run.revision, status: "blocked",
+          safeFailure: "definite_failure", activeOperationId: operation._id },
+          { $set: { status: "running", safeFailure: null } }, { session });
+        if (admitted.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Recovery admission changed.");
+      }
+      const materializationRun = recovering ? { ...run, status: "running" as const, safeFailure: null } : run;
+      const materialized = await materializeNarrativeResult(database, session, materializationRun, operation, result, warnings, input.nowMs, options.store);
       if (lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Result finalization lease expired before saving.");
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
-      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, nowMs()), resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });
+      const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, nowMs()), resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs,
+        ...(recovering ? { m4CompletionRecovery: { reference: recoveryPermission!.reference, evidenceDigest: operation.m4Observation!.evidenceDigest!,
+          requestDigest: operation.m4Preparation!.requestDigest, recoveredAtMs: input.nowMs } } : {}) } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation completion changed concurrently.");
       const pauseRequested = run.pauseRequested || isRecoveredAttempt(operation, nowMs());
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { ...materialized.runPatch, activeOperationId: null, pauseRequested, status: pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
+      if (recovering) {
+        await campaignLedger!.recoverCompletion(session, run, operation, input.nowMs);
+        await verifyM4Accounting(database, session, must(await runs.findOne({ _id: run._id }, { session }), "Run"));
+      }
       return { operation: updated, reused: false };
       }));
       committed = true;
       return completed;
-    } finally {
-      if (claimed && !committed) {
+    } catch (error) { failure = error; throw error; }
+    finally {
+      if (!committed) {
         // A failed cleanup leaves only a bounded lease. Never mask the original
         // callback failure, erase a successor lease, or replay execution.
-        await operations.updateOne({ _id: envelope.operationId, "resultFinalizationClaim.id": claimId },
-          { $set: { resultFinalizationClaim: null } }).catch(() => undefined);
+        try {
+          await withCleanupBudget(() => operations.updateOne({ _id: envelope.operationId, "resultFinalizationClaim.id": claimId },
+            { $set: { resultFinalizationClaim: null } }));
+          reportCleanup(envelope, "completed", failure);
+        } catch { reportCleanup(envelope, "unresolved", failure); }
       }
     }
+  }
+
+  // Exceptional readback only: a failed acknowledgement is not evidence that
+  // the transaction failed. This never repeats materialization or reservations.
+  async function inspectCompletion(raw: unknown) {
+    const input = parse(completeInput, raw); const { envelope } = input;
+    return withMongoTransaction(database, async session => {
+      const operation = must(await operations.findOne({ _id: envelope.operationId, runId: envelope.runId }, { session }), "Operation");
+      const run = must(await runs.findOne({ _id: envelope.runId }, { session }), "Run");
+      if (operation.workflowRunId !== envelope.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId ||
+          operation.inputFingerprint !== envelope.inputFingerprint) throw new ExperimentRepositoryError("conflict", "Completion readback identity changed.");
+      if (operation.state !== "succeeded") return { kind: "pending" as const, operation };
+      let expected = validateRoleResult(operation.role, envelope.result);
+      if (expected.kind === "proposal") expected = { kind: "proposal", payload: { taskId: expected.payload.taskId,
+        content: parseNarrativeTaskProposal(expected.payload.taskId, run.persona, expected.payload.content).content } };
+      const json = canonical(expected);
+      if (operation.resultJson !== json || operation.resultDigest !== digest(json) || !operation.materializationJson ||
+          operation.resultFinalizationClaim || operation.authorizationClaim || operation.imageCompletionClaim ||
+          operation.lifecycle?.unresolved !== false || operation.reservationCount !== 1 || !operation.verifiedWorkflowId ||
+          run.activeOperationId === operation._id) throw new ExperimentRepositoryError("conflict", "Completion readback is inconsistent.");
+      if (run.mode === "balanced") await verifyM4Accounting(database, session, run);
+      return { kind: "saved" as const, operation };
+    });
+  }
+
+  async function blockCompletionFailure(raw: unknown, category: "definite_failure" | "unknown_outcome" = "definite_failure") {
+    const input = parse(completeInput, raw); const { envelope } = input;
+    return withMongoTransaction(database, async session => {
+      const operation = await operations.findOne({ _id: envelope.operationId, runId: envelope.runId }, { session });
+      const run = await runs.findOne({ _id: envelope.runId }, { session });
+      if (!operation || !run || run.activeOperationId !== operation._id || !["started", "unknown"].includes(operation.state) ||
+          operation.workflowRunId !== envelope.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId ||
+          operation.inputFingerprint !== envelope.inputFingerprint || operation.resultJson || operation.materializationJson ||
+          operation.resultFinalizationClaim || operation.authorizationClaim || operation.imageCompletionClaim) return false;
+      // Maintenance reconciliation must retain the original definite blocker
+      // unchanged if a new observation is uncertain, so an unchanged-state abort
+      // remains possible. It cannot silently downgrade the original failure.
+      if (category === "unknown_outcome" && run.status === "blocked" && run.safeFailure === "definite_failure") return false;
+      if (run.mode === "balanced" && campaignLedger) await campaignLedger.stop(session, input.nowMs);
+      if (category === "unknown_outcome") await operations.updateOne({ _id: operation._id, state: operation.state },
+        { $set: { state: "unknown", safeFailure: category, updatedAtMs: input.nowMs } }, { session });
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id },
+        { $set: { status: "blocked", safeFailure: category, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+      if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Completion failure ownership changed.");
+      await failTerminalPageBatchItems(database, { ...run, status: "blocked", safeFailure: category }, session, input.nowMs);
+      return true;
+    });
   }
 
   async function failOperation(raw: unknown): Promise<ExperimentOperationDocument> {
@@ -843,5 +929,5 @@ export function createExperimentRepository(database: Database, options: { store?
       dispatchStartedAtMs: { $ne: null }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, latestOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, inspectCompletion, blockCompletionFailure, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, latestOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
 }

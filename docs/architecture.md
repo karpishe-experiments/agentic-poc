@@ -4,6 +4,95 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Balanced completion separates the durable transaction from progress observation.
+A failed acknowledgement uses bounded, read-only verification of the exact saved
+result, materialization marker and accounting before classification. Progress
+failure cannot invalidate a committed result. Only explicit invalid-result/input
+rejection can create a definite completion blocker; transient database failures
+remain uncertain. Failure writes recheck the target identity and active ownership
+transactionally. Existing progress verification still precedes new dispatch.
+Transient scheduling reads without an admitted operation retain uncertainty.
+Expired preparation is inspectable and idempotent for both current and former
+owners. Terminal states and definite blockers take precedence over expiry;
+completed preparation bookkeeping can clear only after exact ownership and
+terminal, claim-free operation evidence are established.
+Authorization, text and image ownership cleanup use the independent five-second
+cleanup budget and exact claim identity, including lost claim acknowledgements.
+Image cleanup covers every post-claim exit and preserves original bytes/digest.
+Sanitized failure diagnostics retain the original stage, error kind, repository
+code, timing, remaining budget and cleanup outcome. Interactive Inspect/Stop keep
+their existing 20/30-second budgets. Exact granted maintenance J11 recovery reuses
+its same-invocation authenticated GET after full post-observation preservation
+proof and fresh eligibility/admission checks. Its internal dispatcher entry checks
+the bounded context, grant, revision, operation and response identity before using
+shared reconciliation under the existing 150-second maintenance budget. Normal
+accounting, sources, approvals, the 60-second claim, materialization and progress
+checks remain. Responses are not cached across requests or put in preview receipts.
+Provider deadlines and claim leases are unchanged.
+
+The supported issue #65 recovery candidate adds a maintenance-only
+`booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
+an exact granted J11 completion through the existing dispatcher with provider
+starts, uploads and stops disabled. Preview fingerprints retained business data
+and authority. Apply rechecks that fingerprint with admission closed. The
+preservation snapshot reads all retained rows in bounded 256-row keyset pages,
+with at most four collections read concurrently. A failed read stops new scheduling
+and settles every started read. Fresh preview proves stability with two complete snapshots around its authenticated
+GET. Apply pins that proof digest: it compares one complete post-GET snapshot
+against the pinned target/snapshot/grant digest before saving its checkpoint,
+then rechecks eligibility/admission and uses normal reconciliation. Independent
+post-write verification takes another full snapshot. Apply plus verification now
+need two complete scans rather than three; no preservation row is omitted. The maintenance command
+has a 150-second budget within the host's 180-second bound; persisted provider
+deadlines and claims are unchanged. A failed
+inspection reports its sanitized phase and error kind; it does not classify a
+database timeout as unrelated work. Operation-budget expiry is reported explicitly.
+No preservation evidence is omitted.
+Read-only blocker inspection includes paginated operation identities, allowlisted
+state/role, claim presence and expiry, and saved-result/materialization/recovery
+presence. MongoDB projects content fields to type markers before returning them;
+no prompts, outputs or claim identities enter the diagnostic result. Expired claims
+remain blockers. These observations do not grant permission to clear ownership.
+An explicit linked claim-release request can restore only an expired finalization
+claim that is the sole difference from an interrupted recovery's full checkpoint.
+The original request/checkpoint remain unchanged. A separate child checkpoint
+precedes the exact compare-and-set; lost responses use verification only. The host
+keeps the serving app stopped and admission closed. An explicit child abort can
+close an interrupted pre-write request only when the original preview still proves
+the same complete state and exact claim. A committed release rejects that abort.
+Original-request abort and any
+later reconciliation remain separate actions. Failed ordinary completion cleanup
+uses a separate five-second budget and still matches only its own claim identity.
+A durable host checkpoint precedes reconciliation; a repeated request verifies saved
+completion rather than replaying it. Original deadlines, charges and failure
+history remain unchanged, and the recovered run remains paused.
+Successful operation Inspect/Stop responses retain their run view and add a
+sanitized `recovery` diagnostic. Its code describes saved completion, an existing
+execution to inspect, a required reviewed recovery, or unresolved/conflicting
+evidence. It never grants provider replay or continuation authority.
+
+The staging host can execute this command from an immutable reviewed candidate
+image before normal deployment. The candidate must use the current schema and
+must not require initialization. Host recovery owns admission, backup, process
+quiescence and its journal; application services retain ownership of result
+validation, source/approval checks, materialization and accounting. Read errors
+are distinct from nonzero work counts. Unknown or unsupported state remains
+blocked. This candidate is not evidence of live recovery or production readiness.
+Recovery journals retain immutable host fingerprints and preview backup identities.
+Mutating reentry verifies those pins; legacy journals must reproduce their original
+preview digest. Expired recovery supports interruption at `prepared`. Terminal
+child receipts are historical results after exact identity validation, independent
+of later parent progress; they do not assert current database state.
+
+J11 manuscript routing covers the complete booklet, including cover-only units;
+unknown units and exact approved sheet tuples remain independent gates. A protected
+M4 `completionRecoveries` grant permits only a named active pre-generation J11
+operation to recover its retained authenticated result from a definite blocker.
+Normal source/byte/usage checks and materialization remain required. Completion,
+provenance and stopped-campaign reopening are atomic, without another provider
+request or changed charges/deadline. Other definite blockers stay blocked; late
+recovery preserves attempt history and pauses before new work.
+
 A protected M4 grant can name an exact inspected terminal manager failure for
 one same-run continuation. Pre-generation specialists use the same proof as managers. Resume verifies its original provider evidence,
 settlement and retained count liability, excludes unresolved work, and atomically

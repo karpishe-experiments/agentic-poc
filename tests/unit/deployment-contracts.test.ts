@@ -24,6 +24,29 @@ describe("deployment contracts", () => {
     expect(compose).toContain("DIFY_BASE_URL: https://api.dify.ai/v1");
   });
 
+  it("lets read-only exact status bypass mutation queues without changing mutation serialization", () => {
+    const workflow = readFileSync(".github/workflows/vps-operation-control.yml", "utf8");
+    const concurrency = workflow.split("\nconcurrency:")[1].split("\ndefaults:")[0];
+    expect(concurrency).toContain("inputs.action == 'operation-status'");
+    expect(concurrency).toContain("format('vps-operation-status-{0}', github.run_id)");
+    expect(concurrency).toContain("|| format('vps-operation-control-{0}', inputs.request_id)");
+    expect(concurrency).toContain("cancel-in-progress: false");
+    const dispatcher = readFileSync("scripts/deploy/vps-deployment.sh", "utf8");
+    const status = dispatcher.split("\noperation_status_host() {")[1].split("\noperation_stop_host() {")[0];
+    expect(status).not.toContain("flock");
+    expect(status).not.toContain("--apply");
+  });
+  it("builds a reviewed recovery image without host access or alias promotion", () => {
+    const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch' && inputs.recovery_candidate == true");
+    expect(workflow).toContain('[[ "$TARGET" == staging && "$GITHUB_REF_NAME" == agent/issue-65-community-probe-staging ]]');
+    for (const step of ["- uses: ./.github/actions/vps-access", "- name: Release and verify", "- name: Publish successful environment alias"]) {
+      expect(workflow.slice(workflow.indexOf(step)).split(/\r?\n/)[1].trim()).toBe("if: env.RECOVERY_CANDIDATE != 'true'");
+    }
+    expect(workflow).toContain("--jq .commit.tree.sha");
+    expect(workflow).toContain('uk.co.uniwares.booklet.source-tree=$tree');
+    expect(workflow).toContain('Image source tree does not match the reviewed commit');
+  });
   it("counts unresolved lifecycle outcomes even when the local attempt is terminal", () => {
     const drain = readFileSync("scripts/wait-for-deployment-drain.ts", "utf8");
     expect(drain).toContain('{ "lifecycle.unresolved": true }');

@@ -4,6 +4,28 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Separate recovery observation from permission to repeat work
+
+A failed control process does not prove that its database transaction failed.
+Checkpoint the exact target before mutation, then verify saved completion after
+an interrupted response. Keep provider starts unavailable to that recovery path.
+Focused recovery fixtures verify one materialization with unchanged reservation
+and charge evidence after repeated observation. Blocker diagnostics must distinguish
+a database read failure from actual work and identify the bounded set of records.
+Promotion candidate: **Documentation**, after supported live delivery is verified.
+
+### Validate manuscript coverage at the booklet boundary
+
+Context: real-text J05 supplied an approved cover unit and three story units.
+Completed J11 routed each once, but the story-only coverage validator rejected the
+cover allocation. Require complete booklet coverage without guessing placement
+from free-form unit keys; retain unknown-unit and exact reference checks. Recover
+valid retained output through normal materialization and an exact protected grant,
+without regenerating it or changing its charge/deadline. Evidence: saved Kid J11
+`055c52c5-35c5-4a70-be1d-f126139a58d8` and focused routing/recovery checks.
+Promotion target: application boundary and recovery guidance. Simulated fixture
+coverage alone did not expose the mismatch; its cover contains no manuscript unit.
+
 ### Distinguish content size from whitespace token exhaustion
 
 - **Observation:** A paid J11 response exhausted 8,192 output tokens with 24,078
@@ -603,3 +625,41 @@ independent cross-field/persona validation. Preserve failed output and account f
 its charge; do not silently clamp geometry or discard panels. Evidence: retained
 Dify execution `e45b4b23-797b-4992-9f3f-eab7b1bb81bf` and focused J11 request/output
 regressions. Promotion target: structured-generation and bounded repair guidance.
+
+### Persona completion does not prove failure-boundary coverage
+
+Context: Balanced reconciliation and operator recovery added paths that successful
+Simulated persona runs did not exercise. Cancellation can also disable cleanup;
+a lost commit reply or later progress-read failure does not prove failed completion.
+Test each ownership and durable-write boundary with the actual budget wrapper,
+fake providers and real persistence. Inject failures before and after commit and
+journal checkpoints; assert retained accounting and no replay. Keep diagnostic
+projections explicit because typed identity objects can carry extra runtime fields.
+Review the complete path through progress reads, preparation expiry and terminal
+bookkeeping; terminal state must take precedence over lease-expiry classification.
+Evidence: completion/finalization/image persistence fixtures and mocked host
+reentry scenarios. Promotion target: focused failure-test and diagnostic guidance.
+
+### Maintenance inherits the interactive completion window
+
+The retained J11 diagnostic identified budget expiry during an uncommitted
+completion transaction, with exact-claim cleanup completed. A 150-second outer
+maintenance budget did not remove the nested 20-second interactive Inspect cap.
+Trace composed budgets and measure remaining time at the failing phase before
+changing a timeout. Exact granted maintenance can reuse its same-invocation
+authenticated response through shared completion services without another GET;
+it still needs full preservation proof, fresh mutable checks and a bounded outer
+request. Fake-provider persistence tests must advance the actual budget clock,
+not only use fast deterministic responses. Local proof is not live recovery.
+
+### Recheck a pinned complete proof without scanning it twice
+
+After the interactive cap was removed from exact maintenance recovery, the next
+live diagnostic showed outer-budget exhaustion during uncommitted completion.
+An existing full preview digest can serve as the baseline for one fresh complete
+post-observation snapshot. Apply need not first scan another baseline and then
+scan again, provided the pinned digest covers the entire target, inventory and
+grant, and normal post-checkpoint mutable checks remain. Test changes to unrelated
+retained rows during the authenticated GET, not only target revision changes.
+A read-only status workflow must also bypass the mutation queue it observes;
+retain the original group and host lock for mutating actions.
