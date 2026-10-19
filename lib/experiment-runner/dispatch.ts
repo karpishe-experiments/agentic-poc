@@ -34,7 +34,7 @@ import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { createOperationCoordinator } from "@/lib/experiment-runner/lifecycle";
-import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, remainingOperationMs, withOperationBudget, withCleanupBudget } from "@/lib/operations/budget";
+import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, operationBudgetRemainingMs, remainingOperationMs, withOperationBudget, withCleanupBudget } from "@/lib/operations/budget";
 import { CompletionReconciliationError, safeFailure } from "@/lib/operations/completion-failure";
 import { cancelOwnedControllers, withOwnedController } from "@/lib/operations/controllers";
 
@@ -863,5 +863,38 @@ export function createExperimentDispatcher(deps: {
     cancelOwnedControllers(run._id);
     return (await repository.getRun(run._id))?.preparation;
   }
-  return { advance, cycle, inspect: coordinator.inspect, inspectPreparation };
+  // Internal maintenance caller only: its fresh authenticated GET and full
+  // preservation proof precede this call. Keep the interactive Inspect/Stop
+  // budgets unchanged; inherit the existing bounded maintenance request instead.
+  async function reconcileRetainedCompletion(target: { runId: string; operationId: string; expectedRevision: number }, observed: RuntimeResult) {
+    const remaining = operationBudgetRemainingMs();
+    if (remaining === null || remaining <= 0 || remaining > 150_000) {
+      throw new ExperimentRepositoryError("invalid_state", "Retained completion requires a bounded maintenance request.");
+    }
+    const run = await repository.getRun(target.runId);
+    const operation = await repository.getOperation(target.operationId);
+    if (!run || !operation ||
+        !authority?.grant.completionRecoveries?.some(item => item.runId === target.runId && item.operationId === target.operationId) ||
+        run.revision !== target.expectedRevision || run.mode !== "balanced" || run.status !== "blocked" || run.safeFailure !== "definite_failure" ||
+        run.activeOperationId !== operation._id || run.preparation || run.generationCompletedAtMs != null ||
+        operation.runId !== run._id || operation.role !== "specialist" || operation.taskId !== "J11" || operation.providerKind !== "text" ||
+        operation.state !== "started" || operation.lifecycle?.stop || operation.resultJson || operation.materializationJson || operation.m4CompletionRecovery ||
+        operation.authorizationClaim || operation.imageCompletionClaim || operation.resultFinalizationClaim ||
+        observed.kind !== "execution" || observed.execution.status !== "succeeded" || observed.execution.id !== operation.workflowRunId ||
+        observed.execution.workflow_id !== operation.verifiedWorkflowId ||
+        operation.workflowTaskId && observed.execution.task_id && operation.workflowTaskId !== observed.execution.task_id ||
+        typeof observed.execution.outputs?.booklet_provider_result !== "string" ||
+        createHash("sha256").update(observed.execution.outputs.booklet_provider_result).digest("hex") !== operation.m4Observation?.wrapperDigest) {
+      throw new ExperimentRepositoryError("invalid_state", "Retained completion requires exact bounded maintenance proof.");
+    }
+    // Preserve the coordinator's authenticated status write, fenced to the
+    // inspected operation. A newly acquired claim requires fresh inspection.
+    const recorded = await deps.database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
+      state: "started", workflowRunId: observed.execution.id, verifiedWorkflowId: observed.execution.workflow_id,
+      authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null,
+      "m4Observation.wrapperDigest": operation.m4Observation!.wrapperDigest }, { $set: { remoteStatus: "succeeded" } });
+    if (recorded.matchedCount !== 1) throw new ExperimentRepositoryError("conflict", "Retained completion ownership changed.");
+    await reconcile(run, operation, observed, true);
+  }
+  return { advance, cycle, inspect: coordinator.inspect, inspectPreparation, reconcileRetainedCompletion };
 }

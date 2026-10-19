@@ -495,8 +495,74 @@ describe("focused J11 retained completion recovery", () => {
       maintenance: false, draining: false, activeMutations: 0, mutationOwners: [], interruptedMutations: 0, reason: null, updatedAtMs: env.now() });
     const service = createBookletRecovery({ database: env.database, config: { ...env.config, m4: { state: "granted", authority: env.recoveryAuthority } },
       runtime: env.runtime, store: () => env.store, now: env.now });
-    return { ...env, service, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
+    const boundedService = { ...service, apply: (...args: Parameters<typeof service.apply>) =>
+      withOperationBudget(env.now() + 150_000, () => service.apply(...args), { now: env.now }) };
+    return { ...env, service: boundedService, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
   }
+
+  it("maintenance recovery reuses its own authenticated GET and completes past interactive Inspect's window", async () => {
+    const env = await supportedRecovery();
+    const proof = await env.service.preview(env.target);
+    expect(proof).not.toHaveProperty("observed");
+    const gets = vi.mocked(env.runtime.retrieve).mock.calls.length;
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const ops = env.database.collections.experiment_operations;
+    const write = ops.findOneAndUpdate.bind(ops);
+    let delayed = false;
+    vi.spyOn(ops, "findOneAndUpdate").mockImplementation(async (...args) => {
+      if (!delayed && (args[1] as { $set?: { state?: string } }).$set?.state === "succeeded") {
+        delayed = true; for (let i = 0; i < 4; i++) env.tick();
+      }
+      return write(...args);
+    });
+    try {
+      await env.service.apply(env.target, proof.previewDigest, async () => {});
+      expect(delayed).toBe(true);
+      expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets + 1);
+      expect(await env.service.verifyCompleted(env.target, proof.snapshot)).toMatchObject({ verified: true, accounting: "preserved" });
+      expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets + 1);
+      const saved = (await env.repository.getOperation(env.operation._id))!;
+      expect(saved).toMatchObject({ state: "succeeded", deadlineAtMs: env.operation.deadlineAtMs,
+        lifecycle: { attemptOutcome: "failed", unresolved: false }, m4Reservation: env.operation.m4Reservation });
+      expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "paused", pauseRequested: true, counters: env.run.counters });
+      expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+      expect(env.runtime.stop).not.toHaveBeenCalled();
+    } finally { vi.restoreAllMocks(); }
+  }, 120_000);
+
+  it("internal maintenance reconciliation rejects missing budget, grant and changed response identity", async () => {
+    const env = await supportedRecovery();
+    const binding = env.config.bindings.find(item => item.role === "specialist" && item.taskId === "J11")!;
+    const observed = await env.runtime.retrieve(binding, env.operation.workflowRunId!);
+    const inspector = (granted: boolean) => createExperimentDispatcher({ database: env.database, runtime: env.runtime,
+      config: { ...env.config, m4: { state: "granted", authority: granted ? env.recoveryAuthority : env.authority } }, now: env.now });
+    await expect(inspector(true).reconcileRetainedCompletion(env.target, observed)).rejects.toThrow("bounded maintenance");
+    const bounded = (action: () => Promise<void>) => withOperationBudget(env.now() + 150_000, action, { now: env.now });
+    await expect(bounded(() => inspector(false).reconcileRetainedCompletion(env.target, observed))).rejects.toThrow("exact bounded maintenance proof");
+    if (observed.kind !== "execution") throw new Error("Expected execution fixture");
+    await expect(bounded(() => inspector(true).reconcileRetainedCompletion(env.target,
+      { ...observed, execution: { ...observed.execution, id: id(999) } }))).rejects.toThrow("exact bounded maintenance proof");
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
+  }, 120_000);
+
+  it.each(["source", "approval", "budget"])("maintenance recovery rejects post-checkpoint %s drift without completion", async fault => {
+    const env = await supportedRecovery();
+    const proof = await env.service.preview(env.target);
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    await expect(env.service.apply(env.target, proof.previewDigest, async () => {
+      const source = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J05" }))!;
+      if (fault === "source") await env.database.collections.artifacts.updateOne({ _id: source._id }, { $set: { state: "needs_review" } });
+      if (fault === "approval") await env.database.collections.approvals.deleteOne({ artifactVersionId: source.currentVersionId! });
+      if (fault === "budget") for (let i = 0; i < 26; i++) env.tick();
+    })).rejects.toThrow();
+    expect(await env.database.collections.artifact_versions.countDocuments({ sourceOperationId: env.operation._id })).toBe(0);
+    expect((await env.repository.getOperation(env.operation._id))?.resultFinalizationClaim).toBeNull();
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    expect(env.runtime.stop).not.toHaveBeenCalled();
+  }, 120_000);
 
   it.each(["progress", "lost_commit", "transaction_unknown", "validation", "validation_secondary"] as const)(
     "classifies completion %s without replay or invalidating committed output", async fault => {

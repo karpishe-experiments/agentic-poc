@@ -639,3 +639,15 @@ Review the complete path through progress reads, preparation expiry and terminal
 bookkeeping; terminal state must take precedence over lease-expiry classification.
 Evidence: completion/finalization/image persistence fixtures and mocked host
 reentry scenarios. Promotion target: focused failure-test and diagnostic guidance.
+
+### Maintenance inherits the interactive completion window
+
+The retained J11 diagnostic identified budget expiry during an uncommitted
+completion transaction, with exact-claim cleanup completed. A 150-second outer
+maintenance budget did not remove the nested 20-second interactive Inspect cap.
+Trace composed budgets and measure remaining time at the failing phase before
+changing a timeout. Exact granted maintenance can reuse its same-invocation
+authenticated response through shared completion services without another GET;
+it still needs full preservation proof, fresh mutable checks and a bounded outer
+request. Fake-provider persistence tests must advance the actual budget clock,
+not only use fast deterministic responses. Local proof is not live recovery.
