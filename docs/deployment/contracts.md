@@ -11,6 +11,13 @@ use their retained backup. An exact digest match is required; otherwise report
 `legacy_preview_fingerprint_unverified` without mutation. No current state is adopted.
 Expired `prepared` recovery repeats stopped-process/container, original-journal,
 backup and compatibility checks before restoration; it never repeats initialization.
+For an expired deployment that used a completed candidate recovery, preview also
+pins the exact handoff bytes. The handoff must match its completed recovery journal
+and the failed image's source tree. After prior-release compatibility and readiness
+pass, apply archives those bytes under the original failed deployment ID before
+reopening admission. Interrupted restoration verifies the live or archived hash.
+A legacy preview without a pinned handoff cannot retire one. The original recovery
+journal, saved completion, failed deployment journal and deadline remain unchanged.
 Terminal child receipts validate request/target/candidate/revision and return
 `historical: true` without application reads or lifecycle changes. Old child
 revisions come from their hash-verified original checkpoint. Nonterminal paths

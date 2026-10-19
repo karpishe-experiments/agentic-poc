@@ -4,6 +4,28 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Project provenance before scanning growing run histories
+
+Deployment initialization loaded complete experiment operations and artifacts even
+though its integrity checks consume only identities and provenance. The retained
+host error proves a cursor `getMore` timeout, but does not identify its collection.
+Use minimal projections and indexed pages while retaining every row and check.
+The focused 205-operation persistence fixture verifies three pages and rejects a
+broken final-page reference; the read-failure fixture retains the original error
+without logging its private message. Local checks do not prove live latency.
+Promotion candidate: **Documentation** for maintenance integrity verification.
+
+### Complete the failed-delivery handoff boundary
+
+A successful candidate recovery pins its source tree for the next deployment.
+If that deployment fails initialization, restoring the prior app while retaining
+the active handoff would prevent a corrected source tree from deploying. Pin the
+handoff in expired-recovery preview, validate its completed parent and failed-image
+tree, then archive its exact bytes after compatibility/readiness checks. Preserve
+all original journals and deadlines. Mocked lifecycle cases cover exact archival,
+preview drift rejection and interrupted restoration from the archive.
+Promotion candidate: **Documentation** for supported deployment recovery.
+
 ### Separate recovery observation from permission to repeat work
 
 A failed control process does not prove that its database transaction failed.

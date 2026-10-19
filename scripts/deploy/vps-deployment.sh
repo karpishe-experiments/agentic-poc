@@ -565,9 +565,36 @@ recovery_no_containers() {
 recovery_host_fingerprint() {
   sha256sum "$1/manifest.sha256" "$SECRETS/staging/secrets.json" "$CONFIG_FILE" | sha256sum | awk '{print $1}'
 }
+expired_recovery_handoff_hash() {
+  local current="$1" marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" original="$STATE/operation.json" id parent tree image
+  [[ -e "$original" ]] || original="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+  if [[ -e "$marker" && -e "$archive" ]]; then cmp -s "$marker" "$archive" || die 'Recovery handoff archive differs'; fi
+  [[ -e "$marker" ]] || marker="$archive"
+  [[ -e "$marker" ]] || return 0
+  [[ -f "$marker" && ! -L "$marker" ]] || die 'Recovery handoff is invalid'
+  id="$(jq -er .requestId "$marker")"
+  [[ "$id" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]] || die 'Recovery handoff identity invalid'
+  parent="$STATE/recoveries/$id/host.json"
+  [[ -f "$parent" && ! -L "$parent" ]] || die 'Recovery handoff journal missing'
+  jq -e --arg prior "$current" '.action=="candidate-reconcile" and .environment=="staging" and .priorRelease==$prior and (.sourceTree|test("^[a-f0-9]{40}$"))' "$marker" >/dev/null || die 'Recovery handoff target differs'
+  jq -e '.phase=="complete"' "$parent" >/dev/null || die 'Recovery handoff is incomplete'
+  [[ "$(jq -Sc 'del(.phase)' "$marker")" == "$(jq -Sc 'del(.phase)' "$parent")" ]] || die 'Recovery handoff provenance differs'
+  image="$(jq -er .image "$original")"
+  tree="$(docker image inspect --format '{{index .Config.Labels "uk.co.uniwares.booklet.source-tree"}}' "$image")" || die 'Failed deployment tree inspection failed'
+  [[ "$tree" == "$(jq -er .sourceTree "$marker")" ]] || die 'Recovery handoff failed deployment differs'
+  sha256sum "$marker" | awk '{print $1}'
+}
 recovery_verify_fingerprint() {
   local journal="$1" current="$2" supplied="$BACKUP_ID" fingerprint backup digest
   fingerprint="$(recovery_host_fingerprint "$current")" || die 'Recovery fingerprint inspection failed'
+  if [[ "$(jq -r .action "$journal")" == expired-deployment-recover ]] && jq -e 'has("handoffSha256")' "$journal" >/dev/null; then
+    local handoff_hash
+    handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
+    [[ "$handoff_hash" == "$(jq -r .handoffSha256 "$journal")" ]] || die 'Recovery handoff changed'
+    fingerprint="$(printf '%s\n' "$fingerprint" "$handoff_hash" | sha256sum | awk '{print $1}')"
+  elif [[ "$(jq -r .action "$journal")" == expired-deployment-recover && -e "$STATE/recovery-handoff-staging.json" ]]; then
+    die 'legacy_preview_fingerprint_unverified: recovery handoff was not pinned'
+  fi
   if jq -e 'has("hostFingerprint") and has("previewBackupId")' "$journal" >/dev/null; then
     [[ "$(jq -er .hostFingerprint "$journal")" == "$fingerprint" ]] || die 'Recovery configuration changed'
     return 0
@@ -681,6 +708,16 @@ expired_recovery_finish() {
   (REQUEST_ID=''; compose "$current" up -d --no-deps app) || die 'Prior service restart failed'
   (REQUEST_ID=''; verify_application "$current") || die 'Prior service readiness failed'
   recovery_app_json "$candidate" '' legacy-compatibility "$evidence/post-start.json"
+  # Retire only the preview-pinned handoff after compatibility and readiness.
+  # Preserve its exact bytes with the original failed deployment.
+  local handoff_hash marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json"
+  handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
+  [[ "$handoff_hash" == "$(jq -r '.handoffSha256 // ""' "$journal")" ]] || die 'Recovery handoff is not preview-pinned'
+  if [[ -n "$handoff_hash" && -e "$marker" ]]; then
+    if [[ ! -e "$archive" ]]; then cp --no-clobber "$marker" "$archive"; fi
+    cmp -s "$marker" "$archive" || die 'Recovery handoff archive differs'
+    rm "$marker"
+  fi
   if [[ ! -e "$STATE/operations/$ORIGINAL_REQUEST_ID.json" ]]; then
     cp --no-clobber "$STATE/operation.json" "$STATE/operations/$ORIGINAL_REQUEST_ID.json"
   fi
@@ -796,7 +833,7 @@ supported_recovery_host() (
     if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_unresolved_guard "$REQUEST_ID" "$ORIGINAL_REQUEST_ID"; else recovery_unresolved_guard "$REQUEST_ID"; fi
   fi
   recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.oneoff=True || die 'Staging maintenance container remains active; inspect its owning request, do not replay'
-  local CONTROL_DEADLINE_SECONDS=$((SECONDS + 2520)) current image candidate evidence journal digest app_digest='' old_hash='' failed_image='' host_fingerprint source_tree='' prior_schema failed_schema
+  local CONTROL_DEADLINE_SECONDS=$((SECONDS + 2520)) current image candidate evidence journal digest app_digest='' old_hash='' failed_image='' host_fingerprint source_tree='' prior_schema failed_schema handoff_hash=''
   read -r current < "$STATE/releases/staging/current"
   [[ "$current" =~ ^$STATE/releases/staging/[a-f0-9]{40}$ && ! -L "$current" ]] || die 'Selected staging release is invalid'
   (cd "$current" && sha256sum -c manifest.sha256 >/dev/null) || die 'Selected release files changed'
@@ -923,13 +960,17 @@ supported_recovery_host() (
     (REQUEST_ID=''; maintenance "$current" recovery verify) > "$TEMP_DIR/backup.json" 2> "$TEMP_DIR/backup.stderr" || die 'Backup verification failed; inspect before recovery'
   fi
   host_fingerprint="$(recovery_host_fingerprint "$current")"
+  if [[ "$ACTION" == expired-deployment-recover ]]; then
+    handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
+    host_fingerprint="$(printf '%s\n' "$host_fingerprint" "$handoff_hash" | sha256sum | awk '{print $1}')"
+  fi
   digest="$(printf '%s\n' "$host_fingerprint" "$ACTION" "$REQUEST_ID" "$current" "$image" "$COMMIT" "$IMAGE_DIGEST" "$RUN_ID" "$OPERATION_ID" "$EXPECTED_REVISION" "$app_digest" "$old_hash" "$BACKUP_ID" "$source_tree" | sha256sum | awk '{print $1}')"
   printf 'result: recovery preview request=%s action=%s digest=%s\n' "$REQUEST_ID" "$ACTION" "$digest"
   [[ "$APPLY" == true ]] || return 0
   [[ "$PREVIEW_DIGEST" == "$digest" ]] || die 'Recovery preview changed; obtain a fresh preview'
   mkdir -p "$STATE/recoveries"; mkdir "$evidence"; chmod 700 "$evidence"
-  jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" --arg fingerprint "$host_fingerprint" --arg previewBackup "$BACKUP_ID" \
-    '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage,hostFingerprint:$fingerprint,previewBackupId:$previewBackup}' > "$journal"
+  jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" --arg fingerprint "$host_fingerprint" --arg previewBackup "$BACKUP_ID" --arg handoff "$handoff_hash" \
+    '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage,hostFingerprint:$fingerprint,previewBackupId:$previewBackup} + (if $action=="expired-deployment-recover" then {handoffSha256:$handoff} else {} end)' > "$journal"
   cp "$TEMP_DIR/"*.json "$evidence/"
   # An uncertain admission reopen must be closed again. Cleanup has its own
   # bounded budget; it cannot continue business recovery or alter old journals.
