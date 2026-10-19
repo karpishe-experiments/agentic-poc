@@ -32,11 +32,23 @@ Proof-gated abort `39243855714` then restored the exact prior app, verified
 readiness and retained closed admission. Both original journals/deadlines and
 failed evidence are preserved. No further paid request was made.
 
-The next dependency is a private read-only, allowlisted projection of the retained
-`apply.json` diagnostic: SSH disconnected before it reached Actions, and current
-status exposes the journal phase only. Do not infer the original transaction
-cause or replay reconciliation. PR #205 remains unmerged. Kid, Parent and Creator
-acceptance remain incomplete; the conditional $5 campaign limits are unchanged.
+The operator's allowlisted retained diagnostic now establishes
+`OperationBudgetExpired` at `completion_transaction`, uncommitted, with cleanup
+completed. The result transaction ran 6,394 ms before expiry; complete
+reconciliation ran 21,382 ms. The nested interactive Inspect window covers lookup,
+observation/accounting and completion together. These measurements identify the
+constrained phase, not the slowest individual database or source read.
+The bounded application correction reuses this apply invocation's authenticated
+GET after its full preservation proof and fresh eligibility/admission checks, then
+calls normal shared reconciliation under the existing 150-second maintenance
+budget. Interactive Inspect/Stop and all provider deadlines/claims are unchanged.
+The new internal entry is exact-grant/revision/J11/response guarded, performs the
+existing authenticated status write and preserves all completion/accounting/source
+checks. It does not advance or Resume the run. Focused fake-provider persistence
+checks cover a logical 24-second completion, one GET per apply, expired outer
+budget, invalid grant/response and post-checkpoint source/approval/revision drift.
+This correction is under verification, not delivered or live-proven. PR #205
+remains gated; no additional paid request is authorized by the correction itself.
 
 Measured follow-ups: claim apply repeats three full snapshots inside one budget;
 the existing separate verification safely recovered its uncertain acknowledgement.

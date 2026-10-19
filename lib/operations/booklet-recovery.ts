@@ -162,16 +162,23 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     const wrapper = result.execution.outputs?.booklet_provider_result;
     requireProof(typeof wrapper === "string" && createHash("sha256").update(wrapper).digest("hex") === op.m4Observation?.wrapperDigest,
       "remote_evidence_changed");
+    requireProof(!op.workflowTaskId || !result.execution.task_id || op.workflowTaskId === result.execution.task_id,
+      "remote_evidence_changed");
+    return result;
   }
-  async function preview(target: RecoveryTarget, closed = false) {
+  async function preparePreview(target: RecoveryTarget, closed: boolean) {
     await inspectStep("catalog", () => verifyMongoStructure(database));
     await inspectStep("eligibility", () => eligible(target));
     await quiet(target, closed);
     const before = await snapshot(target);
-    await inspectStep("remote_observation", () => observe(target));
+    const observed = await inspectStep("remote_observation", () => observe(target));
     await quiet(target, closed);
     requireProof(recoveryDigest(await snapshot(target)) === recoveryDigest(before), "state_changed");
-    return { contract: BOOKLET_RECOVERY_CONTRACT, previewDigest: recoveryDigest({ target, snapshot: before, grant: authority(target) }), snapshot: before };
+    return { proof: { contract: BOOKLET_RECOVERY_CONTRACT, previewDigest: recoveryDigest({ target, snapshot: before, grant: authority(target) }), snapshot: before }, observed };
+  }
+  async function preview(target: RecoveryTarget, closed = false) {
+    // The authenticated response stays private to this invocation, never in a receipt.
+    return (await preparePreview(target, closed)).proof;
   }
   async function verifyCompleted(target: RecoveryTarget, before: RecoverySnapshot) {
     authority(target);
@@ -216,14 +223,15 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   }
   async function apply(target: RecoveryTarget, expectedDigest: string,
     beforeMutation: (proof: { contract: string; previewDigest: string; snapshot: RecoverySnapshot }) => Promise<void>) {
-    const proof = await preview(target, true);
+    const { proof, observed } = await preparePreview(target, true);
     requireProof(proof.previewDigest === expectedDigest, "preview_changed");
     await beforeMutation(proof);
     // Checkpoint I/O grants no permission to mutate: repeat currentness and
     // ownership checks, then use the normal source/approval/accounting services.
     await eligible(target);
     await quiet(target, true);
-    await inspectStep("completion_reconciliation", () => createExperimentDispatcher({ database, config, runtime, now, store: deps.store, uploadReference: deny, mutate: deny }).inspect(target));
+    await inspectStep("completion_reconciliation", () => createExperimentDispatcher({ database, config, runtime, now, store: deps.store, uploadReference: deny, mutate: deny })
+      .reconcileRetainedCompletion(target, observed));
     return proof;
   }
   async function verifyUnapplied(target: RecoveryTarget, expectedDigest: string) {
