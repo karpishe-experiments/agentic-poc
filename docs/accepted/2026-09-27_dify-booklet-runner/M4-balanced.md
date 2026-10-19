@@ -1,32 +1,51 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The compact J11 correction is deployed. Kid's retained response is complete; Booklet blocks its cover-only manuscript routing after 30 paid text requests and five simulated images. Complete-booklet coverage and exact same-operation completion recovery are being verified. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01–AC03, AC05–AC08, AC10–AC13.
+**State:** Kid remains blocked after 30 paid text requests and five simulated images. Its retained J11 response has not been committed. The reviewed recovery dispatcher is installed; both interrupted recovery requests are safely aborted with the prior app ready and admission closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Supported recovery follow-up - 2026-10-18
 
-**Current implementation follow-up - 2026-10-19:** PR #211 is merged and its
-staging candidate build/lean CI passed; it is not installed. The approved combined
-bundle adds authorization/image cleanup under cancellation, separates committed
-completion from progress errors, preserves original sanitized failure diagnostics,
-and closes related host inspection/reentry/receipt gaps. Focused failure fixtures
-replace another persona campaign. The original transaction cause remains unproven;
-measure the inherited 20-second Inspect budget rather than increasing timeouts.
-One combined reviewed dispatcher/candidate handoff precedes supported recovery.
-No live recovery, deployment or paid request is claimed by these local changes.
+**Current implementation - 2026-10-19:** PR #212 is merged at
+`7fe113baf926b3e4782c9181a87472288a5f343c`; reviewed head
+`e7f58588f5d9271e251c3602a3718e7284f85501` passed two independent reviews.
+Linux CI `39238585635` and staging CI `39238671474` passed, including both
+full shell suites. Candidate-only build `39238706129` passed for staging
+`7126e28a1b30f8aadaf51a16920d662d4d98239a`, image digest
+`sha256:d9f65196382d0312bf58187bf7f1c3994988ddac89579ebcb756b969ec1c588f`.
+The operator installed dispatcher SHA256
+`f00f752fe7257b39126641c8281a41964802f884f4db456c739c9d50f79ec265`
+with backup `/var/lib/kids-booklet/issue65-recovery-dispatcher.WWdV0x7G/dispatcher.before`.
+Normal staging deployment remains gated on successful J11 reconciliation.
 
-**Current live state:** recovery request `issue65-m4-j11-20261018-v4` is interrupted
-at reconciliation. Staging admission remains closed and its serving application
-is stopped. Preview `39117877394` passed; apply `39118151943` failed during the
-result transaction after backup `staging-recovery-issue65-m4-j11-20261018-v4`
-was verified. Status `39118995350` confirms the retained `reconciling` phase.
-Saved-completion verification `39119169276` returned `completion_unverified`;
-the supported abort check `39119284111` returned `unsupported_operation`.
-Neither check replayed reconciliation or restored admission. Read-only inspection
-`39120261970` confirms an expired result-finalization claim, with J11 still started
-and no saved result, materialization or recovery marker. There is no unrelated
-work or active mutation ownership. The original transaction failure remains unproven. No new paid
-request was made. PR #205 and normal deployment remain gated on safe recovery.
+**Current live state:** exact claim-release preview `39239926407` passed.
+Apply `39240169978` exceeded its 150-second budget during post-write snapshot
+verification. Separate verification-only `39240852315` proved the exact claim
+release and complete preservation; no mutation was replayed. Supported abort
+`39241112378` closed original request `issue65-m4-j11-20261018-v4` safely.
+Fresh J11 preview `39241347236` passed. Apply `39241709069` for
+`issue65-m4-j11-20261019-v5` lost SSH with `Broken pipe` after reaching
+reconciliation; backup `staging-recovery-issue65-m4-j11-20261019-v5` is retained.
+Verification-only `39243360753` returned `completion_unverified`.
+Inspection `39243648536` found only the exact J11 run/operation: still started,
+no claims, no result/materialization/recovery, and zero mutation ownership.
+Proof-gated abort `39243855714` then restored the exact prior app, verified
+readiness and retained closed admission. Both original journals/deadlines and
+failed evidence are preserved. No further paid request was made.
+
+The next dependency is a private read-only, allowlisted projection of the retained
+`apply.json` diagnostic: SSH disconnected before it reached Actions, and current
+status exposes the journal phase only. Do not infer the original transaction
+cause or replay reconciliation. PR #205 remains unmerged. Kid, Parent and Creator
+acceptance remain incomplete; the conditional $5 campaign limits are unchanged.
+
+Measured follow-ups: claim apply repeats three full snapshots inside one budget;
+the existing separate verification safely recovered its uncertain acknowledgement.
+A later bounded phase split must preserve the complete post-checkpoint drift check
+and final independent proof. Do not increase timeouts from this evidence.
+The control workflow also queues read-only status behind the same request's
+mutation; status concurrency needs a narrow correction while mutation serialization
+remains intact. These findings do not authorize a provider replay or new campaign.
+Credential-inventory impact: none.
 
 The bounded diagnostic follow-up adds paginated operation state and claim/presence
 flags to existing read-only inspection. MongoDB returns content type markers,
