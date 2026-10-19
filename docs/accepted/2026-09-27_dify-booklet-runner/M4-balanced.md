@@ -1,17 +1,17 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid remains blocked after 30 paid text requests and five simulated images. Its retained J11 response has not been committed. The reviewed recovery dispatcher is installed; both interrupted recovery requests are safely aborted with the prior app ready and admission closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** Kid remains blocked after 30 paid text requests and five simulated images. Its retained J11 response has not been committed. The reviewed recovery dispatcher is installed; interrupted recovery requests are safely aborted with the prior app ready and admission closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Supported recovery follow-up - 2026-10-18
 
-**Current implementation - 2026-10-19:** PR #212 is merged at
-`7fe113baf926b3e4782c9181a87472288a5f343c`; reviewed head
-`e7f58588f5d9271e251c3602a3718e7284f85501` passed two independent reviews.
-Linux CI `39238585635` and staging CI `39238671474` passed, including both
-full shell suites. Candidate-only build `39238706129` passed for staging
-`7126e28a1b30f8aadaf51a16920d662d4d98239a`, image digest
-`sha256:d9f65196382d0312bf58187bf7f1c3994988ddac89579ebcb756b969ec1c588f`.
+**Current implementation - 2026-10-19:** PR #214 is merged at
+`165a36c3e3ca39d79f1a602da86b7c0f768d95a7`; reviewed head
+`0a0ef1d2ca974440dc3b6e7b9bcb34a736a247e8` passed two independent reviews.
+Linux CI `39246918885` and staging CI `39247011887` passed, including both
+full shell suites. Candidate-only build `39247005998` passed for staging
+`ba880437198f19f592968911f4b9a8f6a2be2e7f`, image digest
+`sha256:3b383b04eedbebd59200d7e6c3378fdca94f58d92c5248302a2aee6bd6929416`.
 The operator installed dispatcher SHA256
 `f00f752fe7257b39126641c8281a41964802f884f4db456c739c9d50f79ec265`
 with backup `/var/lib/kids-booklet/issue65-recovery-dispatcher.WWdV0x7G/dispatcher.before`.
@@ -32,32 +32,36 @@ Proof-gated abort `39243855714` then restored the exact prior app, verified
 readiness and retained closed admission. Both original journals/deadlines and
 failed evidence are preserved. No further paid request was made.
 
-The operator's allowlisted retained diagnostic now establishes
-`OperationBudgetExpired` at `completion_transaction`, uncommitted, with cleanup
-completed. The result transaction ran 6,394 ms before expiry; complete
-reconciliation ran 21,382 ms. The nested interactive Inspect window covers lookup,
-observation/accounting and completion together. These measurements identify the
-constrained phase, not the slowest individual database or source read.
-The bounded application correction reuses this apply invocation's authenticated
-GET after its full preservation proof and fresh eligibility/admission checks, then
-calls normal shared reconciliation under the existing 150-second maintenance
-budget. Interactive Inspect/Stop and all provider deadlines/claims are unchanged.
-The new internal entry is exact-grant/revision/J11/response guarded, performs the
-existing authenticated status write and preserves all completion/accounting/source
-checks. It does not advance or Resume the run. Focused fake-provider persistence
-checks cover a logical 24-second completion, one GET per apply, expired outer
-budget, invalid grant/response and post-checkpoint source/approval/revision drift.
-This correction is under verification, not delivered or live-proven. PR #205
-remains gated; no additional paid request is authorized by the correction itself.
+The operator's v5 diagnostic established uncommitted completion budget expiry,
+with cleanup completed. PR #214 (reviewed `0a0ef1d2ca974440dc3b6e7b9bcb34a736a247e8`)
+merged at `165a36c3e3ca39d79f1a602da86b7c0f768d95a7`. CI
+`39246918885`/`39247011887` and candidate build `39247005998` passed.
+The exact maintenance path now reuses its same-invocation authenticated response
+under the existing 150-second budget, preserving interactive Inspect/Stop caps.
+V6 preview `39247782828` passed. Apply `39248278539` then reached the
+outer budget: reconciliation 42,650 ms, result transaction 27,926 ms, remaining
+zero, uncommitted and cleanup completed. This identifies the constrained phase;
+it does not identify the slowest individual source/database read. Supported abort
+`39250015129` verified unchanged data and restored the prior app ready with
+admission closed. Backup `staging-recovery-issue65-m4-j11-20261019-v6`, original
+journal/deadline and failed evidence remain preserved. No additional paid call.
 
-Measured follow-ups: claim apply repeats three full snapshots inside one budget;
-the existing separate verification safely recovered its uncertain acknowledgement.
-A later bounded phase split must preserve the complete post-checkpoint drift check
-and final independent proof. Do not increase timeouts from this evidence.
-The control workflow also queues read-only status behind the same request's
-mutation; status concurrency needs a narrow correction while mutation serialization
-remains intact. These findings do not authorize a provider replay or new campaign.
-Credential-inventory impact: none.
+The bounded correction compares one full post-GET snapshot directly with apply's
+already-pinned target/snapshot/grant digest. Fresh preview retains both scans;
+apply no longer repeats the first scan before comparing the complete proof.
+All preservation rows remain; changed foreign assets, approvals or grants still
+reject before checkpoint. Fresh mutable checks after checkpoint and all shared
+completion, source, approval, accounting, claim and progress checks remain.
+Apply plus independent post-write verification needs two full scans rather than
+three. Budgets, provider deadlines, leases, routes and schemas are unchanged.
+This follow-up is under verification, not live-proven. PR #205 remains gated.
+
+The same bundle gives only read-only status requests an independent workflow
+concurrency group. Mutating actions keep their existing group and host lock.
+Current phase can then be inspected during apply without stopping or replaying it.
+The separate claim-release path still has repeated scans; its earlier uncertain
+acknowledgement was recovered safely by verification only. Its phase split remains
+deferred. Credential-inventory impact: none; campaign/persona limits unchanged.
 
 The bounded diagnostic follow-up adds paginated operation state and claim/presence
 flags to existing read-only inspection. MongoDB returns content type markers,

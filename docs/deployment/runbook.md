@@ -37,6 +37,9 @@ fields. Pages are zero-based; limit is at most 50. Expired-deployment recovery u
 commit/image. Preview does not create a durable recovery journal; retain its digest
 from the workflow summary. Apply does create one. Use `operation-status` with its
 exact request ID after interruption.
+Read-only `operation-status` runs independently of the same request's mutation
+queue. It reports the retained phase without stopping, replaying or acquiring the
+mutation lock. A phase is not proof that the application result committed.
 
 If candidate recovery stopped before committing business changes, use the same
 target and preview digest with `abort_recovery="true"` in the recovery JSON and

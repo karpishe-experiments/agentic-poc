@@ -37,9 +37,12 @@ starts, uploads and stops disabled. Preview fingerprints retained business data
 and authority. Apply rechecks that fingerprint with admission closed. The
 preservation snapshot reads all retained rows in bounded 256-row keyset pages,
 with at most four collections read concurrently. A failed read stops new scheduling
-and settles every started read. Fresh apply owns one preview and awaits the durable
-checkpoint before rechecking eligibility/admission and calling normal reconciliation.
-This requires three complete snapshots rather than five. The maintenance command
+and settles every started read. Fresh preview proves stability with two complete snapshots around its authenticated
+GET. Apply pins that proof digest: it compares one complete post-GET snapshot
+against the pinned target/snapshot/grant digest before saving its checkpoint,
+then rechecks eligibility/admission and uses normal reconciliation. Independent
+post-write verification takes another full snapshot. Apply plus verification now
+need two complete scans rather than three; no preservation row is omitted. The maintenance command
 has a 150-second budget within the host's 180-second bound; persisted provider
 deadlines and claims are unchanged. A failed
 inspection reports its sanitized phase and error kind; it does not classify a
