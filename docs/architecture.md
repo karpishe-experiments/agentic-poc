@@ -20,8 +20,15 @@ Authorization, text and image ownership cleanup use the independent five-second
 cleanup budget and exact claim identity, including lost claim acknowledgements.
 Image cleanup covers every post-claim exit and preserves original bytes/digest.
 Sanitized failure diagnostics retain the original stage, error kind, repository
-code, timing, remaining budget and cleanup outcome. The nested Inspect budget is
-measured; this correction does not extend deadlines or leases.
+code, timing, remaining budget and cleanup outcome. Interactive Inspect/Stop keep
+their existing 20/30-second budgets. Exact granted maintenance J11 recovery reuses
+its same-invocation authenticated GET after full post-observation preservation
+proof and fresh eligibility/admission checks. Its internal dispatcher entry checks
+the bounded context, grant, revision, operation and response identity before using
+shared reconciliation under the existing 150-second maintenance budget. Normal
+accounting, sources, approvals, the 60-second claim, materialization and progress
+checks remain. Responses are not cached across requests or put in preview receipts.
+Provider deadlines and claim leases are unchanged.
 
 The supported issue #65 recovery candidate adds a maintenance-only
 `booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
