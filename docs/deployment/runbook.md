@@ -17,9 +17,17 @@ those resources or production configuration.
 
 ### Supported recovery candidate
 
-The issue #65 supported-recovery implementation is under verification. Installation
-and live execution must be recorded separately; the commands below require the
-matching dispatcher capabilities and application image.
+The issue #65 recovery dispatcher is installed and retained J11 completion has
+been verified through supported controls. Installation and live execution remain
+separate evidence; the commands below require matching dispatcher capabilities
+and application images. See the current [M4 record](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
+for the blocked normal delivery and next checkpoint.
+
+The Dify-profile initializer verifies projected identity/provenance rows in pages
+of 100. A failed read reports `experiment_integrity_read`, collection and an
+allowlisted error kind without saved contents or connection details. Preserve the
+failed deployment journal and backup; a read timeout does not establish invalid
+data or authorize replay, data restoration or a deadline increase.
 
 Use **VPS operation control** with `candidate-reconcile` for a granted retained
 completion, or `expired-deployment-recover` for a stopped expired deployment.
