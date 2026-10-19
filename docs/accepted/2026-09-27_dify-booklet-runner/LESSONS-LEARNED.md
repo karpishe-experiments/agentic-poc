@@ -4,6 +4,17 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Project provenance before scanning growing run histories
+
+Deployment initialization loaded complete experiment operations and artifacts even
+though its integrity checks consume only identities and provenance. The retained
+host error proves a cursor `getMore` timeout, but does not identify its collection.
+Use minimal projections and indexed pages while retaining every row and check.
+The focused 205-operation persistence fixture verifies three pages and rejects a
+broken final-page reference; the read-failure fixture retains the original error
+without logging its private message. Local checks do not prove live latency.
+Promotion candidate: **Documentation** for maintenance integrity verification.
+
 ### Separate recovery observation from permission to repeat work
 
 A failed control process does not prove that its database transaction failed.

@@ -3,21 +3,53 @@ import { access } from "node:fs/promises";
 import type { MongoDatabaseContext } from "@/db/client";
 import { verifyMongoStructure } from "@/db/setup";
 import { AGENT_SEED_SKILL_IDS } from "@/db/agent-defaults";
+import type { Collection, Document, Filter } from "mongodb";
 
 const parseArray = (value: string, label: string): string[] => { const parsed = JSON.parse(value) as unknown; if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) throw new Error(`${label} must be a serialized string array.`); return parsed; };
 const requireIds = (known: Set<string>, ids: Array<string | null | undefined>, label: string) => { const missing = ids.filter((id): id is string => Boolean(id) && !known.has(id!)); if (missing.length) throw new Error(`${label} contains missing references: ${missing.slice(0, 5).join(", ")}.`); };
 
 export type MongoVerification = { counts: Record<string, number>; unresolvedAssetUris: string[] };
 
+// Integrity verification needs identities and provenance, not saved prompts or
+// results. Each indexed page has its own existing driver budget; no getMore is
+// needed to transfer an entire collection of growing operation payloads.
+async function verificationRows<T extends Document & { _id: string }, K extends keyof T & string>(
+  collection: Collection<T>, fields: readonly K[], filter: Filter<T> = {},
+): Promise<Pick<T, K | "_id">[]> {
+  const rows: Pick<T, K | "_id">[] = [];
+  let after: string | undefined;
+  const started = Date.now();
+  try {
+    for (;;) {
+      const page = await collection.find<Pick<T, K | "_id">>(
+        after === undefined ? filter : { $and: [filter, { _id: { $gt: after } }] } as Filter<T>,
+        { projection: Object.fromEntries(fields.map((field) => [field, 1])) },
+      ).sort({ _id: 1 }).limit(100).batchSize(100).toArray();
+      rows.push(...page);
+      if (page.length < 100) return rows;
+      after = page.at(-1)!._id;
+    }
+  } catch (error) {
+    const errorKind = error instanceof Error && ["MongoOperationTimeoutError", "MongoNetworkError", "OperationBudgetExpired"].includes(error.name)
+      ? error.name : "database_read_failed";
+    console.error(JSON.stringify({ verified: false, phase: "experiment_integrity_read", collection: collection.collectionName,
+      errorKind, elapsedMs: Date.now() - started, completedRows: rows.length }));
+    throw error;
+  }
+}
+
 /** Verify the Dify profile without requiring the legacy application's agent seeds. */
 export async function verifyExperimentData(context: MongoDatabaseContext): Promise<void> {
   const c = context.collections;
   const [runs, operations, delegations, booklets, artifacts, versions, approvals, messages] = await Promise.all([
-    c.experiment_runs.find().toArray(), c.experiment_operations.find().toArray(),
-    c.experiment_delegations.find().toArray(), c.booklets.find().toArray(),
-    c.artifacts.find().toArray(), c.artifact_versions.find().toArray(),
-    c.approvals.find({ experimentRunId: { $exists: true } }).toArray(),
-    c.messages.find({ experimentRunId: { $exists: true } }).toArray(),
+    verificationRows(c.experiment_runs, ["_id", "bookletId", "predecessorRunId", "activeOperationId", "activeDelegationId"]),
+    verificationRows(c.experiment_operations, ["_id", "runId", "dependencyVersionIds", "expectedTargetVersionId", "role"]),
+    verificationRows(c.experiment_delegations, ["_id", "runId", "subjectId", "testerDecisionId", "supersededById"]),
+    verificationRows(c.booklets, ["_id", "executionProfile", "experimentRunId"]),
+    verificationRows(c.artifacts, ["_id", "experimentRunId", "bookletId"]),
+    verificationRows(c.artifact_versions, ["_id", "sourceOperationId", "artifactId"]),
+    verificationRows(c.approvals, ["_id", "artifactVersionId", "experimentRunId", "bookletId", "testerDecisionId", "delegationId"], { experimentRunId: { $exists: true } }),
+    verificationRows(c.messages, ["_id", "experimentRunId", "bookletId", "operationId"], { experimentRunId: { $exists: true } }),
   ]);
   const runById = new Map(runs.map((row) => [row._id, row]));
   const operationById = new Map(operations.map((row) => [row._id, row]));
