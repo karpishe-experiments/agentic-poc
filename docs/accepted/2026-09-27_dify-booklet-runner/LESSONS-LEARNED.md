@@ -651,3 +651,15 @@ authenticated response through shared completion services without another GET;
 it still needs full preservation proof, fresh mutable checks and a bounded outer
 request. Fake-provider persistence tests must advance the actual budget clock,
 not only use fast deterministic responses. Local proof is not live recovery.
+
+### Recheck a pinned complete proof without scanning it twice
+
+After the interactive cap was removed from exact maintenance recovery, the next
+live diagnostic showed outer-budget exhaustion during uncommitted completion.
+An existing full preview digest can serve as the baseline for one fresh complete
+post-observation snapshot. Apply need not first scan another baseline and then
+scan again, provided the pinned digest covers the entire target, inventory and
+grant, and normal post-checkpoint mutable checks remain. Test changes to unrelated
+retained rows during the authenticated GET, not only target revision changes.
+A read-only status workflow must also bypass the mutation queue it observes;
+retain the original group and host lock for mutating actions.

@@ -13,6 +13,18 @@ afterEach(() => {
 });
 
 describe("deployment contracts", () => {
+  it("lets read-only exact status bypass mutation queues without changing mutation serialization", () => {
+    const workflow = readFileSync(".github/workflows/vps-operation-control.yml", "utf8");
+    const concurrency = workflow.split("\nconcurrency:")[1].split("\ndefaults:")[0];
+    expect(concurrency).toContain("inputs.action == 'operation-status'");
+    expect(concurrency).toContain("format('vps-operation-status-{0}', github.run_id)");
+    expect(concurrency).toContain("|| format('vps-operation-control-{0}', inputs.request_id)");
+    expect(concurrency).toContain("cancel-in-progress: false");
+    const dispatcher = readFileSync("scripts/deploy/vps-deployment.sh", "utf8");
+    const status = dispatcher.split("\noperation_status_host() {")[1].split("\noperation_stop_host() {")[0];
+    expect(status).not.toContain("flock");
+    expect(status).not.toContain("--apply");
+  });
   it("builds a reviewed recovery image without host access or alias promotion", () => {
     const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
     expect(workflow).toContain("github.event_name == 'workflow_dispatch' && inputs.recovery_candidate == true");

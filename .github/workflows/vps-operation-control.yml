@@ -14,7 +14,11 @@ on:
 permissions: {contents: read}
 # Control must remain available while the main host operation workflow is active.
 # The host dispatcher serializes journal writes after stopping the exact unit.
-concurrency: {group: 'vps-operation-control-${{ inputs.request_id }}', cancel-in-progress: false}
+concurrency:
+  # Status only reads the exact journal and must not wait behind its mutation.
+  # Keep the existing mutation group unchanged, including for in-flight runs.
+  group: ${{ inputs.action == 'operation-status' && format('vps-operation-status-{0}', github.run_id) || format('vps-operation-control-{0}', inputs.request_id) }}
+  cancel-in-progress: false
 defaults: {run: {shell: bash}}
 jobs:
   control:
