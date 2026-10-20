@@ -1,0 +1,6 @@
+{
+  "dataContractVersion": "booklet-data-v1",
+  "supportedDataContractVersions": ["booklet-data-v1"],
+  "initializationRequired": false,
+  "migrationRequired": false
+}

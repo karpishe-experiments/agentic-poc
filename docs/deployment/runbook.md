@@ -19,9 +19,12 @@ separate evidence; the commands below require matching dispatcher capabilities
 and application images. See the current [M4 record](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
 for the blocked normal delivery and next checkpoint.
 
-The Dify-profile initializer verifies projected identity/provenance rows in pages
-of 100. A failed read reports `experiment_integrity_read`, collection and an
-allowlisted error kind without saved contents or connection details. Preserve the
+Routine initialization checks required setup, metadata and seed availability;
+retained history is excluded. Use the explicit `npm run db:verify` diagnostic for
+the comprehensive audit; it retains projected 100-row pages and all corruption
+checks. Maintenance emits sanitized phase/operation timings; a failed audit read
+also reports `experiment_integrity_read`, collection and an allowlisted error kind.
+No saved contents or connection details are reported. Preserve the
 failed deployment journal and backup; a read timeout does not establish invalid
 data or authorize replay, data restoration or a deadline increase.
 
@@ -30,6 +33,14 @@ also pinned in preview. Supported restoration archives that exact handoff with t
 failed deployment after compatibility/readiness pass. This permits a separate
 reviewed corrective deployment without adopting another candidate's recovery
 evidence. Changed or unverified handoff provenance keeps admission closed.
+
+New image compatibility uses the declared `booklet-data-v1` contract with no
+initialization or migration requirement. The current legacy pair has one exact
+reviewed bridge for optional recovery metadata. Restoration compares the selected
+target, dependencies, approvals and accounting before/after startup instead of
+repeating a full historical audit. Reuse a verified backup only within the same
+closed, protected mutation window. Starting the prior app needs no new backup;
+changed or unproven writer exclusion requires fresh proof before mutation.
 
 Use **VPS operation control** with `candidate-reconcile` for a granted retained
 completion, or `expired-deployment-recover` for a stopped expired deployment.

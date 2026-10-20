@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Prove the complete recovery and delivery boundary
+
+Routine initialization called the comprehensive historical audit. Two retained
+deployments failed on cursor read timeouts; the exact collection and underlying
+latency cause remain unproven. Availability now checks required metadata and seeds,
+while the explicit audit keeps corruption detection. Raw source hashes also rejected
+a runtime-erased optional annotation; new images declare their data contract.
+Test recovery, ordinary deployment/readiness and explicit Resume together, including
+one saved completion that must not dispatch again. The combined fixture uses fake
+providers, real application persistence and isolated mocked host commands; it does
+not establish live host latency. Promotion candidate: **Documentation** for bounded
+experimental delivery and recovery.
+
 ### Project provenance before scanning growing run histories
 
 Deployment initialization loaded complete experiment operations and artifacts even

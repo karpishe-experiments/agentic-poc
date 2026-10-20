@@ -2,7 +2,18 @@ import { MongoServerError, type Document, type IndexDescriptionInfo } from "mong
 import type { MongoDatabaseContext } from "@/db/client";
 import { COLLECTION_NAMES } from "@/db/documents";
 import { LEGACY_ARTIFACT_INDEX, REQUIRED_INDEXES } from "@/db/indexes";
-import { AGENT_SEED_ACTOR, AGENT_SEED_TIMESTAMP, agentSeedDefaults } from "@/db/agent-defaults";
+import { AGENT_SEED_ACTOR, AGENT_SEED_TIMESTAMP, AGENT_SEED_SKILL_IDS, agentSeedDefaults } from "@/db/agent-defaults";
+import type { AgentVersionDocument } from "@/db/documents";
+
+export type ActiveAgentMetadata = Pick<AgentVersionDocument, "role" | "isActive" | "skillId" | "imageTarget" | "profileId" | "profileVersion">;
+/** Shared availability predicate; historical integrity auditing uses the same rule. */
+export function assertActiveAgentCoverage(versions: ActiveAgentMetadata[]): void {
+  const managers = versions.filter(x => x.isActive && x.role === "manager");
+  const specialists = versions.filter(x => x.isActive && x.role === "specialist");
+  const imageTargets = new Set(versions.filter(x => x.isActive && x.role === "image" && x.profileId && x.profileVersion).map(x => x.imageTarget));
+  if (managers.length !== 1 || new Set(specialists.map(x => x.skillId)).size !== AGENT_SEED_SKILL_IDS.length || specialists.some(x => !x.skillId || !AGENT_SEED_SKILL_IDS.includes(x.skillId as never) || !x.profileId || !x.profileVersion) || !imageTargets.has("reference") || !imageTargets.has("page"))
+    throw new Error("Active runtime-agent coverage must contain one manager and at least one profiled candidate for every registered specialist and image target.");
+}
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => {
   if (!item || typeof item !== "object" || Array.isArray(item)) return item;
