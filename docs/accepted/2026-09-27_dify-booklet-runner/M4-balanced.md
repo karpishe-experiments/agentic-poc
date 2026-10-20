@@ -1,47 +1,91 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The original Kid run is paused after 30 paid text requests and five simulated images. Its retained J11 result is saved and independently verified. Normal staging deployment failed during initialization; admission remains closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** The original Kid run resumed and advanced, then stopped at 37 paid text requests and five simulated images. J11 is saved and verified. Supported recovery and normal host deployment are complete. Authenticated application preflight passed and explicit Resume is saved. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current execution record - 2026-10-20
 
-The original Kid run `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` remains paused
-with 30 paid text requests and five simulated images. J11 operation
-`48e69de1-cbc9-4ac6-a5d2-bd81dddffad9` is saved and independently verified;
-do not reconcile or dispatch it again. Parent and Creator remain unstarted.
-M4 is not complete. This section supersedes pending actions in retained history.
+Kid run `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` was explicitly resumed once
+after authenticated idle preflight. Saved revision 218 confirmed Resume; revision
+256 records a definite failure at 37 text requests and five simulated images.
+J11 operation `48e69de1-cbc9-4ac6-a5d2-bd81dddffad9` is already saved and
+independently verified. Do not reconcile or dispatch it again. This section
+supersedes pending actions in retained history.
 
-Normal deployment `39254742459` failed during initialization with a MongoDB
-`getMore` socket-read timeout; the collection and underlying cause remain unproven.
-The prior app is stopped and admission closed. Retain backup
-`staging-20261019T125219Z-4e70a40e25dc961d` and all 162 saved assets.
-The installed dispatcher SHA-256 is
-`3eab667167c1c407d312ccc7c3d2312e5dafa87c3b30b85bbb9068cbd371db19`.
-Its subsequent read-only recovery preview rejected a runtime-erased optional type
-change because compatibility used raw source hashes. No recovery mutation followed.
+The reviewed dispatcher `a47bf86921dd78211caae172bb7a0b5c5e81dc19f033620f3279de78b8fb9bd9`
+was installed with its prior file retained. Read-only diagnostic `39395277854`
+reported no blockers; connection, structure, admission and seed reads took about
+1.9 seconds. This does not establish the original cursor timeout's cause.
+Supported expired recovery `issue65-m4-init-20261020-v1` completed through preview
+`39395532598` and apply `39395817631`. It preserved original request
+`39254742459-1`, its deadline, backup `staging-20261019T125219Z-4e70a40e25dc961d`,
+and the saved target across prior-service startup. J11 was not replayed.
 
-The approved combined correction separates required setup/readiness from explicit
-historical audits, adds an image data-contract declaration, retains one exact legacy
-compatibility bridge, and verifies the retained target across prior-service startup.
-Backup reuse requires the same protected maintenance window; starting the prior
-service does not create another backup. Timings are sanitized and deadlines remain
-unchanged. No credential, storage, transfer or consumer change is required.
+PR #218 merged at `b4db9444477ab924e501b1a3b211333fe5bff1fa`. Guarded staging
+PR #217 merged only after recovery, at release
+`4781557821b4a52d02de2608df4d198af14e3313`, image
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:43e0206c75c548b9db8da7fc838f47054779697e352e30cef749de55f9e0b728`.
+Normal deployment request `39396258972-1` is archived at `complete`, independently
+observed by `39397573399`. Its backup is
+`staging-20261020T085348Z-69a0ae646eab2b65`. The Actions client wait expired while
+the host continued; no deployment replay was sent. The mutable environment-image
+alias step was skipped; host delivery uses the selected immutable digest.
+Authenticated HTTPS readiness check `39398099316` passed with `ready: true`,
+environment `_staging` and zero paid provider calls.
 
-Local verification: 51 recovery/compatibility/deployment/command units, 19 focused
-readiness/initialization/audit cases, 20 changed host scenarios and the combined
-recovery-to-Resume fixture pass. The fixture executes the actual targeted recovery
-JavaScript against disposable MongoDB; host lifecycle commands remain mocked.
-Both full shell suites were attempted locally; Windows permission/symlink
-limitations prevent a full local pass. Linux CI must pass before delivery.
-These checks do not establish live latency or the original timeout's cause.
+The delivered recovery bundle passed two consecutive independent reviews. Its local evidence: 51 focused units,
+19 persistence cases, 20 changed mocked host scenarios and one combined
+recovery/deployment/Resume fixture using actual targeted recovery JavaScript,
+fake providers and disposable MongoDB. Both full shell suites passed Linux CI
+`39381093651` and `39381103096`; typecheck, focused lint, ShellCheck, Actionlint,
+117 local documentation links and whitespace passed. No migration, credential,
+storage, transfer or consumer change was introduced.
 
-Delivery gate: prove the combined recovery/deployment/Resume fixture with fake
-providers, real persistence and mocked host commands; finish focused checks, two
-clean independent reviews and lean Linux CI before another installation. Then use
-supported expired-deployment recovery, deploy normally, verify release/admission,
-and explicitly Resume this same Kid run. Continue Parent then Creator only after
-success within the conditional $5 campaign, request and no-successor limits.
-No new paid smoke, campaign, reset or infrastructure work is included.
+Authenticated preflight verified the exact manager publication, open idle admission
+and no unresolved work. Before Resume, accounting retained $0.027000 reserved,
+$0.038177 settled upper charge and $4.934823 remaining. J11 remained approved.
+Kid stopped at manager operation `bf1c9dd8-781c-4307-868b-45d566b7b58e`.
+Read-only diagnostic `39405100017` found that exact operation started with no
+claims, saved result or materialization; admission had zero owners and mutations.
+Small database checks passed. Authenticated full-detail reads returned
+`unavailable`; the underlying cause is not established. No further Resume or paid
+request was sent. Authenticated Dify trace
+`97422092-2627-46e2-bb7f-9d4b26dbb270` matches this manager operation and the
+expected publication. It succeeded in 20.075 seconds and returned complete JSON
+delegating J12 for page `facabb1d-f5b5-430e-923e-2bf91ebb5f2a`, with 24,350
+input and 59 output tokens. This does not establish current completion eligibility.
+Existing phase diagnostics show the result transaction failed after 33.585 seconds,
+with 179.811 seconds left in the outer budget. The operator's sanitized log confirms
+`completion_transaction`, `repository_invalid_result`, `uncommitted` and completed
+claim cleanup. It reports 39.819 seconds for the completion attempt; this includes
+more work than the nested transaction phase. The rejection hides any inner cause;
+no longer timeout is justified.
+
+The reassessed application correction restricts image metadata reads to consumed
+image and parent-manager lineage, projects inspection history/report fields, and separates
+operational reads and saved-context checks from model-byte validation. Delegation
+keeps operational errors intact; observation readback errors remain uncertain.
+The sixth metadata query previously fetched every full operation, including text
+preparations. The live failure stopped after six counted reads; this supports the
+targeted correction but does not prove the original MongoDB exception.
+On 2026-10-20 the user explicitly approved recovery of this exact retained manager
+completion and same-Kid continuation. The manifest records that target separately
+from J11. The application accepts only the retained J12 page delegation and verifies
+that artifacts, versions, dependencies, approvals and the booklet do not change.
+Accounting, assets and history remain preserved; recovery leaves the run paused.
+No dispatcher, schema or credential change is required.
+Focused validation passed 56 recovery/configuration units, two manager recovery
+integration cases and the existing J11 maintenance recovery case. The source and
+inspection suites passed 40 cases; the offline Kid fixture completed generation
+and both reports. These are local fake-provider checks, not live acceptance.
+Independent review and delivery remain pending. Preserve the response; use supported
+preview/apply with a reviewed immutable candidate before normal deployment and
+explicit Resume. Do not reconcile J11 again.
+Continue Parent then
+Creator only after success, within the existing conditional $5 campaign, request
+and no-successor limits. No new paid smoke, reset or infrastructure work is added.
+M4 remains incomplete. Recovery and delivery made no paid requests; the resumed
+Kid now uses the existing authorized campaign allowance.
 
 <details>
 <summary>Retained earlier execution evidence and superseded next-step statements</summary>

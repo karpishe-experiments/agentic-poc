@@ -44,6 +44,15 @@ application recovery from an immutable image without changing the serving releas
 `expired-deployment-recover` uses a separate request linked to the unchanged
 original journal and deadline. Both default to preview and retain closed admission
 after ambiguous mutations. No automatic restore or provider replay is permitted.
+The additive application capability `granted-j12-manager-completion` permits only
+an exact manifest-granted manager operation whose retained authenticated result
+delegates J12 to a page. It uses the existing candidate control, normal source and
+approval validators, and transactional accounting. Verification requires the J12
+delegation summary and byte-identical artifacts, versions, dependencies, approvals
+and booklets. Counters, reservations, charges, deadlines and attempt history remain
+preserved. Recovery leaves the run paused for separate explicit Resume. Existing
+J11 grants remain valid; no dispatcher action, public API, persisted schema or
+credential is added.
 The explicit `release_expired_claim` purpose under `candidate-reconcile` uses a new
 request linked to an interrupted original recovery. It requires stopped writers,
 closed quiet admission, verified original backup and byte-pinned parent journal/

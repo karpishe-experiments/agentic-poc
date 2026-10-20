@@ -57,6 +57,21 @@ async function setup(continuation = false) {
 }
 
 describe("M4 original authenticated provider observation", () => {
+  it("does not classify a failed saved-operation read as malformed creative output", async () => {
+    const env = await setup();
+    const failure = Object.assign(new Error("private read failure"), { name: "MongoOperationTimeoutError" });
+    const original = env.db.collections.experiment_operations.findOne.bind(env.db.collections.experiment_operations);
+    const read = vi.spyOn(env.db.collections.experiment_operations, "findOne").mockImplementation(async (filter, options) => {
+      if (!options?.session) throw failure;
+      return original(filter, options);
+    });
+    await expect(env.observer.observe(env.input)).rejects.toBe(failure);
+    read.mockRestore();
+    expect(await env.repository.getOperation(id(12))).toMatchObject({ state: "started", resultJson: null,
+      m4Observation: { content: env.wrapper.content, issue: null } });
+    expect(await env.campaign()).toMatchObject({ state: "active", requests: 1, reservedMicrodollars: 900, settledMicrodollars: 63 });
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
   it("retrieves the exact saved app/key, persists before parsing, settles once under concurrent duplicates, and never materializes", async () => {
     const env = await setup();
     const results = await Promise.all([env.observer.observe(env.input), env.observer.observe(env.input)]);

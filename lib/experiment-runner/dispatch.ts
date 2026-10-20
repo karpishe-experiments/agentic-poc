@@ -34,6 +34,7 @@ import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { createOperationCoordinator } from "@/lib/experiment-runner/lifecycle";
+import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
 import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, operationBudgetRemainingMs, remainingOperationMs, withOperationBudget, withCleanupBudget } from "@/lib/operations/budget";
 import { CompletionReconciliationError, safeFailure } from "@/lib/operations/completion-failure";
 import { cancelOwnedControllers, withOwnedController } from "@/lib/operations/controllers";
@@ -295,8 +296,14 @@ export function createExperimentDispatcher(deps: {
         // Only a runtime GET is authoritative. Reuse this request's authenticated
         // snapshot; stream notifications must trigger their own original lookup.
         const observationRuntime = observed ? { ...runtime, retrieve: async () => result } : runtime;
-        const outcome = await createM4ProviderResults(deps.database, authority, deps.config, observationRuntime)
-          .observe({ runId: run._id, operationId: current._id, nowMs: now() });
+        let outcome: Awaited<ReturnType<ReturnType<typeof createM4ProviderResults>["observe"]>>;
+        const observationStartedAt = performance.now();
+        try {
+          outcome = await createM4ProviderResults(deps.database, authority, deps.config, observationRuntime)
+            .observe({ runId: run._id, operationId: current._id, nowMs: now() });
+        } catch (error) {
+          throw new CompletionReconciliationError(error, "completion_readback", observationStartedAt, "unknown");
+        }
         if (outcome.kind === "result") {
           const completion = { envelope: { runId: run._id, operationId: current._id,
             workflowRunId: execution.id, inputFingerprint: current.inputFingerprint, result: outcome.result },
@@ -877,7 +884,7 @@ export function createExperimentDispatcher(deps: {
         !authority?.grant.completionRecoveries?.some(item => item.runId === target.runId && item.operationId === target.operationId) ||
         run.revision !== target.expectedRevision || run.mode !== "balanced" || run.status !== "blocked" || run.safeFailure !== "definite_failure" ||
         run.activeOperationId !== operation._id || run.preparation || run.generationCompletedAtMs != null ||
-        operation.runId !== run._id || operation.role !== "specialist" || operation.taskId !== "J11" || operation.providerKind !== "text" ||
+        operation.runId !== run._id || !isCompletionRecoveryRole(operation) || operation.providerKind !== "text" ||
         operation.state !== "started" || operation.lifecycle?.stop || operation.resultJson || operation.materializationJson || operation.m4CompletionRecovery ||
         operation.authorizationClaim || operation.imageCompletionClaim || operation.resultFinalizationClaim ||
         observed.kind !== "execution" || observed.execution.status !== "succeeded" || observed.execution.id !== operation.workflowRunId ||

@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { materializeNarrativeResult } from "@/db/experiment-narrative";
+import { OperationBudgetExpired, withOperationBudget } from "@/lib/operations/budget";
 import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
@@ -7,7 +9,7 @@ import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const runId = id(401), bookletId = id(402), fingerprint = "a".repeat(64);
 const databases: Database[] = [];
-afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
+afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 const concept = { schemaVersion: "2", title: "Kite Rescue", sourceInput: "A child and robot rescue a kite.", audience: { ageBand: "6-8", readingNeeds: "Short text." }, premise: "A kite flies away.", theme: "Friendship", emotionalPromise: "Relief", tone: "Playful", storyScope: "Three pages", contentRequirements: [], knownConstraints: [], deferredDecisions: [], approvalQuestions: [] };
 const outline = { schemaVersion: "2", title: "Kite Rescue", summary: "The friends retrieve the kite.", characters: [{ nameOrRole: "Inventor", narrativeRole: "Hero", relationship: "Robot friend", openDetails: [] }], locations: [{ name: "Park", storyPurpose: "Rescue", openDetails: [] }], storyArc: { opening: "They play.", incitingAction: "Wind takes kite.", escalation: "They search.", decisiveChoice: "They cooperate.", resolution: "They retrieve it." }, theme: "Friendship", emotionalArc: "Worry to relief", deferredDecisions: [], approvalQuestions: [] };
 
@@ -28,6 +30,32 @@ const proposal = (taskId: "J01" | "J02", content: unknown) => ({ kind: "proposal
 const decision = (decision: unknown) => ({ kind: "decision", payload: { decision } });
 
 describe("saved experiment context", () => {
+  it("projects inspection history without retained preparation or non-report output bodies", async () => {
+    const { context, database, start } = await setup();
+    const manager = await start(480, "manager");
+    await manager.complete({ kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: bookletId } });
+    const before = await context.getRunView(runId);
+    await database.database.collection("experiment_operations").updateOne({ _id: id(480) } as never,
+      { $set: { m4Preparation: { privateUnusedPayload: "x".repeat(2_000_000) } } });
+    const find = vi.spyOn(database.collections.experiment_operations, "find");
+    expect(await context.getRunView(runId)).toEqual(before);
+    expect(find.mock.calls[0][1]?.projection).toMatchObject({ _id: 1, role: 1, lifecycle: 1,
+      resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] } });
+    expect(find.mock.calls[0][1]?.projection).not.toHaveProperty("m4Preparation");
+  });
+
+  it.each(["MongoOperationTimeoutError", "OperationBudgetExpired", "Error"])("preserves %s from delegation reads", async (name) => {
+    const { database, repository, start } = await setup();
+    const manager = await start(481, "manager");
+    const run = (await repository.getRun(runId))!;
+    const operation = (await repository.getOperation(manager.identity.operationId))!;
+    const failure = name === "OperationBudgetExpired" ? new OperationBudgetExpired() : Object.assign(new Error("private operational detail"), { name });
+    vi.spyOn(database.collections.artifacts, "findOne").mockRejectedValueOnce(failure);
+    await expect(withOperationBudget(Date.now() + 60_000, () => database.client.withSession(session => materializeNarrativeResult(database, session, run, operation,
+      { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: bookletId } }, [], 500))))
+      .rejects.toBe(failure);
+    expect((await repository.getOperation(operation._id))?.resultJson).toBeNull();
+  });
   it("keeps historical versions and operations in inspection while execution reads only current versions", async () => {
     const { context, database, start } = await setup();
     const specialist = await start(490, "specialist", "J01");
