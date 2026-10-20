@@ -76,6 +76,7 @@ async function setup(amended = false) {
   const saved = new Map<string, RuntimeExecution>();
   let pending = false, badCreative = false, badLayout = false, incompleteLayout = false;
   let blockCompletionTask: string | null = null;
+  let blockManagerPageBible = false;
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
       expect(input.mode).toBe("balanced");
@@ -186,6 +187,13 @@ async function setup(amended = false) {
     retrieve: vi.fn<WorkflowRuntime["retrieve"]>(async (_binding, workflowRunId) => {
       const execution = saved.get(workflowRunId);
       if (!execution) throw new Error("Unexpected fake workflow lookup");
+      if (blockManagerPageBible && _binding.role === "manager" && typeof execution.outputs?.booklet_provider_result === "string") {
+        const result = JSON.parse(JSON.parse(execution.outputs.booklet_provider_result).content).result;
+        if (result?.kind === "delegate" && result.payload?.taskId === "J12" && result.payload?.subjectKind === "page") {
+          blockManagerPageBible = false;
+          await repository.blockRun({ runId, category: "definite_failure", nowMs: clock });
+        }
+      }
       if (blockCompletionTask && _binding.role === "specialist" && typeof execution.outputs?.booklet_provider_result === "string") {
         const wrapper = JSON.parse(execution.outputs.booklet_provider_result);
         if (JSON.parse(wrapper.content).result?.payload?.taskId === blockCompletionTask) {
@@ -207,6 +215,7 @@ async function setup(amended = false) {
     tick: () => { clock += 6_000; }, now: () => clock,
     pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; },
     blockCompletion: (taskId: string) => { blockCompletionTask = taskId; },
+    blockManagerPageBible: () => { blockManagerPageBible = true; },
     badLayout: (value: boolean) => { badLayout = value; }, incompleteLayout: (value: boolean) => { incompleteLayout = value; } };
 }
 
@@ -474,8 +483,9 @@ describe("focused J11 paid-failure continuation", () => {
 });
 
 describe("focused J11 retained completion recovery", () => {
-  async function blockedCompletion(taskId = "J11") {
-    const env = await setup(); env.blockCompletion(taskId);
+  async function blockedCompletion(taskId: string | null = "J11") {
+    const env = await setup();
+    if (taskId === null) env.blockManagerPageBible(); else env.blockCompletion(taskId);
     for (let i = 0; i < 85 && (await env.repository.getRun(env.runId))!.status !== "blocked"; i++) {
       env.tick(); await env.dispatcher.advance(env.runId);
     }
@@ -494,8 +504,8 @@ describe("focused J11 retained completion recovery", () => {
     return { ...env, run, operation, input, permission, recovery, recoveryAuthority: authority };
   }
 
-  async function supportedRecovery() {
-    const env = await blockedCompletion();
+  async function supportedRecovery(manager = false) {
+    const env = await blockedCompletion(manager ? null : "J11");
     while (env.now() <= env.operation.deadlineAtMs!) env.tick();
     await env.database.collections.deployment_control.insertOne({ _id: "environment:_staging", schemaVersion: "1", environment: "_staging",
       maintenance: false, draining: false, activeMutations: 0, mutationOwners: [], interruptedMutations: 0, reason: null, updatedAtMs: env.now() });
@@ -505,6 +515,82 @@ describe("focused J11 retained completion recovery", () => {
       withOperationBudget(env.now() + 150_000, () => service.apply(...args), { now: env.now }) };
     return { ...env, service: boundedService, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
   }
+
+  it("managerRecovery preserves the original J12 delegation through verified recovery, duplicate inspection and same-run Resume", async () => {
+    const env = await supportedRecovery(true);
+    expect(env.operation).toMatchObject({ role: "manager", taskId: null });
+    expect(env.input().envelope.result).toMatchObject({ kind: "delegate", payload: { taskId: "J12", subjectKind: "page" } });
+    const j11 = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J11", state: "approved" }))!;
+    expect(j11).not.toBeNull();
+    const retained = async () => ({
+      artifacts: await env.database.collections.artifacts.find({}).sort({ _id: 1 }).toArray(),
+      versions: await env.database.collections.artifact_versions.find({}).sort({ _id: 1 }).toArray(),
+      approvals: await env.database.collections.approvals.find({}).sort({ _id: 1 }).toArray(),
+      dependencies: await env.database.collections.artifact_dependencies.find({}).sort({ _id: 1 }).toArray(),
+      booklets: await env.database.collections.booklets.find({}).sort({ _id: 1 }).toArray(),
+      assets: await env.database.collections.assets.find({}).sort({ _id: 1 }).toArray(),
+      bytes: [...env.store.files].map(([uri, bytes]) => [uri, Uint8Array.from(bytes)]),
+    });
+    const before = await retained();
+    const campaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const uploads = env.uploadReference.mock.calls.length;
+    const proof = await env.service.preview(env.target);
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const checkpoint = vi.fn();
+    await env.service.apply(env.target, proof.previewDigest, checkpoint);
+    expect(checkpoint).toHaveBeenCalledOnce();
+    for (let duplicate = 0; duplicate < 2; duplicate++) {
+      expect(await env.service.verifyCompleted(env.target, proof.snapshot)).toMatchObject({ verified: true, admission: "closed", providerPosts: 0 });
+    }
+    expect((await env.recovery.completeOperation(env.input())).reused).toBe(true);
+    const completed = (await env.repository.getOperation(env.operation._id))!;
+    expect(completed).toMatchObject({ state: "succeeded", reservationCount: 1, deadlineAtMs: env.operation.deadlineAtMs,
+      m4Reservation: env.operation.m4Reservation, resultFinalizationClaim: null, lifecycle: { attemptOutcome: "failed", unresolved: false } });
+    expect(JSON.parse(completed.materializationJson!)).toMatchObject({ delegatedTaskId: "J12" });
+    const paused = (await env.repository.getRun(env.runId))!;
+    expect(paused).toMatchObject({ status: "paused", pauseRequested: true, activeOperationId: null, counters: env.run.counters });
+    expect(await retained()).toEqual(before);
+    const recoveredCampaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    expect(recoveredCampaign).toMatchObject({ state: "active", requests: campaign.requests, requestCounts: campaign.requestCounts,
+      settledMicrodollars: campaign.settledMicrodollars, reservedMicrodollars: campaign.reservedMicrodollars });
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: false } });
+    expect(await env.recovery.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.now() }))
+      .toMatchObject({ status: "queued", pauseRequested: false, counters: env.run.counters });
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(completed);
+    expect(await retained()).toEqual(before);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+    expect(env.runtime.stop).not.toHaveBeenCalled();
+    await withMongoTransaction(env.database, async session => verifyM4Accounting(env.database, session, (await env.repository.getRun(env.runId))!));
+  }, 120_000);
+
+  it("managerRecovery rejects missing or mismatched grants and changed source or approval evidence", async () => {
+    const env = await supportedRecovery(true);
+    for (const completionRecoveries of [[], [{ ...env.permission, operationId: id(999) }]]) {
+      const authority = { ...env.recoveryAuthority, grant: { ...env.recoveryAuthority.grant, completionRecoveries } };
+      const service = createBookletRecovery({ database: env.database, config: { ...env.config, m4: { state: "granted", authority } },
+        runtime: env.runtime, store: () => env.store, now: env.now });
+      await expect(service.preview(env.target)).rejects.toThrow("exact_completion_grant_missing");
+    }
+    const proof = await env.service.preview(env.target);
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const layout = (await env.database.collections.artifacts.findOne({ experimentRunId: env.runId, taskId: "J11" }))!;
+    const source = (await env.database.collections.artifact_versions.findOne({ _id: layout.currentVersionId! }))!;
+    expect(source).not.toBeNull();
+    const checkpoint = vi.fn();
+    await env.database.collections.artifact_versions.updateOne({ _id: source._id }, { $set: { contentJson: "changed-source" } });
+    await expect(env.service.apply(env.target, proof.previewDigest, checkpoint)).rejects.toThrow();
+    expect(checkpoint).not.toHaveBeenCalled();
+    await env.database.collections.artifact_versions.replaceOne({ _id: source._id }, source);
+    const approval = (await env.database.collections.approvals.findOne({ experimentRunId: env.runId }))!;
+    await env.database.collections.approvals.updateOne({ _id: approval._id }, { $set: { testerDecisionId: id(998) } });
+    await expect(env.service.apply(env.target, proof.previewDigest, checkpoint)).rejects.toThrow("preview_changed");
+    expect(checkpoint).not.toHaveBeenCalled();
+    expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+    expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+  }, 120_000);
 
   it("keeps committed completion through recovery, deployment readiness and explicit Resume without replay", async () => {
     const env = await supportedRecovery();
@@ -701,6 +787,34 @@ describe("focused J11 retained completion recovery", () => {
     expect((await env.repository.getOperation(env.operation._id))?.resultFinalizationClaim).toBeNull();
     expect(env.runtime.start).toHaveBeenCalledTimes(starts);
     expect(env.runtime.stop).not.toHaveBeenCalled();
+  }, 120_000);
+
+  it("preserves a retained result when observation readback fails without blocking or replay", async () => {
+    const env = await blockedCompletion();
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: { status: "running", safeFailure: null } });
+    await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { state: "active" } });
+    const before = (await env.repository.getRun(env.runId))!;
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    const failure = Object.assign(new Error("private read failure"), { name: "MongoOperationTimeoutError" });
+    let armed = false;
+    const retrieve = vi.mocked(env.runtime.retrieve).getMockImplementation()!;
+    vi.spyOn(env.runtime, "retrieve").mockImplementation(async (...args) => { const result = await retrieve(...args); armed = true; return result; });
+    const ops = env.database.collections.experiment_operations;
+    const read = ops.findOne.bind(ops);
+    let observedReads = 0;
+    vi.spyOn(ops, "findOne").mockImplementation(async (...args) => {
+      if (armed && !args[1]?.session && ++observedReads === 2) throw failure;
+      return read(...args);
+    });
+    const inspector = createExperimentDispatcher({ database: env.database, config: env.config, runtime: env.runtime,
+      now: env.now, store: () => env.store, mutate: async action => action() });
+    await expect(inspector.inspect({ runId: env.runId, operationId: env.operation._id })).rejects.toMatchObject({
+      diagnostic: { stage: "completion_readback", errorKind: "MongoOperationTimeoutError", commitState: "unknown" } });
+    vi.restoreAllMocks();
+    expect(await env.repository.getRun(env.runId)).toMatchObject({ status: "running", safeFailure: null, counters: before.counters });
+    expect(await env.repository.getOperation(env.operation._id)).toMatchObject({ resultJson: null,
+      m4Observation: { issue: null }, m4Reservation: env.operation.m4Reservation });
+    expect(env.runtime.start).toHaveBeenCalledTimes(calls);
   }, 120_000);
 
   it.each(["progress", "lost_commit", "transaction_unknown", "validation", "validation_secondary"] as const)(

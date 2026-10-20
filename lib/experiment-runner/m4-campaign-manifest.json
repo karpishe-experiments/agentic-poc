@@ -224,6 +224,11 @@
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "48e69de1-cbc9-4ac6-a5d2-bd81dddffad9",
         "reference": "User M4 completion grant: inspected complete J11 output blocked by story-only manuscript coverage; recover this exact retained result through normal source checks and materialization, preserving deadline, requests and charges."
+      },
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "bf1c9dd8-781c-4307-868b-45d566b7b58e",
+        "reference": "Explicit user grant 2026-10-20: exact retained manager completion from Dify execution 97422092-2627-46e2-bb7f-9d4b26dbb270; normal source/approval/accounting validation, manager-specific preservation, reviewed preview/apply then normal staging delivery and same-Kid continuation; preserve conditional USD5, limits and no successors; no provider replay or saved-output edits."
       }
     ],
     "requestDefinitionUpdate": {

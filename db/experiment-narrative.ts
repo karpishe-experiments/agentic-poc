@@ -360,7 +360,14 @@ export async function materializeNarrativeResult(database: Database, session: Cl
         await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore);
       }
     }
-    catch { invalid("Manager delegation target is not currently eligible."); }
+    catch (error) {
+      // A failed read is not proof that the selected target is invalid. Preserve
+      // operational errors for uncertain completion and its original diagnostic.
+      if (error instanceof ExperimentRepositoryError && ["invalid_input", "invalid_result", "conflict"].includes(error.code)) {
+        invalid("Manager delegation target is not currently eligible.");
+      }
+      throw error;
+    }
     summary.delegatedTaskId = result.payload.taskId;
   } else if (result.kind === "decision") {
     const decision = result.payload.decision;

@@ -170,7 +170,17 @@ Technical access is not authority. Record verification and permission separately
 never infer a grant from a working login. These are the latest recorded results,
 not fresh live checks. Recheck the required row before dependent execution.
 
-**Current M4 decision status - 2026-10-13:** The user selected Luna for manager,
+**Current M4 execution authority - 2026-10-20:** The user approved the conditional
+USD 5 campaign and its delivery, then exact same-run continuations and supported
+recovery. The latest exact grant covers Kid manager operation
+`bf1c9dd8-781c-4307-868b-45d566b7b58e`, retained execution
+`97422092-2627-46e2-bb7f-9d4b26dbb270`, through reviewed preview/apply, normal staging
+delivery and explicit Resume. It permits no provider replay, output edit, new run,
+successor or budget increase. J11 is already saved and must not be reconciled again.
+The [current M4 record](M4-balanced.md#current-execution-record---2026-10-20)
+owns progress and remaining gates. Existing protected credentials are reused.
+
+**Original M4 decision status - 2026-10-13 (superseded for execution authority):** The user selected Luna for manager,
 specialists and testers, Sol for the independent judge, and a USD 5 incremental
 text-campaign ceiling. The [M4 contract](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13)
 owns exact reasoning, tokens, prices, accounting and three-run/no-successor limits.

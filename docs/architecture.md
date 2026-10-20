@@ -24,6 +24,15 @@ successful saved-result recovery from a later corrective release after failed
 initialization.
 
 Balanced completion separates the durable transaction from progress observation.
+Image-source verification reads projected image and parent-manager lineage fields;
+it does not transfer retained text preparations or provider observations. The
+inspection view projects history metadata and report results instead of full
+operation bodies. Both paths preserve saved history without rewriting it.
+Delegation validation preserves operational failures rather than translating all
+exceptions into invalid results. Only malformed model bytes/schema can acquire
+`creative_invalid`; saved reads, context and accounting verification stay outside
+that classification. Failed observation readback remains uncertain and cannot
+start a replacement provider request.
 A failed acknowledgement uses bounded, read-only verification of the exact saved
 result, materialization marker and accounting before classification. Progress
 failure cannot invalidate a committed result. Only explicit invalid-result/input
@@ -40,7 +49,7 @@ cleanup budget and exact claim identity, including lost claim acknowledgements.
 Image cleanup covers every post-claim exit and preserves original bytes/digest.
 Sanitized failure diagnostics retain the original stage, error kind, repository
 code, timing, remaining budget and cleanup outcome. Interactive Inspect/Stop keep
-their existing 20/30-second budgets. Exact granted maintenance J11 recovery reuses
+their existing 20/30-second budgets. Exact granted maintenance completion recovery reuses
 its same-invocation authenticated GET after full post-observation preservation
 proof and fresh eligibility/admission checks. Its internal dispatcher entry checks
 the bounded context, grant, revision, operation and response identity before using
@@ -51,7 +60,8 @@ Provider deadlines and claim leases are unchanged.
 
 The supported issue #65 recovery candidate adds a maintenance-only
 `booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
-an exact granted J11 completion through the existing dispatcher with provider
+an exact granted J11 specialist completion or J12 page delegation from a manager
+through the existing dispatcher with provider
 starts, uploads and stops disabled. Preview fingerprints retained business data
 and authority. Apply rechecks that fingerprint with admission closed. The
 preservation snapshot reads all retained rows in bounded 256-row keyset pages,
@@ -105,12 +115,19 @@ of later parent progress; they do not assert current database state.
 
 J11 manuscript routing covers the complete booklet, including cover-only units;
 unknown units and exact approved sheet tuples remain independent gates. A protected
-M4 `completionRecoveries` grant permits only a named active pre-generation J11
-operation to recover its retained authenticated result from a definite blocker.
+M4 `completionRecoveries` grant permits a named active pre-generation J11 specialist
+or manager operation to recover its retained authenticated result from a definite
+blocker. Manager recovery additionally requires a `delegate` result for J12 with a
+page subject; the additive `granted-j12-manager-completion` capability does not
+grant authority by itself. Independent verification requires the saved J12
+delegation summary and no changes to artifacts, versions, dependencies, approvals
+or booklets. Existing J11 recovery remains supported.
 Normal source/byte/usage checks and materialization remain required. Completion,
 provenance and stopped-campaign reopening are atomic, without another provider
 request or changed charges/deadline. Other definite blockers stay blocked; late
 recovery preserves attempt history and pauses before new work.
+Explicit Resume remains separate. This extension uses the existing controls,
+grant schema and credentials; it adds no dispatcher action or public API.
 
 A protected M4 grant can name an exact inspected terminal manager failure for
 one same-run continuation. Pre-generation specialists use the same proof as managers. Resume verifies its original provider evidence,

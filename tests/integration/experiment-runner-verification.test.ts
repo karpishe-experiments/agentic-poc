@@ -4,8 +4,34 @@ import type { Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { verifyExperimentData } from "@/db/verify";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 const databases: Database[] = [];
+
+it("image verification excludes large retained text payloads and preserves image/manager lineage", async () => {
+  const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
+  const runId = randomUUID(), bookletId = randomUUID();
+  await createExperimentRepository(database).createRun({ runId, bookletId, persona: "playful_kid", mode: "simulated", configuration: [], nowMs: 1 });
+  const imageId = randomUUID();
+  await database.database.collection<{ _id: string; [key: string]: unknown }>("experiment_operations").insertMany([
+    ...Array.from({ length: 37 }, () => ({ _id: randomUUID(), idempotencyKey: randomUUID(), runId, role: "manager", providerKind: "text",
+      taskId: null, m4Preparation: { privateUnusedPayload: "x".repeat(500_000) } })),
+    { _id: imageId, idempotencyKey: imageId, runId, role: "image", providerKind: "image", taskId: "J09",
+      imageRequestJson: "retained image request", resultDigest: "retained digest", m4Preparation: { privateUnusedPayload: "private" } },
+  ]);
+  const store = { async get() { throw new Error("Metadata must not fetch bytes"); }, async put() { throw new Error("Metadata must not write bytes"); }, async exists() { return true; } };
+  const find = vi.spyOn(database.collections.experiment_operations, "find");
+  const metadata = await database.client.withSession(session => verificationMetadata(database, session, runId, createVerificationAttempt(store)));
+  expect(metadata.operations.find(row => row._id === imageId)).toEqual({ _id: imageId, runId, role: "image", providerKind: "image", taskId: "J09",
+    imageRequestJson: "retained image request", resultDigest: "retained digest" });
+  expect(metadata.operations).toHaveLength(38);
+  expect(JSON.stringify(metadata.operations)).not.toContain("privateUnusedPayload");
+  expect(Buffer.byteLength(JSON.stringify(metadata.operations))).toBeLessThan(20_000);
+  expect(find.mock.calls[0][0]).toEqual({ runId, role: { $in: ["image", "manager"] } });
+  expect(find.mock.calls[0][1]?.projection).not.toHaveProperty("m4Preparation");
+  expect(await database.collections.experiment_operations.countDocuments({ runId })).toBe(38);
+});
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
 it("verifies experiment ownership without legacy agent seeds and detects broken ownership", async () => {
