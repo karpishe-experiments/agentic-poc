@@ -15,7 +15,12 @@ vi.mock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => 
 vi.mock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true }) }));
 vi.mock("@/db/setup", () => ({ verifyMongoStructure: vi.fn() }));
 vi.mock("@/db/verify", () => ({ verifyExperimentData: vi.fn(), verifyMongoData: vi.fn() }));
-vi.mock("@/lib/operations/budget", () => ({ withOperationBudget: async (_deadline: number, action: () => unknown) => {
+vi.mock("@/db/deployment-readiness", async importOriginal => ({
+  ...await importOriginal<typeof import("@/db/deployment-readiness")>(), verifyDeploymentState: vi.fn(),
+}));
+vi.mock("@/lib/operations/budget", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/operations/budget")>(),
+  withOperationBudget: async (_deadline: number, action: () => unknown) => {
   if (mocks.budgetError) throw mocks.budgetError;
   return action();
 } }));
@@ -109,6 +114,19 @@ describe("supported booklet recovery command", () => {
   it("previews without checkpoint or business writes", async () => {
     argumentsFor("preview"); await import("@/scripts/booklet-recovery");
     expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(0);
+  });
+  it("reports cleanup failure without losing the original sanitized failure", async () => {
+    const { BookletRecoveryError } = await import("@/lib/operations/booklet-recovery");
+    mocks.preview.mockRejectedValueOnce(new BookletRecoveryError("target_read_failed", "snapshot.target", "MongoOperationTimeoutError"));
+    mocks.close.mockRejectedValueOnce(new Error("private cleanup details"));
+    argumentsFor("preview"); await import("@/scripts/booklet-recovery");
+    const events = vi.mocked(console.log).mock.calls.map(([value]) => JSON.parse(value));
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "target_read_failed", stage: "snapshot.target", errorKind: "MongoOperationTimeoutError" }),
+      expect.objectContaining({ code: "database_cleanup_failed", phase: "cleanup", outcome: "requires_inspection" }),
+    ]));
+    expect(JSON.stringify(events)).not.toContain("private");
+    expect(mocks.files.size).toBe(0); expect(mocks.apply).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
   });
   it("reports the failing inspection phase without private database details", async () => {
     const { BookletRecoveryError } = await import("@/lib/operations/booklet-recovery");

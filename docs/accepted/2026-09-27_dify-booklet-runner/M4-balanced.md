@@ -27,7 +27,7 @@ Backup reuse requires the same protected maintenance window; starting the prior
 service does not create another backup. Timings are sanitized and deadlines remain
 unchanged. No credential, storage, transfer or consumer change is required.
 
-Local verification: 37 recovery/compatibility/deployment units, 19 focused
+Local verification: 51 recovery/compatibility/deployment/command units, 19 focused
 readiness/initialization/audit cases, 20 changed host scenarios and the combined
 recovery-to-Resume fixture pass. The fixture executes the actual targeted recovery
 JavaScript against disposable MongoDB; host lifecycle commands remain mocked.
