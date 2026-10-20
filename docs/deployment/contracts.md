@@ -2,6 +2,22 @@
 
 ## Ownership
 
+Routine initialization owns required setup and availability checks, not a full
+historical audit. The explicit `npm run db:verify` diagnostic retains all integrity
+checks. New immutable images declare `booklet-data-v1`, supported reader versions,
+and initialization/migration requirements. Expired recovery requires supported
+declarations with both requirements false; source hashes remain a legacy fallback,
+with one pinned bridge for the reviewed optional recovery metadata.
+
+Expired recovery verifies quiescence and the completed handoff target's retained
+dependencies, approvals and accounting before and after restarting the prior app.
+It does not replay J11 or repeat the historical audit. Its original verified backup
+is reused only while journals, configuration and closed admission prove the same
+protected maintenance window. Starting the prior app creates no replacement
+backup. A separate normal deployment owns a new mutation window and backup.
+Diagnostics contain fixed phases, operation/collection identifiers, counts, elapsed
+time and remaining budget; arbitrary errors and saved content remain private.
+
 Recovery inspections check command success before interpreting empty container
 lists. New generic journals retain `hostFingerprint` and `previewBackupId` separately
 from the actual backup ID. Every mutating reentry, including abort, verifies the
@@ -11,6 +27,13 @@ use their retained backup. An exact digest match is required; otherwise report
 `legacy_preview_fingerprint_unverified` without mutation. No current state is adopted.
 Expired `prepared` recovery repeats stopped-process/container, original-journal,
 backup and compatibility checks before restoration; it never repeats initialization.
+For an expired deployment that used a completed candidate recovery, preview also
+pins the exact handoff bytes. The handoff must match its completed recovery journal
+and the failed image's source tree. After prior-release compatibility and readiness
+pass, apply archives those bytes under the original failed deployment ID before
+reopening admission. Interrupted restoration verifies the live or archived hash.
+A legacy preview without a pinned handoff cannot retire one. The original recovery
+journal, saved completion, failed deployment journal and deadline remain unchanged.
 Terminal child receipts validate request/target/candidate/revision and return
 `historical: true` without application reads or lifecycle changes. Old child
 revisions come from their hash-verified original checkpoint. Nonterminal paths

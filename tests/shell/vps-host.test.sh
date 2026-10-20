@@ -5,7 +5,7 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
-  for scenario in recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
@@ -17,6 +17,8 @@ source scripts/deploy/vps-deployment.sh
 REAL_MAINTENANCE="$(declare -f maintenance)"
 REAL_COMPOSE="$(declare -f compose)"
 REAL_DRAIN_SUPPORT="$(declare -f verify_drain_support)"
+# Existing legacy fixtures predate the additive image data-contract declaration.
+recovery_data_contract() { printf 'null\n'; }
 # Stub the external timer but keep the wrapped function calls in this shell.
 timeout() { while [[ "$1" == --* ]]; do shift; done; shift; "$@"; }
 TEMP_DIR="$(mktemp -d)"
@@ -47,6 +49,55 @@ verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
+  recovery-contract-*)
+    scenario="$1"
+    contract='{"dataContractVersion":"booklet-data-v1","supportedDataContractVersions":["booklet-data-v1"],"initializationRequired":false,"migrationRequired":false}'
+    recovery_data_contract() {
+      case "$scenario:$1" in
+        recovery-contract-read-error:*) return 124;;
+        recovery-contract-malformed:*) printf 'malformed\n';;
+        recovery-contract-migration:*) jq '.migrationRequired=true' <<< "$contract";;
+        recovery-contract-initialization:*) jq '.initializationRequired=true' <<< "$contract";;
+        recovery-contract-version:*) jq '.dataContractVersion="unknown"' <<< "$contract";;
+        recovery-contract-mixed:prior) printf 'null\n';;
+        *) printf '%s\n' "$contract";;
+      esac
+    }
+    recovery_schema_digest() { printf 'must not inspect source\n' >> "$CALLS"; return 1; }
+    if [[ "$scenario" == recovery-contract-compatible ]]; then
+      proof="$(recovery_expired_compatibility prior failed)"
+      jq -e '.kind=="data-contract" and .verifierImage=="prior"' <<< "$proof" >/dev/null
+    else
+      if (recovery_expired_compatibility prior failed); then exit 1; fi
+    fi
+    [[ ! -s "$CALLS" ]]
+    ;;
+  recovery-compatibility-*)
+    scenario="$1"
+    prior=ghcr.io/karpishe-experiments/agentic-poc@sha256:d79882c41256316fabad292443d75b0675391e02c853dd189b5b433843497b03
+    failed=ghcr.io/karpishe-experiments/agentic-poc@sha256:084a19907ea3118ea881dd429115096965a5da45ff590e2ffea4f4ea0b0c1f5b
+    recovery_schema_digest() {
+      if [[ "$scenario" == recovery-compatibility-read-drift ]]; then return 124; fi
+      if [[ "$scenario" == recovery-compatibility-malformed-drift ]]; then printf "malformed\n"; return; fi
+      if [[ "$scenario" == recovery-compatibility-identical ]]; then printf '%064d\n' 1; return; fi
+      if [[ "$scenario" == recovery-compatibility-schema-drift ]]; then if [[ "$1" == "$prior" ]]; then printf '%064d\n' 3; else printf '%064d\n' 2; fi; return; fi
+      if [[ "$1" == "$prior" ]]; then printf '143d91f426f22d59e8a9a7276578285f03f2dd806ac2d690911e19f48078d147\n'
+      else printf '32b45e53d5b2f99b1048724c2080e66d56d74ee19c5790a0b3f17cc795e8ef66\n'; fi
+    }
+    docker() { printf "Unexpected extra image dependency\n" >> "$CALLS"; return 1; }
+    if [[ "$scenario" == recovery-compatibility-image-drift ]]; then failed="$IMAGE_DIGEST"; fi
+    if [[ "$scenario" =~ drift$ ]]; then
+      if (recovery_expired_compatibility "$prior" "$failed"); then exit 1; fi
+    else
+      proof="$(recovery_expired_compatibility "$prior" "$failed")"
+      if [[ "$scenario" == recovery-compatibility-identical ]]; then
+        jq -e --arg image "$prior" '.kind=="identical" and .verifierImage==$image' <<< "$proof" >/dev/null
+      else
+        jq -e --arg image "$prior" '.kind=="reviewed-optional-recovery-metadata" and .verifierImage==$image' <<< "$proof" >/dev/null
+      fi
+    fi
+    [[ ! -s "$CALLS" ]]
+    ;;
   recovery-inspection-failure)
     docker() { return 124; }
     if (recovery_no_containers -q); then exit 1; fi
@@ -261,6 +312,16 @@ LEGACY_CLAIMS
       printf 'recovery %s\n' "$3" >> "$CALLS"
       case "$3" in
         capabilities) printf '{"contract":"booklet-recovery-v1","environment":"_staging","schemaVersion":"1","initializationRequired":false}\n';;
+        legacy-compatibility)
+          printf 'verifier-image %s\n' "$(jq -r .services.app.image "$1/image.json")" >> "$CALLS"
+          if [[ "$scenario" == expired-recovery-bridge-verify-failed && "$(grep -c '^recovery legacy-compatibility$' "$CALLS")" -ge 4 ]]; then return 1; fi
+          if [[ "$scenario" == expired-recovery-target-* ]]; then
+            target=1
+            if [[ "$scenario" == expired-recovery-target-preview-drift && "$(grep -c '^recovery legacy-compatibility$' "$CALLS")" -ge 2 ]] || \
+              [[ "$scenario" == expired-recovery-target-post-start-drift && "$(grep -c '^recovery legacy-compatibility$' "$CALLS")" -ge 4 ]]; then target=2; fi
+            printf '{"verified":true,"targetDigest":"%064d"}\n' "$target"; return
+          fi
+          printf '{"verified":true}\n';;
         preview) printf '{"verified":true,"previewDigest":"%064d"}\n' 1;;
         verify-unapplied) if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then printf '{"verified":false,"phase":"verify-unapplied","code":"snapshot_changed"}\n'; return 1; fi; printf '{"verified":true,"outcome":"unapplied","providerPosts":0}\n';;
         apply) if [[ "$scenario" == candidate-recovery-unapplied-* ]]; then printf '{"phase":"started","retained":"original"}\n' > "$2/application-recovery.json"; return 1; fi; if [[ "$scenario" == candidate-recovery-failure ]]; then printf '{"verified":false,"phase":"apply","code":"snapshot_changed","stage":"snapshot_verification","errorKind":"operation_budget_expired","elapsedMs":149000,"remainingBudgetMs":1000,"cleanupOutcome":"verified","commitState":"not_started","privateMessage":"do-not-print"}\n'; return 1; fi; printf '{"verified":true}\n';;
@@ -270,9 +331,23 @@ LEGACY_CLAIMS
     if [[ "$scenario" == expired-recovery-* ]]; then
       ACTION=expired-deployment-recover ORIGINAL_REQUEST_ID=old-deploy RUN_ID='' OPERATION_ID='' EXPECTED_REVISION='' COMMIT=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
       jq -n --arg image "$IMAGE_DIGEST" --arg prior "$prior" '{requestId:"old-deploy",action:"deploy",environment:"staging",priorRelease:$prior,budgetDeadlineAtSeconds:1,step:"initializing",image:$image,backupId:"retained-backup"}' > "$STATE/operation.json"
+      if [[ "$scenario" == expired-recovery-bridge-* ]]; then
+        IMAGE_DIGEST=ghcr.io/karpishe-experiments/agentic-poc@sha256:d79882c41256316fabad292443d75b0675391e02c853dd189b5b433843497b03
+        bridge_verifier="$IMAGE_DIGEST"
+        jq -n --arg image "$IMAGE_DIGEST" '{services:{app:{image:$image}}}' > "$prior/image.json"
+        (cd "$prior" && sha256sum compose.yml environment.yml runtime.env image.json > manifest.sha256)
+        jq '.image="ghcr.io/karpishe-experiments/agentic-poc@sha256:084a19907ea3118ea881dd429115096965a5da45ff590e2ffea4f4ea0b0c1f5b"' "$STATE/operation.json" > "$STATE/operation.next"; mv "$STATE/operation.next" "$STATE/operation.json"
+        docker() { if [[ "$1:$2" == image:inspect ]]; then printf 'a2bb22301bcd8e36f8972a30f7ad7b78fda5c655\n'; fi; }
+      fi
       cp "$STATE/operation.json" "$TEMP_DIR/original.json"
       systemctl() { printf 'failed\n'; }
       recovery_schema_digest() { printf '%064d\n' 2; }
+      if [[ "$scenario" == expired-recovery-bridge-* ]]; then
+        recovery_schema_digest() {
+          if [[ "$1" == "$IMAGE_DIGEST" ]]; then printf '143d91f426f22d59e8a9a7276578285f03f2dd806ac2d690911e19f48078d147\n'
+          else printf '32b45e53d5b2f99b1048724c2080e66d56d74ee19c5790a0b3f17cc795e8ef66\n'; fi
+        }
+      fi
       if [[ "$scenario" == expired-recovery-drift ]]; then
         recovery_schema_digest() { printf '%s\n' "$RANDOM"; }
         if (supported_recovery_host); then exit 1; fi
@@ -285,6 +360,23 @@ LEGACY_CLAIMS
     [[ ! -e "$STATE/recoveries" && ! -e "$STATE/recovery-handoff-staging.json" ]]
     ! grep -q 'deployment-control enable' "$CALLS"
     PREVIEW_DIGEST="$(sed -n 's/.*digest=//p' "$TEMP_DIR/preview-output")"
+    if [[ "$scenario" == expired-recovery-handoff-* ]]; then
+      mkdir -p "$STATE/recoveries/original-recovery"
+      jq -n --arg prior "$prior" '{requestId:"original-recovery",action:"candidate-reconcile",environment:"staging",priorRelease:$prior,sourceTree:"0000000000000000000000000000000000000003",phase:"complete"}' > "$STATE/recoveries/original-recovery/host.json"
+      jq '.phase="restoring-closed"' "$STATE/recoveries/original-recovery/host.json" > "$STATE/recovery-handoff-staging.json"
+      cp "$STATE/recovery-handoff-staging.json" "$TEMP_DIR/original-handoff.json"
+      supported_recovery_host > "$TEMP_DIR/handoff-preview"
+      PREVIEW_DIGEST="$(sed -n 's/.*digest=//p' "$TEMP_DIR/handoff-preview")"
+      rm -rf "$TEMP_DIR/candidate"
+      if [[ "$scenario" == expired-recovery-handoff-drift ]]; then
+        printf '\n' >> "$STATE/recovery-handoff-staging.json"
+        APPLY=true
+        if (supported_recovery_host); then exit 1; fi
+        ! grep -q 'deployment-control enable' "$CALLS"
+        [[ -e "$STATE/operation.json" && -e "$STATE/recovery-handoff-staging.json" ]]
+        exit 0
+      fi
+    fi
     if [[ "$scenario" == *-preview ]]; then exit 0; fi
     APPLY=true
     if [[ "$scenario" == candidate-recovery-mismatch ]]; then
@@ -328,6 +420,18 @@ LEGACY_CLAIMS
       cmp -s "$TEMP_DIR/original-checkpoint.json" "$STATE/recoveries/$REQUEST_ID/application-recovery.json"
       [[ "$(grep -c '^recovery apply$' "$CALLS")" == 1 ]]
       ! grep -q 'deployment-control disable' "$CALLS"
+    elif [[ "$scenario" == expired-recovery-target-preview-drift ]]; then
+      if (supported_recovery_host); then exit 1; fi
+      [[ ! -e "$STATE/recoveries" ]]
+      ! grep -q 'deployment-control enable' "$CALLS"
+      cmp -s "$TEMP_DIR/original.json" "$STATE/operation.json"
+    elif [[ "$scenario" == expired-recovery-bridge-verify-failed || "$scenario" == expired-recovery-target-post-start-drift ]]; then
+      if (supported_recovery_host); then exit 1; fi
+      [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == restoring-closed ]]
+      ! grep -q 'deployment-control disable' "$CALLS"
+      cmp -s "$TEMP_DIR/original.json" "$STATE/operation.json"
+      [[ -f "$STATE/recoveries/$REQUEST_ID/fail-closed.log" ]]
+      grep -Fq "maintenance $prior deployment-control enable recovery" "$CALLS"
     elif [[ "$scenario" == candidate-recovery-failure ]]; then
       if (supported_recovery_host) > "$TEMP_DIR/sanitized-error" 2>&1; then exit 1; fi
       grep -q '"code":"snapshot_changed"' "$TEMP_DIR/sanitized-error"
@@ -339,11 +443,32 @@ LEGACY_CLAIMS
     else
       supported_recovery_host
       [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == complete ]]
-      if [[ "$scenario" == expired-recovery-apply || "$scenario" == expired-recovery-resume || "$scenario" == expired-recovery-prepared ]]; then
+      if [[ "$scenario" == expired-recovery-* ]]; then
         cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
         [[ ! -e "$STATE/operation.json" ]]
         grep -q 'deployment-control disable' "$CALLS"
-        if [[ "$scenario" == expired-recovery-prepared ]]; then
+        if [[ "$scenario" == expired-recovery-bridge-* ]]; then
+          jq -e --arg image "$bridge_verifier" '.compatibilityProof.verifierImage==$image and .compatibilityProof.kind=="reviewed-optional-recovery-metadata"' "$STATE/recoveries/$REQUEST_ID/host.json" >/dev/null
+          [[ "$(grep '^verifier-image ' "$CALLS" | sort -u)" == "verifier-image $bridge_verifier" ]]
+          ! grep -q "compose .*candidate.*up " "$CALLS"
+          if [[ "$scenario" == expired-recovery-bridge-reentry-drift ]]; then
+            jq '.phase="archived-closed" | .compatibilityProof.verifierImage="changed"' "$STATE/recoveries/$REQUEST_ID/host.json" > "$TEMP_DIR/drifted-journal"
+            mv "$TEMP_DIR/drifted-journal" "$STATE/recoveries/$REQUEST_ID/host.json"
+            before="$(grep -c '^maintenance ' "$CALLS")"
+            if (supported_recovery_host); then exit 1; fi
+            [[ "$(grep -c '^maintenance ' "$CALLS")" == "$before" ]]
+          fi
+        fi
+        if [[ "$scenario" == expired-recovery-handoff-* ]]; then
+          [[ ! -e "$STATE/recovery-handoff-staging.json" ]]
+          cmp -s "$TEMP_DIR/original-handoff.json" "$STATE/operations/recovery-handoff-old-deploy.json"
+          if [[ "$scenario" == expired-recovery-handoff-resume ]]; then
+            recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" archived-closed
+            supported_recovery_host
+            cmp -s "$TEMP_DIR/original-handoff.json" "$STATE/operations/recovery-handoff-old-deploy.json"
+          fi
+        fi
+        if [[ "$scenario" == expired-recovery-prepared || "$scenario" == expired-recovery-bridge-prepared ]]; then
           cp "$TEMP_DIR/original.json" "$STATE/operation.json"
           recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" prepared
           supported_recovery_host

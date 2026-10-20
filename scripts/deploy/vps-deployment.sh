@@ -565,9 +565,48 @@ recovery_no_containers() {
 recovery_host_fingerprint() {
   sha256sum "$1/manifest.sha256" "$SECRETS/staging/secrets.json" "$CONFIG_FILE" | sha256sum | awk '{print $1}'
 }
+expired_recovery_handoff_hash() {
+  local current="$1" marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" original="$STATE/operation.json" id parent tree image
+  [[ -e "$original" ]] || original="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+  if [[ -e "$marker" && -e "$archive" ]]; then cmp -s "$marker" "$archive" || die 'Recovery handoff archive differs'; fi
+  [[ -e "$marker" ]] || marker="$archive"
+  [[ -e "$marker" ]] || return 0
+  [[ -f "$marker" && ! -L "$marker" ]] || die 'Recovery handoff is invalid'
+  id="$(jq -er .requestId "$marker")"
+  [[ "$id" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ ]] || die 'Recovery handoff identity invalid'
+  parent="$STATE/recoveries/$id/host.json"
+  [[ -f "$parent" && ! -L "$parent" ]] || die 'Recovery handoff journal missing'
+  jq -e --arg prior "$current" '.action=="candidate-reconcile" and .environment=="staging" and .priorRelease==$prior and (.sourceTree|test("^[a-f0-9]{40}$"))' "$marker" >/dev/null || die 'Recovery handoff target differs'
+  jq -e '.phase=="complete"' "$parent" >/dev/null || die 'Recovery handoff is incomplete'
+  [[ "$(jq -Sc 'del(.phase)' "$marker")" == "$(jq -Sc 'del(.phase)' "$parent")" ]] || die 'Recovery handoff provenance differs'
+  image="$(jq -er .image "$original")"
+  tree="$(docker image inspect --format '{{index .Config.Labels "uk.co.uniwares.booklet.source-tree"}}' "$image")" || die 'Failed deployment tree inspection failed'
+  [[ "$tree" == "$(jq -er .sourceTree "$marker")" ]] || die 'Recovery handoff failed deployment differs'
+  sha256sum "$marker" | awk '{print $1}'
+}
 recovery_verify_fingerprint() {
   local journal="$1" current="$2" supplied="$BACKUP_ID" fingerprint backup digest
   fingerprint="$(recovery_host_fingerprint "$current")" || die 'Recovery fingerprint inspection failed'
+  if [[ "$(jq -r .action "$journal")" == expired-deployment-recover ]] && jq -e 'has("handoffSha256")' "$journal" >/dev/null; then
+    local handoff_hash
+    handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
+    [[ "$handoff_hash" == "$(jq -r .handoffSha256 "$journal")" ]] || die 'Recovery handoff changed'
+    if jq -e 'has("compatibilityProof")' "$journal" >/dev/null; then
+      local original="$STATE/operation.json" proof
+      [[ -e "$original" ]] || original="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+      proof="$(recovery_expired_compatibility "$(jq -er .services.app.image "$current/image.json")" "$(jq -er .image "$original")")" || die 'Recovery compatibility inspection failed'
+      [[ "$proof" == "$(jq -Sc .compatibilityProof "$journal")" ]] || die 'Recovery compatibility proof changed'
+      if jq -e 'has("targetDigest")' "$journal" >/dev/null; then
+        fingerprint="$(printf '%s\n' "$fingerprint" "$handoff_hash" "$proof" "$(jq -c .targetDigest "$journal")" | sha256sum | awk '{print $1}')"
+      else
+        fingerprint="$(printf '%s\n' "$fingerprint" "$handoff_hash" "$proof" | sha256sum | awk '{print $1}')"
+      fi
+    else
+      fingerprint="$(printf '%s\n' "$fingerprint" "$handoff_hash" | sha256sum | awk '{print $1}')"
+    fi
+  elif [[ "$(jq -r .action "$journal")" == expired-deployment-recover && -e "$STATE/recovery-handoff-staging.json" ]]; then
+    die 'legacy_preview_fingerprint_unverified: recovery handoff was not pinned'
+  fi
   if jq -e 'has("hostFingerprint") and has("previewBackupId")' "$journal" >/dev/null; then
     [[ "$(jq -er .hostFingerprint "$journal")" == "$fingerprint" ]] || die 'Recovery configuration changed'
     return 0
@@ -601,7 +640,16 @@ recovery_phase() {
   mv "$path.next" "$path"
 }
 recovery_result() {
-  jq -c '{requestId,action,purpose,phase,environment,commit,image,priorRelease,runId,operationId,originalRequestId,backupId,previewDigest}' "$1"
+  jq -c '{requestId,action,purpose,phase,environment,commit,image,priorRelease,runId,operationId,originalRequestId,backupId,previewDigest,compatibilityProof}' "$1"
+}
+recovery_install_fail_closed_trap() {
+  local handler
+  # EXIT can run after function locals unwind. Capture only quoted non-secret
+  # paths now; never depend on current/evidence still being in scope at exit.
+  printf -v handler 'status=$?; if [[ "$status" != 0 ]]; then (REQUEST_ID=""; CONTROL_DEADLINE_SECONDS=$((SECONDS + 120)); maintenance %q deployment-control enable recovery > %q 2>&1) || printf "error: Recovery admission closure is unverified; inspect retained evidence\\n" >&2; fi; cleanup' "$1" "$2/fail-closed.log"
+  # The generated handler intentionally captures the quoted paths above now.
+  # shellcheck disable=SC2064
+  trap "$handler" EXIT
 }
 recovery_oneoff() {
   local release="$1" evidence="$2" phase="$3"; shift 3
@@ -613,7 +661,7 @@ recovery_oneoff() {
     command=(node --import tsx --input-type=module -e '
       import {getDatabase} from "./db/client.ts";
       import {verifyMongoStructure} from "./db/setup.ts";
-      import {verifyExperimentData,verifyMongoData} from "./db/verify.ts";
+      import {createHash} from "node:crypto";
       import {readBookletRunnerConfig} from "./lib/experiment-runner/config.ts";
       if(process.env.RUNNER_ENABLED!=="false" || process.env.DEPLOYMENT_ENV!=="_staging" || process.env.MONGODB_DATABASE!=="kids_booklet" || process.env.ASSETS_BUCKET!=="kids-booklet-staging-assets") throw new Error("Wrong recovery environment");
       const db=getDatabase(); try {
@@ -623,7 +671,33 @@ recovery_oneoff() {
         if(await db.collections.card_responses.countDocuments({followupStatus:"running"})) throw new Error("Unresolved followup");
         if(await db.collections.experiment_runs.countDocuments({$or:[{status:{$in:["queued","running"]}},{activeOperationId:{$exists:true,$ne:null}},{safeFailure:"unknown_outcome"},{preparation:{$exists:true,$ne:null},$or:[{"preparation.outcome":{$ne:"failed"}},{"preparation.unresolved":true}]}]})) throw new Error("Unresolved run");
         if(await db.collections.experiment_operations.countDocuments({$or:[{state:{$in:["prepared","started","unknown"]}},{"lifecycle.unresolved":true},{state:"succeeded",dispatchStartedAtMs:{$exists:true,$ne:null},verifiedWorkflowId:null},...["authorizationClaim","resultFinalizationClaim","imageCompletionClaim"].map(key=>({[key]:{$exists:true,$ne:null}}))]})) throw new Error("Unresolved operation");
-        await verifyMongoStructure(db); const profile=readBookletRunnerConfig(); if(!profile.enabled && profile.reason==="invalid") throw new Error("Invalid configuration"); if(profile.enabled) await verifyExperimentData(db); else await verifyMongoData(db); console.log(JSON.stringify({verified:true,compatible:true}));} finally {await db.close();}')
+        const started=Date.now(); await db.database.command({ping:1}); await verifyMongoStructure(db);
+        console.error(JSON.stringify({diagnostic:"deployment_read",phase:"structure",operation:"collections_and_indexes",elapsedMs:Date.now()-started,outcome:"completed"}));
+        const profile=readBookletRunnerConfig(); if(!profile.enabled && profile.reason==="invalid") throw new Error("Invalid configuration");
+        if(control.schemaVersion!=="1") throw new Error("Unsupported schema");
+        for(const id of ["soft-watercolor","cut-paper-collage","colored-pencil"]){const style=await db.collections.style_catalog.findOne({_id:id},{projection:{previewAssetId:1}}); if(!style || !await db.collections.assets.findOne({_id:style.previewAssetId,kind:"style_preview"},{projection:{_id:1}})) throw new Error("Seed unavailable");}
+        const [runId,operationId]=process.argv.slice(1); let targetDigest=null;
+        if(runId || operationId){
+          if(!runId || !operationId) throw new Error("Incomplete target");
+          const run=await db.collections.experiment_runs.findOne({_id:runId});
+          const op=await db.collections.experiment_operations.findOne({_id:operationId,runId});
+          if(!run || run.status!=="paused" || !run.pauseRequested || run.activeOperationId || !op || op.state!=="succeeded" || op.lifecycle?.unresolved || !op.resultJson || !op.materializationJson) throw new Error("Saved completion unverified");
+          const campaign=await db.collections.experiment_campaigns.findOne({_id:run.m4?.campaignId});
+          const artifacts=await db.collections.artifacts.find({experimentRunId:runId,taskId:op.taskId}).sort({_id:1}).limit(20).toArray();
+          if(!campaign || !artifacts.length || artifacts.length===20) throw new Error("Target accounting or artifacts unavailable");
+          const versions=await db.collections.artifact_versions.find({_id:{$in:[...op.dependencyVersionIds,...artifacts.map(a=>a.currentVersionId)]}}).sort({_id:1}).toArray();
+          if([...op.dependencyVersionIds,...artifacts.map(a=>a.currentVersionId)].some(id=>!versions.some(v=>v._id===id))) throw new Error("Target dependency unavailable");
+          const approvals=await db.collections.approvals.find({artifactVersionId:{$in:versions.map(v=>v._id)}}).sort({_id:1}).toArray();
+          for(const artifact of artifacts){if(artifact.state!=="approved" || !versions.some(v=>v._id===artifact.currentVersionId && v.sourceOperationId===operationId) || !approvals.some(a=>a.artifactVersionId===artifact.currentVersionId && a.experimentRunId===runId)) throw new Error("Target approval unavailable");}
+          targetDigest=createHash("sha256").update(JSON.stringify({run,op,campaign,artifacts,versions,approvals})).digest("hex");
+          console.error(JSON.stringify({diagnostic:"deployment_read",phase:"target",operation:"completion_dependencies",returnedRows:3+artifacts.length+versions.length+approvals.length,elapsedMs:Date.now()-started,remainingBudgetMs:null,outcome:"completed"}));
+        }
+        console.log(JSON.stringify({verified:true,compatible:true,targetDigest}));} finally {await db.close();}')
+    local marker="$STATE/recovery-handoff-staging.json"
+    [[ -e "$marker" ]] || marker="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json"
+    if [[ -e "$marker" ]]; then
+      command+=("$(jq -er .runId "$marker")" "$(jq -er .operationId "$marker")")
+    fi
   fi
   if COMPOSE_TIMEOUT_SECONDS=180 compose "$release" run --rm --no-deps -T --interactive=false --name "$name" \
     --label "uk.co.uniwares.booklet.request=$REQUEST_ID" --label uk.co.uniwares.booklet.environment=staging \
@@ -638,6 +712,48 @@ recovery_schema_digest() {
     for(const p of ["scripts/initialize-deployment.ts","db/initialize.ts","db/setup.ts","db/indexes.ts","db/seed.ts","db/documents.ts"]){h.update(p);h.update(fs.readFileSync(p));} console.log(h.digest("hex"));'; then return 0; else status=$?; fi
   stop_owned_oneoff "$name" 20 || die 'Schema inspection container cleanup is unverified'
   return "$status"
+}
+# Exact reviewed bridge: only the optional runtime-erased m4CompletionRecovery
+# annotation differs in the six fingerprint files. Never infer compatibility
+# from arbitrary optional fields, a matching schema version or a new image.
+recovery_data_contract() {
+  local name="booklet-operation-staging-${REQUEST_ID}-contract-$$-$RANDOM" status=0
+  if timeout --kill-after=5s 30s docker run --rm --network none --name "$name" \
+    --label "uk.co.uniwares.booklet.request=$REQUEST_ID" --label uk.co.uniwares.booklet.environment=staging \
+    --entrypoint node "$1" -e 'const fs=require("fs"); const p="db/deployment-contract.json"; console.log(fs.existsSync(p)?JSON.stringify(JSON.parse(fs.readFileSync(p,"utf8"))):"null");'; then return 0; else status=$?; fi
+  stop_owned_oneoff "$name" 20 || die 'Contract inspection cleanup is unverified'
+  return "$status"
+}
+recovery_expired_compatibility() {
+  local prior="$1" failed="$2" prior_schema failed_schema kind=identical verifier="$1" verifier_commit='' prior_contract failed_contract
+  prior_contract="$(recovery_data_contract "$prior")" || die 'Prior data contract inspection failed'
+  failed_contract="$(recovery_data_contract "$failed")" || die 'Failed data contract inspection failed'
+  if [[ "$prior_contract" != null || "$failed_contract" != null ]]; then
+    jq -ne --argjson prior "$prior_contract" --argjson failed "$failed_contract" '
+      def supported: type=="object" and .dataContractVersion=="booklet-data-v1" and .supportedDataContractVersions==["booklet-data-v1"] and .initializationRequired==false and .migrationRequired==false;
+      ($prior|supported) and ($failed|supported)' >/dev/null || die 'Data contract is unsupported or requires initialization/migration'
+    jq -ncS --arg prior "$prior" --arg failed "$failed" --argjson contract "$prior_contract" \
+      '{kind:"data-contract",priorImage:$prior,failedImage:$failed,verifierImage:$prior,verifierCommit:"",dataContract:$contract}'
+    return 0
+  fi
+  prior_schema="$(recovery_schema_digest "$prior")" || die 'Prior initializer inspection failed'
+  failed_schema="$(recovery_schema_digest "$failed")" || die 'Failed initializer inspection failed'
+  [[ "$prior_schema" =~ ^[a-f0-9]{64}$ && "$failed_schema" =~ ^[a-f0-9]{64}$ ]] || die 'Initializer fingerprint is malformed'
+  if [[ "$prior_schema" != "$failed_schema" ]]; then
+    [[ "$prior" == ghcr.io/karpishe-experiments/agentic-poc@sha256:d79882c41256316fabad292443d75b0675391e02c853dd189b5b433843497b03 \
+      && "$failed" == ghcr.io/karpishe-experiments/agentic-poc@sha256:084a19907ea3118ea881dd429115096965a5da45ff590e2ffea4f4ea0b0c1f5b \
+      && "$prior_schema" == 143d91f426f22d59e8a9a7276578285f03f2dd806ac2d690911e19f48078d147 \
+      && "$failed_schema" == 32b45e53d5b2f99b1048724c2080e66d56d74ee19c5790a0b3f17cc795e8ef66 ]] || die 'Initializer or schema changed; compatibility is not established'
+    kind=reviewed-optional-recovery-metadata
+    # Required APIs exist in the pinned prior image. The host's targeted read-only
+    # command needs neither the failed initializer nor another verifier image.
+  fi
+  jq -ncS --arg kind "$kind" --arg prior "$prior" --arg failed "$failed" --arg priorSchema "$prior_schema" --arg failedSchema "$failed_schema" --arg verifier "$verifier" --arg verifierCommit "$verifier_commit" \
+    '{kind:$kind,priorImage:$prior,failedImage:$failed,priorSchema:$priorSchema,failedSchema:$failedSchema,verifierImage:$verifier,verifierCommit:$verifierCommit}'
+}
+recovery_expired_verifier() {
+  local candidate="$1" proof="$2"
+  jq -n --arg image "$(jq -er .verifierImage <<< "$proof")" '{services:{app:{image:$image}}}' > "$candidate/image.json"
 }
 recovery_app_json() {
   local release="$1" evidence="$2" phase="$3" output="$4"; shift 4
@@ -678,9 +794,23 @@ expired_recovery_finish() {
   recovery_phase "$journal" restoring-closed
   (REQUEST_ID=''; maintenance "$current" deployment-control enable recovery) > "$evidence/admission.json"
   recovery_app_json "$candidate" '' legacy-compatibility "$evidence/prior-compatible.json"
+  if jq -e 'has("targetDigest")' "$journal" >/dev/null; then
+    [[ "$(jq -c .targetDigest "$journal")" == "$(jq -c .targetDigest "$evidence/prior-compatible.json")" ]] || die 'Saved target changed since preview'
+  fi
   (REQUEST_ID=''; compose "$current" up -d --no-deps app) || die 'Prior service restart failed'
   (REQUEST_ID=''; verify_application "$current") || die 'Prior service readiness failed'
   recovery_app_json "$candidate" '' legacy-compatibility "$evidence/post-start.json"
+  [[ "$(jq -c .targetDigest "$evidence/prior-compatible.json")" == "$(jq -c .targetDigest "$evidence/post-start.json")" ]] || die 'Saved target changed while restoring prior service'
+  # Retire only the preview-pinned handoff after compatibility and readiness.
+  # Preserve its exact bytes with the original failed deployment.
+  local handoff_hash marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json"
+  handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
+  [[ "$handoff_hash" == "$(jq -r '.handoffSha256 // ""' "$journal")" ]] || die 'Recovery handoff is not preview-pinned'
+  if [[ -n "$handoff_hash" && -e "$marker" ]]; then
+    if [[ ! -e "$archive" ]]; then cp --no-clobber "$marker" "$archive"; fi
+    cmp -s "$marker" "$archive" || die 'Recovery handoff archive differs'
+    rm "$marker"
+  fi
   if [[ ! -e "$STATE/operations/$ORIGINAL_REQUEST_ID.json" ]]; then
     cp --no-clobber "$STATE/operation.json" "$STATE/operations/$ORIGINAL_REQUEST_ID.json"
   fi
@@ -796,7 +926,7 @@ supported_recovery_host() (
     if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_unresolved_guard "$REQUEST_ID" "$ORIGINAL_REQUEST_ID"; else recovery_unresolved_guard "$REQUEST_ID"; fi
   fi
   recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.oneoff=True || die 'Staging maintenance container remains active; inspect its owning request, do not replay'
-  local CONTROL_DEADLINE_SECONDS=$((SECONDS + 2520)) current image candidate evidence journal digest app_digest='' old_hash='' failed_image='' host_fingerprint source_tree='' prior_schema failed_schema
+  local CONTROL_DEADLINE_SECONDS=$((SECONDS + 2520)) current image candidate evidence journal digest app_digest='' old_hash='' failed_image='' host_fingerprint source_tree='' prior_schema failed_schema handoff_hash='' compatibility_proof='null' target_digest='null'
   read -r current < "$STATE/releases/staging/current"
   [[ "$current" =~ ^$STATE/releases/staging/[a-f0-9]{40}$ && ! -L "$current" ]] || die 'Selected staging release is invalid'
   (cd "$current" && sha256sum -c manifest.sha256 >/dev/null) || die 'Selected release files changed'
@@ -848,14 +978,24 @@ supported_recovery_host() (
         recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original owned containers remain'
         recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging || die 'Staging containers remain active'
         failed_image="$(jq -er .image "$STATE/operation.json")"
-        prior_schema="$(recovery_schema_digest "$image")" || die 'Prior schema inspection failed'
-        failed_schema="$(recovery_schema_digest "$failed_image")" || die 'Failed candidate schema inspection failed'
-        [[ "$prior_schema" =~ ^[a-f0-9]{64}$ && "$prior_schema" == "$failed_schema" ]] || die 'Initializer or schema changed'
+        if ! jq -e 'has("compatibilityProof")' "$journal" >/dev/null; then
+          prior_schema="$(recovery_schema_digest "$image")" || die 'Prior schema inspection failed'
+          failed_schema="$(recovery_schema_digest "$failed_image")" || die 'Failed candidate schema inspection failed'
+          [[ "$prior_schema" =~ ^[a-f0-9]{64}$ && "$prior_schema" == "$failed_schema" ]] || die 'Initializer or schema changed'
+        fi
       fi
       BACKUP_ID="$(jq -er .backupId "$journal")"
       (REQUEST_ID=''; maintenance "$current" recovery verify) > "$evidence/resume-backup.log" 2>&1 || die 'Retained backup verification failed'
-      trap 'status=$?; if [[ "$status" != 0 ]]; then (REQUEST_ID=""; CONTROL_DEADLINE_SECONDS=$((SECONDS + 120)); maintenance "$current" deployment-control enable recovery > "$evidence/fail-closed.log" 2>&1) || printf "error: Recovery admission closure is unverified\n" >&2; fi; cleanup' EXIT
-      expired_recovery_finish "$current" "$current" "$evidence" "$journal"
+      private_temp; candidate="$(mktemp -d "$TEMP_DIR/expired-candidate.XXXXXXXX")"
+      cp "$current/compose.yml" "$current/environment.yml" "$current/runtime.env" "$candidate/"
+      if jq -e 'has("compatibilityProof")' "$journal" >/dev/null; then
+        compatibility_proof="$(jq -Sc .compatibilityProof "$journal")"
+        recovery_expired_verifier "$candidate" "$compatibility_proof"
+      else
+        cp "$current/image.json" "$candidate/image.json"
+      fi
+      recovery_install_fail_closed_trap "$current" "$evidence"
+      expired_recovery_finish "$current" "$candidate" "$evidence" "$journal"
       recovery_phase "$journal" complete
       recovery_result "$journal"
       return 0
@@ -891,10 +1031,11 @@ supported_recovery_host() (
     [[ "$source_tree" =~ ^[a-f0-9]{40}$ ]] || die 'Candidate source tree proof is missing'
     jq -n --arg image "$IMAGE_DIGEST" '{services:{app:{image:$image}}}' > "$candidate/image.json"
     recovery_oneoff "$candidate" '' capabilities > "$TEMP_DIR/capabilities.json" 2> "$TEMP_DIR/capabilities.stderr"
-    jq -e '.contract=="booklet-recovery-v1" and .environment=="_staging" and .schemaVersion=="1" and .initializationRequired==false' "$TEMP_DIR/capabilities.json" >/dev/null || die 'Candidate recovery contract is incompatible'
+    jq -e '.contract=="booklet-recovery-v1" and .environment=="_staging" and .schemaVersion=="1" and .initializationRequired==false and (.migrationRequired // false)==false' "$TEMP_DIR/capabilities.json" >/dev/null || die 'Candidate recovery contract is incompatible'
     if [[ "$INSPECTION_ONLY" == true ]]; then
       local inspect_status=0
       recovery_oneoff "$candidate" '' inspect-blockers --page "$RECOVERY_PAGE" --limit "$RECOVERY_LIMIT" > "$TEMP_DIR/inspection.json" 2> "$TEMP_DIR/inspection.stderr" || inspect_status=$?
+      jq -Rc 'fromjson? | select(.diagnostic=="deployment_read") | {environment:"_staging",diagnostic,phase,operation,collection,outcome,returnedRows,elapsedMs,remainingBudgetMs,errorKind}' "$TEMP_DIR/inspection.stderr"
       jq -c '{schemaVersion,environment,inspectedAtMs,outcome,admission,blockers,inspectionError}' "$TEMP_DIR/inspection.json"
       return "$inspect_status"
     fi
@@ -914,26 +1055,30 @@ supported_recovery_host() (
     [[ "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Verified backup identity required'
     failed_image="$(jq -er .image "$STATE/operation.json")"
     [[ "$failed_image" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Failed candidate image identity missing'
-    prior_schema="$(recovery_schema_digest "$image")" || die 'Prior initializer inspection failed'
-    failed_schema="$(recovery_schema_digest "$failed_image")" || die 'Failed candidate initializer inspection failed'
-    [[ "$prior_schema" =~ ^[a-f0-9]{64}$ && "$prior_schema" == "$failed_schema" ]] || die 'Initializer or schema changed; compatibility is not established'
-    cp "$current/image.json" "$candidate/image.json"
+    compatibility_proof="$(recovery_expired_compatibility "$image" "$failed_image")" || die 'Expired deployment compatibility inspection failed'
+    recovery_expired_verifier "$candidate" "$compatibility_proof"
     recovery_app_json "$candidate" '' legacy-compatibility "$TEMP_DIR/compatibility.json"
+    jq -e '(.targetDigest==null) or ((.targetDigest|type)=="string" and (.targetDigest|test("^[a-f0-9]{64}$")))' "$TEMP_DIR/compatibility.json" >/dev/null || die 'Target digest is malformed'
+    target_digest="$(jq -c .targetDigest "$TEMP_DIR/compatibility.json")"
     # Independent read-only backup proof does not inherit the expired deadline.
     (REQUEST_ID=''; maintenance "$current" recovery verify) > "$TEMP_DIR/backup.json" 2> "$TEMP_DIR/backup.stderr" || die 'Backup verification failed; inspect before recovery'
   fi
   host_fingerprint="$(recovery_host_fingerprint "$current")"
+  if [[ "$ACTION" == expired-deployment-recover ]]; then
+    handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
+    host_fingerprint="$(printf '%s\n' "$host_fingerprint" "$handoff_hash" "$compatibility_proof" "$target_digest" | sha256sum | awk '{print $1}')"
+  fi
   digest="$(printf '%s\n' "$host_fingerprint" "$ACTION" "$REQUEST_ID" "$current" "$image" "$COMMIT" "$IMAGE_DIGEST" "$RUN_ID" "$OPERATION_ID" "$EXPECTED_REVISION" "$app_digest" "$old_hash" "$BACKUP_ID" "$source_tree" | sha256sum | awk '{print $1}')"
   printf 'result: recovery preview request=%s action=%s digest=%s\n' "$REQUEST_ID" "$ACTION" "$digest"
   [[ "$APPLY" == true ]] || return 0
   [[ "$PREVIEW_DIGEST" == "$digest" ]] || die 'Recovery preview changed; obtain a fresh preview'
   mkdir -p "$STATE/recoveries"; mkdir "$evidence"; chmod 700 "$evidence"
-  jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" --arg fingerprint "$host_fingerprint" --arg previewBackup "$BACKUP_ID" \
-    '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage,hostFingerprint:$fingerprint,previewBackupId:$previewBackup}' > "$journal"
+  jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" --arg fingerprint "$host_fingerprint" --arg previewBackup "$BACKUP_ID" --arg handoff "$handoff_hash" --argjson compatibility "$compatibility_proof" --argjson target "$target_digest" \
+    '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage,hostFingerprint:$fingerprint,previewBackupId:$previewBackup} + (if $action=="expired-deployment-recover" then {handoffSha256:$handoff,compatibilityProof:$compatibility,targetDigest:$target} else {} end)' > "$journal"
   cp "$TEMP_DIR/"*.json "$evidence/"
   # An uncertain admission reopen must be closed again. Cleanup has its own
   # bounded budget; it cannot continue business recovery or alter old journals.
-  trap 'status=$?; if [[ "$status" != 0 ]]; then (REQUEST_ID=""; CONTROL_DEADLINE_SECONDS=$((SECONDS + 120)); maintenance "$current" deployment-control enable recovery > "$evidence/fail-closed.log" 2>&1) || printf "error: Recovery admission closure is unverified; inspect retained evidence\n" >&2; fi; cleanup' EXIT
+  recovery_install_fail_closed_trap "$current" "$evidence"
   if [[ "$ACTION" == candidate-reconcile ]]; then
     recovery_phase "$journal" closing
     maintenance "$current" deployment-control enable recovery > "$evidence/admission.json" || die 'Admission close failed'

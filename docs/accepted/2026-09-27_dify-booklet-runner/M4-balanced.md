@@ -1,67 +1,87 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid remains blocked after 30 paid text requests and five simulated images. Its retained J11 response has not been committed. The reviewed recovery dispatcher is installed; interrupted recovery requests are safely aborted with the prior app ready and admission closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** The original Kid run is paused after 30 paid text requests and five simulated images. Its retained J11 result is saved and independently verified. Normal staging deployment failed during initialization; admission remains closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## Current execution record - 2026-10-20
+
+The original Kid run `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` remains paused
+with 30 paid text requests and five simulated images. J11 operation
+`48e69de1-cbc9-4ac6-a5d2-bd81dddffad9` is saved and independently verified;
+do not reconcile or dispatch it again. Parent and Creator remain unstarted.
+M4 is not complete. This section supersedes pending actions in retained history.
+
+Normal deployment `39254742459` failed during initialization with a MongoDB
+`getMore` socket-read timeout; the collection and underlying cause remain unproven.
+The prior app is stopped and admission closed. Retain backup
+`staging-20261019T125219Z-4e70a40e25dc961d` and all 162 saved assets.
+The installed dispatcher SHA-256 is
+`3eab667167c1c407d312ccc7c3d2312e5dafa87c3b30b85bbb9068cbd371db19`.
+Its subsequent read-only recovery preview rejected a runtime-erased optional type
+change because compatibility used raw source hashes. No recovery mutation followed.
+
+The approved combined correction separates required setup/readiness from explicit
+historical audits, adds an image data-contract declaration, retains one exact legacy
+compatibility bridge, and verifies the retained target across prior-service startup.
+Backup reuse requires the same protected maintenance window; starting the prior
+service does not create another backup. Timings are sanitized and deadlines remain
+unchanged. No credential, storage, transfer or consumer change is required.
+
+Local verification: 51 recovery/compatibility/deployment/command units, 19 focused
+readiness/initialization/audit cases, 20 changed host scenarios and the combined
+recovery-to-Resume fixture pass. The fixture executes the actual targeted recovery
+JavaScript against disposable MongoDB; host lifecycle commands remain mocked.
+Both full shell suites were attempted locally; Windows permission/symlink
+limitations prevent a full local pass. Linux CI must pass before delivery.
+These checks do not establish live latency or the original timeout's cause.
+
+Delivery gate: prove the combined recovery/deployment/Resume fixture with fake
+providers, real persistence and mocked host commands; finish focused checks, two
+clean independent reviews and lean Linux CI before another installation. Then use
+supported expired-deployment recovery, deploy normally, verify release/admission,
+and explicitly Resume this same Kid run. Continue Parent then Creator only after
+success within the conditional $5 campaign, request and no-successor limits.
+No new paid smoke, campaign, reset or infrastructure work is included.
+
+<details>
+<summary>Retained earlier execution evidence and superseded next-step statements</summary>
 
 ## Supported recovery follow-up - 2026-10-18
 
-**Current implementation - 2026-10-19:** PR #214 is merged at
-`165a36c3e3ca39d79f1a602da86b7c0f768d95a7`; reviewed head
-`0a0ef1d2ca974440dc3b6e7b9bcb34a736a247e8` passed two independent reviews.
-Linux CI `39246918885` and staging CI `39247011887` passed, including both
-full shell suites. Candidate-only build `39247005998` passed for staging
-`ba880437198f19f592968911f4b9a8f6a2be2e7f`, image digest
-`sha256:3b383b04eedbebd59200d7e6c3378fdca94f58d92c5248302a2aee6bd6929416`.
-The operator installed dispatcher SHA256
-`f00f752fe7257b39126641c8281a41964802f884f4db456c739c9d50f79ec265`
-with backup `/var/lib/kids-booklet/issue65-recovery-dispatcher.WWdV0x7G/dispatcher.before`.
-Normal staging deployment remains gated on successful J11 reconciliation.
+**Current implementation and live state - 2026-10-19:** PR #215 merged at
+`f6ef69c13da448fea60c4365797e2b795ae6e666`. Two independent reviews and lean
+CI `39250813474`/`39250970728` passed. Supported J11 recovery v7 committed the
+original result; verification-only `39254103801` proved durable completion and
+preservation before restoring the prior app ready with admission closed. No paid
+request was replayed. Backup `staging-recovery-issue65-m4-j11-20261019-v7` and all
+failed recovery journals remain retained.
 
-**Current live state:** exact claim-release preview `39239926407` passed.
-Apply `39240169978` exceeded its 150-second budget during post-write snapshot
-verification. Separate verification-only `39240852315` proved the exact claim
-release and complete preservation; no mutation was replayed. Supported abort
-`39241112378` closed original request `issue65-m4-j11-20261018-v4` safely.
-Fresh J11 preview `39241347236` passed. Apply `39241709069` for
-`issue65-m4-j11-20261019-v5` lost SSH with `Broken pipe` after reaching
-reconciliation; backup `staging-recovery-issue65-m4-j11-20261019-v5` is retained.
-Verification-only `39243360753` returned `completion_unverified`.
-Inspection `39243648536` found only the exact J11 run/operation: still started,
-no claims, no result/materialization/recovery, and zero mutation ownership.
-Proof-gated abort `39243855714` then restored the exact prior app, verified
-readiness and retained closed admission. Both original journals/deadlines and
-failed evidence are preserved. No further paid request was made.
+PR #205 then merged at `7f195b57411a54051ea56dc95d43e43b92280e0b`.
+Normal deployment `39254742459` selected image
+`sha256:084a19907ea3118ea881dd429115096965a5da45ff590e2ffea4f4ea0b0c1f5b`
+but failed in `initialize-deployment`. The private host diagnostic reports a
+MongoDB `getMore` socket-read timeout after 27,962 ms; it does not identify the
+collection. Backup `staging-20261019T125219Z-4e70a40e25dc961d` contains 162 assets.
+The serving app is stopped and admission is closed. Preserve the original request
+and deadline; inspect supported expired-deployment recovery before new delivery.
 
-The operator's v5 diagnostic established uncommitted completion budget expiry,
-with cleanup completed. PR #214 (reviewed `0a0ef1d2ca974440dc3b6e7b9bcb34a736a247e8`)
-merged at `165a36c3e3ca39d79f1a602da86b7c0f768d95a7`. CI
-`39246918885`/`39247011887` and candidate build `39247005998` passed.
-The exact maintenance path now reuses its same-invocation authenticated response
-under the existing 150-second budget, preserving interactive Inspect/Stop caps.
-V6 preview `39247782828` passed. Apply `39248278539` then reached the
-outer budget: reconciliation 42,650 ms, result transaction 27,926 ms, remaining
-zero, uncommitted and cleanup completed. This identifies the constrained phase;
-it does not identify the slowest individual source/database read. Supported abort
-`39250015129` verified unchanged data and restored the prior app ready with
-admission closed. Backup `staging-recovery-issue65-m4-j11-20261019-v6`, original
-journal/deadline and failed evidence remain preserved. No additional paid call.
+The bounded initializer correction reads only identity/provenance fields in
+indexed pages of at most 100 rows. Every existing integrity check and collection
+row remains covered. Saved outputs, prompts and preparation payloads are excluded
+from these reads. A failed read emits a fixed phase, collection, allowlisted error
+kind, elapsed time and completed-row count, then preserves the original error.
+The related host correction pins and archives a completed recovery handoff only
+after expired-deployment compatibility/readiness pass. This avoids pinning the next
+corrective release to the failed candidate tree. Original journals/deadlines and
+saved results stay unchanged. No timeout, schema, initializer compatibility
+fingerprint or credential changes are included. Local fixtures verify pagination and final-page corruption;
+this is not proof of live latency or of the exact collection that timed out.
 
-The bounded correction compares one full post-GET snapshot directly with apply's
-already-pinned target/snapshot/grant digest. Fresh preview retains both scans;
-apply no longer repeats the first scan before comparing the complete proof.
-All preservation rows remain; changed foreign assets, approvals or grants still
-reject before checkpoint. Fresh mutable checks after checkpoint and all shared
-completion, source, approval, accounting, claim and progress checks remain.
-Apply plus independent post-write verification needs two full scans rather than
-three. Budgets, provider deadlines, leases, routes and schemas are unchanged.
-This follow-up is under verification, not live-proven. PR #205 remains gated.
-
-The same bundle gives only read-only status requests an independent workflow
-concurrency group. Mutating actions keep their existing group and host lock.
-Current phase can then be inspected during apply without stopping or replaying it.
-The separate claim-release path still has repeated scans; its earlier uncertain
-acknowledgement was recovered safely by verification only. Its phase split remains
-deferred. Credential-inventory impact: none; campaign/persona limits unchanged.
+Next: finish focused validation and two clean reviews, publish the correction,
+install the reviewed dispatcher correction, recover the expired delivery through
+supported controls, deploy normally and
+verify release/admission. Then explicitly Resume the same Kid run and continue
+Parent and Creator within the existing conditional $5 and no-successor limits.
 
 The bounded diagnostic follow-up adds paginated operation state and claim/presence
 flags to existing read-only inspection. MongoDB returns content type markers,
@@ -448,6 +468,9 @@ The deterministic Kid fixture must complete with 39 text + 9 image operations
 
 The authorized comparison is complete. Retain both baselines and the new run;
 do not start another persona campaign or paid execution from this exit record.
+
+
+</details>
 
 ## M4 readiness plan — 2026-10-13
 
