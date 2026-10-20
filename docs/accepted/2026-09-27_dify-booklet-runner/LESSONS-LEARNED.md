@@ -23,6 +23,12 @@ Deployment initialization loaded complete experiment operations and artifacts ev
 though its integrity checks consume only identities and provenance. The retained
 host error proves a cursor `getMore` timeout, but does not identify its collection.
 Use minimal projections and indexed pages while retaining every row and check.
+The same rule applies inside image-source verification and saved-run inspection:
+image lineage consumes image and parent-manager fields, not retained text preparations or
+provider observations. A 37-operation large-payload fixture verifies that those
+text bodies remain stored while image verification excludes those bodies. Keep operational
+read failures outside model-output validation catches; a failed read does not
+prove invalid content. Preserve the original failure and unresolved accounting.
 The focused 205-operation persistence fixture verifies three pages and rejects a
 broken final-page reference; the read-failure fixture retains the original error
 without logging its private message. Local checks do not prove live latency.

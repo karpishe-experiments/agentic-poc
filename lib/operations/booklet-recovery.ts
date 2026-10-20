@@ -12,6 +12,8 @@ import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { CompletionReconciliationError } from "@/lib/operations/completion-failure";
+import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
+import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 
 export const BOOKLET_RECOVERY_CONTRACT = "booklet-recovery-v1";
 export class BookletRecoveryError extends Error {
@@ -142,7 +144,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     requireProof(run.revision === target.expectedRevision, "revision_changed");
     requireProof(run.mode === "balanced" && run.status === "blocked" && run.safeFailure === "definite_failure" &&
       run.activeOperationId === op._id && !run.preparation && !run.generationCompletedAtMs, "unsupported_run");
-    requireProof(op.state === "started" && op.mode === "balanced" && op.role === "specialist" && op.taskId === "J11" && op.providerKind === "text" &&
+    requireProof(op.state === "started" && op.mode === "balanced" && isCompletionRecoveryRole(op) && op.providerKind === "text" &&
       op.reservationCount === 1 && op.deadlineAtMs !== null && op.deadlineAtMs < now() && op.workflowRunId && op.verifiedWorkflowId &&
       op.lifecycle && !op.lifecycle.stop && !op.m4CompletionRecovery && !op.resultJson && !op.materializationJson &&
       !op.authorizationClaim && (releasingClaim || !op.resultFinalizationClaim) && !op.imageCompletionClaim, "unsupported_operation");
@@ -150,11 +152,16 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
       op.m4Observation.evidenceDigest && op.m4Preparation?.requestDigest, "retained_evidence_missing");
     requireProof(campaign.state === "stopped" && campaign._id === grant.campaignId && run.m4?.policyHash === campaign.policyHash &&
       run.m4.policyJson === campaign.policyJson, "campaign_mismatch");
+    if (op.role === "manager") {
+      const result = m4ObservedRoleResult(run, op);
+      requireProof(result.kind === "delegate" && result.payload.taskId === "J12" && result.payload.subjectKind === "page",
+        "unsupported_manager_result");
+    }
     return { run, op };
   }
   async function observe(target: RecoveryTarget) {
     const { op } = await eligible(target);
-    const binding = config.bindings.find(item => item.role === "specialist" && item.taskId === "J11");
+    const binding = config.bindings.find(item => item.role === op.role && item.taskId === op.taskId);
     requireProof(binding && binding.publishedWorkflowId === op.verifiedWorkflowId, "publication_changed");
     const result = await runtime.retrieve(binding, op.workflowRunId!, { deadlineAtMs: now() + 20_000 });
     requireProof(result.kind === "execution" && result.execution.status === "succeeded" && result.execution.id === op.workflowRunId &&
@@ -208,20 +215,29 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
         requireProof(recoveryDigest(Object.keys(after.rows[name])) === recoveryDigest(Object.keys(before.rows[name])), "inventory_changed");
       }
     }
-    const artifact = await c.artifacts.findOne({ experimentRunId: target.runId, taskId: "J11" });
-    requireProof(artifact?.state === "approved", "artifact_unverified");
-    const version = await c.artifact_versions.findOne({ _id: artifact.currentVersionId!, sourceOperationId: target.operationId });
-    requireProof(version, "version_unverified");
-    const approvals = await c.approvals.find({ artifactVersionId: version._id }).toArray();
-    requireProof(approvals.length === 1 && approvals[0].origin === "delegated" && approvals[0].delegationId === run.activeDelegationId &&
-      approvals[0].experimentRunId === target.runId, "approval_unverified");
-    const edges = await c.artifact_dependencies.find({ downstreamVersionId: version._id }).toArray();
-    requireProof(recoveryDigest(edges.map(edge => edge.upstreamVersionId).sort()) === recoveryDigest([...op.dependencyVersionIds].sort()) &&
-      recoveryDigest(JSON.parse(version.dependencyVersionIdsJson)) === recoveryDigest(op.dependencyVersionIds), "lineage_unverified");
-    const additions = (name: string) => Object.keys(after.rows[name]).filter(id => !before.rows[name][id]);
-    requireProof(recoveryDigest(additions("artifacts")) === recoveryDigest([artifact._id]) &&
-      recoveryDigest(additions("artifact_versions")) === recoveryDigest([version._id]) && additions("approvals").length === 1 &&
-      additions("artifact_dependencies").length === op.dependencyVersionIds.length, "unexpected_materialization");
+    if (op.role === "manager") {
+      requireProof(JSON.parse(op.materializationJson!).delegatedTaskId === "J12", "delegation_unverified");
+      // A manager completion records its existing delegation, not new persona
+      // outputs. Every artifact/approval/edge and the booklet stay byte-identical.
+      for (const name of ["artifacts", "artifact_versions", "artifact_dependencies", "approvals", "booklets"]) {
+        requireProof(recoveryDigest(after.rows[name]) === recoveryDigest(before.rows[name]), "unexpected_materialization");
+      }
+    } else {
+      const artifact = await c.artifacts.findOne({ experimentRunId: target.runId, taskId: "J11" });
+      requireProof(artifact?.state === "approved", "artifact_unverified");
+      const version = await c.artifact_versions.findOne({ _id: artifact.currentVersionId!, sourceOperationId: target.operationId });
+      requireProof(version, "version_unverified");
+      const approvals = await c.approvals.find({ artifactVersionId: version._id }).toArray();
+      requireProof(approvals.length === 1 && approvals[0].origin === "delegated" && approvals[0].delegationId === run.activeDelegationId &&
+        approvals[0].experimentRunId === target.runId, "approval_unverified");
+      const edges = await c.artifact_dependencies.find({ downstreamVersionId: version._id }).toArray();
+      requireProof(recoveryDigest(edges.map(edge => edge.upstreamVersionId).sort()) === recoveryDigest([...op.dependencyVersionIds].sort()) &&
+        recoveryDigest(JSON.parse(version.dependencyVersionIdsJson)) === recoveryDigest(op.dependencyVersionIds), "lineage_unverified");
+      const additions = (name: string) => Object.keys(after.rows[name]).filter(id => !before.rows[name][id]);
+      requireProof(recoveryDigest(additions("artifacts")) === recoveryDigest([artifact._id]) &&
+        recoveryDigest(additions("artifact_versions")) === recoveryDigest([version._id]) && additions("approvals").length === 1 &&
+        additions("artifact_dependencies").length === op.dependencyVersionIds.length, "unexpected_materialization");
+    }
     await withMongoTransaction(database, session => verifyM4Accounting(database, session, run));
     await quiet(target, true);
     return { verified: true as const, outcome: "completed" as const, accounting: "preserved" as const,

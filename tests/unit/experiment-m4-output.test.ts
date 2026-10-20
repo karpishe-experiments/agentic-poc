@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
+import { M4CreativeOutputError, parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 import { styleModuleHash } from "@/lib/contracts/experiment-references";
 import { m4TestId as id } from "@/tests/helpers/m4-policy";
 import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
@@ -27,6 +27,12 @@ const context = { role: "specialist", subjectId: id(8), approvedSources: [
 const proposal = (taskId: string, content: unknown) => JSON.stringify({ result: { kind: "proposal", payload: { taskId, content } } });
 
 describe("M4 trusted creative output assembly", () => {
+  it("distinguishes malformed model bytes from an unreadable saved context", () => {
+    const manager = { role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false };
+    const valid = JSON.stringify({ result: { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: id(1) } } });
+    expect(() => parseM4CreativeOutput(manager, "{", "{}")).toThrow(M4CreativeOutputError);
+    expect(() => parseM4CreativeOutput(manager, valid, "{")).toThrow(SyntaxError);
+  });
   it("rejects the observed center-coordinate rectangles and Kid multi-panel layout without rewriting either", () => {
     const sources = paginationSources("playful_kid");
     const fixture = simulatePaginationProposal({ persona: "playful_kid", sources });

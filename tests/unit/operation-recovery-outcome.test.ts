@@ -12,6 +12,13 @@ function fixture() {
 }
 
 describe("operation recovery diagnostic", () => {
+  it("offers inspection of the exact granted manager without authorizing replay or continuation", () => {
+    const input = fixture();
+    Object.assign(input.operation, { role: "manager", taskId: null });
+    expect(operationRecoveryOutcome(input)).toEqual({ code: "reviewed_completion_recovery_required", providerReplayAllowed: false, continuationAuthorized: false });
+    input.completionRecoveries = [];
+    expect(operationRecoveryOutcome(input).code).toBe("inspect_existing_execution");
+  });
   it("identifies only the exact granted retained J11 without authorizing execution or exposing content", () => {
     const input = fixture();
     expect(operationRecoveryOutcome(input)).toEqual({ code: "reviewed_completion_recovery_required", providerReplayAllowed: false, continuationAuthorized: false });

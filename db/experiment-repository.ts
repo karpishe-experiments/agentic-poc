@@ -29,6 +29,7 @@ import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { reportCleanup } from "@/lib/operations/completion-failure";
+import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -785,7 +786,8 @@ export function createExperimentRepository(database: Database, options: { store?
       const recoveryPermission = campaignLedger?.grant.completionRecoveries?.find(item => item.runId === run._id && item.operationId === operation._id);
       const recovering = run.status === "blocked" && run.safeFailure === "definite_failure" &&
         options.m4ExecutionEnabled === true && run.mode === "balanced" && operation.providerKind === "text" &&
-        operation.role === "specialist" && operation.taskId === "J11" && run.generationCompletedAtMs == null &&
+        isCompletionRecoveryRole(operation) && (operation.role !== "manager" || result.kind === "delegate" &&
+          result.payload.taskId === "J12" && result.payload.subjectKind === "page") && run.generationCompletedAtMs == null &&
         !operation.lifecycle?.stop && !operation.m4CompletionRecovery && recoveryPermission &&
         operation.resultJson === null && operation.resultDigest === null && operation.materializationJson === null &&
         operation.authorizationClaim == null && operation.imageCompletionClaim == null &&

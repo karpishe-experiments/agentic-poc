@@ -17,7 +17,7 @@ The issue #65 recovery dispatcher is installed and retained J11 completion has
 been verified through supported controls. Installation and live execution remain
 separate evidence; the commands below require matching dispatcher capabilities
 and application images. See the current [M4 record](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
-for the blocked normal delivery and next checkpoint.
+for the completed normal delivery, retained manager blocker and next checkpoint.
 
 Routine initialization checks required setup, metadata and seed availability;
 retained history is excluded. Use the explicit `npm run db:verify` diagnostic for
@@ -47,6 +47,16 @@ completion, or `expired-deployment-recover` for a stopped expired deployment.
 Preview first, retain its digest, then apply the same exact target. The protected
 workflow exposes structured blocker IDs and phases. Inspection failure is not a
 clear work inventory. Use bounded blocker pages instead of copying private logs.
+
+For an exact retained manager completion, first verify that the reviewed image
+advertises `granted-j12-manager-completion` and the protected manifest grants that
+run/operation identity. Only an authenticated retained `delegate` result for J12
+with a page subject is supported. Use the same preview/apply inputs below; do not
+create another dispatcher action or replay the provider. Source and approval
+checks remain required. Verification must prove the J12 delegation summary,
+unchanged artifacts, versions, dependencies, approvals and booklets, and preserved
+accounting and attempt history. The recovered run remains paused until explicit
+Resume after normal delivery and preflight. Existing J11 recovery is unchanged.
 
 For candidate preview, the workflow's `recovery` input is a JSON object containing
 string fields `run_id`, `operation_id` and `expected_revision`. Supply a new
