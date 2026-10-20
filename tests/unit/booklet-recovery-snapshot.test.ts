@@ -1,8 +1,18 @@
 import type { Collection } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
-import { readRecoveryFingerprints, readRecoveryInventory, recoveryDigest } from "@/lib/operations/booklet-recovery";
+import { readRecoveryFingerprints, readRecoveryInventory, recoveryDigest, inspectStep } from "@/lib/operations/booklet-recovery";
+import { withOperationBudget } from "@/lib/operations/budget";
 
 describe("recovery preservation snapshot", () => {
+  it("attributes a read failure within the actual operation budget without exposing its contents", async () => {
+    const error = await withOperationBudget(Date.now() + 5_000, () => inspectStep("admission", async () => {
+      throw Object.assign(new Error("private connection details"), { name: "MongoServerSelectionError" });
+    })).catch(error => error);
+    expect(error).toMatchObject({ code: "inspection_or_verification_failed", stage: "admission", errorKind: "MongoServerSelectionError",
+      diagnostic: { elapsedMs: expect.any(Number), remainingBudgetMs: expect.any(Number) } });
+    expect(error.diagnostic.remainingBudgetMs).toBeGreaterThan(0);
+    expect(error.message).not.toContain("private");
+  });
   it("hashes every retained row with bounded keyset pages", async () => {
     const rows = Array.from({ length: 600 }, (_, index) => ({ _id: String(index).padStart(4, "0"), retained: `evidence-${index}` }));
     const limits: number[] = [];
