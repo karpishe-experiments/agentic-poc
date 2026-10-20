@@ -58,6 +58,12 @@ accounting, sources, approvals, the 60-second claim, materialization and progres
 checks remain. Responses are not cached across requests or put in preview receipts.
 Provider deadlines and claim leases are unchanged.
 
+Recovery error attribution also covers configuration construction, the initial
+admission read, snapshot invariant hashing and preview proof hashing. These
+boundaries emit fixed stages, allowlisted error kinds, elapsed time and remaining
+budget through the existing sanitized recovery result. They do not change recovery
+eligibility or expose arbitrary errors or retained contents.
+
 The supported issue #65 recovery candidate adds a maintenance-only
 `booklet-recovery-v1` command. It inspects sanitized blockers and can reconcile
 an exact granted J11 specialist completion or J12 page delegation from a manager

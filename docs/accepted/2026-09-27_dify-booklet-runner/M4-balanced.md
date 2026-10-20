@@ -78,9 +78,29 @@ Focused validation passed 56 recovery/configuration units, two manager recovery
 integration cases and the existing J11 maintenance recovery case. The source and
 inspection suites passed 40 cases; the offline Kid fixture completed generation
 and both reports. These are local fake-provider checks, not live acceptance.
-Independent review and delivery remain pending. Preserve the response; use supported
-preview/apply with a reviewed immutable candidate before normal deployment and
-explicit Resume. Do not reconcile J11 again.
+Two consecutive independent source and staging-port reviews passed. PR #219 merged
+at `c69844dcc9904d4af6beeea329ac65e9937e3e0f`; lean CI `39418539627` and staging
+CI `39419016783` passed. Candidate build `39419030540` produced image
+`sha256:69f1d13be786883da081974c02f7ba4f4ae56e773e2f58915f1bb095e7f55196` without
+VPS contact. Guarded PR #220 is approved at `d5322fba3f39358a9dc03e3a0763fcf3f3cb9133`
+but must not merge before successful exact manager recovery.
+
+Read-only preview `39419668263` failed before apply with
+`inspection_or_verification_failed`, `Error` and no stage. No preview digest,
+reconciliation, deployment or Resume followed. Separate inspection `39420232575`
+passed connection (483 ms), structure (1,505 ms), admission and seed checks. It
+found only the expected run and manager blockers, without claims or saved output;
+admission remained open with zero owners or mutations. Authenticated summary
+confirmed revision 256 and counters unchanged. This does not establish the failed
+preview's cause or justify a timeout increase.
+
+Package reassessment found unwrapped configuration, admission-read and snapshot/
+proof-hashing boundaries. The diagnostic-only follow-up adds fixed stage, allowlisted
+error kind, elapsed time and remaining budget there. It changes no eligibility,
+accounting, provider behavior, deadline or host action. Validate injected failures
+before another reviewed candidate; no preview replay or apply is authorized merely
+by successful database inspection. Preserve the response and use supported controls
+before normal deployment and explicit Resume. Do not reconcile J11 again.
 Continue Parent then
 Creator only after success, within the existing conditional $5 campaign, request
 and no-successor limits. No new paid smoke, reset or infrastructure work is added.

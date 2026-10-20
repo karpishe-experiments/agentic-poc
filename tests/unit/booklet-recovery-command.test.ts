@@ -4,15 +4,28 @@ const mocks = vi.hoisted(() => ({
   files: new Map<string, string>(), events: [] as string[],
   mutationError: undefined as Error | undefined,
   budgetError: undefined as Error | undefined,
+  entryErrors: {} as Partial<Record<"environment" | "database" | "configuration" | "recovery_service" | "admission", Error>>,
   preview: vi.fn(), apply: vi.fn(), verify: vi.fn(), verifyUnapplied: vi.fn(), close: vi.fn(), inspect: vi.fn(),
   previewClaim: vi.fn(), applyClaim: vi.fn(), verifyClaim: vi.fn(),
 }));
-vi.mock("@/db/client", () => ({ getDatabase: () => ({ close: mocks.close,
-  collections: { deployment_control: { findOne: async () => ({ maintenance: false }) } } }) }));
-vi.mock("@/lib/config/env", () => ({ getServerEnv: () => ({ RUNNER_ENABLED: "false", DEPLOYMENT_ENV: "_staging",
-  MONGODB_DATABASE: "kids_booklet", ASSETS_BUCKET: "kids-booklet-staging-assets" }) }));
-vi.mock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => ({ enabled: true, config: {} }) }));
-vi.mock("@/lib/experiment-runner/config", () => ({ readBookletRunnerConfig: () => ({ enabled: true }) }));
+vi.mock("@/db/client", () => ({ getDatabase: () => {
+  if (mocks.entryErrors.database) throw mocks.entryErrors.database;
+  return { close: mocks.close, collections: { deployment_control: { findOne: async () => {
+    if (mocks.entryErrors.admission) throw mocks.entryErrors.admission;
+    return { maintenance: false };
+  } } } };
+} }));
+vi.mock("@/lib/config/env", () => ({ getServerEnv: () => {
+  if (mocks.entryErrors.environment) throw mocks.entryErrors.environment;
+  return { RUNNER_ENABLED: "false", DEPLOYMENT_ENV: "_staging", MONGODB_DATABASE: "kids_booklet", ASSETS_BUCKET: "kids-booklet-staging-assets" };
+} }));
+vi.mock("@/lib/experiment-runner/m4-config", () => ({ readM4RunnerConfig: () => {
+  if (mocks.entryErrors.configuration) throw mocks.entryErrors.configuration;
+  return { enabled: true, config: {} };
+} }));
+vi.mock("@/lib/experiment-runner/config", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/experiment-runner/config")>(), readBookletRunnerConfig: () => ({ enabled: true }),
+}));
 vi.mock("@/db/setup", () => ({ verifyMongoStructure: vi.fn() }));
 vi.mock("@/db/verify", () => ({ verifyExperimentData: vi.fn(), verifyMongoData: vi.fn() }));
 vi.mock("@/db/deployment-readiness", async importOriginal => ({
@@ -25,13 +38,14 @@ vi.mock("@/lib/operations/budget", async importOriginal => ({
   return action();
 } }));
 vi.mock("@/lib/operations/recovery-inspection", () => ({ inspectRecoveryWork: mocks.inspect }));
-vi.mock("@/lib/operations/booklet-recovery", async () => {
-  const { createHash } = await import("node:crypto");
-  return { BOOKLET_RECOVERY_CONTRACT: "booklet-recovery-v1",
-    BookletRecoveryError: class extends Error { constructor(public code: string, public stage?: string, public errorKind?: string) { super(code); } },
-    recoveryDigest: (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex"),
-    createBookletRecovery: () => ({ preview: mocks.preview, apply: mocks.apply, verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
-      previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim }),
+vi.mock("@/lib/operations/booklet-recovery", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/operations/booklet-recovery")>();
+  return { ...actual,
+    createBookletRecovery: () => {
+      if (mocks.entryErrors.recovery_service) throw mocks.entryErrors.recovery_service;
+      return { preview: mocks.preview, apply: mocks.apply, verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
+        previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim };
+    },
   };
 });
 vi.mock("node:fs/promises", () => ({
@@ -53,6 +67,7 @@ function argumentsFor(phase: string) {
 }
 beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks(); mocks.files.clear(); mocks.events.length = 0; mocks.mutationError = undefined; process.exitCode = 0;
+  mocks.entryErrors = {};
   mocks.preview.mockResolvedValue({ contract: "booklet-recovery-v1", previewDigest: digest, snapshot: { rows: {} } });
   mocks.apply.mockImplementation(async (_target, expectedDigest, beforeMutation) => {
     const proof = await mocks.preview();
@@ -76,6 +91,32 @@ beforeEach(() => {
 });
 afterEach(() => { process.argv = originalArgv; process.exitCode = 0; vi.restoreAllMocks(); });
 describe("supported booklet recovery command", () => {
+  it.each([
+    ["environment", "Error", "Error"], ["database", "MongoNetworkError", "MongoNetworkError"],
+    ["configuration", "MongoServerSelectionError", "MongoServerSelectionError"],
+    ["recovery_service", "PrivateConstructorError", "Error"], ["admission", "MongoOperationTimeoutError", "MongoOperationTimeoutError"],
+  ] as const)("reports sanitized %s entry failure before preview or apply", async (stage, name, errorKind) => {
+    mocks.entryErrors[stage] = Object.assign(new Error("private credential URL and saved content"), { name });
+    argumentsFor("preview"); await import("@/scripts/booklet-recovery");
+    const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0]);
+    expect(output).toMatchObject({ verified: false, phase: "preview", stage, errorKind,
+      code: "inspection_or_verification_failed", outcome: "blocked", providerPosts: 0,
+      elapsedMs: expect.any(Number) });
+    expect(output.elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(output).toHaveProperty("remainingBudgetMs");
+    if (output.remainingBudgetMs !== null) expect(output.remainingBudgetMs).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toMatch(/private|credential|PrivateConstructorError/);
+    expect(mocks.files.size).toBe(0); expect(mocks.preview).not.toHaveBeenCalled(); expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.previewClaim).not.toHaveBeenCalled(); expect(mocks.applyClaim).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+  });
+  it("preserves an existing structured entry failure code and stage", async () => {
+    const { BookletRecoveryError } = await import("@/lib/operations/booklet-recovery");
+    mocks.entryErrors.configuration = new BookletRecoveryError("target_read_failed", "snapshot.target", "MongoOperationTimeoutError", { elapsedMs: 7, remainingBudgetMs: 12 });
+    argumentsFor("preview"); await import("@/scripts/booklet-recovery");
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toMatchObject({ code: "target_read_failed",
+      stage: "snapshot.target", errorKind: "MongoOperationTimeoutError", elapsedMs: 7, remainingBudgetMs: 12 });
+    expect(mocks.preview).not.toHaveBeenCalled(); expect(mocks.apply).not.toHaveBeenCalled(); expect(mocks.files.size).toBe(0);
+  });
   async function originalCheckpoint() {
     const { recoveryDigest } = await import("@/lib/operations/booklet-recovery");
     const snapshot = { rows: {} };
@@ -141,7 +182,8 @@ describe("supported booklet recovery command", () => {
     mocks.budgetError = Object.assign(new Error("private budget detail"), { name: "OperationBudgetExpired" });
     try {
       argumentsFor("preview"); await import("@/scripts/booklet-recovery");
-      expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toMatchObject({ errorKind: "OperationBudgetExpired", outcome: "blocked" });
+      expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toMatchObject({ errorKind: "OperationBudgetExpired", outcome: "blocked",
+        stage: "operation_budget", elapsedMs: expect.any(Number), remainingBudgetMs: 0 });
       expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain("private");
     } finally { mocks.budgetError = undefined; }
   });
