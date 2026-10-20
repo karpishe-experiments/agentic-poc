@@ -4,9 +4,8 @@ import { z } from "zod";
 import { getDatabase } from "@/db/client";
 import { getServerEnv } from "@/lib/config/env";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
-import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
-import { verifyMongoStructure } from "@/db/setup";
-import { verifyExperimentData, verifyMongoData } from "@/db/verify";
+import { verifyDeploymentState, deploymentRead } from "@/db/deployment-readiness";
+import dataContract from "@/db/deployment-contract.json";
 import { withOperationBudget } from "@/lib/operations/budget";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, createBookletRecovery, recoveryDigest,
@@ -45,7 +44,7 @@ async function main() {
   }
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
-    emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", initializationRequired: false,
+    emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", ...dataContract,
       supported: ["granted-j11-completion", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = getServerEnv();
@@ -53,15 +52,12 @@ async function main() {
     env.ASSETS_BUCKET !== "kids-booklet-staging-assets") throw new BookletRecoveryError("wrong_environment");
   database = getDatabase();
   if (input.phase === "inspect-blockers" || input.phase === "verify-prior-compatible") {
+    await verifyDeploymentState(database);
     const report = await inspectRecoveryWork(database, { environment: "_staging", page: input.page, limit: input.limit });
     if (input.phase === "inspect-blockers") { emit(report); if (report.outcome !== "clear") process.exitCode = 1; return; }
     if (report.outcome !== "clear" || !report.admission?.maintenance || report.admission.draining) {
       emit(report); throw new BookletRecoveryError("prior_state_not_quiet");
     }
-    await verifyMongoStructure(database);
-    const profile = readBookletRunnerConfig();
-    if (!profile.enabled && profile.reason === "invalid") throw new BookletRecoveryError("configuration_invalid");
-    if (profile.enabled) await verifyExperimentData(database); else await verifyMongoData(database);
     emit({ verified: true, phase, compatible: true, admission: "closed", providerPosts: 0 }); return;
   }
   if (!input["run-id"] || !input["operation-id"] || input["expected-revision"] === undefined) throw new BookletRecoveryError("target_required");
@@ -157,4 +153,7 @@ await withOperationBudget(Date.now() + 150_000, main).catch(async error => {
     ...(error instanceof BookletRecoveryError && error.diagnostic ? error.diagnostic : {}),
     outcome: ["apply", "verify-completed", "apply-claim-release", "verify-claim-release"].includes(phase) ? "requires_inspection" : "blocked", providerPosts: 0 });
   process.exitCode = 1;
-}).finally(async () => { await database?.close(); });
+}).finally(async () => {
+  if (database) try { await deploymentRead("cleanup", "database_close", () => database!.close()); }
+  catch { emit({ verified: false, phase: "cleanup", code: "database_cleanup_failed", outcome: "requires_inspection", providerPosts: 0 }); process.exitCode = 1; }
+});

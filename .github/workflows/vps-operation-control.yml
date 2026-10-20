@@ -101,8 +101,8 @@ jobs:
             if [[ -s "$RUNNER_TEMP/operation-control.txt" ]]; then
               printf '```text\n'
               grep -E '^(result: recovery preview |result: operation |result: backup verified |result: bootstrap (old|candidate) |exists: operation |would update: (stop exact operation|exact staging page bookkeeping) |updated: (exact operation stopped|exact staging bookkeeping repaired))' "$RUNNER_TEMP/operation-control.txt" || true
-              jq -Rc 'fromjson? | select(.environment=="staging" and (.action=="candidate-reconcile" or .action=="expired-deployment-recover")) | {requestId,action,purpose,phase,environment,commit,image,runId,operationId,originalRequestId,backupId,previewDigest,historical}' "$RUNNER_TEMP/operation-control.txt"
-              jq -Rc 'fromjson? | select(.environment=="_staging" and (.outcome!=null or .code!=null)) | {schemaVersion,environment,inspectedAtMs,outcome,code,phase,stage,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,admission,blockers,inspectionError}' "$RUNNER_TEMP/operation-control.txt"
+              jq -Rc 'fromjson? | select(.environment=="staging" and (.action=="candidate-reconcile" or .action=="expired-deployment-recover")) | {requestId,action,purpose,phase,environment,commit,image,runId,operationId,originalRequestId,backupId,previewDigest,historical,compatibilityProof}' "$RUNNER_TEMP/operation-control.txt"
+              jq -Rc 'fromjson? | select(.environment=="_staging" and (.outcome!=null or .code!=null)) | {schemaVersion,environment,inspectedAtMs,outcome,code,diagnostic,phase,stage,operation,collection,returnedRows,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,admission,blockers,inspectionError}' "$RUNNER_TEMP/operation-control.txt"
               printf '```\n'
             fi
             printf '\nStopping a process does not prove that its output failed. Inspect and reconcile the retained phase before resume.\n'

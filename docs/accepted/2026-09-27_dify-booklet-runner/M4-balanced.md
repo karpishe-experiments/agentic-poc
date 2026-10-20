@@ -3,6 +3,49 @@
 **State:** The original Kid run is paused after 30 paid text requests and five simulated images. Its retained J11 result is saved and independently verified. Normal staging deployment failed during initialization; admission remains closed. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
+## Current execution record - 2026-10-20
+
+The original Kid run `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` remains paused
+with 30 paid text requests and five simulated images. J11 operation
+`48e69de1-cbc9-4ac6-a5d2-bd81dddffad9` is saved and independently verified;
+do not reconcile or dispatch it again. Parent and Creator remain unstarted.
+M4 is not complete. This section supersedes pending actions in retained history.
+
+Normal deployment `39254742459` failed during initialization with a MongoDB
+`getMore` socket-read timeout; the collection and underlying cause remain unproven.
+The prior app is stopped and admission closed. Retain backup
+`staging-20261019T125219Z-4e70a40e25dc961d` and all 162 saved assets.
+The installed dispatcher SHA-256 is
+`3eab667167c1c407d312ccc7c3d2312e5dafa87c3b30b85bbb9068cbd371db19`.
+Its subsequent read-only recovery preview rejected a runtime-erased optional type
+change because compatibility used raw source hashes. No recovery mutation followed.
+
+The approved combined correction separates required setup/readiness from explicit
+historical audits, adds an image data-contract declaration, retains one exact legacy
+compatibility bridge, and verifies the retained target across prior-service startup.
+Backup reuse requires the same protected maintenance window; starting the prior
+service does not create another backup. Timings are sanitized and deadlines remain
+unchanged. No credential, storage, transfer or consumer change is required.
+
+Local verification: 51 recovery/compatibility/deployment/command units, 19 focused
+readiness/initialization/audit cases, 20 changed host scenarios and the combined
+recovery-to-Resume fixture pass. The fixture executes the actual targeted recovery
+JavaScript against disposable MongoDB; host lifecycle commands remain mocked.
+Both full shell suites were attempted locally; Windows permission/symlink
+limitations prevent a full local pass. Linux CI must pass before delivery.
+These checks do not establish live latency or the original timeout's cause.
+
+Delivery gate: prove the combined recovery/deployment/Resume fixture with fake
+providers, real persistence and mocked host commands; finish focused checks, two
+clean independent reviews and lean Linux CI before another installation. Then use
+supported expired-deployment recovery, deploy normally, verify release/admission,
+and explicitly Resume this same Kid run. Continue Parent then Creator only after
+success within the conditional $5 campaign, request and no-successor limits.
+No new paid smoke, campaign, reset or infrastructure work is included.
+
+<details>
+<summary>Retained earlier execution evidence and superseded next-step statements</summary>
+
 ## Supported recovery follow-up - 2026-10-18
 
 **Current implementation and live state - 2026-10-19:** PR #215 merged at
@@ -425,6 +468,9 @@ The deterministic Kid fixture must complete with 39 text + 9 image operations
 
 The authorized comparison is complete. Retain both baselines and the new run;
 do not start another persona campaign or paid execution from this exit record.
+
+
+</details>
 
 ## M4 readiness plan — 2026-10-13
 

@@ -37,10 +37,12 @@ it("verifies every projected page and rejects a broken reference on the final pa
   // Retained completed operations can contain large provider preparation/results.
   // The verifier needs only their ownership and version-reference fields.
   const ids = Array.from({ length: 205 }, (_, index) => `operation-${String(index).padStart(4, "0")}`);
+  const recovery = { reference: "retained-fixture", evidenceDigest: "a".repeat(64), requestDigest: "b".repeat(64), recoveredAtMs: 1 };
   await database.database.collection<{ _id: string }>("experiment_operations").insertMany(ids.map((_id, index) => ({
     _id, idempotencyKey: _id, runId, role: "specialist", taskId: "J01", subjectKind: "book", subjectId: bookletId,
     attempt: index + 1, dependencyVersionIds: [], expectedTargetVersionId: null,
     resultJson: JSON.stringify({ privateContent: "x".repeat(90_000) }),
+    m4CompletionRecovery: recovery,
   })));
   const find = vi.spyOn(database.collections.experiment_operations, "find");
   await expect(verifyExperimentData(database)).resolves.toBeUndefined();
@@ -51,6 +53,7 @@ it("verifies every projected page and rejects a broken reference on the final pa
   await database.collections.experiment_operations.updateOne({ _id: ids[204] }, { $set: { dependencyVersionIds: [randomUUID()] } });
   await expect(verifyExperimentData(database)).rejects.toThrow(`Experiment operation ${ids[204]} has an incompatible artifact version`);
   expect((await database.collections.experiment_operations.findOne({ _id: ids[204] }))?.resultJson).toBe(JSON.stringify({ privateContent: "x".repeat(90_000) }));
+  expect((await database.collections.experiment_operations.findOne({ _id: ids[204] }))?.m4CompletionRecovery).toEqual(recovery);
 });
 
 it("preserves a failed read and emits only bounded collection diagnostics", async () => {
