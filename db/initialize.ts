@@ -1,12 +1,12 @@
-import { setupMongoStructure, seedDefaultAgents, verifyMongoStructure } from "@/db/setup";
+import { setupMongoStructure, seedDefaultAgents } from "@/db/setup";
 import { seedVisualAssets } from "@/db/seed";
 import type { MongoDatabaseContext } from "@/db/client";
 import type { AssetStore } from "@/lib/assets/asset-store";
-import { verifyExperimentData, verifyMongoData } from "@/db/verify";
+import { verifyDeploymentState, deploymentRead } from "@/db/deployment-readiness";
 import { readBookletRunnerConfig } from "@/lib/experiment-runner/config";
 
 export async function initializeMongoData(context: MongoDatabaseContext, assets: AssetStore): Promise<void> {
-  await setupMongoStructure(context);
+  await deploymentRead("structure", "setup_structure", () => setupMongoStructure(context));
   const environment = process.env.DEPLOYMENT_ENV ?? "local";
   await context.collections.deployment_control.updateOne(
     { environment },
@@ -22,8 +22,6 @@ export async function initializeMongoData(context: MongoDatabaseContext, assets:
     if (definitions === 0 && versions === 0 && events === 0) await seedDefaultAgents(context);
     else if (definitions === 0 || versions === 0 || events === 0) throw new Error("Runtime-agent seed collections are partially initialized.");
   }
-  await seedVisualAssets(context, assets, Date.now(), true);
-  await verifyMongoStructure(context);
-  if (profile.enabled) await verifyExperimentData(context);
-  else await verifyMongoData(context);
+  await deploymentRead("seed", "prepare_assets", () => seedVisualAssets(context, assets, Date.now(), true));
+  await verifyDeploymentState(context, assets);
 }

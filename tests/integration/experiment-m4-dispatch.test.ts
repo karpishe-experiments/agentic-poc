@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -9,7 +11,7 @@ import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
-import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
+import { configurationSnapshot, readBookletRunnerConfig, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
@@ -29,6 +31,10 @@ import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { createBookletRecovery } from "@/lib/operations/booklet-recovery";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import { OperationBudgetExpired, withOperationBudget } from "@/lib/operations/budget";
+import { initializeMongoData } from "@/db/initialize";
+import { verifyDeploymentState } from "@/db/deployment-readiness";
+import { checkProbeReadiness } from "@/lib/experiment-runner/probe-preflight";
+import { verifyMongoStructure } from "@/db/setup";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -499,6 +505,114 @@ describe("focused J11 retained completion recovery", () => {
       withOperationBudget(env.now() + 150_000, () => service.apply(...args), { now: env.now }) };
     return { ...env, service: boundedService, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
   }
+
+  it("keeps committed completion through recovery, deployment readiness and explicit Resume without replay", async () => {
+    const env = await supportedRecovery();
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const proof = await env.service.preview(env.target);
+    await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    await env.service.apply(env.target, proof.previewDigest, async () => {});
+    await expect(env.service.verifyCompleted(env.target, proof.snapshot)).resolves.toMatchObject({ verified: true, admission: "closed" });
+    const completed = (await env.repository.getOperation(env.operation._id))!;
+    const paused = (await env.repository.getRun(env.runId))!;
+    const campaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    const versions = await env.database.collections.artifact_versions.find({}).sort({ _id: 1 }).toArray();
+    const approvals = await env.database.collections.approvals.find({}).sort({ _id: 1 }).toArray();
+    const assets = await env.database.collections.assets.find({}).sort({ _id: 1 }).toArray();
+    const bytes = [...env.store.files].map(([uri, content]) => [uri, Uint8Array.from(content)] as const);
+    const history = await env.repository.listOperations(env.runId);
+    // Host commands and host journals use the shell fixtures' isolated mocks.
+    // The application stages below share this real MongoDB database and store;
+    // no container, VPS, external storage or provider is used by this journey.
+    const bash = process.platform === "win32" ? `${process.env.ProgramFiles ?? "C:/Program Files"}/Git/bin/bash.exe` : "bash";
+    for (const [key, value] of Object.entries({ DEPLOYMENT_ENV: "_staging", RUNNER_ENABLED: "false",
+      DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: env.config.baseUrl,
+      DIFY_BOOKLET_PUBLIC_ORIGIN: env.config.publicOrigin, DIFY_BOOKLET_TOOL_KEY: "x".repeat(32),
+      DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(env.config.bindings) })) vi.stubEnv(key, value);
+    try {
+      const shell = readFileSync("scripts/deploy/vps-deployment.sh", "utf8");
+      const inline = shell.match(/if \[\[ "\$phase" == legacy-compatibility \]\]; then\s*command=\(node --import tsx --input-type=module -e '([\s\S]*?)'\)/)?.[1];
+      expect(inline).toBeDefined();
+      const body = inline!.replace(/^\s*import .*;\r?\n/gm, "");
+      expect(body).not.toMatch(/\bimport\s/);
+      expect(env.database.database.databaseName).toMatch(/^kids_booklet_test_/);
+      const compatibility = async () => {
+        const logs: string[] = [], diagnostics: string[] = [];
+        const find = vi.spyOn(env.database.collections.experiment_operations, "find");
+        const findOne = vi.spyOn(env.database.collections.experiment_operations, "findOne");
+        try {
+          // Execute the exact production inline body, changing only its imports
+          // and host bindings. Its guarded database name is an injected string;
+          // getDatabase still returns ONLY this disposable test database.
+          await runInNewContext(`(async () => {${body}\n})()`, {
+            getDatabase: () => ({ ...env.database, close: async () => {} }),
+            verifyMongoStructure, readBookletRunnerConfig, createHash,
+            process: { env: { RUNNER_ENABLED: "false", DEPLOYMENT_ENV: "_staging",
+              MONGODB_DATABASE: "kids_booklet", ASSETS_BUCKET: "kids-booklet-staging-assets" },
+            argv: ["node", env.runId, completed._id] },
+            console: { log: (value: string) => logs.push(value), error: (value: string) => diagnostics.push(value) },
+          });
+          // The driver may implement findOne with a single-batch find. Every
+          // operation body read must still target only the saved completion.
+          for (const [filter] of find.mock.calls) expect(filter).toEqual({ _id: completed._id, runId: env.runId });
+          expect(findOne.mock.calls.map(([filter]) => filter)).toEqual([{ _id: completed._id, runId: env.runId }]);
+          expect(diagnostics.map(line => JSON.parse(line))).toEqual([expect.objectContaining({
+            diagnostic: "deployment_read", phase: "structure", operation: "collections_and_indexes", outcome: "completed" }), expect.objectContaining({ diagnostic: "deployment_read", phase: "target", operation: "completion_dependencies", outcome: "completed" })]);
+          expect(logs).toHaveLength(1);
+          const result = JSON.parse(logs[0]) as { verified: boolean; compatible: boolean; targetDigest: string };
+          expect(result).toEqual({ verified: true, compatible: true, targetDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+          return result.targetDigest;
+        } finally { find.mockRestore(); findOne.mockRestore(); }
+      };
+      // Model the prior release's existing seeds before host recovery. The same
+      // initializer runs again at normal delivery, without rewriting the result.
+      await initializeMongoData(env.database, env.store);
+      const targetDigest = await compatibility();
+      for (const scenario of ["expired-recovery-bridge-apply", "release"]) {
+        execFileSync(bash, ["tests/shell/vps-host.test.sh", scenario], { cwd: process.cwd(), timeout: 45_000, encoding: "utf8" });
+        if (scenario === "release") await initializeMongoData(env.database, env.store);
+        expect(await compatibility()).toBe(targetDigest);
+      }
+      await verifyDeploymentState(env.database, env.store);
+      const dispatcher = createExperimentDispatcher({ database: env.database,
+        config: { ...env.config, m4: { state: "granted", authority: env.recoveryAuthority } }, runtime: env.runtime,
+        now: env.now, mutate: async action => action(), store: () => env.store, uploadReference: env.uploadReference });
+      expect(await dispatcher.advance(env.runId)).toBe("waiting");
+      expect(await env.repository.getRun(env.runId)).toEqual(paused);
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: false } });
+      const manager = env.config.bindings.find(binding => binding.role === "manager")!;
+      await expect(checkProbeReadiness(env.database, env.config, { appId: manager.appId, publication: manager.publishedWorkflowId }))
+        .resolves.toMatchObject({ ready: true, idle: true });
+      expect(await dispatcher.advance(env.runId)).toBe("waiting");
+      expect(await env.repository.getRun(env.runId)).toEqual(paused);
+      expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+      expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(campaign);
+      const resumed = await env.recovery.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.now() });
+      expect(resumed).toMatchObject({ status: "queued", pauseRequested: false, counters: paused.counters });
+      expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+      await dispatcher.advance(env.runId);
+      const next = (await env.repository.listOperations(env.runId)).at(-1)!;
+      expect(next).toMatchObject({ role: "manager", state: "started", reservationCount: 1 });
+      expect(next._id).not.toBe(completed._id);
+      env.tick(); await dispatcher.advance(env.runId);
+      expect(await env.repository.getOperation(next._id)).toMatchObject({ state: "succeeded", reservationCount: 1 });
+      expect(env.runtime.start).toHaveBeenCalledTimes(starts + 1);
+      expect(vi.mocked(env.runtime.start).mock.calls.at(-1)![1].operationId).toBe(next._id);
+      expect(await env.repository.listOperations(env.runId)).toHaveLength(history.length + 1);
+      expect(await env.repository.getOperation(completed._id)).toEqual(completed);
+      expect(await env.database.collections.artifact_versions.find({ _id: { $in: versions.map(row => row._id) } }).sort({ _id: 1 }).toArray()).toEqual(versions);
+      expect(await env.database.collections.approvals.find({ _id: { $in: approvals.map(row => row._id) } }).sort({ _id: 1 }).toArray()).toEqual(approvals);
+      expect(await env.database.collections.assets.find({ _id: { $in: assets.map(row => row._id) } }).sort({ _id: 1 }).toArray()).toEqual(assets);
+      for (const [uri, content] of bytes) expect(env.store.files.get(uri)).toEqual(content);
+      const continued = (await env.repository.getRun(env.runId))!;
+      expect(continued.counters).toEqual({ ...paused.counters, logicalText: paused.counters.logicalText + 1,
+        payableText: paused.counters.payableText + 1, steps: paused.counters.steps + 1 });
+      expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({
+        state: "active", requests: campaign.requests + 1, requestCounts: { playful_kid: campaign.requestCounts.playful_kid + 1 } });
+      await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, continued));
+      expect(env.runtime.stop).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  }, 180_000);
 
   it("maintenance recovery reuses its own authenticated GET and completes past interactive Inspect's window", async () => {
     const env = await supportedRecovery();

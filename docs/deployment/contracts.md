@@ -2,6 +2,22 @@
 
 ## Ownership
 
+Routine initialization owns required setup and availability checks, not a full
+historical audit. The explicit `npm run db:verify` diagnostic retains all integrity
+checks. New immutable images declare `booklet-data-v1`, supported reader versions,
+and initialization/migration requirements. Expired recovery requires supported
+declarations with both requirements false; source hashes remain a legacy fallback,
+with one pinned bridge for the reviewed optional recovery metadata.
+
+Expired recovery verifies quiescence and the completed handoff target's retained
+dependencies, approvals and accounting before and after restarting the prior app.
+It does not replay J11 or repeat the historical audit. Its original verified backup
+is reused only while journals, configuration and closed admission prove the same
+protected maintenance window. Starting the prior app creates no replacement
+backup. A separate normal deployment owns a new mutation window and backup.
+Diagnostics contain fixed phases, operation/collection identifiers, counts, elapsed
+time and remaining budget; arbitrary errors and saved content remain private.
+
 Recovery inspections check command success before interpreting empty container
 lists. New generic journals retain `hostFingerprint` and `previewBackupId` separately
 from the actual backup ID. Every mutating reentry, including abort, verifies the

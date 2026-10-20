@@ -4,12 +4,19 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
-Deployment integrity verification for the Dify profile reads only identity and
-provenance fields, in indexed pages of at most 100 rows. It retains all ownership
-and reference checks without loading saved prompts, results or preparation data.
-Read failures preserve the original exception and emit sanitized collection/phase
-diagnostics. Page reads retain the existing operation and driver budgets; this
-does not increase a deployment deadline or change stored records.
+Deployment initialization performs required setup and bounded availability checks:
+configuration, connectivity, exact collections/indexes, admission schema and seed
+readiness. It does not scan historical experiments. The explicit `npm run db:verify`
+audit retains every ownership/reference check with projected, indexed 100-row pages.
+Sanitized maintenance timings identify phase, operation, row count and budget;
+failures retain the original exception. No deadline is increased.
+New images declare `booklet-data-v1` read/write compatibility and whether migration
+or initialization is required. Expired recovery rejects unsupported declarations.
+Legacy images retain source equality checks and one exact reviewed bridge for the
+runtime-erased optional recovery annotation; arbitrary source drift stays blocked.
+Prior-service restoration reads quiescence and the exact completed handoff target,
+dependencies, approvals and accounting, then verifies its digest after startup.
+It does not repeat the historical audit or replay a provider request.
 Expired-deployment recovery also pins any completed candidate-recovery handoff.
 It archives that exact handoff only after prior-release compatibility and readiness
 pass, preserving the original recovery and deployment evidence. This separates
