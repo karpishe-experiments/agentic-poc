@@ -205,6 +205,11 @@
     "continuations": [
       {
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "f748c0a3-61cc-47b4-884f-53b8b5933ff4",
+        "reference": "User Kid-only completion instruction 2026-10-21: exact inspected manager execution 8964e01f-047f-44c3-9df8-c4378d16a653 failed at authorization before any reservation/provider request; reviewed atomic authorization correction and same-run continuation through normal controls; preserve failed history, cumulative conditional USD5 and request limits; no automatic replay, new run or paid images."
+      },
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "ac39211f-4e61-4c08-a3b6-81f922bf9be4",
         "reference": "User grant 2026-10-16: all necessary actions to complete M4; exact inspected Kid manager continuation; preserve same USD5 conditional campaign, cumulative limits, failed operation and charges; no automatic retries or paid images."
       },

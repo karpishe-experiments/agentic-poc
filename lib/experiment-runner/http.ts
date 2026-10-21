@@ -263,11 +263,11 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const raw = await boundedJson(request, action === "result" ? 2_359_296 : 4096);
       const callbackIdentity = identity.strip().parse(raw);
       const { repository, context } = services(state);
-      const savedRun = await repository.getRun(callbackIdentity.runId);
+      const savedRun = await measurePhase(callbackIdentity, "callback_run_read", () => repository.getRun(callbackIdentity.runId));
       if (!savedRun) return reply(404, "not_found");
       if (savedRun.mode === "real") return reply(422, "mode_unavailable");
       if (savedRun.mode === "balanced") {
-        const operation = await repository.getOperation(callbackIdentity.operationId);
+        const operation = await measurePhase(callbackIdentity, "callback_operation_read", () => repository.getOperation(callbackIdentity.operationId));
         if (!operation || operation.runId !== callbackIdentity.runId || operation.mode !== "balanced" ||
             operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== callbackIdentity.parentWorkflowRunId ||
             operation.workflowRunId && operation.workflowRunId !== callbackIdentity.workflowRunId) return reply(409, "conflict");
@@ -303,7 +303,8 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
                 item.toolProviderId !== expected.toolProviderId || item.finalPageIllustration !== expected.finalPageIllustration)) return reply(409, "conflict");
           const runtime = (deps.runtime ?? createWorkflowRuntime)(state.config);
           const deadlineAtMs = (operation.deadlineAtMs ?? 0) - RECONCILIATION_RESERVE_MS;
-          const remote = await runtime.retrieve(binding, body.workflowRunId, { deadlineAtMs: Math.min(deadlineAtMs, Date.now() + 30_000), signal: request.signal });
+          const remote = await measurePhase(body, "authorization_execution_readback", () => runtime.retrieve(binding, body.workflowRunId,
+            { deadlineAtMs: Math.min(deadlineAtMs, Date.now() + 30_000), signal: request.signal }));
           if (remote.kind !== "execution" || remote.execution.id !== body.workflowRunId || remote.execution.status !== "running" ||
               remote.execution.workflow_id !== expected.publishedWorkflowId) return reply(409, "conflict");
           const timeoutSeconds = Math.min(snapshot.policy.maxTimeoutSeconds, Math.floor((deadlineAtMs - Date.now()) / 1000));
@@ -316,11 +317,11 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           } };
           const encoded = JSON.stringify({ data: authorized });
           if (Buffer.byteLength(encoded, "utf8") > 1_048_576) return reply(422, "invalid_result");
-          const claim = await mutate(async () => {
-            await repository.recordDispatchIdentity({ ...body, ...(remote.execution.task_id ? { workflowTaskId: remote.execution.task_id } : {}), nowMs: Date.now() });
-            await repository.verifyDispatchPublication({ ...body, workflowId: remote.execution.workflow_id, nowMs: Date.now() });
-            return repository.claimOperation({ ...body, nowMs: Date.now() });
-          }, { admitted: true, runId: body.runId, operationId: body.operationId });
+          const execution = remote.execution;
+          const claim = await measurePhase(body, "authorization_admission", () => mutate(() =>
+            repository.claimOperation({ ...body, nowMs: Date.now() }, { workflowId: execution.workflow_id,
+              ...(execution.task_id ? { workflowTaskId: execution.task_id } : {}) }),
+          { admitted: true, runId: body.runId, operationId: body.operationId }));
           return claim.started ? new Response(encoded, { headers: { ...headers, "Content-Type": "application/json" } }) :
             data({ started: false, reason: claim.reason ?? null, ...summary, m4: null });
         }

@@ -7,6 +7,7 @@ import { assessM4ProviderResult } from "@/lib/experiment-runner/m4-provider-resu
 import { m4MaximumCharge, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4Hash } from "@/lib/experiment-runner/m4-request";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
+import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 
 function invalid(): never { throw new ExperimentRepositoryError("invalid_state", "Balanced completion requires complete attributable accounting."); }
 
@@ -58,13 +59,16 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
       // paid history. Load their full proof on this exceptional path only.
       const failed = await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
       const provenance = failed?.m4Continuation;
+      const unclaimedDigest = failed ? m4UnclaimedFailureDigest({ policy,
+        grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, failed) : null;
       if (!failed || !provenance || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
           failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false || failed.lifecycle.stop ||
-          provenance.evidenceDigest !== failed.m4Observation?.evidenceDigest || provenance.requestDigest !== failed.m4Reservation?.requestDigest ||
+          provenance.evidenceDigest !== (unclaimedDigest ?? failed.m4Observation?.evidenceDigest) ||
+          provenance.requestDigest !== (unclaimedDigest ? failed.m4Preparation?.requestDigest : failed.m4Reservation?.requestDigest) ||
           !provenance.reference || !Number.isSafeInteger(provenance.resumedAtMs) ||
           !await hasM4KnownFailure(database, session, { policy, grant: { campaignId: campaign._id, reference: campaign.grantReference } },
             run, failed, provenance.resumedAtMs)) invalid();
-      texts++;
+      if (!unclaimedDigest) texts++;
       continue;
     }
     if (operation.mode !== "balanced" || operation.reservationCount !== 1 || !operation.workflowRunId || !operation.verifiedWorkflowId ||
