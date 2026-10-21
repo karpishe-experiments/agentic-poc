@@ -7,7 +7,7 @@ import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experimen
 import type { RuntimeResult, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { m4Hash, m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
-import { RECONCILIATION_RESERVE_MS } from "@/lib/operations/budget";
+import { OperationBudgetExpired, RECONCILIATION_RESERVE_MS, withOperationBudget } from "@/lib/operations/budget";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-published-rehearsal";
@@ -137,6 +137,49 @@ describe("granted M4 HTTP boundary with fake Dify reads", () => {
     expect(runtime.start).not.toHaveBeenCalled();
     expect(retrieve).toHaveBeenCalledTimes(1);
   });
+  it("commits authenticated identity, publication and reservation in one transaction", async () => {
+    const { http, db, repository } = await setup();
+    const sessions = vi.spyOn(db.client, "startSession");
+    const operationReads = vi.spyOn(db.collections.experiment_operations, "findOne");
+    const runReads = vi.spyOn(db.collections.experiment_runs, "findOne");
+    expect((await http.tool(callback(), "authorize")).status).toBe(200);
+    // Mongo also opens implicit per-command sessions outside transactions.
+    expect(sessions.mock.calls.filter(([options]) => options === undefined)).toHaveLength(1);
+    // Initial callback snapshot plus fresh atomic claim snapshot. The source
+    // fingerprint adds one projected parent-manager lookup to operation reads.
+    expect(operationReads).toHaveBeenCalledTimes(3);
+    expect(runReads).toHaveBeenCalledTimes(2);
+    expect(await repository.getOperation(id(12))).toMatchObject({ reservationCount: 1,
+      workflowRunId: id(13), workflowTaskId: id(14), verifiedWorkflowId: id(200) });
+  });
+  it("rejects a conflicting retained task identity without reserving", async () => {
+    const { http, db } = await setup();
+    await db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: {
+      workflowRunId: id(13), workflowTaskId: id(999),
+    } });
+    expect((await http.tool(callback(), "authorize")).status).toBe(409);
+    expect(await db.collections.experiment_operations.findOne({ _id: id(12) })).toMatchObject({
+      workflowTaskId: id(999), reservationCount: 0, authorizationClaim: null,
+    });
+    expect(await db.collections.experiment_campaigns.findOne({})).toMatchObject({ requests: 0 });
+  });
+  it("cleans its lease when the actual callback budget expires after lease acquisition", async () => {
+    const { http, db } = await setup();
+    const original = db.collections.experiment_operations.findOneAndUpdate.bind(db.collections.experiment_operations);
+    let clock = Date.now();
+    const leaseWrite = vi.spyOn(db.collections.experiment_operations, "findOneAndUpdate").mockImplementationOnce(async (...args) => {
+      const result = await original(...args);
+      clock += 1_001;
+      return result;
+    });
+    await expect(withOperationBudget(clock + 1_000, () => http.tool(callback(), "authorize"), { now: () => clock }))
+      .rejects.toBeInstanceOf(OperationBudgetExpired);
+    expect(leaseWrite).toHaveBeenCalled();
+    expect(await db.collections.experiment_operations.findOne({ _id: id(12) })).toMatchObject({
+      reservationCount: 0, authorizationClaim: null,
+    });
+    expect(await db.collections.experiment_campaigns.findOne({})).toMatchObject({ requests: 0 });
+  });
   it("refuses unknown, terminal and wrong-publication GETs before reservation", async () => {
     const { http, db, retrieve, config } = await setup();
     for (const remote of [{ kind: "unknown" },
@@ -185,6 +228,8 @@ describe("granted M4 HTTP boundary with fake Dify reads", () => {
     });
     expect(await (await http.tool(callback(), "authorize")).json()).toMatchObject({ data: { started: false, reason: "paused", m4: null } });
     expect(await db.collections.experiment_campaigns.findOne({})).toMatchObject({ requests: 0 });
+    expect(await repository.getOperation(id(12))).toMatchObject({ workflowRunId: id(13),
+      verifiedWorkflowId: config.bindings[0].publishedWorkflowId, authorizationClaim: null, reservationCount: 0 });
   });
   it("uses text callbacks only to wake observation, including forged content and failure", async () => {
     const { http, db, repository, retrieve, config } = await setup();
