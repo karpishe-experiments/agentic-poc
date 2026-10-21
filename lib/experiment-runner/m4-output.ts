@@ -14,12 +14,24 @@ const unavailableCost: ExperimentReport["costEvidence"] = { status: "unavailable
 // This helper consumes the SERVER-SAVED prepared context, never model-supplied
 // identity fields. Its output must still pass normal completion/currentness
 // validation. It neither completes an operation nor releases a reservation.
+export class M4CreativeOutputError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "M4 creative output is invalid.", { cause });
+    this.name = "M4CreativeOutputError";
+  }
+}
+
 export function parseM4CreativeOutput(selector: M4RequestSelector, content: string, savedContextJson: string,
   costEvidence: ExperimentReport["costEvidence"] = unavailableCost): RoleResult {
-  if (Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("M4 model output exceeds its parsing bound.");
-  const parsed = m4ModelOutputSchema(selector).parse(JSON.parse(content)) as {
+  let parsed: {
     result?: { kind: string; payload: { taskId?: string; content?: unknown } }; report?: Record<string, unknown>;
   };
+  // Only validation of model-supplied bytes can prove malformed creative output.
+  // Saved context, attribution and hydration failures remain separate blockers.
+  try {
+    if (Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("M4 model output exceeds its parsing bound.");
+    parsed = m4ModelOutputSchema(selector).parse(JSON.parse(content)) as typeof parsed;
+  } catch (error) { throw new M4CreativeOutputError(error); }
   const context = JSON.parse(savedContextJson) as Record<string, unknown>;
   if (selector.report) {
     const evidence = z.object({ role: z.enum(["tester", "judge"]), mode: z.literal("balanced"), runId: opaqueIdSchema,

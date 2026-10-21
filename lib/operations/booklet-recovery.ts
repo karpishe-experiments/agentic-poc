@@ -12,28 +12,36 @@ import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { CompletionReconciliationError } from "@/lib/operations/completion-failure";
+import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
+import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
+import { operationBudgetRemainingMs } from "@/lib/operations/budget";
 
 export const BOOKLET_RECOVERY_CONTRACT = "booklet-recovery-v1";
 export class BookletRecoveryError extends Error {
   constructor(public readonly code: string, public readonly stage?: string, public readonly errorKind?: string,
-    public readonly diagnostic?: Pick<CompletionReconciliationError["diagnostic"], "elapsedMs" | "remainingBudgetMs" | "cleanupOutcome" | "commitState">) { super(code); }
+    public readonly diagnostic?: Pick<CompletionReconciliationError["diagnostic"], "elapsedMs" | "remainingBudgetMs"> &
+      Partial<Pick<CompletionReconciliationError["diagnostic"], "cleanupOutcome" | "commitState">>) { super(code); }
 }
 function requireProof(value: unknown, code: string): asserts value {
   if (!value) throw new BookletRecoveryError(code);
 }
 export const recoveryDigest = (value: unknown) => createHash("sha256").update(m4CanonicalJson(value)).digest("hex");
 const inspectionErrorKinds = new Set(["MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError", "MongoServerSelectionError", "AbortError", "OperationBudgetExpired"]);
-async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<T> {
+export async function inspectStep<T>(stage: string, action: () => Promise<T>): Promise<T> {
+  const startedAt = performance.now();
   try { return await action(); }
   catch (error) {
-    if (error instanceof BookletRecoveryError) throw error;
+    const diagnostic = { elapsedMs: Math.round(performance.now() - startedAt), remainingBudgetMs: operationBudgetRemainingMs() };
+    if (error instanceof BookletRecoveryError) {
+      throw new BookletRecoveryError(error.code, error.stage ?? stage, error.errorKind ?? "Error", { ...diagnostic, ...error.diagnostic });
+    }
     if (error instanceof CompletionReconciliationError) {
       const { code, stage: completionStage, errorKind, ...diagnostic } = error.diagnostic;
       throw new BookletRecoveryError(code, completionStage, errorKind, diagnostic);
     }
-    if (error instanceof ExperimentRepositoryError) throw new BookletRecoveryError(`repository_${error.code}`, stage, "ExperimentRepositoryError");
+    if (error instanceof ExperimentRepositoryError) throw new BookletRecoveryError(`repository_${error.code}`, stage, "ExperimentRepositoryError", diagnostic);
     const kind = error instanceof Error && inspectionErrorKinds.has(error.name) ? error.name : "Error";
-    throw new BookletRecoveryError("inspection_or_verification_failed", stage, kind);
+    throw new BookletRecoveryError("inspection_or_verification_failed", stage, kind, diagnostic);
   }
 }
 
@@ -118,7 +126,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     const { run, op, campaign, booklet } = await inspectStep("snapshot.target_state", () => state(target));
     // Recovery is deliberately infrequent. Hash the retained data without exporting its contents.
     const rows = await readRecoveryInventory(c);
-    return { rows, campaignId: campaign._id, bookletId: booklet._id,
+    return inspectStep("snapshot.invariants", async () => ({ rows, campaignId: campaign._id, bookletId: booklet._id,
       runInvariant: recoveryDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "progressFingerprint", "progressOperationId", "noProgressCount"])),
       operationInvariant: recoveryDigest(omit(op, ["state", "remoteStatus", "lifecycle", "resultFinalizationClaim", "resultJson", "resultDigest", "warningsJson", "materializationJson", "safeFailure", "updatedAtMs", "m4CompletionRecovery"])),
       campaignInvariant: recoveryDigest(omit(campaign, ["state", "revision", "updatedAtMs"])),
@@ -127,7 +135,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
       requestDigest: op.m4Preparation?.requestDigest ?? "", evidenceDigest: op.m4Observation?.evidenceDigest ?? "",
       wrapperDigest: op.m4Observation?.wrapperDigest ?? "",
       lifecycleOrigin: recoveryDigest({ startedAtMs: op.lifecycle?.startedAtMs ?? null, ownerId: op.lifecycle?.ownerId ?? null, stop: op.lifecycle?.stop ?? null }),
-      priorEndedAtMs: op.lifecycle?.endedAtMs ?? null, priorTimeoutAtMs: op.lifecycle?.timeoutAtMs ?? null };
+      priorEndedAtMs: op.lifecycle?.endedAtMs ?? null, priorTimeoutAtMs: op.lifecycle?.timeoutAtMs ?? null }));
   }
   async function quiet(target: RecoveryTarget, closed: boolean) {
     const report = await inspectRecoveryWork(database, { environment: "_staging", nowMs: now(), validatedTargets: [{ runId: target.runId, operationId: target.operationId }] });
@@ -142,7 +150,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     requireProof(run.revision === target.expectedRevision, "revision_changed");
     requireProof(run.mode === "balanced" && run.status === "blocked" && run.safeFailure === "definite_failure" &&
       run.activeOperationId === op._id && !run.preparation && !run.generationCompletedAtMs, "unsupported_run");
-    requireProof(op.state === "started" && op.mode === "balanced" && op.role === "specialist" && op.taskId === "J11" && op.providerKind === "text" &&
+    requireProof(op.state === "started" && op.mode === "balanced" && isCompletionRecoveryRole(op) && op.providerKind === "text" &&
       op.reservationCount === 1 && op.deadlineAtMs !== null && op.deadlineAtMs < now() && op.workflowRunId && op.verifiedWorkflowId &&
       op.lifecycle && !op.lifecycle.stop && !op.m4CompletionRecovery && !op.resultJson && !op.materializationJson &&
       !op.authorizationClaim && (releasingClaim || !op.resultFinalizationClaim) && !op.imageCompletionClaim, "unsupported_operation");
@@ -150,11 +158,16 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
       op.m4Observation.evidenceDigest && op.m4Preparation?.requestDigest, "retained_evidence_missing");
     requireProof(campaign.state === "stopped" && campaign._id === grant.campaignId && run.m4?.policyHash === campaign.policyHash &&
       run.m4.policyJson === campaign.policyJson, "campaign_mismatch");
+    if (op.role === "manager") {
+      const result = m4ObservedRoleResult(run, op);
+      requireProof(result.kind === "delegate" && result.payload.taskId === "J12" && result.payload.subjectKind === "page",
+        "unsupported_manager_result");
+    }
     return { run, op };
   }
   async function observe(target: RecoveryTarget) {
     const { op } = await eligible(target);
-    const binding = config.bindings.find(item => item.role === "specialist" && item.taskId === "J11");
+    const binding = config.bindings.find(item => item.role === op.role && item.taskId === op.taskId);
     requireProof(binding && binding.publishedWorkflowId === op.verifiedWorkflowId, "publication_changed");
     const result = await runtime.retrieve(binding, op.workflowRunId!, { deadlineAtMs: now() + 20_000 });
     requireProof(result.kind === "execution" && result.execution.status === "succeeded" && result.execution.id === op.workflowRunId &&
@@ -178,7 +191,8 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     await quiet(target, closed);
     const after = await snapshot(target);
     if (before) requireProof(recoveryDigest(after) === recoveryDigest(before), "state_changed");
-    const proof = { contract: BOOKLET_RECOVERY_CONTRACT, previewDigest: recoveryDigest({ target, snapshot: after, grant: authority(target) }), snapshot: after };
+    const proof = await inspectStep("preview.digest", async () => ({ contract: BOOKLET_RECOVERY_CONTRACT,
+      previewDigest: recoveryDigest({ target, snapshot: after, grant: authority(target) }), snapshot: after }));
     if (expectedDigest !== undefined) requireProof(proof.previewDigest === expectedDigest, "preview_changed");
     return { proof, observed };
   }
@@ -208,20 +222,29 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
         requireProof(recoveryDigest(Object.keys(after.rows[name])) === recoveryDigest(Object.keys(before.rows[name])), "inventory_changed");
       }
     }
-    const artifact = await c.artifacts.findOne({ experimentRunId: target.runId, taskId: "J11" });
-    requireProof(artifact?.state === "approved", "artifact_unverified");
-    const version = await c.artifact_versions.findOne({ _id: artifact.currentVersionId!, sourceOperationId: target.operationId });
-    requireProof(version, "version_unverified");
-    const approvals = await c.approvals.find({ artifactVersionId: version._id }).toArray();
-    requireProof(approvals.length === 1 && approvals[0].origin === "delegated" && approvals[0].delegationId === run.activeDelegationId &&
-      approvals[0].experimentRunId === target.runId, "approval_unverified");
-    const edges = await c.artifact_dependencies.find({ downstreamVersionId: version._id }).toArray();
-    requireProof(recoveryDigest(edges.map(edge => edge.upstreamVersionId).sort()) === recoveryDigest([...op.dependencyVersionIds].sort()) &&
-      recoveryDigest(JSON.parse(version.dependencyVersionIdsJson)) === recoveryDigest(op.dependencyVersionIds), "lineage_unverified");
-    const additions = (name: string) => Object.keys(after.rows[name]).filter(id => !before.rows[name][id]);
-    requireProof(recoveryDigest(additions("artifacts")) === recoveryDigest([artifact._id]) &&
-      recoveryDigest(additions("artifact_versions")) === recoveryDigest([version._id]) && additions("approvals").length === 1 &&
-      additions("artifact_dependencies").length === op.dependencyVersionIds.length, "unexpected_materialization");
+    if (op.role === "manager") {
+      requireProof(JSON.parse(op.materializationJson!).delegatedTaskId === "J12", "delegation_unverified");
+      // A manager completion records its existing delegation, not new persona
+      // outputs. Every artifact/approval/edge and the booklet stay byte-identical.
+      for (const name of ["artifacts", "artifact_versions", "artifact_dependencies", "approvals", "booklets"]) {
+        requireProof(recoveryDigest(after.rows[name]) === recoveryDigest(before.rows[name]), "unexpected_materialization");
+      }
+    } else {
+      const artifact = await c.artifacts.findOne({ experimentRunId: target.runId, taskId: "J11" });
+      requireProof(artifact?.state === "approved", "artifact_unverified");
+      const version = await c.artifact_versions.findOne({ _id: artifact.currentVersionId!, sourceOperationId: target.operationId });
+      requireProof(version, "version_unverified");
+      const approvals = await c.approvals.find({ artifactVersionId: version._id }).toArray();
+      requireProof(approvals.length === 1 && approvals[0].origin === "delegated" && approvals[0].delegationId === run.activeDelegationId &&
+        approvals[0].experimentRunId === target.runId, "approval_unverified");
+      const edges = await c.artifact_dependencies.find({ downstreamVersionId: version._id }).toArray();
+      requireProof(recoveryDigest(edges.map(edge => edge.upstreamVersionId).sort()) === recoveryDigest([...op.dependencyVersionIds].sort()) &&
+        recoveryDigest(JSON.parse(version.dependencyVersionIdsJson)) === recoveryDigest(op.dependencyVersionIds), "lineage_unverified");
+      const additions = (name: string) => Object.keys(after.rows[name]).filter(id => !before.rows[name][id]);
+      requireProof(recoveryDigest(additions("artifacts")) === recoveryDigest([artifact._id]) &&
+        recoveryDigest(additions("artifact_versions")) === recoveryDigest([version._id]) && additions("approvals").length === 1 &&
+        additions("artifact_dependencies").length === op.dependencyVersionIds.length, "unexpected_materialization");
+    }
     await withMongoTransaction(database, session => verifyM4Accounting(database, session, run));
     await quiet(target, true);
     return { verified: true as const, outcome: "completed" as const, accounting: "preserved" as const,

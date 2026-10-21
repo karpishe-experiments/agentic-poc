@@ -1,5 +1,11 @@
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 
+// Role support is not authority. Every caller must still require an exact grant
+// and retained authenticated evidence before any completion mutation.
+export function isCompletionRecoveryRole(op: Pick<ExperimentOperationDocument, "role" | "taskId">): boolean {
+  return op.role === "specialist" && op.taskId === "J11" || op.role === "manager" && op.taskId === null;
+}
+
 export type OperationRecoveryCode = "saved_result" | "explicit_continuation_required" | "inspect_existing_execution"
   | "unresolved_identity" | "reviewed_completion_recovery_required" | "existing_stop_reconciliation_pending" | "conflicting_evidence";
 export type OperationRecoveryOutcome = {
@@ -32,7 +38,7 @@ export function operationRecoveryOutcome(input: {
   const observation = op.m4Observation;
   const exactGrant = input.completionRecoveries?.filter((grant) => grant.runId === run._id && grant.operationId === op._id).length === 1;
   if (run.mode === "balanced" && run.status === "blocked" && run.safeFailure === "definite_failure" && run.activeOperationId === op._id
-    && op.mode === "balanced" && op.role === "specialist" && op.taskId === "J11" && op.providerKind === "text" && op.state === "started"
+    && op.mode === "balanced" && isCompletionRecoveryRole(op) && op.providerKind === "text" && op.state === "started"
     && !claimed && !saved && !op.lifecycle?.stop && exactGrant && op.workflowRunId && op.verifiedWorkflowId
     && observation?.remoteStatus === "succeeded" && observation.issue === null && observation.wrapperDigest && observation.evidenceDigest
     && observation.workflowRunId === op.workflowRunId && observation.publishedWorkflowId === op.verifiedWorkflowId && op.m4Preparation?.requestDigest) {

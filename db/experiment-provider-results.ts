@@ -11,6 +11,7 @@ import type { RoleResult } from "@/lib/contracts/experiment-runner";
 import { savedConfigurationSchema, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { assessM4ProviderResult, m4ProviderWrapperSchema } from "@/lib/experiment-runner/m4-provider-result";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
+import { M4CreativeOutputError } from "@/lib/experiment-runner/m4-output";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
 import type { WorkflowRuntime, RuntimeResult } from "@/lib/experiment-runner/transport";
@@ -155,11 +156,12 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     if (retained.stopped) return block(input);
     // Evidence and attributable usage have committed before creative parsing.
     let result: RoleResult;
+    const saved = await repository.getOperation(before.operation._id);
+    if (!saved) conflict();
     try {
-      const saved = await repository.getOperation(before.operation._id);
-      if (!saved) conflict();
       result = m4ObservedRoleResult(before.run, saved);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof M4CreativeOutputError)) throw error;
       await withMongoTransaction(database, async (session) => {
         const current = await load(session, input);
         if (current.operation.m4Observation?.wrapperDigest !== observation.wrapperDigest) conflict();

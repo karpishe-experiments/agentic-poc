@@ -240,7 +240,12 @@ export function createExperimentContextService(database: Database, options: { st
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" },
       projection === "execution" ? { projection: { _id: 1, sequence: 1, createdAtMs: 1 } } : {}).sort({ sequence: 1 }).toArray();
-    const operationRows = projection === "inspection" ? await operations.find({ runId: run._id }).sort({ createdAtMs: 1, _id: 1 }).toArray()
+    const operationRows = projection === "inspection" ? await operations.find({ runId: run._id }, { projection: {
+      _id: 1, role: 1, taskId: 1, state: 1, workflowRunId: 1, parentWorkflowRunId: 1,
+      verifiedWorkflowId: 1, workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1,
+      dispatchStartedAtMs: 1, createdAtMs: 1, updatedAtMs: 1, reservationCount: 1, safeFailure: 1,
+      resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
+    } }).sort({ createdAtMs: 1, _id: 1 }).toArray()
       : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
     let pageSelection = null;
     if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasM4SimulatedImagePolicy(run)) &&
