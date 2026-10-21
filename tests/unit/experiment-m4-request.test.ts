@@ -3,11 +3,45 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { personaSchema, specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { assertM4SchemaLimits, m4BindAllowedValues, m4CanonicalJson, m4Hash, m4RequestBundleHash,
-  m4RequestDefinition, m4StrictSchema, prepareM4Request } from "@/lib/experiment-runner/m4-request";
+  m4RequestDefinition, m4StrictSchema, prepareM4Request, projectM4Context } from "@/lib/experiment-runner/m4-request";
 import { m4TestId, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { m4RequestVectors } from "@/tests/helpers/m4-request-vectors";
 
 describe("M4 reviewed request contract", () => {
+  it("bounds manager context independently of completed image prompt size, retaining exact current provenance", () => {
+    const artifact = { id: m4TestId(2), taskId: "J13", subjectKind: "page", subjectId: m4TestId(3), state: "approved", currentVersionId: m4TestId(4),
+      versions: [{ id: m4TestId(4), number: 1, dependencyVersionIds: [m4TestId(5)], approval: { id: m4TestId(6) },
+        content: { request: { prompt: "large saved image instruction".repeat(10000) } } }, { id: m4TestId(7), content: "historical" }] };
+    const projected = projectM4Context({ role: "manager", taskId: null, persona: "playful_kid", report: false },
+      { role: "manager", run: { bookletId: m4TestId(1), brief: "brief", currentArtifacts: [artifact] }, eligibleRoute: "J13", eligibleTarget: { subjectId: m4TestId(3) } }, "operation");
+    expect(projected).toMatchObject({ eligibleRoute: "J13", eligibleTarget: { subjectId: m4TestId(3) }, run: { currentArtifacts: [{
+      currentVersionId: m4TestId(4), dependencyVersionIds: [m4TestId(5)], approvalId: m4TestId(6) }] } });
+    expect(JSON.stringify(projected)).not.toContain("content");
+    expect(JSON.stringify(projected).length).toBeLessThan(2000);
+    expect(artifact.versions[0].content).toBeDefined();
+  });
+  it("retains report creative text, lettering and reference identities while excluding duplicated execution prompts", () => {
+    const project = (role: "tester" | "judge") => projectM4Context({ role, taskId: null, persona: "playful_kid", report: true }, { role,
+      currentArtifacts: [{ id: "a", taskId: "J13", currentVersionId: "v", versions: [{ id: "v", content: {
+        request: { prompt: "assembled", sourceVersionIds: ["source"] }, build: { prompt: "assembled", assetId: "asset" },
+        stylePromptModule: "duplicate style", lettering: [{ text: "Required dialogue" }], prompt: "creative field must survive" } }] },
+      { id: "s", taskId: "J08", currentVersionId: "style", versions: [{ id: "style", content: { stylePromptModule: "canonical style" } }] }],
+      operationHistory: [{ id: "current" }, { id: "previous" }], reportEvidence: { versionIds: ["v", "style"] } }, "current");
+    for (const role of ["tester", "judge"] as const) {
+      const result = project(role); const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain("assembled"); expect(serialized).not.toContain("duplicate style");
+      for (const value of ["Required dialogue", "canonical style", "source", "asset", "creative field must survive"]) expect(serialized).toContain(value);
+      expect(result.operationHistory).toEqual([{ id: "previous" }]); expect(result.reportEvidence).toEqual({ versionIds: ["v", "style"] });
+    }
+  });
+  it("rejects complete manager/report requests above local byte bounds without truncating required text", () => {
+    const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
+    const allowed = { taskId: ["J01"], subjectKind: ["book"], subjectId: [m4TestId(1)], runId: [m4TestId(1)], artifactId: [m4TestId(2)], versionId: [m4TestId(3)], pageId: [m4TestId(4)] };
+    for (const selector of [{ role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false },
+      { role: "judge" as const, taskId: null, persona: "playful_kid" as const, report: true }]) {
+      expect(() => prepareM4Request(policy, selector, JSON.stringify({ required: "🙂".repeat(34000) }), allowed)).toThrow("required content was not truncated");
+    }
+  });
   it("matches independent Python canonical bytes and digests, including Unicode and numeric keys", () => {
     const vectors = JSON.parse(readFileSync(new URL("../fixtures/m4-canonical-v1.json", import.meta.url), "utf8")) as { input: unknown; canonical: string; digest: string }[];
     for (const vector of vectors) {

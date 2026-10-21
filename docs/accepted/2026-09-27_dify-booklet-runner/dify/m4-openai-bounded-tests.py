@@ -55,6 +55,8 @@ class BoundedTests(unittest.TestCase):
         self.factory_hook = None
         self.requests = []
         self.count = 32000
+        self.count_body = None
+        self.count_request_id = "req_count_fixture"
         self.status = "completed"
         self.usage = {"input_tokens": 10, "output_tokens": 7, "total_tokens": 17,
                       "input_tokens_details": {"cached_tokens": 2, "cache_write_tokens": 0},
@@ -78,13 +80,14 @@ class BoundedTests(unittest.TestCase):
             self.requests.append((request.url.path, body))
             failure = self.count_failure if request.url.path.endswith("input_tokens") else self.failure
             if failure == "timeout":
-                raise httpx2.ReadTimeout("fixture", request=request)
+                raise httpx2.ReadTimeout("private-provider-error-do-not-save", request=request)
             if failure:
                 return httpx2.Response(failure, request=request,
-                                       json={"error": {"message": "fixture", "type": "fixture"}})
+                                       json={"error": {"message": "private-provider-error-do-not-save", "type": "fixture"}})
             if request.url.path.endswith("input_tokens"):
-                return httpx2.Response(200, request=request,
-                                       json={"object": "response.input_tokens", "input_tokens": self.count})
+                return httpx2.Response(200, request=request, headers={"x-request-id": self.count_request_id},
+                                       json=(self.count_body if self.count_body is not None else
+                                             {"object": "response.input_tokens", "input_tokens": self.count}))
             part = ({"type": "refusal", "refusal": self.content} if self.refusal else
                     {"type": "output_text", "text": self.content, "annotations": []})
             return httpx2.Response(200, request=request, headers={"x-request-id": "req_fixture"}, json={
@@ -225,14 +228,82 @@ class BoundedTests(unittest.TestCase):
 
     def test_input_above_limit_never_generates(self):
         self.count = 32001
-        with self.assertRaises(InvokeBadRequestError): self.invoke()
+        evidence = self.assert_count_failure(self.invoke(), "input_limit_exceeded")
+        self.assertEqual(evidence["countedInputTokens"], 32001)
+        self.assertEqual(evidence["countRequestId"], "req_count_fixture")
+        self.assertEqual(len(self.requests), 1)
+
+    def assert_count_failure(self, result, code):
+        wrapper = json.loads(result.message.content)
+        self.assertEqual(set(wrapper), {"schemaVersion", "content", "failureEvidence"})
+        self.assertEqual(wrapper["schemaVersion"], "booklet_pre_generation_failure_v1")
+        self.assertEqual(wrapper["content"], "")
+        evidence = wrapper["failureEvidence"]
+        self.assertEqual(set(evidence), {"provider", "apiBaseUrl", "stdioSdk", "model", "serviceTier",
+            "requestDigest", "adapterVersion", "stage", "code", "countedInputTokens", "limit", "generationStarted",
+            "elapsedMs", "countRequestId"})
+        self.assertEqual(evidence["provider"], "openai")
+        self.assertEqual(evidence["apiBaseUrl"], "https://api.openai.com/v1")
+        self.assertEqual(evidence["stdioSdk"]["version"], "0.10.2")
+        self.assertEqual(evidence["model"], "gpt-6-luna")
+        self.assertEqual(evidence["adapterVersion"], "1.0.7-dev3")
+        self.assertEqual(evidence["serviceTier"], "default")
+        self.assertEqual(evidence["requestDigest"], self.parameters["booklet_request_digest"])
+        self.assertEqual(evidence["stage"], "input_count")
+        self.assertEqual(evidence["code"], code)
+        self.assertEqual(evidence["limit"], 32000)
+        self.assertIs(evidence["generationStarted"], False)
+        self.assertIs(type(evidence["elapsedMs"]), int)
+        self.assertGreaterEqual(evidence["elapsedMs"], 0)
+        self.assertEqual(result.usage, LLMUsage.empty_usage())
+        self.llm._calc_response_usage.assert_not_called()
+        self.assertNotIn("private-provider-error-do-not-save", result.message.content)
+        return evidence
+
+    def test_missing_or_null_count_is_unavailable_without_generation(self):
+        for body in ({"object": "response.input_tokens"}, {"input_tokens": None}):
+            with self.subTest(body=body):
+                self.requests = []; self.count_body = body
+                evidence = self.assert_count_failure(self.invoke(), "input_count_unavailable")
+                self.assertIsNone(evidence["countedInputTokens"])
+                self.assertEqual(len(self.requests), 1)
+
+    def test_malformed_count_is_invalid_without_generation(self):
+        for count in (True, False, -1, 1.5, "32000", "invalid", [], {}, 9007199254740992):
+            with self.subTest(count=count):
+                self.requests = []; self.count = count
+                evidence = self.assert_count_failure(self.invoke(), "input_count_invalid")
+                self.assertIsNone(evidence["countedInputTokens"])
+                self.assertEqual(len(self.requests), 1)
+
+    def test_count_request_id_is_allowlisted(self):
+        self.count = 32001
+        self.count_request_id = "private provider error with content"
+        evidence = self.assert_count_failure(self.invoke(), "input_limit_exceeded")
+        self.assertIsNone(evidence["countRequestId"])
+        self.assertNotIn(self.count_request_id, json.dumps(evidence))
+
+    def test_count_failure_elapsed_time_and_carrier_wire_are_preserved(self):
+        self.count = 32001
+        with patch.object(booklet_bounded.time, "monotonic", side_effect=[10, 10.125]):
+            # Inject the clock explicitly because generate binds its default.
+            result = booklet_bounded.generate(self.llm, self.factory, "gpt-6-luna",
+                {"openai_api_key": "not-a-key"}, self.messages, self.parameters,
+                None, None, False, None, clock=booklet_bounded.time.monotonic)
+        self.assertEqual(self.assert_count_failure(result, "input_limit_exceeded")["elapsedMs"], 125)
+        self.requests = []
+        wrapper = json.loads(self.invoke_carrier().message.content)
+        self.assertEqual(wrapper["schemaVersion"], "booklet_pre_generation_failure_v1")
+        self.assertEqual(wrapper["failureEvidence"]["code"], "input_limit_exceeded")
         self.assertEqual(len(self.requests), 1)
 
     def test_count_failure_never_generates_or_retries(self):
         for failure in (429, 500, "timeout"):
             with self.subTest(failure=failure):
                 self.requests = []; self.count_failure = failure
-                with self.assertRaises(Exception): self.invoke()
+                evidence = self.assert_count_failure(self.invoke(), "input_count_request_failed")
+                self.assertIsNone(evidence["countedInputTokens"])
+                self.assertIsNone(evidence["countRequestId"])
                 self.assertEqual(len(self.requests), 1)
 
     def test_generation_failure_is_not_retried(self):

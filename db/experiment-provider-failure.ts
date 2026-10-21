@@ -12,6 +12,8 @@ import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { m4Digest, m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
+import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
   nowMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) });
@@ -23,6 +25,12 @@ const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSc
 export async function hasM4KnownFailure(database: Database, session: ClientSession,
   authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number): Promise<boolean> {
   const ledger = createExperimentCampaignLedger(database, authority);
+  if (validateLegacyCountFailureProof(ledger.snapshot.policy, run, op)) {
+    const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
+    return run.m4?.campaignId === ledger.grant.campaignId && !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
+      campaign.grantReference === ledger.grant.reference &&
+      !await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } });
+  }
   if (m4UnclaimedFailureDigest(authority, run, op)) {
     const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
     return !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
@@ -54,6 +62,15 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
         saved.appId !== expected.appId || saved.publishedWorkflowId !== expected.publishedWorkflowId || saved.toolProviderId !== expected.toolProviderId) return false;
     const request = z.object({ input: z.array(z.object({ role: z.string(), content: z.string() })) }).parse(JSON.parse(prep.requestJson));
     if (request.input.filter((p) => p.role === "user").length !== 1 || request.input.find((p) => p.role === "user")?.content !== prep.contextJson) return false;
+    const preGeneration = m4PreGenerationFailure(JSON.parse(observation.evidenceJson), ledger.snapshot.policy, op);
+    if (preGeneration) {
+      return observation.issue === "provider_failure" && observation.content === "" &&
+        reservation.settledMicrodollars === null && reservation.evidenceDigest === null &&
+        reservation.unsettledMicrodollars === reservation.maximumMicrodollars &&
+        op.resultJson === null && op.resultDigest === null && op.materializationJson === null && op.imageCompletionDigest == null &&
+        !op.authorizationClaim && !op.resultFinalizationClaim && !op.imageCompletionClaim &&
+        !await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } });
+    }
     const assessed = assessM4ProviderResult({ schemaVersion: "booklet_provider_v1", content: observation.content,
       providerEvidence: JSON.parse(observation.evidenceJson) }, ledger.snapshot.policy, op);
     if (assessed.evidenceJson !== observation.evidenceJson || assessed.evidenceDigest !== observation.evidenceDigest ||

@@ -1,5 +1,5 @@
 import type { ExperimentMode, ExperimentRole, ExperimentTask, Persona } from "@/lib/contracts/experiment-runner";
-import type { M4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import type { M4ModelBucket, M4Grant } from "@/lib/experiment-runner/m4-policy";
 import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 
 export type BaseDocument = { _id: string };
@@ -54,6 +54,7 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  m4PreGenerationRecovery?: import("@/lib/experiment-runner/m4-legacy-count-failure").LegacyCountFailureProof;
   m4Continuation?: { reference: string; evidenceDigest: string; requestDigest: string; resumedAtMs: number;
     runRevision: number; campaignRevision: number; nextOperationId: string | null };
   m4ContinuedFromOperationId?: string;
@@ -64,6 +65,7 @@ export type ExperimentOperationDocument = BaseDocument & {
     remoteStatus: "succeeded" | "failed" | "stopped"; observedAtMs: number;
     issue: "missing_wrapper" | "invalid_evidence" | "provider_failure" | "creative_invalid" | "conflicting_evidence" | null };
   m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
+    adapterUpdate?: M4Grant["providerAdapterUpdate"];
     definitionUpdate?: { fromBundleHash: string; toBundleHash: string; reference: string };
     requestJson: string; contextJson: string; systemPrompt: string; modelParametersJson: string;
     sourceFingerprint: string; operationFingerprint: string; publishedWorkflowId: string; parentWorkflowRunId: string | null; preparedAtMs: number };

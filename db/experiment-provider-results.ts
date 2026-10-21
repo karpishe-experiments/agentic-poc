@@ -14,6 +14,7 @@ import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result
 import { M4CreativeOutputError } from "@/lib/experiment-runner/m4-output";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import { m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import type { WorkflowRuntime, RuntimeResult } from "@/lib/experiment-runner/transport";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
@@ -96,9 +97,11 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     const wrapperText = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 2_500_000 ? value : null;
     let parsed: ReturnType<typeof m4ProviderWrapperSchema.safeParse> = m4ProviderWrapperSchema.safeParse(null);
     let originalContent: string | null = null;
+    let preGeneration: ReturnType<typeof m4PreGenerationFailure> = null;
     if (wrapperText !== null) {
       try {
         const rawWrapper: unknown = JSON.parse(wrapperText);
+        preGeneration = m4PreGenerationFailure(rawWrapper, ledger.snapshot.policy, before.operation);
         parsed = m4ProviderWrapperSchema.safeParse(rawWrapper);
         const creative = z.object({ content: z.string().max(2 * 1024 * 1024) }).safeParse(rawWrapper);
         if (creative.success) originalContent = creative.data.content;
@@ -108,11 +111,11 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     if (parsed.success) {
       try { assessment = assessM4ProviderResult(parsed.data, ledger.snapshot.policy, before.operation); } catch { /* Retain bounded evidence, but no attribution. */ }
     }
-    const evidenceJson = parsed.success ? m4CanonicalJson(parsed.data.providerEvidence) : null;
+    const evidenceJson = preGeneration ? m4CanonicalJson(preGeneration) : parsed.success ? m4CanonicalJson(parsed.data.providerEvidence) : null;
     const observation: Observation = { workflowRunId: execution.id, publishedWorkflowId: execution.workflow_id,
       wrapperDigest: wrapperText === null ? null : m4Hash(wrapperText), content: originalContent,
       evidenceJson, evidenceDigest: evidenceJson === null ? null : m4Hash(evidenceJson), remoteStatus: execution.status,
-      observedAtMs: input.nowMs, issue: wrapperText === null ? "missing_wrapper" : !assessment ? "invalid_evidence" :
+      observedAtMs: input.nowMs, issue: preGeneration ? "provider_failure" : wrapperText === null ? "missing_wrapper" : !assessment ? "invalid_evidence" :
         execution.status !== "succeeded" || !assessment.canMaterialize ? "provider_failure" : null };
     const retained = await withMongoTransaction(database, async (session) => {
       const current = await load(session, input);

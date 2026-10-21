@@ -9,6 +9,8 @@ import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
+import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -269,6 +271,18 @@ export function createExperimentDispatcher(deps: {
       }
       // A matching terminal read or unavailable lookup cannot replay or reopen
       // an inspected unclaimed failure, and there is no provider wrapper.
+      return;
+    }
+    if (current.m4Continuation && current.m4PreGenerationRecovery) {
+      if (!authority || !validateLegacyCountFailureProof(m4PolicySnapshot(authority.policy).policy, run, current) ||
+          current.m4Continuation.evidenceDigest !== current.m4PreGenerationRecovery.proofDigest ||
+          current.m4Continuation.requestDigest !== current.m4Preparation?.requestDigest ||
+          result.kind === "execution" && (result.execution.id !== current.workflowRunId || result.execution.workflow_id !== current.verifiedWorkflowId ||
+            result.execution.status !== "failed" || result.execution.legacyCountFailure?.code !== "legacy_input_count_guard" ||
+            result.execution.legacyCountFailure.totalTokens !== 0 || result.execution.outputs && Object.keys(result.execution.outputs).length > 0 ||
+            current.workflowTaskId && result.execution.task_id && current.workflowTaskId !== result.execution.task_id)) {
+        await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+      }
       return;
     }
     if (current.m4Continuation && result.kind === "execution" && (result.execution.id !== current.workflowRunId ||

@@ -205,6 +205,11 @@
     "continuations": [
       {
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "7d490c15-5ae1-4276-83ce-7d86a0da7ba4",
+        "reference": "User 2026-10-21 context/count correction plan and Kid-only completion instruction: exact inspected count-guard failure; supported closure with full reservation/history retained, reviewed correction and explicit same-run continuation; conditional USD5 and all cumulative limits unchanged."
+      },
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "f748c0a3-61cc-47b4-884f-53b8b5933ff4",
         "reference": "User Kid-only completion instruction 2026-10-21: exact inspected manager execution 8964e01f-047f-44c3-9df8-c4378d16a653 failed at authorization before any reservation/provider request; reviewed atomic authorization correction and same-run continuation through normal controls; preserve failed history, cumulative conditional USD5 and request limits; no automatic replay, new run or paid images."
       },
@@ -236,10 +241,28 @@
         "reference": "Explicit user grant 2026-10-20: exact retained manager completion from Dify execution 97422092-2627-46e2-bb7f-9d4b26dbb270; normal source/approval/accounting validation, manager-specific preservation, reviewed preview/apply then normal staging delivery and same-Kid continuation; preserve conditional USD5, limits and no successors; no provider replay or saved-output edits."
       }
     ],
+    "preGenerationRecoveries": [
+      {
+        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+        "operationId": "7d490c15-5ae1-4276-83ce-7d86a0da7ba4",
+        "workflowRunId": "a90fe27f-1644-4eb8-8d8b-7c409600d2a9",
+        "publishedWorkflowId": "64d08408-4ab7-4413-a5a1-0fccadd2ff26",
+        "pluginIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
+        "guardSourceSha256": "1c18f6440772cbed926368d2d04fde90771ee181f4fbacde92a19c67913e7de8",
+        "nodeTraceDigest": "aebc0ec55b881a868623eb92bca07eea0a0590702d9f8989c4e371d532413f12",
+        "reference": "User 2026-10-21 approved plan: exact legacy count-guard bookkeeping closure using retained authenticated node receipt and fresh execution GET; preserve full reservation, failed history and deadline; no output, usage, replay or automatic Resume."
+      }
+    ],
+    "providerAdapterUpdate": {
+      "fromIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
+      "version": "1.0.7-dev3",
+      "packageSha256": "73a17b49621352aad86a6ae53f9559d9ed62d39e459930967dffcd8afa783e2f",
+      "reference": "User selected complete context/provider correction: reviewed bounded-adapter count-failure evidence only; exact unsigned package, existing shared Dify key, unchanged successful/default routes; install and restore signature checks before same-Kid continuation."
+    },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
-      "toBundleHash": "a47239bc1bb7f15fc0b85cac43de3baa3af5ca9ceeacb640b87f168e153d1883",
-      "reference": "User M4 completion grant: reviewed J11 geometry/cardinality constraints plus compact complete JSON and concise field instructions; monetary policy, models and token limits unchanged; prior request amendments remain retained with historical preparations."
+      "toBundleHash": "cb6083a8cd2ed0a784a6e2ad68a6ae00ae3298ac5550a4839334d4310bd45915",
+      "reference": "User 2026-10-21 context correction: compact manager routing provenance and complete current report evidence without duplicated image prompts; local guards16KiB manager/128KiB report; exact32000 tokens and monetary policy unchanged; prior prepared requests retained."
     }
   }
 }
