@@ -177,7 +177,7 @@ recovery. The latest exact grant covers Kid manager operation
 `97422092-2627-46e2-bb7f-9d4b26dbb270`, through reviewed preview/apply, normal staging
 delivery and explicit Resume. It permits no provider replay, output edit, new run,
 successor or budget increase. J11 is already saved and must not be reconciled again.
-The [current M4 record](M4-balanced.md#current-execution-record---2026-10-20)
+The [current M4 record](M4-balanced.md#current-execution-record---2026-10-21)
 owns progress and remaining gates. Existing protected credentials are reused.
 
 **Original M4 decision status - 2026-10-13 (superseded for execution authority):** The user selected Luna for manager,

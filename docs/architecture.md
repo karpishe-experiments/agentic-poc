@@ -143,6 +143,14 @@ operation links once to that failed operation and reserves normally. Failed outp
 charges, counters and approved artifacts remain saved. Accounting exit includes
 these explicitly continued failed requests and revalidates their proof. Ordinary
 blocked runs remain blocked; no automatic provider retry or budget reset is added.
+An exact grant can also continue an authenticated terminal failed manager before
+any reservation. Its prepared request, execution/publication identity and absence
+of claims, output and reservation form a separate digest; no provider usage is
+invented. Resume closes that attempt's bookkeeping with provenance atomically.
+Accounting excludes the unclaimed attempt from paid counts while preserving its
+history; later inspection verifies the same terminal execution without requiring
+a provider-result wrapper. Claimed, unknown, stopped or conflicting attempts do
+not qualify for this branch.
 Optional continuation metadata is backward compatible and requires no migration. A protected
 request-definition amendment can bind the frozen policy's original bundle hash to
 one reviewed replacement. New preparation/claim requires that exact amendment and
@@ -246,8 +254,17 @@ now saves the exact role request before dispatch, rechecks source/approval and
 publication identities, and reserves operation/run/campaign allowances atomically
 at claim. Preparation grants no execution permission. Duplicate claims admit one
 action. Trusted output assembly supplies approved identity/hash/fact fields rather
-than asking a model to reproduce them. The request bundle has canonical Python/Node
-byte parity; the local provider pins the global endpoint. Assumed token-count
+than asking a model to reproduce them.
+Balanced text authorization retains its authenticated original Dify GET, then
+persists execution/task/publication identity in the same transaction as the
+reservation. It retains identity on a denied Pause and rechecks sources,
+ownership, admission and allowances before provider admission. It avoids two
+standalone metadata transactions; observation retains its existing independent
+helpers. Sanitized callback diagnostics distinguish initial reads, authenticated
+readback, mutation admission, lease acquisition, source checks and reservation.
+No callback, operation deadline or workflow timeout is increased.
+The request bundle has canonical Python/Node byte parity; the local provider pins
+the global endpoint. Assumed token-count
 charges remain reserved after model usage settlement and are not reported as
 verified invoice charges. Authenticated original Dify GET results retain provider
 content and usage before parsing or materialization. Result/failure callbacks only
