@@ -3,6 +3,7 @@ import type { Database } from "@/db/client";
 import type { ExperimentCampaignDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, personaSchema } from "@/lib/contracts/experiment-runner";
 import { m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapshot, type M4Grant } from "@/lib/experiment-runner/m4-policy";
+import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -148,11 +149,14 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     requireState(!await database.collections.experiment_runs.findOne({ _id: { $in: runIds }, $or: [
       { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
     ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
-    const provenance = { reference: permission!.reference, evidenceDigest: operation.m4Observation!.evidenceDigest!,
-      requestDigest: operation.m4Reservation!.requestDigest, resumedAtMs: nowMs, runRevision: run.revision,
+    const unclaimedDigest = m4UnclaimedFailureDigest(authority, run, operation);
+    const provenance = { reference: permission!.reference, evidenceDigest: unclaimedDigest ?? operation.m4Observation!.evidenceDigest!,
+      requestDigest: unclaimedDigest ? operation.m4Preparation!.requestDigest : operation.m4Reservation!.requestDigest, resumedAtMs: nowMs, runRevision: run.revision,
       campaignRevision: campaign.revision, nextOperationId: null };
     const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
-      state: "failed", m4Continuation: { $exists: false } }, { $set: { m4Continuation: provenance } }, { session });
+      state: "failed", m4Continuation: { $exists: false } }, { $set: { m4Continuation: provenance,
+        ...(unclaimedDigest && operation.lifecycle ? { lifecycle: { ...operation.lifecycle, phase: "finished" as const,
+          attemptOutcome: "failed" as const, unresolved: false, endedAtMs: operation.lifecycle.endedAtMs ?? nowMs } } : {}) } }, { session });
     requireState(saved.modifiedCount === 1, "Continuation was already consumed.");
     await touch(campaign, session, { state: "active" }, nowMs);
   }

@@ -1,9 +1,96 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** The original Kid run resumed and advanced, then stopped at 37 paid text requests and five simulated images. J11 is saved and verified. Supported recovery and normal host deployment are complete. Authenticated application preflight passed and explicit Resume is saved. Parent and Creator remain unstarted; M4 is not complete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** Kid-only continuation. Recovery and normal delivery completed; the same Kid advanced, then stopped at an unclaimed manager authorization timeout. Parent and Creator are on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
-## Current execution record - 2026-10-20
+## Current execution record - 2026-10-21
+
+**Immediate scope:** Complete the existing Kid only. Parent and Creator are on
+hold. M4 remains incomplete until all required personas eventually pass; Kid
+completion alone will not establish M4 acceptance.
+
+Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` was paused at revision 258 with no active
+operation or safe failure after recovery. It retained 37 paid text requests, five
+simulated images and zero paid images. J11 is saved and verified; do not reconcile it again.
+
+The exact retained manager recovery completed through supported request
+`issue65-m4-manager37-20261020-v2`. Fresh inspection `39564940201` found only the
+expected run and manager, with no claims or unrelated work. Apply `39565474711`
+reported successful completion reconciliation, then exhausted its budget while
+verifying `snapshot.experiment_operations`. It did not establish a failed
+completion. After journal inspection `39567678154`, supported verification-only
+continuation `39568009458` proved the committed result and preservation checks,
+restored the prior service with admission closed and recorded recovery complete.
+No provider request was replayed. Backup
+`staging-recovery-issue65-m4-manager37-20261020-v2` and failed evidence remain saved.
+Authenticated summary independently confirmed the paused state and unchanged
+counters. No new dispatcher installation or operator Bash command was needed.
+
+PR #219 and diagnostic PR #221 are merged. Both source changes and their actual
+staging ports passed two consecutive clean independent reviews and lean CI.
+After successful recovery, the explicitly approved PR #220 merged at
+`17f2bb26e2962d3ba14d6ab25c722056bf51a2bb`. Normal staging deployment
+`39568614543-1` selected image
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:0af972dfb8a61481e960ee2084fb315cca1b895ad7d6ab5f996880e63ce37fe1`.
+Its Actions client wait ended with exit 124. Independent status `39569765581`
+reported the host service active in backup. Later status `39570183073` proved
+that the same host request completed and was archived. Backup
+`staging-20261021T082633Z-d310b6fbaa2ee57c` remains retained; no deployment replay
+was sent. Authenticated application preflight verified the exact manager
+publication `64d08408-4ab7-4413-a5a1-0fccadd2ff26` and ready/idle admission. The
+full saved-detail view loaded successfully with approved J11 and prior artifacts.
+Accounting retained $0.033300 reserved, $0.056385 settled upper bound and
+$4.910315 remaining. One explicit Resume saved revision 259, queued with unchanged
+counters and a new preparation identity.
+
+The same Kid then completed J12 operation `0a0f3607-1004-4b83-8a44-ce9c7bbfb8ce`.
+Revision 269 records a new definite failure at manager
+`f748c0a3-61cc-47b4-884f-53b8b5933ff4`, Dify execution
+`8964e01f-047f-44c3-9df8-c4378d16a653`. Authenticated MCP readback reports failed,
+zero tokens and 30.526 seconds; node inspection identifies `m4_authorize` read
+timeout at 30.028 seconds. Booklet records zero reservations for that operation,
+38 paid text requests, five simulated images and zero paid images. The campaign
+is stopped with $0.034200 reserved, $0.058766 settled upper bound and $4.907034
+remaining. No further Resume or paid request followed this failure.
+
+Sanitized application diagnostics identify cumulative authorization-budget
+exhaustion: `authorization_transaction` started with 9,131 ms remaining and failed
+after 9,136 ms. They do not identify which preceding read consumed the time.
+Code audit confirms two separate dispatch-identity/publication transactions before
+the claim transaction, with repeated operation/run reads. The bounded correction
+combines authenticated metadata validation/persistence with the existing atomic
+claim, preserving the original Dify GET, source/approval checks, lease cleanup,
+Pause/Stop/deadline/admission and monetary gates. Added phase diagnostics attribute
+those boundaries. No timeout, workflow, provider or host change is included.
+The focused HTTP case asserts one explicit transaction, three operation reads
+(including parent-manager source lookup) and two run reads. Its 13 affected cases
+passed locally; this is not a live-latency guarantee.
+
+Existing continuation required a paid reservation and provider evidence. The
+narrow extension supports only an exact granted terminal failed manager with no
+reservation, observation, output, artifact or ownership. Its authenticated saved
+execution/publication/preparation digest supplies provenance without inventing
+provider usage. Existing Resume closes lifecycle bookkeeping and reopens the same
+campaign atomically; accounting retains the attempt but excludes it from paid
+counts. Historical inspection cannot replay it. All 35 affected provider-result
+cases passed with fake providers and real persistence, including ten unclaimed
+continuation cases. No schema, credential, storage or transfer change is needed.
+
+Next: complete static checks and two clean independent reviews, lean CI and
+selective staging delivery of this one correction. Verify saved failed evidence,
+exact grant, no unresolved work and accounting before one explicit same-Kid
+continuation. Require J01-J13, three single-panel story pages plus cover, required
+assets/approvals, tester feedback, independent judge assessment and durable
+accounting. Preserve the existing conditional USD 5 and cumulative request limits.
+Parent/Creator remain on hold. No new run, successor, paid smoke, real image,
+automatic provider retry or manual saved-output repair is authorized. The original
+manager inner error and first preview failure remain unproven. A new unsupported
+failure requires evidence and package reassessment before another delivery cycle.
+
+<details>
+<summary>Retained earlier execution evidence and superseded next-step statements</summary>
+
+## Retained execution evidence - 2026-10-20
 
 Kid run `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` was explicitly resumed once
 after authenticated idle preflight. Saved revision 218 confirmed Resume; revision
@@ -107,8 +194,7 @@ and no-successor limits. No new paid smoke, reset or infrastructure work is adde
 M4 remains incomplete. Recovery and delivery made no paid requests; the resumed
 Kid now uses the existing authorized campaign allowance.
 
-<details>
-<summary>Retained earlier execution evidence and superseded next-step statements</summary>
+
 
 ## Supported recovery follow-up - 2026-10-18
 

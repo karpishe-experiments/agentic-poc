@@ -6,6 +6,7 @@ import { createExperimentRepository } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
+import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import type { RuntimeResult, WorkflowRuntime } from "@/lib/experiment-runner/transport";
@@ -15,7 +16,7 @@ import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
-async function setup(continuation = false) {
+async function setup(continuation = false, claimProvider = true) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash(),
     countChargeStatus: "assumed" as const, countChargeCeilingMicrodollars: 900 };
@@ -33,7 +34,7 @@ async function setup(continuation = false) {
   const claim = { runId: id(10), operationId: id(12), workflowRunId: id(13), parentWorkflowRunId: null, nowMs: 5 };
   await repository.recordDispatchIdentity(claim);
   await repository.verifyDispatchPublication({ ...claim, workflowId: policy.publications[0].publishedWorkflowId });
-  await repository.claimOperation(claim);
+  if (claimProvider) await repository.claimOperation(claim);
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "https://booklet.invalid", callbackKey: "fixture",
     bindings: policy.publications.map((p) => ({ ...p, taskId: specialistTaskSchema.nullable().parse(p.taskId), apiKey: `fake-key-${p.appId}` })) };
   const wrapper = { schemaVersion: "booklet_provider_v1", content: JSON.stringify({ result: { kind: "delegate",
@@ -55,6 +56,85 @@ async function setup(continuation = false) {
   const campaign = () => db.collections.experiment_campaigns.findOne({ _id: id(1) });
   return { db, repository, authority, config, runtime, wrapper, execution, observer, input, campaign };
 }
+
+describe("explicit unclaimed manager failure continuation", () => {
+  async function failedFixture(granted = true) {
+    const env = await setup(granted, false);
+    vi.mocked(env.runtime.retrieve).mockResolvedValue({ kind: "execution", execution: {
+      ...env.execution, status: "failed", outputs: null } });
+    const dispatcher = createExperimentDispatcher({ database: env.db,
+      config: { ...env.config, m4: { state: "granted", authority: env.authority } },
+      runtime: env.runtime, now: () => 8, mutate: async action => action() });
+    await dispatcher.inspect({ runId: id(10), operationId: id(12) });
+    const resume = async () => createExperimentRepository(env.db, { m4Authority: env.authority, m4ExecutionEnabled: true,
+      elapsedNow: () => 0 }).resume({ runId: id(10), expectedRevision: (await env.repository.getRun(id(10)))!.revision, nowMs: 10 });
+    const verify = () => withMongoTransaction(env.db, async session => verifyM4Accounting(env.db, session,
+      (await env.db.collections.experiment_runs.findOne({ _id: id(10) }, { session }))!));
+    return { ...env, dispatcher, resume, verify };
+  }
+
+  it("continues once with zero new charges, closes owned lifecycle and preserves terminal history on late Inspect", async () => {
+    const env = await failedFixture();
+    const before = (await env.repository.getOperation(id(12)))!;
+    const run = (await env.repository.getRun(id(10)))!;
+    const campaign = (await env.campaign())!;
+    expect(before).toMatchObject({ state: "failed", remoteStatus: "failed", safeFailure: "definite_failure",
+      reservationCount: 0, lifecycle: { phase: "dispatching" } });
+    const digest = m4UnclaimedFailureDigest(env.authority, run, before);
+    expect(digest).toMatch(/^[a-f0-9]{64}$/);
+    const outcomes = await Promise.allSettled([env.resume(), env.resume()]);
+    expect(outcomes.filter(outcome => outcome.status === "fulfilled")).toHaveLength(1);
+    const resumed = (await env.repository.getRun(id(10)))!;
+    const saved = (await env.repository.getOperation(id(12)))!;
+    expect(resumed).toMatchObject({ status: "queued", activeOperationId: null, counters: run.counters });
+    expect(saved).toMatchObject({ ...before, lifecycle: { ...before.lifecycle, phase: "finished", attemptOutcome: "failed",
+      unresolved: false, endedAtMs: 10 }, m4Continuation: { evidenceDigest: digest, requestDigest: before.m4Preparation!.requestDigest,
+      reference: "explicit-inspected-fixture-continuation", resumedAtMs: 10, runRevision: run.revision,
+      campaignRevision: campaign.revision, nextOperationId: null } });
+    expect(await env.campaign()).toMatchObject({ state: "active", requests: 0, settledMicrodollars: 0, reservedMicrodollars: 0 });
+    expect(m4UnclaimedFailureDigest(env.authority, resumed, saved)).toBe(digest);
+    expect(m4UnclaimedFailureDigest(env.authority, { ...resumed, generationCompletedAtMs: 20 }, saved)).toBe(digest);
+    await env.verify();
+    expect(await env.resume()).toEqual(resumed);
+    await env.dispatcher.inspect({ runId: id(10), operationId: id(12) });
+    vi.mocked(env.runtime.retrieve).mockResolvedValueOnce({ kind: "unknown" });
+    await env.dispatcher.inspect({ runId: id(10), operationId: id(12) });
+    expect(await env.repository.getRun(id(10))).toEqual(resumed);
+    const next = await env.repository.prepareOperation({ runId: id(10), operationId: id(60), expectedRevision: resumed.revision,
+      role: "manager", taskId: null, subjectKind: "book", subjectId: id(11), inputFingerprint: "c".repeat(64),
+      attempt: 1, providerKind: "text", nowMs: 11 });
+    expect(next.m4ContinuedFromOperationId).toBe(id(12));
+    expect((await env.repository.getOperation(id(12)))!.m4Continuation!.nextOperationId).toBe(id(60));
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it.each(["no_grant", "claimed", "uncertain", "output", "expired_ownership", "publication", "stop", "artifact"] as const)(
+    "rejects %s without consuming authority or changing accounting", async kind => {
+      const env = await failedFixture(kind !== "no_grant");
+      if (kind === "claimed") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { reservationCount: 1 } });
+      if (kind === "uncertain") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { remoteStatus: "running" } });
+      if (kind === "output") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { resultJson: "{}" } });
+      if (kind === "expired_ownership") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { authorizationClaim: { id: id(90), expiresAtMs: 1 } } });
+      if (kind === "publication") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { verifiedWorkflowId: id(99) } });
+      if (kind === "stop") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { "lifecycle.stop": { requestedAtMs: 7, reason: "manual", delivery: "acknowledged" } } });
+      if (kind === "artifact") await env.db.collections.artifact_versions.insertOne({ _id: id(90), artifactId: id(91), versionNumber: 1,
+        schemaVersion: "2", contentJson: "{}", dependencyVersionIdsJson: "[]", createdBy: "fixture", sourceVersionId: null,
+        sourceExecutionBatchId: null, sourceOperationId: id(12), createdAtMs: 7 });
+      const before = { run: await env.repository.getRun(id(10)), op: await env.repository.getOperation(id(12)), campaign: await env.campaign() };
+      await expect(env.resume()).rejects.toThrow();
+      expect({ run: await env.repository.getRun(id(10)), op: await env.repository.getOperation(id(12)), campaign: await env.campaign() }).toEqual(before);
+      expect(env.runtime.start).not.toHaveBeenCalled();
+    });
+
+  it("blocks a conflicting historical terminal observation without provider work", async () => {
+    const env = await failedFixture(); await env.resume();
+    vi.mocked(env.runtime.retrieve).mockResolvedValueOnce({ kind: "execution", execution: { ...env.execution, status: "succeeded" } });
+    await env.dispatcher.inspect({ runId: id(10), operationId: id(12) });
+    expect(await env.repository.getRun(id(10))).toMatchObject({ status: "blocked", safeFailure: "definite_failure" });
+    expect(await env.campaign()).toMatchObject({ requests: 0, settledMicrodollars: 0, reservedMicrodollars: 0 });
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+});
 
 describe("M4 original authenticated provider observation", () => {
   it("does not classify a failed saved-operation read as malformed creative output", async () => {

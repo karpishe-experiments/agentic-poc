@@ -27,6 +27,7 @@ import { m4Hash, m4RequestBundleMatches, m4RequestDefinition, type M4RequestSele
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
+import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { reportCleanup } from "@/lib/operations/completion-failure";
 import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
@@ -309,7 +310,9 @@ export function createExperimentRepository(database: Database, options: { store?
             run.activeOperationId !== null || run.preparation || !hasM4SimulatedImagePolicy(run) || !failed ||
             failed.state !== "failed" || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
             run.generationCompletedAtMs != null ||
-            failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false || failed.lifecycle.stop ||
+            !failed.lifecycle || failed.lifecycle.stop ||
+            (!m4UnclaimedFailureDigest(options.m4Authority, run, failed) &&
+              (failed.lifecycle.phase !== "finished" || failed.lifecycle.unresolved !== false)) ||
             !await hasM4KnownFailure(database, session, options.m4Authority, run, failed, input.nowMs)) {
           throw new ExperimentRepositoryError("invalid_state", "Blocked run needs an exact inspected continuation grant.");
         }
@@ -459,9 +462,13 @@ export function createExperimentRepository(database: Database, options: { store?
     });
   }
 
-  async function claimOperation(raw: unknown): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked";
+  async function claimOperation(raw: unknown, verifiedM4Dispatch?: { workflowId: string; workflowTaskId?: string }): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked";
     operation: ExperimentOperationDocument; imageRequest?: z.infer<typeof experimentImageRequestSchema> }> {
     const input = parse(claimInput, raw);
+    // Internal evidence from the authorization handler's authenticated Dify GET.
+    // Public callback bodies cannot supply this separate argument.
+    const verified = verifiedM4Dispatch && parse(z.strictObject({ workflowId: opaqueIdSchema,
+      workflowTaskId: opaqueIdSchema.optional() }), verifiedM4Dispatch);
     const startedAt = elapsedNow();
     const nowMs = () => input.nowMs + Math.floor(elapsedNow() - startedAt);
     const claimId = randomUUID();
@@ -469,23 +476,42 @@ export function createExperimentRepository(database: Database, options: { store?
     let failure: unknown;
     let claimed: ExperimentOperationDocument | null = null;
     try {
-    claimed = await operations.findOneAndUpdate({ _id: input.operationId, runId: input.runId,
+    claimed = await measurePhase(input, "authorization_lease", () => operations.findOneAndUpdate({ _id: input.operationId, runId: input.runId,
       state: "prepared", reservationCount: 0,
       $and: [
         { $or: [{ workflowRunId: null }, { workflowRunId: input.workflowRunId }] },
         { $or: [{ dispatchStartedAtMs: null }, { parentWorkflowRunId: input.parentWorkflowRunId }] },
         { $or: [{ authorizationClaim: null }, { "authorizationClaim.expiresAtMs": { $lte: input.nowMs } }] },
       ],
-    }, { $set: { authorizationClaim: { id: claimId, expiresAtMs: input.nowMs + 60_000 } } }, { returnDocument: "after" });
+    }, { $set: { authorizationClaim: { id: claimId, expiresAtMs: input.nowMs + 60_000 } } }, { returnDocument: "after" }));
       const completed = await withMongoTransaction<Awaited<ReturnType<typeof claimOperation>>>(database, async (session) => measurePhase(
         { runId: input.runId, operationId: input.operationId }, "authorization_transaction", async () => {
-      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      let operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs != null && operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Claim parent differs from dispatch.");
       // No public route/config enables this internal seam. Focused fake-provider
       // tests can exercise the whole protected claim before later readiness wiring.
       if (run.mode === "real" || run.mode === "balanced" && (!campaignLedger || options.m4ExecutionEnabled !== true)) return { started: false, reason: "blocked", operation };
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
+      if (verified) {
+        const expected = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown)
+          .find(item => item.role === operation.role && item.taskId === operation.taskId);
+        if (run.mode !== "balanced" || operation.mode !== "balanced" || operation.providerKind !== "text" ||
+            operation.dispatchStartedAtMs == null || !expected || expected.publishedWorkflowId !== verified.workflowId ||
+            operation.verifiedWorkflowId && operation.verifiedWorkflowId !== verified.workflowId ||
+            verified.workflowTaskId && operation.workflowTaskId && operation.workflowTaskId !== verified.workflowTaskId) {
+          throw new ExperimentRepositoryError("conflict", "Authenticated dispatch evidence differs from the saved operation.");
+        }
+        // Persist identity even when a concurrent Pause denies provider admission.
+        // On success this metadata commits with the reservation in this transaction.
+        const metadata = { workflowRunId: input.workflowRunId, verifiedWorkflowId: verified.workflowId,
+          ...(verified.workflowTaskId ? { workflowTaskId: verified.workflowTaskId } : {}) };
+        if (operation.workflowRunId !== metadata.workflowRunId || operation.verifiedWorkflowId !== metadata.verifiedWorkflowId ||
+            verified.workflowTaskId && operation.workflowTaskId !== verified.workflowTaskId) {
+          await operations.updateOne({ _id: operation._id, runId: run._id }, { $set: { ...metadata, updatedAtMs: input.nowMs } }, { session });
+          operation = { ...operation, ...metadata };
+        }
+      }
       if (operation.state !== "prepared") return { started: false, reason: "already_started", operation };
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
       if (operation.deadlineAtMs != null && input.nowMs >= operation.deadlineAtMs) {
@@ -526,10 +552,12 @@ export function createExperimentRepository(database: Database, options: { store?
         if (deployment?.draining || deployment?.maintenance) return { started: false, reason: "blocked", operation };
       }
       if (run.mode === "balanced" && operation.providerKind === "text") {
-        const prepared = await assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "claim");
+        const prepared = await measurePhase(input, "authorization_sources", () =>
+          assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "claim"));
         if (nowMs() >= operation.deadlineAtMs! || lease.expiresAtMs <= nowMs()) return { started: false, reason: "blocked", operation };
         try {
-          await campaignLedger!.reserve(session, run, operation, prepared.requestDigest, nowMs());
+          await measurePhase(input, "authorization_reservation", () =>
+            campaignLedger!.reserve(session, run, operation, prepared.requestDigest, nowMs()));
         } catch (error) {
           // Allowance checks precede all reservation writes. Preserve the
           // unstarted dispatch for observation; never replay it as a new request.

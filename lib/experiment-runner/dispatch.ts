@@ -8,6 +8,7 @@ import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
+import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import { createExperimentSheetAssembly } from "@/db/experiment-sheets";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -256,6 +257,18 @@ export function createExperimentDispatcher(deps: {
     const binding = bindingFor(operation, run);
     if (result.kind === "conflict") {
       await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+      return;
+    }
+    if (current.m4Continuation && current.reservationCount === 0) {
+      const digest = authority ? m4UnclaimedFailureDigest(authority, run, current) : null;
+      if (!digest || digest !== current.m4Continuation.evidenceDigest ||
+          current.m4Continuation.requestDigest !== current.m4Preparation?.requestDigest ||
+          result.kind === "execution" && (result.execution.id !== current.workflowRunId ||
+            result.execution.workflow_id !== current.verifiedWorkflowId || result.execution.status !== "failed")) {
+        await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+      }
+      // A matching terminal read or unavailable lookup cannot replay or reopen
+      // an inspected unclaimed failure, and there is no provider wrapper.
       return;
     }
     if (current.m4Continuation && result.kind === "execution" && (result.execution.id !== current.workflowRunId ||

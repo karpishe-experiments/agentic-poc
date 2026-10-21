@@ -11,6 +11,7 @@ import { assessM4ProviderResult } from "@/lib/experiment-runner/m4-provider-resu
 import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { m4Digest, m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
   nowMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) });
@@ -22,6 +23,12 @@ const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSc
 export async function hasM4KnownFailure(database: Database, session: ClientSession,
   authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number): Promise<boolean> {
   const ledger = createExperimentCampaignLedger(database, authority);
+  if (m4UnclaimedFailureDigest(authority, run, op)) {
+    const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
+    return !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
+      campaign.grantReference === ledger.grant.reference &&
+      !await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } });
+  }
   const prep = op?.m4Preparation, reservation = op?.m4Reservation, observation = op?.m4Observation;
   if (!run || !op || !prep || !reservation || !observation || run.mode !== "balanced" || op.mode !== "balanced" ||
       op.providerKind !== "text" || op.role === "image" || op.reservationCount !== 1 || !op.workflowRunId || op.dispatchStartedAtMs == null ||
@@ -77,6 +84,8 @@ export async function closeM4KnownFailure(database: Database, authority: M4Autho
     const run = await database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
     const op = await database.collections.experiment_operations.findOne({ _id: input.operationId, runId: input.runId }, { session });
     if (!run || !op || !await hasM4KnownFailure(database, session, authority, run, op, input.nowMs)) return "deferred";
+    // Exact Resume owns unclaimed lifecycle closure and continuation together.
+    if (m4UnclaimedFailureDigest(authority, run, op)) return "deferred";
     const observation = op.m4Observation!;
     if (op.state === "failed" && op.safeFailure === "definite_failure" && op.lifecycle?.phase === "finished" &&
         op.lifecycle.unresolved === false && (op.m4Continuation && op.m4Continuation.evidenceDigest === op.m4Observation?.evidenceDigest ||
