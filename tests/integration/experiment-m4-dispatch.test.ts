@@ -16,6 +16,7 @@ import { createExperimentContextService } from "@/lib/experiment-runner/context"
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 import { m4ModelOutputSchema, m4RequestBundleHash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+import * as m4Request from "@/lib/experiment-runner/m4-request";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
@@ -515,6 +516,30 @@ describe("focused J11 retained completion recovery", () => {
       withOperationBudget(env.now() + 150_000, () => service.apply(...args), { now: env.now }) };
     return { ...env, service: boundedService, target: { runId: env.runId, operationId: env.operation._id, expectedRevision: env.run.revision } };
   }
+
+  it.each(["snapshot.invariants", "preview.digest"])("managerRecovery diagnostic identifies %s failure without mutation", async stage => {
+    const env = await supportedRecovery(true);
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const uploads = env.uploadReference.mock.calls.length;
+    const original = m4Request.m4CanonicalJson;
+    const hash = vi.spyOn(m4Request, "m4CanonicalJson").mockImplementation(value => {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const row = value as Record<string, unknown>;
+        if (stage === "snapshot.invariants" ? "m4Preparation" in row && !("state" in row) : "target" in row && "snapshot" in row && "grant" in row) {
+          throw new Error("private retained value must not escape");
+        }
+      }
+      return original(value);
+    });
+    try {
+      await expect(env.service.preview(env.target)).rejects.toMatchObject({ code: "inspection_or_verification_failed", stage,
+        errorKind: "Error", diagnostic: { elapsedMs: expect.any(Number) } });
+      expect(await env.repository.getOperation(env.operation._id)).toEqual(env.operation);
+      expect(await env.repository.getRun(env.runId)).toEqual(env.run);
+      expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+      expect(env.uploadReference).toHaveBeenCalledTimes(uploads);
+    } finally { hash.mockRestore(); }
+  });
 
   it("managerRecovery preserves the original J12 delegation through verified recovery, duplicate inspection and same-run Resume", async () => {
     const env = await supportedRecovery(true);
