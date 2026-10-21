@@ -1,9 +1,106 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid-only continuation. Recovery and normal delivery completed; the same Kid advanced, then stopped at an unclaimed manager authorization timeout. Parent and Creator are on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** Kid-only continuation is blocked at the input-count guard after successful reviewed delivery. The context/provider/recovery correction is local and awaiting final review and delivery. Parent and Creator remain on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current execution record - 2026-10-21
+
+**Immediate scope:** Complete the same Kid only. Parent and Creator remain on hold.
+M4 is incomplete. Preserve the conditional USD 5 ceiling, cumulative request limits,
+original failures and reservations. J11 and the recovered J12 manager completion
+are already saved; do not reconcile either again.
+
+PR #222 merged into master at `66872aa4a9e59d17113039aca59febe6e4eff94f`.
+PR #223 merged into staging at `bb56ee7a7ba4150978a45743c67868f161d91f63`.
+Normal deployment `39578653307-1` passed; status `39579742615` confirmed complete
+and archived. Image:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:89a2e9102a4ee5c17f66c62817ac4af9406998344bf823a651c2ad9e6b2f5a6c`.
+Backup `staging-20261021T094343Z-c8ba57ad2f61038e` remains retained.
+Application preflight verified ready/idle and manager publication
+`64d08408-4ab7-4413-a5a1-0fccadd2ff26`; the eighteen normal bindings remain selected.
+
+One explicit continuation advanced Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`
+from 38 to 41 admitted text requests and five to seven simulated images.
+The latest readback (revision 1202) is blocked/unknown_outcome with Pause requested and exact manager
+operation `7d490c15-5ae1-4276-83ce-7d86a0da7ba4` retained. Generation and both
+reports remain incomplete. The operation retains an acknowledged deadline Stop;
+recovery must preserve that Stop and its timeout history. Stop was requested about
+29 seconds before the full deadline, inside the existing 30-second reconciliation
+window. The proof accepts that window but requires the full deadline to expire
+before recovery. Paid images remain zero. Accounting retains USD
+0.041924 reserved, USD 0.065726 settled upper bound and USD 4.892350 remaining;
+invoice cost remains unavailable and the count-fee assumption remains conditional.
+
+Authenticated Dify execution `a90fe27f-1644-4eb8-8d8b-7c409600d2a9` is failed.
+Fresh run/node readback matches the run and operation: authorization succeeded in
+635 ms, then the manager LLM node stopped at the dev2 input-count guard in 475 ms.
+Dify reports zero generation tokens. The exact count is unavailable: dev2 uses the
+same error for a count above 32,000 and a missing/malformed count. Its reviewed
+source proves this guard precedes generation. This is not proof of a free count
+request; preserve the entire reservation. One normal Inspect retained the failed
+remote status without replay or reservation release.
+
+The retained manager context contains 114,101 characters, including 112,502
+characters of current artifact bodies. The correction projects routing metadata,
+current versions, approval/delegation and dependency identities instead. Complete
+manager requests have a 16 KiB preparation guard. Reports retain creative content,
+lettering, reference identities, approvals and accounting, while excluding assembled
+image prompts and duplicate style modules. The initial 64 KiB report guard failed
+the offline fixture at 80,310 context bytes; the engineering default is 128 KiB.
+The exact provider limit remains 32,000 tokens. Byte guards do not establish token
+counts or live completion. The final offline tester/judge requests measured 93,685
+and 94,081 bytes and completed with fake providers. Focused verification also passed
+46 provider-bookkeeping cases, 88 affected units, the recovery-to-completion Kid
+fixture, five existing context/manager-recovery cases, typecheck, focused lint and
+118 local documentation links/anchors. Unchanged deployment shell evidence is reused;
+the canonical dispatcher and shell suites are unchanged by this application bundle.
+
+The dev3 adapter returns distinct structured pre-generation failures for excessive,
+unavailable, invalid or failed counts. It records sanitized adapter/request/count
+identity and never generates or retries on those paths. Booklet closes owned
+bookkeeping, retains the maximum reservation and requires explicit continuation.
+Successful v1 results and historical preparations remain compatible. The exact
+legacy failure uses separate reviewed recovery provenance, not a fabricated
+provider result or usage record. Existing candidate preview/apply controls close
+it with the campaign stopped and run blocked with Pause requested, ready for a separate normal
+deployment and explicitly granted continuation. Only an acknowledged deadline
+Stop is compatible with this exact proof; manual or uncertain Stops remain blocked.
+The proof pins the original Stop. No dispatcher installation is needed for this
+application correction.
+
+**Delivery dependency:** The serving app repeats deadline observation every five
+seconds and increments the blocked run revision. The existing candidate workflow
+previews before it closes admission, so an exact-revision preview cannot be relied
+on while that writer remains active. Pause does not stop observation. Do not attempt
+live recovery in that state. The narrow recommendation is one separately approved
+operator invocation of the existing application maintenance command under the host
+lock, with exact release/container checks. Then verify closed admission, zero
+owners and a stable revision before the existing preview/apply. This needs no
+record repair or installed script. It is not yet executed or an exposed workflow
+capability. Do not substitute the historical bootstrap repair or weaken revision
+checks to avoid this boundary.
+
+The unsigned candidate package is
+`output/issue65-openai-plugin-audit/openai-1.0.7-dev3.difypkg`, 489,522 bytes,
+SHA-256 `73a17b49621352aad86a6ae53f9559d9ed62d39e459930967dffcd8afa783e2f`.
+Only its manifest version and bounded adapter differ from dev2. All 29 Python
+provider cases pass against its extracted bytes. It is not installed. Existing
+Dify-held credentials are reused; no new secret or transfer is introduced.
+
+**Next:** Complete final focused checks, two clean independent reviews and lean CI,
+then publish one combined correction. Resolve the observation-quiescence checkpoint,
+then use supported recovery for this exact count
+failure, deliver staging normally, install the reviewed provider through one
+bounded signature window and restore verification. Read back identities, admission,
+saved outputs and accounting before continuing the same Kid once. Require all
+J01-J13 outputs, three story pages plus cover, approvals/assets, tester feedback,
+independent judge assessment and durable accounting. A new unsupported failure
+requires evidence and package reassessment before another delivery cycle.
+
+<details>
+<summary>Retained earlier execution evidence and superseded next-step statements</summary>
+
+## Retained earlier execution evidence - 2026-10-21
 
 **Immediate scope:** Complete the existing Kid only. Parent and Creator are on
 hold. M4 remains incomplete until all required personas eventually pass; Kid
@@ -87,8 +184,6 @@ automatic provider retry or manual saved-output repair is authorized. The origin
 manager inner error and first preview failure remain unproven. A new unsupported
 failure requires evidence and package reassessment before another delivery cycle.
 
-<details>
-<summary>Retained earlier execution evidence and superseded next-step statements</summary>
 
 ## Retained execution evidence - 2026-10-20
 

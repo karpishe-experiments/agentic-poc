@@ -704,3 +704,26 @@ grant, and normal post-checkpoint mutable checks remain. Test changes to unrelat
 retained rows during the authenticated GET, not only target revision changes.
 A read-only status workflow must also bypass the mutation queue it observes;
 retain the original group and host lock for mutating actions.
+
+### Bound context for its consumer and retain pre-generation evidence
+
+The M4 Kid manager received 114,101 context characters as completed page images
+added full artifact bodies and assembled prompts. Routing needs current status,
+version, approval and dependency identities; independent reports need creative
+content. Use explicit projections for each consumer and measure the remaining
+journey through both reports. The first proposed 64 KiB report byte guard failed
+the offline fixture at 80,310 context bytes. Byte limits do not prove model token
+counts; retain the independent exact-token guard and fail visibly rather than
+truncate required evidence.
+
+The dev2 count guard threw before generation without returning structured
+evidence. Authenticated terminal failure and zero reported generation tokens did
+not satisfy the normal accounting proof, so the maximum reservation remained
+uncertain. Return typed, sanitized pre-generation evidence at the provider
+boundary; preserve exposure and require explicit continuation. Legacy recovery
+must use separate provenance from reviewed code and authenticated execution,
+without creating a provider result or usage record retroactively.
+
+Evidence: the current [M4 record](M4-balanced.md#current-execution-record---2026-10-21),
+bounded provider tests and the count-failure/recovery/deployment/Resume Kid fixture.
+Promotion target: provider-boundary and role-context test guidance.

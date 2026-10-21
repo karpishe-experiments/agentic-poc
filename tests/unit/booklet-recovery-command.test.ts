@@ -187,12 +187,14 @@ describe("supported booklet recovery command", () => {
       expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain("private");
     } finally { mocks.budgetError = undefined; }
   });
-  it("durably checkpoints before mutation and returns a duplicate without replay", async () => {
+  it.each(["completed", "failure_closed"])("durably checkpoints %s and returns a duplicate without replay", async outcome => {
+    mocks.verify.mockResolvedValue({ verified: true, outcome });
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
     expect(mocks.events.indexOf("sync")).toBeLessThan(mocks.events.indexOf("apply"));
     expect(JSON.parse(mocks.files.get("/recovery/application-recovery.json")!).phase).toBe("completed");
     vi.resetModules(); await import("@/scripts/booklet-recovery");
     expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toMatchObject({ verified: true, outcome, repeated: true });
   });
   it("does not replay an uncertain mutation or falsely complete its checkpoint", async () => {
     mocks.mutationError = new Error("private details");
@@ -203,7 +205,8 @@ describe("supported booklet recovery command", () => {
     expect(mocks.apply).toHaveBeenCalledOnce(); expect(process.exitCode).toBe(1);
     expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain("private details");
   });
-  it("verifies a lost commit response without writes or replay", async () => {
+  it.each(["completed", "failure_closed"])("verifies a lost %s response without writes or replay", async outcome => {
+    mocks.verify.mockResolvedValue({ verified: true, outcome });
     mocks.verify.mockRejectedValueOnce(new Error("lost response"));
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
     const checkpoint = mocks.files.get("/recovery/application-recovery.json"); const writes = mocks.events.length;

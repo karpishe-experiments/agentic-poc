@@ -177,6 +177,29 @@ function modelOutputSchema(selector: M4RequestSelector, providerLayout: boolean)
     z.strictObject({ result: selector.role === "manager" ? z.union(managerOptions) : decisionOptions[0] });
 }
 const managerRunFields = ["bookletId", "brief", "persona", "currentArtifacts", "pendingDecision", "activeDelegation", "creatorMessages", "counters", "limits", "generationStatus"];
+const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+// Routing consumes status and provenance. Creative bodies belong to specialists
+// and independent reports, and otherwise grow with every completed image.
+function artifactProjection(raw: unknown, report: boolean): Record<string, unknown> {
+  const artifact = record(raw);
+  const current = list(artifact.versions).map(record).find(version => version.id === artifact.currentVersionId);
+  if (!report) return { ...Object.fromEntries(["id", "taskId", "subjectKind", "subjectId", "state", "currentVersionId"].map(key => [key, artifact[key]])),
+    approvalId: record(current?.approval).id ?? null, delegationId: record(current?.approval).delegationId ?? null,
+    dependencyVersionIds: current?.dependencyVersionIds ?? [] };
+  return { ...Object.fromEntries(["id", "taskId", "subjectKind", "subjectId", "state", "currentVersionId"].map(key => [key, artifact[key]])),
+    versions: list(artifact.versions).filter(raw => record(raw).id === artifact.currentVersionId).map(raw => {
+      const version = record(raw);
+      return { ...Object.fromEntries(["id", "number", "dependencyVersionIds", "warnings", "sourceVersionId", "sourceOperationId", "approval"].map(key => [key, version[key]])),
+        content: reportContent(version.content, artifact.taskId === "J08") };
+    }) };
+}
+function reportContent(raw: unknown, keepStyleModule: boolean, parentKey = ""): unknown {
+  if (Array.isArray(raw)) return raw.map(value => reportContent(value, keepStyleModule));
+  if (!raw || typeof raw !== "object") return raw;
+  return Object.fromEntries(Object.entries(record(raw)).filter(([key]) => !(key === "prompt" && ["build", "request"].includes(parentKey)) &&
+    (keepStyleModule || key !== "stylePromptModule")).map(([key, value]) => [key, reportContent(value, keepStyleModule, key)]));
+}
 function projectionFields(selector: M4RequestSelector) {
   return selector.role === "manager" ? ["role", "run", "eligibleRoute", "eligibleTarget"] : selector.role === "specialist" ?
     ["role", "taskId", "subjectKind", "subjectId", "brief", "persona", "currentTarget", "approvedSources", "matchingRevision", "questionAnswers"] : selector.report ?
@@ -190,8 +213,16 @@ export function projectM4Context(selector: M4RequestSelector, raw: unknown, oper
   if (selector.role === "manager") {
     const run = context.run as Record<string, unknown>;
     result.run = Object.fromEntries(managerRunFields.map((name) => [name, run[name]]));
+    (result.run as Record<string, unknown>).currentArtifacts = list(run.currentArtifacts).map(value => artifactProjection(value, false));
   }
-  if (selector.report && Array.isArray(result.operationHistory)) result.operationHistory = result.operationHistory.filter((row) => (row as { id?: string }).id !== operationId);
+  if (selector.report) result.currentArtifacts = list(result.currentArtifacts).map(value => artifactProjection(value, true));
+  if (selector.report && Array.isArray(result.operationHistory)) result.operationHistory = result.operationHistory
+    .filter((row) => (row as { id?: string }).id !== operationId)
+    .map(raw => {
+      const row = record(raw);
+      return Object.fromEntries(["id", "role", "taskId", "state", "workflowRunId", "parentWorkflowRunId", "verifiedWorkflowId",
+        "reservationCount", "safeFailure", "remoteStatus", "elapsedMs", "deadlineAtMs", "countFailure"].filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]]));
+    });
   return result;
 }
 export type M4AllowedValues = Readonly<Record<string, readonly string[]>>;
@@ -260,7 +291,9 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
     instruction = `Act as the saved ${persona} creator persona. Give a meaningful decision on the current pending work using exact supplied versions/question/grant identities. Preserve current delegation: do not repeat an existing valid grant. Kid/Parent may delegate routine approvals. Creator must explicitly approve current artifacts and exercise the saved detailed control/revision requirement; never delegate around it. Use saved revisionCounts and creator messages to avoid repeating a completed control. Answer clarifications from the saved goal. Revise missing or technically invalid content, or fulfill an explicit saved creator control; advisory quality findings alone do not require another attempt.`;
   }
   const definition = { version: "m4_request_v1", rendering: "exact-context-string-v1", role, taskId, persona, report,
-    projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [] },
+    projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
+      ...(role === "manager" || report ? { artifactProjection: "current-provenance-v2", creativeContent: report } : {}) },
+    preparationByteLimit: role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null,
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
   return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
 }
@@ -318,6 +351,10 @@ export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, 
     max_output_tokens: model.maxOutputTokens, reasoning: { effort: model.reasoningEffort, mode: "standard" }, service_tier: "default",
     text: { format }, store: false, truncation: "disabled", include: ["reasoning.encrypted_content"] };
   const requestJson = m4CanonicalJson(payload);
+  const requestByteLimit = definition.preparationByteLimit;
+  if (requestByteLimit !== null && Buffer.byteLength(requestJson, "utf8") > requestByteLimit) {
+    throw new Error(`M4 ${selector.role === "manager" ? "manager" : "report"} request exceeds its preparation byte limit; required content was not truncated.`);
+  }
   return { definitionHash: definition.hash, requestJson, requestDigest: m4Hash(requestJson),
     systemPrompt: definition.systemPrompt, contextJson, modelParameters: { max_tokens: model.maxOutputTokens,
       reasoning_effort: model.reasoningEffort, reasoning_mode: "standard", service_tier: "default", response_format: "json_schema",

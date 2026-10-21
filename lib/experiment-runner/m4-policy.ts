@@ -51,14 +51,23 @@ export type M4Policy = z.infer<typeof m4PolicySchema>;
 export type M4ModelBucket = keyof M4Policy["models"];
 export const m4ContinuationGrantSchema = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
   reference: z.string().min(1).max(500) });
+export const legacyCountRecoveryGrantSchema = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
+  workflowRunId: opaqueIdSchema, publishedWorkflowId: opaqueIdSchema, pluginIdentity: m4PolicySchema.shape.pluginIdentity,
+  guardSourceSha256: m4Digest, nodeTraceDigest: m4Digest, reference: z.string().min(1).max(500) });
 export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, reference: z.string().min(1).max(500),
   continuations: z.array(m4ContinuationGrantSchema).max(20).optional(),
   completionRecoveries: z.array(m4ContinuationGrantSchema).max(20).optional(),
+  preGenerationRecoveries: z.array(legacyCountRecoveryGrantSchema).max(1).optional(),
   requestDefinitionUpdate: z.strictObject({ fromBundleHash: m4Digest, toBundleHash: m4Digest,
     reference: z.string().min(1).max(500) }).optional(),
+  providerAdapterUpdate: z.strictObject({ fromIdentity: m4PolicySchema.shape.pluginIdentity,
+    version: z.literal("1.0.7-dev3"), packageSha256: m4Digest, reference: z.string().min(1).max(500) }).optional(),
 }).superRefine((grant, context) => {
   const keys = [...grant.continuations ?? [], ...grant.completionRecoveries ?? []].map((item) => item.operationId);
   if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: "Continuation operations must be unique." });
+  if (grant.preGenerationRecoveries?.some(item => grant.completionRecoveries?.some(other => other.operationId === item.operationId))) {
+    context.addIssue({ code: "custom", message: "Recovery operations must have one exact recovery kind." });
+  }
 });
 export type M4Grant = z.infer<typeof m4GrantSchema>;
 
