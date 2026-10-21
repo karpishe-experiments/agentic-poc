@@ -7,7 +7,7 @@
 - **Guidance:** Give each turn an unpredictable application-owned ID. Require it in mutating tools, check it in the write condition, and do not reveal a later turn's ID to an earlier turn.
 - **Evidence:** `lib/dify-experiment/service.ts`, `lib/dify-experiment/http.ts`, and `tests/integration/dify-experiment.test.ts`.
 - **Promotion target:** Documentation for future third-party agent integrations.
-- **Status:** Candidate; live Dify behavior is not yet verified.
+- **Status:** Candidate; integration checks and live Dify `409 stale_run` rejection are verified. See [verification.md](verification.md).
 
 ## Candidate: Encode inline Dify object parameters as JSON text
 
@@ -34,7 +34,7 @@
 - **Guidance:** Use Code only to validate file metadata and return a scalar result. After validation, use a List Operator to select `first_record` and bind that file to the HTTP binary body. Do not return a file through Code or bind an `array[file]` directly to a Binary body.
 - **Evidence:** The target-workspace `CodeNodeData` validation error, Dify's `web/app/components/workflow/nodes/http/components/edit-body/index.tsx`, [illustrate-panel.yml](illustrate-panel.yml), and `tests/unit/dify-experiment-openapi.test.ts`.
 - **Promotion target:** Documentation for Dify workflows that upload generated files.
-- **Status:** Candidate; schema validation is verified, while a live binary upload remains incomplete.
+- **Status:** Candidate; schema validation and transport to Booklet were exercised live. The original upload was rejected for dimensions; browser recovery completed storage. Automatic storage through the final workflow remains unverified.
 
 ## Candidate: Check Dify publication separately from import and branch execution
 
@@ -43,7 +43,7 @@
 - **Guidance:** Check the publish checklist as a separate checkpoint. Use globally unique End output names, the text editor's mixed-variable representation for prompts, and explicit List Operator array/item types. Inspect both upload and recovery file selectors.
 - **Evidence:** The operator's publish checklist, Dify's [text-input helper](https://github.com/langgenius/dify/blob/main/web/app/components/workflow/nodes/_base/components/form-input-item.helpers.ts) and [List Operator helper](https://github.com/langgenius/dify/blob/main/web/app/components/workflow/nodes/list-operator/use-config.helpers.ts), and `tests/unit/dify-experiment-openapi.test.ts`.
 - **Promotion target:** Dify import and verification documentation.
-- **Status:** Candidate; local contract checks pass. Target-workspace publication and paid generation still require verification.
+- **Status:** Candidate; publication and generation were subsequently exercised in the target workspace. A fresh import of the final DSL remains unverified; see [verification.md](verification.md).
 
 ## Candidate: Isolate storage writes by completion claim
 
@@ -68,6 +68,15 @@
 - **Context:** A generated image exists, but a strict preferred-size check prevents the experiment from completing.
 - **Observation:** Focused tests can preserve original PNG/JPEG/WebP bytes and complete recovery with warnings while retaining approval, attempt caps, digest identity, and concurrent-write protection.
 - **Guidance:** Enforce required structure and safety limits. Report quality deviations separately. Validate decoded bytes rather than a filename or MIME label, and provide recovery without another paid call.
-- **Evidence:** `tests/integration/dify-experiment.test.ts` and the shared Dify completion validator.
+- **Evidence:** `tests/integration/dify-experiment.test.ts`, the shared Dify completion validator, and the live recovery recorded in [verification.md](verification.md). The retained 1254 × 1254 PNG completed the existing attempt at `2/2`; reload preserved completion and Resume called only the context tool.
 - **Promotion target:** Experiment-design documentation, not a change to normal Booklet validation.
-- **Status:** Candidate; local tests pass. Live recovery remains a separate checkpoint.
+- **Status:** Candidate; local tests and live recovery pass. A fresh generation-to-upload run through the updated workflow remains unverified.
+
+## Candidate: Automate the external authoring cycle, not only execution
+
+- **Context:** The operator completed the bounded Dify trial and reviewed the setup experience.
+- **Observation:** The operator values configuring agents outside Booklet. Manual authoring, testing, publication, and troubleshooting were difficult. Visual workflows and logs did not remove that effort. Delegation needs broader testing before drawing a reliability conclusion.
+- **Guidance:** Evaluate agent-operated configuration, publication, trace inspection, repair, and verification together. Preserve configuration evidence per run. Keep Booklet authoritative for saved state and spending controls. Do not assume an import or successful rejected-request test proves the complete workflow.
+- **Evidence:** The 2026-09-26 operator interview, publication failures and repairs above, and [verification.md](verification.md).
+- **Promotion target:** The [next experiment brief](../../proposed/2026-09-26_dify-booklet-runner/experiment-brief.md). A reusable automation skill is only a candidate until the control interface is verified.
+- **Status:** Operator assessment recorded; unattended end-to-end configuration control is not yet established.
