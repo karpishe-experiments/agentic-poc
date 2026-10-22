@@ -1,3 +1,4 @@
+import { controlState, controlStateProjection } from "@/lib/experiment-runner/control-state";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
@@ -31,6 +32,7 @@ import { operationRecoveryOutcome } from "@/lib/operations/operation-recovery-ou
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
 const control = z.strictObject({ expectedRevision: z.number().int().nonnegative() });
+const runControl = control.extend({ responseMode: z.literal("receipt").optional() });
 const operationControl = z.union([control.extend({ operationId: opaqueIdSchema }), control.extend({ preparationId: opaqueIdSchema })]);
 const pageSelection = control.extend({ batch: experimentPageBatchSchema });
 const failure = identity.extend({ category: z.enum(["definite_failure", "unknown_outcome"]) });
@@ -38,6 +40,7 @@ const result = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{6
 const headers = { "Cache-Control": "no-store" };
 const errorMessages: Record<string, string> = {
   invalid_request: "Request is invalid.", invalid_result: "Result is invalid.", not_found: "Resource was not found.",
+  stale_revision: "The run revision changed. Read its current state.",
   conflict: "Saved state conflicts with the request.", unavailable: "Runner is temporarily unavailable.",
   runner_unavailable: "Runner configuration is unavailable.", unauthorized: "Authentication is required.",
   invalid_origin: "Request origin is not allowed.", mode_unavailable: "This run mode is unavailable.",
@@ -216,7 +219,16 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
     list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
-    detail(request: Request, runId: string) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const view = await services(state).context.getRunView(opaqueIdSchema.parse(runId)); return view ? data(view) : reply(404, "not_found"); }); },
+    detail(request: Request, runId: string) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      const id = opaqueIdSchema.parse(runId);
+      if (new URL(request.url).searchParams.get("view") === "control") {
+        const saved = await database().collections.experiment_runs.findOne({ _id: id }, { projection: controlStateProjection });
+        return saved ? data(controlState(saved)) : reply(404, "not_found");
+      }
+      const view = await services(state).context.getRunView(id);
+      return view ? data(view) : reply(404, "not_found");
+    }); },
     create(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       if (!state.enabled) return reply(503, "runner_unavailable");
@@ -241,18 +253,23 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }); },
     control(request: Request, runId: string, action: "pause" | "resume") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
-      const body = control.parse(await boundedJson(request, 4096));
+      const { responseMode, ...body } = runControl.parse(await boundedJson(request, 4096));
       const { repository, context } = services(state);
-      const saved = await mutate(async () => {
-        const current = await repository.getRun(runId);
-        const input = { runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() };
-        if (action === "resume" && current?.generationCompletedAtMs != null &&
-            (current.status === "blocked" || current.status === "completed" && current.evaluationStatus === "failed")) {
-          return createExperimentCompletionService(database(), store()).completeAdvisoryFailure(input);
-        }
-        return repository[action](input);
-      }, { runId });
-      return data(await context.getRunView(saved._id));
+      try {
+        const saved = await mutate(async () => {
+          const current = await repository.getRun(runId);
+          const input = { runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() };
+          if (action === "resume" && current?.generationCompletedAtMs != null &&
+              (current.status === "blocked" || current.status === "completed" && current.evaluationStatus === "failed")) {
+            return createExperimentCompletionService(database(), store()).completeAdvisoryFailure(input);
+          }
+          return repository[action](input);
+        }, { runId });
+        return data(responseMode === "receipt" ? controlState(saved) : await context.getRunView(saved._id));
+      } catch (error) {
+        if (responseMode === "receipt" && error instanceof ExperimentRepositoryError && error.code === "stale_revision") return reply(409, "stale_revision");
+        throw error;
+      }
     }); },
     selectPages(request: Request, runId: string) { return run(async () => {
       const denied = browserAuth(request, config(), true); if (denied) return denied;

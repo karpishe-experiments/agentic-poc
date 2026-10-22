@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { BookletRunner } from "@/components/experiments/booklet-runner";
 
-const run = { createdAtMs: Date.parse("2026-10-22T08:00:00Z"), updatedAtMs: Date.parse("2026-10-22T09:15:00Z"), runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
+const run = { generationStatus: "in_progress", evaluationStatus: "pending", safeFailure: null, preparation: null, createdAtMs: Date.parse("2026-10-22T08:00:00Z"), updatedAtMs: Date.parse("2026-10-22T09:15:00Z"), runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
 let fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>();
 beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 }));
@@ -205,32 +205,143 @@ describe("booklet runner inspector", () => {
     expect(screen.queryByRole("button", { name: "Start linked successor" })).toBeNull();
     expect(fetchMock.mock.calls.every(([url, options]) => url === `/api/experiments/booklet-runs/${run.runId}` && options?.method !== "POST")).toBe(true);
   });
+  it("retains a completion receipt when the full detail refresh fails", async () => {
+    const blocked = { ...run, status: "blocked", activeOperationId: null, safeFailure: "definite_failure", generationStatus: "complete" };
+    const completed = { ...blocked, status: "completed", safeFailure: null, evaluationStatus: "failed", revision: 3 };
+    let saved = false;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") { saved = true; return Response.json({ data: completed }); }
+      if (saved) throw new Error("Details unavailable");
+      return Response.json({ data: blocked });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Finalize completed booklet" }));
+    expect(await screen.findByText("Change saved. Run details could not be refreshed.")).toBeTruthy();
+    expect(screen.getByText(/Completed . evaluation incomplete/)).toBeTruthy();
+    expect(screen.getByText(/Kite Rescue/)).toBeTruthy();
+    expect(screen.getByText("Saved details are awaiting refresh.")).toBeTruthy();
+    expect(screen.queryByText("The run could not be updated.")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
+  it.each(["lost", "malformed", "missing", "server"])("reconciles a %s response with one compact read and no write replay", async failure => {
+    const paused = { ...run, status: "paused", pauseRequested: true, activeOperationId: null, revision: 3 };
+    let saved = false;
+    fetchMock.mockImplementation(async (url, options) => {
+      if (options?.method === "POST") {
+        saved = true;
+        if (failure === "lost") throw new Error("Lost acknowledgement");
+        if (failure === "missing") return Response.json({});
+        return failure === "malformed" ? Response.json({ data: { status: "paused" } }) : Response.json({ error: { message: "Unavailable" } }, { status: 503 });
+      }
+      return Response.json({ data: url.endsWith("?view=control") || saved ? paused : run });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith("?view=control"))).toBe(true));
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("?view=control"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    expect(screen.queryByText("Change saved.")).toBeNull();
+  });
+  it("keeps mutations disabled after failed reconciliation until a successful refresh", async () => {
+    const paused = { ...run, status: "paused", activeOperationId: null, pauseRequested: true };
+    let attempted = false;
+    let readable = false;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") { attempted = true; throw new Error("lost"); }
+      if (attempted && !readable) throw new Error("read unavailable");
+      return Response.json({ data: paused });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    expect(await screen.findByText("The update could not be confirmed. Check saved status before trying again.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume" }).hasAttribute("disabled")).toBe(true);
+    readable = true;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Resume" }).hasAttribute("disabled")).toBe(false));
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
+  it("does not overwrite a receipt with an older in-flight full read", async () => {
+    const initial = { ...run, status: "paused", pauseRequested: true, activeOperationId: null };
+    let resolveOld!: (response: Response) => void;
+    let reads = 0;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") return Response.json({ data: { ...initial, status: "completed", evaluationStatus: "failed", revision: 3 } });
+      reads += 1;
+      if (reads === 1) return Response.json({ data: initial });
+      if (reads === 2) return new Promise<Response>(resolve => { resolveOld = resolve; });
+      throw new Error("new read unavailable");
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    await screen.findByRole("button", { name: "Resume" });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await screen.findByText("Change saved. Run details could not be refreshed.");
+    await act(async () => resolveOld(Response.json({ data: initial })));
+    expect(screen.getByText(/Completed . evaluation incomplete/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume" }).hasAttribute("disabled")).toBe(true);
+  });
+  it("never retries a generic state rejection as a revision conflict", async () => {
+    fetchMock.mockImplementation(async (_url, options) => options?.method === "POST"
+      ? Response.json({ error: { code: "conflict", message: "Saved state conflicts with the request." } }, { status: 409 })
+      : Response.json({ data: run }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause" }));
+    await screen.findByRole("alert");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("?view=control"))).toHaveLength(0);
+  });
+  it("keeps a newer full-detail revision when an older overlapping read arrives", async () => {
+    const initial = { ...run, status: "paused", pauseRequested: true, activeOperationId: null };
+    const resumed = { ...initial, status: "running", pauseRequested: false, revision: 3 };
+    const complete = { ...resumed, status: "completed", evaluationStatus: "failed", revision: 4 };
+    const pendingReads: ((response: Response) => void)[] = [];
+    let reads = 0;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") return Response.json({ data: resumed });
+      if (++reads === 1) return Response.json({ data: initial });
+      return new Promise<Response>(resolve => { pendingReads.push(resolve); });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    await screen.findByRole("button", { name: "Resume" });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(pendingReads).toHaveLength(2));
+    await act(async () => pendingReads[0](Response.json({ data: initial })));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(pendingReads).toHaveLength(3));
+    await act(async () => pendingReads[2](Response.json({ data: complete })));
+    expect(screen.getByText("Revision 4")).toBeTruthy();
+    await act(async () => pendingReads[1](Response.json({ data: resumed })));
+    expect(screen.getByText("Revision 4")).toBeTruthy();
+    expect(screen.getByText(/Completed . evaluation incomplete/)).toBeTruthy();
+  });
   it("reads current state and retries a definite control conflict once", async () => {
     let writes = 0;
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
       if (options?.method === "POST") {
         writes += 1;
         return writes === 1
-          ? new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 })
+          ? new Response(JSON.stringify({ error: { code: "stale_revision", message: "Saved state conflicts with the request." } }), { status: 409 })
           : new Response(JSON.stringify({ data: { ...run, revision: 5, pauseRequested: true, status: "paused" } }), { status: 200 });
       }
-      return new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...run, revision: 4 } : [run] }), { status: 200 });
+      return new Response(JSON.stringify({ data: (url.endsWith(run.runId) || url.endsWith(`${run.runId}?view=control`)) ? { ...run, revision: 4 } : [run] }), { status: 200 });
     });
     render(<BookletRunner />);
     await screen.findByText("Kite Rescue", { exact: false });
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     await waitFor(() => expect(writes).toBe(2));
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(String(options?.body)).expectedRevision)).toEqual([2, 4]);
-    expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith(run.runId) && options?.cache === "no-store")).toBe(true);
+    expect(fetchMock.mock.calls.some(([url, options]) => (url.endsWith(run.runId) || url.endsWith(`${run.runId}?view=control`)) && options?.cache === "no-store")).toBe(true);
   });
   it("does not repeat a control already applied in the read-back state", async () => {
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => options?.method === "POST"
-      ? new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 })
-      : new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...run, revision: 4, pauseRequested: true, status: "paused" } : [run] }), { status: 200 }));
+      ? new Response(JSON.stringify({ error: { code: "stale_revision", message: "Saved state conflicts with the request." } }), { status: 409 })
+      : new Response(JSON.stringify({ data: (url.endsWith(run.runId) || url.endsWith(`${run.runId}?view=control`)) ? { ...run, revision: 4, pauseRequested: true, status: "paused" } : [run] }), { status: 200 }));
     render(<BookletRunner />);
     await screen.findByText("Kite Rescue", { exact: false });
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith(run.runId))).toBe(true));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => (url.endsWith(run.runId) || url.endsWith(`${run.runId}?view=control`)))).toBe(true));
     await waitFor(() => expect(screen.getByRole("button", { name: "Start selected" }).hasAttribute("disabled")).toBe(false));
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
   });
@@ -238,9 +349,9 @@ describe("booklet runner inspector", () => {
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
       if (options?.method === "POST") {
         if (failure === "lost response") throw new Error("Response lost");
-        return new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 });
+        return new Response(JSON.stringify({ error: { code: "stale_revision", message: "Saved state conflicts with the request." } }), { status: 409 });
       }
-      return new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...run, revision: 4 } : [run] }), { status: 200 });
+      return new Response(JSON.stringify({ data: (url.endsWith(run.runId) || url.endsWith(`${run.runId}?view=control`)) ? { ...run, revision: 4 } : [run] }), { status: 200 });
     });
     render(<BookletRunner />);
     await screen.findByText("Kite Rescue", { exact: false });
@@ -251,8 +362,8 @@ describe("booklet runner inspector", () => {
   it("does not resume a run that became blocked during read-back", async () => {
     const paused = { ...run, status: "paused", pauseRequested: true };
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => options?.method === "POST"
-      ? new Response(JSON.stringify({ error: { code: "conflict", message: "Saved state conflicts with the request." } }), { status: 409 })
-      : new Response(JSON.stringify({ data: url.endsWith(run.runId) ? { ...paused, revision: 4, status: "blocked" } : [paused] }), { status: 200 }));
+      ? new Response(JSON.stringify({ error: { code: "stale_revision", message: "Saved state conflicts with the request." } }), { status: 409 })
+      : new Response(JSON.stringify({ data: (url.endsWith(run.runId) || url.endsWith(`${run.runId}?view=control`)) ? { ...paused, revision: 4, status: "blocked" } : [paused] }), { status: 200 }));
     render(<BookletRunner />);
     await screen.findByRole("button", { name: "Resume" });
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
@@ -294,7 +405,7 @@ describe("booklet runner inspector", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => url === "/api/experiments/booklet-runs" && options?.method === "POST" && new Headers(options?.headers).get("Idempotency-Key") === "00000000-0000-4000-8000-000000000010" && options?.body === JSON.stringify({ persona: "playful_kid", mode: "simulated" }))).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/pause") && options?.body === JSON.stringify({ expectedRevision: 2 }))).toBe(true));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/pause") && options?.body === JSON.stringify({ expectedRevision: 2, responseMode: "receipt" }))).toBe(true));
   });
   it("keeps failed creation for explicit retry and stops polling on unmount", async () => {
     fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => options?.method === "POST" ? Promise.reject(new Error("Connection lost")) : new Response(JSON.stringify({ data: [] }), { status: 200 }));

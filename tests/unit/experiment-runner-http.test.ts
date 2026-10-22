@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import type { ConfigState } from "@/lib/experiment-runner/config";
 import * as repositoryModule from "@/db/experiment-repository";
+import * as contextModule from "@/lib/experiment-runner/context";
+import * as completionModule from "@/db/experiment-completion";
 import type { Database } from "@/db/client";
 import type { AssetStore } from "@/lib/assets/asset-store";
 
@@ -12,6 +14,136 @@ const request = (headers: Record<string, string> = {}, body = "{}") => new Reque
 const imageUrl = "http://localhost:3000/api/experiments/booklet-tools/image?runId=00000000-0000-4000-8000-000000000001&operationId=00000000-0000-4000-8000-000000000002&workflowRunId=00000000-0000-4000-8000-000000000003&inputFingerprint=" + "a".repeat(64);
 
 describe("booklet runner HTTP boundary", () => {
+  const controlRunId = "00000000-0000-4000-8000-000000000001";
+  const savedControl = { _id: controlRunId, revision: 8, status: "paused", pauseRequested: true,
+    generationCompletedAtMs: null, evaluationStatus: "pending", updatedAtMs: 2000,
+    safeFailure: null, activeOperationId: null, preparation: null, configurationJson: "private" };
+  const receiptFor = (saved: Omit<typeof savedControl, "generationCompletedAtMs"> & { generationCompletedAtMs: number | null }) => ({ runId: saved._id, revision: saved.revision,
+    status: saved.status, pauseRequested: saved.pauseRequested,
+    generationStatus: saved.generationCompletedAtMs == null ? "in_progress" : "complete",
+    evaluationStatus: saved.evaluationStatus, updatedAtMs: saved.updatedAtMs,
+    safeFailure: saved.safeFailure, activeOperationId: saved.activeOperationId, preparation: saved.preparation });
+
+  it.each(["pause", "resume"] as const)("acknowledges %s without loading the full run", async (action) => {
+    const saved = { ...savedControl, status: action === "pause" ? "paused" : "running", pauseRequested: action === "pause" };
+    const save = vi.fn().mockResolvedValue(saved);
+    const getRunView = vi.fn().mockRejectedValue(new Error("Detail read unavailable"));
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => ({ ...savedControl, revision: 7 }), [action]: save,
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const ownership = vi.fn();
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {} } as Database),
+        store: () => ({} as AssetStore), mutate: async (operation, options) => { ownership(options); return operation(); } });
+      const response = await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7, responseMode: "receipt" })), controlRunId, action);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ data: receiptFor(saved) });
+      expect(save).toHaveBeenCalledWith({ runId: controlRunId, expectedRevision: 7, nowMs: expect.any(Number) });
+      expect(ownership).toHaveBeenCalledWith({ runId: controlRunId });
+      expect(getRunView).not.toHaveBeenCalled();
+    } finally { repository.mockRestore(); context.mockRestore(); }
+  });
+
+  it("returns a finalization receipt only after tracked mutation cleanup succeeds", async () => {
+    const saved = { ...savedControl, status: "completed", pauseRequested: false, generationCompletedAtMs: 1000, evaluationStatus: "failed" };
+    const completeAdvisoryFailure = vi.fn().mockResolvedValue(saved);
+    const resume = vi.fn();
+    const getRunView = vi.fn().mockRejectedValue(new Error("Detail read unavailable"));
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => ({ ...saved, status: "blocked", revision: 7 }), resume,
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    const completion = vi.spyOn(completionModule, "createExperimentCompletionService").mockReturnValue({ completeAdvisoryFailure } as unknown as ReturnType<typeof completionModule.createExperimentCompletionService>);
+    try {
+      for (const cleanupFails of [false, true]) {
+        const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {} } as Database),
+          store: () => ({} as AssetStore), mutate: async (operation) => { const result = await operation(); if (cleanupFails) throw new Error("Claim cleanup failed"); return result; } });
+        const response = await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7, responseMode: "receipt" })), controlRunId, "resume");
+        expect(response.status).toBe(cleanupFails ? 503 : 200);
+        expect(await response.json()).toEqual(cleanupFails ? { error: { code: "unavailable", message: "Runner is temporarily unavailable." } } : { data: receiptFor(saved) });
+      }
+      expect(resume).not.toHaveBeenCalled();
+      expect(getRunView).not.toHaveBeenCalled();
+      expect(completeAdvisoryFailure).toHaveBeenCalledWith({ runId: controlRunId, expectedRevision: 7, nowMs: expect.any(Number) });
+    } finally { repository.mockRestore(); context.mockRestore(); completion.mockRestore(); }
+  });
+
+  it("keeps the default control and detail response contracts", async () => {
+    const view = { runId: controlRunId, artifacts: [{ artifactId: "retained" }] };
+    const getRunView = vi.fn().mockResolvedValue(view);
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => savedControl, pause: async () => savedControl,
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {} } as Database), store: () => ({} as AssetStore), mutate: (operation) => operation() });
+      const response = await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7 })), controlRunId, "pause");
+      expect(await response.json()).toEqual({ data: view });
+      expect(await (await http.detail(new Request("http://localhost:3000/api/experiments/booklet-runs/" + controlRunId), controlRunId)).json()).toEqual({ data: view });
+      expect(getRunView).toHaveBeenCalledTimes(2);
+    } finally { repository.mockRestore(); context.mockRestore(); }
+  });
+
+  it.each([["invalid_result", 422], ["invalid_state", 409], ["stale_revision", 409]] as const)("does not acknowledge a rejected %s mutation", async (code, status) => {
+    const pause = vi.fn().mockRejectedValue(new repositoryModule.ExperimentRepositoryError(code, "Rejected fixture"));
+    const getRunView = vi.fn();
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => savedControl, pause,
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {} } as Database),
+        store: () => ({} as AssetStore), mutate: (operation) => operation() });
+      const response = await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7, responseMode: "receipt" })), controlRunId, "pause");
+      expect(response.status).toBe(status);
+      const rejected = await response.json();
+      expect(rejected).not.toHaveProperty("data");
+      expect(rejected.error.code).toBe(code === "stale_revision" ? "stale_revision" : code === "invalid_state" ? "conflict" : "invalid_result");
+      const legacy = await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7 })), controlRunId, "pause");
+      expect((await legacy.json()).error.code).toBe(code === "invalid_result" ? "invalid_result" : "conflict");
+      expect(getRunView).not.toHaveBeenCalled();
+    } finally { repository.mockRestore(); context.mockRestore(); }
+  });
+
+  it("projects compact control state without constructing storage or full detail views", async () => {
+    const findOne = vi.fn().mockResolvedValue(savedControl);
+    const store = vi.fn(() => { throw new Error("Control reads must not construct storage"); });
+    const context = vi.spyOn(contextModule, "createExperimentContextService");
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled,
+        database: () => ({ collections: { experiment_runs: { findOne } } } as unknown as Database), store });
+      const url = "http://localhost:3000/api/experiments/booklet-runs/" + controlRunId + "?view=control";
+      const response = await http.detail(new Request(url), controlRunId);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ data: receiptFor(savedControl) });
+      expect(findOne.mock.calls[0][0]).toEqual({ _id: controlRunId });
+      expect(findOne.mock.calls[0][1].projection).toEqual({ _id: 1, revision: 1, status: 1, pauseRequested: 1,
+        generationCompletedAtMs: 1, evaluationStatus: 1, updatedAtMs: 1, safeFailure: 1, activeOperationId: 1, preparation: 1 });
+      expect(store).not.toHaveBeenCalled();
+      expect(context).not.toHaveBeenCalled();
+      findOne.mockResolvedValueOnce(null);
+      expect((await http.detail(new Request(url), controlRunId)).status).toBe(404);
+    } finally { context.mockRestore(); }
+  });
+
+  it("validates receipt controls and authenticates compact reads before database access", async () => {
+    const database = vi.fn(() => { throw new Error("Unexpected database access"); });
+    const http = createBookletRunnerHttp({ config: () => enabled, database });
+    for (const action of ["pause", "resume"] as const) {
+      expect((await http.control(request({ origin: "http://localhost:3001" }, JSON.stringify({ expectedRevision: 7, responseMode: "receipt" })), controlRunId, action)).status).toBe(403);
+      for (const body of [{ expectedRevision: -1, responseMode: "receipt" }, { expectedRevision: 7, responseMode: "unknown" }, { responseMode: "receipt" }]) {
+        expect((await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify(body)), controlRunId, action)).status).toBe(400);
+      }
+    }
+    vi.stubEnv("DEPLOYMENT_ENV", "_staging");
+    vi.stubEnv("ACCESS_GATE_PASSWORD", "fixture-password-long-enough");
+    try {
+      expect((await http.detail(new Request("http://localhost:3000/api/experiments/booklet-runs/" + controlRunId + "?view=control"), controlRunId)).status).toBe(401);
+      expect((await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7, responseMode: "receipt" })), controlRunId, "resume")).status).toBe(401);
+    } finally { vi.unstubAllEnvs(); }
+    expect(database).not.toHaveBeenCalled();
+  });
   it("retains exact mutation ownership for a failure callback", async () => {
     const runId = "00000000-0000-4000-8000-000000000001";
     const operationId = "00000000-0000-4000-8000-000000000002";
