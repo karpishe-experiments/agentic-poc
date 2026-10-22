@@ -64,7 +64,7 @@ export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, refere
   requestDefinitionUpdate: z.strictObject({ fromBundleHash: m4Digest, toBundleHash: m4Digest,
     reference: z.string().min(1).max(500) }).optional(),
   providerAdapterUpdate: z.strictObject({ fromIdentity: m4PolicySchema.shape.pluginIdentity,
-    version: z.literal("1.0.7-dev3"), packageSha256: m4Digest, reference: z.string().min(1).max(500) }).optional(),
+    version: z.enum(["1.0.7-dev3", "1.0.7-dev4"]), packageSha256: m4Digest, reference: z.string().min(1).max(500) }).optional(),
 }).superRefine((grant, context) => {
   const keys = [...grant.continuations ?? [], ...grant.completionRecoveries ?? []].map((item) => item.operationId);
   if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: "Continuation operations must be unique." });
