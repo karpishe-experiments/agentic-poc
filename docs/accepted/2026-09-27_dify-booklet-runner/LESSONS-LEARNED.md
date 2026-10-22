@@ -29,6 +29,17 @@ providers, real application persistence and isolated mocked host commands; it do
 not establish live host latency. Promotion candidate: **Documentation** for bounded
 experimental delivery and recovery.
 
+### Keep deterministic routing independent of the full provenance graph
+
+Even metadata-only artifact projections can exceed a fixed manager request limit
+as page dependencies grow. Full Parent and Creator persistence fixtures exposed
+this after the creative bodies had already been removed. When the application
+has selected one eligible route and target, send that choice and minimal identity
+to the manager. Retain source, approval and accounting validation in application
+admission, and keep full evidence for specialists and advisory reports. The
+bounded manager fixtures complete both larger personas without raising the
+16 KiB limit. Promotion candidate: architecture documentation.
+
 ### Project provenance before scanning growing run histories
 
 Deployment initialization loaded complete experiment operations and artifacts even

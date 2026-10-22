@@ -4,6 +4,20 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Balanced manager preparation sends only booklet/persona/generation state and the
+application-selected eligible route and target. The application retains and
+validates the full artifact/provenance graph; routing does not resend it. The
+16 KiB preparation limit and authoritative provider token ceiling remain.
+
+A protected remaining-persona grant can admit an unused Parent or Creator slot
+from a stopped campaign through normal creation. It pins the retained Kid ID and
+revision. Admission requires every preceding saved run to be completed with valid
+generation and accounting, no operation/preparation/mutation ownership (including
+expired operation claims), and the existing persona ordering. Activation and slot
+creation share one transaction; failed verification rolls both back. No counters,
+reservations, liabilities, prior runs or policy snapshots are reset. This grant
+does not continue failed generation or allow a replacement persona run.
+
 Deployment initialization performs required setup and bounded availability checks:
 configuration, connectivity, exact collections/indexes, admission schema and seed
 readiness. It does not scan historical experiments. The explicit `npm run db:verify`

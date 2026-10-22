@@ -265,7 +265,7 @@ export function createExperimentRepository(database: Database, options: { store?
       await withMongoTransaction(database, async (session) => {
         if (input.mode === "balanced") {
           await campaignLedger!.create(session, input.nowMs);
-          run.m4 = await campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs);
+          run.m4 = await campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs, options.store?.());
         }
         if (input.predecessorRunId) {
           const predecessor = must(await runs.findOne({ _id: input.predecessorRunId }, { session }), "Predecessor run");
