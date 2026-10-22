@@ -8,7 +8,7 @@ import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-lega
 export const m4PreGenerationFailureSchema = z.strictObject({ schemaVersion: z.literal("booklet_pre_generation_failure_v1"),
   content: z.literal(""), failureEvidence: z.strictObject({
     provider: z.literal("openai"), apiBaseUrl: z.literal("https://api.openai.com/v1"),
-    adapterVersion: z.literal("1.0.7-dev3"),
+    adapterVersion: z.enum(["1.0.7-dev3", "1.0.7-dev4"]),
     stdioSdk: m4ProviderWrapperSchema.shape.providerEvidence.shape.stdioSdk.unwrap(),
     model: z.enum(["gpt-6-luna", "gpt-6-sol"]), serviceTier: z.literal("default"), requestDigest: m4Digest,
     stage: z.literal("input_count"), code: z.enum(["input_limit_exceeded", "input_count_unavailable", "input_count_invalid", "input_count_request_failed"]),

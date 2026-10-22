@@ -65,6 +65,7 @@ class BoundedTests(unittest.TestCase):
         self.count_failure = None
         self.refusal = False
         self.content = '{"answer":"fixture"}'
+        self.output = None
 
     def factory(self, **kwargs):
         self.client_creations += 1
@@ -93,7 +94,7 @@ class BoundedTests(unittest.TestCase):
             return httpx2.Response(200, request=request, headers={"x-request-id": "req_fixture"}, json={
                 "id": "resp_fixture", "created_at": 1, "object": "response", "model": "gpt-6-luna",
                 "status": self.status, "service_tier": "default", "usage": self.usage,
-                "output": [{"id": "msg_fixture", "type": "message", "role": "assistant", "status": "completed", "content": [part]}],
+                "output": self.output if self.output is not None else [{"id": "msg_fixture", "type": "message", "role": "assistant", "status": "completed", "content": [part]}],
             })
 
         return OpenAI(**kwargs, http_client=httpx2.Client(transport=httpx2.MockTransport(handle)))
@@ -103,6 +104,57 @@ class BoundedTests(unittest.TestCase):
         return booklet_bounded.generate(self.llm, self.factory, "gpt-6-luna",
             {"openai_api_key": "not-a-key", "api_protocol": "responses"},
             self.messages, params, None, None, False, None)
+
+    @staticmethod
+    def message(text, phase=None):
+        return {"id": "msg_fixture", "type": "message", "role": "assistant", "status": "completed",
+                "phase": phase, "content": [{"type": "output_text", "text": text, "annotations": []}]}
+
+    def test_final_answer_excludes_commentary_and_reasoning(self):
+        self.output = [{"type": "reasoning", "id": "rs_fixture", "summary": [
+            {"type": "summary_text", "text": "private reasoning"}]},
+            self.message(self.content + " in final?", "commentary"), self.message(self.content, "final_answer")]
+        result = json.loads(self.invoke().message.content)
+        self.assertEqual(result["content"], self.content)
+        self.assertEqual(result["providerEvidence"]["usage"]["outputTokens"], 7)
+        self.assertEqual(len(self.requests), 2)
+
+    def test_ambiguous_answers_fail_without_erasing_usage_or_retry(self):
+        cases = [[], [self.message(self.content, "commentary")],
+                 [self.message(self.content), self.message(self.content)],
+                 [self.message(self.content, "final_answer"), self.message(self.content, "final_answer")],
+                 [self.message(self.content), self.message(self.content, "final_answer")],
+                 [self.message(self.content, "unknown")]]
+        for output in cases:
+            with self.subTest(output=output):
+                self.output = output
+                before = len(self.requests)
+                result = json.loads(self.invoke().message.content)
+                self.assertEqual(result["content"], "")
+                self.assertEqual(result["providerEvidence"]["status"], "completed")
+                self.assertEqual(result["providerEvidence"]["usage"]["outputTokens"], 7)
+                self.assertEqual(len(self.requests) - before, 2)
+
+    def test_selected_content_is_not_repaired(self):
+        self.content = '{"answer":"first"} in final?{"answer":"last"}'
+        self.output = [self.message(self.content, "final_answer")]
+        result = json.loads(self.invoke().message.content)
+        self.assertEqual(result["content"], self.content)
+        with self.assertRaises(ValueError): json.loads(result["content"])
+
+    def test_invalid_output_shapes_and_incomplete_messages_are_not_answers(self):
+        message = self.message(self.content, "final_answer")
+        for output in (42, {}, "text", [message | {"status": "incomplete"}],
+                       [message | {"role": "user"}], [message | {"content": "text"}],
+                       [message | {"content": []}], [message | {"content": [{"type": "unknown"}]}]):
+            with self.subTest(output=output):
+                self.assertEqual(booklet_bounded._final_content({"output": output}), "")
+
+    def test_phase_less_single_answer_and_split_text_parts(self):
+        self.output = [self.message(self.content)]
+        self.output[0]["content"] = [{"type": "output_text", "text": part, "annotations": []}
+                                    for part in (self.content[:5], self.content[5:])]
+        self.assertEqual(json.loads(self.invoke().message.content)["content"], self.content)
 
     def carrier(self):
         payload = {"model": "gpt-6-luna", "input": [
@@ -246,7 +298,7 @@ class BoundedTests(unittest.TestCase):
         self.assertEqual(evidence["apiBaseUrl"], "https://api.openai.com/v1")
         self.assertEqual(evidence["stdioSdk"]["version"], "0.10.2")
         self.assertEqual(evidence["model"], "gpt-6-luna")
-        self.assertEqual(evidence["adapterVersion"], "1.0.7-dev3")
+        self.assertEqual(evidence["adapterVersion"], "1.0.7-dev4")
         self.assertEqual(evidence["serviceTier"], "default")
         self.assertEqual(evidence["requestDigest"], self.parameters["booklet_request_digest"])
         self.assertEqual(evidence["stage"], "input_count")

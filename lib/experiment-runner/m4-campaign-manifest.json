@@ -227,6 +227,11 @@
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "cbc18fd7-7aa5-475e-bc0a-a312e584d25c",
         "reference": "User M4 completion grant: inspected J11 incomplete max_output_tokens with whitespace-heavy unfinished JSON; reviewed compact-output instruction mitigation and exact same-campaign continuation; retain all charges, outputs and cumulative limits."
+      },
+      {
+        "runId": "d07dace4-c4d0-4b57-879e-02fe54f0e530",
+        "operationId": "0371a9ef-43ff-489a-926d-29c8470e27e2",
+        "reference": "User 2026-10-22 approved fixing blockers then continuing initial Parent before Creator. Authenticated terminal malformed manager result retained; continue only after reviewed final-answer adapter installation, exact binding readback and resolved ownership. Preserve failed operation, counters and liability; no replay or successor."
       }
     ],
     "completionRecoveries": [
@@ -255,9 +260,9 @@
     ],
     "providerAdapterUpdate": {
       "fromIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
-      "version": "1.0.7-dev3",
-      "packageSha256": "73a17b49621352aad86a6ae53f9559d9ed62d39e459930967dffcd8afa783e2f",
-      "reference": "User selected complete context/provider correction: reviewed bounded-adapter count-failure evidence only; exact unsigned package, existing shared Dify key, unchanged successful/default routes; install and restore signature checks before same-Kid continuation."
+      "version": "1.0.7-dev4",
+      "packageSha256": "38ebc9d89b9b8eef3c6ec69d3f88e282001777d1155c45a352d23ec06e035e1a",
+      "reference": "User 2026-10-22 approved blocker fixes and continuation: one final-answer message selection, preserve strict JSON and usage, no automatic retries. Exact unsigned package installation requires separate action-time confirmation."
     },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
