@@ -4,6 +4,14 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+The opt-in Balanced provider adapter selects exactly one completed assistant
+`final_answer` message. It excludes commentary and reasoning. Legacy responses
+can use one phase-less assistant message; mixed or ambiguous messages produce
+invalid creative content while retaining the provider usage wrapper. The normal
+strict JSON parser remains authoritative. It does not repair malformed JSON or
+retry generation. Historical dev3 preparations and count-failure evidence remain
+readable; the exact protected dev4 package grant applies to new preparations.
+
 Balanced manager preparation sends only booklet/persona/generation state and the
 application-selected eligible route and target. The application retains and
 validates the full artifact/provenance graph; routing does not resend it. The

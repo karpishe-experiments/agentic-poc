@@ -19,13 +19,13 @@ import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
-async function setup(continuation = false, claimProvider = true, legacy = false) {
+async function setup(continuation = false, claimProvider = true, legacy = false, adapterVersion: "1.0.7-dev3" | "1.0.7-dev4" = "1.0.7-dev3") {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash(),
     ...(legacy ? { pluginIdentity: LEGACY_COUNT_PLUGIN_IDENTITY } : {}),
     countChargeStatus: "assumed" as const, countChargeCeilingMicrodollars: 900 };
   const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-only",
-    ...(!legacy ? { providerAdapterUpdate: { fromIdentity: policy.pluginIdentity, version: "1.0.7-dev3" as const,
+    ...(!legacy ? { providerAdapterUpdate: { fromIdentity: policy.pluginIdentity, version: adapterVersion,
       packageSha256: "a".repeat(64), reference: "fake-adapter-only" } } : {}),
     ...(continuation ? { continuations: [{ runId: id(10), operationId: id(12), reference: "explicit-inspected-fixture-continuation" }] } : {}) } };
   const repository = createExperimentRepository(db, { m4Authority: authority, m4ExecutionEnabled: true, elapsedNow: () => 0 });
@@ -239,13 +239,17 @@ describe("verified pre-generation failure bookkeeping", () => {
     const op = (await env.repository.getOperation(id(12)))!;
     expect(op.m4Reservation).toEqual(original.m4Reservation); expect(op.state).toBe("started"); expect(env.runtime.start).not.toHaveBeenCalled();
   });
-  it.each(["input_limit_exceeded", "input_count_unavailable", "input_count_invalid", "input_count_request_failed"] as const)(
-    "closes %s once, retaining full exposure and explicit continuation", async code => {
-      const env = await setup(true);
+  it.each([
+    ["input_limit_exceeded", "1.0.7-dev3"], ["input_count_unavailable", "1.0.7-dev3"],
+    ["input_count_invalid", "1.0.7-dev3"], ["input_count_request_failed", "1.0.7-dev3"],
+    ["input_limit_exceeded", "1.0.7-dev4"],
+  ] as const)(
+    "closes %s with %s once, retaining full exposure and explicit continuation", async (code, adapterVersion) => {
+      const env = await setup(true, true, false, adapterVersion);
       const originalCampaign = await env.campaign();
       const original = (await env.repository.getOperation(id(12)))!;
       const failure = { schemaVersion: "booklet_pre_generation_failure_v1", content: "", failureEvidence: {
-        provider: "openai", apiBaseUrl: "https://api.openai.com/v1", adapterVersion: "1.0.7-dev3", stdioSdk: env.wrapper.providerEvidence.stdioSdk,
+        provider: "openai", apiBaseUrl: "https://api.openai.com/v1", adapterVersion, stdioSdk: env.wrapper.providerEvidence.stdioSdk,
         model: "gpt-6-luna", serviceTier: "default", requestDigest: original.m4Preparation!.requestDigest,
         stage: "input_count", code, countedInputTokens: code === "input_limit_exceeded" ? 32001 : null,
         limit: 32000, generationStarted: false, elapsedMs: 5, countRequestId: null } };

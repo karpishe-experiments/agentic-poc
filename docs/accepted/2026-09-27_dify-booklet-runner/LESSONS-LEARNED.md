@@ -4,6 +4,17 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Select the final structured answer before JSON validation
+
+The bounded provider extractor joined every assistant message and reasoning
+summary. Responses API messages can distinguish commentary from the final answer.
+For structured tasks, select one completed final message; permit one phase-less
+message for legacy responses. Reject ambiguous selection without erasing provider
+usage. Do not repair JSON substrings or retry automatically. Offline transport
+fixtures prove this boundary; missing historical phase metadata does not prove
+that concatenation caused a particular saved malformed response. Promotion
+candidate: **Documentation** for provider integration.
+
 ### Separate mutation acknowledgement from full-detail reads
 
 A control can save its state before a later detail read fails. Receipt requests
