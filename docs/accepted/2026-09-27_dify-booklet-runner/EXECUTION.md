@@ -174,7 +174,7 @@ not fresh live checks. Recheck the required row before dependent execution.
 `0025c1ee86de8fbd9bea8f9531953d05fa19794f` and PR #225 at
 `6c985bb6805f3ed1a806d5d201cd17630efd3afc`, with staging merge/deployment only
 after the exact retained count failure is safely recovered. PR #224 merged at
-`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`; #225 remains guarded. The existing
+`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`. The existing
 maintenance command is the necessary private operator checkpoint to quiesce
 observation before preview. It closes admission only; the supported recovery
 workflow still owns backup, exact reconciliation and separate delivery. No new
@@ -187,9 +187,27 @@ readbacks retained revision 2967. Provider dev3 installation still requires
 its bounded signature window and restoration before Kid continuation.
 Recovery preview `39744440897` then stopped before apply at
 `snapshot.experiment_operations` with `OperationBudgetExpired`; admission remains
-closed. Package reassessment identified the inherited full-history snapshot as
-outside the target-only recovery contract. Verify and review the scoped correction
-before another candidate preview; no timeout increase or automatic replay.
+closed at that checkpoint. Package reassessment identified the inherited full-history
+snapshot as outside the target-only recovery contract. The scoped correction was
+verified and reviewed before the subsequent preview; no timeout increase or replay.
+**Recovery completed:** reviewed PR #226 merged at
+`ea484d3d74d8821a71588b439db87e7f2ea3ddd4`; source/staging CI and both pairs of
+reviews passed. Supported preview `39751711628` and apply `39752108906` completed
+the exact count-failure closure with verified backup
+`staging-recovery-issue65-kid-count-recovery-20261022-v2`. Readback is revision 2968,
+active operation null, failed operation resolved and counters/history preserved.
+Only then did guarded PR #225 merge at `4236375426466d9e4c3419cdde9ef9d8384f8259`.
+Normal Deploy `39753524655` reached its observer wait limit; status `39754842442`
+verified the original host request complete and archived without replay. Release
+`4236375426466d9e4c3419cdde9ef9d8384f8259` uses image
+`sha256:43d9e5c7676d3bc5e898b14d315445f31ab501a72df50ce94e3771fdaf69eef5`.
+Read-only Check `39755106127` passed. The provider's existing signature-window
+handoff is ready and awaiting the operator; no host operation remains running.
+Use the existing reviewed `issue65_m4_signature_policy` function for preview and
+apply to false, install the exact reviewed dev3 package with action-time
+confirmation, then restore true. Do not repeat the completed Booklet maintenance
+command. No paid work may resume before restored verification and application
+preflight. No new secret, credential copy or OpenAI-key transfer is needed.
 
 **Retained M4 execution authority - 2026-10-20:** The user approved the conditional
 USD 5 campaign and its delivery, then exact same-run continuations and supported
