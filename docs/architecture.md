@@ -189,6 +189,9 @@ run/operation identities. Startup retains dead-process owners for evidence-based
 reconciliation; unidentifiable legacy counts remain explicit drain blockers.
 Counter cleanup cannot release another mutation. The run list uses a paginated
 metadata API; selected-run detail retains artifact and byte-verification paths.
+Run cards expose recorded creation and latest-update timestamps in UTC, separate
+generation from evaluation, and provide a primary Open run link. Missing historical
+timestamps show as unavailable; timestamps do not advance from a client clock.
 Active list rows poll every five seconds. Terminal pages stop automatic polling
 and retain manual Refresh. These candidate changes are not yet verified live.
 
