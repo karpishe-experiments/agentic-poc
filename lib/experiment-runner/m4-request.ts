@@ -176,7 +176,7 @@ function modelOutputSchema(selector: M4RequestSelector, providerLayout: boolean)
   return selector.report ? z.strictObject({ report: reportCreative }) :
     z.strictObject({ result: selector.role === "manager" ? z.union(managerOptions) : decisionOptions[0] });
 }
-const managerRunFields = ["bookletId", "brief", "persona", "currentArtifacts", "pendingDecision", "activeDelegation", "creatorMessages", "counters", "limits", "generationStatus"];
+const managerRunFields = ["bookletId", "persona", "generationStatus"];
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 // Routing consumes status and provenance. Creative bodies belong to specialists
@@ -239,7 +239,9 @@ export function projectM4Context(selector: M4RequestSelector, raw: unknown, oper
   if (selector.role === "manager") {
     const run = context.run as Record<string, unknown>;
     result.run = Object.fromEntries(managerRunFields.map((name) => [name, run[name]]));
-    (result.run as Record<string, unknown>).currentArtifacts = list(run.currentArtifacts).map(value => artifactProjection(value, false));
+    // The application already selects and validates the only eligible route and
+    // target. Repeating the booklet provenance graph grows quadratically with
+    // pages without giving this routing decision another permissible choice.
   }
   if (selector.report) result.currentArtifacts = list(result.currentArtifacts).map(value => artifactProjection(value, true));
   if (selector.report) {
@@ -320,7 +322,7 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
   }
   const definition = { version: "m4_request_v1", rendering: "exact-context-string-v1", role, taskId, persona, report,
     projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
-      ...(role === "manager" || report ? { artifactProjection: report ? "compact-advisory-v3" : "current-provenance-v2", creativeContent: report } : {}) },
+      ...(role === "manager" || report ? { artifactProjection: report ? "compact-advisory-v3" : "eligible-route-v3", creativeContent: report } : {}) },
     preparationByteLimit: role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null,
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
   return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
