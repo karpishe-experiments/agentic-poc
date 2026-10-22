@@ -3,6 +3,19 @@
 **State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. It is completed with advisory evaluation incomplete. Parent and Creator remain on hold. M4 as a whole remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
+## Control acknowledgement correction
+
+A follow-up correction separates Pause/Resume and finalization acknowledgement
+from full-detail loading. Receipt requests return compact saved state after
+tracked mutation cleanup succeeds; existing callers retain the default response.
+The UI refreshes details separately, rejects stale polling state, and uses one
+compact read after an uncertain reply without replaying the write. This correction
+is pending reviewed delivery. It does not change Kid acceptance or its saved
+revision 3014. The exact exception from the earlier finalization response remains
+unverified. Live verification must be read-only; do not finalize Kid again.
+Parent and Creator execution remains on hold. No credential inventory change is
+needed because credential names, storage and consumers are unchanged.
+
 ## Current execution record - 2026-10-22
 
 The retained Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` is completed at
