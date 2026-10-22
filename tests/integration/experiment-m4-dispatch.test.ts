@@ -10,7 +10,7 @@ import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import type { AssetStore } from "@/lib/assets/asset-store";
-import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
+import { CASES, specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { configurationSnapshot, readBookletRunnerConfig, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
@@ -547,6 +547,61 @@ describe("offline Balanced dispatcher", () => {
     await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
     env.store.files.set(assetUri, originalBytes);
     expect(env.runtime.start).toHaveBeenCalledTimes(before.calls);
+    if (failure === "count") {
+      const creation = { runId: id(800), bookletId: id(801), persona: "enthusiast_parent" as const, mode: "balanced" as const,
+        campaignId: id(1), configuration: configurationSnapshot(env.config, "enthusiast_parent"), nowMs: env.now() };
+      await expect(env.repository.createRun(creation)).rejects.toThrow("not active");
+      const authority = { ...env.authority, grant: { ...env.authority.grant, remainingPersonaAdmission: {
+        anchorRunId: env.runId, anchorRevision: complete.revision,
+        personas: ["enthusiast_parent", "professional_creator"] as ["enthusiast_parent", "professional_creator"], reference: "offline remaining slots grant",
+      } } };
+      const repository = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
+      // Expired claims also remain unresolved ownership, and damaged evidence
+      // rolls back temporary activation and the persona slot together.
+      await env.database.collections.experiment_operations.updateOne({ _id: failed._id }, { $set: { authorizationClaim: { id: id(997), expiresAtMs: 0 } } });
+      await expect(repository.createRun(creation)).rejects.toThrow("ownership");
+      await env.database.collections.experiment_operations.replaceOne({ _id: failed._id }, failed);
+      env.store.files.set(assetUri, Uint8Array.of(0));
+      await expect(repository.createRun(creation)).rejects.toThrow();
+      env.store.files.set(assetUri, originalBytes);
+      expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(before.campaign);
+      const attempts = await Promise.allSettled([repository.createRun(creation), repository.createRun({ ...creation, runId: id(802), bookletId: id(803) })]);
+      expect(attempts.filter(result => result.status === "fulfilled")).toHaveLength(1);
+      const campaign = (await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+      expect(campaign).toMatchObject({ state: "active", requests: before.campaign!.requests,
+        reservedMicrodollars: before.campaign!.reservedMicrodollars, settledMicrodollars: before.campaign!.settledMicrodollars });
+      expect(await repository.getRun(env.runId)).toEqual(complete);
+      expect(await repository.listOperations(env.runId)).toEqual(before.operations);
+      const winner = attempts.find(result => result.status === "fulfilled") as PromiseFulfilledResult<typeof complete>;
+      expect(await repository.createRun({ ...creation, runId: winner.value._id, bookletId: winner.value.bookletId })).toEqual(winner.value);
+      expect(env.runtime.start).toHaveBeenCalledTimes(before.calls);
+    }
+  }, 120_000);
+
+  it.each(["enthusiast_parent", "professional_creator"] as const)("completes %s with the actual bounded manager requests", async persona => {
+    const env = await setup(false, false, persona);
+    for (let step = 0; step < 280; step++) {
+      const outcome = await env.dispatcher.advance(env.runId);
+      for (const result of vi.mocked(env.runtime.start).mock.results) await result.value;
+      const run = (await env.repository.getRun(env.runId))!;
+      expect(outcome, JSON.stringify({ persona, step, status: run.status, failure: run.safeFailure })).not.toBe("blocked");
+      if (run.status === "completed") break;
+      env.tick();
+    }
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "completed", generationCompletedAtMs: expect.any(Number), evaluationStatus: "complete", activeOperationId: null });
+    const view = (await env.context.getRunView(env.runId))!;
+    expect(view.currentArtifacts.every(artifact => artifact.state === "approved")).toBe(true);
+    expect(view.currentArtifacts.filter(artifact => artifact.taskId === "J13")).toHaveLength(CASES[persona].storyPages + 1);
+    expect(view.reports).toHaveLength(2);
+    const operations = await env.repository.listOperations(env.runId);
+    for (const operation of operations.filter(operation => operation.role === "manager")) {
+      expect(Buffer.byteLength(operation.m4Preparation!.requestJson)).toBeLessThan(16 * 1024);
+    }
+    await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, run));
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher.advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(calls);
   }, 120_000);
 
   it("completes generation with an oversized local advisory request before reservation or provider dispatch", async () => {

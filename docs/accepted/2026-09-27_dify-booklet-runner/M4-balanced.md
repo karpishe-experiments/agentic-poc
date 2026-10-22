@@ -1,20 +1,44 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. It is completed with advisory evaluation incomplete. Parent and Creator remain on hold. M4 as a whole remains incomplete.
+**State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. It is completed with advisory evaluation incomplete. The user authorized the remaining initial Parent and Creator runs and required blocker fixes. Their execution awaits reviewed readiness delivery. M4 as a whole remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Control acknowledgement correction
 
-A follow-up correction separates Pause/Resume and finalization acknowledgement
-from full-detail loading. Receipt requests return compact saved state after
-tracked mutation cleanup succeeds; existing callers retain the default response.
-The UI refreshes details separately, rejects stale polling state, and uses one
-compact read after an uncertain reply without replaying the write. This correction
-is pending reviewed delivery. It does not change Kid acceptance or its saved
-revision 3014. The exact exception from the earlier finalization response remains
-unverified. Live verification must be read-only; do not finalize Kid again.
-Parent and Creator execution remains on hold. No credential inventory change is
-needed because credential names, storage and consumers are unchanged.
+PRs #231/#232 delivered the acknowledgement correction. Staging release
+`c336b63c2d4a41f865e19ebe3eb3ad510156fd94` completed on the host after Deploy
+`39802941794` reached its client observation limit. Read-only status `39804837718`
+proved complete/archived; Check deployment `39804989899` passed. Kid readback
+retained revision 3014, 20 approved artifacts, 54 operations and unchanged
+accounting. No finalization replay or paid request occurred.
+
+Receipt requests return compact saved state after tracked mutation cleanup;
+existing callers retain the default response. Details refresh separately, older
+polling cannot replace newer state, and uncertain replies cause one compact read
+without replay. The exact historical response exception remains unverified.
+Kid verification stays read-only. Credential storage and consumers are unchanged.
+
+## Remaining-persona readiness correction
+
+The user authorized Parent followed by Creator within the existing conditional
+USD 5 campaign and approved required PRs/merges. First correct the known offline
+manager overflow and stopped-campaign admission blocker. Manager requests carry
+only the deterministic eligible route/target and minimal run identity; specialists
+and testers retain their creative evidence. Keep the 16 KiB byte limit, 32,000-token
+provider guard, zero automatic retries and frozen policy. Amend the protected
+request bundle while preserving historical preparations.
+
+Normal create can activate a stopped campaign only with the explicit remaining
+persona grant anchored to Kid revision 3014. Revalidate completed preceding
+generation, approvals, bytes and accounting; reject any unresolved owner or claim.
+Admission and the unused persona slot commit atomically. Preserve Kid, prior
+failure history, cumulative requests, reservations and liabilities. No successors
+are included. Verify full Parent/Creator generation with real persistence and
+fake providers before delivery, including actual bounded manager requests.
+Obtain two independent reviews and lean CI, deliver normally, recheck live
+readiness, then execute sequentially. Stop on technical failure or uncertainty;
+advisory report failure alone can complete valid generation under the accepted
+criterion. This candidate does not yet establish live Parent/Creator completion.
 
 ## Current execution record - 2026-10-22
 
@@ -70,10 +94,12 @@ state, and Refresh/full reload displayed it. No second submission was made.
 The exact post-commit response failure cause is unverified. Saved accounting,
 operation history and request counts remained unchanged after reload.
 
-**Next:** No further Kid execution is required for this acceptance criterion.
-Parent and Creator execution remains on hold. Their representative Balanced fixtures hit
-the existing manager preparation byte limit before evaluation; report projection
-validation does not establish their end-to-end readiness.
+**Next:** No further Kid execution is required. Deliver the remaining-persona
+readiness correction above before the newly authorized Parent/Creator execution.
+Their earlier representative Balanced fixtures hit the manager byte limit;
+the corrected full Parent/Creator persistence fixtures now complete generation
+and both reports without bypassing that limit. This is fake-provider evidence,
+not live model reliability or completed live acceptance.
 
 Offline full-fixture request sizing with `o200k_base` estimates tester/judge
 serialized-request tokens at 25,601/25,600 for Kid, 31,800/31,799 for Parent and
@@ -84,8 +110,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `317b8b05295d19bbc6813f3c0d303c989c24ac8b`,
-image `sha256:ceb44d00cda93ac39db2c32ee11130dd05365197f3a46d26a18c335b3fbd22d3`.
+The verified serving release is `c336b63c2d4a41f865e19ebe3eb3ad510156fd94`,
+image `sha256:a68100c082143528e7660fa9163de50728ea878d5a4ac4013bfad2c5cfa5dfdd`.
 The reviewed dev3 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.

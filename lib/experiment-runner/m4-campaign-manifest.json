@@ -261,8 +261,17 @@
     },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
-      "toBundleHash": "45993dabe7747e6b9751828e7e02b748f2bfe5aef9814802d5f80493020c3ee2",
-      "reference": "User 2026-10-22 approved advisory completion: compact report evidence for all personas with explicit omissions and aggregated history; manager unchanged; exact32000-token ceiling and monetary policy unchanged; prior prepared requests retained."
+      "toBundleHash": "57ab75d19e9453a304383f253ebb646b088dd3c5f486608ab4be308b7cf35bdf",
+      "reference": "User approved remaining Parent/Creator execution and blocker fixes: eligible-route manager projection, compact advisory evidence; preserve frozen policy,32000-token guard and prior requests."
+    },
+    "remainingPersonaAdmission": {
+      "anchorRunId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
+      "anchorRevision": 3014,
+      "personas": [
+        "enthusiast_parent",
+        "professional_creator"
+      ],
+      "reference": "User 2026-10-22 approved both remaining initial Balanced personas and required blocker fixes; admit only after verified completed preceding runs, resolved ownership and intact accounting; no successor, replay or allowance reset."
     }
   }
 }

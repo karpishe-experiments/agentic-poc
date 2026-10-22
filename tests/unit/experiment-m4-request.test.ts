@@ -26,17 +26,22 @@ describe("M4 reviewed request contract", () => {
     expect(() => prepareM4Request(policy, { role: "manager", taskId: null, persona, report: false },
       JSON.stringify({ brief: "x".repeat(20 * 1024) }), { taskId: [], subjectId: [], subjectKind: [] })).not.toThrow(M4ReportSizeError);
   });
-  it("bounds manager context independently of completed image prompt size, retaining exact current provenance", () => {
+  it.each(personaSchema.options)("bounds %s manager routing independently of the retained provenance graph", (persona) => {
     const artifact = { id: m4TestId(2), taskId: "J13", subjectKind: "page", subjectId: m4TestId(3), state: "approved", currentVersionId: m4TestId(4),
       versions: [{ id: m4TestId(4), number: 1, dependencyVersionIds: [m4TestId(5)], approval: { id: m4TestId(6) },
         content: { request: { prompt: "large saved image instruction".repeat(10000) } } }, { id: m4TestId(7), content: "historical" }] };
-    const projected = projectM4Context({ role: "manager", taskId: null, persona: "playful_kid", report: false },
-      { role: "manager", run: { bookletId: m4TestId(1), brief: "brief", currentArtifacts: [artifact] }, eligibleRoute: "J13", eligibleTarget: { subjectId: m4TestId(3) } }, "operation");
-    expect(projected).toMatchObject({ eligibleRoute: "J13", eligibleTarget: { subjectId: m4TestId(3) }, run: { currentArtifacts: [{
-      currentVersionId: m4TestId(4), dependencyVersionIds: [m4TestId(5)], approvalId: m4TestId(6) }] } });
+    const projected = projectM4Context({ role: "manager", taskId: null, persona, report: false },
+      { role: "manager", run: { bookletId: m4TestId(1), persona, brief: "brief", currentArtifacts: Array(100).fill(artifact),
+        creatorMessages: ["retained feedback".repeat(10000)] }, eligibleRoute: "J13", eligibleTarget: { subjectId: m4TestId(3) } }, "operation");
+    expect(projected).toEqual({ role: "manager", eligibleRoute: "J13", eligibleTarget: { subjectId: m4TestId(3) },
+      run: { bookletId: m4TestId(1), persona, generationStatus: undefined } });
     expect(JSON.stringify(projected)).not.toContain("content");
     expect(JSON.stringify(projected).length).toBeLessThan(2000);
     expect(artifact.versions[0].content).toBeDefined();
+    const prepared = prepareM4Request({ ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() },
+      { role: "manager", taskId: null, persona, report: false }, JSON.stringify(projected),
+      { taskId: ["J13"], subjectId: [m4TestId(3)], subjectKind: ["page"] });
+    expect(Buffer.byteLength(prepared.requestJson)).toBeLessThan(16 * 1024);
   });
   it("retains report creative text, lettering and reference identities while excluding duplicated execution prompts", () => {
     const project = (role: "tester" | "judge") => projectM4Context({ role, taskId: null, persona: "playful_kid", report: true }, { role,
