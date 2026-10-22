@@ -14,6 +14,8 @@ const endedMutations = cleanupState[cleanupKey] ??= new Map<string, MutationOwne
 type MutationOptions = { admitted?: boolean; runId?: string; operationId?: string };
 const mutationContext = new AsyncLocalStorage<MutationOwner>();
 
+export function currentMutationOwnerId(): string | undefined { return mutationContext.getStore()?.id; }
+
 async function releaseEndedMutation(owner: MutationOwner): Promise<void> {
   await getDatabase().collections.deployment_control.updateOne({ environment: getServerEnv().DEPLOYMENT_ENV,
     mutationOwners: { $elemMatch: { id: owner.id, state: "active", processId: owner.processId } } },

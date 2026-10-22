@@ -661,7 +661,14 @@ export function createExperimentRepository(database: Database, options: { store?
         !!operation.lifecycle?.stop && operation.deadlineAtMs != null && input.nowMs >= operation.deadlineAtMs &&
         !operation.authorizationClaim && !operation.imageCompletionClaim && !operation.resultFinalizationClaim &&
         !operation.resultJson && !operation.materializationJson && !operation.imageCompletionDigest;
-      const category = stopped ? "definite_failure" : input.category === "observed_stop" || input.category === "observed_failure" ?
+      const advisoryFailed = run.mode === "simulated" && run.generationCompletedAtMs != null &&
+        ["tester", "judge"].includes(operation.role) && operation.taskId === null && operation.subjectKind === "book" &&
+        operation.subjectId === run.bookletId && operation.createdAtMs >= run.generationCompletedAtMs &&
+        input.category === "observed_failure" && operation.remoteStatus === "failed" && !!operation.verifiedWorkflowId &&
+        operation.reservationCount === 1 && !operation.lifecycle?.stop &&
+        !operation.authorizationClaim && !operation.imageCompletionClaim && !operation.resultFinalizationClaim &&
+        !operation.resultJson && !operation.materializationJson && !operation.resultDigest;
+      const category = stopped || advisoryFailed ? "definite_failure" : input.category === "observed_stop" || input.category === "observed_failure" ?
         operation.reservationCount === 0 && (operation.state === "prepared" ||
           operation.state === "failed" && operation.safeFailure === "definite_failure") ? "definite_failure" : "unknown_outcome" : input.category;
       if (category === "paused") {
@@ -679,7 +686,7 @@ export function createExperimentRepository(database: Database, options: { store?
       if (safeFailure && run.mode === "balanced" && campaignLedger && run.m4?.campaignId === campaignLedger.grant.campaignId) await campaignLedger.stop(session, input.nowMs);
       if (operation.state === state && operation.safeFailure === safeFailure) return operation;
       const imageFailureHistory = operation.role === "image" && safeFailure ? { imageFailureHistory: [...(operation.imageFailureHistory ?? []), { category: safeFailure, recordedAtMs: input.nowMs }] } : {};
-      const stoppedLifecycle = stopped && operation.lifecycle ? { lifecycle: { ...operation.lifecycle,
+      const stoppedLifecycle = (stopped || advisoryFailed) && operation.lifecycle ? { lifecycle: { ...operation.lifecycle,
         phase: "finished" as const, attemptOutcome: "failed" as const, unresolved: false,
         endedAtMs: operation.lifecycle.endedAtMs ?? input.nowMs } } : {};
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state }, { $set: { state, safeFailure, ...imageFailureHistory, ...stoppedLifecycle, updatedAtMs: input.nowMs } }, { session, returnDocument: "after" });

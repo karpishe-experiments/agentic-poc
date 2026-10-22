@@ -17,6 +17,7 @@ import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 import { m4ModelOutputSchema, m4RequestBundleHash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import * as m4Request from "@/lib/experiment-runner/m4-request";
+import * as textPreparation from "@/db/experiment-text-preparation";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
 import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
@@ -57,7 +58,8 @@ const workflowOwnedFields: Record<string, string[]> = {
   J12: ["pageId", "pageIndex", "layoutVersionId", "manuscriptVersionId", "styleVersionId"],
 };
 
-async function setup(amended = false, legacyCount = false) {
+async function setup(amended = false, legacyCount = false, persona: "playful_kid" | "enthusiast_parent" | "professional_creator" = "playful_kid",
+  reportFailure?: "tester" | "judge" | "count") {
   const published = process.env.M4_PUBLICATION_REHEARSAL === "1" ? await loadPublishedRehearsal() : null;
   const phases: { operationId: string; role: string; report: boolean; publicationId: string; authorizationBytes: number; resultBytes: number; authorizationMs: number; decodeReturnMs: number }[] = [];
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
@@ -65,6 +67,8 @@ async function setup(amended = false, legacyCount = false) {
     ...(legacyCount ? { pluginIdentity: LEGACY_COUNT_PLUGIN_IDENTITY } : {}),
     ...(published ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
   const authority = { policy, grant: { campaignId: id(1), reference: "offline-dispatch-fixture-only",
+    ...(reportFailure === "count" ? { providerAdapterUpdate: { fromIdentity: policy.pluginIdentity, version: "1.0.7-dev3" as const,
+      packageSha256: "b".repeat(64), reference: "offline-count-fixture-only" } } : {}),
     ...(amended ? { requestDefinitionUpdate: { fromBundleHash: policy.requestDefinitionHash,
       toBundleHash: m4RequestBundleHash(), reference: "prior-reviewed-amendment" } } : {}) } };
   const store = new MemoryStore();
@@ -74,8 +78,18 @@ async function setup(amended = false, legacyCount = false) {
     m4: { state: "granted", authority },
     bindings: policy.publications.map((p) => ({ ...p, taskId: specialistTaskSchema.nullable().parse(p.taskId), apiKey: "fake-key" })) };
   const runId = id(10), bookletId = id(11); let clock = Date.now();
-  await repository.createRun({ runId, bookletId, persona: "playful_kid", mode: "balanced", campaignId: id(1),
-    configuration: configurationSnapshot(config, "playful_kid"), nowMs: clock });
+  // Earlier personas are admission-only fixture records; this isolated test
+  // executes every generation and evaluation operation of the selected persona.
+  for (const [index, priorPersona] of (["playful_kid", "enthusiast_parent"] as const).entries()) {
+    if (priorPersona === persona) break;
+    const prior = await repository.createRun({ runId: id(20 + index), bookletId: id(30 + index), persona: priorPersona,
+      mode: "balanced", campaignId: id(1), configuration: configurationSnapshot(config, priorPersona), nowMs: clock });
+    await database.collections.experiment_runs.updateOne({ _id: prior._id }, { $set: {
+      status: "completed", evaluationStatus: "complete", generationCompletedAtMs: clock,
+    } });
+  }
+  await repository.createRun({ runId, bookletId, persona, mode: "balanced", campaignId: id(1),
+    configuration: configurationSnapshot(config, persona), nowMs: clock });
   const saved = new Map<string, RuntimeExecution>();
   let pending = false, badCreative = false, badLayout = false, incompleteLayout = false;
   let blockCompletionTask: string | null = null;
@@ -147,7 +161,7 @@ async function setup(amended = false, legacyCount = false) {
         return { kind: "execution", execution };
       }
       // Fixture generation is local only; saved execution and accounting stay Balanced.
-      const selector = { role: binding.role, taskId: binding.taskId, persona: "playful_kid", report: "reportEvidence" in roleContext } as M4RequestSelector;
+      const selector = { role: binding.role, taskId: binding.taskId, persona, report: "reportEvidence" in roleContext } as M4RequestSelector;
       let creative: unknown;
       if ("reportEvidence" in roleContext) {
         const report = simulatedExperimentReport({ ...roleContext.reportEvidence, mode: "simulated" });
@@ -181,6 +195,18 @@ async function setup(amended = false, legacyCount = false) {
         wrapper.providerEvidence.usage.outputTokens = 8192;
       }
       let output = JSON.stringify(wrapper);
+      if (isReport && binding.role === reportFailure) {
+        wrapper.content = '{"report":null}';
+        output = JSON.stringify(wrapper);
+      }
+      if (isReport && binding.role === "tester" && reportFailure === "count") {
+        output = JSON.stringify({ schemaVersion: "booklet_pre_generation_failure_v1", content: "", failureEvidence: {
+          provider: "openai", apiBaseUrl: "https://api.openai.com/v1", adapterVersion: "1.0.7-dev3",
+          stdioSdk: wrapper.providerEvidence.stdioSdk, model: "gpt-6-luna", serviceTier: "default",
+          requestDigest: operation.m4Preparation!.requestDigest, stage: "input_count", code: "input_limit_exceeded",
+          countedInputTokens: 39891, limit: 32000, generationStarted: false, elapsedMs: 100, countRequestId: "count_fixture",
+        } });
+      }
       if (graph) {
         expect(operation.verifiedWorkflowId).toBe(graph.publicationId);
         const returned = publishedReturn(graph.graph, authorizationBody, output, operation.m4Preparation!.requestJson, isReport);
@@ -422,6 +448,144 @@ describe("offline Balanced dispatcher", () => {
     expect(await env.repository.getOperation(operation._id)).toMatchObject({ reservationCount: 0 });
     expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ requests: 0, reservedMicrodollars: 0 });
   });
+
+  it.each([
+    ["playful_kid", "count"], ["playful_kid", "tester"], ["playful_kid", "judge"],
+  ] as const)("completes %s generation with advisory %s failure without replay", async (persona, failure) => {
+    const env = await setup(false, false, persona, failure);
+    let generation: { versions: string[]; at: number; assets: unknown[]; approvals: unknown[] } | undefined;
+    for (let step = 0; step < 240; step++) {
+      await env.dispatcher.advance(env.runId);
+      for (const result of vi.mocked(env.runtime.start).mock.results) await result.value;
+      const current = (await env.repository.getRun(env.runId))!;
+      if (current.generationCompletedAtMs != null && !generation) {
+        generation = { versions: current.generationVersionIds!, at: current.generationCompletedAtMs,
+          assets: await env.database.collections.assets.find({ bookletId: env.bookletId }).toArray(),
+          approvals: await env.database.collections.approvals.find({ bookletId: env.bookletId }).toArray() };
+      }
+      if (current.status === "completed" || current.status === "blocked") break;
+      env.tick();
+    }
+    const failedRun = (await env.repository.getRun(env.runId))!;
+    const operations = await env.repository.listOperations(env.runId);
+    expect(generation, JSON.stringify({ status: failedRun.status, failure: failedRun.safeFailure,
+      last: operations.at(-1) && { role: operations.at(-1)!.role, taskId: operations.at(-1)!.taskId,
+        state: operations.at(-1)!.state, lifecycle: operations.at(-1)!.lifecycle } })).toBeDefined();
+    const failed = operations.find(op => op.state === "failed")!;
+    expect(failed).toMatchObject({ role: failure === "count" ? "tester" : failure, safeFailure: "definite_failure",
+      lifecycle: { phase: "finished", unresolved: false }, reservationCount: 1 });
+    const completion = createExperimentCompletionService(env.database, env.store);
+    await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { state: "stopped" } });
+    const before = { operations: structuredClone(operations), campaign: await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }),
+      counters: failedRun.counters, calls: vi.mocked(env.runtime.start).mock.calls.length };
+    // A retained failure can be finalized through the same service even if the
+    // dispatcher has already observed and finalized the terminal result.
+    // Emulate a retained pre-correction run, then exercise the existing HTTP
+    // Resume control. This must finalize without reopening its stopped campaign.
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: {
+      status: "blocked", evaluationStatus: "pending", safeFailure: "definite_failure",
+    } });
+    const http = createBookletRunnerHttp({ database: () => env.database, config: () => ({ enabled: true, config: env.config }),
+      runtime: () => env.runtime, store: () => env.store, mutate: action => action() });
+    const response = await http.control(new Request(`https://booklet.invalid/api/experiments/booklet-runs/${env.runId}/resume`, {
+      method: "POST", headers: { origin: env.config.publicOrigin }, body: JSON.stringify({ expectedRevision: failedRun.revision }),
+    }), env.runId, "resume");
+    expect(response.status, await response.clone().text()).toBe(200);
+    const complete = (await env.repository.getRun(env.runId))!;
+    const repeatedResponse = await http.control(new Request(`https://booklet.invalid/api/experiments/booklet-runs/${env.runId}/resume`, {
+      method: "POST", headers: { origin: env.config.publicOrigin }, body: JSON.stringify({ expectedRevision: failedRun.revision }),
+    }), env.runId, "resume");
+    expect(repeatedResponse.status, await repeatedResponse.clone().text()).toBe(200);
+    expect(await env.repository.getRun(env.runId)).toEqual(complete);
+    expect(complete).toMatchObject({ status: "completed", evaluationStatus: "failed", activeOperationId: null,
+      generationCompletedAtMs: generation!.at, generationVersionIds: generation!.versions, counters: before.counters });
+    expect(await env.database.collections.assets.find({ bookletId: env.bookletId }).toArray()).toEqual(generation!.assets);
+    expect(await env.database.collections.approvals.find({ bookletId: env.bookletId }).toArray()).toEqual(generation!.approvals);
+    expect(await env.repository.listOperations(env.runId)).toEqual(before.operations);
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(before.campaign);
+    expect(operations.filter(op => op.role === "judge")).toHaveLength(failure === "judge" ? 1 : 0);
+    if (failure === "count") {
+      expect(failed.m4Reservation).toMatchObject({ settledMicrodollars: null,
+        unsettledMicrodollars: failed.m4Reservation!.maximumMicrodollars });
+      expect(JSON.parse(failed.m4Observation!.evidenceJson!)).toMatchObject({ failureEvidence: { generationStarted: false, countedInputTokens: 39891 } });
+    }
+    await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, complete));
+    const repeated = await Promise.all([1, 2].map(() => completion.completeAdvisoryFailure({
+      runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })));
+    expect(repeated.map(run => run.revision)).toEqual([complete.revision, complete.revision]);
+    await env.dispatcher.advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(before.calls);
+    // Unknown ownership, active preparations and changed generation evidence
+    // cannot use the advisory outcome to bypass verification.
+    for (const patch of [{ activeOperationId: failed._id }, { safeFailure: "unknown_outcome" as const },
+      { preparation: { ownerId: id(998), startedAtMs: env.now(), deadlineAtMs: env.now() + 10_000 } },
+      { generationVersionIds: [id(999)] }]) {
+      await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: patch });
+      await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
+      await env.database.collections.experiment_runs.replaceOne({ _id: env.runId }, complete);
+    }
+    await env.database.collections.experiment_operations.updateOne({ _id: failed._id }, { $set: { "lifecycle.unresolved": true } });
+    await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
+    await env.database.collections.experiment_operations.replaceOne({ _id: failed._id }, failed);
+    await env.database.collections.experiment_operations.updateOne({ _id: failed._id }, { $set: {
+      authorizationClaim: { id: id(997), expiresAtMs: env.now() + 10_000 },
+    } });
+    await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
+    await env.database.collections.experiment_operations.replaceOne({ _id: failed._id }, failed);
+    await env.database.collections.deployment_control.insertOne({ _id: "advisory-owner-fixture", environment: "local", schemaVersion: "1",
+      maintenance: false, activeMutations: 1, reason: null, updatedAtMs: env.now(),
+      mutationOwners: [{ id: id(996), processId: id(995), runId: env.runId, operationId: failed._id, startedAtMs: env.now(), state: "active" }] });
+    await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
+    await env.database.collections.deployment_control.deleteOne({ _id: "advisory-owner-fixture" });
+    await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision + 1, nowMs: env.now() }))
+      .rejects.toThrow("revision");
+    const [assetUri, originalBytes] = [...env.store.files][0];
+    env.store.files.set(assetUri, Uint8Array.of(0));
+    await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
+    env.store.files.set(assetUri, originalBytes);
+    expect(env.runtime.start).toHaveBeenCalledTimes(before.calls);
+  }, 120_000);
+
+  it("completes generation with an oversized local advisory request before reservation or provider dispatch", async () => {
+    const env = await setup();
+    // The fixture advances time between operations, so preparation must use
+    // that same clock rather than adding wall-clock time inside one operation.
+    const createPreparation = textPreparation.createM4TextPreparation;
+    const preparationClock = vi.spyOn(textPreparation, "createM4TextPreparation").mockImplementation((database, authority, options) =>
+      createPreparation(database, authority, { ...options, elapsedNow: () => 0 }));
+    const original = m4Request.prepareM4Request;
+    const prepared = vi.spyOn(m4Request, "prepareM4Request").mockImplementation((...args) => {
+      if (args[1].report) {
+        const context = JSON.parse(args[2]);
+        context.brief = "Full retained creative evidence. ".repeat(6_000);
+        return original(args[0], args[1], JSON.stringify(context), args[3], args[4]);
+      }
+      return original(...args);
+    });
+    try {
+      for (let step = 0; step < 180; step++) {
+        await env.dispatcher.advance(env.runId);
+        const run = (await env.repository.getRun(env.runId))!;
+        if (run.status === "completed" || run.status === "blocked") break;
+        env.tick();
+      }
+      const run = (await env.repository.getRun(env.runId))!;
+      expect(run).toMatchObject({ status: "completed", evaluationStatus: "failed", activeOperationId: null });
+      expect(run.generationCompletedAtMs).toBeTypeOf("number");
+      const operations = await env.repository.listOperations(env.runId);
+      const local = operations.find(op => op.localReportFailure)!;
+      expect(local).toMatchObject({ role: "tester", state: "failed", reservationCount: 0, workflowRunId: null });
+      expect(local.m4Reservation).toBeUndefined();
+      expect(operations.filter(op => op.role === "judge")).toHaveLength(0);
+      expect(vi.mocked(env.runtime.start).mock.calls.some(([, input]) => input.operationId === local._id)).toBe(false);
+      const campaign = await env.database.collections.experiment_campaigns.findOne({ _id: id(1) });
+      expect(campaign?.requests).toBe(run.counters.payableText);
+      await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, run));
+      const calls = vi.mocked(env.runtime.start).mock.calls.length;
+      await env.dispatcher.advance(env.runId);
+      expect(env.runtime.start).toHaveBeenCalledTimes(calls);
+    } finally { prepared.mockRestore(); preparationClock.mockRestore(); }
+  }, 120_000);
 
   it("completes all Kid tasks offline with simulated images and freezes each report's own settled cost", async () => {
     const env = await setup();

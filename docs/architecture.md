@@ -597,7 +597,12 @@ The dispatcher records generation completion only after the thirteen artifact
 sets, exact approvals and durable bytes pass verification. It saves the generation
 timestamp and exact version IDs, marks the Booklet complete, and then runs tester
 feedback followed by the independent judge. Evaluation becomes complete only
-after both exact publication-verified reports pass validation. Missing reports
+after both exact publication-verified reports pass validation. A verified terminal
+advisory failure completes the run with `evaluationStatus: failed`; a tester failure
+omits the dependent judge. Completion revalidates generation, stored bytes,
+ownership and accounting. It preserves failures and reservations. The existing
+Resume control can finalize retained generation without reopening a stopped
+campaign. Unknown outcomes and unresolved owners remain blocked. Missing reports
 and uncertain evaluation outcomes leave generation success intact. After
 generation completion, only advisory evaluation is permitted; revisions require
 a successor run. Repository admission and report saving require the persisted
@@ -609,6 +614,18 @@ changing counters or the run revision.
 The runner inspector shows generation/evaluation status separately and links to
 the existing saved-booklet view. Advisory reports retain operation, workflow and
 publication identities and show whether their version evidence is current.
+Completed advisory failures display **Completed — evaluation incomplete** and
+cannot dispatch more work. Balanced reports use the shared `compact-advisory-v3`
+projection for all personas: current creative evidence and exact lettering,
+compact operation summaries, and explicit evidence omissions. Historical records
+remain unchanged. Simulated visual evidence remains `not_assessed`. The frozen
+token ceiling and authoritative provider count guard remain in force.
+A report rejected by the local preparation size guard retains optional
+`localReportFailure` evidence on its operation. This records measured size,
+limit, request identity and source fingerprints before dispatch. Finalization
+requires the same generation evidence, no reservation or remote execution, and
+closed ownership. Arbitrary preparation errors do not qualify. Historical
+operations without this metadata retain their existing interpretation.
 The local context endpoint supplies claimed tester/judge operations with verified
 generation evidence, current artifacts, dialogue, warnings, usage counters and
 durable image identities. Initial execution can read this evidence before runtime

@@ -18,6 +18,30 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("keeps completed advisory failures terminal and does not infer a missing tester from summary data", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed", evaluationStatus: "failed", generationStatus: "complete", activeOperationId: null }] })));
+    render(<BookletRunner />);
+    expect(await screen.findByText("Completed — evaluation incomplete")).toBeTruthy();
+    expect(screen.getByText(/Open the run for the retained evaluation failure/)).toBeTruthy();
+    expect(screen.queryByText(/judge was not run/)).toBeNull();
+    expect((screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
+  it("explains tester failure and dependent judge omission in saved detail", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed", evaluationStatus: "failed", generationStatus: "complete", activeOperationId: null, reports: [] }] })));
+    render(<BookletRunner />);
+    expect(await screen.findByText(/The judge was not run because tester evaluation failed/)).toBeTruthy();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
+  it("shows local report rejection separately from provider counts and charges", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed", evaluationStatus: "failed", generationStatus: "complete", activeOperationId: null,
+      operationHistory: [{ ...run.operationHistory[0], role: "tester", taskId: null, state: "failed", reservationCount: 0,
+        localReportFailure: { code: "report_request_too_large", scope: "request", requestBytes: 131073, byteLimit: 131072 } }] }] })));
+    render(<BookletRunner />);
+    expect(await screen.findByText(/131073\/131072 bytes\. No provider request was sent or reserved/)).toBeTruthy();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
   it("does not claim uncertain remote work has stopped", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "blocked", safeFailure: "unknown_outcome" }] })));
     render(<BookletRunner />);

@@ -190,15 +190,41 @@ function artifactProjection(raw: unknown, report: boolean): Record<string, unkno
   return { ...Object.fromEntries(["id", "taskId", "subjectKind", "subjectId", "state", "currentVersionId"].map(key => [key, artifact[key]])),
     versions: list(artifact.versions).filter(raw => record(raw).id === artifact.currentVersionId).map(raw => {
       const version = record(raw);
-      return { ...Object.fromEntries(["id", "number", "dependencyVersionIds", "warnings", "sourceVersionId", "sourceOperationId", "approval"].map(key => [key, version[key]])),
+      return { ...Object.fromEntries(["id", "number", "dependencyVersionIds", "warnings", "sourceVersionId", "approval"].map(key => [key, version[key]])),
         content: reportContent(version.content, artifact.taskId === "J08") };
     }) };
 }
 function reportContent(raw: unknown, keepStyleModule: boolean, parentKey = ""): unknown {
-  if (Array.isArray(raw)) return raw.map(value => reportContent(value, keepStyleModule));
+  if (Array.isArray(raw)) return raw.map(value => reportContent(value, keepStyleModule, parentKey));
   if (!raw || typeof raw !== "object") return raw;
-  return Object.fromEntries(Object.entries(record(raw)).filter(([key]) => !(key === "prompt" && ["build", "request"].includes(parentKey)) &&
-    (keepStyleModule || key !== "stylePromptModule")).map(([key, value]) => [key, reportContent(value, keepStyleModule, key)]));
+  // Remove transport data only at known transport boundaries. Creative fields,
+  // including exact lettering, source relationships and ordered references stay.
+  const transport = ["build", "request", "attachments", "output"].includes(parentKey);
+  return Object.fromEntries(Object.entries(record(raw)).filter(([key]) =>
+    !(key === "prompt" && ["build", "request"].includes(parentKey)) &&
+    !(transport && ["operationId", "uploadFileId", "uploadUser", "sha256", "byteLength"].includes(key)) &&
+    !(parentKey === "" && ["operationId", "runId", "workflowRunId", "parentWorkflowRunId", "publishedWorkflowId", "inputFingerprint"].includes(key)) &&
+    key !== "stylePromptModuleHash" && (keepStyleModule || key !== "stylePromptModule"))
+    .map(([key, value]) => [key, reportContent(value, keepStyleModule, key)]));
+}
+function reportOperationSummary(rows: unknown[], operationId: string) {
+  const groups = new Map<string, { role: unknown; taskId: unknown; state: unknown; safeFailure: unknown;
+    countFailureReason: unknown; count: number; reservations: number; measuredTimings: number; elapsedMsTotal: number; elapsedMsMax: number }>();
+  for (const raw of rows) {
+    const row = record(raw);
+    if (row.id === operationId) continue;
+    const identity = { role: row.role ?? null, taskId: row.taskId ?? null, state: row.state ?? null,
+      safeFailure: row.safeFailure ?? null, countFailureReason: record(row.countFailure).code ?? null };
+    const key = JSON.stringify(identity);
+    const group = groups.get(key) ?? { ...identity, count: 0, reservations: 0, measuredTimings: 0, elapsedMsTotal: 0, elapsedMsMax: 0 };
+    group.count++;
+    if (typeof row.reservationCount === "number") group.reservations += row.reservationCount;
+    if (typeof row.elapsedMs === "number" && Number.isFinite(row.elapsedMs) && row.elapsedMs >= 0) {
+      group.measuredTimings++; group.elapsedMsTotal += row.elapsedMs; group.elapsedMsMax = Math.max(group.elapsedMsMax, row.elapsedMs);
+    }
+    groups.set(key, group);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, group]) => group);
 }
 function projectionFields(selector: M4RequestSelector) {
   return selector.role === "manager" ? ["role", "run", "eligibleRoute", "eligibleTarget"] : selector.role === "specialist" ?
@@ -216,13 +242,15 @@ export function projectM4Context(selector: M4RequestSelector, raw: unknown, oper
     (result.run as Record<string, unknown>).currentArtifacts = list(run.currentArtifacts).map(value => artifactProjection(value, false));
   }
   if (selector.report) result.currentArtifacts = list(result.currentArtifacts).map(value => artifactProjection(value, true));
-  if (selector.report && Array.isArray(result.operationHistory)) result.operationHistory = result.operationHistory
-    .filter((row) => (row as { id?: string }).id !== operationId)
-    .map(raw => {
-      const row = record(raw);
-      return Object.fromEntries(["id", "role", "taskId", "state", "workflowRunId", "parentWorkflowRunId", "verifiedWorkflowId",
-        "reservationCount", "safeFailure", "remoteStatus", "elapsedMs", "deadlineAtMs", "countFailure"].filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]]));
-    });
+  if (selector.report) {
+    result.operationHistory = reportOperationSummary(list(result.operationHistory), operationId);
+    result.evidenceScope = {
+      artifactVersions: "Current approved evidence only; version numbers and source relationships retain revision context. Historical creative bodies are omitted.",
+      operations: "Grouped counts, reservations and measured timings only. Individual execution identifiers, deadlines and transport metadata are omitted; complete history remains saved.",
+      images: "Simulated images; visual consistency is not_assessed. Image identities, ordered references, dimensions and warnings are evidence, not visual assessment.",
+      cost: "Reservation counts are not monetary charges. Assess cost only from explicit supplied monetary evidence; otherwise report it as unavailable.",
+    };
+  }
   return result;
 }
 export type M4AllowedValues = Readonly<Record<string, readonly string[]>>;
@@ -284,7 +312,7 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
     instruction = taskInstructions[taskId!];
     if (taskId === "J11") instruction += ` For ${persona}, supply exactly ${CASES[persona].storyPages + 1} pages, ordered from cover index 0. Kid story pages must each have exactly one panel. Parent must have exactly one two-panel story page; all other story pages have one panel. Creator must have at least two multi-panel story pages. liveTextSafeRegion x and y are normalized TOP-LEFT coordinates, not the center; width and height are sizes. Require x+width <= 1 and y+height <= 1. A valid safe region is {"x":0.05,"y":0.05,"width":0.9,"height":0.9}; {"x":0.5,"y":0.5,"width":1,"height":1} is invalid. Keep trim, aspect ratio, working pixels and orientation consistent. Return one complete compact JSON object. Use concise field values, no indentation or blank lines outside strings, and close every array and object. Stop immediately after the final closing brace.`;
   } else if (report) {
-    instruction = "Give an independent advisory assessment of intent, textual consistency, interaction and cost evidence. Images are simulated and this request is text-only: visual consistency must be not_assessed. Findings must use current supplied artifact/version targets or this run. Do not approve, revise or regenerate anything. Identity, evidence lists and monetary fields are supplied by trusted workflow code.";
+    instruction = "Give an independent advisory assessment of intent, textual consistency, interaction and cost evidence. The evidenceScope describes omitted historical and transport evidence. Do not infer unseen content, individual historical behavior or monetary charges from aggregate counts. Mark unsupported assessments not_assessed where the schema permits, and explicitly describe other evidence limitations in the explanation or summary. Images are simulated and this request is text-only: visual consistency must be not_assessed. Findings must use current supplied artifact/version targets or this run. Do not approve, revise or regenerate anything. Identity, evidence lists and monetary fields are supplied by trusted workflow code.";
   } else if (role === "manager") {
     instruction = "Select only the supplied eligibleRoute and exact eligibleTarget. J13 delegates page-image work, never text-specialist work. If no route can be selected because information is missing, ask one concise creator question. Do not select an already completed or unapproved downstream task.";
   } else {
@@ -292,7 +320,7 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
   }
   const definition = { version: "m4_request_v1", rendering: "exact-context-string-v1", role, taskId, persona, report,
     projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
-      ...(role === "manager" || report ? { artifactProjection: "current-provenance-v2", creativeContent: report } : {}) },
+      ...(role === "manager" || report ? { artifactProjection: report ? "compact-advisory-v3" : "current-provenance-v2", creativeContent: report } : {}) },
     preparationByteLimit: role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null,
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
   return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
@@ -333,13 +361,27 @@ export function m4RequestBundleMatches(policy: M4Policy, grant?: M4Grant): boole
     update.fromBundleHash !== update.toBundleHash : policy.requestDefinitionHash === m4RequestBundleHash();
 }
 
+export class M4ReportSizeError extends Error {
+  constructor(readonly requestBytes: number, readonly byteLimit: number, readonly definitionHash: string, readonly requestDigest: string,
+    readonly scope: "context" | "request" = "request") {
+    super("M4 report request exceeds its preparation byte limit; required content was not truncated.");
+    this.name = "M4ReportSizeError";
+  }
+}
+
 export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, contextJson: string, allowed: M4AllowedValues, grant?: M4Grant) {
   if (!m4RequestBundleMatches(policy, grant)) throw new Error("M4 request definitions differ from the frozen policy or reviewed amendment.");
   // Validate JSON without rebuilding its bytes: Dify must receive this exact string.
-  if (!contextJson.trim() || Buffer.byteLength(contextJson, "utf8") > 2 * 1024 * 1024) throw new Error("M4 context exceeds the preparation byte limit.");
+  if (!contextJson.trim()) throw new Error("M4 context must not be blank.");
   const context = JSON.parse(contextJson) as unknown;
   if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("M4 context must be an object.");
   const definition = m4RequestDefinition(selector);
+  if (Buffer.byteLength(contextJson, "utf8") > 2 * 1024 * 1024) {
+    if (selector.report && (selector.role === "tester" || selector.role === "judge")) {
+      throw new M4ReportSizeError(Buffer.byteLength(contextJson, "utf8"), 2 * 1024 * 1024, definition.hash, m4Hash(contextJson), "context");
+    }
+    throw new Error("M4 context exceeds the preparation byte limit.");
+  }
   if ((selector.role === "manager" || selector.role === "tester" && !selector.report) &&
       (!allowed.taskId || !allowed.subjectId || selector.role === "manager" && !allowed.subjectKind || selector.role === "tester" && (!allowed.action || !allowed.taskIds))) {
     throw new Error("M4 decisions require protected task, action and target choices.");
@@ -353,6 +395,9 @@ export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, 
   const requestJson = m4CanonicalJson(payload);
   const requestByteLimit = definition.preparationByteLimit;
   if (requestByteLimit !== null && Buffer.byteLength(requestJson, "utf8") > requestByteLimit) {
+    if (selector.report && (selector.role === "tester" || selector.role === "judge")) {
+      throw new M4ReportSizeError(Buffer.byteLength(requestJson, "utf8"), requestByteLimit, definition.hash, m4Hash(requestJson));
+    }
     throw new Error(`M4 ${selector.role === "manager" ? "manager" : "report"} request exceeds its preparation byte limit; required content was not truncated.`);
   }
   return { definitionHash: definition.hash, requestJson, requestDigest: m4Hash(requestJson),
