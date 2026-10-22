@@ -822,9 +822,21 @@ not completion. The legacy home and agent navigation remain when disabled.
 The six M1 Community bindings and all three live Simulated J01/J02 cases are
 verified; [M1 evidence](accepted/2026-09-27_dify-booklet-runner/M1-runner.md)
 records their release and run identifiers. Reload and idle Pause/Resume preserve
-saved results without duplicate execution. The deployed UI recovers a definite
-control revision conflict with a current-state read and at most one control retry;
-it does not retry an uncertain write. Live active-operation Pause persisted after
+saved results without duplicate execution. The runner UI requests `responseMode: "receipt"` for Pause/Resume and advisory
+finalization. The handler returns compact saved control state only after tracked
+mutation and ownership cleanup succeed. It does not load full run details to
+acknowledge these requests. Callers that omit this option retain the full-detail
+response. The authenticated detail route supports `?view=control`, a projected
+read of the selected run without artifact, operation or asset reads.
+The UI applies the receipt before refreshing details. A detail-read failure leaves
+the saved state visible with a separate refresh warning. The latest accepted revision and a
+control-request epoch prevent older polling responses from replacing it. Saved
+artifacts remain visible and are marked as awaiting refresh until current details
+arrive. A lost or invalid response triggers one compact read, never a write replay;
+if the requested state is not confirmed, mutation controls remain disabled until
+a successful refresh. A saved state observed after an uncertain reply does not
+prove that the particular request caused it. Receipt requests distinguish `stale_revision` from other conflicts. Only that
+explicit revision rejection permits a current-state read and at most one eligible control retry. Live active-operation Pause persisted after
 reload and Resume did not duplicate work. Rapid progression can exhaust the
 single retry and require another Pause click. Production, Cloud and the diagnostic
 probe are unchanged.

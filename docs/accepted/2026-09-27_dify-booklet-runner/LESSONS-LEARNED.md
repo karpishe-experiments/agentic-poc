@@ -4,6 +4,18 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Separate mutation acknowledgement from full-detail reads
+
+A control can save its state before a later detail read fails. Receipt requests
+now acknowledge only after the tracked mutation and its cleanup succeed, then the
+UI loads details separately. HTTP and UI fixtures cover successful saves followed
+by failed detail reads, lost acknowledgements and stale polling responses. Use a
+compact authenticated state read to reconcile uncertain replies; do not repeat
+an uncertain mutation. Preserve errors from mutation validation and cleanup.
+The retained Kid response exception remains unverified; this boundary correction
+does not establish that a timeout caused it. Promotion candidate:
+**Documentation** for application control responses.
+
 ### Prove the complete recovery and delivery boundary
 
 Routine initialization called the comprehensive historical audit. Two retained
