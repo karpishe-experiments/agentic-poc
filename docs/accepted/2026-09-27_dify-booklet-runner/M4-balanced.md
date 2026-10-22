@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid-only continuation is blocked at the input-count guard. Maintenance is closed. Recovery preview failed before apply while scanning historical operations; the targeted-snapshot correction is under verification. Staging delivery remains guarded. Parent and Creator remain on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** Exact count-failure recovery and normal staging delivery succeeded. The same Kid remains blocked with Pause requested at revision 2968, with preserved accounting. Reviewed dev3 installation and application preflight remain pending. Parent and Creator remain on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current execution record - 2026-10-21
@@ -10,7 +10,7 @@ M4 is incomplete. Preserve the conditional USD 5 ceiling, cumulative request lim
 original failures and reservations. J11 and the recovered J12 manager completion
 are already saved; do not reconcile either again.
 
-PR #222 merged into master at `66872aa4a9e59d17113039aca59febe6e4eff94f`.
+**Prior serving baseline:** PR #222 merged into master at `66872aa4a9e59d17113039aca59febe6e4eff94f`.
 PR #223 merged into staging at `bb56ee7a7ba4150978a45743c67868f161d91f63`.
 Normal deployment `39578653307-1` passed; status `39579742615` confirmed complete
 and archived. Image:
@@ -21,7 +21,7 @@ Application preflight verified ready/idle and manager publication
 
 One explicit continuation advanced Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`
 from 38 to 41 admitted text requests and five to seven simulated images.
-The latest readback (revision 1202) is blocked/unknown_outcome with Pause requested and exact manager
+An earlier readback (revision 1202) was blocked/unknown_outcome with Pause requested and exact manager
 operation `7d490c15-5ae1-4276-83ce-7d86a0da7ba4` retained. Generation and both
 reports remain incomplete. The operation retains an acknowledged deadline Stop;
 recovery must preserve that Stop and its timeout history. Stop was requested about
@@ -88,8 +88,8 @@ provider cases pass against its extracted bytes. It is not installed. Existing
 Dify-held credentials are reused; no new secret or transfer is introduced.
 
 **Delivery update - 2026-10-22:** PR #224 merged at
-`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`. Reviewed staging PR #225 remains at
-`6c985bb6805f3ed1a806d5d201cd17630efd3afc`, unmerged until recovery succeeds.
+`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`. The initial reviewed staging PR #225
+head was `6c985bb6805f3ed1a806d5d201cd17630efd3afc`.
 Both source/port passed two independent reviews and lean CI (`39598496902`,
 `39599386771`). Candidate build `39599398667` passed without VPS contact:
 `ghcr.io/karpishe-experiments/agentic-poc@sha256:3e2ae6b46ed7ff3222af0a26a63285286a41d20ed363a576b5fdb51bc2c58ee4`.
@@ -106,8 +106,9 @@ completed handoff. Exact recovery preview `39744440897` failed before apply at
 65,792 ms and exhausted the remaining command budget. The code still scanned full
 documents in eleven historical collections twice per fresh preview. This identifies
 unnecessary work, but does not establish whether payload size, query latency or
-connectivity caused the observed delay. No recovery apply, provider upgrade or Kid
-continuation has occurred. Do not retry that candidate or increase its timeout.
+connectivity caused the observed delay. At that checkpoint, no recovery apply,
+provider upgrade or Kid continuation had occurred. Do not retry that candidate
+or increase its timeout.
 
 The package reassessment selected a versioned, targeted snapshot for this exact
 pre-generation failure closure. It pins the complete target run/operation,
@@ -124,9 +125,29 @@ when that history is added. This is local correctness evidence, not a live laten
 or completion claim. Existing shell evidence is reused because no shell changes.
 Credential storage, transfers and consumers remain unchanged.
 
-**Next:** Finish focused verification, independent review and candidate publication
-for the targeted snapshot. Then use supported recovery for this exact count
-failure, deliver staging normally, install the reviewed provider through one
+PR #226, reviewed head `71028098f01325b7e87fbbe330f5118f30ac7b05`, merged at
+`ea484d3d74d8821a71588b439db87e7f2ea3ddd4`. Two source and two actual-port reviews
+passed; lean CI `39750308172` and `39750889426` passed. Candidate build
+`39750993890` produced staging head `4eae3c285659887b9cf7d2a45743bd968c2da9dd`:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:62b156533a943050138c9897fbb4013a336c09215763dd33142eef39496ab958`.
+Supported preview `39751711628` and apply `39752108906` succeeded for request
+`issue65-kid-count-recovery-20261022-v2`. Verified backup:
+`staging-recovery-issue65-kid-count-recovery-20261022-v2`. The final journal is
+complete. Authenticated readback verifies revision 2968, no active operation,
+blocked/definite_failure with Pause requested, the exact failed operation resolved,
+one reservation, original deadline/Stop/timeout and unchanged 41 text/7 image counters.
+No provider replay occurred. Guarded PR #225 then merged at
+`4236375426466d9e4c3419cdde9ef9d8384f8259`. Deploy `39753524655` reached the
+client wait limit without stopping or replaying the host request. Supported status
+`39754842442` confirmed that original request completed and archived. Release image:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:43d9e5c7676d3bc5e898b14d315445f31ab501a72df50ce94e3771fdaf69eef5`.
+Normal deployment backup: `staging-20261022T091613Z-3633ea35c432c9f2`.
+Read-only Check `39755106127` passed. Existing provider/workspace readback confirms
+Community workspace `ffac910f-2786-490e-90d8-07243d49741b` still has dev2 installed.
+No new dispatcher installation or manual data repair was needed.
+
+**Next:** The existing signature-window handoff is ready and awaiting the operator.
+Install the reviewed provider through one
 bounded signature window and restore verification. Read back identities, admission,
 saved outputs and accounting before continuing the same Kid once. Require all
 J01-J13 outputs, three story pages plus cover, approvals/assets, tester feedback,
