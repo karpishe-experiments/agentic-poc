@@ -168,11 +168,12 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const rows = await database().collections.experiment_runs.find({}, { projection: {
         _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
         counters: 1, limits: 1, safeFailure: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
-        preparation: 1,
+        preparation: 1, createdAtMs: 1, updatedAtMs: 1,
       } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
       return data({ runs: rows.slice(0, limit).map(row => ({ runId: row._id, bookletId: row.bookletId,
         predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
-        revision: row.revision, pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
+        revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
+        pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
         safeFailure: row.safeFailure, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
         generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
         preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,

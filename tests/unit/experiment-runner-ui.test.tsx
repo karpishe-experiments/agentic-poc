@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { BookletRunner } from "@/components/experiments/booklet-runner";
 
-const run = { runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
+const run = { createdAtMs: Date.parse("2026-10-22T08:00:00Z"), updatedAtMs: Date.parse("2026-10-22T09:15:00Z"), runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
 let fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>();
 beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 }));
@@ -18,6 +18,34 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("does not claim uncertain remote work has stopped", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "blocked", safeFailure: "unknown_outcome" }] })));
+    render(<BookletRunner />);
+    expect(await screen.findByText("Run blocked. Inspect the saved details before continuing; unresolved work may still finish.")).toBeTruthy();
+    expect(screen.queryByText(/Execution stopped/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continue inspected run" })).toBeNull();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
+  it("shows recorded UTC times and a direct open link even without a booklet ID", async () => {
+    render(<BookletRunner />);
+    const started = await screen.findByText("22 Oct 2026, 08:00:00 UTC");
+    expect(started.getAttribute("datetime")).toBe("2026-10-22T08:00:00.000Z");
+    expect(screen.getByText("22 Oct 2026, 09:15:00 UTC").getAttribute("datetime")).toBe("2026-10-22T09:15:00.000Z");
+    expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, updatedAtMs: Date.parse("2026-10-22T09:20:00Z") }] })));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("22 Oct 2026, 09:20:00 UTC")).toBeTruthy();
+    expect(screen.getByText("22 Oct 2026, 08:00:00 UTC")).toBeTruthy();
+  });
+  it("does not invent timestamps for historical records", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, createdAtMs: undefined, updatedAtMs: undefined }] })));
+    render(<BookletRunner />);
+    expect(await screen.findAllByText("Unavailable", { exact: true })).toHaveLength(2);
+    expect(screen.getByText("Started")).toBeTruthy();
+    expect(screen.getByText("Latest update")).toBeTruthy();
+  });
+
   it("shows retained Balanced allowance separately from invoice cost", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, mode: "balanced", m4Accounting: {
       campaignId: "campaign-safe-id", state: "active", requests: 7, maxRequests: 500, runRequests: 7, runMaxRequests: 120,
@@ -129,8 +157,10 @@ describe("booklet runner inspector", () => {
       { operationId: "judge-1", workflowRunId: "run-2", verifiedWorkflowId: "published-2", matchesCurrentVersions: false,
         report: { ...report, role: "judge", summary: "Historical judge assessment." } }] }] }), { status: 200 }));
     render(<BookletRunner />);
-    expect(await screen.findByText("Generation: complete · Evaluation: running")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open saved booklet" }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
+    expect(await screen.findByText("Booklet generation")).toBeTruthy();
+    expect(screen.getByText("Complete", { exact: true })).toBeTruthy();
+    expect(screen.getByText("Running", { exact: true })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
     expect(screen.getByText("Tester feedback · simulated")).toBeTruthy();
     expect(screen.getByText("Independent judge assessment · simulated")).toBeTruthy();
     expect(screen.getByText("Current artifact versions: do not match; report is historical")).toBeTruthy();

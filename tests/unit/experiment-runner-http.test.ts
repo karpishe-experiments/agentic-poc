@@ -33,7 +33,7 @@ describe("booklet runner HTTP boundary", () => {
     } finally { factory.mockRestore(); }
   });
   it("pages summary metadata without constructing artifact or storage views", async () => {
-    const rows = [{ _id: "run-1", persona: "playful_kid", status: "completed", counters: {}, limits: {}, configurationJson: "private" },
+    const rows = [{ _id: "run-1", persona: "playful_kid", status: "completed", createdAtMs: 1000, updatedAtMs: 2000, counters: {}, limits: {}, configurationJson: "private" },
       { _id: "run-2" }];
     const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) };
     const find = vi.fn().mockReturnValue(cursor);
@@ -42,10 +42,11 @@ describe("booklet runner HTTP boundary", () => {
       database: () => ({ collections: { experiment_runs: { find } } } as unknown as Database), store });
     const response = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?page=2&limit=1"));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ data: { page: 2, hasMore: true, runs: [{ runId: "run-1" }] } });
+    expect(await response.json()).toMatchObject({ data: { page: 2, hasMore: true, runs: [{ runId: "run-1", createdAtMs: 1000, updatedAtMs: 2000 }] } });
     expect(cursor.skip).toHaveBeenCalledWith(2);
     expect(cursor.limit).toHaveBeenCalledWith(2);
     expect(find.mock.calls[0][1].projection.configurationJson).toBeUndefined();
+    expect(find.mock.calls[0][1].projection).toMatchObject({ createdAtMs: 1, updatedAtMs: 1 });
     expect(store).not.toHaveBeenCalled();
     expect((await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?limit=1000"))).status).toBe(400);
     expect(find).toHaveBeenCalledTimes(1);
