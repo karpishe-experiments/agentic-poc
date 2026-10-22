@@ -41,6 +41,14 @@ retain current parent and configuration checks.
 
 Supported Booklet recovery is staging-only. `candidate-reconcile` runs reviewed
 application recovery from an immutable image without changing the serving release.
+New exact pre-generation failure closures use `pre-generation-target-v1`
+snapshots: complete target identities/preparation, current source and approval
+fingerprints, and bounded campaign-reservation projections. Only the exact run and
+operation may change. Global work/ownership inspection remains mandatory; a
+comprehensive historical audit is not part of this closure. Old unversioned
+checkpoints keep their original full-inventory meaning, and unknown scopes stop.
+Abort uses the original immutable candidate. A changed candidate requires a fresh
+preview; its digest cannot replace an older journal's pinned proof.
 `expired-deployment-recover` uses a separate request linked to the unchanged
 original journal and deadline. Both default to preview and retain closed admission
 after ambiguous mutations. No automatic restore or provider replay is permitted.

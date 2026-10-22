@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid-only continuation is blocked at the input-count guard after successful reviewed delivery. The context/provider/recovery correction is local and awaiting final review and delivery. Parent and Creator remain on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
+**State:** Kid-only continuation is blocked at the input-count guard. Maintenance is closed. Recovery preview failed before apply while scanning historical operations; the targeted-snapshot correction is under verification. Staging delivery remains guarded. Parent and Creator remain on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current execution record - 2026-10-21
@@ -68,7 +68,7 @@ Stop is compatible with this exact proof; manual or uncertain Stops remain block
 The proof pins the original Stop. No dispatcher installation is needed for this
 application correction.
 
-**Delivery dependency:** The serving app repeats deadline observation every five
+**Quiescence requirement (verified 2026-10-22):** The serving app repeats deadline observation every five
 seconds and increments the blocked run revision. The existing candidate workflow
 previews before it closes admission, so an exact-revision preview cannot be relied
 on while that writer remains active. Pause does not stop observation. Do not attempt
@@ -76,8 +76,8 @@ live recovery in that state. The narrow recommendation is one separately approve
 operator invocation of the existing application maintenance command under the host
 lock, with exact release/container checks. Then verify closed admission, zero
 owners and a stable revision before the existing preview/apply. This needs no
-record repair or installed script. It is not yet executed or an exposed workflow
-capability. Do not substitute the historical bootstrap repair or weaken revision
+record repair or installed script. This operator checkpoint is now verified below;
+it remains outside the exposed workflow controls. Do not substitute the historical bootstrap repair or weaken revision
 checks to avoid this boundary.
 
 The unsigned candidate package is
@@ -87,9 +87,45 @@ Only its manifest version and bounded adapter differ from dev2. All 29 Python
 provider cases pass against its extracted bytes. It is not installed. Existing
 Dify-held credentials are reused; no new secret or transfer is introduced.
 
-**Next:** Complete final focused checks, two clean independent reviews and lean CI,
-then publish one combined correction. Resolve the observation-quiescence checkpoint,
-then use supported recovery for this exact count
+**Delivery update - 2026-10-22:** PR #224 merged at
+`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`. Reviewed staging PR #225 remains at
+`6c985bb6805f3ed1a806d5d201cd17630efd3afc`, unmerged until recovery succeeds.
+Both source/port passed two independent reviews and lean CI (`39598496902`,
+`39599386771`). Candidate build `39599398667` passed without VPS contact:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:3e2ae6b46ed7ff3222af0a26a63285286a41d20ed363a576b5fdb51bc2c58ee4`.
+Read-only inspection `39742136191` found only this run and operation, no claims,
+result or materialization, zero mutation owners and no inspection error. Its
+nonzero exit reports those expected unresolved records, not a failed database
+read. The operator then closed maintenance through the existing command.
+Inspection `39744110026` verified maintenance true, draining false, zero active
+and interrupted mutations, and zero owners. The same target remains the only
+unresolved work. Application revision 2967 remained stable across two reads.
+The [authorization register](EXECUTION.md#b-authorization-register) records this
+completed handoff. Exact recovery preview `39744440897` failed before apply at
+`snapshot.experiment_operations` with `OperationBudgetExpired`. That phase took
+65,792 ms and exhausted the remaining command budget. The code still scanned full
+documents in eleven historical collections twice per fresh preview. This identifies
+unnecessary work, but does not establish whether payload size, query latency or
+connectivity caused the observed delay. No recovery apply, provider upgrade or Kid
+continuation has occurred. Do not retry that candidate or increase its timeout.
+
+The package reassessment selected a versioned, targeted snapshot for this exact
+pre-generation failure closure. It pins the complete target run/operation,
+campaign/booklet, current source and approval fingerprint, and projected campaign
+reservations. Global ownership inspection remains. Historical J11/manager and
+unversioned checkpoints retain their existing interpretation. The correction must
+pass a large unrelated-history fixture and the same-Kid completion fixture before
+another reviewed candidate preview. No dispatcher installation is required.
+Local verification passed: nine final recovery cases plus 43 unchanged passing
+provider-result cases, 27 snapshot/storage units, the same-Kid completion fixture
+with 80 unrelated large historical operations, typecheck, focused lint and 207 local
+documentation links/anchors. The snapshot digest and query count remain unchanged
+when that history is added. This is local correctness evidence, not a live latency
+or completion claim. Existing shell evidence is reused because no shell changes.
+Credential storage, transfers and consumers remain unchanged.
+
+**Next:** Finish focused verification, independent review and candidate publication
+for the targeted snapshot. Then use supported recovery for this exact count
 failure, deliver staging normally, install the reviewed provider through one
 bounded signature window and restore verification. Read back identities, admission,
 saved outputs and accounting before continuing the same Kid once. Require all
