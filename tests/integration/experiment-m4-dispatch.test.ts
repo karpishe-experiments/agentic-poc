@@ -488,14 +488,17 @@ describe("offline Balanced dispatcher", () => {
     const http = createBookletRunnerHttp({ database: () => env.database, config: () => ({ enabled: true, config: env.config }),
       runtime: () => env.runtime, store: () => env.store, mutate: action => action() });
     const response = await http.control(new Request(`https://booklet.invalid/api/experiments/booklet-runs/${env.runId}/resume`, {
-      method: "POST", headers: { origin: env.config.publicOrigin }, body: JSON.stringify({ expectedRevision: failedRun.revision }),
+      method: "POST", headers: { origin: env.config.publicOrigin }, body: JSON.stringify({ expectedRevision: failedRun.revision, responseMode: "receipt" }),
     }), env.runId, "resume");
     expect(response.status, await response.clone().text()).toBe(200);
     const complete = (await env.repository.getRun(env.runId))!;
     const repeatedResponse = await http.control(new Request(`https://booklet.invalid/api/experiments/booklet-runs/${env.runId}/resume`, {
-      method: "POST", headers: { origin: env.config.publicOrigin }, body: JSON.stringify({ expectedRevision: failedRun.revision }),
+      method: "POST", headers: { origin: env.config.publicOrigin }, body: JSON.stringify({ expectedRevision: failedRun.revision, responseMode: "receipt" }),
     }), env.runId, "resume");
     expect(repeatedResponse.status, await repeatedResponse.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { runId: env.runId, status: "completed", evaluationStatus: "failed", revision: complete.revision } });
+    const readback = await http.detail(new Request(`https://booklet.invalid/api/experiments/booklet-runs/${env.runId}?view=control`), env.runId);
+    expect(await readback.json()).toEqual(await repeatedResponse.json());
     expect(await env.repository.getRun(env.runId)).toEqual(complete);
     expect(complete).toMatchObject({ status: "completed", evaluationStatus: "failed", activeOperationId: null,
       generationCompletedAtMs: generation!.at, generationVersionIds: generation!.versions, counters: before.counters });
