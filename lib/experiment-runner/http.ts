@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
+import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
 import { experimentPageBatchSchema } from "@/lib/contracts/experiment-page-batches";
@@ -242,7 +243,15 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       const body = control.parse(await boundedJson(request, 4096));
       const { repository, context } = services(state);
-      const saved = await mutate(() => repository[action]({ runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() }), { runId });
+      const saved = await mutate(async () => {
+        const current = await repository.getRun(runId);
+        const input = { runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() };
+        if (action === "resume" && current?.generationCompletedAtMs != null &&
+            (current.status === "blocked" || current.status === "completed" && current.evaluationStatus === "failed")) {
+          return createExperimentCompletionService(database(), store()).completeAdvisoryFailure(input);
+        }
+        return repository[action](input);
+      }, { runId });
       return data(await context.getRunView(saved._id));
     }); },
     selectPages(request: Request, runId: string) { return run(async () => {

@@ -734,3 +734,21 @@ without creating a provider result or usage record retroactively.
 Evidence: the current [M4 record](M4-balanced.md#current-execution-record---2026-10-21),
 bounded provider tests and the count-failure/recovery/deployment/Resume Kid fixture.
 Promotion target: provider-boundary and role-context test guidance.
+
+### Advisory evaluation must not invalidate verified generation
+
+When reports are advisory, preserve generation and evaluation as separate
+outcomes. A verified terminal report failure can end evaluation while retaining
+valid generation. Unknown provider outcomes, active owners and unresolved
+accounting still block completion. Recheck saved generation and liabilities
+before finalization; repeated acknowledgements must return the terminal outcome
+without another request or campaign reopening.
+
+Compact report evidence reduces duplicated transport data, but does not guarantee
+that creative content fits a model limit. Keep the authoritative count guard and
+record oversize as a visible evaluation failure. Retain original evidence and
+require `not_assessed` where the projection cannot support a finding.
+
+Evidence: the all-persona advisory integration matrix, Balanced Kid count/size
+failure and retained-finalization cases, and request projection unit tests.
+Promotion target: documentation for advisory evaluation and terminal outcomes.

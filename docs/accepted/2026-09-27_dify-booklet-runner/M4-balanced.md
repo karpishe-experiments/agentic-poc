@@ -1,5 +1,65 @@
 # M4 — Simulation hardening and Balanced acceptance
 
+**State:** Kid generation is saved. Final acceptance under the revised advisory-completion contract is pending delivery and live verification. Parent and Creator remain on hold. M4 as a whole remains incomplete.
+**Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## Current execution record - 2026-10-22
+
+Complete the retained Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` without
+repeating generation or advisory evaluation. Its failed tester operation
+`aaeb78da-1bb7-44d1-96f7-3762fdd1873c` retains an authenticated input-count
+failure: 39,891 tokens exceed the unchanged 32,000-token ceiling; generation did
+not start. The judge has not run. Last retained readback has 44 text requests,
+nine simulated images, zero paid images and 53 steps. Preserve all liabilities:
+USD 0.052720 reserved and USD 0.067229 settled upper bound. Invoice cost remains
+unavailable. The campaign is stopped; finalization must not reopen it.
+
+The accepted completion criterion is valid saved generation and accounting.
+Tester and judge remain advisory. A verified terminal report failure ends
+report scheduling and records `status: completed`, `evaluationStatus: failed`.
+The UI must say **Completed — evaluation incomplete**. This does not mean that
+report verification passed. Unknown outcomes, active owners and invalid generation
+remain blocking. Repeated finalization and Resume must not create provider work.
+
+The shared report projection applies to Kid, Parent and Creator. It preserves
+current creative evidence, exact lettering and relevant feedback, summarizes
+historical operations, and explains omitted evidence. Original records remain
+saved. Reports must use `not_assessed` for unsupported conclusions, including
+simulated-image quality. The protected request definition changes; frozen spending
+policy and the provider count ceiling do not.
+
+Local verification passed: 79 focused units, 14 real-persistence cases with fake
+providers, offline agent fixtures, typecheck and focused lint. The persistence
+matrix covers successful reports, tester failure and judge failure for all three
+Simulated personas; Balanced Kid also covers count and local-size failures,
+retained finalization, ownership guards and repeated requests.
+
+**Next:** Finish independent reviews and lean CI.
+Deliver through normal staging deployment, then finalize the retained Kid through
+the existing application control. Verify generation, accounting, terminal UI state
+and no further requests. No new run or paid retry is included. Parent and Creator
+execution remains on hold. Their representative Balanced fixtures currently hit
+the existing manager preparation byte limit before evaluation; report projection
+validation does not establish their end-to-end readiness.
+
+Offline full-fixture request sizing with `o200k_base` estimates tester/judge
+serialized-request tokens at 25,601/25,600 for Kid, 31,800/31,799 for Parent and
+45,185/45,184 for Creator. These are tokenizer estimates, not authoritative
+provider input counts. Creator includes revision feedback. The Parent/Creator
+sizing harness bypassed manager-only context to reach report preparation; this is
+sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
+Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
+ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
+
+The last retained serving release is `4236375426466d9e4c3419cdde9ef9d8384f8259`,
+image `sha256:43d9e5c7676d3bc5e898b14d315445f31ab501a72df50ce94e3771fdaf69eef5`.
+The reviewed dev3 provider installation is complete and signature verification was
+restored. Do not repeat its installation or signature-policy handoff. Credential
+storage, transfers and consumers are unchanged by this application correction.
+
+<details>
+<summary>Superseded delivery instructions and retained evidence</summary>
+
 **State:** Exact count-failure recovery and normal staging delivery succeeded. The same Kid remains blocked with Pause requested at revision 2968, with preserved accounting. Reviewed dev3 installation and application preflight remain pending. Parent and Creator remain on hold. M4 remains incomplete. **Coverage:** AC01-AC03, AC05-AC08, AC10-AC13.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
@@ -153,6 +213,9 @@ saved outputs and accounting before continuing the same Kid once. Require all
 J01-J13 outputs, three story pages plus cover, approvals/assets, tester feedback,
 independent judge assessment and durable accounting. A new unsupported failure
 requires evidence and package reassessment before another delivery cycle.
+
+
+</details>
 
 <details>
 <summary>Retained earlier execution evidence and superseded next-step statements</summary>

@@ -2,12 +2,30 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { personaSchema, specialistTaskSchema } from "@/lib/contracts/experiment-runner";
-import { assertM4SchemaLimits, m4BindAllowedValues, m4CanonicalJson, m4Hash, m4RequestBundleHash,
+import { M4ReportSizeError, assertM4SchemaLimits, m4BindAllowedValues, m4CanonicalJson, m4Hash, m4RequestBundleHash,
   m4RequestDefinition, m4StrictSchema, prepareM4Request, projectM4Context } from "@/lib/experiment-runner/m4-request";
 import { m4TestId, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { m4RequestVectors } from "@/tests/helpers/m4-request-vectors";
 
 describe("M4 reviewed request contract", () => {
+  it.each(personaSchema.options)("retains typed local report-size rejection for %s without truncation", (persona) => {
+    const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
+    const allowed = { runId: [m4TestId(1)], artifactId: [m4TestId(2)], versionId: [m4TestId(3)], pageId: [m4TestId(4)] };
+    for (const role of ["tester", "judge"] as const) {
+      const selector = { role, taskId: null, persona, report: true } as const;
+      let caught: unknown;
+      try { prepareM4Request(policy, selector, JSON.stringify({ brief: "x".repeat(128 * 1024) }), allowed); } catch (error) { caught = error; }
+      expect(caught).toBeInstanceOf(M4ReportSizeError);
+      expect(caught).toMatchObject({ byteLimit: 128 * 1024, definitionHash: m4RequestDefinition(selector).hash,
+        requestDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+      expect((caught as M4ReportSizeError).requestBytes).toBeGreaterThan(128 * 1024);
+      expect(() => prepareM4Request(policy, selector, JSON.stringify({ brief: "x".repeat(2 * 1024 * 1024) }), allowed))
+        .toThrow(expect.objectContaining({ scope: "context", byteLimit: 2 * 1024 * 1024 }));
+      expect(() => prepareM4Request(policy, selector, "{" + "x".repeat(2 * 1024 * 1024), allowed)).not.toThrow(M4ReportSizeError);
+    }
+    expect(() => prepareM4Request(policy, { role: "manager", taskId: null, persona, report: false },
+      JSON.stringify({ brief: "x".repeat(20 * 1024) }), { taskId: [], subjectId: [], subjectKind: [] })).not.toThrow(M4ReportSizeError);
+  });
   it("bounds manager context independently of completed image prompt size, retaining exact current provenance", () => {
     const artifact = { id: m4TestId(2), taskId: "J13", subjectKind: "page", subjectId: m4TestId(3), state: "approved", currentVersionId: m4TestId(4),
       versions: [{ id: m4TestId(4), number: 1, dependencyVersionIds: [m4TestId(5)], approval: { id: m4TestId(6) },
@@ -31,8 +49,50 @@ describe("M4 reviewed request contract", () => {
       const result = project(role); const serialized = JSON.stringify(result);
       expect(serialized).not.toContain("assembled"); expect(serialized).not.toContain("duplicate style");
       for (const value of ["Required dialogue", "canonical style", "source", "asset", "creative field must survive"]) expect(serialized).toContain(value);
-      expect(result.operationHistory).toEqual([{ id: "previous" }]); expect(result.reportEvidence).toEqual({ versionIds: ["v", "style"] });
+      expect(result.operationHistory).toEqual([{ role: null, taskId: null, state: null, safeFailure: null,
+        countFailureReason: null, count: 1, reservations: 0, measuredTimings: 0, elapsedMsTotal: 0, elapsedMsMax: 0 }]);
+      expect(result.reportEvidence).toEqual({ versionIds: ["v", "style"] });
     }
+  });
+  it.each(personaSchema.options)("compacts %s history deterministically without losing creative or finding evidence", (persona) => {
+    const history = Array.from({ length: 300 }, (_, index) => ({ id: `historical-${index}`, role: "tester", taskId: "J08",
+      state: "succeeded", reservationCount: 1, elapsedMs: 20, workflowRunId: `transport-${index}` }));
+    history.push({ ...history[0], id: "current", reservationCount: 1000 });
+    const raw = { role: "tester", brief: "Creator brief", persona, creatorMessages: [{ sequence: 1, content: "Please revise the ending." }],
+      operationHistory: history, counters: { textCalls: 300 }, limits: { textCalls: 500 }, warnings: ["Retained warning"],
+      currentArtifacts: [{ id: "artifact", taskId: "J12", currentVersionId: "current-version", versions: [
+        { id: "old-version", content: { prose: "Historical body" } },
+        { id: "current-version", number: 3, dependencyVersionIds: ["manuscript"], approval: { id: "approval", state: "approved" },
+          content: { panels: [{ lettering: [{ text: "Exact text\n  unchanged!", speakerEntityId: "character" }],
+            sheetReferences: [{ subjectId: "character", assetId: "image", artifactVersionId: "reference" }] }],
+            attachments: [{ subjectId: "character", assetId: "image", artifactVersionId: "reference", uploadFileId: "private-upload", uploadUser: "transport-user", sha256: "digest", byteLength: 95, width: 8, height: 8 }],
+            output: { width: 8, height: 8, sha256: "digest" } } }] }], reportEvidence: { versionIds: ["current-version"] } };
+    const before = structuredClone(raw);
+    const selector = { role: "tester" as const, taskId: null, persona, report: true };
+    const result = projectM4Context(selector, raw, "current");
+    expect(result).toEqual(projectM4Context(selector, { ...raw, operationHistory: [...history].reverse() }, "current"));
+    expect(result.operationHistory).toEqual([{ role: "tester", taskId: "J08", state: "succeeded", safeFailure: null,
+      countFailureReason: null, count: 300, reservations: 300, measuredTimings: 300, elapsedMsTotal: 6000, elapsedMsMax: 20 }]);
+    const serialized = JSON.stringify(result);
+    for (const value of ["current-version", "manuscript", "approval", "character", "reference", "Please revise the ending.", "Retained warning"]) expect(serialized).toContain(value);
+    expect(serialized).toContain(JSON.stringify("Exact text\n  unchanged!").slice(1, -1));
+    for (const value of ["Historical body", "private-upload", "transport-user", "digest", "historical-"]) expect(serialized).not.toContain(value);
+    expect(serialized.length).toBeLessThan(JSON.stringify(raw).length / 5);
+    expect(result.evidenceScope).toMatchObject({ images: expect.stringContaining("not_assessed"), cost: expect.stringContaining("unavailable") });
+    expect(raw).toEqual(before);
+    expect(m4RequestDefinition(selector).projection.artifactProjection).toBe("compact-advisory-v3");
+  });
+  it("retains aggregate failure kinds and distinguishes missing timings from zero", () => {
+    const result = projectM4Context({ role: "judge", taskId: null, persona: "playful_kid", report: true }, {
+      role: "judge", operationHistory: [
+        { id: "a", role: "tester", state: "failed", safeFailure: "definite_failure", countFailure: { code: "input_limit_exceeded" }, reservationCount: 1, elapsedMs: null },
+        { id: "b", role: "tester", state: "failed", safeFailure: "unknown_outcome", reservationCount: 1, elapsedMs: 0 },
+      ],
+    }, "current");
+    expect(result.operationHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ safeFailure: "definite_failure", countFailureReason: "input_limit_exceeded", measuredTimings: 0, reservations: 1 }),
+      expect.objectContaining({ safeFailure: "unknown_outcome", measuredTimings: 1, elapsedMsTotal: 0 }),
+    ]));
   });
   it("rejects complete manager/report requests above local byte bounds without truncating required text", () => {
     const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };

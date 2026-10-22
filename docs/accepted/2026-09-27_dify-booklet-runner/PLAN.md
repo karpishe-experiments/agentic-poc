@@ -208,7 +208,7 @@ and reconcile active/uncertain work before configuration changes; do not replay
 unknown outcomes automatically. Existing PRD limits and release authority remain
 unchanged.
 
-**Exit:** no known technical completion blockers, all Balanced cases complete, and configuration/accounting evidence is current. This does not prove image quality or Real acceptance.
+**Exit:** all Balanced cases have verified generation and current configuration/accounting evidence. A verified terminal tester or judge failure permits completion with evaluation incomplete; unknown outcomes and unresolved ownership remain blocking. Reports remain advisory and their failure must not trigger generation replay. This does not prove image quality, successful advisory evaluation or Real acceptance. The current delivery scope is Kid only; Parent and Creator remain on hold.
 
 ## Milestone 5 — Clean staging transition and Real acceptance
 
