@@ -1,5 +1,15 @@
 # VPS deployment runbook
 
+Before planning shared-host changes, read the private
+[srv1 inventory](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/inventory/srv1.md)
+and [shared operations guidance](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).
+The October 22 inventory identifies legacy port-80 gateway ownership, image storage,
+Compose compatibility work and proposed Unibase subnet collisions. It is a dated
+observation, not permission to upgrade, prune, restart or migrate services.
+Booklet/Dify/tunnel operations still follow this runbook and the
+[ownership boundary](contracts.md#shared-infrastructure-documentation-boundary).
+New application conventions do not alter the existing locks, recovery or credentials.
+
 This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
 PR Validate runs [selected non-build checks](../../scripts/ci/README.md). For a manual
