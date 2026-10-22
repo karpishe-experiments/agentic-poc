@@ -3,6 +3,14 @@ import { m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySchema, m4Policy
 import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 describe("frozen M4 policy", () => {
+  it("accepts the reviewed final-answer adapter while retaining historical dev3 grants", () => {
+    const grant = { campaignId: "00000000-0000-4000-8000-000000000003", reference: "explicit-fix",
+      providerAdapterUpdate: { fromIdentity: m4TestPolicy().pluginIdentity, version: "1.0.7-dev4",
+        packageSha256: "a".repeat(64), reference: "reviewed-exact-package" } };
+    expect(m4GrantSchema.parse(grant).providerAdapterUpdate?.version).toBe("1.0.7-dev4");
+    expect(m4GrantSchema.safeParse({ ...grant, providerAdapterUpdate: { ...grant.providerAdapterUpdate, version: "1.0.7-dev3" } }).success).toBe(true);
+    expect(m4GrantSchema.safeParse({ ...grant, providerAdapterUpdate: { ...grant.providerAdapterUpdate, version: "1.0.7-dev5" } }).success).toBe(false);
+  });
   it("keeps completion recovery exact, bounded and separate from failure continuation", () => {
     const entry = { runId: "00000000-0000-4000-8000-000000000001", operationId: "00000000-0000-4000-8000-000000000002", reference: "reviewed-exact-recovery" };
     const grant = { campaignId: "00000000-0000-4000-8000-000000000003", reference: "frozen-grant", completionRecoveries: [entry] };

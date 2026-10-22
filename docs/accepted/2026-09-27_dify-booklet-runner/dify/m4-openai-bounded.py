@@ -63,7 +63,7 @@ def _count_failure(model: str, digest: str, stdio_sdk: dict[str, str], code: str
             "provider": "openai", "apiBaseUrl": "https://api.openai.com/v1",
             "stdioSdk": stdio_sdk, "model": model, "serviceTier": "default",
             "requestDigest": digest, "stage": "input_count", "code": code,
-            "adapterVersion": "1.0.7-dev3", "countedInputTokens": counted, "limit": 32000, "generationStarted": False,
+            "adapterVersion": "1.0.7-dev4", "countedInputTokens": counted, "limit": 32000, "generationStarted": False,
             "elapsedMs": max(0, int(elapsed * 1000)), "countRequestId": request_id,
         },
     }
@@ -86,6 +86,42 @@ def _usage(response: Any) -> dict[str, Any]:
         "cacheWriteInputTokens": _integer(_field(input_details, "cache_write_tokens")),
         "reasoningOutputTokens": _integer(_field(output_details, "reasoning_tokens")),
     }
+
+
+def _final_content(response: Any) -> str:
+    """Select one assistant answer without joining commentary or reasoning.
+
+    Phase is optional for older responses. Accept one phase-less message only
+    when no message has a phase. Ambiguous output stays invalid creative content;
+    return it empty so the wrapper still preserves authoritative usage evidence.
+    Never recover JSON substrings or choose among multiple possible answers.
+    """
+    output = _field(response, "output")
+    if not isinstance(output, list):
+        return ""
+    messages = [item for item in output
+                if _field(item, "type") == "message"]
+    if any(_field(item, "role") != "assistant" for item in messages):
+        return ""
+    phases = [_field(item, "phase") for item in messages]
+    if any(phase not in (None, "commentary", "final_answer") for phase in phases):
+        return ""
+    if all(phase is None for phase in phases):
+        selected = messages if len(messages) == 1 else []
+    else:
+        # Mixed phase-less/phased output cannot establish which answer is final.
+        selected = [item for item in messages if _field(item, "phase") == "final_answer"] if None not in phases else []
+    if len(selected) != 1:
+        return ""
+    if _field(selected[0], "status") != "completed":
+        return ""
+    parts = _field(selected[0], "content")
+    if not isinstance(parts, list) or not parts or any(_field(part, "type") not in ("output_text", "refusal") for part in parts):
+        return ""
+    # Refusal bytes remain inspectable, but the independent refused flag always
+    # prevents materialization, even when a refusal happens to be valid JSON.
+    texts = [_field(part, "text" if _field(part, "type") == "output_text" else "refusal") for part in parts]
+    return "".join(texts) if all(isinstance(value, str) for value in texts) else ""
 
 
 def generate(llm, client_factory, model, credentials, messages, parameters,
@@ -220,10 +256,11 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     if status not in ("completed", "incomplete", "failed", "cancelled"):
         raise InvokeBadRequestError("Unexpected Booklet provider status; inspect the original request.")
     usage = _usage(response)
+    output = _field(response, "output")
     refused = any(_field(part, "type") == "refusal"
-                  for item in (_field(response, "output") or [])
-                  if _field(item, "type") == "message"
-                  for part in (_field(item, "content") or []) if not isinstance(part, str))
+                  for item in (output if isinstance(output, list) else [])
+                  if _field(item, "type") == "message" and isinstance(_field(item, "content"), list)
+                  for part in _field(item, "content"))
     incomplete_reason = _field(_field(response, "incomplete_details"), "reason")
     if incomplete_reason not in (None, "max_output_tokens", "content_filter"):
         incomplete_reason = "unknown"
@@ -239,7 +276,7 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     }
     # Dify LLM nodes expose text. Do not depend on opaque_body being exported.
     # Creative output remains a string for the trusted downstream parser to validate.
-    wrapper = {"schemaVersion": "booklet_provider_v1", "content": responses.content(response),
+    wrapper = {"schemaVersion": "booklet_provider_v1", "content": _final_content(response),
                "providerEvidence": evidence}
     measured = (llm._calc_response_usage(model, credentials, usage["inputTokens"], usage["outputTokens"])
                 if usage["source"] == "provider_reported" else LLMUsage.empty_usage())
