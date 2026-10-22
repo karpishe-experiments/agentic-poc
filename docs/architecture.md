@@ -282,6 +282,16 @@ Stop and preserves it; manual or uncertain Stops do not qualify. No new host act
 or public route is added. The serving image's changing observation revision must
 be quiescent before exact-revision recovery preview; this bundle does not expose
 a new maintenance control.
+New pre-generation failure-closure checkpoints use `pre-generation-target-v1`.
+They pin the complete affected run/operation and campaign/booklet, projected
+campaign reservations and current source/approval metadata. They do not read
+unrelated historical prepared requests or asset bodies. Apply rechecks the exact
+records, source fingerprint, reservations and closed ownership transactionally,
+then updates only the run and operation. Older unversioned checkpoints retain
+full-inventory verification; unknown scopes fail before mutation. Global
+quiescence inspection and explicit comprehensive integrity audits remain separate.
+Sanitized snapshot diagnostics report fixed operation names, returned sizes,
+elapsed time and remaining budget without record contents.
 The request bundle has canonical Python/Node byte parity; the local provider pins
 the global endpoint. Assumed token-count
 charges remain reserved after model usage settlement and are not reported as

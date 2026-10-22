@@ -21,6 +21,11 @@ for the completed normal delivery, retained manager blocker and next checkpoint.
 
 The count-failure correction uses the same `candidate-reconcile` action and
 preview/apply inputs. Its candidate must advertise `granted-legacy-count-failure`.
+New count-failure checkpoints pin `pre-generation-target-v1`: exact affected
+records, current sources/approvals and projected campaign exposure. They exclude
+unrelated historical payloads. Older checkpoints retain their original proof;
+unknown scopes or changed evidence stop without mutation. Snapshot read diagnostics
+contain fixed operation names, row/byte counts and budget timings only.
 An exact manifest grant pins the failed execution, dev2 adapter/source and retained
 node receipt; preview also requires fresh authenticated execution readback.
 Successful apply reports `failure_closed`, preserves the entire reservation,
