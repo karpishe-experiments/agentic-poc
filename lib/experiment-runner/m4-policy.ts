@@ -55,6 +55,9 @@ export const legacyCountRecoveryGrantSchema = z.strictObject({ runId: opaqueIdSc
   workflowRunId: opaqueIdSchema, publishedWorkflowId: opaqueIdSchema, pluginIdentity: m4PolicySchema.shape.pluginIdentity,
   guardSourceSha256: m4Digest, nodeTraceDigest: m4Digest, reference: z.string().min(1).max(500) });
 export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, reference: z.string().min(1).max(500),
+  remainingPersonaAdmission: z.strictObject({ anchorRunId: opaqueIdSchema, anchorRevision: z.number().int().nonnegative(),
+    personas: z.tuple([z.literal("enthusiast_parent"), z.literal("professional_creator")]),
+    reference: z.string().min(1).max(500) }).optional(),
   continuations: z.array(m4ContinuationGrantSchema).max(20).optional(),
   completionRecoveries: z.array(m4ContinuationGrantSchema).max(20).optional(),
   preGenerationRecoveries: z.array(legacyCountRecoveryGrantSchema).max(1).optional(),

@@ -4,6 +4,8 @@ import type { ExperimentCampaignDocument, ExperimentOperationDocument, Experimen
 import { CASES, personaSchema } from "@/lib/contracts/experiment-runner";
 import { m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapshot, type M4Grant } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import type { AssetStore } from "@/lib/assets/asset-store";
+import { verifyExperimentGeneration } from "@/db/experiment-completion";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -42,10 +44,11 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     await campaigns.insertOne(campaign, { session });
     return campaign;
   }
-  async function claimPersona(session: ClientSession, run: Pick<ExperimentRunDocument, "_id" | "persona" | "mode" | "predecessorRunId" | "configurationJson">, campaignId: string, nowMs: number) {
+  async function claimPersona(session: ClientSession, run: Pick<ExperimentRunDocument, "_id" | "persona" | "mode" | "predecessorRunId" | "configurationJson">, campaignId: string, nowMs: number, store?: AssetStore) {
     requireState(campaignId === grant.campaignId && run.mode === "balanced" && !run.predecessorRunId, "M4 requires one initial run in the granted campaign.");
     const campaign = await current(session);
-    requireState(campaign.state === "active", "Campaign is not active.");
+    const reopen = campaign.state === "stopped";
+    requireState(campaign.state === "active" || reopen && grant.remainingPersonaAdmission?.personas.includes(run.persona as "enthusiast_parent" | "professional_creator"), "Campaign is not active.");
     const slot = campaign.slots[run.persona];
     requireState(slot === null || slot === run._id, "Persona already has its initial run.");
     const previous = run.persona === "enthusiast_parent" ? "playful_kid" : run.persona === "professional_creator" ? "enthusiast_parent" : null;
@@ -53,6 +56,34 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       const prior = await database.collections.experiment_runs.findOne({ _id: campaign.slots[previous] ?? "", "m4.campaignId": campaign._id }, { session });
       requireState(prior?.status === "completed" && ["complete", "failed"].includes(prior.evaluationStatus) && prior.generationCompletedAtMs != null,
         "The preceding persona has not completed generation and evaluation.");
+    }
+    if (reopen) {
+      const permission = grant.remainingPersonaAdmission!;
+      requireState(store && campaign.slots[run.persona] === null && campaign.slots.playful_kid === permission.anchorRunId,
+        "Remaining-persona admission requires an unused slot and its retained anchor.");
+      const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
+      const savedRuns = await database.collections.experiment_runs.find({ _id: { $in: runIds } }, { session }).toArray();
+      requireState(savedRuns.length === runIds.length && savedRuns.some(saved => saved._id === permission.anchorRunId && saved.revision === permission.anchorRevision),
+        "Retained campaign anchor changed.");
+      requireState(!await database.collections.deployment_control.findOne({ "mutationOwners.runId": { $in: runIds } }, { session, projection: { _id: 1 } }),
+        "A preceding run still has a mutation owner.");
+      requireState(!await database.collections.experiment_operations.findOne({ runId: { $in: runIds }, $or: [
+        { state: { $nin: ["succeeded", "failed"] } }, { "lifecycle.unresolved": true }, { safeFailure: "unknown_outcome" },
+        ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map(key => ({ [key]: { $ne: null } })),
+      ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved operation ownership.");
+      // Temporarily activate only inside the admission transaction so the normal
+      // verifier can audit successful reports too. A failed proof rolls it back.
+      await touch(campaign, session, { state: "active" }, nowMs);
+      for (const saved of savedRuns) {
+        requireState(saved.status === "completed" && saved.generationCompletedAtMs != null &&
+          ["complete", "failed"].includes(saved.evaluationStatus) && !saved.activeOperationId && !saved.preparation &&
+          !saved.pendingDecisionJson && !saved.pauseRequested && !saved.safeFailure, "A preceding persona is not complete and resolved.");
+        await verifyExperimentGeneration(database, session, saved, store!);
+      }
+      // touch() uses revision CAS. Keep this local snapshot current for the slot
+      // claim below; all ledger amounts and historical evidence stay unchanged.
+      campaign.revision++;
+      campaign.state = "active";
     }
     const expected = snapshot.policy.publications.filter((p) => p.persona === null || p.persona === run.persona)
       .map(({ role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) => ({ role, taskId, appId, publishedWorkflowId, toolProviderId,
