@@ -51,7 +51,7 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     const previous = run.persona === "enthusiast_parent" ? "playful_kid" : run.persona === "professional_creator" ? "enthusiast_parent" : null;
     if (previous) {
       const prior = await database.collections.experiment_runs.findOne({ _id: campaign.slots[previous] ?? "", "m4.campaignId": campaign._id }, { session });
-      requireState(prior?.status === "completed" && prior.evaluationStatus === "complete" && prior.generationCompletedAtMs != null,
+      requireState(prior?.status === "completed" && ["complete", "failed"].includes(prior.evaluationStatus) && prior.generationCompletedAtMs != null,
         "The preceding persona has not completed generation and evaluation.");
     }
     const expected = snapshot.policy.publications.filter((p) => p.persona === null || p.persona === run.persona)

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
+import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
 import { experimentPageBatchSchema } from "@/lib/contracts/experiment-page-batches";
@@ -168,11 +169,12 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const rows = await database().collections.experiment_runs.find({}, { projection: {
         _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
         counters: 1, limits: 1, safeFailure: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
-        preparation: 1,
+        preparation: 1, createdAtMs: 1, updatedAtMs: 1,
       } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
       return data({ runs: rows.slice(0, limit).map(row => ({ runId: row._id, bookletId: row.bookletId,
         predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
-        revision: row.revision, pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
+        revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
+        pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
         safeFailure: row.safeFailure, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
         generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
         preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
@@ -241,7 +243,15 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       const body = control.parse(await boundedJson(request, 4096));
       const { repository, context } = services(state);
-      const saved = await mutate(() => repository[action]({ runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() }), { runId });
+      const saved = await mutate(async () => {
+        const current = await repository.getRun(runId);
+        const input = { runId: opaqueIdSchema.parse(runId), ...body, nowMs: Date.now() };
+        if (action === "resume" && current?.generationCompletedAtMs != null &&
+            (current.status === "blocked" || current.status === "completed" && current.evaluationStatus === "failed")) {
+          return createExperimentCompletionService(database(), store()).completeAdvisoryFailure(input);
+        }
+        return repository[action](input);
+      }, { runId });
       return data(await context.getRunView(saved._id));
     }); },
     selectPages(request: Request, runId: string) { return run(async () => {

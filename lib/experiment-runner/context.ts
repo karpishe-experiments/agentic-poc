@@ -245,6 +245,7 @@ export function createExperimentContextService(database: Database, options: { st
       _id: 1, role: 1, taskId: 1, state: 1, workflowRunId: 1, parentWorkflowRunId: 1,
       verifiedWorkflowId: 1, workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1,
       dispatchStartedAtMs: 1, createdAtMs: 1, updatedAtMs: 1, reservationCount: 1, safeFailure: 1,
+      "localReportFailure.code": 1, "localReportFailure.scope": 1, "localReportFailure.requestBytes": 1, "localReportFailure.byteLimit": 1,
       resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
     } }).sort({ createdAtMs: 1, _id: 1 }).toArray()
       : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
@@ -306,6 +307,8 @@ export function createExperimentContextService(database: Database, options: { st
       creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: row.uiMessageJson ? parseJson(row.uiMessageJson) : null, createdAtMs: row.createdAtMs })),
       operationHistory: operationRows.map((row) => ({ id: row._id, role: row.role, taskId: row.taskId, state: row.state,
         countFailure: countFailures.get(row._id) ?? null,
+        localReportFailure: row.localReportFailure ? { code: row.localReportFailure.code, scope: row.localReportFailure.scope,
+          requestBytes: row.localReportFailure.requestBytes, byteLimit: row.localReportFailure.byteLimit } : null,
         workflowRunId: row.workflowRunId, parentWorkflowRunId: row.parentWorkflowRunId,
         verifiedWorkflowId: row.verifiedWorkflowId ?? null,
         workflowTaskId: row.workflowTaskId ?? null, deadlineAtMs: row.deadlineAtMs, remoteStatus: row.remoteStatus ?? null,

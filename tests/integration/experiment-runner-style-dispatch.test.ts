@@ -65,7 +65,8 @@ class MemoryStore implements AssetStore {
   async get(uri: string) { const bytes = this.files.get(uri); if (!bytes) throw new Error("missing"); return Uint8Array.from(bytes); }
   async exists(uri: string) { return this.files.has(uri); }
 }
-async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 | 18 = 13, finalPages = false) {
+async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 | 16 | 17 | 18 = 13, finalPages = false,
+  failedReport?: "tester" | "judge") {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const store = new MemoryStore(), repository = createExperimentRepository(database, { store: () => store });
   const context = createExperimentContextService(database, { store: () => store });
@@ -111,6 +112,11 @@ async function setup(persona: Persona = "playful_kid", slots: 6 | 11 | 13 | 15 |
       expect((await repository.claimOperation({ ...identity, nowMs: clock++ })).started).toBe(true);
       const operation = (await repository.getOperation(input.operationId))!;
       const operationContext = await context.getOperationContext(identity);
+      if (binding.role === failedReport && "reportEvidence" in operationContext) {
+        const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "failed", outputs: {} };
+        saved.set(workflowRunId, execution);
+        return { kind: "execution", execution };
+      }
       let outputs: Record<string, unknown>;
       if (binding.role === "image") {
         expect(operationContext.role).toBe("image");
@@ -545,8 +551,34 @@ describe("automatic saved J08 sample dispatch", () => {
     expect((await env.repository.getRun(env.runId))?.safeFailure).toBe("unknown_outcome");
     expect(env.runtime.start).toHaveBeenCalledTimes(1);
   });
-  it("automatically completes generation and separate reports, recovering a lost judge response without replay", async () => {
-    const env = await setup("playful_kid", 18, true);
+  it.each((["playful_kid", "enthusiast_parent", "professional_creator"] as const)
+    .flatMap(persona => (["tester", "judge"] as const).map(role => [persona, role] as const)))("retains %s completed generation after terminal advisory %s failure", async (persona, failedRole) => {
+    const env = await setup(persona, 18, true, failedRole);
+    for (let step = 0; step < 240; step++) {
+      await env.dispatcher().advance(env.runId);
+      const run = (await env.repository.getRun(env.runId))!;
+      if (run.status === "completed" || run.status === "blocked" && !run.activeOperationId) break;
+      if (run.status === "blocked" && run.activeOperationId) env.elapse(6_000);
+    }
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "completed", evaluationStatus: "failed", activeOperationId: null });
+    expect(run.generationCompletedAtMs).toBeTypeOf("number");
+    const view = (await env.context.getRunView(env.runId))!;
+    expect(view.currentArtifacts.every(artifact => artifact.state === "approved")).toBe(true);
+    expect(view.reports).toHaveLength(failedRole === "judge" ? 1 : 0);
+    const operations = await env.repository.listOperations(env.runId);
+    expect(operations.filter(op => op.role === "judge")).toHaveLength(failedRole === "judge" ? 1 : 0);
+    expect(operations.filter(op => op.state === "failed")).toEqual([expect.objectContaining({ role: failedRole,
+      remoteStatus: "failed", lifecycle: expect.objectContaining({ phase: "finished", unresolved: false }) })]);
+    const count = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher().advance(env.runId);
+    await createExperimentCompletionService(env.database, env.store).completeAdvisoryFailure({ runId: env.runId,
+      expectedRevision: run.revision, nowMs: env.next() });
+    expect(env.runtime.start).toHaveBeenCalledTimes(count);
+  }, 120_000);
+
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("automatically completes %s generation and separate reports, recovering a lost judge response without replay", async persona => {
+    const env = await setup(persona, 18, true);
     env.faults({ lostJudge: true });
     let recovered = false, finished = false, checkedPendingEvaluation = false;
     for (let step = 0; step < 210; step++) {
@@ -578,9 +610,13 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(finished).toBe(true); expect(recovered).toBe(true); expect(checkedPendingEvaluation).toBe(true);
     const run = (await env.repository.getRun(env.runId))!;
     expect(run).toMatchObject({ status: "completed", evaluationStatus: "complete", activeOperationId: null,
-      counters: { logicalText: 39, logicalImage: 9, steps: 48, payableText: 0, payableImage: 0 } });
+      counters: { payableText: 0, payableImage: 0 } });
+    const operations = await env.repository.listOperations(env.runId);
+    expect(run.counters).toMatchObject({ logicalText: operations.filter(op => op.providerKind === "text").length,
+      logicalImage: operations.filter(op => op.providerKind === "image").length, steps: operations.length });
     const decisions = await env.database.collections.messages.find({ experimentRunId: env.runId, role: "user" }).toArray();
-    expect(decisions).toHaveLength(1);
+    expect(decisions.length).toBeGreaterThanOrEqual(1);
+    if (persona === "playful_kid") expect(decisions).toHaveLength(1);
     expect((await env.context.getRunView(env.runId))!.reports).toHaveLength(2);
     expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "judge")).toHaveLength(1);
     expect(env.runtime.retrieve).toHaveBeenCalled();
