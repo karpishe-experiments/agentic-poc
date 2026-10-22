@@ -23,6 +23,31 @@ separate evidence; the commands below require matching dispatcher capabilities
 and application images. See the current [M4 record](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
 for the completed normal delivery, retained manager blocker and next checkpoint.
 
+The count-failure correction uses the same `candidate-reconcile` action and
+preview/apply inputs. Its candidate must advertise `granted-legacy-count-failure`.
+New count-failure checkpoints pin `pre-generation-target-v1`: exact affected
+records, current sources/approvals and projected campaign exposure. They exclude
+unrelated historical payloads. Older checkpoints retain their original proof;
+unknown scopes or changed evidence stop without mutation. Snapshot read diagnostics
+contain fixed operation names, row/byte counts and budget timings only.
+An exact manifest grant pins the failed execution, dev2 adapter/source and retained
+node receipt; preview also requires fresh authenticated execution readback.
+Successful apply reports `failure_closed`, preserves the entire reservation,
+original deadline and history, and leaves the campaign stopped with the run
+blocked and Pause requested. This result is a completed recovery action, not a
+successful generation. Repeated verification reads its saved provenance. Normal
+deployment and preflight must precede the separately granted continuation.
+No dispatcher replacement or custom host script is required for this outcome.
+The exact legacy proof can retain an acknowledged deadline Stop; it cannot accept
+a manual or uncertain Stop. Before preview, confirm a stable target revision. If
+the serving image keeps changing that revision through observation, stop here:
+the existing workflow does not expose a separate observation-quiesce action.
+Use the issue's separately approved maintenance checkpoint, or return the precise
+blocker. Do not invoke the unrelated historical bootstrap repair or bypass revision
+checks.
+Install the reviewed dev3 provider only through its bounded signature window;
+restore verification and read back the exact package identity before continuation.
+
 Routine initialization checks required setup, metadata and seed availability;
 retained history is excluded. Use the explicit `npm run db:verify` diagnostic for
 the comprehensive audit; it retains projected 100-row pages and all corruption

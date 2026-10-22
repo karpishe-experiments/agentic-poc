@@ -150,7 +150,7 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
     ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
     const unclaimedDigest = m4UnclaimedFailureDigest(authority, run, operation);
-    const provenance = { reference: permission!.reference, evidenceDigest: unclaimedDigest ?? operation.m4Observation!.evidenceDigest!,
+    const provenance = { reference: permission!.reference, evidenceDigest: unclaimedDigest ?? operation.m4PreGenerationRecovery?.proofDigest ?? operation.m4Observation!.evidenceDigest!,
       requestDigest: unclaimedDigest ? operation.m4Preparation!.requestDigest : operation.m4Reservation!.requestDigest, resumedAtMs: nowMs, runRevision: run.revision,
       campaignRevision: campaign.revision, nextOperationId: null };
     const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,

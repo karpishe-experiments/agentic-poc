@@ -41,6 +41,14 @@ retain current parent and configuration checks.
 
 Supported Booklet recovery is staging-only. `candidate-reconcile` runs reviewed
 application recovery from an immutable image without changing the serving release.
+New exact pre-generation failure closures use `pre-generation-target-v1`
+snapshots: complete target identities/preparation, current source and approval
+fingerprints, and bounded campaign-reservation projections. Only the exact run and
+operation may change. Global work/ownership inspection remains mandatory; a
+comprehensive historical audit is not part of this closure. Old unversioned
+checkpoints keep their original full-inventory meaning, and unknown scopes stop.
+Abort uses the original immutable candidate. A changed candidate requires a fresh
+preview; its digest cannot replace an older journal's pinned proof.
 `expired-deployment-recover` uses a separate request linked to the unchanged
 original journal and deadline. Both default to preview and retain closed admission
 after ambiguous mutations. No automatic restore or provider replay is permitted.
@@ -247,7 +255,7 @@ Source: [installer](../../scripts/deploy/vps-deployment.sh) and
 | Credential | Variable / identifier | Storage | Consumer and purpose |
 | --- | --- | --- | --- |
 | Human Dify account passwords | No Booklet variable | Dify account store; private user custody | Workspace owner/developer login and administration; distinct accounts |
-| Dify model/image provider keys | Provider-specific Dify binding fields; no runner variable | Private Dify workspace provider bindings | Real model/image calls; Simulated execution does not call a paid provider. Installed OpenAI dev2 and eighteen published Booklet graphs conditionally reuse the same Dify-held key for input counting and Responses; Booklet requires a separate paid grant. Other workflows retain existing routes. Count permission/billing and paid readiness are unverified. No new provider secret name, storage or transfer copy |
+| Dify model/image provider keys | Provider-specific Dify binding fields; no runner variable | Private Dify workspace provider bindings | Real model/image calls; Simulated execution does not call a paid provider. Installed OpenAI dev2 and eighteen published Booklet graphs conditionally reuse the same Dify-held key for input counting and Responses; Booklet requires a separate paid grant. The dev3 count-failure candidate reuses that storage and purpose after reviewed installation; its exact package amendment is non-secret. Other workflows retain existing routes. Count permission/billing and paid readiness are unverified. No new provider secret name, storage or transfer copy |
 | MCP device tokens and console cookies | `__Host-access_token`, `__Host-refresh_token`, `__Host-csrf_token`; `DIFYWF_HOME` identifies the store, not a secret | Plaintext `hosts.json` protected by Windows ACLs under `%LOCALAPPDATA%\DifyWf-Community-Codex`; Cloud uses separate `%LOCALAPPDATA%\DifyWf-Codex` | Local-stdio MCP administration; credential file ACL must limit access to the user, SYSTEM and Administrators |
 | Official CLI session tokens | Separate Community/Cloud `difyctl` profiles; no Booklet variable | CLI-managed local credential state; exact file path must be checked for the installed CLI | CLI fallback administration; CLI login does not authenticate MCP |
 | Dedicated Dify backup R2 credentials and restic password | Names/provision path not yet established | Intended root-owned host files and independent password-manager recovery copies | Deferred, not active: Dify backup setup and restore/upgrade rehearsal remain incomplete |

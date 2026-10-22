@@ -36,6 +36,7 @@ import { initializeMongoData } from "@/db/initialize";
 import { verifyDeploymentState } from "@/db/deployment-readiness";
 import { checkProbeReadiness } from "@/lib/experiment-runner/probe-preflight";
 import { verifyMongoStructure } from "@/db/setup";
+import { LEGACY_COUNT_PLUGIN_IDENTITY, LEGACY_COUNT_GUARD_SOURCE_SHA256 } from "@/lib/experiment-runner/m4-legacy-count-failure";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -56,11 +57,12 @@ const workflowOwnedFields: Record<string, string[]> = {
   J12: ["pageId", "pageIndex", "layoutVersionId", "manuscriptVersionId", "styleVersionId"],
 };
 
-async function setup(amended = false) {
+async function setup(amended = false, legacyCount = false) {
   const published = process.env.M4_PUBLICATION_REHEARSAL === "1" ? await loadPublishedRehearsal() : null;
   const phases: { operationId: string; role: string; report: boolean; publicationId: string; authorizationBytes: number; resultBytes: number; authorizationMs: number; decodeReturnMs: number }[] = [];
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: amended ? "a".repeat(64) : m4RequestBundleHash(),
+    ...(legacyCount ? { pluginIdentity: LEGACY_COUNT_PLUGIN_IDENTITY } : {}),
     ...(published ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
   const authority = { policy, grant: { campaignId: id(1), reference: "offline-dispatch-fixture-only",
     ...(amended ? { requestDefinitionUpdate: { fromBundleHash: policy.requestDefinitionHash,
@@ -117,6 +119,12 @@ async function setup(amended = false) {
       }
       const operation = (await repository.getOperation(input.operationId))!;
       expect(operation.deadlineAtMs).toBe(before.deadlineAtMs);
+      if (legacyCount && binding.role === "manager" && (await repository.getRun(runId))!.counters.logicalImage === 7) {
+        legacyCount = false;
+        saved.set(workflowRunId, { ...running, status: "failed", outputs: null,
+          legacyCountFailure: { code: "legacy_input_count_guard", totalTokens: 0 } });
+        return { kind: "accepted", execution: running };
+      }
       const report = ["tester", "judge"].includes(binding.role) && (await repository.getRun(runId))!.generationCompletedAtMs != null;
       // Balanced reports consume the pre-claim projection carried in the exact
       // prepared request. Execution-context accounting cannot precede its GET.
@@ -221,6 +229,78 @@ async function setup(amended = false) {
 }
 
 describe("offline Balanced dispatcher", () => {
+  it("recovers a claimed count failure, delivers readiness and completes the same Kid without replay", async () => {
+    const env = await setup(false, true);
+    for (let step = 0; step < 120; step++) {
+      await env.dispatcher.advance(env.runId);
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+      env.tick();
+    }
+    const blocked = (await env.repository.getRun(env.runId))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", counters: { logicalImage: 7 } });
+    const failed = (await env.repository.getOperation(blocked.activeOperationId!))!;
+    expect(failed.m4Reservation?.unsettledMicrodollars).toBe(failed.m4Reservation?.maximumMicrodollars);
+    // Retained history must not enter this closure or normal readiness. These
+    // unrelated terminal rows hold much larger contexts than the target request.
+    await env.database.collections.experiment_operations.insertMany(Array.from({ length: 80 }, (_, index) => ({ ...failed,
+      _id: id(5000 + index), runId: id(4999), idempotencyKey: `retained-large-${index}`, state: "failed" as const,
+      lifecycle: { ...failed.lifecycle!, phase: "finished" as const, unresolved: false },
+      m4Reservation: undefined, m4Preparation: { ...failed.m4Preparation!, requestJson: "x".repeat(300000), contextJson: "y".repeat(300000) },
+    })));
+    const authority = { ...env.authority, grant: { ...env.authority.grant,
+      continuations: [{ runId: env.runId, operationId: failed._id, reference: "explicit legacy fixture continuation" }],
+      preGenerationRecoveries: [{ runId: env.runId, operationId: failed._id, workflowRunId: failed.workflowRunId!,
+        publishedWorkflowId: failed.verifiedWorkflowId!, pluginIdentity: LEGACY_COUNT_PLUGIN_IDENTITY,
+        guardSourceSha256: LEGACY_COUNT_GUARD_SOURCE_SHA256, nodeTraceDigest: "e".repeat(64), reference: "reviewed retained fixture trace" }] } };
+    while (env.now() <= failed.deadlineAtMs!) env.tick();
+    await env.database.collections.experiment_operations.updateOne({ _id: failed._id }, { $set: {
+      "lifecycle.stop": { requestedAtMs: failed.deadlineAtMs! - 29_006, reason: "deadline", delivery: "acknowledged" },
+      "lifecycle.timeoutAtMs": failed.deadlineAtMs! - 29_005,
+    } });
+    await env.database.collections.deployment_control.insertOne({ _id: "environment:_staging", schemaVersion: "1", environment: "_staging",
+      maintenance: true, draining: false, activeMutations: 0, mutationOwners: [], interruptedMutations: 0, reason: "fixture delivery", updatedAtMs: env.now() });
+    const config = { ...env.config, m4: { state: "granted" as const, authority } };
+    const service = createBookletRecovery({ database: env.database, config, runtime: env.runtime, store: () => env.store, now: env.now });
+    const target = { runId: env.runId, operationId: failed._id, expectedRevision: blocked.revision };
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const preview = await service.preview(target, true);
+    expect(preview.snapshot.scope).toBe("pre-generation-target-v1");
+    await withOperationBudget(env.now() + 150_000, () => service.apply(target, preview.previewDigest, async () => {}), { now: env.now });
+    expect(await service.verifyCompleted(target, preview.snapshot)).toMatchObject({ verified: true, outcome: "failure_closed" });
+    // Lost acknowledgement after commit is resolved by verification, not replay.
+    expect(await service.verifyCompleted(target, preview.snapshot)).toMatchObject({ verified: true, outcome: "failure_closed" });
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    for (const [key, value] of Object.entries({ DEPLOYMENT_ENV: "_staging", RUNNER_ENABLED: "false", DIFY_BOOKLET_RUNNER_ENABLED: "true",
+      DIFY_BOOKLET_BASE_URL: config.baseUrl, DIFY_BOOKLET_PUBLIC_ORIGIN: config.publicOrigin, DIFY_BOOKLET_TOOL_KEY: "x".repeat(32),
+      DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(config.bindings) })) vi.stubEnv(key, value);
+    try {
+      await initializeMongoData(env.database, env.store);
+      await verifyDeploymentState(env.database, env.store);
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: false } });
+      const manager = config.bindings.find(binding => binding.role === "manager")!;
+      expect(await checkProbeReadiness(env.database, config, { appId: manager.appId, publication: manager.publishedWorkflowId })).toMatchObject({ ready: true });
+      const repository = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
+      const paused = (await repository.getRun(env.runId))!;
+      await repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: env.now() });
+      const dispatcher = createExperimentDispatcher({ database: env.database, config, runtime: env.runtime, now: env.now,
+        mutate: async action => action(), store: () => env.store, uploadReference: env.uploadReference });
+      for (let step = 0; step < 60; step++) {
+        const outcome = await dispatcher.advance(env.runId);
+        const run = (await repository.getRun(env.runId))!;
+        expect(outcome, `Same-Kid continuation ${step}: ${run.status}/${run.safeFailure}`).not.toBe("blocked");
+        if (run.status === "completed") break;
+        env.tick();
+      }
+      const completed = (await repository.getRun(env.runId))!;
+      expect(completed).toMatchObject({ status: "completed", evaluationStatus: "complete", counters: { logicalText: 40, payableText: 40, logicalImage: 9, payableImage: 0, steps: 49 } });
+      expect((await repository.getOperation(failed._id))!.m4Reservation).toEqual(failed.m4Reservation);
+      expect(vi.mocked(env.runtime.start).mock.calls.filter(([, input]) => input.operationId === failed._id)).toHaveLength(1);
+      await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, completed));
+      const view = (await env.context.getRunView(env.runId))!;
+      expect(view.reports).toHaveLength(2); expect(view.reports!.every(report => report.matchesCurrentVersions)).toBe(true);
+      expect(view.currentArtifacts.every(artifact => artifact.state === "approved")).toBe(true);
+    } finally { vi.unstubAllEnvs(); }
+  }, 120_000);
   it("prepares tester then manager and J01, admits each once, and only materializes original GET output", async () => {
     const env = await setup();
     env.pending(true);
@@ -345,6 +425,15 @@ describe("offline Balanced dispatcher", () => {
 
   it("completes all Kid tasks offline with simulated images and freezes each report's own settled cost", async () => {
     const env = await setup();
+    const sizes: { role: string; report: boolean; contextBytes: number; requestBytes: number | null; outcome: string }[] = [];
+    const prepare = m4Request.prepareM4Request;
+    const measured = vi.spyOn(m4Request, "prepareM4Request").mockImplementation((...args) => {
+      const row = { role: args[1].role, report: args[1].report, contextBytes: Buffer.byteLength(args[2]), requestBytes: null as number | null, outcome: "failed" };
+      sizes.push(row);
+      const request = prepare(...args); row.requestBytes = Buffer.byteLength(request.requestJson); row.outcome = "prepared";
+      return request;
+    });
+    try {
     let testerSnapshot: unknown, testerResult: string | null = null;
     for (let step = 0; step < 120; step++) {
       const outcome = await env.dispatcher.advance(env.runId);
@@ -352,7 +441,7 @@ describe("offline Balanced dispatcher", () => {
       // uncertain dispatch, rather than hiding their cause behind "blocked".
       for (const result of vi.mocked(env.runtime.start).mock.results) await result.value;
       const run = (await env.repository.getRun(env.runId))!;
-      expect(outcome, `Offline step ${step}: ${run.status}/${run.safeFailure}`).not.toBe("blocked");
+      expect(outcome, `Offline step ${step}: ${run.status}/${run.safeFailure}; request ${JSON.stringify(sizes.at(-1))}`).not.toBe("blocked");
       const operations = await env.repository.listOperations(env.runId);
       const tester = operations.find((op) => op.role === "tester" && op.state === "succeeded" &&
         JSON.parse(op.resultJson ?? "null")?.kind === "feedback");
@@ -422,6 +511,10 @@ describe("offline Balanced dispatcher", () => {
       expect(observation.every((event) => event.outcome === "succeeded")).toBe(true);
       expect(new Set(observation.map((event) => event.operationId)).size).toBe(3);
       writeFileSync("output/issue65-m4-rehearsal-phases.json", JSON.stringify({ providerRequests: 0, phases: env.phases, observation }, null, 2));
+    }
+    } finally {
+      measured.mockRestore();
+      writeFileSync("output/m4-kid-request-sizes.json", JSON.stringify({ fakeProviders: true, sizes }, null, 2));
     }
   }, 120_000);
 });

@@ -170,7 +170,28 @@ Technical access is not authority. Record verification and permission separately
 never infer a grant from a working login. These are the latest recorded results,
 not fresh live checks. Recheck the required row before dependent execution.
 
-**Current M4 execution authority - 2026-10-20:** The user approved the conditional
+**Current M4 execution authority - 2026-10-22:** The user approved PR #224 at
+`0025c1ee86de8fbd9bea8f9531953d05fa19794f` and PR #225 at
+`6c985bb6805f3ed1a806d5d201cd17630efd3afc`, with staging merge/deployment only
+after the exact retained count failure is safely recovered. PR #224 merged at
+`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`; #225 remains guarded. The existing
+maintenance command is the necessary private operator checkpoint to quiesce
+observation before preview. It closes admission only; the supported recovery
+workflow still owns backup, exact reconciliation and separate delivery. No new
+host entrypoint, saved-output repair or provider replay is authorized. **Maintenance
+handoff verified:** the operator invoked the existing
+`scripts/deployment-control.ts enable recovery` through the selected staging
+container under the host lock. Inspection `39744110026` verified closed admission,
+zero active/interrupted owners and only the exact target blockers. Two application
+readbacks retained revision 2967. Provider dev3 installation still requires
+its bounded signature window and restoration before Kid continuation.
+Recovery preview `39744440897` then stopped before apply at
+`snapshot.experiment_operations` with `OperationBudgetExpired`; admission remains
+closed. Package reassessment identified the inherited full-history snapshot as
+outside the target-only recovery contract. Verify and review the scoped correction
+before another candidate preview; no timeout increase or automatic replay.
+
+**Retained M4 execution authority - 2026-10-20:** The user approved the conditional
 USD 5 campaign and its delivery, then exact same-run continuations and supported
 recovery. The latest exact grant covers Kid manager operation
 `bf1c9dd8-781c-4307-868b-45d566b7b58e`, retained execution

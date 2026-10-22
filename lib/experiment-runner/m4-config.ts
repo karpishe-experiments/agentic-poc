@@ -24,6 +24,8 @@ export function readM4RunnerConfig(env: Record<string, string | undefined> = pro
   // private authority, rather than enabling this production entry point.
   if (env.DEPLOYMENT_ENV !== "_staging") return unavailable();
   const snapshot = m4PolicySnapshot(parsed.data.policy);
+  const adapterUpdate = parsed.data.state === "granted" ? parsed.data.grant.providerAdapterUpdate : undefined;
+  if (adapterUpdate && adapterUpdate.fromIdentity !== snapshot.policy.pluginIdentity) return unavailable();
   if (!m4RequestBundleMatches(snapshot.policy, parsed.data.state === "granted" ? parsed.data.grant : undefined) ||
       snapshot.policy.publications.length !== base.config.bindings.length || snapshot.policy.publications.some((expected) =>
         !base.config.bindings.some((actual) => actual.role === expected.role && actual.taskId === expected.taskId &&

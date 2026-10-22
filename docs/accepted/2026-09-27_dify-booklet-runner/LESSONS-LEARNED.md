@@ -76,7 +76,7 @@ coverage alone did not expose the mismatch; its cover contains no manuscript uni
 - **Guidance:** Inspect attributable output and usage before changing a ceiling.
   Request concise compact JSON and explicit closure as a bounded mitigation, not a
   proven cure. Preserve failed output; never salvage its prefix as completion.
-- **Evidence:** [Current J11 record](M4-balanced.md#current-j11-incomplete-output-correction---2026-10-17).
+- **Evidence:** [Retained J11 record](M4-balanced.md#current-j11-cover-routing-recovery---2026-10-17).
 - **Promotion target:** Bounded structured-output experiment guidance.
 
 ### Compare equivalent completion boundaries when optimizing delegation
@@ -693,14 +693,44 @@ it still needs full preservation proof, fresh mutable checks and a bounded outer
 request. Fake-provider persistence tests must advance the actual budget clock,
 not only use fast deterministic responses. Local proof is not live recovery.
 
-### Recheck a pinned complete proof without scanning it twice
+### Recheck a pinned proof within its mutation scope
 
 After the interactive cap was removed from exact maintenance recovery, the next
 live diagnostic showed outer-budget exhaustion during uncommitted completion.
 An existing full preview digest can serve as the baseline for one fresh complete
 post-observation snapshot. Apply need not first scan another baseline and then
-scan again, provided the pinned digest covers the entire target, inventory and
-grant, and normal post-checkpoint mutable checks remain. Test changes to unrelated
-retained rows during the authenticated GET, not only target revision changes.
+scan again, provided the pinned digest covers the mutation's required evidence and
+grant, and normal post-checkpoint mutable checks remain.
+The later count-failure preview exhausted its budget in historical operation
+snapshotting: the inherited proof read every full document in eleven collections.
+For a closure that only updates one operation and run, pin exact records, current
+sources/approvals and campaign exposure; prove write confinement in tests. Keep
+global quiescence inspection, but separate comprehensive historical audits. Test
+large unrelated prepared contexts and assert filters/projections and unchanged
+snapshot size. Preserve the interpretation of older saved checkpoints explicitly.
+The observed timeout does not isolate payload size from latency or connectivity.
 A read-only status workflow must also bypass the mutation queue it observes;
 retain the original group and host lock for mutating actions.
+
+### Bound context for its consumer and retain pre-generation evidence
+
+The M4 Kid manager received 114,101 context characters as completed page images
+added full artifact bodies and assembled prompts. Routing needs current status,
+version, approval and dependency identities; independent reports need creative
+content. Use explicit projections for each consumer and measure the remaining
+journey through both reports. The first proposed 64 KiB report byte guard failed
+the offline fixture at 80,310 context bytes. Byte limits do not prove model token
+counts; retain the independent exact-token guard and fail visibly rather than
+truncate required evidence.
+
+The dev2 count guard threw before generation without returning structured
+evidence. Authenticated terminal failure and zero reported generation tokens did
+not satisfy the normal accounting proof, so the maximum reservation remained
+uncertain. Return typed, sanitized pre-generation evidence at the provider
+boundary; preserve exposure and require explicit continuation. Legacy recovery
+must use separate provenance from reviewed code and authenticated execution,
+without creating a provider result or usage record retroactively.
+
+Evidence: the current [M4 record](M4-balanced.md#current-execution-record---2026-10-21),
+bounded provider tests and the count-failure/recovery/deployment/Resume Kid fixture.
+Promotion target: provider-boundary and role-context test guidance.

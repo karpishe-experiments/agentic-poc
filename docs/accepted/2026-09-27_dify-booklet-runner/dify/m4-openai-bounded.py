@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import time
 from copy import deepcopy
 from typing import Any
@@ -45,6 +46,29 @@ def _integer(value: Any) -> int | None:
 
 def _field(value: Any, name: str) -> Any:
     return responses.field(value, name)
+
+
+def _count_request_id(value: Any) -> str | None:
+    value = _field(value, "_request_id")
+    return value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,200}", value) else None
+
+
+def _count_failure(model: str, digest: str, stdio_sdk: dict[str, str], code: str,
+                   counted: int | None, request_id: str | None, elapsed: float) -> LLMResult:
+    # This is transport evidence only. It does not assert usage or a free count
+    # request, and can only be returned before entering responses.create.
+    wrapper = {
+        "schemaVersion": "booklet_pre_generation_failure_v1", "content": "",
+        "failureEvidence": {
+            "provider": "openai", "apiBaseUrl": "https://api.openai.com/v1",
+            "stdioSdk": stdio_sdk, "model": model, "serviceTier": "default",
+            "requestDigest": digest, "stage": "input_count", "code": code,
+            "adapterVersion": "1.0.7-dev3", "countedInputTokens": counted, "limit": 32000, "generationStarted": False,
+            "elapsedMs": max(0, int(elapsed * 1000)), "countRequestId": request_id,
+        },
+    }
+    return LLMResult(model=model, message=AssistantPromptMessage(content=json.dumps(wrapper)),
+                     usage=LLMUsage.empty_usage())
 
 
 def _usage(response: Any) -> dict[str, Any]:
@@ -169,10 +193,22 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     kwargs["base_url"] = "https://api.openai.com/v1"
     kwargs.update(max_retries=0, timeout=seconds)
     with client_factory(**kwargs) as client:
-        count = client.responses.input_tokens.count(**deepcopy(count_payload))
-        input_count = _integer(_field(count, "input_tokens"))
-        if input_count is None or input_count > 32000:
-            raise InvokeBadRequestError("Booklet complete input exceeds its verified token limit.")
+        try:
+            count = client.responses.input_tokens.count(**deepcopy(count_payload))
+        except Exception:
+            # Never persist exception text, credentials or provider error bodies.
+            # Generation errors are deliberately outside this catch boundary.
+            return _count_failure(model, digest, stdio_sdk, "input_count_request_failed",
+                                  None, None, clock() - started)
+        raw_count = _field(count, "input_tokens")
+        input_count = _integer(raw_count)
+        code = ("input_count_unavailable" if raw_count is None else
+                "input_count_invalid" if input_count is None or input_count > 9007199254740991 else
+                "input_limit_exceeded" if input_count > 32000 else None)
+        if code:
+            return _count_failure(model, digest, stdio_sdk, code,
+                                  input_count if code == "input_limit_exceeded" else None,
+                                  _count_request_id(count), clock() - started)
         remaining = seconds - (clock() - started)
         if carrier:
             remaining = min(remaining, (deadline_at_ms - time.time() * 1000) / 1000)

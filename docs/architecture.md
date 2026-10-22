@@ -273,6 +273,35 @@ standalone metadata transactions; observation retains its existing independent
 helpers. Sanitized callback diagnostics distinguish initial reads, authenticated
 readback, mutation admission, lease acquisition, source checks and reservation.
 No callback, operation deadline or workflow timeout is increased.
+Balanced manager requests carry current routing/provenance metadata rather than
+creative artifact bodies. Final reports retain current creative evidence and
+omit assembled image prompts and repeated style modules. Complete request byte
+guards are 16 KiB for managers and 128 KiB for reports; the independent provider
+limit remains 32,000 tokens. The reviewed request-definition amendment records
+these projections without rewriting historical preparations.
+The bounded dev3 adapter returns a separate pre-generation failure envelope for
+count-limit, unavailable/invalid count and count-request failure. Authenticated
+observation closes owned bookkeeping and retains the full monetary reservation;
+it never creates usage, materializes content or resumes the run. Preparations
+retain the exact authorized adapter-package amendment. The exact legacy dev2
+count failure uses separate recovery provenance tied to its reviewed source and
+retained node receipt plus fresh execution GET. Existing candidate recovery can
+verify `failure_closed` with the campaign stopped, before normal delivery and an
+explicit same-run continuation. That proof pins an optional acknowledged deadline
+Stop and preserves it; manual or uncertain Stops do not qualify. No new host action
+or public route is added. The serving image's changing observation revision must
+be quiescent before exact-revision recovery preview; this bundle does not expose
+a new maintenance control.
+New pre-generation failure-closure checkpoints use `pre-generation-target-v1`.
+They pin the complete affected run/operation and campaign/booklet, projected
+campaign reservations and current source/approval metadata. They do not read
+unrelated historical prepared requests or asset bodies. Apply rechecks the exact
+records, source fingerprint, reservations and closed ownership transactionally,
+then updates only the run and operation. Older unversioned checkpoints retain
+full-inventory verification; unknown scopes fail before mutation. Global
+quiescence inspection and explicit comprehensive integrity audits remain separate.
+Sanitized snapshot diagnostics report fixed operation names, returned sizes,
+elapsed time and remaining budget without record contents.
 The request bundle has canonical Python/Node byte parity; the local provider pins
 the global endpoint. Assumed token-count
 charges remain reserved after model usage settlement and are not reported as
