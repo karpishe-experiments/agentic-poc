@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
+import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, EXPERIMENT_PROFILE, MAX_NARRATIVE_CONTENT_BYTES, experimentModeSchema, experimentRoleSchema, experimentTaskSchema, parseNarrativeTaskProposal, personaSchema, resultEnvelopeSchema, validateRoleResult, type RoleResult } from "@/lib/contracts/experiment-runner";
 import { isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
@@ -122,6 +123,7 @@ export function createExperimentRepository(database: Database, options: { store?
         prepared.requestDigest !== m4Hash(prepared.requestJson) || prepared.operationFingerprint !== m4OperationFingerprint(operation) ||
         !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant) ||
         canonical(prepared.definitionUpdate ?? null) !== canonical(campaignLedger.grant.requestDefinitionUpdate ?? null) ||
+        canonical(prepared.adapterUpdate ?? null) !== canonical(campaignLedger.grant.providerAdapterUpdate ?? null) ||
         prepared.definitionHash !== m4RequestDefinition(selector).hash ||
         phase === "claim" && operation.verifiedWorkflowId !== prepared.publishedWorkflowId ||
         prepared.sourceFingerprint !== await m4SourceFingerprint(database, session, run)) {
@@ -310,7 +312,7 @@ export function createExperimentRepository(database: Database, options: { store?
             run.activeOperationId !== null || run.preparation || !hasM4SimulatedImagePolicy(run) || !failed ||
             failed.state !== "failed" || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
             run.generationCompletedAtMs != null ||
-            !failed.lifecycle || failed.lifecycle.stop ||
+            !failed.lifecycle || failed.lifecycle.stop && !validateLegacyCountFailureProof(campaignLedger.snapshot.policy, run, failed) ||
             (!m4UnclaimedFailureDigest(options.m4Authority, run, failed) &&
               (failed.lifecycle.phase !== "finished" || failed.lifecycle.unresolved !== false)) ||
             !await hasM4KnownFailure(database, session, options.m4Authority, run, failed, input.nowMs)) {

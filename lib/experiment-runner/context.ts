@@ -22,6 +22,7 @@ import type { ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4CountFailureDiagnostic } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { CASES } from "@/lib/contracts/experiment-runner";
 
 const contextIdentity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
@@ -247,6 +248,13 @@ export function createExperimentContextService(database: Database, options: { st
       resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
     } }).sort({ createdAtMs: 1, _id: 1 }).toArray()
       : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
+    // Only retained count failures need the full preparation for diagnostic
+    // verification. Keep normal history rows and execution scheduling light.
+    const countFailureRows = projection === "inspection" && run.mode === "balanced"
+      ? await operations.find({ runId: run._id, $or: [
+        { "m4Observation.issue": "provider_failure" }, { m4PreGenerationRecovery: { $exists: true } },
+      ] }).toArray() : [];
+    const countFailures = new Map(countFailureRows.map(row => [row._id, m4CountFailureDiagnostic(row, run)]));
     let pageSelection = null;
     if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasM4SimulatedImagePolicy(run)) &&
         run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
@@ -297,6 +305,7 @@ export function createExperimentContextService(database: Database, options: { st
       pageSelection,
       creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: row.uiMessageJson ? parseJson(row.uiMessageJson) : null, createdAtMs: row.createdAtMs })),
       operationHistory: operationRows.map((row) => ({ id: row._id, role: row.role, taskId: row.taskId, state: row.state,
+        countFailure: countFailures.get(row._id) ?? null,
         workflowRunId: row.workflowRunId, parentWorkflowRunId: row.parentWorkflowRunId,
         verifiedWorkflowId: row.verifiedWorkflowId ?? null,
         workflowTaskId: row.workflowTaskId ?? null, deadlineAtMs: row.deadlineAtMs, remoteStatus: row.remoteStatus ?? null,

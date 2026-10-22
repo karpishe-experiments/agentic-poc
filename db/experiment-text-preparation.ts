@@ -116,6 +116,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       if (saved.policyHash !== snapshot.hash || saved.sourceFingerprint !== before.sourceFingerprint ||
           saved.definitionHash !== m4RequestDefinition(selector).hash ||
           m4CanonicalJson(saved.definitionUpdate ?? null) !== m4CanonicalJson(grant.requestDefinitionUpdate ?? null) ||
+          m4CanonicalJson(saved.adapterUpdate ?? null) !== m4CanonicalJson(grant.providerAdapterUpdate ?? null) ||
           saved.operationFingerprint !== m4OperationFingerprint(before.operation)) conflict("Saved M4 preparation became stale; do not replay it.");
       return saved;
     }
@@ -141,6 +142,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       }
     }
     const saved = { policyHash: snapshot.hash, configurationHash: before.run.configurationHash, definitionHash: request.definitionHash,
+      ...(grant.providerAdapterUpdate ? { adapterUpdate: grant.providerAdapterUpdate } : {}),
       ...(grant.requestDefinitionUpdate ? { definitionUpdate: grant.requestDefinitionUpdate } : {}),
       requestDigest: request.requestDigest, requestJson: request.requestJson, contextJson, systemPrompt: request.systemPrompt,
       modelParametersJson: JSON.stringify(request.modelParameters), sourceFingerprint: before.sourceFingerprint,

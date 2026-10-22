@@ -45,6 +45,21 @@ function openJsonResponse(chunks: string[]) {
 }
 
 describe("model-free runtime transport", () => {
+  it("extracts only the exact legacy count guard and zero-token diagnostic from authenticated GET", async () => {
+    const exact = "Booklet complete input exceeds its verified token limit.";
+    for (const [error, total_tokens, status, admitted] of [[exact, 0, "failed", true], [exact, 1, "failed", false],
+      [exact, null, "failed", false], [exact, "0", "failed", false], ["private arbitrary body", 0, "failed", false], [exact, 0, "succeeded", false]] as const) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ id, workflow_id: workflow, status,
+        outputs: null, error, total_tokens, legacyCountFailure: { code: "legacy_input_count_guard", totalTokens: 0 } }),
+      { headers: { "Content-Type": "application/json" } }));
+      const result = await createWorkflowRuntime(config, fetcher).retrieve(binding, id);
+      expect(result.kind).toBe("execution");
+      if (result.kind !== "execution") throw new Error("Expected GET execution");
+      expect(result.execution.legacyCountFailure).toEqual(admitted ? { code: "legacy_input_count_guard", totalTokens: 0 } : undefined);
+      expect(result.execution).not.toHaveProperty("error"); expect(result.execution).not.toHaveProperty("total_tokens");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
   it("propagates Balanced without changing the Simulated wire shape", async () => {
     const bodies: string[] = [];
     const fetcher = vi.fn<typeof fetch>(async (_url, options) => {
