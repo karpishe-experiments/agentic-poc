@@ -54,6 +54,10 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  localReportFailure?: { code: "report_request_too_large"; scope: "context" | "request"; requestBytes: number; byteLimit: number;
+    definitionHash: string; requestDigest: string; policyHash: string; configurationHash: string;
+    sourceFingerprint: string; operationFingerprint: string; generationCompletedAtMs: number;
+    generationVersionIds: string[]; recordedAtMs: number };
   m4PreGenerationRecovery?: import("@/lib/experiment-runner/m4-legacy-count-failure").LegacyCountFailureProof;
   m4Continuation?: { reference: string; evidenceDigest: string; requestDigest: string; resumedAtMs: number;
     runRevision: number; campaignRevision: number; nextOperationId: string | null };

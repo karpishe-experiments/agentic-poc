@@ -9,6 +9,7 @@ import { m4Hash } from "@/lib/experiment-runner/m4-request";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
+import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
 
 function invalid(): never { throw new ExperimentRepositoryError("invalid_state", "Balanced completion requires complete attributable accounting."); }
 
@@ -18,7 +19,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
   if (!hasM4SimulatedImagePolicy(run) || !run.m4 || run.counters.payableImage !== 0) invalid();
   const { policy, hash } = m4PolicySnapshot(JSON.parse(run.m4.policyJson));
   const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.m4.campaignId }, { session });
-  if (!campaign || campaign.state !== "active" || campaign.policyHash !== hash || campaign.policyJson !== run.m4.policyJson ||
+  if (!campaign || (campaign.state !== "active" && !(campaign.state === "stopped" && run.status === "completed" && run.evaluationStatus === "failed")) || campaign.policyHash !== hash || campaign.policyJson !== run.m4.policyJson ||
       campaign.slots[run.persona] !== run._id || campaign.requests > policy.maxRequests || campaign.judgeRunIds.length > policy.maxJudges ||
       campaign.settledMicrodollars + campaign.reservedMicrodollars > policy.maxMicrodollars) invalid();
   const campaignOperations = await database.collections.experiment_operations.find({ "m4Reservation.campaignId": campaign._id },
@@ -59,6 +60,11 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
       // Only inspected, explicitly continued terminal failures count as retained
       // paid history. Load their full proof on this exceptional path only.
       const failed = await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
+      if (failed && run.status === "completed" && run.evaluationStatus === "failed" &&
+          await isVerifiedAdvisoryFailure(database, session, run, failed, run.updatedAtMs)) {
+        texts += failed.reservationCount;
+        continue;
+      }
       const provenance = failed?.m4Continuation;
       const unclaimedDigest = failed ? m4UnclaimedFailureDigest({ policy,
         grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, failed) : null;

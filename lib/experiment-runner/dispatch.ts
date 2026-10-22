@@ -357,6 +357,12 @@ export function createExperimentDispatcher(deps: {
             }
           }
           await observeProgress(run._id, completed);
+        } else if (outcome.kind === "blocked" && run.generationCompletedAtMs != null) {
+          const retained = await repository.getRun(run._id);
+          if (retained?.safeFailure === "definite_failure" && !retained.activeOperationId && !retained.preparation) {
+            await createExperimentCompletionService(deps.database, store()).completeAdvisoryFailure({ runId: retained._id,
+              expectedRevision: retained.revision, nowMs: now() });
+          }
         } else if (outcome.kind === "pending" && now() >= (current.deadlineAtMs ?? Infinity)) {
           await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
         }
@@ -414,7 +420,8 @@ export function createExperimentDispatcher(deps: {
           return;
         }
       }
-      if (execution.status === "succeeded") {
+      if (execution.status === "succeeded" || observed && run.mode === "simulated" && run.generationCompletedAtMs != null &&
+          ["tester", "judge"].includes(operation.role) && execution.status === "failed") {
         await repository.verifyDispatchPublication({ ...identity, workflowRunId: execution.id, workflowId: execution.workflow_id,
           terminalSucceeded: execution.status === "succeeded" });
       }
@@ -429,6 +436,11 @@ export function createExperimentDispatcher(deps: {
           await repository.recordDispatchOutcome({ ...identity, category: "paused" });
         } else if (execution.status === "failed" || execution.status === "stopped") {
           await repository.recordDispatchOutcome({ ...identity, category: execution.status === "stopped" ? "observed_stop" : "observed_failure" });
+          const retained = await repository.getRun(run._id);
+          if (retained?.generationCompletedAtMs != null && retained.safeFailure === "definite_failure" && !retained.activeOperationId && !retained.preparation) {
+            await createExperimentCompletionService(deps.database, store()).completeAdvisoryFailure({ runId: retained._id,
+              expectedRevision: retained.revision, nowMs: now() });
+          }
         } else if (execution.status !== "running" || now() >= (current.deadlineAtMs ?? (current.dispatchStartedAtMs ?? now()) + OPERATION_LIMIT_MS)) {
           await repository.recordDispatchOutcome({ ...identity, category: "unknown_outcome" });
         }
@@ -473,6 +485,15 @@ export function createExperimentDispatcher(deps: {
       let run = await repository.getRun(runId);
       if (!run || run.mode === "real" || run.mode === "balanced" && (!authority || run.m4?.campaignId !== authority.grant.campaignId) ||
           run.status === "completed" || run.status === "failed") return "blocked";
+      if (run.generationCompletedAtMs != null && !run.activeOperationId && run.status === "blocked" && run.safeFailure === "definite_failure") {
+        try {
+          await createExperimentCompletionService(deps.database, store()).completeAdvisoryFailure({ runId, expectedRevision: run.revision, nowMs: now() });
+          return "boundary";
+        } catch (error) {
+          if (error instanceof ExperimentRepositoryError && error.code === "invalid_state") return "blocked";
+          throw error;
+        }
+      }
       let snapshot: Awaited<ReturnType<typeof context.getExecutionView>> | undefined;
       let snapshotRevision = -1;
       const viewForRun = async () => {
@@ -715,6 +736,21 @@ export function createExperimentDispatcher(deps: {
     }, { admitted: true, runId });
   }
 
+  async function finalizeLocalReportFailure(runId: string): Promise<"boundary" | "blocked"> {
+    const retained = await repository.getRun(runId);
+    if (!retained || retained.generationCompletedAtMs == null || retained.activeOperationId || retained.preparation) return "blocked";
+    try {
+      await withOperationBudget(now() + OPERATION_LIMIT_MS, () => mutate(() =>
+        createExperimentCompletionService(deps.database, store()).completeAdvisoryFailure({
+          runId, expectedRevision: retained.revision, nowMs: now(),
+        }), { admitted: true, runId }), { now });
+      return "boundary";
+    } catch (error) {
+      if (error instanceof ExperimentRepositoryError && error.code === "invalid_state") return "blocked";
+      throw error;
+    }
+  }
+
   async function advanceOwned(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
     let run = await repository.getRun(runId);
     if (!run) return "blocked";
@@ -746,7 +782,12 @@ export function createExperimentDispatcher(deps: {
       }
       return run.status === "completed" ? "boundary" : "blocked";
     }
-    if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") return "blocked";
+    if (run.status === "blocked" && run.safeFailure !== "unknown_outcome") {
+      if (run.generationCompletedAtMs != null && !run.activeOperationId && !run.preparation) {
+        return withOperationBudget(now() + OPERATION_LIMIT_MS, () => advanceWork(runId), { now });
+      }
+      return "blocked";
+    }
     // Expiry is uncertain regardless of controller identity. A retained own
     // preparation must not loop on an already-expired I/O budget forever.
     if (!operation && run.preparation && now() >= run.preparation.deadlineAtMs) {
@@ -765,7 +806,7 @@ export function createExperimentDispatcher(deps: {
     if (operation?.deadlineAtMs && now() >= operation.deadlineAtMs - RECONCILIATION_RESERVE_MS) {
       if (operation.dispatchStartedAtMs == null) {
         await repository.failPreparation(runId, operation._id, now());
-        return "blocked";
+        return operation.localReportFailure ? finalizeLocalReportFailure(runId) : "blocked";
       }
       if (operation.lifecycle?.attemptOutcome && !await repository.beginObservation(operation._id, now())) return "waiting";
       await mutate(() => coordinator.inspect({ runId, operationId: operation!._id, stop: "deadline" }), { admitted: true, runId, operationId: operation._id });
@@ -820,6 +861,7 @@ export function createExperimentDispatcher(deps: {
         if (currentOperation) await repository.failPreparation(runId, currentOperation._id, now());
         else await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
         if (run.preparation) await deps.database.collections.experiment_runs.updateOne({ _id: runId, "preparation.ownerId": ownerId }, { $set: { "preparation.outcome": "failed", "preparation.unresolved": false } });
+        if (currentOperation?.localReportFailure) return finalizeLocalReportFailure(runId);
       }
       return "blocked";
     }

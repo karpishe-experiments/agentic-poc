@@ -7,7 +7,7 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentTaskSchema, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { m4GrantSchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { prepareM4Request, projectM4Context, m4RequestBundleMatches, m4RequestDefinition, m4CanonicalJson,
+import { M4ReportSizeError, prepareM4Request, projectM4Context, m4RequestBundleMatches, m4RequestDefinition, m4CanonicalJson,
   type M4AllowedValues, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -111,6 +111,12 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     const before = await withMongoTransaction(database, load);
     const selector: M4RequestSelector = { role: before.operation.role as M4RequestSelector["role"], taskId: before.operation.taskId as SpecialistTask | null,
       persona: before.run.persona, report: (before.operation.role === "tester" || before.operation.role === "judge") && before.run.generationCompletedAtMs != null };
+    if (before.operation.localReportFailure) {
+      // A retained local rejection is terminal even after a lost acknowledgement.
+      // The completion verifier checks its current sources before acceptance.
+      const saved = before.operation.localReportFailure;
+      throw new M4ReportSizeError(saved.requestBytes, saved.byteLimit, saved.definitionHash, saved.requestDigest, saved.scope);
+    }
     if (before.operation.m4Preparation) {
       const saved = before.operation.m4Preparation;
       if (saved.policyHash !== snapshot.hash || saved.sourceFingerprint !== before.sourceFingerprint ||
@@ -125,7 +131,35 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     const context = projectM4Context(selector, { ...rawContext,
       revisionCounts: { text: before.run.textRevisions, image: before.run.imageRevisions } }, input.operationId);
     const contextJson = JSON.stringify(context);
-    const request = prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context), grant);
+    let request: ReturnType<typeof prepareM4Request>;
+    try {
+      request = prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context), grant);
+    } catch (error) {
+      if (!(error instanceof M4ReportSizeError) || !selector.report) throw error;
+      await withMongoTransaction(database, async (session) => {
+        const current = await load(session);
+        const op = current.operation;
+        if (current.sourceFingerprint !== before.sourceFingerprint || m4OperationFingerprint(op) !== m4OperationFingerprint(before.operation) ||
+            op.dispatchStartedAtMs != null || op.workflowRunId || op.parentWorkflowRunId || op.verifiedWorkflowId || op.workflowTaskId || op.remoteStatus ||
+            op.m4Preparation || op.m4Reservation || op.m4Observation || op.authorizationClaim || op.resultFinalizationClaim || op.imageCompletionClaim ||
+            op.resultJson || op.resultDigest || op.materializationJson || current.run.generationCompletedAtMs == null || !current.run.generationVersionIds?.length) {
+          conflict("Report sources or ownership changed before local rejection.");
+        }
+        const proof = { code: "report_request_too_large" as const, scope: error.scope, requestBytes: error.requestBytes, byteLimit: error.byteLimit,
+          definitionHash: error.definitionHash, requestDigest: error.requestDigest, policyHash: snapshot.hash,
+          configurationHash: current.run.configurationHash, sourceFingerprint: current.sourceFingerprint,
+          operationFingerprint: m4OperationFingerprint(op), generationCompletedAtMs: current.run.generationCompletedAtMs,
+          generationVersionIds: current.run.generationVersionIds, recordedAtMs: now() };
+        if (op.localReportFailure) return;
+        const changed = await database.collections.experiment_operations.updateOne({ _id: op._id, state: "prepared", localReportFailure: { $exists: false } },
+          { $set: { localReportFailure: proof } }, { session });
+        if (changed.modifiedCount !== 1) conflict("Report rejection changed concurrently.");
+        const touched = await database.collections.experiment_runs.updateOne({ _id: current.run._id, revision: current.run.revision },
+          { $inc: { revision: 1 } }, { session });
+        if (touched.modifiedCount !== 1) conflict("Run changed before local rejection was retained.");
+      });
+      throw error;
+    }
     const publication = snapshot.policy.publications.find((p) => p.role === selector.role && p.taskId === selector.taskId &&
       p.persona === (selector.role === "tester" ? selector.persona : null));
     if (!publication) conflict("M4 publication is not in the frozen policy.");
@@ -151,6 +185,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     return withMongoTransaction(database, async (session) => {
       const current = await load(session);
       if (current.sourceFingerprint !== before.sourceFingerprint || current.operation.dispatchStartedAtMs != null) conflict("M4 sources changed during preparation.");
+      if (current.operation.localReportFailure) conflict("A retained local report rejection forbids preparation replay.");
       if (current.operation.m4Preparation) {
         if (current.operation.m4Preparation.requestDigest !== saved.requestDigest) conflict("M4 preparation identity conflicts.");
         return current.operation.m4Preparation;

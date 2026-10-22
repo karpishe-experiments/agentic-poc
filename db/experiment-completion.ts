@@ -18,6 +18,8 @@ import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-i
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { isBalancedImageVerificationRun, verificationMetadata } from "@/db/experiment-verification-metadata";
+import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
+import { currentMutationOwnerId } from "@/lib/application/deployment-control";
 
 function incomplete(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
 
@@ -171,6 +173,44 @@ export async function assertExperimentEvaluationOrder(database: Database, sessio
 // Generation and evaluation are separate persisted outcomes. No provider call,
 // artifact approval or quality threshold is part of either transaction.
 export function createExperimentCompletionService(database: Database, store: AssetStore) {
+  async function completeAdvisoryFailure(raw: unknown) {
+    const input = transitionInput.parse(raw);
+    return withMongoTransaction(database, async session => {
+      const run = await database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
+      if (!run) throw new ExperimentRepositoryError("stale_revision", "Completion run revision changed.");
+      const alreadyComplete = run.status === "completed" && run.evaluationStatus === "failed";
+      // A lost acknowledgement may repeat the original revision. Only an already
+      // terminal result can accept that older revision; all evidence is rechecked.
+      if (run.revision !== input.expectedRevision && !(alreadyComplete && input.expectedRevision < run.revision)) {
+        throw new ExperimentRepositoryError("stale_revision", "Completion run revision changed.");
+      }
+      if (run.activeOperationId || run.preparation || run.pendingDecisionJson || run.generationCompletedAtMs == null ||
+          run.status === "failed" || run.safeFailure === "unknown_outcome") incomplete("Evaluation ownership remains unresolved.");
+      const controls = await database.collections.deployment_control.find({ "mutationOwners.runId": run._id }, { session }).toArray();
+      if (controls.some(control => control.mutationOwners?.some(owner => owner.runId === run._id && owner.id !== currentMutationOwnerId()))) {
+        incomplete("Another mutation still owns this run.");
+      }
+      const operations = await database.collections.experiment_operations.find({ runId: run._id }, { session,
+        projection: { _id: 1, createdAtMs: 1, state: 1, safeFailure: 1, authorizationClaim: 1, resultFinalizationClaim: 1,
+          imageCompletionClaim: 1, "lifecycle.unresolved": 1 } }).toArray();
+      if (operations.some(op => !["succeeded", "failed"].includes(op.state) || op.authorizationClaim ||
+          op.resultFinalizationClaim || op.imageCompletionClaim || op.lifecycle?.unresolved ||
+          op.safeFailure === "unknown_outcome")) incomplete("Evaluation has unfinished work.");
+      const latestId = [...operations].sort((a, b) => b.createdAtMs - a.createdAtMs || b._id.localeCompare(a._id))[0]?._id;
+      const latest = latestId ? await database.collections.experiment_operations.findOne({ _id: latestId, runId: run._id }, { session }) : null;
+      if (!latest || !await isVerifiedAdvisoryFailure(database, session, run, latest, input.nowMs)) incomplete("Evaluation failure has no verified terminal evidence.");
+      await assertExperimentEvaluationOrder(database, session, run, latest.role as "tester" | "judge");
+      // Set the candidate terminal state within this transaction so the normal
+      // generation verifier can inspect it. Any failed check rolls it back.
+      const candidate = alreadyComplete ? run : await database.collections.experiment_runs.findOneAndUpdate(
+        { _id: run._id, revision: run.revision, activeOperationId: null },
+        { $set: { status: "completed", evaluationStatus: "failed", safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs },
+          $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      if (!candidate) throw new ExperimentRepositoryError("stale_revision", "Completion changed concurrently.");
+      await verifyExperimentGeneration(database, session, candidate, store);
+      return candidate;
+    });
+  }
   async function transition(raw: unknown, evaluation: boolean) {
     const input = transitionInput.parse(raw);
     return withMongoTransaction(database, async (session) => {
@@ -213,5 +253,5 @@ export function createExperimentCompletionService(database: Database, store: Ass
       return updated;
     });
   }
-  return { markGenerationComplete: (raw: unknown) => transition(raw, false), completeEvaluation: (raw: unknown) => transition(raw, true) };
+  return { completeAdvisoryFailure, markGenerationComplete: (raw: unknown) => transition(raw, false), completeEvaluation: (raw: unknown) => transition(raw, true) };
 }
