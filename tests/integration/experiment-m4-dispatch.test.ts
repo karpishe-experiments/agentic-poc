@@ -240,6 +240,13 @@ describe("offline Balanced dispatcher", () => {
     expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", counters: { logicalImage: 7 } });
     const failed = (await env.repository.getOperation(blocked.activeOperationId!))!;
     expect(failed.m4Reservation?.unsettledMicrodollars).toBe(failed.m4Reservation?.maximumMicrodollars);
+    // Retained history must not enter this closure or normal readiness. These
+    // unrelated terminal rows hold much larger contexts than the target request.
+    await env.database.collections.experiment_operations.insertMany(Array.from({ length: 80 }, (_, index) => ({ ...failed,
+      _id: id(5000 + index), runId: id(4999), idempotencyKey: `retained-large-${index}`, state: "failed" as const,
+      lifecycle: { ...failed.lifecycle!, phase: "finished" as const, unresolved: false },
+      m4Reservation: undefined, m4Preparation: { ...failed.m4Preparation!, requestJson: "x".repeat(300000), contextJson: "y".repeat(300000) },
+    })));
     const authority = { ...env.authority, grant: { ...env.authority.grant,
       continuations: [{ runId: env.runId, operationId: failed._id, reference: "explicit legacy fixture continuation" }],
       preGenerationRecoveries: [{ runId: env.runId, operationId: failed._id, workflowRunId: failed.workflowRunId!,
@@ -257,7 +264,10 @@ describe("offline Balanced dispatcher", () => {
     const target = { runId: env.runId, operationId: failed._id, expectedRevision: blocked.revision };
     const starts = vi.mocked(env.runtime.start).mock.calls.length;
     const preview = await service.preview(target, true);
+    expect(preview.snapshot.scope).toBe("pre-generation-target-v1");
     await withOperationBudget(env.now() + 150_000, () => service.apply(target, preview.previewDigest, async () => {}), { now: env.now });
+    expect(await service.verifyCompleted(target, preview.snapshot)).toMatchObject({ verified: true, outcome: "failure_closed" });
+    // Lost acknowledgement after commit is resolved by verification, not replay.
     expect(await service.verifyCompleted(target, preview.snapshot)).toMatchObject({ verified: true, outcome: "failure_closed" });
     expect(env.runtime.start).toHaveBeenCalledTimes(starts);
     for (const [key, value] of Object.entries({ DEPLOYMENT_ENV: "_staging", RUNNER_ENABLED: "false", DIFY_BOOKLET_RUNNER_ENABLED: "true",

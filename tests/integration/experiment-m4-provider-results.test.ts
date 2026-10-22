@@ -8,7 +8,7 @@ import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
-import { createBookletRecovery } from "@/lib/operations/booklet-recovery";
+import { createBookletRecovery, readRecoveryInventory, recoveryDigest } from "@/lib/operations/booklet-recovery";
 import { LEGACY_COUNT_PLUGIN_IDENTITY, LEGACY_COUNT_GUARD_SOURCE_SHA256 } from "@/lib/experiment-runner/m4-legacy-count-failure";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
@@ -116,12 +116,94 @@ describe("supported legacy count-failure recovery", () => {
     await dispatcher.inspect({ runId: id(10), operationId: id(12) });
     expect(await env.repository.getRun(id(10))).toEqual(resumed);
   });
-  it("rejects a changed source after preview/checkpoint before writing recovery", async () => {
+  it("keeps snapshot queries and bytes independent of unrelated historical prepared payloads", async () => {
+    const env = await fixture();
+    const find = vi.spyOn(env.db.collections.experiment_operations, "find");
+    const first = await env.service.preview(env.target);
+    const baselineQueries = find.mock.calls.length;
+    find.mockClear();
+    expect(first.snapshot.scope).toBe("pre-generation-target-v1");
+    const retained = (await env.repository.getOperation(id(12)))!;
+    await env.db.collections.experiment_operations.insertMany(Array.from({ length: 80 }, (_, index) => ({ ...retained,
+      _id: id(1000 + index), runId: id(999), idempotencyKey: `historical-${index}`, state: "failed" as const,
+      lifecycle: { ...retained.lifecycle!, phase: "finished" as const, unresolved: false },
+      m4Reservation: undefined, m4Preparation: { ...retained.m4Preparation!, requestJson: "private-history".repeat(20000), contextJson: "x".repeat(300000) },
+    })));
+    find.mockClear();
+    const preview = await env.service.preview(env.target);
+    const reads = find.mock.calls.map(([filter, options]) => ({ filter, projection: options?.projection }));
+    expect(preview).toEqual(first);
+    expect(Buffer.byteLength(JSON.stringify(preview))).toBe(Buffer.byteLength(JSON.stringify(first)));
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads).toHaveLength(baselineQueries);
+    for (const read of reads) {
+      expect(read.filter).not.toEqual({});
+      // The driver implements findOne through find. Only the exact target may
+      // return a full prepared request; every history query must project it away.
+      if (!read.projection) {
+        expect(read.filter).toEqual({ _id: id(12), runId: id(10) });
+        continue;
+      }
+      expect(read.projection).not.toHaveProperty("m4Preparation");
+      expect(read.projection).not.toHaveProperty("m4Preparation.requestJson");
+    }
+    find.mockClear();
+    await env.service.preview(env.target);
+    expect(find).toHaveBeenCalledTimes(reads.length);
+    const writes = vi.spyOn(env.db.collections.experiment_operations, "updateOne");
+    const runWrites = vi.spyOn(env.db.collections.experiment_runs, "updateOne");
+    const campaignWrites = vi.spyOn(env.db.collections.experiment_campaigns, "updateOne");
+    await env.db.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    await env.service.apply(env.target, preview.previewDigest, async () => {});
+    expect(await env.service.verifyCompleted(env.target, preview.snapshot)).toMatchObject({ verified: true, outcome: "failure_closed" });
+    expect(writes.mock.calls.map(([filter]) => filter)).toEqual([{ _id: id(12), state: retained.state }]);
+    expect(runWrites).toHaveBeenCalledTimes(1); expect(runWrites.mock.calls[0][0]).toMatchObject({ _id: id(10), revision: env.target.expectedRevision });
+    expect(campaignWrites).not.toHaveBeenCalled();
+    expect(await env.db.collections.experiment_operations.countDocuments({ runId: id(999), "m4Preparation.contextJson": "x".repeat(300000) })).toBe(80);
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+  it("keeps original full-inventory checkpoints verifiable and rejects unknown scopes", async () => {
+    const env = await fixture();
+    const preview = await env.service.preview(env.target);
+    const { scope: _scope, ...old } = preview.snapshot;
+    expect(_scope).toBe("pre-generation-target-v1");
+    const historical = { ...old, rows: await readRecoveryInventory(env.db.collections) };
+    expect(recoveryDigest(historical)).not.toBe(recoveryDigest(preview.snapshot));
+    await expect(env.service.verifyCompleted(env.target, { ...preview.snapshot, scope: "unknown" as never }))
+      .rejects.toThrow("snapshot_scope_unsupported");
+    await env.db.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    await env.service.apply(env.target, preview.previewDigest, async () => {});
+    expect(await env.service.verifyCompleted(env.target, historical)).toMatchObject({ verified: true, outcome: "failure_closed" });
+    expect(await env.service.verifyCompleted(env.target, preview.snapshot)).toMatchObject({ verified: true, outcome: "failure_closed" });
+  });
+  it.each(["reservation", "campaign", "ownership"])("rejects %s drift after checkpoint without closing the target", async kind => {
     const env = await fixture(); const before = await env.repository.getOperation(id(12));
     await env.db.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
     const preview = await env.service.preview(env.target, true);
     await expect(env.service.apply(env.target, preview.previewDigest, async () => {
-      await env.db.collections.booklets.updateOne({ _id: id(11) }, { $set: { workingTitle: "changed after checkpoint" } });
+      if (kind === "reservation") await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $inc: { "m4Reservation.unsettledMicrodollars": 1 } });
+      if (kind === "campaign") await env.db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $inc: { revision: 1 } });
+      if (kind === "ownership") await env.db.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { activeMutations: 1 } });
+    })).rejects.toThrow(kind === "ownership" ? "other_work" : "state_changed");
+    const after = (await env.repository.getOperation(id(12)))!;
+    expect(after.state).toBe(before!.state); expect(after.m4PreGenerationRecovery).toBeUndefined();
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+  it.each(["source", "approval"])("rejects a changed %s after preview/checkpoint before writing recovery", async kind => {
+    const env = await fixture(); const before = await env.repository.getOperation(id(12));
+    if (kind === "approval") {
+      await env.db.collections.artifacts.insertOne({ _id: id(201), bookletId: id(11), experimentRunId: id(10),
+        artifactType: "style", state: "approved", currentVersionId: id(202), createdAtMs: 1, updatedAtMs: 1 });
+      await env.db.collections.artifact_versions.insertOne({ _id: id(202), artifactId: id(201), versionNumber: 1, schemaVersion: "1",
+        contentJson: "{}", dependencyVersionIdsJson: "[]", createdBy: "fixture", sourceVersionId: null, sourceExecutionBatchId: null, createdAtMs: 1 });
+      await env.db.collections.approvals.insertOne({ _id: id(203), bookletId: id(11), experimentRunId: id(10), artifactVersionId: id(202),
+        scope: "artifact", subjectKey: null, action: "approve", origin: "explicit", sourceApprovalId: null, cardResponseId: null, qualityReviewId: null, createdAtMs: 1 });
+    }
+    await env.db.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+    const preview = await env.service.preview(env.target, true);
+    await expect(env.service.apply(env.target, preview.previewDigest, async () => {
+      if (kind === "source") await env.db.collections.booklets.updateOne({ _id: id(11) }, { $set: { workingTitle: "changed after checkpoint" } });
+      else await env.db.collections.approvals.updateOne({ _id: id(203) }, { $set: { action: "reject" } });
     })).rejects.toThrow("source_state_changed");
     expect(await env.repository.getOperation(id(12))).toEqual(before); expect(env.runtime.start).not.toHaveBeenCalled();
   });
