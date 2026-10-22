@@ -1,23 +1,29 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid generation is saved. Final acceptance under the revised advisory-completion contract is pending delivery and live verification. Parent and Creator remain on hold. M4 as a whole remains incomplete.
+**State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. It is completed with advisory evaluation incomplete. Parent and Creator remain on hold. M4 as a whole remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current execution record - 2026-10-22
 
-Complete the retained Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` without
-repeating generation or advisory evaluation. Its failed tester operation
+The retained Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e` is completed at
+revision 3014, with `evaluationStatus: failed`. Its failed tester operation
 `aaeb78da-1bb7-44d1-96f7-3762fdd1873c` retains an authenticated input-count
 failure: 39,891 tokens exceed the unchanged 32,000-token ceiling; generation did
-not start. The judge has not run. Last retained readback has 44 text requests,
+not start. The judge has not run. Verified readback retains 44 text requests,
 nine simulated images, zero paid images and 53 steps. Preserve all liabilities:
 USD 0.052720 reserved and USD 0.067229 settled upper bound. Invoice cost remains
-unavailable. The campaign is stopped; finalization must not reopen it.
+unavailable. The campaign remains stopped. Finalization changed only run
+completion bookkeeping; all 20 approved artifacts, current versions,
+approvals, 54 operation-history records, generation marker and counters match
+the pre-finalization application readback. Normal generation validation checked
+the saved dependencies and stored image bytes before commit.
 
 The accepted completion criterion is valid saved generation and accounting.
 Tester and judge remain advisory. A verified terminal report failure ends
 report scheduling and records `status: completed`, `evaluationStatus: failed`.
-The UI must say **Completed — evaluation incomplete**. This does not mean that
+The live UI shows **Completed — evaluation incomplete**, including after a full
+reload. It explains that the judge was not run because tester evaluation failed
+and that no evaluation retry is scheduled. This does not mean that
 report verification passed. Unknown outcomes, active owners and invalid generation
 remain blocking. Repeated finalization and Resume must not create provider work.
 
@@ -34,11 +40,25 @@ matrix covers successful reports, tester failure and judge failure for all three
 Simulated personas; Balanced Kid also covers count and local-size failures,
 retained finalization, ownership guards and repeated requests.
 
-**Next:** Finish independent reviews and lean CI.
-Deliver through normal staging deployment, then finalize the retained Kid through
-the existing application control. Verify generation, accounting, terminal UI state
-and no further requests. No new run or paid retry is included. Parent and Creator
-execution remains on hold. Their representative Balanced fixtures currently hit
+Both independent source reviews and both staging-port reviews passed. Linux CI
+`39775778627` and `39776839571` passed. Approved PR #229 merged at
+`54e4360874b4c6949872b736b0646c3e2752fa89`; staging PR #230 merged at
+`317b8b05295d19bbc6813f3c0d303c989c24ac8b`.
+
+Normal deployment `39779731923` reached its observer wait limit during backup;
+the original host request `39779731923-1` continued without stop or replay.
+Status `39781252184` verified complete/archived. Backup
+`staging-20261022T124015Z-717fbee3a5a4a334` is retained. Deployment check
+`39781388877` passed, and authenticated application preflight confirmed ready,
+idle admission and the exact manager publication. One existing application
+finalization submission committed at 2026-10-22T12:49:24Z. The UI returned an
+update error after commit; a read-only detail request established the terminal
+state, and Refresh/full reload displayed it. No second submission was made.
+The exact post-commit response failure cause is unverified. Saved accounting,
+operation history and request counts remained unchanged after reload.
+
+**Next:** No further Kid execution is required for this acceptance criterion.
+Parent and Creator execution remains on hold. Their representative Balanced fixtures hit
 the existing manager preparation byte limit before evaluation; report projection
 validation does not establish their end-to-end readiness.
 
@@ -51,8 +71,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The last retained serving release is `4236375426466d9e4c3419cdde9ef9d8384f8259`,
-image `sha256:43d9e5c7676d3bc5e898b14d315445f31ab501a72df50ce94e3771fdaf69eef5`.
+The verified serving release is `317b8b05295d19bbc6813f3c0d303c989c24ac8b`,
+image `sha256:ceb44d00cda93ac39db2c32ee11130dd05365197f3a46d26a18c335b3fbd22d3`.
 The reviewed dev3 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
