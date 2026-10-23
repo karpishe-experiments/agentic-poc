@@ -1,53 +1,35 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. Parent started after readiness delivery and is blocked on malformed manager output. Creator has not started. The user authorized blocker fixes and continuation. M4 remains incomplete.
+**State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. Parent is blocked on invalid J11 sheet routing. Creator has not started. The user authorized blocker fixes and continuation. M4 remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
-## Parent manager output correction
+## Parent layout routing correction
 
-Readiness PRs [#233](https://github.com/karpishe-experiments/agentic-poc/pull/233)
-and [#234](https://github.com/karpishe-experiments/agentic-poc/pull/234) delivered
-the compact manager and guarded admission fixes. Staging release
-`e75f622c876605d9bfcd69e203a94926aed4af68` completed through normal deployment
-`39813585005`; read-only status `39816072406` proved complete/archived and
-Check deployment `39816622554` passed. All eighteen publication bindings matched.
+The dev4 correction in PRs [#235](https://github.com/karpishe-experiments/agentic-poc/pull/235)
+and [#236](https://github.com/karpishe-experiments/agentic-poc/pull/236) is deployed.
+The reviewed provider package is installed and its identity was read back.
+The operator restored signature verification before Parent continued.
+No further signature-policy or provider change is needed for this correction.
 
-Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530` stopped at revision 35 after six
-text requests and zero images. J01/J02 remain approved. Manager operation
-`0371a9ef-43ff-489a-926d-29c8470e27e2`, execution
-`a141400d-bda1-4bb4-a93a-e015a90dc6e4`, returned duplicated JSON separated by
-prose. Authenticated Dify execution and provider generation completed; the strict
-creative parser correctly rejected it. Provider usage was 370 input and 115 output
-tokens. No operation/preparation owner remains. Campaign totals are 50 requests,
-USD 0.058120 reserved and USD 0.068410 settled upper bound; invoice cost is
-unavailable. Preserve the failed record and all accounting.
+Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530` reached revision 206 with
+29 text requests, five simulated images and no paid images. J01 through J10 are approved,
+including both character sheets. The terminal J11 operation
+`abcad8f9-d96f-40e2-bf8d-432d5a7f3666` produced valid JSON with a duplicate
+location reference and a character-sheet version paired with the location image.
+Authenticated provider generation completed. Normal validation rejected the
+result; no J11 artifact was saved and no operation/preparation owner remains.
+Campaign totals are 73/500 requests, USD 0.078820 reserved and USD 0.083657
+settled upper bound. Invoice cost is unavailable. Retain all evidence and charges.
 
-The existing extractor joins commentary, final answers and reasoning. The
-[official phase contract](https://developers.openai.com/api/docs/guides/reasoning#phase-parameter)
-distinguishes commentary from final answers. The historical wrapper omitted
-phases, so that mechanism is a possible cause of this failure, not a proven one.
-The bounded dev4 candidate selects one completed final message, or one phase-less
-legacy message, without JSON repair. Ambiguous selection returns empty creative
-content while preserving usage. Invalid JSON inside a selected message still
-fails. No automatic retry is added. The default provider route is unchanged.
-
-Candidate package: `output/issue65-openai-plugin-audit/openai-1.0.7-dev4.difypkg`,
-490,118 bytes, SHA-256
-`38ebc9d89b9b8eef3c6ec69d3f88e282001777d1155c45a352d23ec06e035e1a`.
-Only manifest version and bounded adapter differ from dev3. It is unsigned and
-not installed. Installation and any temporary signature-policy change require
-action-time confirmation. Then restore signature checks, read back exact binding,
-verify quiescence/accounting, and use the exact granted normal Parent continuation
-once. This creates a new accounted operation; it does not replay or rewrite the
-failed operation. Creator remains unstarted until Parent completes. Frozen policy,
-ceilings, prior preparations and liabilities remain. Existing credential storage,
-transfers and consumers do not change; no inventory row update is needed.
-
-Local checks passed: 34 Python mock-HTTP cases against extracted candidate bytes,
-38 units, 53 real-persistence/fake-provider result and continuation cases, agent
-fixtures, typecheck, focused lint and 209 local documentation links/anchors.
-The persistence runner exited zero after reporting a child-process shutdown
-warning. These checks establish local behavior, not live Parent completion.
+New J11 requests for every persona select unique sheet subjects. The application
+supplies exact saved version/image tuples before normal completion checks.
+The saved preparation selects the format; historical requests use their original
+full-reference format. Invalid historical tuples are not repaired. The protected
+request-bundle amendment preserves the frozen policy and 32,000-token guard.
+An exact continuation grant permits new accounted work for this Parent after
+reviewed delivery. Creator remains unstarted until Parent completes. No automatic
+retry, successor, budget reset or paid image is included. Existing credential
+storage and consumers are unchanged; no inventory update is needed.
 
 ## Control acknowledgement delivery
 
@@ -140,7 +122,7 @@ state, and Refresh/full reload displayed it. No second submission was made.
 The exact post-commit response failure cause is unverified. Saved accounting,
 operation history and request counts remained unchanged after reload.
 
-**Next:** No further Kid execution is required. Deliver the Parent output
+**Next:** No further Kid execution is required. Deliver the Parent layout routing
 correction above before continuing Parent, then starting Creator.
 Their earlier representative Balanced fixtures hit the manager byte limit;
 the corrected full Parent/Creator persistence fixtures now complete generation
@@ -156,9 +138,9 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `e75f622c876605d9bfcd69e203a94926aed4af68`,
-image `sha256:8c488539a87f0789013aba74875e70fb7e603a63932da58aad627a17ea6e18cc`.
-The reviewed dev3 provider installation is complete and signature verification was
+The verified serving release is `44f9eed2eb4189f39d413953dbfd8a0e4af4ebde`,
+image `sha256:10710adf8329f27368c86fdba69797a7e61054c1b862a6927e62e257a98d57e4`.
+The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
 

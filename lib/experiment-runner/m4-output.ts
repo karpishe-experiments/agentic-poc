@@ -2,11 +2,13 @@ import { z } from "zod";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { finalCharacterListSchema, finalLocationListSchema, roleResultSchema, type RoleResult } from "@/lib/contracts/experiment-runner";
 import { parseReferenceProposal, styleModuleHash } from "@/lib/contracts/experiment-references";
-import { pageSubjectProposalSchema, storedPageLayoutSchema } from "@/lib/contracts/experiment-pages";
+import { pageLayoutProposalSchema, pageSubjectProposalSchema, storedPageLayoutSchema } from "@/lib/contracts/experiment-pages";
 import { experimentReportSchema, type ExperimentReport } from "@/lib/contracts/experiment-reports";
-import { m4ModelOutputSchema, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+import { M4_LAYOUT_CONTRACT, m4ModelOutputSchema, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 
-const source = z.object({ id: opaqueIdSchema, taskId: z.string(), content: z.unknown() });
+import { m4LayoutCatalog } from "@/lib/experiment-runner/m4-layout";
+
+const source = z.object({ id: opaqueIdSchema, taskId: z.string(), content: z.unknown(), subjectKind: z.string().optional(), subjectId: opaqueIdSchema.optional() });
 const specialistContext = z.object({ role: z.literal("specialist"), subjectId: opaqueIdSchema, approvedSources: z.array(source) });
 const unavailableCost: ExperimentReport["costEvidence"] = { status: "unavailable", actualUsd: null, estimatedUsd: null,
   explanation: "Attributable campaign cost is supplied by the saved ledger. This text-only assessment does not establish invoice charges." };
@@ -26,13 +28,17 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
   let parsed: {
     result?: { kind: string; payload: { taskId?: string; content?: unknown } }; report?: Record<string, unknown>;
   };
+  // The saved preparation chooses compatibility. Model bytes cannot select a
+  // legacy parser or change the mapping used by this operation.
+  const context = JSON.parse(savedContextJson) as Record<string, unknown>;
+  const layoutSubjects = selector.role === "specialist" && selector.taskId === "J11" && context.layoutContract !== undefined;
+  if (layoutSubjects && context.layoutContract !== M4_LAYOUT_CONTRACT) throw new Error("Unknown saved M4 layout contract.");
   // Only validation of model-supplied bytes can prove malformed creative output.
   // Saved context, attribution and hydration failures remain separate blockers.
   try {
     if (Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("M4 model output exceeds its parsing bound.");
-    parsed = m4ModelOutputSchema(selector).parse(JSON.parse(content)) as typeof parsed;
+    parsed = m4ModelOutputSchema(selector, layoutSubjects).parse(JSON.parse(content)) as typeof parsed;
   } catch (error) { throw new M4CreativeOutputError(error); }
-  const context = JSON.parse(savedContextJson) as Record<string, unknown>;
   if (selector.report) {
     const evidence = z.object({ role: z.enum(["tester", "judge"]), mode: z.literal("balanced"), runId: opaqueIdSchema,
       configurationHash: z.string().regex(/^[a-f0-9]{64}$/), versionIds: z.array(opaqueIdSchema) }).parse(context.reportEvidence);
@@ -73,6 +79,17 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
       hydrated = parseReferenceProposal("J10", "proposal", { ...common, locationId: subject.locationId,
         stableAnchors: subject.stableAnchors, requiredFeatures: subject.requiredFeatures }).content;
     }
+  } else if (selector.taskId === "J11" && layoutSubjects) {
+    const catalog = m4LayoutCatalog(saved.approvedSources);
+    const pages = creative.pages as Array<{ panels: Array<{ sheetSubjects: Array<{ subjectKind: string; subjectId: string }> }> }>;
+    hydrated = pageLayoutProposalSchema.parse({ ...creative, pages: pages.map(page => ({ ...page, panels: page.panels.map(panel => {
+      const { sheetSubjects, ...rest } = panel;
+      return { ...rest, sheetReferences: sheetSubjects.map(subject => {
+        const reference = catalog.get(`${subject.subjectKind}:${subject.subjectId}`);
+        if (!reference) throw new M4CreativeOutputError(new Error("Selected sheet subject is absent from the prepared catalog."));
+        return reference;
+      }) };
+    }) })) });
   } else if (selector.taskId === "J12") {
     const layoutSource = select("J11"); const manuscript = select("J05"); const style = select("J08");
     const layout = storedPageLayoutSchema.parse(layoutSource.content);

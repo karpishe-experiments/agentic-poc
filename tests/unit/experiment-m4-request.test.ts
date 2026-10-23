@@ -185,6 +185,9 @@ describe("M4 reviewed request contract", () => {
       const proposal = schema.properties.result.anyOf.find((item: { properties: { kind: { enum: string[] } } }) => item.properties.kind.enum.includes("proposal"));
       const pages = proposal.properties.payload.properties.content.properties.pages;
       expect(pages).toMatchObject({ minItems: count, maxItems: count });
+      expect(pages.items.properties.panels.items.properties.sheetSubjects).toBeDefined();
+      expect(pages.items.properties.panels.items.properties.sheetReferences).toBeUndefined();
+      expect(definition.projection).toMatchObject({ layoutContract: "sheet-subjects-v1" });
       expect(pages.items.properties.panels.maxItems).toBe(persona === "playful_kid" ? 1 : 4);
       expect(pages.items.properties.panels.items.properties.liveTextSafeRegion.description).toContain("top-left");
       expect(definition.systemPrompt).toContain("x+width <= 1");
