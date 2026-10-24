@@ -1,4 +1,18 @@
 mock_provider "cloudflare" {}
+run "unibase_staging_route" {
+  command = plan
+  variables { unibase_staging_hostname = "unibase-staging.example.com" }
+  assert {
+    condition = (
+      length(cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress) == 6 &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[4].hostname == "unibase-staging.example.com" &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[4].service == "http://localhost:35101" &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[5].service == "http_status:404" &&
+      cloudflare_dns_record.unibase_staging[0].proxied
+    )
+    error_message = "Unibase must use its private listener before the existing fallback and receive a proxied DNS record."
+  }
+}
 variables {
   cloudflare_account_id = "0123456789abcdef0123456789abcdef"
   cloudflare_zone_id    = "0123456789abcdef0123456789abcdef"

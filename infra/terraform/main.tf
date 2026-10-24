@@ -35,14 +35,24 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "vps" {
   account_id = var.cloudflare_account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.vps.id
   config = {
-    ingress = [
+    ingress = concat([
       { hostname = var.staging_hostname, service = "http://localhost:3100" },
       { hostname = var.prod_hostname, service = "http://localhost:3200" },
       { hostname = var.deploy_hostname, service = "ssh://localhost:22" },
       { hostname = var.dify_hostname, service = var.dify_public_enabled ? "http://localhost:3300" : "http_status:503" },
-      { service = "http_status:404" }
-    ]
+      ], var.unibase_staging_hostname == null ? [] : [
+      { hostname = var.unibase_staging_hostname, service = "http://localhost:35101" }
+    ], [{ service = "http_status:404" }])
   }
+}
+resource "cloudflare_dns_record" "unibase_staging" {
+  count   = var.unibase_staging_hostname == null ? 0 : 1
+  zone_id = var.cloudflare_zone_id
+  name    = var.unibase_staging_hostname
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.vps.id}.cfargotunnel.com"
+  ttl     = 1
+  proxied = true
 }
 resource "cloudflare_dns_record" "application" {
   for_each = { staging = var.staging_hostname, prod = var.prod_hostname, deploy = var.deploy_hostname, dify = var.dify_hostname }

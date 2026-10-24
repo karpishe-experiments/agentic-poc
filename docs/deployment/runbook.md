@@ -360,6 +360,26 @@ source scripts/deploy/vps-deployment.sh --action clear-credential-session
 
 ## Rebuild setup
 
+### Optional Unibase staging route
+
+The reviewed `unibase_staging_hostname` setting adds only a proxied CNAME and an
+ingress rule to `http://localhost:35101`, before the existing fallback. The default
+Terraform variable is null, preserving the original four hostnames when omitted.
+Tracked VPS configuration proposes `unibase-staging.uniwares.co.uk`; it is not live
+until the owner's normal infrastructure preview/apply is reviewed and authorized.
+Use the existing state and infrastructure workflow, inspect the entire Terraform
+plan for unrelated drift, and preserve all Booklet, Dify and SSH routes. Do not
+manually add a competing dashboard route. Confirm no DNS record exists outside
+state before creating this new record; stop for owner reconciliation if one does.
+
+Unibase publishes and deploys its own application using its own restricted account
+and private Nginx. This repository continues owning the tunnel, Booklet and Dify;
+this change transfers neither services nor Terraform state. Shared preparation and
+host facts are in the [infrastructure runbook](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).
+Wait for active Booklet operations to finish before shared infrastructure changes.
+
+### Existing rebuild procedure
+
 Use this section only to rebuild or reconcile the deployment. The canonical entrypoint is `scripts/deploy/vps-deployment.sh`; all actions preview unless `--apply` is present.
 
 Required host tools are Docker Engine with Compose v2, Git, sudo, jq, Python 3, curl, tar, OpenSSL, OpenSSH, and systemd. Use an x86_64 Ubuntu host with at least 2 CPU cores, 6 GiB RAM, and 10 GiB free disk. Complete Cloudflare DNS, R2, and Zero Trust Free-plan enrollment and billing consent before setup.

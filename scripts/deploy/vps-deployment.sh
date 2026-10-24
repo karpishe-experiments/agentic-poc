@@ -222,6 +222,13 @@ load_terraform_configuration() {
   TF_VAR_dify_hostname="$(jq -er .dify_hostname "$CONFIG_FILE")"
   TF_VAR_dify_backup_bucket="$(jq -er .dify_backup_bucket "$CONFIG_FILE")"
   TF_VAR_dify_public_enabled="$(jq -er '.dify_public_enabled | if type == "boolean" then tostring else error("invalid Dify public switch") end' "$CONFIG_FILE")"
+  # Existing configurations may omit the optional Unibase route.
+  if jq -e '.unibase_staging_hostname != null' "$CONFIG_FILE" >/dev/null; then
+    TF_VAR_unibase_staging_hostname="$(jq -er '.unibase_staging_hostname | strings | select(length > 0)' "$CONFIG_FILE")"
+    export TF_VAR_unibase_staging_hostname
+  else
+    unset TF_VAR_unibase_staging_hostname
+  fi
   R2_STATE_BUCKET="$(jq -r .state_bucket "$CONFIG_FILE")"
   export TF_VAR_cloudflare_account_id TF_VAR_cloudflare_zone_id TF_VAR_staging_hostname TF_VAR_prod_hostname TF_VAR_deploy_hostname TF_VAR_dify_hostname TF_VAR_dify_backup_bucket TF_VAR_dify_public_enabled R2_STATE_BUCKET
   export R2_ENDPOINT="https://$TF_VAR_cloudflare_account_id.r2.cloudflarestorage.com"
