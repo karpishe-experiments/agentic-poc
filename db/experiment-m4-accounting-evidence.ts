@@ -2,7 +2,16 @@ import type { ClientSession } from "mongodb";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import type { Database } from "@/db/client";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { countVerificationQuery, measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { countVerificationQuery, countVerificationRead, measurePhase } from "@/lib/experiment-runner/diagnostics";
+
+// Exact existing accounting exclusion: an unclaimed Pause has no attributable
+// provider work. Share it with proof selection so no excluded body is loaded.
+export function isUnclaimedPauseFailure(operation: ExperimentOperationDocument) {
+  return operation.mode === "balanced" && operation.state === "failed" && operation.safeFailure === null &&
+    operation.reservationCount === 0 && operation.remoteStatus === "succeeded" && !!operation.workflowRunId && !!operation.verifiedWorkflowId &&
+    !operation.m4Reservation && !operation.m4Observation && !operation.resultJson && !operation.materializationJson &&
+    !operation.imageCompletionDigest && !operation.authorizationClaim && !operation.resultFinalizationClaim && !operation.imageCompletionClaim;
+}
 
 // Cache documents only within the caller's transaction-local verification attempt.
 // These reads do not cache a proof verdict or authorize continuation.
@@ -27,7 +36,13 @@ export async function readM4FailedOperations(database: Database, session: Client
   if (!failedIds.length) return new Map<string, ExperimentOperationDocument>();
   const failed = await measurePhase({ runId }, "accounting_failed_proofs_read", async () => {
     countVerificationQuery();
-    return database.collections.experiment_operations.find({ runId, _id: { $in: failedIds } }, { session }).toArray();
+    // None of the failure predicates consumes these image transport/debug fields.
+    // Keep complete preparations (including legacy digest inputs), observations,
+    // claims, results and lifecycle provenance unchanged.
+    const rows = await database.collections.experiment_operations.find({ runId, _id: { $in: failedIds } },
+      { session, projection: { imageRequestJson: 0, referenceUploadsJson: 0, referenceUploadJournalJson: 0, warningsJson: 0 } }).toArray();
+    countVerificationRead(rows);
+    return rows;
   });
   // Global scope is intentional: even a wrongly owned materialization rejects a failure.
   const versions = await measurePhase({ runId }, "accounting_failure_sources_read", async () => {

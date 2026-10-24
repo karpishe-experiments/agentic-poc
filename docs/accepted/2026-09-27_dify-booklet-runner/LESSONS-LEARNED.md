@@ -821,6 +821,10 @@ and only 99/64 ms for validation. Query batching alone did not establish live
 success. Preserve complete failure evidence and distinguish transfer/read cost
 from validation before changing checks. Shared-driver compression tests prove
 lossless large reads, transactions and uncompressed fallback; local byte reduction
-does not prove live latency. Evidence: the [Creator checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
+does not prove live latency. The subsequent live compressed attempt retained
+approximately the same failed-proof read timings and still exhausted its budget.
+Do not infer transfer cost from read duration alone. Measure returned evidence
+volume and exclude only fields/rows that existing proof predicates do not consume.
+Evidence: the [Creator checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
 and `mongodb-compression.test.ts`. Promotion candidate: **Documentation** for
 bounded persistence diagnosis.

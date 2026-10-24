@@ -3,7 +3,8 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import { budgetRemaining, safeFailure } from "@/lib/operations/completion-failure";
 
 type Identity = { runId: string; operationId?: string };
-type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number };
+type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number;
+  readRows?: number; readJsonBytes?: number | null };
 const current = new AsyncLocalStorage<Counters>();
 
 export type DiagnosticEvent = Identity & Counters & {
@@ -37,6 +38,18 @@ export function countTransactionAttempt() {
   if (counters) counters.transactionAttempts++;
 }
 
+// Size only, never contents. Unsupported diagnostic serialization must not change
+// the outcome of a successful evidence read or its subsequent proof validation.
+export function countVerificationRead(rows: readonly unknown[]) {
+  const counters = current.getStore();
+  if (!counters) return;
+  counters.readRows = (counters.readRows ?? 0) + rows.length;
+  try {
+    const bytes = rows.reduce<number>((sum, row) => sum + Buffer.byteLength(JSON.stringify(row), "utf8"), 0);
+    if (counters.readJsonBytes !== null) counters.readJsonBytes = (counters.readJsonBytes ?? 0) + bytes;
+  } catch { counters.readJsonBytes = null; }
+}
+
 export function diagnosticAssetStore(store: AssetStore): AssetStore {
   return {
     async get(uri) { countVerificationStorageCall(); return store.get(uri); },
@@ -50,7 +63,7 @@ export function diagnosticAssetStore(store: AssetStore): AssetStore {
 export async function measurePhase<T>(identity: Identity, phase: string, work: () => Promise<T>): Promise<T> {
   const start = performance.now();
   const budgetAtStartMs = budgetRemaining();
-  const counters = { queryCount: 0, storageCallCount: 0, transactionAttempts: 0 };
+  const counters: Counters = { queryCount: 0, storageCallCount: 0, transactionAttempts: 0 };
   let outcome: DiagnosticEvent["outcome"] = "failed";
   let failure: ReturnType<typeof safeFailure> | undefined;
   try {
@@ -66,6 +79,9 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
       parent.queryCount += counters.queryCount;
       parent.storageCallCount += counters.storageCallCount;
       parent.transactionAttempts += counters.transactionAttempts;
+      if (counters.readRows !== undefined) parent.readRows = (parent.readRows ?? 0) + counters.readRows;
+      if (counters.readJsonBytes !== undefined) parent.readJsonBytes = parent.readJsonBytes === null || counters.readJsonBytes === null
+        ? null : (parent.readJsonBytes ?? 0) + counters.readJsonBytes;
     }
     const event: DiagnosticEvent = { event: "booklet_callback_phase", timestamp: new Date().toISOString(), runId: identity.runId,
       ...(identity.operationId ? { operationId: identity.operationId } : {}), phase,

@@ -70,8 +70,25 @@ and 64 ms respectively. Kid's full generation audit used 18,370 ms and Parent's
 audit exhausted the remaining budget. The next bounded application correction
 requests the driver's built-in zlib wire compression, retaining complete evidence
 and all checks. Local tests cover exact full reads, multi-batch cursors,
-transaction commit and servers without compression. Live benefit remains
-unverified until reviewed delivery and one reconciled same-key admission.
+transaction commit and servers without compression.
+
+Compression source [#246](https://github.com/karpishe-experiments/agentic-poc/pull/246)
+and staging [#247](https://github.com/karpishe-experiments/agentic-poc/pull/247)
+passed two independent reviews each and lean CI. Release
+`477bf084aea25bb7c57fce9e2f64bfc510070d50` completed through deployment
+`40080178987`; client observation expired with exit 124, status `40080939705`
+confirmed complete/archived, and Check deployment `40081024289` passed.
+One reconciled same-key admission still failed after 30,631 ms. Failed-proof
+reads remained 10,465/4,204 ms for Kid/Parent. Compression did not establish a live
+latency improvement. Creator remains absent and preflight is idle; retain its key.
+
+The next bounded correction applies the unchanged unclaimed-Pause exclusion
+before loading failed proofs and omits only unused top-level operation image
+transport/debug fields. Complete preparation, result, ownership and failure
+evidence remain. Decoded JSON sizes and row counts will distinguish returned
+evidence volume from read latency without another database query. These are not
+wire-byte counts. Local preservation tests and live admission remain separate
+gates; no deadline or proof predicate changes.
 
 Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
 [#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
@@ -209,8 +226,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `48a9d6bdca0c0e1a9f7f069103c44c5217b06225`,
-image `sha256:5aa95983c193a376aa0c6c2db39848dacd6de73de4d9d7e975c6fb0c6cb0042d`.
+The verified serving release is `477bf084aea25bb7c57fce9e2f64bfc510070d50`,
+image `sha256:b5ea65cc052eb55d9325402ab14a7752654caf7c9a0bf2b7a6d8300b1e087a62`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
