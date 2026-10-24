@@ -28,7 +28,8 @@ Creator completes and M4's substantive evidence checks pass.
 
 Creation-budget task contract: change the shared create-handler wrapper to a
 60-second bound for all personas/modes; retain the default 30-second bound for
-all other handlers. Preserve response bodies, authentication, idempotency keys,
+all other handlers. Match the browser's creation-only response wait to 60 seconds;
+retain other browser request bounds. Preserve response bodies, authentication, idempotency keys,
 transactional checks/rollback and ownership cleanup. Verify success beyond
 30 seconds, failure after 60 seconds, inherited shorter deadlines, unchanged
 read/control bounds and duplicate creation. No migration, credential or provider
