@@ -44,11 +44,22 @@ attempt still failed after 31,599 ms; Kid accounting took 12,912 ms and Parent
 accounting 7,000 ms. No initial Balanced Creator was observed. Do not repeat the
 pending key without checking saved state and ownership.
 
-The next candidate projects unused successful creative bodies out of accounting
+The delivered follow-up projects unused successful creative bodies out of accounting
 reads while retaining exact failed bodies. Granular phases measure each awaited
 accounting read and validation separately. The observed accounting delay does not
 yet distinguish transfer size, read latency and validation cost. No timeout, proof
 predicate, provider request or allowance change is included.
+
+Source [#243](https://github.com/karpishe-experiments/agentic-poc/pull/243) and
+staging [#244](https://github.com/karpishe-experiments/agentic-poc/pull/244) passed
+two independent reviews each and lean CI. The 43 focused persistence cases,
+44 units, typecheck, focused lint and 209 documentation checks passed. Release
+`48a9d6bdca0c0e1a9f7f069103c44c5217b06225` completed through deployment
+`40073770189`; bounded client observation expired with exit 124, read-only status
+`40074687291` confirmed complete/archived and Check deployment `40074785234` passed.
+Live Creator admission on this release has not been attempted. The previous
+pending identity `998c1751-e458-47d4-88ea-ecca41504c78` reads as not found and
+preflight is idle; recover the existing pending creation controls before submitting.
 
 Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
 [#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
@@ -186,8 +197,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `89abbd829be1ee94ae8d52ef1c892639f4b3e97b`,
-image `sha256:28cb21c480191eacd924852622cad3c348c3cc55bfe97cb263d80d5fbc8e15b7`.
+The verified serving release is `48a9d6bdca0c0e1a9f7f069103c44c5217b06225`,
+image `sha256:5aa95983c193a376aa0c6c2db39848dacd6de73de4d9d7e975c6fb0c6cb0042d`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
