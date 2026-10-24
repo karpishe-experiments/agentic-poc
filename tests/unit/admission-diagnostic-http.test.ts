@@ -9,6 +9,21 @@ const request = (query: string, authenticated = true) => new Request(`https://ex
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
 describe("bounded admission read endpoint", () => {
+  it("keeps a started read within its original budget after navigation observation disconnects", async () => {
+    vi.stubEnv("ACCESS_GATE_PASSWORD", "abcdefghijklmnop"); vi.stubEnv("DEPLOYMENT_ENV", "_staging");
+    mocks.config.mockReturnValue({ enabled: true, config: { m4: { state: "granted", authority: { grant: {} } } } });
+    const controller = new AbortController();
+    mocks.diagnose.mockImplementation(async () => {
+      controller.abort();
+      const { operationSignal, operationBudgetRemainingMs } = await import("@/lib/operations/budget");
+      expect(operationSignal()?.aborted).toBe(false);
+      expect(operationBudgetRemainingMs()).toBeLessThanOrEqual(30_000);
+      return { readOnly: true };
+    });
+    const original = request("probe=admission-read&persona=playful_kid&part=proofs");
+    expect((await GET(new Request(original, { signal: controller.signal }))).status).toBe(200);
+    expect(mocks.diagnose).toHaveBeenCalledTimes(1);
+  });
   it("rejects unauthenticated, non-staging and arbitrary query targets before database access", async () => {
     vi.stubEnv("ACCESS_GATE_PASSWORD", "abcdefghijklmnop"); vi.stubEnv("DEPLOYMENT_ENV", "_staging");
     const query = "probe=admission-read&persona=playful_kid&part=proofs";

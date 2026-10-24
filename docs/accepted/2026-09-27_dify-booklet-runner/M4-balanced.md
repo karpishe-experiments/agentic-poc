@@ -19,6 +19,29 @@ negotiated compression. Collect one proofs/plan pair per predecessor after norma
 reviewed delivery; choose a correction from that evidence before another Creator
 submission. This diagnostic implementation does not establish live improvement.
 
+Diagnostic source #251 and staging #252 passed two independent reviews each and
+lean CI (`40086488576` / `40086704455`). Source checks passed 15 units, 11
+persistence/client cases, typecheck, focused lint and 211 documentation checks;
+the port passed 15 units and nine persistence/client cases. Deployment
+`40086826408-1` reached observer expiry (124) without stop/replay. Status
+`40087458070` confirmed complete/archived at release
+`b8dd99caf2048fa4ead5bef9c3c89604728b39d3`, image
+`sha256:030c54baa064402d3b3852520e75aac2352548c920d63f3c4d2e69771c449f72`,
+backup `staging-20261024T104406Z-8ec65d355b2c0044`. Check deployment
+`40087542406` and direct readiness passed.
+
+The Kid and Parent plans used indexes, examined six/three documents and twelve/six
+keys, and reported zero milliseconds of server execution. Parent's full proof
+query returned 445,586 decoded JSON bytes in 4,206 ms (5,542 ms total probe).
+Driver event lists were empty, so their zero counters do not establish zero
+checkout waiting. The slow Kid proof navigation exceeded the browser tool's
+ten-second observation bound; no successful proof response was obtained. Creator
+was not submitted. The diagnostic follow-up shares monitoring scopes across
+application bundles and retains the last twenty sanitized results in process
+memory. Retrieve `admissionReads` through the normal logs GET after a slow probe;
+do not repeat the query merely because navigation observation timed out. The
+query, 30-second read budget, generation checks and campaign remain unchanged.
+
 Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530` completed at revision 412.
 All 24 artifacts are approved, including six J12 page plans and six J13 images.
 Counters are 50 text requests, 11 simulated images, zero paid images and 61 steps.
@@ -269,8 +292,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `5bcbd6fab9c0721e2bdac0ff8bf6f183e1fb79bb`,
-image `sha256:e1e0f954a0899808d59270ec4f195205e4fd54c00a99680ed06f4592a4da0f13`.
+The verified serving release is `b8dd99caf2048fa4ead5bef9c3c89604728b39d3`,
+image `sha256:030c54baa064402d3b3852520e75aac2352548c920d63f3c4d2e69771c449f72`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
