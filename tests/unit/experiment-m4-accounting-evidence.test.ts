@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { readM4FailedOperations, readM4FailureCampaign, readM4FailureSourceVersion } from "@/db/experiment-m4-accounting-evidence";
 
 function fixture() {
@@ -29,7 +30,7 @@ describe("transaction-local M4 accounting evidence", () => {
     expect(proofs.get("failed")).toMatchObject({ proof: "original" });
     expect(proofs.has("missing-0")).toBe(false);
     for (const id of ids) expect(await readM4FailureSourceVersion(f.database, f.session, id, attempt)).toBeNull();
-    for (let i = 0; i < 51; i++) await readM4FailureCampaign(f.database, f.session, "campaign", attempt);
+    for (let i = 0; i < 51; i++) await readM4FailureCampaign(f.database, f.session, "campaign", "run", attempt);
     expect(f.proofRead).toHaveBeenCalledExactlyOnceWith({ runId: "run", _id: { $in: ids } }, { session: f.session });
     expect(f.sourcesRead).toHaveBeenCalledExactlyOnceWith({ sourceOperationId: { $in: ids } },
       { session: f.session, projection: { _id: 1, sourceOperationId: 1 } });
@@ -37,21 +38,33 @@ describe("transaction-local M4 accounting evidence", () => {
   });
   it("loads new campaign, proofs and wrongly owned materialization for a fresh attempt", async () => {
     const f = fixture(), first = f.attempt();
-    await readM4FailureCampaign(f.database, f.session, "campaign", first);
+    await readM4FailureCampaign(f.database, f.session, "campaign", "run", first);
     await readM4FailedOperations(f.database, f.session, "run", ["failed"], first);
     f.change();
     const second = f.attempt();
-    expect(await readM4FailureCampaign(f.database, f.session, "campaign", second)).toMatchObject({ revision: 2 });
+    expect(await readM4FailureCampaign(f.database, f.session, "campaign", "run", second)).toMatchObject({ revision: 2 });
     expect((await readM4FailedOperations(f.database, f.session, "run", ["failed"], second)).get("failed")).toMatchObject({ proof: "changed" });
     expect(await readM4FailureSourceVersion(f.database, f.session, "failed", second)).toMatchObject({ _id: "foreign-version" });
     expect(f.campaignRead).toHaveBeenCalledTimes(2); expect(f.sourcesRead).toHaveBeenCalledTimes(2);
   });
+  it("records a failed proof read without disclosing its body or changing the thrown error", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const f = fixture();
+    const error = Object.assign(new Error("private-proof-body"), { name: "MongoOperationTimeoutError" });
+    f.proofRead.mockImplementationOnce(() => ({ toArray: async () => { throw error; } }));
+    await expect(readM4FailedOperations(f.database, f.session, "run", ["failed"], f.attempt())).rejects.toBe(error);
+    const event = recentDiagnostics("run", 1).events[0];
+    expect(event).toMatchObject({ phase: "accounting_failed_proofs_read", outcome: "failed", queryCount: 1,
+      failure: { errorKind: "MongoOperationTimeoutError", code: "completion_failed" } });
+    expect(JSON.stringify(event)).not.toContain("private-proof-body");
+    expect(f.sourcesRead).not.toHaveBeenCalled();
+  });
   it("keeps uncached callers reading current evidence", async () => {
     const f = fixture();
     expect(await readM4FailureSourceVersion(f.database, f.session, "failed")).toBeNull();
-    await readM4FailureCampaign(f.database, f.session, "campaign"); f.change();
+    await readM4FailureCampaign(f.database, f.session, "campaign", "run"); f.change();
     expect(await readM4FailureSourceVersion(f.database, f.session, "failed")).toMatchObject({ _id: "foreign-version" });
-    expect(await readM4FailureCampaign(f.database, f.session, "campaign")).toMatchObject({ revision: 2 });
+    expect(await readM4FailureCampaign(f.database, f.session, "campaign", "run")).toMatchObject({ revision: 2 });
     expect(f.sourceRead).toHaveBeenCalledTimes(2); expect(f.campaignRead).toHaveBeenCalledTimes(2);
   });
 });

@@ -50,6 +50,11 @@ lookups, and reuses the campaign document within that attempt. Proof predicates
 still run for each operation; a source version under any owner rejects a failure.
 A transaction retry creates fresh evidence. Other callers retain uncached reads;
 no cached evidence crosses a campaign write, request or transaction attempt.
+Accounting projects successful creative/result bodies out of its operation read;
+failed rows retain exact values for the unclaimed-Pause exclusion. Original stored
+records are unchanged. Timings distinguish campaign, reservation, run-operation,
+failed-proof and source-version reads from per-operation validation. All MongoDB
+commands remain sequential within the transaction.
 
 Deployment initialization performs required setup and bounded availability checks:
 configuration, connectivity, exact collections/indexes, admission schema and seed
