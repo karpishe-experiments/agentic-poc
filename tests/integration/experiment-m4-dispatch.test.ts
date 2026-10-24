@@ -27,7 +27,7 @@ import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-published-rehearsal";
-import { m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
+import { type M4Grant, m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { createBookletRecovery } from "@/lib/operations/booklet-recovery";
@@ -59,36 +59,39 @@ const workflowOwnedFields: Record<string, string[]> = {
 };
 
 async function setup(amended = false, legacyCount = false, persona: "playful_kid" | "enthusiast_parent" | "professional_creator" = "playful_kid",
-  reportFailure?: "tester" | "judge" | "count") {
+  reportFailure?: "tester" | "judge" | "count", shared?: {
+    database: Database; store: MemoryStore; runId: string; bookletId: string; grant: M4Grant; skipCreate?: boolean;
+  }) {
   const published = process.env.M4_PUBLICATION_REHEARSAL === "1" ? await loadPublishedRehearsal() : null;
   const phases: { operationId: string; role: string; report: boolean; publicationId: string; authorizationBytes: number; resultBytes: number; authorizationMs: number; decodeReturnMs: number }[] = [];
-  const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
+  const database = shared?.database ?? await createTestDatabase({ seedAgents: false });
+  if (!shared) databases.push(database);
   const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: amended ? "a".repeat(64) : m4RequestBundleHash(),
     ...(legacyCount ? { pluginIdentity: LEGACY_COUNT_PLUGIN_IDENTITY } : {}),
     ...(published ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
-  const authority = { policy, grant: { campaignId: id(1), reference: "offline-dispatch-fixture-only",
+  const authority = { policy, grant: shared?.grant ?? { campaignId: id(1), reference: "offline-dispatch-fixture-only",
     ...(reportFailure === "count" ? { providerAdapterUpdate: { fromIdentity: policy.pluginIdentity, version: "1.0.7-dev3" as const,
       packageSha256: "b".repeat(64), reference: "offline-count-fixture-only" } } : {}),
     ...(amended ? { requestDefinitionUpdate: { fromBundleHash: policy.requestDefinitionHash,
       toBundleHash: m4RequestBundleHash(), reference: "prior-reviewed-amendment" } } : {}) } };
-  const store = new MemoryStore();
+  const store = shared?.store ?? new MemoryStore();
   const repository = createExperimentRepository(database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => store });
   const context = createExperimentContextService(database, { store: () => store });
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "https://booklet.invalid", callbackKey: "fixture",
     m4: { state: "granted", authority },
     bindings: policy.publications.map((p) => ({ ...p, taskId: specialistTaskSchema.nullable().parse(p.taskId), apiKey: "fake-key" })) };
-  const runId = id(10), bookletId = id(11); let clock = Date.now();
+  const runId = shared?.runId ?? id(10), bookletId = shared?.bookletId ?? id(11); let clock = Date.now();
   // Earlier personas are admission-only fixture records; this isolated test
   // executes every generation and evaluation operation of the selected persona.
   for (const [index, priorPersona] of (["playful_kid", "enthusiast_parent"] as const).entries()) {
-    if (priorPersona === persona) break;
+    if (shared || priorPersona === persona) break;
     const prior = await repository.createRun({ runId: id(20 + index), bookletId: id(30 + index), persona: priorPersona,
       mode: "balanced", campaignId: id(1), configuration: configurationSnapshot(config, priorPersona), nowMs: clock });
     await database.collections.experiment_runs.updateOne({ _id: prior._id }, { $set: {
       status: "completed", evaluationStatus: "complete", generationCompletedAtMs: clock,
     } });
   }
-  await repository.createRun({ runId, bookletId, persona, mode: "balanced", campaignId: id(1),
+  if (!shared?.skipCreate) await repository.createRun({ runId, bookletId, persona, mode: "balanced", campaignId: id(1),
     configuration: configurationSnapshot(config, persona), nowMs: clock });
   const saved = new Map<string, RuntimeExecution>();
   let pending = false, badCreative = false, badLayout = false, incompleteLayout = false;
@@ -749,6 +752,72 @@ describe("offline Balanced dispatcher", () => {
   }, 120_000);
 });
 
+
+describe("Creator admission after two completed booklets", () => {
+  it("audits both real predecessor graphs within the existing HTTP contract and preserves their evidence", async () => {
+    const kid = await setup(false, false, "playful_kid", "count");
+    const finish = async (env: Awaited<ReturnType<typeof setup>>) => {
+      for (let step = 0; step < 180; step++) {
+        await env.dispatcher.advance(env.runId);
+        const run = (await env.repository.getRun(env.runId))!;
+        if (run.status === "completed") return run;
+        expect(run.status, `Unexpected generation blocker at ${step}`).not.toBe("blocked");
+        env.tick();
+      }
+      throw new Error("Fixture did not complete");
+    };
+    const completedKid = await finish(kid);
+    const grant: M4Grant = { ...kid.authority.grant, remainingPersonaAdmission: {
+      anchorRunId: kid.runId, anchorRevision: completedKid.revision,
+      personas: ["enthusiast_parent", "professional_creator"], reference: "two populated predecessors fixture",
+    } };
+    const parent = await setup(false, false, "enthusiast_parent", "count", {
+      database: kid.database, store: kid.store, runId: id(110), bookletId: id(111), grant,
+    });
+    const completedParent = await finish(parent);
+    expect(completedKid.evaluationStatus).toBe("failed"); expect(completedParent.evaluationStatus).toBe("failed");
+    const creator = await setup(false, false, "professional_creator", "count", {
+      database: kid.database, store: kid.store, runId: id(210), bookletId: id(211), grant, skipCreate: true,
+    });
+    const beforeCampaign = (await kid.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!;
+    expect(beforeCampaign.state).toBe("stopped");
+    const collections = ["experiment_runs", "artifacts", "artifact_versions", "artifact_dependencies", "approvals", "assets", "experiment_operations"] as const;
+    const before = await Promise.all(collections.map(name => kid.database.collections[name].find({}).sort({ _id: 1 }).toArray()));
+    const bytes = [...kid.store.files.entries()];
+    const calls = [kid.runtime.start, parent.runtime.start, creator.runtime.start].map(start => vi.mocked(start).mock.calls.length);
+    vi.stubEnv("ACCESS_GATE_PASSWORD", "fixture-password-at-least-16");
+    const http = createBookletRunnerHttp({ database: () => kid.database, config: () => ({ enabled: true, config: creator.config }),
+      store: () => kid.store, runtime: () => creator.runtime, mutate: async action => action() });
+    const request = () => new Request("https://booklet.invalid/api/experiments/booklet-runs", { method: "POST",
+      headers: { origin: "https://booklet.invalid", authorization: `Basic ${btoa("booklet:fixture-password-at-least-16")}`,
+        "content-type": "application/json", "idempotency-key": id(990) },
+      body: JSON.stringify({ persona: "professional_creator", mode: "balanced" }) });
+    try {
+      const [uri, original] = bytes[0]; kid.store.files.set(uri, Uint8Array.of(0));
+      expect((await http.create(request())).status).toBe(409);
+      kid.store.files.set(uri, original);
+      expect(await kid.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(beforeCampaign);
+      const result = await http.create(request());
+      expect(result.status).toBe(201);
+      const created = (await result.json()).data;
+      expect(created).toMatchObject({ persona: "professional_creator", mode: "balanced", status: "queued", counters: { logicalText: 0, logicalImage: 0 } });
+      expect((await http.create(request())).status).toBe(200);
+      for (const [index, name] of collections.entries()) {
+        expect(await kid.database.collections[name].find({ _id: { $in: before[index].map(row => row._id) } }).sort({ _id: 1 }).toArray()).toEqual(before[index]);
+      }
+      expect([...kid.store.files.entries()]).toEqual(bytes);
+      expect([kid.runtime.start, parent.runtime.start, creator.runtime.start].map(start => vi.mocked(start).mock.calls.length)).toEqual(calls);
+      expect(await kid.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toMatchObject({ state: "active",
+        requests: beforeCampaign.requests, reservedMicrodollars: beforeCampaign.reservedMicrodollars, settledMicrodollars: beforeCampaign.settledMicrodollars });
+      const phases = recentDiagnostics(undefined, 500).events;
+      expect(phases.some(event => event.runId === kid.runId && event.phase === "admission_predecessor_generation")).toBe(true);
+      expect(phases.some(event => event.runId === parent.runId && event.phase === "admission_predecessor_generation")).toBe(true);
+      expect(phases.some(event => event.runId === created.runId && event.phase === "create_transaction" && event.outcome === "succeeded" && event.transactionAttempts >= 1)).toBe(true);
+      expect(phases.some(event => event.phase === "create_mutation" && event.outcome === "failed" && event.failure)).toBe(true);
+      expect(phases.some(event => event.runId === created.runId && event.phase === "create_detail" && event.outcome === "succeeded")).toBe(true);
+    } finally { vi.unstubAllEnvs(); }
+  }, 120_000);
+});
 
 describe("focused J11 paid-failure continuation", () => {
   it.each([["layout", "playful_kid"], ["incomplete", "playful_kid"], ["layout", "enthusiast_parent"]] as const)("retains sources/assets and the %s failure charge for %s while new work completes layout", async (failure, persona) => {
