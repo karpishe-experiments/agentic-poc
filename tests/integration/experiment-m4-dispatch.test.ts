@@ -174,7 +174,15 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
         }
         creative = { result };
       }
-      let content = JSON.stringify(m4ModelOutputSchema(selector).parse(creative));
+      const layoutSubjects = binding.taskId === "J11" && JSON.parse(operation.m4Preparation!.contextJson).layoutContract === m4Request.M4_LAYOUT_CONTRACT;
+      if (layoutSubjects) {
+        const output = creative as { result: { kind: string; payload: { content: { pages: Array<{ panels: Array<Record<string, unknown>> }> } } } };
+        if (output.result.kind === "proposal") for (const page of output.result.payload.content.pages) for (const panel of page.panels) {
+          panel.sheetSubjects = (panel.sheetReferences as Array<{ subjectKind: string; subjectId: string }>).map(({ subjectKind, subjectId }) => ({ subjectKind, subjectId }));
+          delete panel.sheetReferences;
+        }
+      }
+      let content = JSON.stringify(m4ModelOutputSchema(selector, layoutSubjects).parse(creative));
       if (badLayout && binding.taskId === "J11") {
         const invalid = JSON.parse(content);
         for (const page of invalid.result.payload.content.pages) for (const panel of page.panels) {
@@ -743,8 +751,8 @@ describe("offline Balanced dispatcher", () => {
 
 
 describe("focused J11 paid-failure continuation", () => {
-  it.each(["layout", "incomplete"] as const)("retains sources/assets and the %s failure charge while new work completes layout", async (failure) => {
-    const env = await setup(failure === "incomplete");
+  it.each([["layout", "playful_kid"], ["incomplete", "playful_kid"], ["layout", "enthusiast_parent"]] as const)("retains sources/assets and the %s failure charge for %s while new work completes layout", async (failure, persona) => {
+    const env = await setup(failure === "incomplete", false, persona);
     env.badLayout(failure === "layout"); env.incompleteLayout(failure === "incomplete");
     for (let i = 0; i < 85 && (await env.repository.getRun(env.runId))!.status !== "blocked"; i++) {
       env.tick(); await env.dispatcher.advance(env.runId);

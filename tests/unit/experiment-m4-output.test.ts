@@ -4,6 +4,7 @@ import { styleModuleHash } from "@/lib/contracts/experiment-references";
 import { m4TestId as id } from "@/tests/helpers/m4-policy";
 import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-fixtures";
 import { paginationSources } from "@/tests/helpers/pagination-fixtures";
+import { M4_LAYOUT_CONTRACT, projectM4Context } from "@/lib/experiment-runner/m4-request";
 import { parsePageProposal } from "@/lib/contracts/experiment-pages";
 
 const style = { schemaVersion: "2", title: "Warm ink", styleDefinition: { mediumAndLineWork: "ink", shapeLanguageAndProportions: "round",
@@ -52,6 +53,62 @@ describe("M4 trusted creative output assembly", () => {
       if (valid.kind !== "proposal") throw new Error("Expected valid layout");
       expect(() => parsePageProposal("J11", persona, valid.content)).not.toThrow();
     }
+  });
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("resolves %s layout subjects from saved approved sheets and preserves legacy output", persona => {
+    const sources = paginationSources(persona);
+    const fixture = simulatePaginationProposal({ persona, sources });
+    if (fixture.kind !== "proposal") throw new Error("Expected layout");
+    const layoutSelector = { ...selector, taskId: "J11" as const, persona };
+    const legacy = { role: "specialist", subjectId: id(1), approvedSources: sources };
+    const saved = projectM4Context(layoutSelector, legacy, id(2));
+    expect(saved.layoutContract).toBe(M4_LAYOUT_CONTRACT);
+    const creative = { ...fixture.content, pages: fixture.content.pages.map(page => ({ ...page,
+      panels: page.panels.map(({ sheetReferences, ...panel }) => ({ ...panel,
+        sheetSubjects: sheetReferences.map(({ subjectKind, subjectId }) => ({ subjectKind, subjectId })) })) })) };
+    const bytes = proposal("J11", creative);
+    expect(parseM4CreativeOutput(layoutSelector, bytes, JSON.stringify(saved))).toEqual(
+      parseM4CreativeOutput(layoutSelector, proposal("J11", fixture.content), JSON.stringify(legacy)));
+    expect(() => parseM4CreativeOutput(layoutSelector, bytes, JSON.stringify({ ...saved, layoutContract: "unknown" }))).toThrow("Unknown saved");
+    // Compatibility never depends on a model-supplied marker or parse fallback.
+    expect(() => parseM4CreativeOutput(layoutSelector, bytes, JSON.stringify(legacy))).toThrow(M4CreativeOutputError);
+    expect(() => parseM4CreativeOutput(layoutSelector, proposal("J11", fixture.content), JSON.stringify(saved))).toThrow(M4CreativeOutputError);
+    const invalid = (change: (panel: typeof creative.pages[number]["panels"][number]) => void) => {
+      const copy = structuredClone(creative); change(copy.pages[1].panels[0]);
+      expect(() => parseM4CreativeOutput(layoutSelector, proposal("J11", copy), JSON.stringify(saved))).toThrow(M4CreativeOutputError);
+    };
+    if (persona !== "playful_kid") {
+      const repeatedPanel = structuredClone(creative);
+      const page = repeatedPanel.pages.find(page => page.panels.length > 1)!;
+      page.panels[1].panelKey = page.panels[0].panelKey;
+      const legacyRepeated = structuredClone(fixture.content);
+      const legacyPage = legacyRepeated.pages.find(page => page.panels.length > 1)!;
+      legacyPage.panels[1].panelKey = legacyPage.panels[0].panelKey;
+      expect(() => parseM4CreativeOutput(layoutSelector, proposal("J11", legacyRepeated), JSON.stringify(legacy))).toThrow(M4CreativeOutputError);
+      expect(() => parseM4CreativeOutput(layoutSelector, proposal("J11", repeatedPanel), JSON.stringify(saved))).toThrow(M4CreativeOutputError);
+    }
+    invalid(panel => panel.sheetSubjects.push(panel.sheetSubjects[0]));
+    invalid(panel => { panel.sheetSubjects[0].subjectId = id(999); });
+    invalid(panel => { panel.sheetSubjects[0].subjectKind = "location"; });
+    invalid(panel => Object.assign(panel, { sheetReferences: fixture.content.pages[1].panels[0].sheetReferences }));
+    const sharedAsset = structuredClone(sources);
+    const sheets = sharedAsset.filter(row => row.taskId === "J09");
+    (sheets[1].content as { build: { assetId: string } }).build.assetId = (sheets[0].content as { build: { assetId: string } }).build.assetId;
+    for (const corrupt of [
+      sharedAsset, sources.filter(row => row.taskId !== "J09" && row.taskId !== "J10"),
+      [...sources, sources.find(row => row.taskId === "J09")!],
+      sources.map(row => row.taskId === "J09" ? { ...row, subjectKind: "location" } : row),
+    ]) {
+      expect(() => projectM4Context(layoutSelector, { ...legacy, approvedSources: corrupt }, id(2))).toThrow("catalog");
+      try { parseM4CreativeOutput(layoutSelector, bytes, JSON.stringify({ ...saved, approvedSources: corrupt })); throw new Error("Expected catalog failure"); }
+      catch (error) { expect(error).not.toBeInstanceOf(M4CreativeOutputError); expect(String(error)).toContain("catalog"); }
+    }
+    const mixedLegacy = structuredClone(fixture.content);
+    Object.assign(mixedLegacy.pages[1].panels[0], { sheetSubjects: creative.pages[1].panels[0].sheetSubjects });
+    expect(() => parseM4CreativeOutput(layoutSelector, proposal("J11", mixedLegacy), JSON.stringify(legacy))).toThrow(M4CreativeOutputError);
+    const duplicate = structuredClone(fixture.content);
+    duplicate.pages[1].panels[0].sheetReferences.push(duplicate.pages[1].panels[0].sheetReferences[0]);
+    expect(() => parseM4CreativeOutput(layoutSelector, proposal("J11", duplicate), JSON.stringify(legacy))).toThrow(M4CreativeOutputError);
+    expect(proposal("J11", creative)).toBe(bytes);
   });
   it("computes the style hash from exact creative bytes", () => {
     const result = parseM4CreativeOutput({ ...selector, taskId: "J08" }, proposal("J08", style), JSON.stringify({ ...context, approvedSources: [] }));

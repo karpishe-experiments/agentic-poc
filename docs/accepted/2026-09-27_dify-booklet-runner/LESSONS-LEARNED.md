@@ -786,3 +786,14 @@ require `not_assessed` where the projection cannot support a finding.
 Evidence: the all-persona advisory integration matrix, Balanced Kid count/size
 failure and retained-finalization cases, and request projection unit tests.
 Promotion target: documentation for advisory evaluation and terminal outcomes.
+
+## Keep saved reference identity assembly in application code
+
+In Balanced J11 output, individually valid reference IDs formed an invalid tuple:
+a character version pointed to a location image, and the location was repeated.
+Independent field enums cannot establish a relationship between IDs. Let the model
+select unique subjects and let application code resolve the complete tuple from
+saved approved evidence. Select compatibility from the saved preparation, never
+from model output. Keep downstream currentness and asset checks. Evidence: the
+retained Parent J11 failure and M4 output/dispatch tests. Promotion candidate:
+**Documentation** for application-owned reference assembly.
