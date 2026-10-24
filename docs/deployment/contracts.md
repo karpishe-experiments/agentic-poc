@@ -1,5 +1,26 @@
 # Deployment contracts and verification
 
+## Shared infrastructure documentation boundary
+
+The private [Uniwares infrastructure repository](https://github.com/Uniwares-LTD/infrastructure/blob/main/README.md)
+owns the shared [srv1 inventory](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/inventory/srv1.md),
+dated 2026-10-22, and proposed conventions for new shared components. Its inventory
+supersedes the older capacity snapshot for planning; `host_observation` in
+`infra/config/vps.json` remains explicitly historical and is not modified here.
+
+This repository retains current ownership of Booklet deployments, Dify Community,
+Cloudflare Tunnel/Access and associated Terraform state. No accounts, credentials,
+locks, routes, provider resources or service ownership transfer with documentation.
+Future transfer requires an explicit state/configuration migration and acceptance.
+Unibase and derived apps use their own release workflows and paths, not Booklet's.
+
+The [shared architecture](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/architecture.md)
+and [operations](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md)
+describe accepted preferences and pending changes for those apps. They do not
+override Booklet's current database roles, credential inventory, backup/restore,
+drain or host-journal contracts below. Exact gateway/tunnel integration is pending;
+app repositories must not independently replace this owner's tunnel route list.
+
 ## Ownership
 
 Routine initialization owns required setup and availability checks, not a full

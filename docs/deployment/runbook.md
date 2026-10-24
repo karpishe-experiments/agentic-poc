@@ -1,5 +1,15 @@
 # VPS deployment runbook
 
+Before planning shared-host changes, read the private
+[srv1 inventory](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/inventory/srv1.md)
+and [shared operations guidance](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).
+The October 22 inventory identifies legacy port-80 gateway ownership, image storage,
+Compose compatibility work and proposed Unibase subnet collisions. It is a dated
+observation, not permission to upgrade, prune, restart or migrate services.
+Booklet/Dify/tunnel operations still follow this runbook and the
+[ownership boundary](contracts.md#shared-infrastructure-documentation-boundary).
+New application conventions do not alter the existing locks, recovery or credentials.
+
 This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
 PR Validate runs [selected non-build checks](../../scripts/ci/README.md). For a manual
@@ -349,6 +359,26 @@ source scripts/deploy/vps-deployment.sh --action clear-credential-session
 `access-check` verifies Cloudflare, R2 Terraform state, Atlas Project Owner, and GitHub administration access without mutation. The R2 Terraform Access Key ID and Secret Access Key are S3-compatible credentials; they are separate from the Cloudflare API token.
 
 ## Rebuild setup
+
+### Optional Unibase staging route
+
+The reviewed `unibase_staging_hostname` setting adds only a proxied CNAME and an
+ingress rule to `http://localhost:35101`, before the existing fallback. The default
+Terraform variable is null, preserving the original four hostnames when omitted.
+Tracked VPS configuration proposes `unibase-staging.uniwares.co.uk`; it is not live
+until the owner's normal infrastructure preview/apply is reviewed and authorized.
+Use the existing state and infrastructure workflow, inspect the entire Terraform
+plan for unrelated drift, and preserve all Booklet, Dify and SSH routes. Do not
+manually add a competing dashboard route. Confirm no DNS record exists outside
+state before creating this new record; stop for owner reconciliation if one does.
+
+Unibase publishes and deploys its own application using its own restricted account
+and private Nginx. This repository continues owning the tunnel, Booklet and Dify;
+this change transfers neither services nor Terraform state. Shared preparation and
+host facts are in the [infrastructure runbook](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).
+Wait for active Booklet operations to finish before shared infrastructure changes.
+
+### Existing rebuild procedure
 
 Use this section only to rebuild or reconcile the deployment. The canonical entrypoint is `scripts/deploy/vps-deployment.sh`; all actions preview unless `--apply` is present.
 
