@@ -148,7 +148,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
       try {
         await read<Run>(await fetch("/api/experiments/booklet-runs", {
           method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": item.key },
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(60_000),
           body: JSON.stringify({ persona: item.persona, mode: item.mode, ...(item.predecessorRunId ? { predecessorRunId: item.predecessorRunId } : {}) }),
         }));
         setPending(queue.slice(index + 1));

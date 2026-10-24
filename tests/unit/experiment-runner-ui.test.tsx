@@ -97,6 +97,7 @@ describe("booklet runner inspector", () => {
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(0);
   });
   it("retains the selected Balanced mode and key for explicit retry and hides bulk creation", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     fetchMock.mockImplementation(async (_url, options) => options?.method === "POST" ? Promise.reject(new Error("lost")) :
       new Response(JSON.stringify({ data: [] })));
     const view = render(<BookletRunner balancedEnabled m4State="granted" />);
@@ -117,6 +118,8 @@ describe("booklet runner inspector", () => {
       expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "balanced" });
       expect(new Headers(options?.headers).get("Idempotency-Key")).toBe("00000000-0000-4000-8000-000000000010");
     }
+    expect(timeout.mock.calls.filter(([milliseconds]) => milliseconds === 60_000)).toHaveLength(2);
+    timeout.mockRestore();
   });
   it("labels saved Balanced images simulated and offers no linked successor", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, mode: "balanced", status: "blocked", activeOperationId: null,

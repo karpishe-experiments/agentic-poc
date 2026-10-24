@@ -38,6 +38,7 @@ does not continue failed generation or allow a replacement persona run.
 
 Run creation retains its existing full-detail response and uses a 60-second HTTP
 budget, explicitly approved to accommodate retained predecessor verification.
+The browser's creation request also waits up to 60 seconds for that response.
 Other runner handlers retain their 30-second HTTP budgets. Per-read bounds,
 provider deadlines and ownership cleanup limits are unchanged. Nested work and
 transaction retries inherit the original request deadline; no retry renews it.
