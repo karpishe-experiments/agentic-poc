@@ -41,7 +41,7 @@ export async function isVerifiedAdvisoryFailure(database: Database, session: Cli
   if (!binding || op.verifiedWorkflowId !== binding.publishedWorkflowId) return false;
   if (run.mode === "simulated") return op.remoteStatus === "failed";
   if (run.mode !== "balanced" || !run.m4) return false;
-  const campaign = await readM4FailureCampaign(database, session, run.m4.campaignId, attempt);
+  const campaign = await readM4FailureCampaign(database, session, run.m4.campaignId, run._id, attempt);
   if (!campaign) return false;
   return hasM4KnownFailure(database, session, { policy: m4PolicySnapshot(JSON.parse(run.m4.policyJson)).policy,
     grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, op, nowMs, attempt);

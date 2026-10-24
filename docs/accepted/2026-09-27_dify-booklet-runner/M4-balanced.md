@@ -34,16 +34,28 @@ accounting used 7,331 ms and its generation audit failed after the budget expire
 The transaction did not reach a successful save. Read-only refresh still found no
 Balanced Creator; preflight was idle. No provider work was dispatched by creation.
 
-The candidate correction batches full failed-operation proofs and global
+The delivered correction batches full failed-operation proofs and global
 materialization-source reads and reuses the campaign document only within one
 transaction-local verification attempt. All proof predicates, byte checks,
 ownership checks, monetary calculations and the 30-second budget remain. A retry
 uses fresh evidence; no historical record or allowance is changed. Local query
-reduction is not proof of live admission success.
+reduction did not establish live admission success. The post-delivery retained-key
+attempt still failed after 31,599 ms; Kid accounting took 12,912 ms and Parent
+accounting 7,000 ms. No initial Balanced Creator was observed. Do not repeat the
+pending key without checking saved state and ownership.
 
-Staging release `6b2af49f43935ef98ee375f9cc9f3cb688b153ac` completed through normal
-deployment `40069588788`. Client observation expired with exit 124; read-only status
-`40070331433` confirmed complete/archived and Check deployment `40070396252` passed.
+The next candidate projects unused successful creative bodies out of accounting
+reads while retaining exact failed bodies. Granular phases measure each awaited
+accounting read and validation separately. The observed accounting delay does not
+yet distinguish transfer size, read latency and validation cost. No timeout, proof
+predicate, provider request or allowance change is included.
+
+Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
+[#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
+[#242](https://github.com/karpishe-experiments/agentic-poc/pull/242), with two clean
+reviews each and passing lean CI. Deployment `40071833132` reached client expiry
+(exit 124); read-only status `40072446736` confirmed complete/archived and Check
+deployment `40072532334` passed. No deployment replay was sent.
 
 ## Delivered Parent layout correction
 
@@ -174,8 +186,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `6b2af49f43935ef98ee375f9cc9f3cb688b153ac`,
-image `sha256:e0979444fd80e97201943a2a65c1f5283dac05936c1bd18356268196e7b17404`.
+The verified serving release is `89abbd829be1ee94ae8d52ef1c892639f4b3e97b`,
+image `sha256:28cb21c480191eacd924852622cad3c348c3cc55bfe97cb263d80d5fbc8e15b7`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
