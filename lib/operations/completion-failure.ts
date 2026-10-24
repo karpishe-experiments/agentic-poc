@@ -4,7 +4,7 @@ type Identity = { runId: string; operationId: string };
 export type CleanupOutcome = "completed" | "unresolved";
 export type CompletionStage = "completion_transaction" | "completion_readback" | "completion_progress";
 const cleanup = new WeakMap<object, CleanupOutcome>();
-const kinds = new Set(["ExperimentRepositoryError", "MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError",
+const kinds = new Set(["CampaignAdmissionError", "ExperimentRepositoryError", "MongoOperationTimeoutError", "MongoNetworkError", "MongoServerError",
   "MongoServerSelectionError", "AbortError", "OperationBudgetExpired"]);
 const codes = new Set(["invalid_input", "not_found", "conflict", "stale_revision", "invalid_state", "invalid_result"]);
 export function safeFailure(error: unknown) {

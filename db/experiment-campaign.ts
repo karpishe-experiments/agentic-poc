@@ -6,6 +6,7 @@ import { m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapsh
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
+import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -78,7 +79,8 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
         requireState(saved.status === "completed" && saved.generationCompletedAtMs != null &&
           ["complete", "failed"].includes(saved.evaluationStatus) && !saved.activeOperationId && !saved.preparation &&
           !saved.pendingDecisionJson && !saved.pauseRequested && !saved.safeFailure, "A preceding persona is not complete and resolved.");
-        await verifyExperimentGeneration(database, session, saved, store!);
+        await measurePhase({ runId: saved._id }, "admission_predecessor_generation", () =>
+          verifyExperimentGeneration(database, session, saved, store!));
       }
       // touch() uses revision CAS. Keep this local snapshot current for the slot
       // claim below; all ledger amounts and historical evidence stay unchanged.

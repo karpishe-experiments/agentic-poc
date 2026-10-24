@@ -36,6 +36,14 @@ creation share one transaction; failed verification rolls both back. No counters
 reservations, liabilities, prior runs or policy snapshots are reset. This grant
 does not continue failed generation or allow a replacement persona run.
 
+Run creation retains its existing full-detail response and 30-second HTTP budget.
+Bounded diagnostic phases distinguish tracked mutation/cleanup, campaign admission,
+each retained generation audit, accounting and detail loading. Failed phases expose
+only allowlisted error kind/code, timings, transaction attempts and instrumented
+query/storage counts. These counts are not all database traffic. Diagnostics do
+not authorize a retry or turn an uncertain save into success; inspect saved state
+before repeating a pending creation key.
+
 Deployment initialization performs required setup and bounded availability checks:
 configuration, connectivity, exact collections/indexes, admission schema and seed
 readiness. It does not scan historical experiments. The explicit `npm run db:verify`
