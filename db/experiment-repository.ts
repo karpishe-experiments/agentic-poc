@@ -262,10 +262,11 @@ export function createExperimentRepository(database: Database, options: { store?
     const fixed = CASES[input.persona];
     const run: ExperimentRunDocument = { _id: input.runId, schemaVersion: "2", bookletId: input.bookletId, persona: input.persona, mode: input.mode, brief: fixed.brief, predecessorRunId: input.predecessorRunId ?? null, configurationJson, configurationHash, status: "queued", evaluationStatus: "pending", revision: 0, pauseRequested: false, activeOperationId: null, counters: { logicalText: 0, logicalImage: 0, payableText: 0, payableImage: 0, steps: 0 }, limits: { text: fixed.llmLimit, image: fixed.imageLimit, steps: 300 }, safeFailure: null, activeDelegationId: null, decisionSequence: 0, pendingDecisionJson: null, textRevisions: 0, imageRevisions: 0, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
     try {
-      await withMongoTransaction(database, async (session) => {
+      await measurePhase({ runId: input.runId }, "create_transaction", () => withMongoTransaction(database, async (session) => {
         if (input.mode === "balanced") {
           await campaignLedger!.create(session, input.nowMs);
-          run.m4 = await campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs, options.store?.());
+          run.m4 = await measurePhase({ runId: run._id }, "create_campaign_admission", () =>
+            campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs, options.store?.()));
         }
         if (input.predecessorRunId) {
           const predecessor = must(await runs.findOne({ _id: input.predecessorRunId }, { session }), "Predecessor run");
@@ -273,7 +274,7 @@ export function createExperimentRepository(database: Database, options: { store?
         }
         await database.collections.booklets.insertOne({ _id: input.bookletId, schemaVersion: "2", workingTitle: "Untitled booklet", lifecycle: "draft", currentStage: "J01", coverAssetId: null, executionProfile: EXPERIMENT_PROFILE, experimentRunId: input.runId, createdAtMs: input.nowMs, updatedAtMs: input.nowMs }, { session });
         await runs.insertOne(run, { session });
-      });
+      }));
     } catch (error) {
       if (isDuplicate(error)) {
         const existing = await runs.findOne({ _id: input.runId });

@@ -20,6 +20,7 @@ import { createVerificationAttempt } from "@/lib/experiment-runner/verification-
 import { isBalancedImageVerificationRun, verificationMetadata } from "@/db/experiment-verification-metadata";
 import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
 import { currentMutationOwnerId } from "@/lib/application/deployment-control";
+import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 
 function incomplete(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
 
@@ -64,7 +65,9 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
       (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.");
   // Preparation is a read-only source projection, not accounting acceptance.
   // Generation/report materialization and final exit require retained usage.
-  if (run.mode === "balanced" && !preparation) await verifyM4Accounting(database, session, run, reportOperationId);
+  if (run.mode === "balanced" && !preparation) await measurePhase({ runId: run._id,
+    ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
+    verifyM4Accounting(database, session, run, reportOperationId));
   const metadata = await verificationMetadata(database, session, run._id, attempt);
   const artifacts = metadata.artifacts;
   const tasks = Array.from({ length: 13 }, (_, index) => `J${String(index + 1).padStart(2, "0")}`);

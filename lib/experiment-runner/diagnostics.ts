@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { AssetStore } from "@/lib/assets/asset-store";
-import { budgetRemaining } from "@/lib/operations/completion-failure";
+import { budgetRemaining, safeFailure } from "@/lib/operations/completion-failure";
 
 type Identity = { runId: string; operationId?: string };
 type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number };
@@ -10,6 +10,7 @@ export type DiagnosticEvent = Identity & Counters & {
   event: "booklet_callback_phase"; timestamp: string; phase: string;
   elapsedMs: number; outcome: "succeeded" | "failed";
   budgetAtStartMs: number | null; remainingBudgetMs: number | null;
+  failure?: ReturnType<typeof safeFailure>;
 };
 type DiagnosticBuffer = { startedAt: string; dropped: number; events: DiagnosticEvent[] };
 // Next.js can bundle the handler and runner separately within the same process.
@@ -51,10 +52,14 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
   const budgetAtStartMs = budgetRemaining();
   const counters = { queryCount: 0, storageCallCount: 0, transactionAttempts: 0 };
   let outcome: DiagnosticEvent["outcome"] = "failed";
+  let failure: ReturnType<typeof safeFailure> | undefined;
   try {
     const result = await current.run(counters, work);
     outcome = "succeeded";
     return result;
+  } catch (error) {
+    failure = safeFailure(error);
+    throw error;
   } finally {
     const parent = current.getStore();
     if (parent) {
@@ -64,7 +69,8 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
     }
     const event: DiagnosticEvent = { event: "booklet_callback_phase", timestamp: new Date().toISOString(), runId: identity.runId,
       ...(identity.operationId ? { operationId: identity.operationId } : {}), phase,
-      elapsedMs: Math.round(performance.now() - start), budgetAtStartMs, remainingBudgetMs: budgetRemaining(), ...counters, outcome };
+      elapsedMs: Math.round(performance.now() - start), budgetAtStartMs, remainingBudgetMs: budgetRemaining(), ...counters, outcome,
+      ...(failure ? { failure } : {}) };
     buffer.events.push(event);
     if (buffer.events.length > 5000) { buffer.events.shift(); buffer.dropped++; }
     console.info(JSON.stringify(event));
