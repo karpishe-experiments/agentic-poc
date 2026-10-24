@@ -1,9 +1,19 @@
 import { EventEmitter } from "node:events";
 import type { MongoClient } from "mongodb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { installMongoReadDiagnostics, observeMongoRead } from "@/db/mongo-read-diagnostics";
 
 describe("public MongoDB read monitoring", () => {
+  it("shares request scopes with listeners created by another module bundle", async () => {
+    const events = new EventEmitter(); installMongoReadDiagnostics(events as MongoClient);
+    vi.resetModules();
+    const routeModule = await import("@/db/mongo-read-diagnostics");
+    const result = await routeModule.observeMongoRead(() => routeModule.withMongoReadPhase("proofs", async () => {
+      events.emit("connectionCheckedOut", { durationMS: 4 });
+      events.emit("commandSucceeded", { commandName: "find", duration: 12, reply: { cursor: { firstBatch: [1] } } });
+    }));
+    expect(result.metrics).toMatchObject({ checkoutMs: 4, commands: [{ phase: "proofs", command: "find", elapsedMs: 12 }] });
+  });
   it("keeps bounded numeric measurements without retaining commands, replies or connection identities", async () => {
     const events = new EventEmitter(); installMongoReadDiagnostics(events as MongoClient);
     events.emit("connectionCheckedOut", { durationMS: 999 });

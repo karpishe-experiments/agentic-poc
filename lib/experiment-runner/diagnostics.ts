@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { budgetRemaining, safeFailure } from "@/lib/operations/completion-failure";
+import type { AdmissionReadDiagnostic } from "@/lib/contracts/experiment-admission-diagnostics";
 
 type Identity = { runId: string; operationId?: string };
 type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number;
@@ -18,11 +19,20 @@ type DiagnosticBuffer = { startedAt: string; dropped: number; events: Diagnostic
 const bufferKey = Symbol.for("booklet.diagnostics");
 const processState = globalThis as typeof globalThis & { [bufferKey]?: DiagnosticBuffer };
 const buffer = processState[bufferKey] ??= { startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(), dropped: 0, events: [] };
+const readKey = Symbol.for("booklet.admission-read-results");
+const readState = globalThis as typeof globalThis & { [readKey]?: (AdmissionReadDiagnostic & { timestamp: string })[] };
+const admissionReads = readState[readKey] ??= [];
+
+export function retainAdmissionRead(result: AdmissionReadDiagnostic) {
+  admissionReads.push(structuredClone({ ...result, timestamp: new Date().toISOString() }));
+  if (admissionReads.length > 20) admissionReads.shift();
+}
 
 export function recentDiagnostics(runId: string | undefined, limit: number) {
   const matching = runId ? buffer.events.filter(event => event.runId === runId) : buffer.events;
   return { processStartedAt: buffer.startedAt, truncated: buffer.dropped > 0 || matching.length > limit,
-    events: matching.slice(-limit).map(event => ({ ...event })) };
+    events: matching.slice(-limit).map(event => ({ ...event })),
+    admissionReads: structuredClone(admissionReads.filter(result => !runId || result.runId === runId).slice(-limit)) };
 }
 
 export function countVerificationQuery(count = 1) {
