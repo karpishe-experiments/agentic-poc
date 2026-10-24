@@ -16,15 +16,17 @@ reset data, deploy changes or grant paid execution authority.
 
 The current [M4 diagnosis checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
 retains accepted Kid and Parent generation/accounting with incomplete advisory
-evaluation. Creator is still absent because prior-run audits exceed the creation
-budget. The user accepts the observed latency for M4; no performance improvement
-is required for acceptance. The implementation must still complete its evidence
-checks and atomic creation within an approved execution budget. The latest
-diagnostics locate delay in full proof-command responses;
-they do not establish a repair or negotiated compression. Preserve the campaign,
-failed reports and pending Creator identity. Last verified campaign exposure is
-94/500 requests, USD 0.105816 reserved and USD 0.103747 settled upper bound;
-invoice cost is unavailable. This diagnostic slice dispatched no providers.
+evaluation. The initial Creator was admitted with the deployed creation-only
+60-second server/browser budgets and the user's explicit new-key permission.
+It is now blocked at J09; the same campaign is stopped. The user accepts observed
+latency for M4; no performance improvement is required for acceptance. Generation,
+ownership and accounting checks remain mandatory. Preserve the campaign, failed
+reports and saved Creator `47894c71-7991-4b15-8dc2-810395ec3f01`.
+Last verified campaign exposure is 129/500 requests, USD 0.137316 reserved,
+USD 0.131931 settled upper bound and USD 4.730753 remaining. Invoice cost is
+unavailable and paid images remain zero. The current M4 record separates the
+J09 review loop from its subsequent un-dispatched preparation failure and the
+proposed repair/recovery boundary. M5 has no execution authority from this work.
 Complete Creator and record M4 acceptance before assembling the Real authorization
 handoff. Reuse exact retained bindings/evidence through the M4 record; no new image
 spending, reset or Real execution is granted here.

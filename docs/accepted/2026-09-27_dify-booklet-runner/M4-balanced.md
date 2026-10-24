@@ -1,9 +1,71 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. The user accepts the observed persistence/admission latency as an M4 limitation; a speed improvement is not an acceptance prerequisite. The approved creation-only 60-second server budget and browser wait are deployed. Creator continuation awaits its original pending-creation control or idempotency key. M4 remains incomplete.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` was admitted and is blocked at J09 after repeated revisions and an undispatched preparation failure. The campaign is stopped; Creator retains Pause requested and no active operation/preparation. The approved creation-only 60-second server budget and browser wait are deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Creator J09 stop and proposed repair — 2026-10-24
+
+Creator is retained at revision 242, blocked with `definite_failure`, Pause
+requested, generation in progress and evaluation pending. It has ten saved
+creator decisions, 35 text calls, five simulated images and 41 operation records.
+Paid images remain zero. The stopped campaign retains 129/500 requests,
+USD 0.137316 reserved, USD 0.131931 settled upper bound and USD 4.730753 remaining.
+These are ledger bounds, not an invoice. Kid and Parent remain unchanged.
+
+The creator answered J09's appearance question and then requested three revisions
+of Friend Two's sheet. The current design profile and editable sheet module
+include that answer and the required side view. However, J06's inherited attire
+array says no specific clothing is established in the approved manuscript. The
+application copies that array unchanged into every J09 proposal and checks exact
+equality in both narrative and sheet validation. The reviewer asks J09 to delete
+that inherited sentence, which J09's model cannot do. This is an ownership and
+provenance mismatch; it does not justify discarding actual approved constraints
+or forcing approval. Historical image serialization must remain byte-identical:
+assembly reconstructs expected requests to verify lineage.
+
+Pause was requested to prevent further repetition. The bounded diagnostics for
+operation `865ca52b-36d1-460e-bc18-e2249c87b5a7` show successful operation/context
+preparation followed by `text_preparation` repository conflict at 15:41:11 UTC,
+after the Pause request. The preparation guard rejects paused state; the worker
+then retains the prepared operation until its deadline, when local failure closes
+it and stops the campaign. The retained trace shows zero reservations, no workflow
+identity and no active owner. These observations do not themselves grant recovery;
+the exact no-dispatch predicates and global accounting still need verification.
+The supported inspection control was used once; no Resume or replacement POST
+was sent.
+
+Proposed repair, pending separate continuation authority: clarify specialist and
+reviewer ownership of inherited source facts versus later resolved design; keep
+hard source constraints and required views binding. Preserve historical requests,
+artifacts, hashes and frozen prices/count allowances. Handle Pause during
+un-dispatched text preparation without converting a normal control action into
+an unexplained generation failure. Any retained recovery must pin this exact run
+and operation, prove no dispatch/reservation/materialization or unresolved owner,
+and retain the failed record. Verify real persistence with fake providers, legacy
+proof compatibility, hard-constraint rejection, concurrent Pause and failure
+boundaries; obtain two independent clean reviews and lean CI before normal
+staging delivery. No new persona, allowance reset, report retry, paid image,
+provider/signature change or infrastructure work is included.
+
+### Initial Creator admitted — 2026-10-24
+
+After confirming old pending run `272ad2ef-920d-4aad-8feb-393bd2c56506` absent and
+preflight ready/idle, the user explicitly allowed a new key for the initial
+Creator because the original pending tab's in-memory key was lost. This amends
+the retained-key boundary only; it grants no replacement persona, extra budget,
+report retry or provider change. One normal UI submission saved
+`47894c71-7991-4b15-8dc2-810395ec3f01` at 15:21:54 UTC (18:51:54 Asia/Tehran).
+The unchanged admission verifier accepted both completed predecessors and
+activated the same campaign atomically. No second POST was sent.
+
+The saved title is **Mending the Star Room**. The initial brief retains eight
+story pages plus cover, two recurring characters, two locations and at least two
+multi-panel pages. After separately authorized repair and exact continuation,
+retain its existing automated production and advisory ordering within the
+unchanged campaign limits. No completed predecessor is
+reopened and no paid image execution is authorized.
 
 ### Accepted latency limitation — 2026-10-24
 
@@ -59,11 +121,12 @@ and direct readiness passed. Post-deployment read-only reconciliation found
 Creator `272ad2ef-920d-4aad-8feb-393bd2c56506` absent; manager preflight was
 ready/idle at publication `64d08408-4ab7-4413-a5a1-0fccadd2ff26`.
 
-The original pending-creation tab is unavailable. The user authorized browser
-continuation, but submission still requires the original pending control or
-original idempotency key. The saved run ID is derived from that key; it cannot
-replace the key. No replacement key, Creator submission or provider call was
-made during this delivery. Preserve predecessor evidence and campaign allowances.
+At this delivery checkpoint, the original pending-creation tab was unavailable.
+Browser continuation was authorized, but submission still required the original
+pending control or key. The saved run ID is derived from that key and cannot
+replace it. No replacement key, Creator submission or provider call was made
+during this delivery. The later explicit new-key amendment and initial admission
+are recorded above; predecessor evidence and campaign allowances were preserved.
 
 ### Duplicate-context live result — 2026-10-24
 
