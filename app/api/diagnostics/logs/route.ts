@@ -9,6 +9,15 @@ export function GET(request: Request) {
   if (process.env.DEPLOYMENT_ENV !== "_staging") return new Response(null, { status: 404, headers });
   if (!hasValidBasicAuthorization(request.headers.get("authorization"))) return new Response(null, { status: 401, headers });
   const params = new URL(request.url).searchParams;
+  if (params.get("probe") === "admission-read") {
+    if ([...params.keys()].some(key => !["probe", "persona", "part"].includes(key)) ||
+        [...params.keys()].some(key => params.getAll(key).length !== 1) ||
+        !["playful_kid", "enthusiast_parent"].includes(params.get("persona") ?? "") ||
+        !["proofs", "plan"].includes(params.get("part") ?? "")) {
+      return Response.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+    return admissionRead(request, params.get("persona") as "playful_kid" | "enthusiast_parent", params.get("part") as "proofs" | "plan");
+  }
   const runId = params.get("runId") ?? undefined;
   const rawLimit = params.get("limit") ?? "200";
   if ((runId !== undefined && !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(runId)) ||
@@ -17,4 +26,23 @@ export function GET(request: Request) {
     return Response.json({ error: "invalid_request" }, { status: 400, headers });
   }
   return Response.json({ data: recentDiagnostics(runId, Number(rawLimit)) }, { headers });
+}
+
+async function admissionRead(request: Request, persona: "playful_kid" | "enthusiast_parent", part: "proofs" | "plan") {
+  const headers = { "Cache-Control": "no-store" };
+  const { readM4RunnerConfig } = await import("@/lib/experiment-runner/m4-config");
+  const configuration = readM4RunnerConfig();
+  const authority = configuration.enabled && configuration.config.m4?.state === "granted" ? configuration.config.m4.authority : undefined;
+  if (!authority) return Response.json({ error: "unavailable" }, { status: 409, headers });
+  const { withOperationBudget } = await import("@/lib/operations/budget");
+  const { diagnoseAdmissionRead } = await import("@/db/experiment-admission-diagnostics");
+  const { getDatabase } = await import("@/db/client");
+  const { safeFailure } = await import("@/lib/operations/completion-failure");
+  try {
+    const data = await withOperationBudget(Date.now() + 30_000,
+      () => diagnoseAdmissionRead(getDatabase(), authority, persona, part), { signal: request.signal });
+    return Response.json({ data }, { headers });
+  } catch (error) {
+    return Response.json({ error: "diagnostic_unavailable", failure: safeFailure(error) }, { status: 409, headers });
+  }
 }

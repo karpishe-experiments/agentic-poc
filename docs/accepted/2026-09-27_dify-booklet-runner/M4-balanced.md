@@ -5,6 +5,20 @@
 
 ## Current Creator admission checkpoint
 
+GitHub Actions resumed after the operator made the repository public. PR #250's
+second validation attempt passed and the documentation checkpoint merged. The
+approved next slice adds bounded read-only diagnostics for the retained Kid and
+Parent, through the authenticated staging logs route. Use
+`probe=admission-read&persona=playful_kid|enthusiast_parent&part=proofs|plan`, one
+persona/part per request. Targets come from the reviewed campaign, not a run ID
+supplied by the caller. Each request retains the 30-second bound and does not
+activate admission or dispatch providers. Commands/replies are never returned;
+only checkout timings, command durations/batch sizes, decoded byte counts and a
+compact winning-plan summary are exposed. Public driver events do not establish
+negotiated compression. Collect one proofs/plan pair per predecessor after normal
+reviewed delivery; choose a correction from that evidence before another Creator
+submission. This diagnostic implementation does not establish live improvement.
+
 Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530` completed at revision 412.
 All 24 artifacts are approved, including six J12 page plans and six J13 images.
 Counters are 50 text requests, 11 simulated images, zero paid images and 61 steps.
@@ -2042,9 +2056,12 @@ Keep one concise exit record here with evidence links, published bindings, usage
 failures/successors and remaining limitations. A successful run alone does not
 require another deployment.
 
-Exit: all named simulated scenarios and all three Balanced cases pass, no real
-image calls, complete artifacts/reports, request enforcement verified, and no known
-technical blocker. Record failed predecessors and successful successors. Update
+Exit: all named simulated scenarios and all three Balanced cases pass generation
+and accounting, no real image calls, required approved artifacts and original
+bytes are valid, request enforcement is verified, and no technical outcome or
+ownership remains unresolved. Advisory reports either succeed or retain a verified
+terminal failure with evaluation incomplete; never claim missing reports passed.
+Record failed predecessors and authorized continuations. Update
 M5 with exact bindings, measured consumption, confirmed staging/reset state and
 the bounded Real campaign authorization request.
 

@@ -4,6 +4,8 @@ import type { Database } from "@/db/client";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { countVerificationQuery, countVerificationRead, measurePhase } from "@/lib/experiment-runner/diagnostics";
 
+export const m4FailedProofProjection = { imageRequestJson: 0, referenceUploadsJson: 0, referenceUploadJournalJson: 0, warningsJson: 0 } as const;
+
 // Exact existing accounting exclusion: an unclaimed Pause has no attributable
 // provider work. Share it with proof selection so no excluded body is loaded.
 export function isUnclaimedPauseFailure(operation: ExperimentOperationDocument) {
@@ -40,7 +42,7 @@ export async function readM4FailedOperations(database: Database, session: Client
     // Keep complete preparations (including legacy digest inputs), observations,
     // claims, results and lifecycle provenance unchanged.
     const rows = await database.collections.experiment_operations.find({ runId, _id: { $in: failedIds } },
-      { session, projection: { imageRequestJson: 0, referenceUploadsJson: 0, referenceUploadJournalJson: 0, warningsJson: 0 } }).toArray();
+      { session, projection: m4FailedProofProjection }).toArray();
     countVerificationRead(rows);
     return rows;
   });
