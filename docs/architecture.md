@@ -65,6 +65,26 @@ They survive module reload, not process restart, and grant no admission authorit
 A started read can finish after a browser disconnect within its original 30-second
 budget; later logs GETs retrieve measurements without another proof query.
 
+The diagnostic-only `candidate-proofs` mode reads failed proofs without duplicate
+string contexts, then compares each stored context with the exact request user
+message in the same snapshot transaction. The comparison uses explicit string
+types and binary collation. Only a successful comparison permits reconstruction
+of the complete preparation for the existing verifier and legacy hashes.
+Unsupported or mismatched documents use the original full read; missing or
+ambiguous identities, database errors and exhausted budgets abort. No stored
+request, context or proof is rewritten. `candidate-audit` runs the complete
+generation/accounting verifier, including original image bytes, with that reader.
+It performs no campaign activation, claim, accounting mutation or provider work.
+Both modes retain the existing authenticated, server-resolved Kid/Parent targets
+and 30-second budget. Diagnostics expose selection digests, revisions, fallback
+and comparison counts, returned JSON sizes and comparison-input JSON sizes;
+these sizes are not network-byte measurements. Public command monitoring includes
+aggregate timings and counts, never aggregate bodies or replies. Normal admission
+continues to use the original reader until the measured adoption gate in the
+[M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#duplicate-context-candidate-contract--2026-10-24)
+passes and a second reviewed release enables the candidate. Reader selection is
+internal to one verification attempt, never a public creation parameter or cache.
+
 Generation accounting uses transaction-local evidence reads. It loads failed
 operation proofs by run and selected IDs, batches global materialization-source
 lookups, and reuses the campaign document within that attempt. Proof predicates

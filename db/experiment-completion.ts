@@ -16,7 +16,7 @@ import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-ill
 import { verifyCurrentPaginationSources } from "@/db/experiment-pages";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
-import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { createVerificationAttempt, type VerificationReadOptions } from "@/lib/experiment-runner/verification-attempt";
 import { isBalancedImageVerificationRun, verificationMetadata } from "@/db/experiment-verification-metadata";
 import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
 import { currentMutationOwnerId } from "@/lib/application/deployment-control";
@@ -28,8 +28,8 @@ function incomplete(message: string): never { throw new ExperimentRepositoryErro
 // the transaction and any later run transition; this does not mark completion.
 export async function verifyExperimentGeneration(database: Database, session: ClientSession,
   inputRun: ExperimentRunDocument, store: AssetStore, reportOperationId?: string,
-  phase: "completion" | "context" | "preparation" = "completion", nowMs?: number) {
-  const attempt = createVerificationAttempt(store);
+  phase: "completion" | "context" | "preparation" = "completion", nowMs?: number, reads: VerificationReadOptions = {}) {
+  const attempt = createVerificationAttempt(store, reads);
   const run = await database.collections.experiment_runs.findOne({ _id: inputRun._id }, { session });
   if (!run || run.revision !== inputRun.revision || run.configurationHash !== inputRun.configurationHash) incomplete("Generation run evidence changed before verification.");
   const preparation = phase === "preparation";

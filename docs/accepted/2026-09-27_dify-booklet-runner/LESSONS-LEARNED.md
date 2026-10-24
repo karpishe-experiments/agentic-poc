@@ -828,3 +828,15 @@ volume and exclude only fields/rows that existing proof predicates do not consum
 Evidence: the [Creator checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
 and `mongodb-compression.test.ts`. Promotion candidate: **Documentation** for
 bounded persistence diagnosis.
+
+The operator's direct indexed query returned six full records in 12,495 ms and
+IDs only in 370 ms. Most preparation data was request/context duplication.
+Duplication can still protect a proof: this verifier compares the saved context
+with the request message and legacy proofs hash the complete preparation. A
+smaller response must preserve that comparison against storage in the same
+snapshot before reconstructing omitted data. Local candidate tests demonstrate
+exact reconstruction, corruption fallback and fresh retry evidence; they do not
+establish a live speedup. Measure both the smaller response and the additional
+comparison input before adoption. Evidence: `experiment-candidate-proofs.test.ts`
+and the M4 candidate contract. Promotion candidate: **Documentation** for lossless
+proof-read optimization.

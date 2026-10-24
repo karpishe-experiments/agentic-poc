@@ -7,7 +7,10 @@ import sharp from "sharp";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
-import { createExperimentCompletionService } from "@/db/experiment-completion";
+import { createExperimentCompletionService, verifyExperimentGeneration } from "@/db/experiment-completion";
+import { candidateProofMetrics, readM4CandidateProofs } from "@/db/experiment-m4-accounting-evidence";
+import { diagnoseAdmissionRead } from "@/db/experiment-admission-diagnostics";
+import * as assetStoreFactory from "@/lib/assets/create-asset-store";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { CASES, specialistTaskSchema } from "@/lib/contracts/experiment-runner";
@@ -334,6 +337,12 @@ describe("offline Balanced dispatcher", () => {
       expect((await repository.getOperation(failed._id))!.m4Reservation).toEqual(failed.m4Reservation);
       expect(vi.mocked(env.runtime.start).mock.calls.filter(([, input]) => input.operationId === failed._id)).toHaveLength(1);
       await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, completed));
+      const candidate = candidateProofMetrics();
+      await withMongoTransaction(env.database, session => verifyExperimentGeneration(env.database, session, completed,
+        env.store, undefined, "completion", undefined, {
+          failedProofReader: (runId, ids) => readM4CandidateProofs(env.database, session, runId, ids, candidate),
+        }));
+      expect(candidate).toMatchObject({ selectedRows: 1, matchedRows: 1, fallbackRows: 0 });
       const view = (await env.context.getRunView(env.runId))!;
       expect(view.reports).toHaveLength(2); expect(view.reports!.every(report => report.matchesCurrentVersions)).toBe(true);
       expect(view.currentArtifacts.every(artifact => artifact.state === "approved")).toBe(true);
@@ -463,6 +472,7 @@ describe("offline Balanced dispatcher", () => {
 
   it.each([
     ["playful_kid", "count"], ["playful_kid", "tester"], ["playful_kid", "judge"],
+    ["enthusiast_parent", "count"], ["professional_creator", "count"],
   ] as const)("completes %s generation with advisory %s failure without replay", async (persona, failure) => {
     const env = await setup(false, false, persona, failure);
     let generation: { versions: string[]; at: number; assets: unknown[]; approvals: unknown[] } | undefined;
@@ -525,6 +535,17 @@ describe("offline Balanced dispatcher", () => {
       expect(JSON.parse(failed.m4Observation!.evidenceJson!)).toMatchObject({ failureEvidence: { generationStarted: false, countedInputTokens: 39891 } });
     }
     await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, complete));
+    const candidate = candidateProofMetrics();
+    const candidateAudit = () => withMongoTransaction(env.database, session => verifyExperimentGeneration(env.database,
+      session, complete, env.store, undefined, "completion", undefined, {
+        failedProofReader: (runId, ids) => readM4CandidateProofs(env.database, session, runId, ids, candidate),
+      }));
+    await candidateAudit();
+    expect(candidate).toMatchObject({ selectedRows: 1, comparedRows: 1, matchedRows: 1, fallbackRows: 0 });
+    const badContext = { ...failed.m4Preparation!, contextJson: "corrupt stored context" };
+    await env.database.collections.experiment_operations.updateOne({ _id: failed._id }, { $set: { m4Preparation: badContext } });
+    await expect(candidateAudit()).rejects.toThrow();
+    await env.database.collections.experiment_operations.replaceOne({ _id: failed._id }, failed);
     const repeated = await Promise.all([1, 2].map(() => completion.completeAdvisoryFailure({
       runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })));
     expect(repeated.map(run => run.revision)).toEqual([complete.revision, complete.revision]);
@@ -556,10 +577,11 @@ describe("offline Balanced dispatcher", () => {
       .rejects.toThrow("revision");
     const [assetUri, originalBytes] = [...env.store.files][0];
     env.store.files.set(assetUri, Uint8Array.of(0));
+    await expect(candidateAudit()).rejects.toThrow();
     await expect(completion.completeAdvisoryFailure({ runId: env.runId, expectedRevision: complete.revision, nowMs: env.now() })).rejects.toThrow();
     env.store.files.set(assetUri, originalBytes);
     expect(env.runtime.start).toHaveBeenCalledTimes(before.calls);
-    if (failure === "count") {
+    if (failure === "count" && persona === "playful_kid") {
       const creation = { runId: id(800), bookletId: id(801), persona: "enthusiast_parent" as const, mode: "balanced" as const,
         campaignId: id(1), configuration: configurationSnapshot(env.config, "enthusiast_parent"), nowMs: env.now() };
       await expect(env.repository.createRun(creation)).rejects.toThrow("not active");
@@ -790,6 +812,19 @@ describe("Creator admission after two completed booklets", () => {
     const before = await Promise.all(collections.map(name => kid.database.collections[name].find({}).sort({ _id: 1 }).toArray()));
     const bytes = [...kid.store.files.entries()];
     const calls = [kid.runtime.start, parent.runtime.start, creator.runtime.start].map(start => vi.mocked(start).mock.calls.length);
+    const assetFactory = vi.spyOn(assetStoreFactory, "createAssetStore").mockReturnValue(kid.store);
+    try {
+      for (const persona of ["playful_kid", "enthusiast_parent"] as const) {
+        const audit = await withOperationBudget(Date.now() + 30_000, () => diagnoseAdmissionRead(kid.database,
+          { ...kid.authority, grant }, persona, "candidate-audit"));
+        expect(audit.failure).toBeUndefined(); expect(audit.value).toMatchObject({ auditPassed: true,
+          candidate: { selectedRows: 1, matchedRows: 1, fallbackRows: 0 } });
+        expect(JSON.stringify(audit)).not.toContain("contextJson");
+      }
+    } finally { assetFactory.mockRestore(); }
+    expect(await kid.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(beforeCampaign);
+    expect(await Promise.all(collections.map(name => kid.database.collections[name].find({}).sort({ _id: 1 }).toArray()))).toEqual(before);
+    expect([...kid.store.files.entries()]).toEqual(bytes);
     vi.stubEnv("ACCESS_GATE_PASSWORD", "fixture-password-at-least-16");
     const http = createBookletRunnerHttp({ database: () => kid.database, config: () => ({ enabled: true, config: creator.config }),
       store: () => kid.store, runtime: () => creator.runtime, mutate: async action => action() });

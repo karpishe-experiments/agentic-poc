@@ -50,6 +50,15 @@ it("reads only retained predecessor proofs and plans without changing persisted 
     expect(retained.timestamp).toBeTruthy();
   }
   expect(await snapshot()).toEqual(before);
+  const aggregate = vi.spyOn(db.collections.experiment_operations, "aggregate");
+  const candidate = await withOperationBudget(Date.now() + 30_000, () => diagnoseAdmissionRead(db, authority, "playful_kid", "candidate-proofs"));
+  expect(candidate.value).toMatchObject({ rows: 1, candidate: { selectedRows: 1, comparedRows: 0, fallbackRows: 1 } });
+  expect(candidate.metrics.commands.some(command => command.command === "aggregate")).toBe(true);
+  expect(JSON.stringify(candidate)).not.toContain("private retained proof");
+  // An invalid graph cannot turn a component probe into generation acceptance.
+  const audit = await withOperationBudget(Date.now() + 30_000, () => diagnoseAdmissionRead(db, authority, "playful_kid", "candidate-audit"));
+  expect(audit).toHaveProperty("failure"); expect(audit.value).toBeNull();
+  expect(await snapshot()).toEqual(before); aggregate.mockRestore();
   await db.collections.experiment_runs.updateOne({ _id: id(10) }, { $set: { activeOperationId: id(12) } });
   const blocked = await diagnoseAdmissionRead(db, authority, "playful_kid", "proofs"); expect(blocked).toHaveProperty("failure");
   await expect(withOperationBudget(Date.now() - 1, () => diagnoseAdmissionRead(db, authority, "playful_kid", "proofs"))).rejects.toThrow();
