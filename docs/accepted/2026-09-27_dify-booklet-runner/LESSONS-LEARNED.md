@@ -853,3 +853,12 @@ establish a live speedup. Measure both the smaller response and the additional
 comparison input before adoption. Evidence: `experiment-candidate-proofs.test.ts`
 and the M4 candidate contract. Promotion candidate: **Documentation** for lossless
 proof-read optimization.
+
+The live candidate reduced combined Kid/Parent returned JSON by about 41%, with
+all nine contexts matching and no fallback. Combined read time increased from
+14,669 to 14,879 ms because the comparison request added 4,514/1,808 ms. Moving
+duplicate text from a response into a verification command did not improve this
+deployment's latency. Count both directions and all commands; a smaller response
+alone is insufficient evidence to adopt an optimization. The measured gate kept
+normal admission unchanged. Evidence: the M4 live-result table. Promotion target:
+**Documentation** for measured persistence changes.
