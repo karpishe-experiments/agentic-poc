@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. The user accepts the observed persistence/admission latency as an M4 limitation; a speed improvement is not an acceptance prerequisite. Earlier creation attempts exhausted the implemented 30-second request budget. That execution constraint still requires a bounded solution before Creator can be saved. M4 remains incomplete.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. The user accepts the observed persistence/admission latency as an M4 limitation; a speed improvement is not an acceptance prerequisite. The approved creation-only 60-second server budget and browser wait are deployed. Creator continuation awaits its original pending-creation control or idempotency key. M4 remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
@@ -18,8 +18,8 @@ All generation, current approval, dependency, original image-byte, ownership and
 accounting checks remain required. Latency acceptance cannot establish a
 successful verification or save when a request actually expires. The user
 separately approved increasing creation's budget from 30 to 60 seconds. Staging
-delivery remains pending. The implementation slice changes only creation's
-outer HTTP budget; other endpoints, per-read limits, provider deadlines and
+delivery is verified below. The change applies only to creation's outer HTTP
+budget and its browser response wait; other endpoints, per-read limits, provider deadlines and
 cleanup budgets retain their existing bounds. Verification and atomic creation
 must finish within that one inherited deadline; no retry renews it. Preserve the exact pending Creator key, reconcile saved
 state before submission, and do not retry an uncertain mutation automatically.
@@ -35,6 +35,35 @@ transactional checks/rollback and ownership cleanup. Verify success beyond
 read/control bounds and duplicate creation. No migration, credential or provider
 policy change is required. Local checks/review and normal staging delivery must
 precede reconciliation of the retained Creator.
+
+### Creation-budget delivery and retained identity — 2026-10-24
+
+Source #260 at `c1a888273090d26afde35c7d97731fe69682ebaa` and client correction
+#262 at `b6e9f9f2ede7c91d562613b1f1158be7a8c41e25` passed two independent reviews
+and CI `40103762435` / `40104506586`. The browser correction prevents its previous
+30-second wait from hiding server work allowed by the approved 60-second budget.
+Combined staging #261 at `2a9e37a307b5f00a2e68bb21e77e9dfb9e55ffd3` passed two
+independent reviews and CI `40104618661`. Source checks passed 69 UI/server/budget
+units, four focused real-persistence cases with fake providers, typecheck,
+focused lint and 213 documentation links. Port checks passed the same 69 units,
+three HTTP persistence cases, typecheck/lint and diff checks; unchanged source
+Creator persistence evidence remains applicable. Six pre-existing staging link
+failures remain unchanged. No credential-inventory impact.
+
+Deployment `40104810340-1` exceeded its client observation wait (exit 124) without
+stop or replay. Journal check `40105588513` verified complete/archived at
+`a996fa5eb114d1d3eed012342ebfe53a50a1f643`, image
+`sha256:2251ae6df4e6c05345ea8ad45e3d2c60e8310cd8b1db5c90aa13f572f0ddb66e`,
+backup `staging-20261024T150149Z-9552304ee6439f73`. Check deployment `40105684457`
+and direct readiness passed. Post-deployment read-only reconciliation found
+Creator `272ad2ef-920d-4aad-8feb-393bd2c56506` absent; manager preflight was
+ready/idle at publication `64d08408-4ab7-4413-a5a1-0fccadd2ff26`.
+
+The original pending-creation tab is unavailable. The user authorized browser
+continuation, but submission still requires the original pending control or
+original idempotency key. The saved run ID is derived from that key; it cannot
+replace the key. No replacement key, Creator submission or provider call was
+made during this delivery. Preserve predecessor evidence and campaign allowances.
 
 ### Duplicate-context live result — 2026-10-24
 
@@ -459,8 +488,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `18dbba7436554d8cad0a546b7614b81dae59ebd9`,
-image `sha256:e91c61a95a2f7f2c580b75c78c7f80be8bbe02dede58d4b90e1ba522ecbb43d8`.
+The verified serving release is `a996fa5eb114d1d3eed012342ebfe53a50a1f643`,
+image `sha256:2251ae6df4e6c05345ea8ad45e3d2c60e8310cd8b1db5c90aa13f572f0ddb66e`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
