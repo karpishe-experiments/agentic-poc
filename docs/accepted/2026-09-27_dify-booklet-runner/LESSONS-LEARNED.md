@@ -738,7 +738,9 @@ every existing predicate. Materialization checks must keep their global scope:
 a wrongly owned source version also invalidates a claimed failure. Evidence:
 bounded admission diagnostics and the combined Kid/Parent persistence fixture.
 Promotion candidate: documentation for transaction-local verification and sizing;
-live success after batching still requires verification.
+the observed attempt after batching still exceeded the budget. Query reduction
+alone did not identify the dominant cost; time actual cursor completion and
+validation separately, and omit bodies that the consumer does not use.
 
 ### Recheck a pinned proof within its mutation scope
 
