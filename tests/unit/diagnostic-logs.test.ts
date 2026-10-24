@@ -29,7 +29,17 @@ describe("staging diagnostic logs", () => {
     expect(body.data.events[0]).toMatchObject({ runId, phase: "context", outcome: "succeeded" });
     expect(body.data.truncated).toBe(true);
     expect(JSON.stringify(recentDiagnostics(runId, 500))).not.toContain("private-token");
+    expect(recentDiagnostics(runId, 500).events.find(event => event.outcome === "failed")?.failure)
+      .toEqual({ errorKind: "Error", code: "completion_failed" });
     for (const query of ["?limit=501", "?limit=0", "?runId=invalid", "?path=/etc/passwd"]) expect(GET(request(query)).status).toBe(400);
+  });
+  it("retains allowlisted failure kinds without exception text or arbitrary codes", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const error = Object.assign(new Error("private-connection-and-payload"), { name: "MongoOperationTimeoutError", code: "private-code" });
+    await expect(measurePhase({ runId }, "create_mutation", async () => { throw error; })).rejects.toBe(error);
+    const event = recentDiagnostics(runId, 1).events[0];
+    expect(event.failure).toEqual({ errorKind: "MongoOperationTimeoutError", code: "completion_failed" });
+    expect(JSON.stringify(event)).not.toContain("private");
   });
   it("retains at most 5000 events across module reloads", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});

@@ -1,35 +1,62 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Balanced Kid is accepted under the revised generation-and-accounting criterion. Parent is blocked on invalid J11 sheet routing. Creator has not started. The user authorized blocker fixes and continuation. M4 remains incomplete.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved after two same-key creation attempts. The creation exception remains unverified. The user authorized blocker fixes and continuation; M4 remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
-## Parent layout routing correction
+## Current Creator admission checkpoint
 
-The dev4 correction in PRs [#235](https://github.com/karpishe-experiments/agentic-poc/pull/235)
-and [#236](https://github.com/karpishe-experiments/agentic-poc/pull/236) is deployed.
-The reviewed provider package is installed and its identity was read back.
-The operator restored signature verification before Parent continued.
-No further signature-policy or provider change is needed for this correction.
+Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530` completed at revision 412.
+All 24 artifacts are approved, including six J12 page plans and six J13 images.
+Counters are 50 text requests, 11 simulated images, zero paid images and 61 steps.
+Tester `2d152f16-0d76-42f5-b599-40bdb99f64b9` was rejected before generation:
+the authoritative count was 38,075 input tokens against the unchanged 32,000
+limit. Evaluation is failed; the dependent judge was omitted. Preserve this
+failure and all earlier generation failures. Do not retry either report.
 
-Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530` reached revision 206 with
-29 text requests, five simulated images and no paid images. J01 through J10 are approved,
-including both character sheets. The terminal J11 operation
-`abcad8f9-d96f-40e2-bf8d-432d5a7f3666` produced valid JSON with a duplicate
-location reference and a character-sheet version paired with the location image.
-Authenticated provider generation completed. Normal validation rejected the
-result; no J11 artifact was saved and no operation/preparation owner remains.
-Campaign totals are 73/500 requests, USD 0.078820 reserved and USD 0.083657
-settled upper bound. Invoice cost is unavailable. Retain all evidence and charges.
+Kid remains completed at revision 3014 with generation complete, evaluation
+failed, 20 approved artifacts, 44 text requests, nine simulated images and 54
+operation records. The new release was checked read-only; no Kid mutation occurred.
+Campaign totals after Parent are 94/500 requests, USD 0.105816 reserved and
+USD 0.103747 settled upper bound. Invoice cost remains unavailable.
 
-New J11 requests for every persona select unique sheet subjects. The application
-supplies exact saved version/image tuples before normal completion checks.
-The saved preparation selects the format; historical requests use their original
-full-reference format. Invalid historical tuples are not repaired. The protected
-request-bundle amendment preserves the frozen policy and 32,000-token guard.
-An exact continuation grant permits new accounted work for this Parent after
-reviewed delivery. Creator remains unstarted until Parent completes. No automatic
-retry, successor, budget reset or paid image is included. Existing credential
-storage and consumers are unchanged; no inventory update is needed.
+The normal Creator launch returned an error. Read-only refresh found only an
+older simulated Creator; preflight confirmed idle state. One retry used the same
+pending creation key and also returned an error. No replacement key, provider
+retry or new allowance was used. Creator remains unverified and must not be
+reported as started. Preserve the pending key and inspect saved state before any
+further creation action.
+
+Candidate creation diagnostics separate the tracked mutation, campaign admission,
+each predecessor generation audit, accounting and full-detail loading. They
+retain bounded timings, instrumented query/storage counts, transaction attempts
+and allowlisted error categories; no exception bodies are retained. Admission
+still validates every predecessor and uses the same HTTP budget. The combined Kid,
+Parent and Creator admission case passed with real persistence and fake providers,
+including corrupt-byte rejection, unchanged predecessor evidence and same-key
+replay without dispatch. This does not establish the live exception or live
+Creator admission.
+
+## Delivered Parent layout correction
+
+Source [#237](https://github.com/karpishe-experiments/agentic-poc/pull/237) and
+staging [#238](https://github.com/karpishe-experiments/agentic-poc/pull/238) delivered
+J11 subject selection and application-owned saved version/image tuples for all
+personas. Both source and port passed two independent reviews and lean CI.
+Staging release `5496a999c9c5f5a125faf80b3aff603b7bb51608` completed through
+normal deployment `40064819858`; its client observation ended with exit 124,
+but read-only status `40065488622` confirmed complete/archived and Check deployment
+`40065592282` passed. The same Parent continued once and J11 passed live.
+
+The earlier J11 failure `abcad8f9-d96f-40e2-bf8d-432d5a7f3666` remains saved.
+It duplicated a location and paired a character-sheet version with the location
+image. Historical full-reference requests are not rewritten. New saved preparation
+selects the subject format; normal approval, currentness, ownership, accounting
+and original-byte checks remain. J12 is unchanged and all Parent pages passed.
+
+The reviewed dev4 provider from PRs #235/#236 remains installed. The operator
+restored signature verification before Parent continued. No provider or signature
+change is included in Creator diagnosis. Frozen ceilings and existing credential
+storage/consumers remain; no credential inventory update is needed.
 
 ## Control acknowledgement delivery
 
@@ -122,8 +149,8 @@ state, and Refresh/full reload displayed it. No second submission was made.
 The exact post-commit response failure cause is unverified. Saved accounting,
 operation history and request counts remained unchanged after reload.
 
-**Next:** No further Kid execution is required. Deliver the Parent layout routing
-correction above before continuing Parent, then starting Creator.
+**Next:** No further Kid or Parent execution is required. Diagnose and resolve
+initial Creator admission before continuing the campaign.
 Their earlier representative Balanced fixtures hit the manager byte limit;
 the corrected full Parent/Creator persistence fixtures now complete generation
 and both reports without bypassing that limit. This is fake-provider evidence,
@@ -138,8 +165,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `44f9eed2eb4189f39d413953dbfd8a0e4af4ebde`,
-image `sha256:10710adf8329f27368c86fdba69797a7e61054c1b862a6927e62e257a98d57e4`.
+The verified serving release is `5496a999c9c5f5a125faf80b3aff603b7bb51608`,
+image `sha256:809892a66aad35c538b0234722b578aa17f07e1fc5afe68d746b6f8f48db56bd`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.

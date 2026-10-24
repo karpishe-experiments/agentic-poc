@@ -244,12 +244,12 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       if (prior) {
         if (prior.persona !== body.persona || prior.mode !== body.mode || prior.predecessorRunId !== (body.predecessorRunId ?? null) ||
             body.mode === "balanced" && prior.m4?.campaignId !== authority!.grant.campaignId) return reply(409, "conflict");
-        return data(await context.getRunView(prior._id), 200);
+        return data(await measurePhase({ runId }, "create_existing_detail", () => context.getRunView(prior._id)), 200);
       }
-      const saved = await mutate(() => repository.createRun({ runId, bookletId, ...body,
+      const saved = await measurePhase({ runId }, "create_mutation", () => mutate(() => repository.createRun({ runId, bookletId, ...body,
         ...(body.mode === "balanced" ? { campaignId: authority!.grant.campaignId } : {}),
-        configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId });
-      return data(await context.getRunView(saved._id), 201);
+        configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId }));
+      return data(await measurePhase({ runId }, "create_detail", () => context.getRunView(saved._id)), 201);
     }); },
     control(request: Request, runId: string, action: "pause" | "resume") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
