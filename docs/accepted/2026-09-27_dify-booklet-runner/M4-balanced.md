@@ -5,6 +5,51 @@
 
 ## Current Creator admission checkpoint
 
+### Duplicate-context live result — 2026-10-24
+
+The diagnostic candidate is delivered but not adopted. Source #256 at
+`2b1233fb4b2b5b393d9887f7c9e5d362e8466999` and staging #257 at
+`a424817f93b1570742c2a15a2387de70142d614c` passed two independent reviews and CI
+(`40095517486` / `40095845328`). Source passed 24 focused units, 25 persistence
+cases and the updated complete diagnostic audit. The actual port passed 24 units,
+18 persistence cases, typecheck and focused lint; identical runtime/test blobs
+support reuse of the complete source audit. Source checked 213 local links;
+six pre-existing staging link failures remain unchanged.
+
+Deployment `40096015226-1` reached observer expiry (124). No stop or replay was
+issued. Status `40096872033` verified complete/archived; readiness
+`40096945163` and direct readiness passed. The release is
+`18dbba7436554d8cad0a546b7614b81dae59ebd9`, image
+`sha256:e91c61a95a2f7f2c580b75c78c7f80be8bbe02dede58d4b90e1ba522ecbb43d8`,
+backup `staging-20261024T130003Z-279da08bd3c76c94`.
+
+One baseline/candidate proof pair was collected per predecessor, sequentially.
+Kid's slow navigation results were retrieved from saved diagnostic measurements
+without repeating either probe. Selection digests and revisions matched.
+
+| Live proof read | Kid | Parent |
+| --- | ---: | ---: |
+| Original returned JSON bytes | 1,116,251 | 445,586 |
+| Candidate returned JSON bytes | 651,931 | 264,177 |
+| Comparison-input JSON bytes | 465,914 | 182,337 |
+| Original query elapsed, ms | 10,461 | 4,208 |
+| Candidate query elapsed, ms | 10,546 | 4,333 |
+| First candidate aggregate, ms | 6,011 | 2,489 |
+| Context comparison aggregate, ms | 4,514 | 1,808 |
+| Compared / matched / fallback rows | 6 / 6 / 0 | 3 / 3 / 0 |
+
+The candidate reduced combined returned JSON by about 41%, but combined proof
+time rose from 14,669 to 14,879 ms. The required 25% improvement and no-persona
+regression gates failed. The additional comparison request consumed the response
+time reduction; these measurements do not isolate server, transfer or decoding
+costs and do not establish throttling. No additional pair or live complete audit
+was needed after the decisive speed-gate failure. Normal admission retains the
+original reader. No second adoption release or Creator submission occurred.
+Read-only controls retained Kid revision 3014 and Parent revision 412, completed
+generation and failed evaluation, with no active operation/preparation. Creator
+`272ad2ef-920d-4aad-8feb-393bd2c56506` remains absent. Campaign allowances and
+provider work are unchanged. M4 remains incomplete; M5 remains on hold.
+
 ### Duplicate-context candidate contract — 2026-10-24
 
 The operator measured six Kid proof records at 12,495 ms with saved contents and
@@ -383,8 +428,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `cfce1d94ec9cea46de397a5ec44180b17813da4d`,
-image `sha256:9f3e24776a8f5c663094ae7a03839649398456421a9b3dfcd420c9ebc27282e9`.
+The verified serving release is `18dbba7436554d8cad0a546b7614b81dae59ebd9`,
+image `sha256:e91c61a95a2f7f2c580b75c78c7f80be8bbe02dede58d4b90e1ba522ecbb43d8`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.

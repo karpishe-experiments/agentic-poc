@@ -84,6 +84,9 @@ continues to use the original reader until the measured adoption gate in the
 [M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#duplicate-context-candidate-contract--2026-10-24)
 passes and a second reviewed release enables the candidate. Reader selection is
 internal to one verification attempt, never a public creation parameter or cache.
+The delivered candidate failed the live speed gate: less returned data was offset
+by the additional comparison request. It remains diagnostic-only; normal
+admission uses the original reader and Creator remains unsubmitted.
 
 Generation accounting uses transaction-local evidence reads. It loads failed
 operation proofs by run and selected IDs, batches global materialization-source
