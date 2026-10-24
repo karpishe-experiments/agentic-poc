@@ -14,6 +14,18 @@ proof is still required; test reuse does not replace it.
 M5 remains planned, pending M4 acceptance. This plan update does not start runs,
 reset data, deploy changes or grant paid execution authority.
 
+The current [M4 diagnosis checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
+retains accepted Kid and Parent generation/accounting with incomplete advisory
+evaluation. Creator is still absent because prior-run audits exceed the creation
+budget. The latest diagnostics locate delay in full proof-command responses;
+they do not establish a repair or negotiated compression. Preserve the campaign,
+failed reports and pending Creator identity. Last verified campaign exposure is
+94/500 requests, USD 0.105816 reserved and USD 0.103747 settled upper bound;
+invoice cost is unavailable. This diagnostic slice dispatched no providers.
+Complete Creator and record M4 acceptance before assembling the Real authorization
+handoff. Reuse exact retained bindings/evidence through the M4 record; no new image
+spending, reset or Real execution is granted here.
+
 The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
 reference ordering, provider permissions, retry behavior and price limits before

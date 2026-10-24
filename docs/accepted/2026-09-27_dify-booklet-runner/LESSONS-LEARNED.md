@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Share observation contexts when a cached client crosses module bundles
+
+A process-global MongoDB client can retain listeners from a different Next.js
+bundle than the request that starts a diagnostic scope. Module-local
+AsyncLocalStorage then yields empty observations despite successful reads. A
+module-reload fixture reproduces this boundary; process-shared observation scopes
+restore live command and checkout events. Treat missing events as unavailable,
+not evidence of zero work. Keep numeric diagnostic results in a small, sanitized
+process buffer when a read can exceed the observer's wait; later retrieval must
+not repeat the query. The original execution deadline still bounds that read.
+See the [M4 measured evidence](M4-balanced.md#current-creator-admission-checkpoint).
+Promotion candidate: **Documentation** for application diagnostics.
+
 ### Select the final structured answer before JSON validation
 
 The bounded provider extractor joined every assistant message and reasoning
