@@ -5,6 +5,39 @@
 
 ## Current Creator admission checkpoint
 
+### Duplicate-context candidate contract — 2026-10-24
+
+The operator measured six Kid proof records at 12,495 ms with saved contents and
+370 ms with IDs only. The winning `_id_` index examined six documents and twelve
+keys. Preparation field sizes include 494,160 bytes of `requestJson` and 442,466
+bytes of `contextJson`; these are application observations, not wire-byte counts
+or proof of Atlas throttling.
+
+Implement an opt-in diagnostic reader that omits string contexts, compares the
+stored strings with the exact request user message inside the same snapshot,
+and reconstructs complete preparations only after binary equality. Unsupported
+or mismatched rows use the original read; database/budget failures abort. Keep
+legacy whole-preparation hashes and every existing proof predicate. Normal
+admission remains on the original reader in this first release.
+
+Adoption requires identical selected operations, successful comparisons, zero
+fallbacks, at least 35% less returned JSON, at least 25% less combined proof-read
+time, neither predecessor slower, and both complete candidate generation audits
+passing in a combined time below 20 seconds. Collect one fresh baseline/candidate
+pair per predecessor; allow one further pair only for marginal or contradictory
+results. A failed gate leaves admission unchanged and Creator unsubmitted.
+Only a second reviewed release may adopt the reader. No stored history, index,
+credential, provider, frozen allowance or 30-second creation deadline changes.
+
+The candidate implementation passed 24 focused units, 25 focused persistence
+cases (including fake-provider histories for all three personas and legacy
+recovery), typecheck, focused lint and 213 local documentation checks. The updated
+full diagnostic audit case also passed with both predecessor graphs, original
+assets and unchanged database/provider state. The reader tests preserve malformed
+inputs and extra preparation fields, reject missing/duplicate comparison rows,
+and rebuild evidence on a transaction retry. This local evidence establishes
+correctness coverage, not a live performance result or permission to adopt it.
+
 **Diagnosis exit — 2026-10-24:** the measured delay is the full proof-command
 response path. No bounded admission correction has been established. Preserve
 the pending Creator key and do not submit it again on this evidence alone.
@@ -42,7 +75,7 @@ unavailable. No index, connection-lifecycle or further projection change is
 justified by this measurement. Historical proof predicates still need their exact
 saved inputs, including complete preparations for legacy digests.
 
-**Next proposal:** inspect the MongoDB response/transport path using existing
+**Earlier diagnosis proposal:** inspect the MongoDB response/transport path using existing
 read-only server/operator observations, including server-supported compression
 and any bandwidth throttling. This is an external diagnostic handoff, not an
 infrastructure change. Do not assume throttling or change a database tier, region,
@@ -56,10 +89,12 @@ Kid and Parent retain their accepted terminal states; M4 remains incomplete.
 
 The [Atlas Free cluster limits](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/)
 document network throttling above 10 GB inbound or outbound in a rolling seven-day
-period. This is a candidate to verify with the operator's actual cluster tier and
-transfer observations, not a diagnosis of this cluster. Those Atlas-side readings
-are not exposed by the current application diagnostic interface; the operator
-handoff is pending. No Atlas settings have changed.
+period. Read-only Atlas inspection confirmed the Free tier, weekly network rate
+charts, no plotted operation-throttling values and no displayed open/closed
+project alerts. No explicit rolling seven-day transfer total was available.
+These observations do not establish or exclude throttling. Operator shell reads
+then isolated the larger response and its duplicate preparation fields, which
+justify the bounded candidate experiment above. No Atlas settings have changed.
 
 GitHub Actions resumed after the operator made the repository public. PR #250's
 second validation attempt passed and the documentation checkpoint merged. The
