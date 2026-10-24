@@ -3,6 +3,7 @@ import { createCollectionHandles, type MongoCollections } from "@/db/collections
 import { getServerEnv } from "@/lib/config/env";
 import { assertOperationBudget, remainingOperationMs } from "@/lib/operations/budget";
 import { countTransactionAttempt } from "@/lib/experiment-runner/diagnostics";
+import { installMongoReadDiagnostics } from "@/db/mongo-read-diagnostics";
 
 const DATABASE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/;
 const RESERVED_DATABASES = new Set(["admin", "config", "local"]);
@@ -31,7 +32,9 @@ export function createMongoDatabase(input: { uri: string; databaseName: string }
   const client = new MongoClient(validateMongoUri(input.uri), {
     maxPoolSize: 10, serverSelectionTimeoutMS: 5_000,
     compressors: ["zlib"], zlibCompressionLevel: 3,
+    monitorCommands: process.env.DEPLOYMENT_ENV === "_staging",
   });
+  if (process.env.DEPLOYMENT_ENV === "_staging") installMongoReadDiagnostics(client);
   const database = client.db(validateMongoDatabaseName(input.databaseName));
   return { client, database, collections: createCollectionHandles(database), close: () => client.close() };
 }

@@ -184,7 +184,9 @@ outside M3; this consolidation does not change PRD limits or acceptance criteria
 M3's deployed Simulated acceptance is complete. The operator's later continuation
 authorizes non-billable M4 implementation under the
 [M4 contract](M4-balanced.md#incremental-implementation-slices). The local policy and
-campaign foundation is implemented; Balanced execution remains closed. Use the three
+campaign foundation is implemented. Kid and Parent have completed valid Balanced
+generation/accounting with incomplete advisory evaluation; Creator admission is
+the remaining execution blocker. Use the three
 [M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |
@@ -195,9 +197,9 @@ campaign foundation is implemented; Balanced execution remains closed. Use the t
 
 Selected campaign policy: three initial runs, zero successors, at most 500 LLM
 requests, three judge requests and USD 5 incremental model charges in total;
-the final paid execution grant remains pending. Any successors need a finite
-approved allowance with its additional worst-case request total. Without paid
-approval, complete non-billable readiness work and stop at the paid checkpoint.
+the user granted execution within that allowance. Any successors need a finite
+approved allowance with its additional worst-case request total. Creator must
+continue within the retained campaign; no replacement run or reset is authorized.
 
 Use representative shared-mechanism recovery tests and focused persona contracts,
 not repeated unchanged campaigns. Aim for one reviewed release candidate. Defects
@@ -208,7 +210,7 @@ and reconcile active/uncertain work before configuration changes; do not replay
 unknown outcomes automatically. Existing PRD limits and release authority remain
 unchanged.
 
-**Exit:** all Balanced cases have verified generation and current configuration/accounting evidence. A verified terminal tester or judge failure permits completion with evaluation incomplete; unknown outcomes and unresolved ownership remain blocking. Reports remain advisory and their failure must not trigger generation replay. This does not prove image quality, successful advisory evaluation or Real acceptance. The current delivery scope is Kid only; Parent and Creator remain on hold.
+**Exit:** all Balanced cases have verified generation and current configuration/accounting evidence. A verified terminal tester or judge failure permits completion with evaluation incomplete; unknown outcomes and unresolved ownership remain blocking. Reports remain advisory and their failure must not trigger generation replay. This does not prove image quality, successful advisory evaluation or Real acceptance. Preserve completed Kid and Parent; finish the initial Creator after evidenced admission repair. See M4 for exact retained identities and measurements.
 
 ## Milestone 5 — Clean staging transition and Real acceptance
 
