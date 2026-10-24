@@ -19,12 +19,12 @@ describe("staging diagnostic logs", () => {
     await measurePhase({ runId }, "outer", () => measurePhase({ runId }, "read", async () => countVerificationRead([1n])));
     expect(recentDiagnostics(runId, 1).events[0]).toMatchObject({ outcome: "succeeded", readRows: 1, readJsonBytes: null });
   });
-  it("requires existing authentication and is unavailable outside staging", () => {
+  it("requires existing authentication and is unavailable outside staging", async () => {
     vi.stubEnv("DEPLOYMENT_ENV", "_staging"); vi.stubEnv("ACCESS_GATE_PASSWORD", "abcdefghijklmnop");
-    expect(GET(request("", false)).status).toBe(401);
+    expect((await GET(request("", false))).status).toBe(401);
     for (const environment of ["_prod", "local", ""]) {
       vi.stubEnv("DEPLOYMENT_ENV", environment);
-      expect(GET(request()).status).toBe(404);
+      expect((await GET(request())).status).toBe(404);
     }
   });
   it("filters bounded structured events and never retains exception bodies", async () => {
@@ -32,7 +32,7 @@ describe("staging diagnostic logs", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     await expect(measurePhase({ runId }, "authorization", async () => { throw new Error("private-token"); })).rejects.toThrow();
     await measurePhase({ runId }, "context", async () => 1);
-    const response = GET(request(`?runId=${runId}&limit=1`));
+    const response = await GET(request(`?runId=${runId}&limit=1`));
     const body = await response.json();
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(body.data.events).toHaveLength(1);
@@ -41,7 +41,7 @@ describe("staging diagnostic logs", () => {
     expect(JSON.stringify(recentDiagnostics(runId, 500))).not.toContain("private-token");
     expect(recentDiagnostics(runId, 500).events.find(event => event.outcome === "failed")?.failure)
       .toEqual({ errorKind: "Error", code: "completion_failed" });
-    for (const query of ["?limit=501", "?limit=0", "?runId=invalid", "?path=/etc/passwd"]) expect(GET(request(query)).status).toBe(400);
+    for (const query of ["?limit=501", "?limit=0", "?runId=invalid", "?path=/etc/passwd"]) expect((await GET(request(query))).status).toBe(400);
   });
   it("retains allowlisted failure kinds without exception text or arbitrary codes", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
