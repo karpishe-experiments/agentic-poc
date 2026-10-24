@@ -16,14 +16,24 @@ candidate's adoption, not to persona or milestone acceptance.
 
 All generation, current approval, dependency, original image-byte, ownership and
 accounting checks remain required. Latency acceptance cannot establish a
-successful verification or save when a request actually expires. The serving
-creation endpoint still has its 30-second budget. A narrowly scoped 60-second
-creation budget has been proposed to permit the existing synchronous checks;
-it is pending the user's answer and is not implemented or deployed by this
-documentation decision. Preserve the exact pending Creator key, reconcile saved
+successful verification or save when a request actually expires. The user
+separately approved increasing creation's budget from 30 to 60 seconds. Staging
+delivery remains pending. The implementation slice changes only creation's
+outer HTTP budget; other endpoints, per-read limits, provider deadlines and
+cleanup budgets retain their existing bounds. Verification and atomic creation
+must finish within that one inherited deadline; no retry renews it. Preserve the exact pending Creator key, reconcile saved
 state before submission, and do not retry an uncertain mutation automatically.
 The campaign and provider allowances remain unchanged; M5 remains on hold until
 Creator completes and M4's substantive evidence checks pass.
+
+Creation-budget task contract: change the shared create-handler wrapper to a
+60-second bound for all personas/modes; retain the default 30-second bound for
+all other handlers. Preserve response bodies, authentication, idempotency keys,
+transactional checks/rollback and ownership cleanup. Verify success beyond
+30 seconds, failure after 60 seconds, inherited shorter deadlines, unchanged
+read/control bounds and duplicate creation. No migration, credential or provider
+policy change is required. Local checks/review and normal staging delivery must
+precede reconciliation of the retained Creator.
 
 ### Duplicate-context live result — 2026-10-24
 

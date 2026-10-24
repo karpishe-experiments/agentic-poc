@@ -6,6 +6,7 @@ import * as contextModule from "@/lib/experiment-runner/context";
 import * as completionModule from "@/db/experiment-completion";
 import type { Database } from "@/db/client";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import { assertOperationBudget, operationBudgetRemainingMs, withOperationBudget } from "@/lib/operations/budget";
 
 const disabled: ConfigState = { enabled: false, reason: "disabled" };
 const invalid: ConfigState = { enabled: false, reason: "invalid" };
@@ -23,6 +24,60 @@ describe("booklet runner HTTP boundary", () => {
     generationStatus: saved.generationCompletedAtMs == null ? "in_progress" : "complete",
     evaluationStatus: saved.evaluationStatus, updatedAtMs: saved.updatedAtMs,
     safeFailure: saved.safeFailure, activeOperationId: saved.activeOperationId, preparation: saved.preparation });
+
+  it.each([false, true])("allows creation and its full detail read beyond 30 seconds (existing=%s)", async existing => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const saved = { _id: controlRunId, persona: "playful_kid", mode: "simulated", predecessorRunId: null };
+    const createRun = vi.fn(async () => { now += 31_000; assertOperationBudget(); return saved; });
+    const getRun = vi.fn(async () => {
+      expect(operationBudgetRemainingMs()).toBe(60_000);
+      if (existing) now += 31_000;
+      return existing ? saved : null;
+    });
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({ getRun, createRun } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const getRunView = vi.fn(async () => { expect(operationBudgetRemainingMs()).toBe(29_000); assertOperationBudget(); return { runId: controlRunId }; });
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({} as Database), store: () => ({} as AssetStore), mutate: action => action() });
+      const response = await http.create(request({ origin: enabled.config.publicOrigin, "idempotency-key": controlRunId }, JSON.stringify({ persona: "playful_kid", mode: "simulated" })));
+      expect(response.status).toBe(existing ? 200 : 201);
+      expect(await response.json()).toEqual({ data: { runId: controlRunId } });
+      expect(createRun).toHaveBeenCalledTimes(existing ? 0 : 1);
+    } finally { clock.mockRestore(); repository.mockRestore(); context.mockRestore(); }
+  });
+
+  it.each([false, true])("does not renew creation's deadline or a shorter inherited deadline (nested=%s)", async nested => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const createRun = vi.fn();
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({ getRun: async () => null, createRun } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView: vi.fn() } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({} as Database), store: () => ({} as AssetStore), mutate: async action => {
+        expect(operationBudgetRemainingMs()).toBe(nested ? 20_000 : 60_000);
+        now += nested ? 21_000 : 61_000; assertOperationBudget(); return action();
+      } });
+      const create = () => http.create(request({ origin: enabled.config.publicOrigin, "idempotency-key": controlRunId }, JSON.stringify({ persona: "playful_kid", mode: "simulated" })));
+      if (nested) await expect(withOperationBudget(now + 20_000, create)).rejects.toThrow("budget expired");
+      else expect((await create()).status).toBe(503);
+      expect(createRun).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); repository.mockRestore(); context.mockRestore(); }
+  });
+
+  it.each(["detail", "pause"] as const)("keeps %s on its original 30-second deadline", async endpoint => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const work = vi.fn(async () => { expect(operationBudgetRemainingMs()).toBe(30_000); now += 31_000; assertOperationBudget(); });
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({ getRun: async () => savedControl, pause: work } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView: work } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({} as Database), store: () => ({} as AssetStore), mutate: action => action() });
+      const response = endpoint === "detail" ? await http.detail(new Request("http://localhost:3000"), controlRunId)
+        : await http.control(request({ origin: enabled.config.publicOrigin }, '{"expectedRevision":8,"responseMode":"receipt"}'), controlRunId, "pause");
+      expect(response.status).toBe(503); expect(work).toHaveBeenCalledTimes(1);
+    } finally { clock.mockRestore(); repository.mockRestore(); context.mockRestore(); }
+  });
 
   it.each(["pause", "resume"] as const)("acknowledges %s without loading the full run", async (action) => {
     const saved = { ...savedControl, status: action === "pause" ? "paused" : "running", pauseRequested: action === "pause" };

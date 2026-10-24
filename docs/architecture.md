@@ -36,11 +36,14 @@ creation share one transaction; failed verification rolls both back. No counters
 reservations, liabilities, prior runs or policy snapshots are reset. This grant
 does not continue failed generation or allow a replacement persona run.
 
-Run creation retains its existing full-detail response and 30-second HTTP budget.
+Run creation retains its existing full-detail response and uses a 60-second HTTP
+budget, explicitly approved to accommodate retained predecessor verification.
+Other runner handlers retain their 30-second HTTP budgets. Per-read bounds,
+provider deadlines and ownership cleanup limits are unchanged. Nested work and
+transaction retries inherit the original request deadline; no retry renews it.
 The user accepts the observed latency as an M4 limitation. A speed improvement is
-not an M4 completion prerequisite. This acceptance does not change the implemented
-request deadline or permit incomplete evidence validation; a creation-only budget
-change is a separate pending decision.
+not an M4 completion prerequisite. Creation still requires complete evidence
+validation and atomic persistence within its approved request budget.
 Bounded diagnostic phases distinguish tracked mutation/cleanup, campaign admission,
 each retained generation audit, accounting and detail loading. Failed phases expose
 only allowlisted error kind/code, timings, transaction attempts and instrumented

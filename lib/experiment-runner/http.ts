@@ -155,7 +155,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}) }),
       context: createExperimentContextService(db, { store: () => callbackStore }) };
   }
-  async function run(operation: () => Promise<Response>) { try { return await withOperationBudget(Date.now() + 30_000, operation); } catch (error) { return safeError(error); } }
+  async function run(operation: () => Promise<Response>, budgetMs = 30_000) { try { return await withOperationBudget(Date.now() + budgetMs, operation); } catch (error) { return safeError(error); } }
   return {
     probePreflight(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
@@ -250,7 +250,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
         ...(body.mode === "balanced" ? { campaignId: authority!.grant.campaignId } : {}),
         configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId }));
       return data(await measurePhase({ runId }, "create_detail", () => context.getRunView(saved._id)), 201);
-    }); },
+    }, 60_000); },
     control(request: Request, runId: string, action: "pause" | "resume") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       const { responseMode, ...body } = runControl.parse(await boundedJson(request, 4096));
