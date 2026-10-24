@@ -3,7 +3,7 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
-import { readM4AccountingOperations } from "@/db/experiment-m4-accounting-evidence";
+import { readM4AccountingOperations, readM4FailedOperations } from "@/db/experiment-m4-accounting-evidence";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
@@ -117,7 +117,10 @@ describe.each([false, true])("Balanced accounting and original-result completion
     expect(history[1].m4Observation).toBeUndefined();
     const paused = (await env.repository.getRun(id(10)))!;
     await env.repository.resume({ runId: id(10), expectedRevision: paused.revision, nowMs: 13 });
+    const proofReads = vi.spyOn(env.db.collections.experiment_operations, "find");
     await env.verify();
+    if (cached) expect(proofReads.mock.calls.some(([filter]) => filter && "_id" in filter)).toBe(false);
+    proofReads.mockRestore();
     expect((await env.repository.getRun(id(10)))!.counters).toEqual(before.run!.counters);
     expect(await env.campaign()).toEqual(before.campaign);
     expect(await env.repository.listOperations(id(10))).toEqual(history);
@@ -154,6 +157,26 @@ describe.each([false, true])("Balanced accounting and original-result completion
     const before = await env.records();
     await expect(env.verify()).rejects.toThrow("complete attributable accounting");
     expect(await env.records()).toEqual(before);
+  });
+
+  it("omits only unused failed-operation transport fields and preserves all proof bytes and stored history", async () => {
+    const env = await setup(cached); await env.observe(); await env.repository.completeOperation(env.completion);
+    const large = JSON.stringify({ retainedTransport: "x".repeat(300_000) });
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: {
+      state: "failed", imageRequestJson: large, referenceUploadsJson: large, referenceUploadJournalJson: large, warningsJson: large,
+    } });
+    const original = (await env.repository.getOperation(id(12)))!;
+    const projected = await withMongoTransaction(env.db, async session => (await readM4FailedOperations(env.db, session, id(10),
+      [id(12)], createVerificationAttempt({ get: vi.fn(), put: vi.fn(), exists: vi.fn() }))).get(id(12))!);
+    const expected = { ...original };
+    for (const field of ["imageRequestJson", "referenceUploadsJson", "referenceUploadJournalJson", "warningsJson"] as const) {
+      Reflect.deleteProperty(expected, field); expect(projected).not.toHaveProperty(field);
+    }
+    expect(projected).toEqual(expected);
+    expect(projected.m4Preparation).toEqual(original.m4Preparation);
+    expect(JSON.stringify(original).length - JSON.stringify(projected).length).toBeGreaterThan(1_200_000);
+    await expect(env.verify()).rejects.toThrow("complete attributable accounting");
+    expect(await env.repository.getOperation(id(12))).toEqual(original);
   });
 
   it("rejects tampered creative content even after valid GET and settlement", async () => {

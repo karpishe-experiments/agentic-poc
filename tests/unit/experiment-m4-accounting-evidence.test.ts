@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
+import type { ExperimentOperationDocument } from "@/db/documents";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
-import { readM4FailedOperations, readM4FailureCampaign, readM4FailureSourceVersion } from "@/db/experiment-m4-accounting-evidence";
+import { isUnclaimedPauseFailure, readM4FailedOperations, readM4FailureCampaign, readM4FailureSourceVersion } from "@/db/experiment-m4-accounting-evidence";
 
 function fixture() {
   let campaign = { _id: "campaign", revision: 1 };
@@ -31,7 +32,8 @@ describe("transaction-local M4 accounting evidence", () => {
     expect(proofs.has("missing-0")).toBe(false);
     for (const id of ids) expect(await readM4FailureSourceVersion(f.database, f.session, id, attempt)).toBeNull();
     for (let i = 0; i < 51; i++) await readM4FailureCampaign(f.database, f.session, "campaign", "run", attempt);
-    expect(f.proofRead).toHaveBeenCalledExactlyOnceWith({ runId: "run", _id: { $in: ids } }, { session: f.session });
+    expect(f.proofRead).toHaveBeenCalledExactlyOnceWith({ runId: "run", _id: { $in: ids } },
+      { session: f.session, projection: { imageRequestJson: 0, referenceUploadsJson: 0, referenceUploadJournalJson: 0, warningsJson: 0 } });
     expect(f.sourcesRead).toHaveBeenCalledExactlyOnceWith({ sourceOperationId: { $in: ids } },
       { session: f.session, projection: { _id: 1, sourceOperationId: 1 } });
     expect(f.sourceRead).not.toHaveBeenCalled(); expect(f.campaignRead).toHaveBeenCalledTimes(1);
@@ -66,5 +68,21 @@ describe("transaction-local M4 accounting evidence", () => {
     expect(await readM4FailureSourceVersion(f.database, f.session, "failed")).toMatchObject({ _id: "foreign-version" });
     expect(await readM4FailureCampaign(f.database, f.session, "campaign", "run")).toMatchObject({ revision: 2 });
     expect(f.sourceRead).toHaveBeenCalledTimes(2); expect(f.campaignRead).toHaveBeenCalledTimes(2);
+  });
+  it("uses the exact unclaimed-Pause exclusion without accepting reservations, results or owners", () => {
+    const pause = { mode: "balanced", state: "failed", safeFailure: null, reservationCount: 0,
+      remoteStatus: "succeeded", workflowRunId: "workflow", verifiedWorkflowId: "publication" } as ExperimentOperationDocument;
+    expect(isUnclaimedPauseFailure(pause)).toBe(true);
+    for (const change of [
+      { mode: "simulated" }, { state: "unknown" }, { safeFailure: "definite_failure" }, { reservationCount: 1 },
+      { remoteStatus: "failed" }, { workflowRunId: null }, { verifiedWorkflowId: null },
+      { m4Reservation: {} }, { m4Observation: {} }, { resultJson: "{}" }, { materializationJson: "{}" },
+      { imageCompletionDigest: "digest" }, { authorizationClaim: {} }, { resultFinalizationClaim: {} }, { imageCompletionClaim: {} },
+    ]) expect(isUnclaimedPauseFailure({ ...pause, ...change } as ExperimentOperationDocument)).toBe(false);
+  });
+  it("does not query any full proofs or source versions when no proof is required", async () => {
+    const f = fixture();
+    expect(await readM4FailedOperations(f.database, f.session, "run", [], f.attempt())).toEqual(new Map());
+    expect(f.proofRead).not.toHaveBeenCalled(); expect(f.sourcesRead).not.toHaveBeenCalled();
   });
 });

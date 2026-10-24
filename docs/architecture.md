@@ -44,7 +44,7 @@ query/storage counts. These counts are not all database traffic. Diagnostics do
 not authorize a retry or turn an uncertain save into success; inspect saved state
 before repeating a pending creation key.
 
-Generation accounting uses transaction-local evidence reads. It loads full failed
+Generation accounting uses transaction-local evidence reads. It loads failed
 operation proofs by run and selected IDs, batches global materialization-source
 lookups, and reuses the campaign document within that attempt. Proof predicates
 still run for each operation; a source version under any owner rejects a failure.
@@ -55,6 +55,17 @@ failed rows retain exact values for the unclaimed-Pause exclusion. Original stor
 records are unchanged. Timings distinguish campaign, reservation, run-operation,
 failed-proof and source-version reads from per-operation validation. All MongoDB
 commands remain sequential within the transaction.
+
+The existing unclaimed-Pause exclusion applies before selecting failed-proof IDs
+and again during accounting. Such rows still require the same no-reservation,
+no-result, no-owner predicate; authenticated definite failures retain full proof
+validation. Proof reads omit only top-level operation image requests, upload
+acknowledgements/journals and warnings. Complete preparations (including legacy
+digest inputs), observations, recovery/continuation, lifecycle, claims and result
+fields remain. Artifact-version warnings and global materialization checks are
+unchanged. Read diagnostics can include returned row counts and decoded JSON byte
+counts, never contents. These sizes are not BSON or network-byte measurements;
+unavailable serialization produces a null byte count without changing validation.
 
 The shared application MongoDB client requests built-in zlib wire compression
 with outbound compression level 3. This constructor preference overrides URI
