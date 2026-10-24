@@ -56,6 +56,18 @@ records are unchanged. Timings distinguish campaign, reservation, run-operation,
 failed-proof and source-version reads from per-operation validation. All MongoDB
 commands remain sequential within the transaction.
 
+The shared application MongoDB client requests built-in zlib wire compression
+with outbound compression level 3. This constructor preference overrides URI
+compression options and applies to reads, writes and transactions. Negotiation
+falls back to uncompressed messages when the server offers no shared compressor.
+Records, query predicates, TLS/authentication and deadlines are unchanged. Local
+replica-set tests verify exact full records, multi-batch cursors, transaction
+commit and both transport directions, including the uncompressed fallback.
+Compression trades CPU for fewer transferred bytes; it does not guarantee live
+admission latency. No server configuration or additional monitoring privilege is
+required. Credential inventory is unchanged: the existing `MONGODB_URI` consumer
+uses the same protected value and access scope.
+
 Deployment initialization performs required setup and bounded availability checks:
 configuration, connectivity, exact collections/indexes, admission schema and seed
 readiness. It does not scan historical experiments. The explicit `npm run db:verify`
