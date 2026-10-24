@@ -5,6 +5,7 @@ import type { M4Authority } from "@/db/experiment-campaign";
 import { diagnoseAdmissionRead } from "@/db/experiment-admission-diagnostics";
 import { observeMongoRead } from "@/db/mongo-read-diagnostics";
 import { withOperationBudget } from "@/lib/operations/budget";
+import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 const databases: Database[] = [];
@@ -36,6 +37,7 @@ it("reads only retained predecessor proofs and plans without changing persisted 
   for (const persona of ["playful_kid", "enthusiast_parent"] as const) for (const part of ["proofs", "plan"] as const) {
     const result = await withOperationBudget(Date.now() + 30_000, () => diagnoseAdmissionRead(db, authority, persona, part));
     expect(result).not.toHaveProperty("failure");
+    expect(result.metricsStatus).toBe("observed");
     expect(result.compression).toEqual({ state: "configured", requested: "zlib", negotiated: "unavailable" });
     expect(result.metrics.commands.some(command => command.command === (part === "plan" ? "explain" : "find"))).toBe(true);
     expect(result.metrics.checkoutCount).toBeGreaterThan(0);
@@ -43,6 +45,9 @@ it("reads only retained predecessor proofs and plans without changing persisted 
     if (part === "proofs") expect(result.value).toMatchObject({ rows: persona === "playful_kid" ? 1 : 0 });
     else expect(result.value).toMatchObject({ plan: { scan: persona === "playful_kid" ? "index" : "unavailable" } });
     expect(JSON.stringify(result)).not.toContain("private retained proof");
+    const retained = recentDiagnostics(result.runId, 1).admissionReads[0];
+    expect(retained).toMatchObject(result);
+    expect(retained.timestamp).toBeTruthy();
   }
   expect(await snapshot()).toEqual(before);
   await db.collections.experiment_runs.updateOne({ _id: id(10) }, { $set: { activeOperationId: id(12) } });

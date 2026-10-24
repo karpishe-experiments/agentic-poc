@@ -4,11 +4,13 @@ import type { M4Authority } from "@/db/experiment-campaign";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { isUnclaimedPauseFailure, m4FailedProofProjection, readM4AccountingOperations } from "@/db/experiment-m4-accounting-evidence";
 import { observeMongoRead, withMongoReadPhase } from "@/db/mongo-read-diagnostics";
+import { retainAdmissionRead } from "@/lib/experiment-runner/diagnostics";
+import type { AdmissionReadDiagnostic } from "@/lib/contracts/experiment-admission-diagnostics";
 
 export type AdmissionDiagnosticPersona = "playful_kid" | "enthusiast_parent";
 export type AdmissionDiagnosticPart = "proofs" | "plan";
 
-function summarizePlan(raw: Record<string, unknown>) {
+function summarizePlan(raw: Record<string, unknown>): NonNullable<NonNullable<AdmissionReadDiagnostic["value"]>["plan"]> {
   const stages = new Set<string>();
   // Inspect only the winning plan. Rejected plans do not describe execution.
   const visit = (value: unknown, depth = 0) => {
@@ -21,7 +23,7 @@ function summarizePlan(raw: Record<string, unknown>) {
   };
   visit((raw.queryPlanner as { winningPlan?: unknown } | undefined)?.winningPlan);
   const stats = raw.executionStats as Record<string, unknown> | undefined;
-  const number = (key: string) => typeof stats?.[key] === "number" && Number.isFinite(stats[key]) ? stats[key] : null;
+  const number = (key: string): number | null => typeof stats?.[key] === "number" && Number.isFinite(stats[key]) ? stats[key] as number : null;
   return { scan: stages.has("COLLSCAN") ? "collection" : stages.size ? "index" : "unavailable",
     returned: number("nReturned"), documentsExamined: number("totalDocsExamined"), keysExamined: number("totalKeysExamined"), executionMs: number("executionTimeMillis") };
 }
@@ -59,6 +61,9 @@ export async function diagnoseAdmissionRead(database: Database, authority: M4Aut
       { projection: m4FailedProofProjection }).explain("executionStats"));
     return { rows: null, decodedJsonBytes: null, queryElapsedMs: null, plan: summarizePlan(plan) };
   });
-  return { runId, persona, part, compression: { state: "configured", requested: "zlib", negotiated: "unavailable" },
-    ...observed, totalElapsedMs: Math.round(performance.now() - started) };
+  const result: AdmissionReadDiagnostic = { runId, persona, part, compression: { state: "configured", requested: "zlib", negotiated: "unavailable" },
+    ...observed, metricsStatus: observed.metrics.commands.length ? "observed" : "unavailable",
+    totalElapsedMs: Math.round(performance.now() - started) };
+  retainAdmissionRead(result);
+  return result;
 }

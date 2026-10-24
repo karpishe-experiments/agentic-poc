@@ -57,6 +57,13 @@ batch sizes. Neither commands nor replies are retained. Compression is configure
 as zlib; negotiated compression is unavailable through the public events used here.
 Query timings include response transfer and decoding, not server execution alone.
 No new credential, monitoring privilege or database migration is required.
+Monitoring scopes are process-shared across Next.js module bundles, matching the
+shared Mongo client. Missing events report `metricsStatus: unavailable`, never
+proof of zero waiting. The last twenty sanitized probe results are held in the
+existing process-local diagnostic surface as `admissionReads`, filtered by run ID.
+They survive module reload, not process restart, and grant no admission authority.
+A started read can finish after a browser disconnect within its original 30-second
+budget; later logs GETs retrieve measurements without another proof query.
 
 Generation accounting uses transaction-local evidence reads. It loads failed
 operation proofs by run and selected IDs, batches global materialization-source

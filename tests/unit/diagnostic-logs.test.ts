@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/diagnostics/logs/route";
-import { countVerificationRead, measurePhase, recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
+import { countVerificationRead, measurePhase, recentDiagnostics, retainAdmissionRead } from "@/lib/experiment-runner/diagnostics";
 
 const runId = "123e4567-e89b-42d3-a456-426614174000";
 const request = (query = "", authenticated = true) => new Request(`https://example.test/api/diagnostics/logs${query}`, {
@@ -9,6 +9,19 @@ const request = (query = "", authenticated = true) => new Request(`https://examp
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("staging diagnostic logs", () => {
+  it("retains at most twenty sanitized admission results across module reloads with independent returned copies", async () => {
+    const result = { runId, persona: "playful_kid" as const, part: "proofs" as const,
+      compression: { state: "configured" as const, requested: "zlib" as const, negotiated: "unavailable" as const },
+      value: { rows: 6, decodedJsonBytes: 1234, queryElapsedMs: 8, plan: null },
+      metrics: { checkoutCount: 1, checkoutFailed: 0, checkoutMs: 1, commands: [], droppedCommands: 0 },
+      metricsStatus: "unavailable" as const, elapsedMs: 10, totalElapsedMs: 12 };
+    for (let i = 0; i < 21; i++) retainAdmissionRead(result);
+    const saved = recentDiagnostics(runId, 500).admissionReads;
+    expect(saved).toHaveLength(20); saved[0].value!.rows = 99;
+    vi.resetModules(); const reloaded = await import("@/lib/experiment-runner/diagnostics");
+    expect(reloaded.recentDiagnostics(runId, 500).admissionReads[0].value!.rows).toBe(6);
+    expect(reloaded.recentDiagnostics("other-run", 500).admissionReads).toEqual([]);
+  });
   it("records only returned JSON byte counts and propagates unavailable size without failing the read", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const rows = [{ evidence: "private-proof-body" }];

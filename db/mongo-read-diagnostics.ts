@@ -1,14 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { MongoClient, CommandSucceededEvent, CommandFailedEvent } from "mongodb";
 import { safeFailure } from "@/lib/operations/completion-failure";
+import type { AdmissionReadMetrics, AdmissionReadPhase } from "@/lib/contracts/experiment-admission-diagnostics";
 
-type ReadPhase = "selection" | "proofs" | "plan";
-type Command = { phase: ReadPhase | null; command: "find" | "getMore" | "explain"; elapsedMs: number; outcome: "succeeded" | "failed"; batchRows: number | null };
-type Observation = { checkoutCount: number; checkoutFailed: number; checkoutMs: number; commands: Command[]; droppedCommands: number };
-const scope = new AsyncLocalStorage<Observation>();
-const phase = new AsyncLocalStorage<ReadPhase>();
+type Command = AdmissionReadMetrics["commands"][number];
+// Next.js bundles bootstrap and route modules separately; their shared client
+// listeners and request observations must use the same AsyncLocalStorage objects.
+const key = Symbol.for("booklet.mongo-read-diagnostics");
+const state = globalThis as typeof globalThis & { [key]?: {
+  scope: AsyncLocalStorage<AdmissionReadMetrics>; phase: AsyncLocalStorage<AdmissionReadPhase>;
+} };
+const { scope, phase } = state[key] ??= { scope: new AsyncLocalStorage<AdmissionReadMetrics>(), phase: new AsyncLocalStorage<AdmissionReadPhase>() };
 
-export function withMongoReadPhase<T>(name: ReadPhase, work: () => Promise<T>) { return phase.run(name, work); }
+export function withMongoReadPhase<T>(name: AdmissionReadPhase, work: () => Promise<T>) { return phase.run(name, work); }
 
 // Public monitoring events only. Never copy command/reply documents, connection
 // identities, addresses or errors into the diagnostic result.
@@ -39,7 +43,7 @@ export function installMongoReadDiagnostics(client: MongoClient) {
 }
 
 export async function observeMongoRead<T>(work: () => Promise<T>) {
-  const state: Observation = { checkoutCount: 0, checkoutFailed: 0, checkoutMs: 0, commands: [], droppedCommands: 0 };
+  const state: AdmissionReadMetrics = { checkoutCount: 0, checkoutFailed: 0, checkoutMs: 0, commands: [], droppedCommands: 0 };
   const start = performance.now();
   return scope.run(state, async () => {
     try {
