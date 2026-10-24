@@ -863,6 +863,8 @@ describe("Creator admission after two completed booklets", () => {
       expect(phases.some(event => event.runId === kid.runId && event.phase === "admission_predecessor_generation")).toBe(true);
       expect(phases.some(event => event.runId === parent.runId && event.phase === "admission_predecessor_generation")).toBe(true);
       expect(phases.some(event => event.runId === created.runId && event.phase === "create_transaction" && event.outcome === "succeeded" && event.transactionAttempts >= 1)).toBe(true);
+      const creationBudget = phases.find(event => event.runId === created.runId && event.phase === "create_transaction" && event.outcome === "succeeded")!.budgetAtStartMs;
+      expect(creationBudget).toBeGreaterThan(30_000); expect(creationBudget).toBeLessThanOrEqual(60_000);
       expect(phases.some(event => event.phase === "create_mutation" && event.outcome === "failed" && event.failure)).toBe(true);
       expect(phases.some(event => event.runId === created.runId && event.phase === "create_detail" && event.outcome === "succeeded")).toBe(true);
     } finally { vi.unstubAllEnvs(); }
