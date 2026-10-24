@@ -812,3 +812,15 @@ saved approved evidence. Select compatibility from the saved preparation, never
 from model output. Keep downstream currentness and asset checks. Evidence: the
 retained Parent J11 failure and M4 output/dispatch tests. Promotion candidate:
 **Documentation** for application-owned reference assembly.
+
+## Measure evidence reads separately from proof validation
+
+Creator admission exhausted its existing budget while auditing retained Kid and
+Parent runs. Granular phases measured 10,450/4,240 ms for full failed-proof reads
+and only 99/64 ms for validation. Query batching alone did not establish live
+success. Preserve complete failure evidence and distinguish transfer/read cost
+from validation before changing checks. Shared-driver compression tests prove
+lossless large reads, transactions and uncompressed fallback; local byte reduction
+does not prove live latency. Evidence: the [Creator checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
+and `mongodb-compression.test.ts`. Promotion candidate: **Documentation** for
+bounded persistence diagnosis.

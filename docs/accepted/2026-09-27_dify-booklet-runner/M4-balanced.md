@@ -44,11 +44,34 @@ attempt still failed after 31,599 ms; Kid accounting took 12,912 ms and Parent
 accounting 7,000 ms. No initial Balanced Creator was observed. Do not repeat the
 pending key without checking saved state and ownership.
 
-The next candidate projects unused successful creative bodies out of accounting
+The delivered follow-up projects unused successful creative bodies out of accounting
 reads while retaining exact failed bodies. Granular phases measure each awaited
 accounting read and validation separately. The observed accounting delay does not
 yet distinguish transfer size, read latency and validation cost. No timeout, proof
 predicate, provider request or allowance change is included.
+
+Source [#243](https://github.com/karpishe-experiments/agentic-poc/pull/243) and
+staging [#244](https://github.com/karpishe-experiments/agentic-poc/pull/244) passed
+two independent reviews each and lean CI. The 43 focused persistence cases,
+44 units, typecheck, focused lint and 209 documentation checks passed. Release
+`48a9d6bdca0c0e1a9f7f069103c44c5217b06225` completed through deployment
+`40073770189`; bounded client observation expired with exit 124, read-only status
+`40074687291` confirmed complete/archived and Check deployment `40074785234` passed.
+After the operator reconnected and refreshed the controls, the previous pending
+identity `998c1751-e458-47d4-88ea-ecca41504c78` remained absent and preflight was
+idle. Refresh had lost that key. One initial creation with the refreshed controls
+also failed, after 30,037 ms. Its pending identity
+`272ad2ef-920d-4aad-8feb-393bd2c56506` reads as not found; preflight is idle.
+Preserve this current key. No Balanced Creator or provider dispatch was saved.
+
+The granular phases identify full failed-proof reads as the main delay: Kid used
+10,450 ms for those reads and 99 ms for operation validation; Parent used 4,240 ms
+and 64 ms respectively. Kid's full generation audit used 18,370 ms and Parent's
+audit exhausted the remaining budget. The next bounded application correction
+requests the driver's built-in zlib wire compression, retaining complete evidence
+and all checks. Local tests cover exact full reads, multi-batch cursors,
+transaction commit and servers without compression. Live benefit remains
+unverified until reviewed delivery and one reconciled same-key admission.
 
 Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
 [#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
@@ -186,8 +209,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `89abbd829be1ee94ae8d52ef1c892639f4b3e97b`,
-image `sha256:28cb21c480191eacd924852622cad3c348c3cc55bfe97cb263d80d5fbc8e15b7`.
+The verified serving release is `48a9d6bdca0c0e1a9f7f069103c44c5217b06225`,
+image `sha256:5aa95983c193a376aa0c6c2db39848dacd6de73de4d9d7e975c6fb0c6cb0042d`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
@@ -205,7 +228,7 @@ M4 is incomplete. Preserve the conditional USD 5 ceiling, cumulative request lim
 original failures and reservations. J11 and the recovered J12 manager completion
 are already saved; do not reconcile either again.
 
-PR #222 merged into master at `66872aa4a9e59d17113039aca59febe6e4eff94f`.
+**Prior serving baseline:** PR #222 merged into master at `66872aa4a9e59d17113039aca59febe6e4eff94f`.
 PR #223 merged into staging at `bb56ee7a7ba4150978a45743c67868f161d91f63`.
 Normal deployment `39578653307-1` passed; status `39579742615` confirmed complete
 and archived. Image:
@@ -216,7 +239,7 @@ Application preflight verified ready/idle and manager publication
 
 One explicit continuation advanced Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`
 from 38 to 41 admitted text requests and five to seven simulated images.
-The latest readback (revision 1202) is blocked/unknown_outcome with Pause requested and exact manager
+An earlier readback (revision 1202) was blocked/unknown_outcome with Pause requested and exact manager
 operation `7d490c15-5ae1-4276-83ce-7d86a0da7ba4` retained. Generation and both
 reports remain incomplete. The operation retains an acknowledged deadline Stop;
 recovery must preserve that Stop and its timeout history. Stop was requested about
@@ -283,8 +306,8 @@ provider cases pass against its extracted bytes. It is not installed. Existing
 Dify-held credentials are reused; no new secret or transfer is introduced.
 
 **Delivery update - 2026-10-22:** PR #224 merged at
-`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`. Reviewed staging PR #225 remains at
-`6c985bb6805f3ed1a806d5d201cd17630efd3afc`, unmerged until recovery succeeds.
+`277abc3ce3fa0c77c4dd1870b2b523ee315deb8e`. The initial reviewed staging PR #225
+head was `6c985bb6805f3ed1a806d5d201cd17630efd3afc`.
 Both source/port passed two independent reviews and lean CI (`39598496902`,
 `39599386771`). Candidate build `39599398667` passed without VPS contact:
 `ghcr.io/karpishe-experiments/agentic-poc@sha256:3e2ae6b46ed7ff3222af0a26a63285286a41d20ed363a576b5fdb51bc2c58ee4`.
@@ -301,8 +324,9 @@ completed handoff. Exact recovery preview `39744440897` failed before apply at
 65,792 ms and exhausted the remaining command budget. The code still scanned full
 documents in eleven historical collections twice per fresh preview. This identifies
 unnecessary work, but does not establish whether payload size, query latency or
-connectivity caused the observed delay. No recovery apply, provider upgrade or Kid
-continuation has occurred. Do not retry that candidate or increase its timeout.
+connectivity caused the observed delay. At that checkpoint, no recovery apply,
+provider upgrade or Kid continuation had occurred. Do not retry that candidate
+or increase its timeout.
 
 The package reassessment selected a versioned, targeted snapshot for this exact
 pre-generation failure closure. It pins the complete target run/operation,
@@ -319,9 +343,29 @@ when that history is added. This is local correctness evidence, not a live laten
 or completion claim. Existing shell evidence is reused because no shell changes.
 Credential storage, transfers and consumers remain unchanged.
 
-**Next:** Finish focused verification, independent review and candidate publication
-for the targeted snapshot. Then use supported recovery for this exact count
-failure, deliver staging normally, install the reviewed provider through one
+PR #226, reviewed head `71028098f01325b7e87fbbe330f5118f30ac7b05`, merged at
+`ea484d3d74d8821a71588b439db87e7f2ea3ddd4`. Two source and two actual-port reviews
+passed; lean CI `39750308172` and `39750889426` passed. Candidate build
+`39750993890` produced staging head `4eae3c285659887b9cf7d2a45743bd968c2da9dd`:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:62b156533a943050138c9897fbb4013a336c09215763dd33142eef39496ab958`.
+Supported preview `39751711628` and apply `39752108906` succeeded for request
+`issue65-kid-count-recovery-20261022-v2`. Verified backup:
+`staging-recovery-issue65-kid-count-recovery-20261022-v2`. The final journal is
+complete. Authenticated readback verifies revision 2968, no active operation,
+blocked/definite_failure with Pause requested, the exact failed operation resolved,
+one reservation, original deadline/Stop/timeout and unchanged 41 text/7 image counters.
+No provider replay occurred. Guarded PR #225 then merged at
+`4236375426466d9e4c3419cdde9ef9d8384f8259`. Deploy `39753524655` reached the
+client wait limit without stopping or replaying the host request. Supported status
+`39754842442` confirmed that original request completed and archived. Release image:
+`ghcr.io/karpishe-experiments/agentic-poc@sha256:43d9e5c7676d3bc5e898b14d315445f31ab501a72df50ce94e3771fdaf69eef5`.
+Normal deployment backup: `staging-20261022T091613Z-3633ea35c432c9f2`.
+Read-only Check `39755106127` passed. Existing provider/workspace readback confirms
+Community workspace `ffac910f-2786-490e-90d8-07243d49741b` still has dev2 installed.
+No new dispatcher installation or manual data repair was needed.
+
+**Next:** The existing signature-window handoff is ready and awaiting the operator.
+Install the reviewed provider through one
 bounded signature window and restore verification. Read back identities, admission,
 saved outputs and accounting before continuing the same Kid once. Require all
 J01-J13 outputs, three story pages plus cover, approvals/assets, tester feedback,
