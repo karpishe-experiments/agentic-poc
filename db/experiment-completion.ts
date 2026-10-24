@@ -67,7 +67,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   // Generation/report materialization and final exit require retained usage.
   if (run.mode === "balanced" && !preparation) await measurePhase({ runId: run._id,
     ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
-    verifyM4Accounting(database, session, run, reportOperationId));
+    verifyM4Accounting(database, session, run, reportOperationId, attempt));
   const metadata = await verificationMetadata(database, session, run._id, attempt);
   const artifacts = metadata.artifacts;
   const tasks = Array.from({ length: 13 }, (_, index) => `J${String(index + 1).padStart(2, "0")}`);

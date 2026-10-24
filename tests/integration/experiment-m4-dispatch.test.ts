@@ -30,6 +30,7 @@ import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-publ
 import { type M4Grant, m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { createBookletRecovery } from "@/lib/operations/booklet-recovery";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import { OperationBudgetExpired, withOperationBudget } from "@/lib/operations/budget";
@@ -775,6 +776,10 @@ describe("Creator admission after two completed booklets", () => {
       database: kid.database, store: kid.store, runId: id(110), bookletId: id(111), grant,
     });
     const completedParent = await finish(parent);
+    for (const completed of [completedKid, completedParent]) await withMongoTransaction(kid.database, async session => {
+      await verifyM4Accounting(kid.database, session, completed);
+      await verifyM4Accounting(kid.database, session, completed, undefined, createVerificationAttempt(kid.store));
+    });
     expect(completedKid.evaluationStatus).toBe("failed"); expect(completedParent.evaluationStatus).toBe("failed");
     const creator = await setup(false, false, "professional_creator", "count", {
       database: kid.database, store: kid.store, runId: id(210), bookletId: id(211), grant, skipCreate: true,
@@ -793,6 +798,16 @@ describe("Creator admission after two completed booklets", () => {
         "content-type": "application/json", "idempotency-key": id(990) },
       body: JSON.stringify({ persona: "professional_creator", mode: "balanced" }) });
     try {
+      const failedReport = (await parent.repository.listOperations(parent.runId)).find(operation => operation.role === "tester" && operation.state === "failed")!;
+      const exampleVersion = (await kid.database.collections.artifact_versions.findOne({}))!;
+      await kid.database.collections.artifact_versions.insertOne({ ...exampleVersion, _id: id(991), artifactId: id(992), sourceOperationId: failedReport._id });
+      expect((await http.create(request())).status).toBe(409);
+      expect(await kid.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(beforeCampaign);
+      await kid.database.collections.artifact_versions.deleteOne({ _id: id(991) });
+      await kid.database.collections.experiment_operations.updateOne({ _id: failedReport._id }, { $set: { "m4Observation.evidenceDigest": "0".repeat(64) } });
+      expect((await http.create(request())).status).toBe(409);
+      expect(await kid.database.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(beforeCampaign);
+      await kid.database.collections.experiment_operations.updateOne({ _id: failedReport._id }, { $set: { m4Observation: failedReport.m4Observation } });
       const [uri, original] = bytes[0]; kid.store.files.set(uri, Uint8Array.of(0));
       expect((await http.create(request())).status).toBe(409);
       kid.store.files.set(uri, original);
@@ -869,7 +884,11 @@ describe("focused J11 paid-failure continuation", () => {
     expect(retained.state).toBe("failed");
     expect(await env.database.collections.artifact_versions.find({ _id: { $in: beforeVersions.map(v => v._id) } }).sort({ _id: 1 }).toArray()).toEqual(beforeVersions);
     expect([...env.store.files.entries()]).toEqual(beforeAssets);
-    await withMongoTransaction(env.database, async session => verifyM4Accounting(env.database, session, (await env.repository.getRun(env.runId))!));
+    await withMongoTransaction(env.database, async session => {
+      const current = (await env.repository.getRun(env.runId))!;
+      await verifyM4Accounting(env.database, session, current);
+      await verifyM4Accounting(env.database, session, current, undefined, createVerificationAttempt(env.store));
+    });
     expect((await env.repository.getRun(env.runId))!.counters.payableText).toBe(blocked.counters.payableText + 2);
     expect((await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }))!.requests).toBe(beforeCampaign.requests + 2);
   }, 120_000);

@@ -1,3 +1,5 @@
+import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { readM4FailureCampaign, readM4FailureSourceVersion } from "@/db/experiment-m4-accounting-evidence";
 import { z } from "zod";
 import type { ClientSession } from "mongodb";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
@@ -23,19 +25,19 @@ const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSc
 // proof here and exclude active save claims; an operation deadline need not expire.
 // This never releases money, retries generation, or repairs historical outputs.
 export async function hasM4KnownFailure(database: Database, session: ClientSession,
-  authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number): Promise<boolean> {
+  authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number, attempt?: VerificationAttempt): Promise<boolean> {
   const ledger = createExperimentCampaignLedger(database, authority);
   if (validateLegacyCountFailureProof(ledger.snapshot.policy, run, op)) {
-    const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
+    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, attempt);
     return run.m4?.campaignId === ledger.grant.campaignId && !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
       campaign.grantReference === ledger.grant.reference &&
-      !await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } });
+      !await readM4FailureSourceVersion(database, session, op._id, attempt);
   }
   if (m4UnclaimedFailureDigest(authority, run, op)) {
-    const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
+    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, attempt);
     return !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
       campaign.grantReference === ledger.grant.reference &&
-      !await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } });
+      !await readM4FailureSourceVersion(database, session, op._id, attempt);
   }
   const prep = op?.m4Preparation, reservation = op?.m4Reservation, observation = op?.m4Observation;
   if (!run || !op || !prep || !reservation || !observation || run.mode !== "balanced" || op.mode !== "balanced" ||
@@ -51,7 +53,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
       observation.evidenceDigest !== m4Hash(observation.evidenceJson) ||
       reservation.bucket !== m4ModelBucket(op.role, run.generationCompletedAtMs != null) ||
       reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket)) return false;
-  const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
+  const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, attempt);
   if (!campaign || campaign.policyHash !== ledger.snapshot.hash || campaign.policyJson !== ledger.snapshot.json ||
       campaign.grantReference !== ledger.grant.reference) return false;
   try {
@@ -69,7 +71,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
         reservation.unsettledMicrodollars === reservation.maximumMicrodollars &&
         op.resultJson === null && op.resultDigest === null && op.materializationJson === null && op.imageCompletionDigest == null &&
         !op.authorizationClaim && !op.resultFinalizationClaim && !op.imageCompletionClaim &&
-        !await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } });
+        !await readM4FailureSourceVersion(database, session, op._id, attempt);
     }
     const assessed = assessM4ProviderResult({ schemaVersion: "booklet_provider_v1", content: observation.content,
       providerEvidence: JSON.parse(observation.evidenceJson) }, ledger.snapshot.policy, op);
@@ -90,7 +92,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
   } catch { return false; }
   if (op.resultJson !== null || op.resultDigest !== null || op.materializationJson !== null || op.imageCompletionDigest != null ||
       [op.authorizationClaim, op.resultFinalizationClaim, op.imageCompletionClaim].some((claim) => claim && claim.expiresAtMs > nowMs) ||
-      await database.collections.artifact_versions.findOne({ sourceOperationId: op._id }, { session, projection: { _id: 1 } })) return false;
+      await readM4FailureSourceVersion(database, session, op._id, attempt)) return false;
   return true;
 }
 

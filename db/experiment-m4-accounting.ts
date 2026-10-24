@@ -1,3 +1,5 @@
+import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { readM4FailedOperations, readM4FailureCampaign } from "@/db/experiment-m4-accounting-evidence";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ExperimentRunDocument } from "@/db/documents";
@@ -15,10 +17,10 @@ function invalid(): never { throw new ExperimentRepositoryError("invalid_state",
 
 // Read-only exit evidence. Projection omits creative output and prepared context;
 // owning completion already checks those against original authenticated output.
-export async function verifyM4Accounting(database: Database, session: ClientSession, run: ExperimentRunDocument, reportOperationId?: string) {
+export async function verifyM4Accounting(database: Database, session: ClientSession, run: ExperimentRunDocument, reportOperationId?: string, attempt?: VerificationAttempt) {
   if (!hasM4SimulatedImagePolicy(run) || !run.m4 || run.counters.payableImage !== 0) invalid();
   const { policy, hash } = m4PolicySnapshot(JSON.parse(run.m4.policyJson));
-  const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.m4.campaignId }, { session });
+  const campaign = await readM4FailureCampaign(database, session, run.m4.campaignId, attempt);
   if (!campaign || (campaign.state !== "active" && !(campaign.state === "stopped" && run.status === "completed" && run.evaluationStatus === "failed")) || campaign.policyHash !== hash || campaign.policyJson !== run.m4.policyJson ||
       campaign.slots[run.persona] !== run._id || campaign.requests > policy.maxRequests || campaign.judgeRunIds.length > policy.maxJudges ||
       campaign.settledMicrodollars + campaign.reservedMicrodollars > policy.maxMicrodollars) invalid();
@@ -48,6 +50,8 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
     "m4Preparation.publishedWorkflowId": 1, "m4Observation.evidenceJson": 1, "m4Observation.evidenceDigest": 1,
     "m4Observation.remoteStatus": 1, "m4Observation.issue": 1,
   } }).toArray();
+  const failedOperations = attempt ? await readM4FailedOperations(database, session, run._id,
+    operations.filter(operation => operation.state === "failed").map(operation => operation._id), attempt) : null;
   let texts = 0; let images = 0;
   for (const operation of operations) {
     // Pause may close a published workflow before it claims any provider action.
@@ -59,9 +63,10 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
     if (operation.state === "failed") {
       // Only inspected, explicitly continued terminal failures count as retained
       // paid history. Load their full proof on this exceptional path only.
-      const failed = await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
+      const failed = failedOperations ? failedOperations.get(operation._id) :
+        await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
       if (failed && run.status === "completed" && run.evaluationStatus === "failed" &&
-          await isVerifiedAdvisoryFailure(database, session, run, failed, run.updatedAtMs)) {
+          await isVerifiedAdvisoryFailure(database, session, run, failed, run.updatedAtMs, attempt)) {
         texts += failed.reservationCount;
         continue;
       }
@@ -75,7 +80,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
           provenance.requestDigest !== (unclaimedDigest ? failed.m4Preparation?.requestDigest : failed.m4Reservation?.requestDigest) ||
           !provenance.reference || !Number.isSafeInteger(provenance.resumedAtMs) ||
           !await hasM4KnownFailure(database, session, { policy, grant: { campaignId: campaign._id, reference: campaign.grantReference } },
-            run, failed, provenance.resumedAtMs)) invalid();
+            run, failed, provenance.resumedAtMs, attempt)) invalid();
       if (!unclaimedDigest) texts++;
       continue;
     }
