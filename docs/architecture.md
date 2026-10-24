@@ -94,7 +94,9 @@ passes and a second reviewed release enables the candidate. Reader selection is
 internal to one verification attempt, never a public creation parameter or cache.
 The delivered candidate failed the live speed gate: less returned data was offset
 by the additional comparison request. It remains diagnostic-only; normal
-admission uses the original reader and Creator remains unsubmitted.
+admission uses the original reader. The initial Balanced Creator was admitted
+after the separately approved creation-only 60-second server/browser budgets
+were deployed. See the M4 record for its current saved outcome.
 Those speed gates govern candidate adoption only. They do not block persona or
 M4 acceptance under the user's accepted-latency decision.
 
