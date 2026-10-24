@@ -90,6 +90,35 @@ evidence volume from read latency without another database query. These are not
 wire-byte counts. Local preservation tests and live admission remain separate
 gates; no deadline or proof predicate changes.
 
+Source [#248](https://github.com/karpishe-experiments/agentic-poc/pull/248) and
+staging [#249](https://github.com/karpishe-experiments/agentic-poc/pull/249) passed
+two independent reviews each and lean CI. Source validation passed 45 focused
+persistence cases (43 unrelated cases skipped), 47 units, typecheck, focused lint
+and 210 documentation checks. The port passed 38 accounting cases and 47 units;
+seven unchanged source cases remain applicable. Release
+`5bcbd6fab9c0721e2bdac0ff8bf6f183e1fb79bb` started normal deployment
+`40082936544`. Client observation expired with exit 124 while the host continued.
+The last available journal reported active backup
+`staging-20261024T094527Z-783dbe9b52522de8`, image
+`sha256:e1e0f954a0899808d59270ec4f195205e4fd54c00a99680ed06f4592a4da0f13`.
+Later status jobs `40083572316` and `40083726000` did not start: GitHub's
+annotation reports failed account payments or a spending-limit restriction.
+No stop or deployment replay was sent. The operator's read-only status for exact
+request `40082936544-1` confirmed complete/archived at the selected release and
+image. Direct application readiness reports MongoDB/assets ready, maintenance
+off and a healthy runner. GitHub Actions remains unavailable; the separate Check
+deployment workflow was not run. Creator's pending identity remained absent and
+preflight was idle before one same-key submission on this release. Admission
+still failed after 30,159 ms. Kid's six proof records returned 1,116,251 decoded
+JSON bytes in 10,457 ms; Parent's three returned 445,586 bytes in 4,211 ms. These
+are application JSON sizes, not wire/BSON bytes. The narrower reads did not
+establish a live latency improvement. Creator's exact pending identity is still
+not found and preflight is ready/idle. Preserve key
+`272ad2ef-920d-4aad-8feb-393bd2c56506`; no provider work or allowance was added.
+Further correction requires evidence about actual compressor negotiation and
+query/read behavior. GitHub's account restriction blocks the required CI and
+normal delivery for another correction; billing repair is an operator handoff.
+
 Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
 [#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
 [#242](https://github.com/karpishe-experiments/agentic-poc/pull/242), with two clean
@@ -226,8 +255,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `477bf084aea25bb7c57fce9e2f64bfc510070d50`,
-image `sha256:b5ea65cc052eb55d9325402ab14a7752654caf7c9a0bf2b7a6d8300b1e087a62`.
+The verified serving release is `5bcbd6fab9c0721e2bdac0ff8bf6f183e1fb79bb`,
+image `sha256:e1e0f954a0899808d59270ec4f195205e4fd54c00a99680ed06f4592a4da0f13`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
