@@ -53,4 +53,12 @@ describe("bounded admission read endpoint", () => {
     mocks.diagnose.mockRejectedValue(new Error("private URI and proof"));
     const failed = await GET(request(query)); expect(failed.status).toBe(409); expect(JSON.stringify(await failed.json())).not.toContain("private");
   });
+  it.each(["candidate-proofs", "candidate-audit"])("accepts only the explicit %s read mode", async part => {
+    vi.stubEnv("ACCESS_GATE_PASSWORD", "abcdefghijklmnop"); vi.stubEnv("DEPLOYMENT_ENV", "_staging");
+    const authority = { grant: {} }, database = {};
+    mocks.config.mockReturnValue({ enabled: true, config: { m4: { state: "granted", authority } } });
+    mocks.database.mockReturnValue(database); mocks.diagnose.mockResolvedValue({ readOnly: true });
+    expect((await GET(request(`probe=admission-read&persona=playful_kid&part=${part}`))).status).toBe(200);
+    expect(mocks.diagnose).toHaveBeenCalledExactlyOnceWith(database, authority, "playful_kid", part);
+  });
 });

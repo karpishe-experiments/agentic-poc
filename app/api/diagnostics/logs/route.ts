@@ -1,5 +1,6 @@
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
+import type { AdmissionReadPart } from "@/lib/contracts/experiment-admission-diagnostics";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,10 +14,10 @@ export function GET(request: Request) {
     if ([...params.keys()].some(key => !["probe", "persona", "part"].includes(key)) ||
         [...params.keys()].some(key => params.getAll(key).length !== 1) ||
         !["playful_kid", "enthusiast_parent"].includes(params.get("persona") ?? "") ||
-        !["proofs", "plan"].includes(params.get("part") ?? "")) {
+        !["proofs", "plan", "candidate-proofs", "candidate-audit"].includes(params.get("part") ?? "")) {
       return Response.json({ error: "invalid_request" }, { status: 400, headers });
     }
-    return admissionRead(params.get("persona") as "playful_kid" | "enthusiast_parent", params.get("part") as "proofs" | "plan");
+    return admissionRead(params.get("persona") as "playful_kid" | "enthusiast_parent", params.get("part") as AdmissionReadPart);
   }
   const runId = params.get("runId") ?? undefined;
   const rawLimit = params.get("limit") ?? "200";
@@ -28,7 +29,7 @@ export function GET(request: Request) {
   return Response.json({ data: recentDiagnostics(runId, Number(rawLimit)) }, { headers });
 }
 
-async function admissionRead(persona: "playful_kid" | "enthusiast_parent", part: "proofs" | "plan") {
+async function admissionRead(persona: "playful_kid" | "enthusiast_parent", part: AdmissionReadPart) {
   const headers = { "Cache-Control": "no-store" };
   const { readM4RunnerConfig } = await import("@/lib/experiment-runner/m4-config");
   const configuration = readM4RunnerConfig();

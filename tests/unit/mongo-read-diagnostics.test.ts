@@ -23,13 +23,15 @@ describe("public MongoDB read monitoring", () => {
       events.emit("commandSucceeded", { commandName: "find", duration: 20, reply: { cursor: { firstBatch: ["private-proof"] } }, address: "private-host" });
       events.emit("commandSucceeded", { commandName: "getMore", duration: 5, reply: { cursor: { nextBatch: [1, 2] } } });
       events.emit("commandFailed", { commandName: "explain", duration: 7, failure: "private-proof" });
+      events.emit("commandSucceeded", { commandName: "aggregate", duration: 4, reply: { cursor: { firstBatch: ["private-context"] } } });
       events.emit("commandSucceeded", { commandName: "insert", duration: 9, reply: "private-proof" });
       return 1;
     });
     expect(observed).toMatchObject({ value: 1, metrics: { checkoutCount: 1, checkoutFailed: 1, checkoutMs: 15,
       commands: [{ command: "find", elapsedMs: 20, outcome: "succeeded", batchRows: 1 },
         { command: "getMore", elapsedMs: 5, outcome: "succeeded", batchRows: 2 },
-        { command: "explain", elapsedMs: 7, outcome: "failed", batchRows: null }] } });
+        { command: "explain", elapsedMs: 7, outcome: "failed", batchRows: null },
+        { command: "aggregate", elapsedMs: 4, outcome: "succeeded", batchRows: 1 }] } });
     expect(JSON.stringify(observed)).not.toContain("private");
   });
   it("isolates concurrent scopes, caps commands and retains timing on failure", async () => {

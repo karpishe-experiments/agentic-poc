@@ -27,7 +27,7 @@ export function installMongoReadDiagnostics(client: MongoClient) {
   });
   const record = (event: CommandSucceededEvent | CommandFailedEvent, succeeded: boolean) => {
     const state = scope.getStore();
-    if (!state || !["find", "getMore", "explain"].includes(event.commandName)) return;
+    if (!state || !["find", "getMore", "explain", "aggregate"].includes(event.commandName)) return;
     if (state.commands.length >= 100) { state.droppedCommands++; return; }
     let batchRows: number | null = null;
     if (succeeded && "reply" in event && event.reply && typeof event.reply === "object") {

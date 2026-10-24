@@ -1,16 +1,22 @@
 import { createHash } from "node:crypto";
 import type { AssetStore } from "@/lib/assets/asset-store";
+import type { ExperimentOperationDocument } from "@/db/documents";
+
+export type VerificationReadOptions = {
+  failedProofReader?: (runId: string, ids: string[]) => Promise<ExperimentOperationDocument[]>;
+};
 
 // Distinguish unreadable storage from bytes that contradict saved evidence.
 export class ImageEvidenceMismatch extends Error {}
 
 // Create inside the transaction callback, never outside withMongoTransaction.
 // A retry, later phase or later request must build new evidence from storage.
-export function createVerificationAttempt(store: AssetStore) {
+export function createVerificationAttempt(store: AssetStore, options: VerificationReadOptions = {}) {
   const bytes = new Map<string, Uint8Array>();
   const checked = new Set<string>();
   const metadata = new Map<string, unknown>();
   return {
+    failedProofReader: options.failedProofReader,
     async metadata<T>(key: string, load: () => Promise<T>): Promise<T> {
       if (metadata.has(key)) return metadata.get(key) as T;
       const value = await load();
