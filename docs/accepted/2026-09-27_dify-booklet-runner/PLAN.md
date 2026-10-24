@@ -210,7 +210,7 @@ and reconcile active/uncertain work before configuration changes; do not replay
 unknown outcomes automatically. Existing PRD limits and release authority remain
 unchanged.
 
-**Exit:** all Balanced cases have verified generation and current configuration/accounting evidence. A verified terminal tester or judge failure permits completion with evaluation incomplete; unknown outcomes and unresolved ownership remain blocking. Reports remain advisory and their failure must not trigger generation replay. This does not prove image quality, successful advisory evaluation or Real acceptance. Preserve completed Kid and Parent; finish the initial Creator after evidenced admission repair. See M4 for exact retained identities and measurements.
+**Exit:** all Balanced cases have verified generation and current configuration/accounting evidence. A verified terminal tester or judge failure permits completion with evaluation incomplete; unknown outcomes and unresolved ownership remain blocking. Reports remain advisory and their failure must not trigger generation replay. This does not prove image quality, successful advisory evaluation or Real acceptance. Observed persistence/admission latency is accepted and requires no speed improvement for M4 acceptance. Preserve completed Kid and Parent; finish the initial Creator after its existing verification and atomic creation can complete within the separately approved 60-second creation budget. A timeout is not successful verification. See M4 for exact retained identities and measurements.
 
 ## Milestone 5 — Clean staging transition and Real acceptance
 
