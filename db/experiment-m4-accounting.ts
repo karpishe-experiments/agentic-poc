@@ -1,5 +1,5 @@
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { readM4FailedOperations, readM4FailureCampaign, readM4AccountingOperations } from "@/db/experiment-m4-accounting-evidence";
+import { isUnclaimedPauseFailure, readM4FailedOperations, readM4FailureCampaign, readM4AccountingOperations } from "@/db/experiment-m4-accounting-evidence";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ExperimentRunDocument } from "@/db/documents";
@@ -48,16 +48,13 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
       new Set(judges).size !== judges.length || judges.length !== campaign.judgeRunIds.length || judges.some((id) => !campaign.judgeRunIds.includes(id))) invalid();
   const operations = await readM4AccountingOperations(database, session, run._id);
   const failedOperations = attempt ? await readM4FailedOperations(database, session, run._id,
-    operations.filter(operation => operation.state === "failed").map(operation => operation._id), attempt) : null;
+    operations.filter(operation => operation.state === "failed" && !isUnclaimedPauseFailure(operation)).map(operation => operation._id), attempt) : null;
   let texts = 0; let images = 0;
   await measurePhase({ runId: run._id }, "accounting_operation_validation", async () => {
     for (const operation of operations) {
       // Pause may close a published workflow before it claims any provider action.
       // Preserve that history without inventing a request or reservation for it.
-      if (operation.mode === "balanced" && operation.state === "failed" && operation.safeFailure === null &&
-          operation.reservationCount === 0 && operation.remoteStatus === "succeeded" && operation.workflowRunId && operation.verifiedWorkflowId &&
-          !operation.m4Reservation && !operation.m4Observation && !operation.resultJson && !operation.materializationJson &&
-          !operation.imageCompletionDigest && !operation.authorizationClaim && !operation.resultFinalizationClaim && !operation.imageCompletionClaim) continue;
+      if (isUnclaimedPauseFailure(operation)) continue;
       if (operation.state === "failed") {
         // Only inspected, explicitly continued terminal failures count as retained
         // paid history. Load their full proof on this exceptional path only.
