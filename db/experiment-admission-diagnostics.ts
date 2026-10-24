@@ -2,13 +2,15 @@ import type { Database } from "@/db/client";
 import { withMongoTransaction } from "@/db/client";
 import type { M4Authority } from "@/db/experiment-campaign";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { isUnclaimedPauseFailure, m4FailedProofProjection, readM4AccountingOperations } from "@/db/experiment-m4-accounting-evidence";
+import { candidateProofMetrics, isUnclaimedPauseFailure, m4FailedProofProjection, readM4AccountingOperations, readM4CandidateProofs } from "@/db/experiment-m4-accounting-evidence";
 import { observeMongoRead, withMongoReadPhase } from "@/db/mongo-read-diagnostics";
 import { retainAdmissionRead } from "@/lib/experiment-runner/diagnostics";
-import type { AdmissionReadDiagnostic } from "@/lib/contracts/experiment-admission-diagnostics";
+import type { AdmissionReadDiagnostic, AdmissionReadPart } from "@/lib/contracts/experiment-admission-diagnostics";
+import { m4Hash } from "@/lib/experiment-runner/m4-request";
+import { verifyExperimentGeneration } from "@/db/experiment-completion";
 
 export type AdmissionDiagnosticPersona = "playful_kid" | "enthusiast_parent";
-export type AdmissionDiagnosticPart = "proofs" | "plan";
+export type AdmissionDiagnosticPart = AdmissionReadPart;
 
 function summarizePlan(raw: Record<string, unknown>): NonNullable<NonNullable<AdmissionReadDiagnostic["value"]>["plan"]> {
   const stages = new Set<string>();
@@ -48,13 +50,27 @@ export async function diagnoseAdmissionRead(database: Database, authority: M4Aut
       const failedIds = operations.filter(operation => operation.state === "failed" && !isUnclaimedPauseFailure(operation)).map(operation => operation._id);
       if (part === "plan") return { failedIds, rows: null, decodedJsonBytes: null, queryElapsedMs: null };
       const start = performance.now();
-      const rows = await withMongoReadPhase("proofs", () => database.collections.experiment_operations.find({ runId, _id: { $in: failedIds } },
-        { session, projection: m4FailedProofProjection }).toArray());
+      const candidate = candidateProofMetrics();
+      if (part === "candidate-audit") {
+        const { createAssetStore } = await import("@/lib/assets/create-asset-store");
+        await withMongoReadPhase(part, () => verifyExperimentGeneration(database, session, run, createAssetStore(), undefined, "completion", undefined, {
+          failedProofReader: (targetRunId, ids) => readM4CandidateProofs(database, session, targetRunId, ids, candidate),
+        }));
+        return { failedIds, rows: candidate.selectedRows, decodedJsonBytes: candidate.returnedJsonBytes,
+          queryElapsedMs: Math.round(performance.now() - start), candidate, auditPassed: true, runRevision: run.revision,
+          selectionDigest: m4Hash(JSON.stringify([...failedIds].sort())) };
+      }
+      const rows = await withMongoReadPhase(part, () => part === "candidate-proofs"
+        ? readM4CandidateProofs(database, session, runId, failedIds, candidate)
+        : database.collections.experiment_operations.find({ runId, _id: { $in: failedIds } },
+          { session, projection: m4FailedProofProjection }).toArray());
       const queryElapsedMs = Math.round(performance.now() - start);
-      return { failedIds, rows: rows.length, decodedJsonBytes: rows.reduce((sum, row) => sum + Buffer.byteLength(JSON.stringify(row), "utf8"), 0),
-        queryElapsedMs };
+      return { failedIds, rows: rows.length, decodedJsonBytes: part === "candidate-proofs" ? candidate.returnedJsonBytes
+        : rows.reduce((sum, row) => sum + Buffer.byteLength(JSON.stringify(row), "utf8"), 0),
+        queryElapsedMs, runRevision: run.revision, selectionDigest: m4Hash(JSON.stringify([...failedIds].sort())),
+        ...(part === "candidate-proofs" ? { candidate } : {}) };
     });
-    if (part === "proofs") return { ...selected, failedIds: undefined, plan: null };
+    if (part !== "plan") return { ...selected, failedIds: undefined, plan: null };
     // MongoDB cannot explain within a transaction. This separate read-only plan
     // is diagnostic evidence only, never an admission proof.
     const plan = await withMongoReadPhase("plan", () => database.collections.experiment_operations.find({ runId, _id: { $in: selected.failedIds } },
