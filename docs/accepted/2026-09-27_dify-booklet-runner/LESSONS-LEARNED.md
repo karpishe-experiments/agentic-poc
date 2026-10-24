@@ -727,6 +727,19 @@ it still needs full preservation proof, fresh mutable checks and a bounded outer
 request. Fake-provider persistence tests must advance the actual budget clock,
 not only use fast deterministic responses. Local proof is not live recovery.
 
+### Measure combined admission with retained failure history
+
+When a later persona must audit multiple completed runs, isolated successful
+fixtures do not represent accumulated failure proofs. Live Creator admission used
+about 21 seconds in accounting and exhausted its 30-second budget before saving.
+Measure accounting, generation audit, transaction and response separately before
+changing a timeout. Batch evidence reads within one transaction attempt, then run
+every existing predicate. Materialization checks must keep their global scope:
+a wrongly owned source version also invalidates a claimed failure. Evidence:
+bounded admission diagnostics and the combined Kid/Parent persistence fixture.
+Promotion candidate: documentation for transaction-local verification and sizing;
+live success after batching still requires verification.
+
 ### Recheck a pinned proof within its mutation scope
 
 After the interactive cap was removed from exact maintenance recovery, the next

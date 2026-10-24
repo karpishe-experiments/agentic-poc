@@ -44,6 +44,13 @@ query/storage counts. These counts are not all database traffic. Diagnostics do
 not authorize a retry or turn an uncertain save into success; inspect saved state
 before repeating a pending creation key.
 
+Generation accounting uses transaction-local evidence reads. It loads full failed
+operation proofs by run and selected IDs, batches global materialization-source
+lookups, and reuses the campaign document within that attempt. Proof predicates
+still run for each operation; a source version under any owner rejects a failure.
+A transaction retry creates fresh evidence. Other callers retain uncached reads;
+no cached evidence crosses a campaign write, request or transaction attempt.
+
 Deployment initialization performs required setup and bounded availability checks:
 configuration, connectivity, exact collections/indexes, admission schema and seed
 readiness. It does not scan historical experiments. The explicit `npm run db:verify`

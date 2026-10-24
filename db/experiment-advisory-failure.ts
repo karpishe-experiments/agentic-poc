@@ -1,3 +1,5 @@
+import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { readM4FailureCampaign } from "@/db/experiment-m4-accounting-evidence";
 import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
@@ -10,7 +12,7 @@ import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-tex
 // A report failure is advisory only after its owning execution has ended.
 // This predicate grants neither another request nor release of reserved money.
 export async function isVerifiedAdvisoryFailure(database: Database, session: ClientSession,
-  run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number): Promise<boolean> {
+  run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number, attempt?: VerificationAttempt): Promise<boolean> {
   if (run.generationCompletedAtMs == null || !run.generationVersionIds?.length ||
       !["tester", "judge"].includes(op.role) || op.taskId !== null || op.subjectKind !== "book" ||
       op.subjectId !== run.bookletId || op.runId !== run._id || op.mode !== run.mode || op.providerKind !== "text" ||
@@ -39,8 +41,8 @@ export async function isVerifiedAdvisoryFailure(database: Database, session: Cli
   if (!binding || op.verifiedWorkflowId !== binding.publishedWorkflowId) return false;
   if (run.mode === "simulated") return op.remoteStatus === "failed";
   if (run.mode !== "balanced" || !run.m4) return false;
-  const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.m4.campaignId }, { session });
+  const campaign = await readM4FailureCampaign(database, session, run.m4.campaignId, attempt);
   if (!campaign) return false;
   return hasM4KnownFailure(database, session, { policy: m4PolicySnapshot(JSON.parse(run.m4.policyJson)).policy,
-    grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, op, nowMs);
+    grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, op, nowMs, attempt);
 }

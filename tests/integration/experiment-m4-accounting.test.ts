@@ -4,6 +4,7 @@ import { createExperimentRepository } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
@@ -17,7 +18,7 @@ afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatab
 
 // One real preparation/claim/GET/materialization sequence in an isolated DB.
 // This proves the accounting component, not completion of a persona booklet.
-async function setup() {
+async function setup(cached = false) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
   const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-accounting-only" } };
@@ -53,15 +54,16 @@ async function setup() {
     parentWorkflowRunId: null, nowMs: 8 };
   const observe = () => observer.observe({ runId: id(10), operationId: id(12), nowMs: 7 });
   const verify = () => withMongoTransaction(db, async (session) => verifyM4Accounting(db, session,
-    (await db.collections.experiment_runs.findOne({ _id: id(10) }, { session }))!));
+    (await db.collections.experiment_runs.findOne({ _id: id(10) }, { session }))!, undefined,
+    cached ? createVerificationAttempt({ get: vi.fn(), put: vi.fn(), exists: vi.fn() }) : undefined));
   const campaign = () => db.collections.experiment_campaigns.findOne({ _id: id(1) });
   const records = async () => ({ run: await repository.getRun(id(10)), operation: await repository.getOperation(id(12)), campaign: await campaign() });
   return { db, repository, authority, config, runtime, completion, observe, verify, campaign, records };
 }
 
-describe("Balanced accounting and original-result completion", () => {
+describe.each([false, true])("Balanced accounting and original-result completion (cached=%s)", (cached) => {
   it("accepts attributed settled evidence and keeps duplicate valid completion and exit verification read-only", async () => {
-    const env = await setup();
+    const env = await setup(cached);
     expect(await env.observe()).toMatchObject({ kind: "result", result: env.completion.envelope.result });
     expect(env.runtime.retrieve).toHaveBeenCalledWith(env.config.bindings[0], id(13));
     expect(env.runtime.start).not.toHaveBeenCalled();
@@ -76,7 +78,7 @@ describe("Balanced accounting and original-result completion", () => {
   });
 
   it("rejects a callback's plausible result without original GET evidence before materialization", async () => {
-    const env = await setup(); const before = await env.records();
+    const env = await setup(cached); const before = await env.records();
     await expect(env.repository.completeOperation(env.completion)).rejects.toMatchObject({ code: "invalid_result" });
     expect(env.runtime.retrieve).not.toHaveBeenCalled();
     expect(await env.repository.getRun(id(10))).toEqual(before.run);
@@ -88,7 +90,7 @@ describe("Balanced accounting and original-result completion", () => {
   });
 
   it("retains an unclaimed Pause attempt without inventing accounting after Resume", async () => {
-    const env = await setup(); await env.observe(); await env.repository.completeOperation(env.completion);
+    const env = await setup(cached); await env.observe(); await env.repository.completeOperation(env.completion);
     const before = await env.records();
     const runtime: WorkflowRuntime = {
       start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
@@ -123,7 +125,7 @@ describe("Balanced accounting and original-result completion", () => {
   });
 
   it("rejects a retained failed claimed operation even when its safeFailure is null", async () => {
-    const env = await setup(); await env.observe(); await env.repository.completeOperation(env.completion); await env.verify();
+    const env = await setup(cached); await env.observe(); await env.repository.completeOperation(env.completion); await env.verify();
     // Isolated corruption fixture: a paid failed attempt cannot use the Pause exclusion.
     await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { state: "failed", safeFailure: null } });
     const before = await env.records();
@@ -132,7 +134,7 @@ describe("Balanced accounting and original-result completion", () => {
   });
 
   it("rejects tampered creative content even after valid GET and settlement", async () => {
-    const env = await setup(); await env.observe(); const before = await env.records();
+    const env = await setup(cached); await env.observe(); const before = await env.records();
     await expect(env.repository.completeOperation({ ...env.completion, envelope: { ...env.completion.envelope,
       result: { ...env.completion.envelope.result, payload: { ...env.completion.envelope.result.payload, taskId: "J02" } },
     } })).rejects.toThrow("must match retained provider evidence and usage");
@@ -158,7 +160,7 @@ describe("Balanced accounting and original-result completion", () => {
     { name: "provider usage evidence", target: "operation", patch: { "m4Observation.evidenceJson": "{}" } },
     { name: "original observation status", target: "operation", patch: { "m4Observation.remoteStatus": "failed" } },
   ])("rejects $name corruption at accounting exit", async ({ target, patch }) => {
-    const env = await setup(); await env.observe(); await env.repository.completeOperation(env.completion); await env.verify();
+    const env = await setup(cached); await env.observe(); await env.repository.completeOperation(env.completion); await env.verify();
     if (target === "run") await env.db.collections.experiment_runs.updateOne({ _id: id(10) }, { $set: patch });
     else if (target === "campaign") await env.db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: patch });
     else await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: patch });

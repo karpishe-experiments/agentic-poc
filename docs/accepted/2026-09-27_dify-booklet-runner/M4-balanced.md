@@ -1,6 +1,6 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved after two same-key creation attempts. The creation exception remains unverified. The user authorized blocker fixes and continuation; M4 remains incomplete.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. Live diagnostics show that retained generation/accounting audits exhausted the 30-second creation budget. The user authorized blocker fixes and continuation; M4 remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
@@ -26,15 +26,24 @@ retry or new allowance was used. Creator remains unverified and must not be
 reported as started. Preserve the pending key and inspect saved state before any
 further creation action.
 
-Candidate creation diagnostics separate the tracked mutation, campaign admission,
-each predecessor generation audit, accounting and full-detail loading. They
-retain bounded timings, instrumented query/storage counts, transaction attempts
-and allowlisted error categories; no exception bodies are retained. Admission
-still validates every predecessor and uses the same HTTP budget. The combined Kid,
-Parent and Creator admission case passed with real persistence and fake providers,
-including corrupt-byte rejection, unchanged predecessor evidence and same-key
-replay without dispatch. This does not establish the live exception or live
-Creator admission.
+Diagnostics from source [#239](https://github.com/karpishe-experiments/agentic-poc/pull/239)
+and staging [#240](https://github.com/karpishe-experiments/agentic-poc/pull/240) are
+live. A retained-key admission took 32,963 ms against the unchanged 30-second
+budget. Kid accounting used 13,929 ms and its generation audit 20,043 ms; Parent
+accounting used 7,331 ms and its generation audit failed after the budget expired.
+The transaction did not reach a successful save. Read-only refresh still found no
+Balanced Creator; preflight was idle. No provider work was dispatched by creation.
+
+The candidate correction batches full failed-operation proofs and global
+materialization-source reads and reuses the campaign document only within one
+transaction-local verification attempt. All proof predicates, byte checks,
+ownership checks, monetary calculations and the 30-second budget remain. A retry
+uses fresh evidence; no historical record or allowance is changed. Local query
+reduction is not proof of live admission success.
+
+Staging release `6b2af49f43935ef98ee375f9cc9f3cb688b153ac` completed through normal
+deployment `40069588788`. Client observation expired with exit 124; read-only status
+`40070331433` confirmed complete/archived and Check deployment `40070396252` passed.
 
 ## Delivered Parent layout correction
 
@@ -93,7 +102,7 @@ fake providers before delivery, including actual bounded manager requests.
 Obtain two independent reviews and lean CI, deliver normally, recheck live
 readiness, then execute sequentially. Stop on technical failure or uncertainty;
 advisory report failure alone can complete valid generation under the accepted
-criterion. This candidate does not yet establish live Parent/Creator completion.
+criterion. Parent completion is verified above; Creator completion remains unverified.
 
 ## Current execution record - 2026-10-22
 
@@ -165,8 +174,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `5496a999c9c5f5a125faf80b3aff603b7bb51608`,
-image `sha256:809892a66aad35c538b0234722b578aa17f07e1fc5afe68d746b6f8f48db56bd`.
+The verified serving release is `6b2af49f43935ef98ee375f9cc9f3cb688b153ac`,
+image `sha256:e0979444fd80e97201943a2a65c1f5283dac05936c1bd18356268196e7b17404`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
