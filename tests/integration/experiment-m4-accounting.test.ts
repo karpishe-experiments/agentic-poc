@@ -3,6 +3,7 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
+import { readM4AccountingOperations } from "@/db/experiment-m4-accounting-evidence";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
@@ -120,8 +121,30 @@ describe.each([false, true])("Balanced accounting and original-result completion
     expect((await env.repository.getRun(id(10)))!.counters).toEqual(before.run!.counters);
     expect(await env.campaign()).toEqual(before.campaign);
     expect(await env.repository.listOperations(id(10))).toEqual(history);
+    for (const field of ["resultJson", "materializationJson"] as const) {
+      await env.db.collections.experiment_operations.updateOne({ _id: history[1]._id }, { $set: { [field]: "unexpected-saved-body" } });
+      await expect(env.verify()).rejects.toThrow("complete attributable accounting");
+      await env.db.collections.experiment_operations.updateOne({ _id: history[1]._id }, { $set: { [field]: null } });
+    }
+    await env.verify();
     expect(runtime.start).toHaveBeenCalledTimes(1);
     expect(runtime.retrieve).not.toHaveBeenCalled();
+  });
+
+  it("projects large successful bodies out but retains exact failed bodies without rewriting storage", async () => {
+    const env = await setup(cached); await env.observe(); await env.repository.completeOperation(env.completion);
+    const resultJson = JSON.stringify({ privateBody: "x".repeat(300_000) });
+    const materializationJson = JSON.stringify({ privateMaterialization: "y".repeat(300_000) });
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { resultJson, materializationJson } });
+    const read = () => withMongoTransaction(env.db, session => readM4AccountingOperations(env.db, session, id(10)));
+    const successful = (await read())[0];
+    expect(successful.resultJson).toBeNull(); expect(successful.materializationJson).toBeNull();
+    expect(JSON.stringify(successful).length).toBeLessThan(20_000);
+    await env.verify();
+    expect(await env.repository.getOperation(id(12))).toMatchObject({ resultJson, materializationJson });
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { state: "failed" } });
+    expect((await read())[0]).toMatchObject({ resultJson, materializationJson });
+    await expect(env.verify()).rejects.toThrow("complete attributable accounting");
   });
 
   it("rejects a retained failed claimed operation even when its safeFailure is null", async () => {

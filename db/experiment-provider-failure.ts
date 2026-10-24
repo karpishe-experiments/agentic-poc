@@ -28,13 +28,13 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
   authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number, attempt?: VerificationAttempt): Promise<boolean> {
   const ledger = createExperimentCampaignLedger(database, authority);
   if (validateLegacyCountFailureProof(ledger.snapshot.policy, run, op)) {
-    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, attempt);
+    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
     return run.m4?.campaignId === ledger.grant.campaignId && !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
       campaign.grantReference === ledger.grant.reference &&
       !await readM4FailureSourceVersion(database, session, op._id, attempt);
   }
   if (m4UnclaimedFailureDigest(authority, run, op)) {
-    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, attempt);
+    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
     return !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
       campaign.grantReference === ledger.grant.reference &&
       !await readM4FailureSourceVersion(database, session, op._id, attempt);
@@ -53,7 +53,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
       observation.evidenceDigest !== m4Hash(observation.evidenceJson) ||
       reservation.bucket !== m4ModelBucket(op.role, run.generationCompletedAtMs != null) ||
       reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket)) return false;
-  const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, attempt);
+  const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
   if (!campaign || campaign.policyHash !== ledger.snapshot.hash || campaign.policyJson !== ledger.snapshot.json ||
       campaign.grantReference !== ledger.grant.reference) return false;
   try {
