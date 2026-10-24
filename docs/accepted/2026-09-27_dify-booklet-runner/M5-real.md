@@ -17,7 +17,10 @@ reset data, deploy changes or grant paid execution authority.
 The current [M4 diagnosis checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
 retains accepted Kid and Parent generation/accounting with incomplete advisory
 evaluation. Creator is still absent because prior-run audits exceed the creation
-budget. The latest diagnostics locate delay in full proof-command responses;
+budget. The user accepts the observed latency for M4; no performance improvement
+is required for acceptance. The implementation must still complete its evidence
+checks and atomic creation within an approved execution budget. The latest
+diagnostics locate delay in full proof-command responses;
 they do not establish a repair or negotiated compression. Preserve the campaign,
 failed reports and pending Creator identity. Last verified campaign exposure is
 94/500 requests, USD 0.105816 reserved and USD 0.103747 settled upper bound;

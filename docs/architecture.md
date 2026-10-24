@@ -37,6 +37,10 @@ reservations, liabilities, prior runs or policy snapshots are reset. This grant
 does not continue failed generation or allow a replacement persona run.
 
 Run creation retains its existing full-detail response and 30-second HTTP budget.
+The user accepts the observed latency as an M4 limitation. A speed improvement is
+not an M4 completion prerequisite. This acceptance does not change the implemented
+request deadline or permit incomplete evidence validation; a creation-only budget
+change is a separate pending decision.
 Bounded diagnostic phases distinguish tracked mutation/cleanup, campaign admission,
 each retained generation audit, accounting and detail loading. Failed phases expose
 only allowlisted error kind/code, timings, transaction attempts and instrumented
@@ -87,6 +91,8 @@ internal to one verification attempt, never a public creation parameter or cache
 The delivered candidate failed the live speed gate: less returned data was offset
 by the additional comparison request. It remains diagnostic-only; normal
 admission uses the original reader and Creator remains unsubmitted.
+Those speed gates govern candidate adoption only. They do not block persona or
+M4 acceptance under the user's accepted-latency decision.
 
 Generation accounting uses transaction-local evidence reads. It loads failed
 operation proofs by run and selected IDs, batches global materialization-source

@@ -1,9 +1,29 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. Live diagnostics show that retained generation/accounting audits exhausted the 30-second creation budget. The user authorized blocker fixes and continuation; M4 remains incomplete.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. The user accepts the observed persistence/admission latency as an M4 limitation; a speed improvement is not an acceptance prerequisite. Earlier creation attempts exhausted the implemented 30-second request budget. That execution constraint still requires a bounded solution before Creator can be saved. M4 remains incomplete.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Accepted latency limitation — 2026-10-24
+
+The user accepts the observed database-read and admission latency and directs
+that it must not block M4 acceptance. No additional profiling, index change,
+optimization adoption or minimum speedup is required to complete M4. The
+duplicate-context experiment below remains a measured unsuccessful optimization;
+normal admission keeps the original reader. Its speed gates apply only to that
+candidate's adoption, not to persona or milestone acceptance.
+
+All generation, current approval, dependency, original image-byte, ownership and
+accounting checks remain required. Latency acceptance cannot establish a
+successful verification or save when a request actually expires. The serving
+creation endpoint still has its 30-second budget. A narrowly scoped 60-second
+creation budget has been proposed to permit the existing synchronous checks;
+it is pending the user's answer and is not implemented or deployed by this
+documentation decision. Preserve the exact pending Creator key, reconcile saved
+state before submission, and do not retry an uncertain mutation automatically.
+The campaign and provider allowances remain unchanged; M5 remains on hold until
+Creator completes and M4's substantive evidence checks pass.
 
 ### Duplicate-context live result — 2026-10-24
 
