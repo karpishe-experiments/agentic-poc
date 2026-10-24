@@ -354,8 +354,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `b8dd99caf2048fa4ead5bef9c3c89604728b39d3`,
-image `sha256:030c54baa064402d3b3852520e75aac2352548c920d63f3c4d2e69771c449f72`.
+The verified serving release is `cfce1d94ec9cea46de397a5ec44180b17813da4d`,
+image `sha256:9f3e24776a8f5c663094ae7a03839649398456421a9b3dfcd420c9ebc27282e9`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
