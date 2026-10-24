@@ -176,7 +176,7 @@ Provide mode/persona selection (one or all), progress/current task, warnings/lim
 
 The independent Dify judge receives the brief, dialogue, decisions, artifacts and images. It reports intent adherence, visual consistency, interaction quality and available cost evidence. It cannot approve artifacts, trigger regeneration or block saved-booklet completion. Retain tester feedback separately. Mark simulated assessments as simulated, not real quality evidence.
 
-Distinguish booklet generation completion from evaluation status. A failed judge call must not undo stored generation success, but final experiment acceptance requires the retained reports. API-driven testers assess interaction flow, not human UI usability; browser checks provide separate UI evidence.
+Distinguish booklet generation completion from evaluation status. A failed advisory call must not undo stored generation success. For M4 Balanced acceptance, valid generation and accounting plus a verified terminal tester or judge failure permit completion with evaluation incomplete. Retain the failed attempt, omit a judge dependent on a failed tester, and do not retry the report. Unknown outcomes and unresolved ownership remain blocking. Retained reports remain required for the separately authorized Real acceptance. API-driven testers assess interaction flow, not human UI usability; browser checks provide separate UI evidence.
 
 ## 7. Observable acceptance
 
@@ -188,7 +188,7 @@ Distinguish booklet generation completion from evaluation status. A failed judge
 | AC04 | Real acceptance proceeds 3 → 5 → 8 pages, each plus cover; each retained run completes without manual repair during that run. |
 | AC05 | Required artifacts/images, current approvals, source lineage and run evidence are durably stored; quality warnings do not block completion. |
 | AC06 | Pause/restart/recovery, duplicates, concurrent completion, stale results and limits preserve completed work and do not automatically repeat uncertain paid work. |
-| AC07 | Tester and independent judge reports cover intent, consistency, cost and interaction quality; UI verification is separately recorded. |
+| AC07 | Tester and independent judge reports cover intent, consistency, cost and interaction quality; UI verification is separately recorded. M4 may retain verified terminal advisory failure with evaluation incomplete under section 6; this does not claim report coverage passed. |
 | AC08 | Codex's configuration → test → diagnosis → repair → publish → tool-sync → verify path works without routine manual clicks. |
 | AC09 | Local/staging transition is target-verified; production and existing Dify resources are unchanged. |
 | AC10 | Failures and linked successors remain inspectable; code repairs are distinguished from agent improvements. |

@@ -44,6 +44,20 @@ query/storage counts. These counts are not all database traffic. Diagnostics do
 not authorize a retry or turn an uncertain save into success; inspect saved state
 before repeating a pending creation key.
 
+Authenticated staging diagnostics also accept `probe=admission-read`, one retained
+`persona` (`playful_kid` or `enthusiast_parent`) and `part=proofs|plan` on the
+existing logs GET. Each request has a 30-second budget and resolves its target from
+the reviewed stopped campaign. It performs no campaign, run, accounting or provider
+mutation. Proof reads use the accounting query/projection inside a snapshot
+transaction; execution-plan inspection is separate because MongoDB cannot explain
+inside a transaction. Its plan is diagnostic evidence, never admission authority.
+The staging client enables public driver command monitoring; request-local scopes
+retain only checkout durations/counts and bounded find/getMore/explain timings and
+batch sizes. Neither commands nor replies are retained. Compression is configured
+as zlib; negotiated compression is unavailable through the public events used here.
+Query timings include response transfer and decoding, not server execution alone.
+No new credential, monitoring privilege or database migration is required.
+
 Generation accounting uses transaction-local evidence reads. It loads failed
 operation proofs by run and selected IDs, batches global materialization-source
 lookups, and reuses the campaign document within that attempt. Proof predicates
@@ -401,6 +415,13 @@ Historical run configuration hashes remain unchanged. See the
 ## Artifact and decision flow
 
 ### Issue #65 local foundation
+
+The current full suite has eighteen Community bindings: manager, J01-J12,
+three testers, simulated image transport (including J13), and judge. Simulated
+acceptance is complete. Balanced Kid and Parent have verified generation with
+incomplete advisory evaluation; Creator admission remains blocked. The subsections
+below retain incremental foundation details; current live status is owned by the
+[M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md).
 
 The [Dify booklet experiment](accepted/2026-09-27_dify-booklet-runner/PRD.md)
 has a separate `dify_booklet_v1` booklet profile. Its current local foundation
