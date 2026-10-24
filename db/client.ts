@@ -26,7 +26,12 @@ export function validateMongoUri(uri: string): string {
 export function createMongoDatabase(input: { uri: string; databaseName: string }): MongoDatabaseContext {
   // Collection calls supply CSOT explicitly. A client-level timeout is copied
   // into insertMany's internal bulk operation and conflicts with withTransaction.
-  const client = new MongoClient(validateMongoUri(input.uri), { maxPoolSize: 10, serverSelectionTimeoutMS: 5_000 });
+  // Negotiate lossless wire compression for large saved evidence reads. Servers
+  // without zlib support retain the driver's uncompressed transport fallback.
+  const client = new MongoClient(validateMongoUri(input.uri), {
+    maxPoolSize: 10, serverSelectionTimeoutMS: 5_000,
+    compressors: ["zlib"], zlibCompressionLevel: 3,
+  });
   const database = client.db(validateMongoDatabaseName(input.databaseName));
   return { client, database, collections: createCollectionHandles(database), close: () => client.close() };
 }

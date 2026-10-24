@@ -57,9 +57,21 @@ two independent reviews each and lean CI. The 43 focused persistence cases,
 `48a9d6bdca0c0e1a9f7f069103c44c5217b06225` completed through deployment
 `40073770189`; bounded client observation expired with exit 124, read-only status
 `40074687291` confirmed complete/archived and Check deployment `40074785234` passed.
-Live Creator admission on this release has not been attempted. The previous
-pending identity `998c1751-e458-47d4-88ea-ecca41504c78` reads as not found and
-preflight is idle; recover the existing pending creation controls before submitting.
+After the operator reconnected and refreshed the controls, the previous pending
+identity `998c1751-e458-47d4-88ea-ecca41504c78` remained absent and preflight was
+idle. Refresh had lost that key. One initial creation with the refreshed controls
+also failed, after 30,037 ms. Its pending identity
+`272ad2ef-920d-4aad-8feb-393bd2c56506` reads as not found; preflight is idle.
+Preserve this current key. No Balanced Creator or provider dispatch was saved.
+
+The granular phases identify full failed-proof reads as the main delay: Kid used
+10,450 ms for those reads and 99 ms for operation validation; Parent used 4,240 ms
+and 64 ms respectively. Kid's full generation audit used 18,370 ms and Parent's
+audit exhausted the remaining budget. The next bounded application correction
+requests the driver's built-in zlib wire compression, retaining complete evidence
+and all checks. Local tests cover exact full reads, multi-batch cursors,
+transaction commit and servers without compression. Live benefit remains
+unverified until reviewed delivery and one reconciled same-key admission.
 
 Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
 [#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
