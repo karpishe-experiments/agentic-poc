@@ -232,6 +232,11 @@
         "runId": "d07dace4-c4d0-4b57-879e-02fe54f0e530",
         "operationId": "0371a9ef-43ff-489a-926d-29c8470e27e2",
         "reference": "User 2026-10-22 approved fixing blockers then continuing initial Parent before Creator. Authenticated terminal malformed manager result retained; continue only after reviewed final-answer adapter installation, exact binding readback and resolved ownership. Preserve failed operation, counters and liability; no replay or successor."
+      },
+      {
+        "runId": "d07dace4-c4d0-4b57-879e-02fe54f0e530",
+        "operationId": "abcad8f9-d96f-40e2-bf8d-432d5a7f3666",
+        "reference": "User 2026-10-23 authorized blocker fixes then continuation: authenticated terminal J11 output duplicates a sheet subject and mixes saved version/image identities. Continue the same Parent only after reviewed subject-routing correction and normal validation; retain failed output, all charges and cumulative limits. No output repair, automatic retry or successor."
       }
     ],
     "completionRecoveries": [
@@ -266,8 +271,8 @@
     },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
-      "toBundleHash": "57ab75d19e9453a304383f253ebb646b088dd3c5f486608ab4be308b7cf35bdf",
-      "reference": "User approved remaining Parent/Creator execution and blocker fixes: eligible-route manager projection, compact advisory evidence; preserve frozen policy,32000-token guard and prior requests."
+      "toBundleHash": "67346ebedab1bc46b70096c655cae57c2c5c12c392826921ecf0383b6ffe8ea9",
+      "reference": "User approved remaining Parent/Creator execution and blocker fixes: eligible-route manager projection, compact advisory evidence and application-owned J11 sheet identities; preserve frozen policy, 32000-token guard and prior requests."
     },
     "remainingPersonaAdmission": {
       "anchorRunId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",

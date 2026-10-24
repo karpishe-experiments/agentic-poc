@@ -12,6 +12,16 @@ strict JSON parser remains authoritative. It does not repair malformed JSON or
 retry generation. Historical dev3 preparations and count-failure evidence remain
 readable; the exact protected dev4 package grant applies to new preparations.
 
+Balanced J11 preparation uses `sheet-subjects-v1`. The model selects unique
+character/location subjects per panel. Application code resolves their exact
+version and image IDs from the server-saved approved sheets, then applies the
+normal layout, currentness, approval, dependency and image-byte checks. Catalog
+errors block preparation; unknown or duplicate model selections fail creative
+validation. A saved context without this marker uses the legacy full-reference
+format. Model output cannot select the compatibility format. Historical requests
+and failed outputs are not rewritten; continuation requires an exact grant and
+creates new accounted work.
+
 Balanced manager preparation sends only booklet/persona/generation state and the
 application-selected eligible route and target. The application retains and
 validates the full artifact/provenance graph; routing does not resend it. The
