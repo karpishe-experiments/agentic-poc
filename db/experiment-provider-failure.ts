@@ -9,10 +9,10 @@ import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
-import { assessM4ProviderResult } from "@/lib/experiment-runner/m4-provider-result";
+import { assessM4ProviderResult, m4RetainedProviderWrapper } from "@/lib/experiment-runner/m4-provider-result";
 import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
-import { m4Digest, m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import { m4Digest, m4MaximumCharge, m4ModelBucket, m4OperationTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { isM4ContinuedReviewerInputFailure, m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
@@ -60,7 +60,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
       !m4Digest.safeParse(observation.wrapperDigest).success || observation.content === null || observation.evidenceJson === null ||
       observation.evidenceDigest !== m4Hash(observation.evidenceJson) ||
       reservation.bucket !== m4ModelBucket(op.role, run.generationCompletedAtMs != null && !continuedReviewer) ||
-      reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket)) return false;
+      reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket, m4OperationTokenPolicy(ledger.snapshot.policy, op).snapshot)) return false;
   const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
   if (!campaign || campaign.policyHash !== ledger.snapshot.hash || campaign.policyJson !== ledger.snapshot.json ||
       campaign.grantReference !== ledger.grant.reference) return false;
@@ -85,8 +85,8 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
         !op.authorizationClaim && !op.resultFinalizationClaim && !op.imageCompletionClaim &&
         !await readM4FailureSourceVersion(database, session, op._id, attempt);
     }
-    const assessed = assessM4ProviderResult({ schemaVersion: "booklet_provider_v1", content: observation.content,
-      providerEvidence: JSON.parse(observation.evidenceJson) }, ledger.snapshot.policy, op);
+    const assessed = assessM4ProviderResult(m4RetainedProviderWrapper(observation.content,
+      JSON.parse(observation.evidenceJson)), ledger.snapshot.policy, op);
     if (assessed.evidenceJson !== observation.evidenceJson || assessed.evidenceDigest !== observation.evidenceDigest ||
         assessed.violations.length || assessed.chargeUpperMicrodollars === null || reservation.evidenceDigest !== observation.evidenceDigest ||
         reservation.settledMicrodollars !== assessed.chargeUpperMicrodollars ||

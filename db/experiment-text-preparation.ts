@@ -6,14 +6,15 @@ import type { M4Authority } from "@/db/experiment-campaign";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentTaskSchema, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
-import { m4GrantSchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { M4ReportSizeError, prepareM4Request, projectM4Context, m4RequestBundleMatches, m4RequestDefinition, m4CanonicalJson,
+import { m4AdmittedTokenPolicy, m4GrantSchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { M4ReportSizeError, m4AuthorizationEnvelope, prepareM4Request, projectM4Context, m4RequestBundleMatches, m4RequestDefinition, m4CanonicalJson,
   type M4AllowedValues, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
 import { measurePhase, countVerificationQuery, countVerificationRead, recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { buildContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
+import { RECONCILIATION_RESERVE_MS } from "@/lib/operations/budget";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, nowMs: z.number().int().nonnegative() });
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
@@ -98,6 +99,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
   const contexts = createExperimentContextService(database, options);
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   async function prepare(raw: unknown): Promise<NonNullable<ExperimentOperationDocument["m4Preparation"]>> {
+    const effective = m4AdmittedTokenPolicy(snapshot.policy, grant);
     if (!m4RequestBundleMatches(snapshot.policy, grant)) conflict("M4 request definitions or amendment are not current.");
     const input = identity.parse(raw); const started = elapsedNow(); const diagnosticStartedAt = Date.now();
     const now = () => input.nowMs + Math.floor(elapsedNow() - started);
@@ -121,6 +123,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     }
     if (before.operation.m4Preparation) {
       const saved = before.operation.m4Preparation;
+      m4AdmittedTokenPolicy(snapshot.policy, grant, saved);
       if (saved.policyHash !== snapshot.hash || saved.sourceFingerprint !== before.sourceFingerprint ||
           saved.definitionHash !== m4RequestDefinition(selector).hash ||
           m4CanonicalJson(saved.definitionUpdate ?? null) !== m4CanonicalJson(grant.requestDefinitionUpdate ?? null) ||
@@ -139,6 +142,18 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     try {
       request = await measurePhase(input, "preparation_request_construction", async () =>
         prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context), grant));
+      // The actual timeout can only shrink. All other envelope fields remain
+      // immutable, so this upper bound also covers the later callback response.
+      const op = before.operation;
+      const encoded = m4AuthorizationEnvelope({ role: op.role, taskId: op.taskId, subjectKind: op.subjectKind,
+        subjectId: op.subjectId, mode: op.mode, inputFingerprint: op.inputFingerprint }, request.requestJson,
+      effective.snapshot, snapshot.policy.maxTimeoutSeconds, op.deadlineAtMs! - RECONCILIATION_RESERVE_MS, selector.report);
+      const authorizationBytes = Buffer.byteLength(encoded, "utf8");
+      if (authorizationBytes > 1_048_576) {
+        if (selector.report) throw new M4ReportSizeError(authorizationBytes, 1_048_576, request.definitionHash,
+          request.requestDigest, "authorization");
+        throw new Error("M4 escaped authorization response exceeds its transport byte limit before dispatch.");
+      }
     } catch (error) {
       if (!(error instanceof M4ReportSizeError) || !selector.report) throw error;
       await withMongoTransaction(database, async (session) => {
@@ -185,6 +200,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       }
     }
     const saved = { policyHash: snapshot.hash, configurationHash: before.run.configurationHash, definitionHash: request.definitionHash,
+      ...(effective.snapshot ? { tokenPolicy: effective.snapshot } : {}),
       ...(grant.providerAdapterUpdate ? { adapterUpdate: grant.providerAdapterUpdate } : {}),
       ...(grant.requestDefinitionUpdate ? { definitionUpdate: grant.requestDefinitionUpdate } : {}),
       requestDigest: request.requestDigest, requestJson: request.requestJson, contextJson, systemPrompt: request.systemPrompt,

@@ -166,6 +166,15 @@ class BoundedTests(unittest.TestCase):
             "store": False, "truncation": "disabled", "include": ["reasoning.encrypted_content"]}
         return payload
 
+    def amended_carrier(self):
+        provider = self.carrier()
+        digest = hashlib.sha256(json.dumps(provider, sort_keys=True, separators=(",", ":"),
+                                           ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+        return provider | {"bookletPolicy": {
+            "contractVersion": "booklet_carrier_v2", "requestDigest": digest,
+            "tokenPolicy": {"version": "m4_context_policy_v2", "hash": "b" * 64,
+                            "maxInputTokens": 128000, "warningInputTokens": 32000}}}
+
     def invoke_carrier(self, payload=None, raw=None, **overrides):
         payload = self.carrier() if payload is None else payload
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
@@ -182,6 +191,40 @@ class BoundedTests(unittest.TestCase):
         self.assertEqual(len(self.requests), 2)
         self.assertEqual(self.requests[1][1], self.carrier())
         self.assertEqual(json.loads(result.message.content)["schemaVersion"], "booklet_provider_v1")
+
+    def test_amended_carrier_preserves_provider_bytes_and_one_generation(self):
+        self.count = 32001
+        carrier = self.amended_carrier()
+        result = json.loads(self.invoke_carrier(payload=carrier).message.content)
+        self.assertEqual(result["schemaVersion"], "booklet_provider_v2")
+        self.assertEqual(result["providerEvidence"]["requestDigest"], carrier["bookletPolicy"]["requestDigest"])
+        self.assertEqual(result["providerEvidence"]["effectivePolicy"], carrier["bookletPolicy"]["tokenPolicy"])
+        self.assertEqual(result["providerEvidence"]["contextWarnings"], ["input_tokens_above_32000"])
+        self.assertEqual([request[0] for request in self.requests], ["/v1/responses/input_tokens", "/v1/responses"])
+        self.assertEqual(self.requests[1][1], self.carrier())
+        self.assertNotIn("bookletPolicy", self.requests[0][1])
+        self.assertNotIn("bookletPolicy", self.requests[1][1])
+
+    def test_amended_carrier_rejects_hash_metadata_and_escape_drift_before_io(self):
+        carrier = self.amended_carrier()
+        corrupt = [
+            (carrier, {"booklet_request_digest": "sha256:" + "0" * 64}),
+            (carrier | {"bookletPolicy": carrier["bookletPolicy"] | {"requestDigest": "0" * 64}}, {}),
+            (carrier | {"bookletPolicy": carrier["bookletPolicy"] | {"contractVersion": "other"}}, {}),
+            (carrier | {"bookletPolicy": carrier["bookletPolicy"] | {"unexpected": True}}, {}),
+            (carrier | {"bookletPolicy": carrier["bookletPolicy"] | {"tokenPolicy":
+                carrier["bookletPolicy"]["tokenPolicy"] | {"maxInputTokens": 32000}}}, {}),
+            (carrier, {"booklet_token_policy_version": "m4_legacy_v1", "booklet_token_policy_hash": "none",
+                       "booklet_max_input_tokens": 32000, "booklet_warning_input_tokens": 32000}),
+            (carrier, self.amended() | {"booklet_token_policy_hash": "sha256:" + "c" * 64}),
+        ]
+        for payload, params in corrupt:
+            with self.subTest(params=params):
+                with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(payload=payload, **params)
+        noncanonical = json.dumps(carrier, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        with self.assertRaises(InvokeBadRequestError): self.invoke_carrier(payload=carrier, raw=noncanonical)
+        self.assertEqual(self.client_creations, 0)
+        self.assertEqual(self.requests, [])
 
     def test_carrier_policy_drift_is_rejected_even_with_matching_self_digest(self):
         for change in ({"model": "gpt-6-sol"}, {"tools": []}, {"max_output_tokens": True}, {"max_output_tokens": 8192},
@@ -285,6 +328,95 @@ class BoundedTests(unittest.TestCase):
         self.assertEqual(evidence["countRequestId"], "req_count_fixture")
         self.assertEqual(len(self.requests), 1)
 
+    def amended(self):
+        return {"booklet_token_policy_version": "m4_context_policy_v2",
+                "booklet_token_policy_hash": "sha256:" + "b" * 64,
+                "booklet_max_input_tokens": 128000, "booklet_warning_input_tokens": 32000}
+
+    def test_explicit_legacy_tuple_preserves_v1_and_32000_guard(self):
+        legacy = {"booklet_token_policy_version": "m4_legacy_v1", "booklet_token_policy_hash": "none",
+                  "booklet_max_input_tokens": 32000, "booklet_warning_input_tokens": 32000}
+        self.count = 32000
+        wrapper = json.loads(self.invoke(**legacy).message.content)
+        self.assertEqual(wrapper["schemaVersion"], "booklet_provider_v1")
+        self.assertNotIn("effectivePolicy", wrapper["providerEvidence"])
+        self.requests = []; self.count = 32001
+        wrapper = json.loads(self.invoke(**legacy).message.content)
+        self.assertEqual(wrapper["schemaVersion"], "booklet_pre_generation_failure_v1")
+        self.assertEqual(wrapper["failureEvidence"]["limit"], 32000)
+        self.assertNotIn("effectivePolicy", wrapper["failureEvidence"])
+        self.assertEqual(len(self.requests), 1)
+        self.requests = []
+        for changed in (legacy | {"booklet_token_policy_hash": "b" * 64},
+                        legacy | {"booklet_max_input_tokens": 128000},
+                        legacy | {"booklet_warning_input_tokens": 24000}):
+            with self.assertRaises(InvokeBadRequestError): self.invoke(**changed)
+        self.assertEqual(self.requests, [])
+
+    def test_amended_count_boundaries_and_exact_warning_evidence(self):
+        policy = {"version": "m4_context_policy_v2", "hash": "b" * 64,
+                  "maxInputTokens": 128000, "warningInputTokens": 32000}
+        for count in (31999, 32000, 32001, 128000, 128001):
+            with self.subTest(count=count):
+                self.requests = []; self.count = count
+                wrapper = json.loads(self.invoke(**self.amended()).message.content)
+                evidence = wrapper["failureEvidence" if count > 128000 else "providerEvidence"]
+                self.assertEqual(wrapper["schemaVersion"], "booklet_pre_generation_failure_v2" if count > 128000 else "booklet_provider_v2")
+                self.assertEqual(evidence["effectivePolicy"], policy)
+                self.assertEqual(evidence["contextWarnings"], ["input_tokens_above_32000"] if count > 32000 else [])
+                self.assertEqual(evidence["countedInputTokens"], count)
+                self.assertEqual(len(self.requests), 1 if count > 128000 else 2)
+                if count > 128000:
+                    self.assertEqual(evidence["limit"], 128000)
+                    self.assertEqual(evidence["adapterVersion"], "1.0.7-dev5")
+        self.requests = []; self.count = 32001
+        carrier = json.loads(self.invoke_carrier(**self.amended()).message.content)
+        self.assertEqual(carrier["schemaVersion"], "booklet_provider_v2")
+        self.assertEqual(carrier["providerEvidence"]["contextWarnings"], ["input_tokens_above_32000"])
+        self.assertEqual(len(self.requests), 2)
+
+    def test_amended_invalid_counts_fail_without_generation(self):
+        for count in (True, -1, 1.5, "32001", [], {}, 9007199254740992):
+            with self.subTest(count=count):
+                self.requests = []; self.count = count
+                wrapper = json.loads(self.invoke(**self.amended()).message.content)
+                self.assertEqual(wrapper["schemaVersion"], "booklet_pre_generation_failure_v2")
+                evidence = wrapper["failureEvidence"]
+                self.assertEqual(evidence["code"], "input_count_invalid")
+                self.assertIsNone(evidence["countedInputTokens"])
+                self.assertEqual(evidence["contextWarnings"], [])
+                self.assertEqual(len(self.requests), 1)
+        for body in ({"object": "response.input_tokens"}, {"input_tokens": None}):
+            with self.subTest(body=body):
+                self.requests = []; self.count_body = body
+                wrapper = json.loads(self.invoke(**self.amended()).message.content)
+                self.assertEqual(wrapper["schemaVersion"], "booklet_pre_generation_failure_v2")
+                self.assertEqual(wrapper["failureEvidence"]["code"], "input_count_unavailable")
+                self.assertEqual(wrapper["failureEvidence"]["contextWarnings"], [])
+                self.assertEqual(len(self.requests), 1)
+        self.count_body = None
+        self.requests = []; self.count_failure = "timeout"
+        wrapper = json.loads(self.invoke(**self.amended()).message.content)
+        self.assertEqual(wrapper["failureEvidence"]["code"], "input_count_request_failed")
+        self.assertEqual(wrapper["failureEvidence"]["effectivePolicy"]["maxInputTokens"], 128000)
+        self.assertEqual(len(self.requests), 1)
+
+    def test_amended_policy_is_all_or_nothing_before_io(self):
+        valid = self.amended()
+        for invalid in (
+            {"booklet_token_policy_version": valid["booklet_token_policy_version"]},
+            valid | {"booklet_token_policy_version": "wrong"},
+            valid | {"booklet_token_policy_hash": "private policy content"},
+            valid | {"booklet_max_input_tokens": 32000},
+            valid | {"booklet_max_input_tokens": True},
+            valid | {"booklet_warning_input_tokens": 32001},
+            valid | {"booklet_warning_input_tokens": "32000"},
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(InvokeBadRequestError): self.invoke(**invalid)
+        self.assertEqual(self.client_creations, 0)
+        self.assertEqual(self.requests, [])
+
     def assert_count_failure(self, result, code):
         wrapper = json.loads(result.message.content)
         self.assertEqual(set(wrapper), {"schemaVersion", "content", "failureEvidence"})
@@ -298,7 +430,7 @@ class BoundedTests(unittest.TestCase):
         self.assertEqual(evidence["apiBaseUrl"], "https://api.openai.com/v1")
         self.assertEqual(evidence["stdioSdk"]["version"], "0.10.2")
         self.assertEqual(evidence["model"], "gpt-6-luna")
-        self.assertEqual(evidence["adapterVersion"], "1.0.7-dev4")
+        self.assertEqual(evidence["adapterVersion"], "1.0.7-dev5")
         self.assertEqual(evidence["serviceTier"], "default")
         self.assertEqual(evidence["requestDigest"], self.parameters["booklet_request_digest"])
         self.assertEqual(evidence["stage"], "input_count")
@@ -422,7 +554,7 @@ class BoundedTests(unittest.TestCase):
             result = self.llm._chat_generate("gpt-6-luna", {"openai_api_key": "not-a-key"},
                 self.messages, {"booklet_bounded_execution": False, "booklet_timeout_seconds": 60,
                                 "booklet_request_digest": "0" * 64, "booklet_prepared_request": True,
-                                "booklet_deadline_at_ms": 4102444800000, "max_tokens": 10}, stream=False)
+                                "booklet_deadline_at_ms": 4102444800000, **self.amended(), "max_tokens": 10}, stream=False)
         self.assertEqual(result, "original")
         self.assertEqual(original.call_args.args[5], {"max_tokens": 10})
         self.assertNotIn("max_retries", factory.call_args.kwargs)
@@ -462,6 +594,8 @@ class BoundedTests(unittest.TestCase):
             self.assertIs(carrier.default, False)
             deadline = next(rule for rule in model.parameter_rules if rule.name == "booklet_deadline_at_ms")
             self.assertFalse(deadline.required)
+            for name in self.amended():
+                self.assertFalse(next(rule for rule in model.parameter_rules if rule.name == name).required)
         name = "models/llm/gpt-4.1-mini.yaml"
         self.assertEqual((PACKAGE / name).read_bytes(), (PACKAGE.parent / "package" / name).read_bytes())
 

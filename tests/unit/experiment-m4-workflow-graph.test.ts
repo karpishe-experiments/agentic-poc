@@ -125,6 +125,25 @@ describe("offline Balanced graph candidate", () => {
     expect(decoded.digest).toBe(`sha256:${data.m4.requestDigest}`);
   });
 
+  it("passes a versioned policy carrier unchanged without changing the provider request publication", async () => {
+    for (const selectedModule of [manager, tester, { ...tester, persona: "enthusiast_parent" },
+      { ...tester, persona: "professional_creator" }, judge, { role: "specialist", taskId: "J12", persona: null }] as SimulationModule[]) {
+      const graph = await createM4WorkflowGraph(selectedModule);
+      const data = authorization(selectedModule, selectedModule.role === "judge", 'Exact "quoted" text\nفارسی');
+      const providerDigest = data.m4.requestDigest;
+      data.m4.requestJson = m4CanonicalJson({ ...JSON.parse(data.m4.requestJson), bookletPolicy: {
+        contractVersion: "booklet_carrier_v2", requestDigest: providerDigest,
+        tokenPolicy: { version: "m4_context_policy_v2", hash: "b".repeat(64), maxInputTokens: 128000, warningInputTokens: 32000 },
+      } });
+      data.m4.requestDigest = m4Hash(data.m4.requestJson);
+      const decoded = decode(graph, data);
+      expect(M4_CARRIER_CHUNKS.map(key => decoded[key]).join("")).toBe(data.m4.requestJson);
+      expect(decoded.digest).toBe(`sha256:${data.m4.requestDigest}`);
+      expect(data.m4.requestDigest).not.toBe(providerDigest);
+      expect(selectedLlm(graph, decoded)).toHaveLength(1);
+    }
+  });
+
   it.skipIf(!existsSync(wheel))("rehearses actual pinned Graphon template, parameter coercion and text normalization", async () => {
     const graph = await createM4WorkflowGraph(tester);
     const modelNode = graph.nodes.find((node) => node.id === "m4_report_llm")!;
