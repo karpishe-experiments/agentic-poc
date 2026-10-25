@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Separate current creative evidence from execution history
+
+Model context and verification need different views of the same saved record.
+Current creative projections retain exact wording, identities, approvals and
+source relationships; original records remain authoritative for verification.
+J12 needs the selected layout page plus lettering derived from the complete
+approved routing. Compact J09/J11/J12 output fixtures verify equivalent hydration
+without sending image execution prompts or old drafts. Preserve unknown creator
+message fields rather than assuming that they contain only control metadata.
+Size diagnostics belong outside request and legacy preparation hashes, and their
+failure must not change execution eligibility. Promotion candidate:
+**Documentation** for model-context construction.
+
 ### Share observation contexts when a cached client crosses module bundles
 
 A process-global MongoDB client can retain listeners from a different Next.js

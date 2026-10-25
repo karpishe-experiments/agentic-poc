@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { m4LayoutCatalog } from "@/lib/experiment-runner/m4-layout";
+import { buildFeedbackLedger, type SavedCreatorMessage } from "@/lib/experiment-runner/feedback-ledger";
+import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
+import { pageLetteringContext } from "@/lib/experiment-runner/page-lettering-context";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import {
   conceptBriefSchema, storyOutlineSchema, draftCharacterListSchema, draftLocationListSchema, manuscriptSchema,
@@ -236,7 +239,7 @@ function reportOperationSummary(rows: unknown[], operationId: string) {
 }
 function projectionFields(selector: M4RequestSelector) {
   return selector.role === "manager" ? ["role", "run", "eligibleRoute", "eligibleTarget"] : selector.role === "specialist" ?
-    ["role", "taskId", "subjectKind", "subjectId", "brief", "persona", "currentTarget", "approvedSources", "matchingRevision", "questionAnswers"] : selector.report ?
+    ["role", "taskId", "subjectKind", "subjectId", "brief", "persona", "currentTarget", "approvedSources", "matchingRevision", "questionAnswers", "creatorMessages"] : selector.report ?
       ["role", "bookletId", "brief", "persona", "currentArtifacts", "creatorMessages", "operationHistory", "counters", "limits", "warnings", "imageEvidence", "reportEvidence"] :
       ["role", "bookletId", "brief", "persona", "currentArtifacts", "pendingDecision", "activeDelegation", "creatorMessages", "eligibleTaskIds", "revisionCounts"];
 }
@@ -253,6 +256,55 @@ export function projectM4Context(selector: M4RequestSelector, raw: unknown, oper
   if (selector.role === "specialist" && selector.taskId === "J11") {
     m4LayoutCatalog(result.approvedSources);
     result.layoutContract = M4_LAYOUT_CONTRACT;
+  }
+  if (selector.role === "specialist") {
+    // Validate complete source shapes before reducing the saved model-facing
+    // projection. Normal owning-service validation still reads original records.
+    if (selector.taskId === "J09" || selector.taskId === "J10") {
+      const style = list(result.approvedSources).map(record).filter(source => source.taskId === "J08");
+      if (style.length !== 1) throw new Error("M4 style source is missing or ambiguous.");
+      parseReferenceProposal("J08", "assembled", style[0].content);
+    }
+    result.evidenceProjection = "current_creative_v2";
+    if (selector.taskId === "J12") {
+      const sources = list(result.approvedSources).map(record);
+      const layout = sources.filter(source => source.taskId === "J11"), manuscript = sources.filter(source => source.taskId === "J05");
+      if (layout.length !== 1 || manuscript.length !== 1 || typeof result.subjectId !== "string") throw new Error("M4 selected page sources are missing or ambiguous.");
+      result.requiredLettering = pageLetteringContext(selector.persona, result.subjectId, layout[0].content, manuscript[0].content);
+    }
+    result.approvedSources = list(result.approvedSources).map(rawSource => {
+      const source = record(rawSource);
+      let content = reportContent(source.content, source.taskId === "J08");
+      // Style identity is consumed by the J09/J10 output hydrator. It is source
+      // evidence, unlike duplicated per-image execution hashes and prompts.
+      if (source.taskId === "J08") content = { ...record(content), stylePromptModuleHash: record(source.content).stylePromptModuleHash };
+      if (selector.taskId === "J12" && source.taskId === "J11") {
+        const layout = record(content);
+        const selected = list(layout.pages).filter(page => record(page).pageId === result.subjectId);
+        if (selected.length !== 1) throw new Error("M4 prepared page is missing or ambiguous.");
+        content = { ...layout, pages: selected };
+      }
+      return { ...Object.fromEntries(["id", "taskId", "subjectKind", "subjectId", "number", "dependencyVersionIds", "warnings", "sourceVersionId", "approval"]
+        .filter(key => Object.hasOwn(source, key)).map(key => [key, source[key]])), content };
+    });
+    if (result.currentTarget) result.currentTarget = artifactProjection(result.currentTarget, true);
+    result.evidenceScope = { ...testerEvidenceScope,
+      sources: "Required current approved creative sources only. J12 includes its selected layout page and the manuscript for continuity; execution prompts and unrelated layout pages are omitted. Original evidence remains saved and verified by the application." };
+  }
+  if (Array.isArray(result.creatorMessages)) {
+    const feedback = buildFeedbackLedger(result.creatorMessages as SavedCreatorMessage[]);
+    const questionIds = new Set(list(result.questionAnswers).map(value => record(value).questionId));
+    result.creatorMessages = selector.role !== "specialist" ? feedback : feedback.filter(message => {
+      const content = record(message.content);
+      // Only the recognized ledger envelope can be scoped away. Unknown fields
+      // can contain creative instructions and must remain visible.
+      if (Object.keys(content).length !== 1 || !Object.hasOwn(content, "decision")) return true;
+      const decision = record(content.decision);
+      if (typeof decision.action !== "string") return true;
+      if (decision.action === "revise") return decision.taskId === selector.taskId;
+      if (decision.action === "answer") return questionIds.has(decision.questionId);
+      return !["approve", "delegate", "revoke_delegation"].includes(decision.action);
+    });
   }
   if (selector.role === "manager") {
     const run = context.run as Record<string, unknown>;
@@ -321,7 +373,7 @@ export function m4BindAllowedValues(schema: JsonSchema, allowed: M4AllowedValues
   assertM4SchemaLimits(bound);
   return bound;
 }
-function compileM4RequestDefinition(selector: M4RequestSelector) {
+function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = false) {
   const { role, taskId, persona, report } = selector;
   z.enum(["manager", "specialist", "tester", "judge"]).parse(role);
   z.boolean().parse(report);
@@ -332,6 +384,7 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
     specialistTaskSchema.parse(taskId);
     instruction = taskInstructions[taskId!];
     if (taskId === "J09") instruction += " J06 attireRequirements and accessories are inherited source evidence copied by the application; J09 cannot edit them. Resolve open appearance details from saved creator answers in characterDesignProfile and sheetPromptModule. A source note that clothing is not established in the manuscript describes missing earlier detail, not a prohibition on later design choices. Preserve actual approved hard constraints and all required views. If a creator request contradicts an approved constraint, request clarification or an upstream revision; do not silently override the constraint.";
+    if (taskId === "J12") instruction += " requiredLettering supplies exact words and speakers routed to this page from the complete current layout. Preserve those strings unchanged; a panel with no required words can be text-free. Other layout pages are omitted, and the current manuscript is supplied once for continuity.";
     if (taskId === "J11") instruction += ` For ${persona}, supply exactly ${CASES[persona].storyPages + 1} pages, ordered from cover index 0. Kid story pages must each have exactly one panel. Parent must have exactly one two-panel story page; all other story pages have one panel. Creator must have at least two multi-panel story pages. liveTextSafeRegion x and y are normalized TOP-LEFT coordinates, not the center; width and height are sizes. Require x+width <= 1 and y+height <= 1. A valid safe region is {"x":0.05,"y":0.05,"width":0.9,"height":0.9}; {"x":0.5,"y":0.5,"width":1,"height":1} is invalid. Keep trim, aspect ratio, working pixels and orientation consistent. Return one complete compact JSON object. Use concise field values, no indentation or blank lines outside strings, and close every array and object. Stop immediately after the final closing brace.`;
   } else if (report) {
     instruction = "Give an independent advisory assessment of intent, textual consistency, interaction and cost evidence. The evidenceScope describes omitted historical and transport evidence. Do not infer unseen content, individual historical behavior or monetary charges from aggregate counts. Mark unsupported assessments not_assessed where the schema permits, and explicitly describe other evidence limitations in the explanation or summary. Images are simulated and this request is text-only: visual consistency must be not_assessed. Findings must use current supplied artifact/version targets or this run. Do not approve, revise or regenerate anything. Identity, evidence lists and monetary fields are supplied by trusted workflow code.";
@@ -342,11 +395,11 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
     instruction += " For J09, attireRequirements and accessories are immutable copies of approved J06 source evidence, not editable design fields. Do not request their deletion or rewriting through J09. A note that appearance is not established in the manuscript is not a prohibition on later creator-specified design. Assess whether characterDesignProfile and sheetPromptModule implement saved creator answers and required views; do not repeat a revision solely because the inherited note remains. Actual approved hard constraints remain binding. If a creator request contradicts one, request clarification or an upstream revision rather than overriding it. This distinction does not require approval of missing, contradictory or technically invalid work.";
     instruction += " Use evidenceScope to distinguish supplied current creative evidence from omitted history and transport data. Do not assess unseen historical versions or treat omitted execution prompts as missing creative work. Preserve exact current version targets and saved creator feedback when deciding. Images are simulated and text-only: visual assessment is not_assessed; do not claim to have inspected rendered images. State any relevant evidence limitation in the decision explanation; required current creative and technical checks still apply.";
   }
-  const definition = { version: role === "tester" && !report ? "m4_request_tester_current_v3" : role === "specialist" && taskId === "J09"
-    ? "m4_request_j09_ownership_v2" : "m4_request_v1", rendering: "exact-context-string-v1", role, taskId, persona, report,
+  const definition = { version: role === "manager" || legacyReport ? "m4_request_v1" : "m4_context_current_v2", rendering: "exact-context-string-v1", role, taskId, persona, report,
     projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
       ...(role === "specialist" && taskId === "J11" ? { layoutContract: M4_LAYOUT_CONTRACT } : {}),
       ...(role === "tester" && !report ? { artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: testerEvidenceScope } : {}),
+      ...(role !== "manager" && !legacyReport ? { feedbackProjection: "saved_decisions_v1", evidenceProjection: "current_creative_v2" } : {}),
       ...(role === "manager" || report ? { artifactProjection: report ? "compact-advisory-v3" : "eligible-route-v3", creativeContent: report } : {}) },
     preparationByteLimit: role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null,
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
@@ -367,6 +420,15 @@ export function m4RequestDefinition(selector: M4RequestSelector) {
   freeze(definition);
   definitions.set(key, definition);
   return definition;
+}
+
+/** Historical local report rejections pin their original definition hash. */
+export function m4SavedReportDefinition(selector: M4RequestSelector, hash: string) {
+  if (!selector.report) return null;
+  const current = m4RequestDefinition(selector);
+  if (current.hash === hash) return current;
+  const legacy = compileM4RequestDefinition(selector, true);
+  return legacy.hash === hash ? legacy : null;
 }
 
 let bundleHash: string | undefined;

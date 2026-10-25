@@ -6,7 +6,7 @@ import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/do
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
-import { m4CanonicalJson, m4RequestDefinition } from "@/lib/experiment-runner/m4-request";
+import { m4CanonicalJson, m4SavedReportDefinition } from "@/lib/experiment-runner/m4-request";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
 
 // A report failure is advisory only after its owning execution has ended.
@@ -22,7 +22,8 @@ export async function isVerifiedAdvisoryFailure(database: Database, session: Cli
       op.resultJson || op.resultDigest || op.materializationJson) return false;
   if (op.localReportFailure) {
     const proof = op.localReportFailure;
-    const definition = m4RequestDefinition({ role: op.role as "tester" | "judge", taskId: null, persona: run.persona, report: true });
+    const definition = m4SavedReportDefinition({ role: op.role as "tester" | "judge", taskId: null, persona: run.persona, report: true }, proof.definitionHash);
+    if (!definition) return false;
     return run.mode === "balanced" && !!run.m4 && op.reservationCount === 0 && !op.m4Reservation && !op.m4Preparation && !op.m4Observation &&
       !op.workflowRunId && !op.parentWorkflowRunId && !op.verifiedWorkflowId && !op.workflowTaskId && !op.remoteStatus && op.dispatchStartedAtMs == null &&
       proof.code === "report_request_too_large" && Number.isSafeInteger(proof.requestBytes) && proof.requestBytes > proof.byteLimit &&
