@@ -5,8 +5,8 @@ import type { Database } from "@/db/client";
 import type { ExperimentRunDocument } from "@/db/documents";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
-import { assessM4ProviderResult } from "@/lib/experiment-runner/m4-provider-result";
-import { m4MaximumCharge, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { assessM4ProviderResult, m4RetainedProviderWrapper } from "@/lib/experiment-runner/m4-provider-result";
+import { m4MaximumCharge, m4PolicySnapshot, m4ReservationTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { m4Hash } from "@/lib/experiment-runner/m4-request";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
@@ -39,7 +39,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
     const reservation = operation.m4Reservation!;
     const persona = Object.keys(campaign.slots).find((key) => campaign.slots[key as keyof typeof campaign.slots] === operation.runId);
     if (!persona || operation.providerKind !== "text" || operation.reservationCount !== 1 || reservation.policyHash !== hash ||
-        reservation.maximumMicrodollars !== m4MaximumCharge(policy, reservation.bucket) ||
+        reservation.maximumMicrodollars !== m4MaximumCharge(policy, reservation.bucket, m4ReservationTokenPolicy(policy, reservation).snapshot) ||
         !Number.isSafeInteger(reservation.unsettledMicrodollars) || reservation.unsettledMicrodollars < 0 ||
         reservation.settledMicrodollars !== null && (!Number.isSafeInteger(reservation.settledMicrodollars) || reservation.settledMicrodollars < 0)) invalid();
     counts[persona]++; reserved += reservation.unsettledMicrodollars; settled += reservation.settledMicrodollars ?? 0;
@@ -115,7 +115,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
           reservation.campaignId !== campaign._id || reservation.policyHash !== hash || prep.policyHash !== hash ||
           observation.evidenceDigest !== m4Hash(observation.evidenceJson) || reservation.evidenceDigest !== observation.evidenceDigest) invalid();
       const evidence = JSON.parse(observation.evidenceJson) as unknown;
-      const assessed = assessM4ProviderResult({ schemaVersion: "booklet_provider_v1", content: "", providerEvidence: evidence }, policy, operation);
+      const assessed = assessM4ProviderResult(m4RetainedProviderWrapper("", evidence), policy, operation);
       if (!assessed.canMaterialize || assessed.chargeUpperMicrodollars !== reservation.settledMicrodollars ||
           reservation.unsettledMicrodollars !== (policy.countChargeStatus === "assumed" ? policy.countChargeCeilingMicrodollars : 0)) invalid();
     }

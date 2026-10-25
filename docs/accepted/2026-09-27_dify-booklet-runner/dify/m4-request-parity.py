@@ -37,6 +37,7 @@ for index, vector in enumerate(vectors):
     assert hashlib.sha256(encoded.encode()).hexdigest() == vector["requestDigest"], f"Vector {index}: digest differs."
 
     calls = []
+    count_value = 100
     class FakeClient:
         def __init__(self, **kwargs):
             assert kwargs["max_retries"] == 0 and kwargs["timeout"] == 60
@@ -47,7 +48,7 @@ for index, vector in enumerate(vectors):
         def count(self, **kwargs):
             assert kwargs == {key: value for key, value in expected.items() if key in {"model", "input", "reasoning", "text", "truncation"}}
             calls.append("count")
-            return {"input_tokens": 100}
+            return {"input_tokens": count_value}
         def create(self, **kwargs):
             timeout = kwargs.pop("timeout")
             assert 0 < timeout <= 60 and kwargs == expected
@@ -65,4 +66,36 @@ for index, vector in enumerate(vectors):
         [UserPromptMessage(content=vector["requestJson"])], parameters, None, None, False, None)
     assert calls == ["count", "generation"]
     assert json.loads(result.message.content)["providerEvidence"]["requestDigest"] == vector["requestDigest"]
+    if index == 0:
+        # The amendment is authorization metadata outside the exact request
+        # body. It must not change the canonical provider request or digest.
+        calls.clear()
+        count_value = 32001
+        amended = parameters | {
+            "booklet_token_policy_version": "m4_context_policy_v2",
+            "booklet_token_policy_hash": "sha256:" + "b" * 64,
+            "booklet_max_input_tokens": 128000,
+            "booklet_warning_input_tokens": 32000,
+        }
+        result = booklet_bounded.generate(llm, FakeClient, expected["model"], {"api_protocol": "responses"},
+            [UserPromptMessage(content=vector["requestJson"])], amended, None, None, False, None)
+        evidence = json.loads(result.message.content)
+        assert calls == ["count", "generation"]
+        assert evidence["schemaVersion"] == "booklet_provider_v2"
+        assert evidence["providerEvidence"]["requestDigest"] == vector["requestDigest"]
+        assert evidence["providerEvidence"]["contextWarnings"] == ["input_tokens_above_32000"]
+        calls.clear()
+        carrier = expected | {"bookletPolicy": {
+            "contractVersion": "booklet_carrier_v2", "requestDigest": vector["requestDigest"],
+            "tokenPolicy": {"version": "m4_context_policy_v2", "hash": "b" * 64,
+                            "maxInputTokens": 128000, "warningInputTokens": 32000}}}
+        carrier_json = json.dumps(carrier, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        carrier_params = parameters | {"booklet_request_digest": "sha256:" + hashlib.sha256(carrier_json.encode()).hexdigest()}
+        result = booklet_bounded.generate(llm, FakeClient, expected["model"], {"api_protocol": "responses"},
+            [UserPromptMessage(content=carrier_json)], carrier_params, None, None, False, None)
+        evidence = json.loads(result.message.content)
+        assert calls == ["count", "generation"]
+        assert evidence["schemaVersion"] == "booklet_provider_v2"
+        assert evidence["providerEvidence"]["requestDigest"] == vector["requestDigest"]
+        assert evidence["providerEvidence"]["contextWarnings"] == ["input_tokens_above_32000"]
 print(f"PASS: {len(vectors)} exact Node/Python translations and fake carrier invocations; zero HTTP requests or sockets.")

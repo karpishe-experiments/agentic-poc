@@ -4,7 +4,7 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
-New non-manager Balanced requests use `m4_context_current_v2`. Specialists receive
+New Balanced requests use `m4_context_policy_v3`. Specialists receive
 current approved creative sources without per-image execution prompts and upload
 metadata. J12 receives only its selected current layout page plus exact required
 lettering derived from the full approved layout; the manuscript remains once for
@@ -26,8 +26,36 @@ It is saved with existing preparation/observation writes and excluded from reque
 preparation and source hashes. Diagnostic serialization failure does not affect
 eligibility. Detail inspection exposes measurements; list summaries batch only
 warning metadata. Older rows show unavailable measurements. Warnings never change
-status or disable controls. The 32,000-token policy and existing byte guards remain
-enforced until the separate effective-policy/provider amendment is enabled.
+status or disable controls. The 16 KiB manager and 128 KiB other request targets
+are advisory. The complete canonical carrier remains bounded to 2 MiB, and the
+escaped authorization response retains its existing 1 MiB transport bound.
+Preparation checks the complete escaped response before dispatch, using the same
+serializer as HTTP and the maximum authorized timeout. An oversized report saves
+a no-dispatch advisory failure; it cannot leave an unreserved workflow running.
+
+The original frozen campaign policy/hash remains at 32,000 input tokens. A
+reviewed optional `m4_context_policy_v2` grant can authorize 128,000 for new work.
+Preparation and reservation each retain the exact amendment snapshot/hash, base
+policy hash, warning threshold, hard ceiling and exact dev5 adapter identity plus
+ZIP checksum. Dify's sorted content checksum and the ZIP checksum are distinct.
+One shared resolver validates saved policy agreement for authorization, provider
+results, failures and cumulative accounting. Absence means legacy 32,000; it never
+inherits a current grant. New admission requires equality with the current grant.
+Prepared/dispatched work cannot adopt a different amendment. Reservations use
+the effective hard ceiling with frozen rates and existing count-call liability.
+
+`booklet_carrier_v2` puts trusted policy metadata beside the unchanged provider
+payload. Authorization hashes the complete carrier separately from the original
+provider request. The existing published decoder forwards canonical JSON without
+rewriting it; its publication identity is retained. Dev5 verifies the carrier,
+removes policy metadata, verifies the embedded provider digest, then counts and
+generates from those same original bytes at most once. V2 evidence echoes policy
+identity, enforced ceiling and the above-32,000 warning; legacy dev4 v1 readers
+remain. Missing/invalid count, above-128,000 count, spending, storage, schema and
+evidence failures remain hard. SDK retries and provider truncation stay disabled.
+The compatibility release does not activate this amendment: dev4 and the legacy
+limit remain selected until reviewed installation/readback and a separate grant
+enablement. Disabling new amendments must retain their historical readers.
 
 Specialist dependencies remain application-owned: J01 has no approved source;
 J02 uses J01; J03/J04 use J01/J02; J05 uses J01–J04; J06 uses J02/J03/J05;
@@ -82,7 +110,7 @@ creates new accounted work.
 Balanced manager preparation sends only booklet/persona/generation state and the
 application-selected eligible route and target. The application retains and
 validates the full artifact/provenance graph; routing does not resend it. The
-16 KiB preparation limit and authoritative provider token ceiling remain.
+16 KiB efficiency target warns; the saved effective provider ceiling remains hard.
 
 A protected remaining-persona grant can admit an unused Parent or Creator slot
 from a stopped campaign through normal creation. It pins the retained Kid ID and
@@ -371,8 +399,8 @@ version, exact lettering, source references, warnings and approval identities.
 Historical creative bodies and repeated execution/transport data remain stored but
 are omitted from new requests. Saved feedback, pending controls, delegation and
 revision counts remain. Explicit evidence scope prevents claims about unseen
-history or simulated image visuals. Only non-report tester definitions are
-versioned by this correction; the authoritative 32,000-token ceiling stays fixed.
+history or simulated image visuals. Request definitions are versioned separately
+from the frozen monetary policy and saved effective input ceiling.
 Optional continuation metadata is backward compatible and requires no migration. A protected
 request-definition amendment can bind the frozen policy's original bundle hash to
 one reviewed replacement. New preparation/claim requires that exact amendment and
@@ -501,8 +529,8 @@ No callback, operation deadline or workflow timeout is increased.
 Balanced manager requests carry current routing/provenance metadata rather than
 creative artifact bodies. Final reports retain current creative evidence and
 omit assembled image prompts and repeated style modules. Complete request byte
-guards are 16 KiB for managers and 128 KiB for reports; the independent provider
-limit remains 32,000 tokens. The reviewed request-definition amendment records
+targets are 16 KiB for managers and 128 KiB for reports and record warnings.
+Transport and saved effective token limits remain enforced. The request-definition amendment records
 these projections without rewriting historical preparations.
 The bounded dev3 adapter returns a separate pre-generation failure envelope for
 count-limit, unavailable/invalid count and count-request failure. Authenticated

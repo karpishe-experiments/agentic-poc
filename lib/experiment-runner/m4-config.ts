@@ -1,7 +1,7 @@
 import { z } from "zod";
 import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import { readBookletRunnerConfig, type ConfigState } from "@/lib/experiment-runner/config";
-import { m4GrantSchema, m4PolicySchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4AdmittedTokenPolicy, m4GrantSchema, m4PolicySchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4RequestBundleMatches } from "@/lib/experiment-runner/m4-request";
 
 // Non-secret reviewed release input. Ready records technical configuration;
@@ -26,6 +26,8 @@ export function readM4RunnerConfig(env: Record<string, string | undefined> = pro
   const snapshot = m4PolicySnapshot(parsed.data.policy);
   const adapterUpdate = parsed.data.state === "granted" ? parsed.data.grant.providerAdapterUpdate : undefined;
   if (adapterUpdate && adapterUpdate.fromIdentity !== snapshot.policy.pluginIdentity) return unavailable();
+  try { if (parsed.data.state === "granted") m4AdmittedTokenPolicy(snapshot.policy, parsed.data.grant); }
+  catch { return unavailable(); }
   if (!m4RequestBundleMatches(snapshot.policy, parsed.data.state === "granted" ? parsed.data.grant : undefined) ||
       snapshot.policy.publications.length !== base.config.bindings.length || snapshot.policy.publications.some((expected) =>
         !base.config.bindings.some((actual) => actual.role === expected.role && actual.taskId === expected.taskId &&

@@ -49,6 +49,15 @@ export const m4PolicySchema = z.strictObject({
 });
 export type M4Policy = z.infer<typeof m4PolicySchema>;
 export type M4ModelBucket = keyof M4Policy["models"];
+export const m4TokenAmendmentSchema = z.strictObject({
+  version: z.literal("m4_context_policy_v2"), basePolicyHash: m4Digest,
+  warningInputTokens: z.literal(32000), maxInputTokens: z.literal(128000),
+  requiredProviderAdapterIdentity: z.string().regex(/^langgenius\/openai:1\.0\.7-dev5@[0-9a-f]{64}$/),
+  requiredProviderPackageSha256: m4Digest,
+  reference: z.string().min(1).max(500),
+});
+export const m4TokenPolicySchema = z.strictObject({ amendment: m4TokenAmendmentSchema, hash: m4Digest });
+export type M4TokenPolicy = z.infer<typeof m4TokenPolicySchema>;
 export const m4ContinuationGrantSchema = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
   reference: z.string().min(1).max(500) });
 export const legacyCountRecoveryGrantSchema = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
@@ -64,7 +73,9 @@ export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, refere
   requestDefinitionUpdate: z.strictObject({ fromBundleHash: m4Digest, toBundleHash: m4Digest,
     reference: z.string().min(1).max(500) }).optional(),
   providerAdapterUpdate: z.strictObject({ fromIdentity: m4PolicySchema.shape.pluginIdentity,
-    version: z.enum(["1.0.7-dev3", "1.0.7-dev4"]), packageSha256: m4Digest, reference: z.string().min(1).max(500) }).optional(),
+    version: z.enum(["1.0.7-dev3", "1.0.7-dev4", "1.0.7-dev5"]), packageSha256: m4Digest,
+    identity: m4PolicySchema.shape.pluginIdentity.optional(), reference: z.string().min(1).max(500) }).optional(),
+  tokenPolicy: m4TokenPolicySchema.optional(),
 }).superRefine((grant, context) => {
   const keys = [...grant.continuations ?? [], ...grant.completionRecoveries ?? []].map((item) => item.operationId);
   if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: "Continuation operations must be unique." });
@@ -73,6 +84,69 @@ export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, refere
   }
 });
 export type M4Grant = z.infer<typeof m4GrantSchema>;
+
+function canonicalPolicyJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
+}
+
+export function m4TokenPolicySnapshot(raw: unknown): M4TokenPolicy {
+  const amendment = m4TokenAmendmentSchema.parse(raw);
+  return { amendment, hash: createHash("sha256").update(canonicalPolicyJson(amendment)).digest("hex") };
+}
+
+/** Resolve saved authority, never reinterpret historical work from a new grant. */
+export function m4EffectiveTokenPolicy(policy: M4Policy, saved?: unknown) {
+  if (saved === undefined) return { maxInputTokens: 32000 as const, warningInputTokens: 32000 as const,
+    hash: null, snapshot: undefined };
+  const parsed = m4TokenPolicySchema.parse(saved);
+  const expected = m4TokenPolicySnapshot(parsed.amendment);
+  if (parsed.hash !== expected.hash || parsed.amendment.basePolicyHash !== m4PolicySnapshot(policy).hash)
+    throw new Error("Saved effective token policy differs from its base or canonical identity.");
+  return { maxInputTokens: parsed.amendment.maxInputTokens, warningInputTokens: parsed.amendment.warningInputTokens,
+    hash: parsed.hash, snapshot: parsed };
+}
+
+type TokenPreparation = { tokenPolicy?: M4TokenPolicy; adapterUpdate?: M4Grant["providerAdapterUpdate"] };
+type TokenReservation = { tokenPolicy?: M4TokenPolicy; effectivePolicyHash?: string; maxInputTokens?: number };
+export function m4ReservationTokenPolicy(policy: M4Policy, reservation: TokenReservation) {
+  const effective = m4EffectiveTokenPolicy(policy, reservation.tokenPolicy);
+  if (effective.snapshot ? reservation.effectivePolicyHash !== effective.hash || reservation.maxInputTokens !== effective.maxInputTokens :
+      reservation.effectivePolicyHash !== undefined || reservation.maxInputTokens !== undefined)
+    throw new Error("Reservation effective token identity or ceiling differs.");
+  return effective;
+}
+export function m4PreparationTokenPolicy(policy: M4Policy, preparation: TokenPreparation) {
+  const effective = m4EffectiveTokenPolicy(policy, preparation.tokenPolicy);
+  if (effective.snapshot) {
+    const adapter = preparation.adapterUpdate;
+    if (!adapter || adapter.fromIdentity !== policy.pluginIdentity || adapter.version !== "1.0.7-dev5" ||
+        effective.snapshot.amendment.requiredProviderAdapterIdentity !== adapter.identity ||
+        effective.snapshot.amendment.requiredProviderPackageSha256 !== adapter.packageSha256)
+      throw new Error("Effective token policy requires its exact saved provider adapter.");
+  }
+  return effective;
+}
+
+export function m4OperationTokenPolicy(policy: M4Policy, operation: {
+  m4Preparation?: TokenPreparation; m4Reservation?: TokenReservation;
+}) {
+  if (!operation.m4Preparation || !operation.m4Reservation) throw new Error("Effective token policy requires preparation and reservation.");
+  const effective = m4PreparationTokenPolicy(policy, operation.m4Preparation), reservation = operation.m4Reservation;
+  const reserved = m4ReservationTokenPolicy(policy, reservation);
+  if (canonicalPolicyJson(reservation.tokenPolicy) !== canonicalPolicyJson(operation.m4Preparation.tokenPolicy) ||
+      effective.hash !== reserved.hash)
+    throw new Error("Preparation and reservation effective token policies differ.");
+  return effective;
+}
+
+/** Admission uses current reviewed authority; no historical verifier uses this equality. */
+export function m4AdmittedTokenPolicy(policy: M4Policy, grant: M4Grant, preparation?: TokenPreparation) {
+  const effective = m4PreparationTokenPolicy(policy, { tokenPolicy: grant.tokenPolicy, adapterUpdate: grant.providerAdapterUpdate });
+  if (preparation && canonicalPolicyJson(preparation.tokenPolicy) !== canonicalPolicyJson(grant.tokenPolicy))
+    throw new Error("Prepared work cannot adopt another token policy.");
+  return effective;
+}
 
 function freezeJson(value: unknown): void {
   if (!value || typeof value !== "object") return;
@@ -93,8 +167,9 @@ export function m4ModelBucket(role: ExperimentRole, report: boolean): M4ModelBuc
   if (role === "image") throw new Error("M4 images cannot reserve text-provider charges.");
   return role === "judge" ? "judge" : role === "specialist" ? "specialist" : role === "tester" && report ? "testerReport" : "decision";
 }
-export function m4MaximumCharge(policy: M4Policy, bucket: M4ModelBucket): number {
+export function m4MaximumCharge(policy: M4Policy, bucket: M4ModelBucket, tokenPolicy?: M4TokenPolicy): number {
   const model = policy.models[bucket];
-  return Math.ceil((policy.maxInputTokens * model.inputMicrodollarsPerMillion +
+  const effective = m4EffectiveTokenPolicy(policy, tokenPolicy);
+  return Math.ceil((effective.maxInputTokens * model.inputMicrodollarsPerMillion +
     model.maxOutputTokens * model.outputMicrodollarsPerMillion) / 1_000_000) + policy.countChargeCeilingMicrodollars;
 }

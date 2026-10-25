@@ -2,7 +2,7 @@ import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ExperimentCampaignDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, personaSchema } from "@/lib/contracts/experiment-runner";
-import { m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapshot, type M4Grant } from "@/lib/experiment-runner/m4-policy";
+import { m4AdmittedTokenPolicy, m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapshot, m4ReservationTokenPolicy, type M4Grant } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import type { AssetStore } from "@/lib/assets/asset-store";
@@ -108,10 +108,16 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       operation.runId === run._id && run.m4?.campaignId === grant.campaignId && run.m4.policyHash === snapshot.hash &&
       run.m4.policyJson === snapshot.json, "Text claim has no matching M4 policy.");
     const bucket = m4ModelBucket(operation.role, run.generationCompletedAtMs != null);
-    const maximumMicrodollars = m4MaximumCharge(snapshot.policy, bucket);
-    const expected = { campaignId: grant.campaignId, policyHash: snapshot.hash, requestDigest, bucket, maximumMicrodollars };
+    const effective = m4AdmittedTokenPolicy(snapshot.policy, grant, operation.m4Preparation);
+    requireState(!effective.snapshot || !!operation.m4Preparation, "Amended reservation requires its saved preparation.");
+    const maximumMicrodollars = m4MaximumCharge(snapshot.policy, bucket, effective.snapshot);
+    const expected = { campaignId: grant.campaignId, policyHash: snapshot.hash, requestDigest, bucket, maximumMicrodollars,
+      ...(effective.snapshot ? { tokenPolicy: effective.snapshot, effectivePolicyHash: effective.hash!, maxInputTokens: effective.maxInputTokens } : {}) };
     if (operation.m4Reservation) {
-      requireState(Object.entries(expected).every(([key, value]) => operation.m4Reservation![key as keyof typeof expected] === value), "Reservation identity changed.");
+      requireState(JSON.stringify(operation.m4Reservation.tokenPolicy ?? null) === JSON.stringify(effective.snapshot ?? null) &&
+        operation.m4Reservation.effectivePolicyHash === (effective.hash ?? undefined) &&
+        operation.m4Reservation.maxInputTokens === (effective.snapshot ? effective.maxInputTokens : undefined), "Reservation token policy changed.");
+      requireState(Object.entries(expected).every(([key, value]) => JSON.stringify(operation.m4Reservation![key as keyof typeof expected]) === JSON.stringify(value)), "Reservation identity changed.");
       return operation.m4Reservation;
     }
     requireState(operation.state === "prepared" && operation.reservationCount === 0 && run.activeOperationId === operation._id &&
@@ -141,6 +147,8 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     requireState(Number.isSafeInteger(evidence.chargeMicrodollars) && evidence.chargeMicrodollars >= 0, "Invalid attributable charge.");
     const reservation = operation.m4Reservation;
     requireState(reservation && reservation.campaignId === grant.campaignId && reservation.policyHash === snapshot.hash, "No matching reservation.");
+    requireState(reservation!.maximumMicrodollars === m4MaximumCharge(snapshot.policy, reservation!.bucket,
+      m4ReservationTokenPolicy(snapshot.policy, reservation!).snapshot), "Settlement reservation ceiling differs.");
     if (reservation!.evidenceDigest !== null) {
       if (reservation!.evidenceDigest !== evidence.digest || reservation!.settledMicrodollars !== evidence.chargeMicrodollars) {
         await stop(session, nowMs);
@@ -177,7 +185,7 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     requireState(campaign.state === "stopped" && campaign.slots[run.persona] === run._id, "Campaign cannot continue this run.");
     requireAllowance(campaign.requests < snapshot.policy.maxRequests && campaign.requestCounts[run.persona] < CASES[run.persona].llmLimit &&
       run.counters.steps < run.limits.steps && run.counters.logicalText < run.limits.text &&
-      campaign.settledMicrodollars + campaign.reservedMicrodollars + m4MaximumCharge(snapshot.policy, "decision") <= snapshot.policy.maxMicrodollars,
+      campaign.settledMicrodollars + campaign.reservedMicrodollars + m4MaximumCharge(snapshot.policy, "decision", m4AdmittedTokenPolicy(snapshot.policy, grant).snapshot) <= snapshot.policy.maxMicrodollars,
       "Continuation has no remaining allowance.");
     const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
     const undispatchedDigest = operation.dispatchStartedAtMs == null ?

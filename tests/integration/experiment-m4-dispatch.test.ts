@@ -638,7 +638,7 @@ describe("offline Balanced dispatcher", () => {
     expect(env.runtime.start).toHaveBeenCalledTimes(calls);
   }, 120_000);
 
-  it("completes generation with an oversized local advisory request before reservation or provider dispatch", async () => {
+  it.each(["carrier", "authorization"] as const)("completes generation when a local advisory request exceeds the hard %s bound before dispatch", async (bound) => {
     const env = await setup();
     // The fixture advances time between operations, so preparation must use
     // that same clock rather than adding wall-clock time inside one operation.
@@ -649,8 +649,13 @@ describe("offline Balanced dispatcher", () => {
     const prepared = vi.spyOn(m4Request, "prepareM4Request").mockImplementation((...args) => {
       if (args[1].report) {
         const context = JSON.parse(args[2]);
-        context.brief = "Full retained creative evidence. ".repeat(6_000);
-        return original(args[0], args[1], JSON.stringify(context), args[3], args[4]);
+        context.brief = bound === "carrier" ? "Full retained creative evidence. ".repeat(80_000) : "\n".repeat(240_000);
+        const result = original(args[0], args[1], JSON.stringify(context), args[3], args[4]);
+        // This payload passes the raw carrier bound, but escaping it once more
+        // for Dify's HTTP response crosses the distinct 1 MiB transport limit.
+        expect(Buffer.byteLength(result.requestJson)).toBeLessThan(1_048_576);
+        expect(Buffer.byteLength(JSON.stringify({ requestJson: result.requestJson }))).toBeGreaterThan(1_048_576);
+        return result;
       }
       return original(...args);
     });
@@ -667,6 +672,9 @@ describe("offline Balanced dispatcher", () => {
       const operations = await env.repository.listOperations(env.runId);
       const local = operations.find(op => op.localReportFailure)!;
       expect(local).toMatchObject({ role: "tester", state: "failed", reservationCount: 0, workflowRunId: null });
+      expect(local.dispatchStartedAtMs == null).toBe(true);
+      expect(local.m4Preparation).toBeUndefined();
+      expect(local.localReportFailure?.scope).toBe(bound === "carrier" ? "context" : "authorization");
       expect(local.m4Reservation).toBeUndefined();
       expect(operations.filter(op => op.role === "judge")).toHaveLength(0);
       expect(vi.mocked(env.runtime.start).mock.calls.some(([, input]) => input.operationId === local._id)).toBe(false);

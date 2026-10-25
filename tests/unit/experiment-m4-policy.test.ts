@@ -9,7 +9,8 @@ describe("frozen M4 policy", () => {
         packageSha256: "a".repeat(64), reference: "reviewed-exact-package" } };
     expect(m4GrantSchema.parse(grant).providerAdapterUpdate?.version).toBe("1.0.7-dev4");
     expect(m4GrantSchema.safeParse({ ...grant, providerAdapterUpdate: { ...grant.providerAdapterUpdate, version: "1.0.7-dev3" } }).success).toBe(true);
-    expect(m4GrantSchema.safeParse({ ...grant, providerAdapterUpdate: { ...grant.providerAdapterUpdate, version: "1.0.7-dev5" } }).success).toBe(false);
+    expect(m4GrantSchema.safeParse({ ...grant, providerAdapterUpdate: { ...grant.providerAdapterUpdate, version: "1.0.7-dev5" } }).success).toBe(true);
+    expect(m4GrantSchema.safeParse({ ...grant, providerAdapterUpdate: { ...grant.providerAdapterUpdate, version: "1.0.7-dev6" } }).success).toBe(false);
   });
   it("keeps completion recovery exact, bounded and separate from failure continuation", () => {
     const entry = { runId: "00000000-0000-4000-8000-000000000001", operationId: "00000000-0000-4000-8000-000000000002", reference: "reviewed-exact-recovery" };
