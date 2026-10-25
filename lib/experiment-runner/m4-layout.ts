@@ -7,14 +7,18 @@ const sourcesSchema = z.array(z.object({ id: opaqueIdSchema, taskId: z.string(),
 
 // Only server-saved approved sources supply version and image identities. This
 // runs before preparation is saved and again when its output is interpreted.
-export function m4LayoutCatalog(raw: unknown) {
+export function m4LayoutCatalog(raw: unknown, compact = false) {
   const catalog = new Map<string, { subjectKind: "character" | "location"; subjectId: string; artifactVersionId: string; assetId: string }>();
   const assets = new Set<string>();
   for (const row of sourcesSchema.parse(raw).filter(row => row.taskId === "J09" || row.taskId === "J10")) {
     const character = row.taskId === "J09";
-    const sheet = character ? assembledCharacterSheetSchema.parse(row.content) : assembledLocationSheetSchema.parse(row.content);
+    const compactSchema = z.object({ characterId: opaqueIdSchema.optional(), locationId: opaqueIdSchema.optional(),
+      build: z.object({ assetId: opaqueIdSchema }) });
+    const sheet = compact ? compactSchema.parse(row.content)
+      : character ? assembledCharacterSheetSchema.parse(row.content) : assembledLocationSheetSchema.parse(row.content);
     const subjectKind = character ? "character" as const : "location" as const;
     const subjectId = character ? (sheet as { characterId: string }).characterId : (sheet as { locationId: string }).locationId;
+    opaqueIdSchema.parse(subjectId);
     const key = `${subjectKind}:${subjectId}`;
     if (row.subjectKind !== subjectKind || row.subjectId !== subjectId || catalog.has(key) || assets.has(sheet.build.assetId)) {
       throw new Error("M4 prepared sheet catalog is inconsistent or ambiguous.");

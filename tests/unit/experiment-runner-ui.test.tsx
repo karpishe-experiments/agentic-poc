@@ -18,14 +18,64 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("shows saved context warnings without treating estimates as provider counts or disabling controls", async () => {
+    const diagnostics = { version: "context_diagnostics_v1", projectionVersion: "role_v1", requestDigest: "a".repeat(64),
+      contextBytes: 82000, systemPromptBytes: 1200, schemaBytes: 400, requestBytes: 85000,
+      estimatedInputTokens: 21250, estimator: "utf8_bytes_div4_v1", authoritativeInputTokens: null,
+      sectionBytes: { brief: 10, currentTarget: 50, approvedSources: 100, creatorMessages: 60000,
+        questionAnswers: 25, currentArtifacts: 500, operationHistory: 300, feedback: 0, layout: 0, evidenceScope: 0, other: 40 },
+      currentCount: 2, historyCount: 4, read: { returnedJsonBytes: 90000, elapsedMs: 11000 },
+      warnings: [{ code: "read_elapsed_high", projectionVersion: "role_v1" }] };
+    fetchMock.mockResolvedValue(Response.json({ data: { ...run, operationHistory: [{ ...run.operationHistory[0],
+      state: "failed", contextDiagnostics: diagnostics }] } }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    const measurements = await screen.findByRole("region", { name: "Saved context measurements" });
+    expect(measurements.textContent).toContain("Large context — preparation continued.");
+    expect(measurements.textContent).toContain("Context 82000 bytes");
+    expect(measurements.textContent).toContain("System prompt 1200 bytes");
+    expect(measurements.textContent).toContain("Schema 400 bytes");
+    expect(measurements.textContent).toContain("Request 85000 bytes");
+    expect(measurements.textContent).toContain("Heuristic input estimate 21250 tokens");
+    expect(measurements.textContent).toContain("authoritative input count unavailable");
+    expect(measurements.textContent).toContain("creatorMessages 60000 bytes · currentArtifacts 500 bytes · operationHistory 300 bytes");
+    expect(measurements.textContent).toContain("Warning codes: read_elapsed_high");
+    expect(measurements.textContent).not.toContain("execution continued");
+    expect((screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("marks successful saved execution and distinguishes an authoritative count", async () => {
+    const diagnostics = { version: "context_diagnostics_v1", projectionVersion: "role_v1", requestDigest: "a".repeat(64),
+      contextBytes: 100, systemPromptBytes: 200, schemaBytes: 300, requestBytes: 700,
+      estimatedInputTokens: 175, estimator: "utf8_bytes_div4_v1", authoritativeInputTokens: 222,
+      sectionBytes: { brief: 100, currentTarget: 0, approvedSources: 0, creatorMessages: 0, questionAnswers: 0,
+        currentArtifacts: 0, operationHistory: 0, feedback: 0, layout: 0, evidenceScope: 0, other: 0 },
+      read: { returnedJsonBytes: null, elapsedMs: null }, warnings: [{ code: "counted_input_tokens_high", projectionVersion: "role_v1" }] };
+    fetchMock.mockResolvedValue(Response.json({ data: { ...run, operationHistory: [{ ...run.operationHistory[0],
+      state: "succeeded", contextDiagnostics: diagnostics }] } }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    const measurements = await screen.findByRole("region", { name: "Saved context measurements" });
+    expect(measurements.textContent).toContain("Large context — execution continued.");
+    expect(measurements.textContent).toContain("Heuristic input estimate 175 tokens");
+    expect(measurements.textContent).toContain("authoritative input count 222");
+  });
+
+  it("keeps historical operations and list rows usable without measurements", async () => {
+    render(<BookletRunner />);
+    expect(await screen.findByText("Context measurement unavailable.")).toBeTruthy();
+    expect(screen.queryByText(/Context measurements:/)).toBeNull();
+    expect((screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("renders a compact list row and opens full detail through its run link", async () => {
     const summary = { runId: run.runId, bookletId: "book-1", title: "Saved booklet title", persona: run.persona,
       mode: run.mode, status: "running", revision: 3, pauseRequested: false, activeOperationId: null,
       generationStatus: "in_progress", evaluationStatus: "pending", counters: run.counters, limits: run.limits,
+      contextWarningSummary: { measuredOperations: 3, warningCount: 2 },
       createdAtMs: run.createdAtMs, updatedAtMs: run.updatedAtMs };
     fetchMock.mockResolvedValue(Response.json({ data: { runs: [summary], hasMore: false } }));
     render(<BookletRunner />);
     expect(await screen.findByText("Saved booklet title")).toBeTruthy();
+    expect(screen.getByText("Context measurements: 3 operations · 2 warnings")).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
     expect(screen.queryByText("Operation trace (1)")).toBeNull();
     expect(fetchMock.mock.calls.every(([url]) => url.includes("?view=summary"))).toBe(true);

@@ -244,6 +244,7 @@ export function createExperimentContextService(database: Database, options: { st
     const operationRows = projection === "inspection" || projection === "report" ? await operations.find({ runId: run._id }, { projection: {
       _id: 1, role: 1, taskId: 1, state: 1, workflowRunId: 1, parentWorkflowRunId: 1,
       verifiedWorkflowId: 1, workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1,
+      ...(projection === "inspection" ? { contextDiagnostics: 1 } : {}),
       dispatchStartedAtMs: 1, createdAtMs: 1, updatedAtMs: 1, reservationCount: 1, safeFailure: 1,
       "localReportFailure.code": 1, "localReportFailure.scope": 1, "localReportFailure.requestBytes": 1, "localReportFailure.byteLimit": 1,
       resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
@@ -309,6 +310,7 @@ export function createExperimentContextService(database: Database, options: { st
       pageSelection,
       creatorMessages: creatorRows.map((row) => ({ id: row._id, sequence: row.sequence, content: row.uiMessageJson ? parseJson(row.uiMessageJson) : null, createdAtMs: row.createdAtMs })),
       operationHistory: operationRows.map((row) => ({ id: row._id, role: row.role, taskId: row.taskId, state: row.state,
+        ...(projection === "inspection" ? { contextDiagnostics: row.contextDiagnostics ?? null } : {}),
         countFailure: countFailures.get(row._id) ?? null,
         localReportFailure: row.localReportFailure ? { code: row.localReportFailure.code, scope: row.localReportFailure.scope,
           requestBytes: row.localReportFailure.requestBytes, byteLimit: row.localReportFailure.byteLimit } : null,
@@ -459,7 +461,8 @@ export function createExperimentContextService(database: Database, options: { st
       const pending = view.pendingDecision as { kind?: string; taskId?: SpecialistTask; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
       const matchingRevision = pending?.kind === "revision" && pending.taskId === taskId && pending.artifactVersionId === operation.expectedTargetVersionId &&
         (!isPageBible || (pending.subjectKind === "page" && pending.subjectId === operation.subjectId)) ? pending : null;
-      return { role: "specialist" as const, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, brief: view.brief, persona: view.persona, currentTarget, approvedSources, approvedUpstream: taskId === "J02" ? approvedSources[0] ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, taskId, operation.subjectId, operation._id) };
+      return { role: "specialist" as const, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, brief: view.brief, persona: view.persona, currentTarget, approvedSources, approvedUpstream: taskId === "J02" ? approvedSources[0] ?? null : null, matchingRevision,
+        creatorMessages: view.creatorMessages, questionAnswers: await getQuestionAnswers(run._id, taskId, operation.subjectId, operation._id) };
     }
     deny("Role context is not supported in this slice.");
   }

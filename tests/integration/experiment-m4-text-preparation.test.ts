@@ -62,6 +62,10 @@ describe("protected M4 preparation and atomic text claim", () => {
   it("prepares without a reservation, reuses unchanged input, and admits one fake action under duplicate authorization", async () => {
     const { db, repository, preparation, input, claim, dispatch } = await setup();
     const prepared = await preparation.prepare(input);
+    expect(await repository.getOperation(id(12))).toMatchObject({ contextDiagnostics: {
+      version: "context_diagnostics_v1", requestDigest: prepared.requestDigest,
+      estimator: "utf8_bytes_div4_v1", authoritativeInputTokens: null } });
+    expect(prepared).not.toHaveProperty("contextDiagnostics");
     const run = (await repository.getRun(id(10)))!;
     expect(run.counters.payableText).toBe(0);
     expect(await preparation.prepare(input)).toEqual(prepared);
@@ -123,6 +127,7 @@ describe("protected M4 preparation and atomic text claim", () => {
       premise: text, theme: "Friendship", emotionalPromise: "Hope", tone: "Playful", storyScope: "Three story pages and a cover",
       contentRequirements: [text], knownConstraints: [], deferredDecisions: [], approvalQuestions: [] };
     const specialistResult = await observeFakeResult(env, id(14), { kind: "proposal", payload: { taskId: "J01", content } }, 12);
+    expect((await repository.getOperation(id(14)))?.contextDiagnostics?.authoritativeInputTokens).toBe(100);
     await repository.completeOperation({ envelope: { runId: id(10), operationId: id(14), workflowRunId: id(15), inputFingerprint: "c".repeat(64), result: specialistResult },
       parentWorkflowRunId: id(13), nowMs: 12 });
     expect(await db.collections.artifacts.findOne({ experimentRunId: id(10), taskId: "J01" })).toMatchObject({ state: "draft" });

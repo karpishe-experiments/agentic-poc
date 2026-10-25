@@ -12,7 +12,8 @@ import { M4ReportSizeError, prepareM4Request, projectM4Context, m4RequestBundleM
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
-import { measurePhase, countVerificationQuery, countVerificationRead } from "@/lib/experiment-runner/diagnostics";
+import { measurePhase, countVerificationQuery, countVerificationRead, recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
+import { buildContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, nowMs: z.number().int().nonnegative() });
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
@@ -98,7 +99,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   async function prepare(raw: unknown): Promise<NonNullable<ExperimentOperationDocument["m4Preparation"]>> {
     if (!m4RequestBundleMatches(snapshot.policy, grant)) conflict("M4 request definitions or amendment are not current.");
-    const input = identity.parse(raw); const started = elapsedNow();
+    const input = identity.parse(raw); const started = elapsedNow(); const diagnosticStartedAt = Date.now();
     const now = () => input.nowMs + Math.floor(elapsedNow() - started);
     const load = async (session: ClientSession) => {
       const run = await database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
@@ -190,6 +191,20 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       modelParametersJson: JSON.stringify(request.modelParameters), sourceFingerprint: before.sourceFingerprint,
       operationFingerprint: m4OperationFingerprint(before.operation),
       publishedWorkflowId: publication.publishedWorkflowId, parentWorkflowRunId: manager?.workflowRunId ?? null, preparedAtMs: now() };
+    // Advisory diagnostics remain outside request/preparation hashes and cannot
+    // decide eligibility. These totals cover only the instrumented leaf reads.
+    const contextDiagnostics = (() => {
+      try {
+        const events = recentDiagnostics(input.runId, 500).events.filter(event => event.operationId === input.operationId &&
+          Date.parse(event.timestamp) >= diagnosticStartedAt &&
+          ["preparation_question_operations", "preparation_answer_messages", "preparation_manager_parent"].includes(event.phase));
+        return buildContextDiagnostics({ projectionVersion: m4RequestDefinition(selector).version,
+          requestDigest: saved.requestDigest, role: selector.role, contextJson, systemPrompt: request.systemPrompt,
+          outputSchema: request.modelParameters.json_schema.schema, requestJson: request.requestJson,
+          ...(events.length ? { read: { returnedJsonBytes: events.some(event => event.readJsonBytes == null) ? null
+            : events.reduce((sum, event) => sum + event.readJsonBytes!, 0), elapsedMs: events.reduce((sum, event) => sum + event.elapsedMs, 0) } } : {}) });
+      } catch { return undefined; }
+    })();
     return measurePhase(input, "preparation_attachment_transaction", () => withMongoTransaction(database, async (session) => {
       const current = await measurePhase(input, "preparation_final_source_recheck", () => load(session));
       if (current.sourceFingerprint !== before.sourceFingerprint || current.operation.dispatchStartedAtMs != null) conflict("M4 sources changed during preparation.");
@@ -199,7 +214,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
         return current.operation.m4Preparation;
       }
       const changed = await database.collections.experiment_operations.updateOne({ _id: input.operationId, m4Preparation: { $exists: false }, state: "prepared" },
-        { $set: { m4Preparation: saved } }, { session });
+        { $set: { m4Preparation: saved, ...(contextDiagnostics ? { contextDiagnostics } : {}) } }, { session });
       if (changed.modifiedCount !== 1) conflict("M4 preparation was attached concurrently.");
       const touched = await database.collections.experiment_runs.updateOne({ _id: input.runId, revision: current.run.revision, pauseRequested: false },
         { $inc: { revision: 1 } }, { session });

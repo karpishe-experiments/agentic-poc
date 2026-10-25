@@ -7,6 +7,7 @@ import { SavedArtifactImages } from "./saved-artifact-images";
 import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 import type { ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 import { PageBatchSelector, type PageSelection } from "./page-batch-selector";
+import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 
 const personas = [
   { id: "playful_kid", label: "Playful kid" },
@@ -19,6 +20,7 @@ type Artifact = { id: string; taskId: string; state: string; currentVersionId: s
 type Operation = { id: string; role: string; taskId: string | null; state: string; workflowRunId: string | null; parentWorkflowRunId: string | null; reservationCount: number; safeFailure: string | null; createdAtMs: number; updatedAtMs: number;
   countFailure?: { code: string; countedInputTokens: number | null; limit: number; generationStarted: false } | null;
   localReportFailure?: { code: string; scope: "context" | "request"; requestBytes: number; byteLimit: number } | null;
+  contextDiagnostics?: ContextDiagnostics | null;
   elapsedMs?: number; remoteStatus?: string | null; deadlineAtMs?: number | null; lifecycle?: { phase: string; startedAtMs: number; lastProgressAtMs: number; attemptOutcome?: string; unresolved?: boolean; stop?: { delivery: string } } | null };
 type Run = {
   runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; title?: string | null; brief?: string; status: string; revision: number; pauseRequested: boolean;
@@ -32,6 +34,7 @@ type Run = {
   creatorMessages?: { id: string; sequence: number; content: unknown; createdAtMs: number }[];
   activeDelegation?: { id: string; taskIds: string[]; subjectKind: string; subjectId: string; testerDecisionId: string } | null;
   operationHistory?: Operation[];
+  contextWarningSummary?: { measuredOperations: number; warningCount: number } | null;
   bookletId?: string;
   generationStatus?: "in_progress" | "complete";
   evaluationStatus?: "pending" | "running" | "complete" | "failed";
@@ -66,6 +69,22 @@ function RunTimestamp({ value }: { value?: number }) {
 }
 const label = (value: string) => value.replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
 const secondaryAction = "inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50";
+
+function ContextMeasurements({ value, operation }: { value?: ContextDiagnostics | null; operation: Operation }) {
+  if (!value) return <p>Context measurement unavailable.</p>;
+  const largest = Object.entries(value.sectionBytes).sort(([left, leftBytes], [right, rightBytes]) =>
+    rightBytes - leftBytes || left.localeCompare(right)).slice(0, 3);
+  return <section aria-label="Saved context measurements" className="space-y-1">
+    {value.warnings.length ? <p>{operation.state === "succeeded" && operation.workflowRunId
+      ? "Large context — execution continued." : "Large context — preparation continued."}</p> : null}
+    <p>Size warnings did not block preparation. A later count or provider failure may still stop the operation.</p>
+    <p>Context {value.contextBytes} bytes · System prompt {value.systemPromptBytes} bytes · Schema {value.schemaBytes} bytes · Request {value.requestBytes} bytes</p>
+    <p>Heuristic input estimate {value.estimatedInputTokens} tokens ({value.estimator}); authoritative input count {value.authoritativeInputTokens ?? "unavailable"}.</p>
+    <p>Largest context sections: {largest.map(([name, bytes]) => `${name} ${bytes} bytes`).join(" · ") || "unavailable"}.</p>
+    <p>Read JSON {value.read.returnedJsonBytes ?? "unavailable"} bytes · Read time {value.read.elapsedMs ?? "unavailable"} ms.</p>
+    {value.warnings.length ? <p>Warning codes: {value.warnings.map(warning => warning.code).join(", ")}.</p> : <p>No size warnings recorded.</p>}
+  </section>;
+}
 
 export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State = "disabled" }: {
   focusedRunId?: string; balancedEnabled?: boolean; m4State?: "disabled" | "invalid" | "ready" | "granted";
@@ -326,6 +345,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
       {!focusedRunId && run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create([{ persona: run.persona, mode: "simulated", key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
       {pendingDetails.includes(run.runId) ? <p role="status">Saved details are awaiting refresh.</p> : null}
       <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · Image calls {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>
+      {run.contextWarningSummary ? <p className="text-sm">Context measurements: {run.contextWarningSummary.measuredOperations} operations · {run.contextWarningSummary.warningCount} warnings</p> : null}
       {run.m4Accounting ? <section aria-label="Balanced campaign accounting" className="space-y-1 text-sm">
         <p className="break-all">Campaign {run.m4Accounting.campaignId} · {run.m4Accounting.state}</p>
         <p>Campaign requests {run.m4Accounting.requests}/{run.m4Accounting.maxRequests} · Run requests {run.m4Accounting.runRequests}/{run.m4Accounting.runMaxRequests}</p>
@@ -343,6 +363,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         <p>Elapsed: {operation.elapsedMs == null ? "unavailable" : `${Math.floor(operation.elapsedMs / 1000)}s`} · Remote status: {operation.remoteStatus ?? "not verified"}</p>
         {operation.countFailure ? <p>Input count: {operation.countFailure.code} · {operation.countFailure.countedInputTokens ?? "unavailable"}/{operation.countFailure.limit} · Generation did not start; reservation retained.</p> : null}
         {operation.localReportFailure ? <p>Report {operation.localReportFailure.scope} exceeded the preparation size limit: {operation.localReportFailure.requestBytes}/{operation.localReportFailure.byteLimit} bytes. No provider request was sent or reserved.</p> : null}
+        <ContextMeasurements value={operation.contextDiagnostics} operation={operation} />
         <button disabled={mutationDisabled} onClick={() => void inspectOperation(run, operation.id, "inspect")}>Inspect/reconcile</button>{run.activeOperationId === operation.id ? <button disabled={mutationDisabled} onClick={() => void inspectOperation(run, operation.id, "stop")}>Stop operation</button> : null}
       </li>)}</ol></details> : null}
       <div className="space-y-3">{run.currentArtifacts?.map((artifact) => <section key={artifact.id} className="rounded border border-[var(--border)] p-3"><h4 className="font-semibold">{artifact.taskId} · {artifact.state}</h4>{artifact.versions.map((version) => <details key={version.id} open={version.id === artifact.currentVersionId}><summary>Version {version.number} · {version.approval ? `Approved (${version.approval.origin})` : "Needs review"}</summary><p className="break-all text-xs">Version ID: {version.id}</p>{version.dependencyVersionIds.length ? <p className="break-all text-xs">Sources: {version.dependencyVersionIds.join(", ")}</p> : null}<SavedArtifactImages taskId={artifact.taskId} content={version.content} simulated={run.mode === "simulated" || run.mode === "balanced"} /><pre className="overflow-auto whitespace-pre-wrap text-sm">{format(version.content)}</pre>{version.warnings.length ? <ul className="list-disc pl-5">{version.warnings.map((warning, index) => <li key={`${warning.field}-${index}`}>{warning.field}: {warning.message}</li>)}</ul> : null}</details>)}</section>)}</div>

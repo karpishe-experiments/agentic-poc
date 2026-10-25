@@ -4,6 +4,38 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+New non-manager Balanced requests use `m4_context_current_v2`. Specialists receive
+current approved creative sources without per-image execution prompts and upload
+metadata. J12 receives only its selected current layout page plus exact required
+lettering derived from the full approved layout; the manuscript remains once for
+continuity. J09/J10 style hydration and J11 subject resolution explicitly recognize
+the saved `current_creative_v2` marker. Legacy saved contexts retain their original
+full-source parsers. Owning services continue validating complete stored evidence.
+The server, never model output, selects this compatibility marker.
+
+Creative feedback keeps exact ordered answers/revision instructions, IDs and
+unscoped messages. Known control envelopes become structured decisions; unknown
+fields/types remain intact. Specialists receive their task revisions and matched
+question answers, while testers/reports retain completed control history. No
+model summarization, age-based dropping or inferred supersession is used.
+
+Optional operation `contextDiagnostics` records fixed section sizes, complete
+request/schema/system/context bytes, instrumented read totals, the labelled
+`utf8_bytes_div4_v1` heuristic and separately authenticated provider input counts.
+It is saved with existing preparation/observation writes and excluded from request,
+preparation and source hashes. Diagnostic serialization failure does not affect
+eligibility. Detail inspection exposes measurements; list summaries batch only
+warning metadata. Older rows show unavailable measurements. Warnings never change
+status or disable controls. The 32,000-token policy and existing byte guards remain
+enforced until the separate effective-policy/provider amendment is enabled.
+
+Specialist dependencies remain application-owned: J01 has no approved source;
+J02 uses J01; J03/J04 use J01/J02; J05 uses J01–J04; J06 uses J02/J03/J05;
+J07 uses J02/J04/J05; J08 uses J01/J02/J05/J06/J07. J09/J10 use their approved
+final list and J08; J11 uses approved manuscript, final lists, style and required
+sheets; J12 uses J11/J05/J08 plus exactly its routed sheets. Projection does not
+change currentness, source identity, approval, dependency or original-byte checks.
+
 Preparation reads have separate execution and report projections. Question/answer
 reads return only the saved question identity/task/result and exact answer text;
 manager-parent selection reads only its validation fields. Report preparation
