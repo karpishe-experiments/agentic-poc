@@ -55,7 +55,7 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
-  localReportFailure?: { code: "report_request_too_large"; scope: "context" | "request"; requestBytes: number; byteLimit: number;
+  localReportFailure?: { code: "report_request_too_large"; scope: "context" | "request" | "authorization"; requestBytes: number; byteLimit: number;
     definitionHash: string; requestDigest: string; policyHash: string; configurationHash: string;
     sourceFingerprint: string; operationFingerprint: string; generationCompletedAtMs: number;
     generationVersionIds: string[]; recordedAtMs: number };
@@ -73,11 +73,13 @@ export type ExperimentOperationDocument = BaseDocument & {
     issue: "missing_wrapper" | "invalid_evidence" | "provider_failure" | "creative_invalid" | "conflicting_evidence" | null };
   contextDiagnostics?: ContextDiagnostics;
   m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
+    tokenPolicy?: import("@/lib/experiment-runner/m4-policy").M4TokenPolicy;
     adapterUpdate?: M4Grant["providerAdapterUpdate"];
     definitionUpdate?: { fromBundleHash: string; toBundleHash: string; reference: string };
     requestJson: string; contextJson: string; systemPrompt: string; modelParametersJson: string;
     sourceFingerprint: string; operationFingerprint: string; publishedWorkflowId: string; parentWorkflowRunId: string | null; preparedAtMs: number };
   m4Reservation?: { campaignId: string; policyHash: string; requestDigest: string; bucket: M4ModelBucket;
+    tokenPolicy?: import("@/lib/experiment-runner/m4-policy").M4TokenPolicy; effectivePolicyHash?: string; maxInputTokens?: number;
     maximumMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null; evidenceDigest: string | null };
   runId: string; role: ExperimentRole; taskId: ExperimentTask | null;
   subjectKind: "book" | "character" | "location" | "page"; subjectId: string;

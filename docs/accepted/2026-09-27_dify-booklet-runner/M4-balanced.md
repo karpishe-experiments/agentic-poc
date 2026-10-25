@@ -27,7 +27,7 @@ rates and preserves legacy 32,000-token evidence. Keep carrier/storage/schema an
 evidence boundaries hard. Changes to provider consumers require metadata-only
 credential-inventory reconciliation. Slice A has no credential-inventory impact.
 
-Slice A is delivered; Slice B is a local candidate. Returned JSON sizes are not
+Slices A and B are delivered; Slice C is a local compatibility candidate. Returned JSON sizes are not
 wire-byte measurements. The bounded read probe reproduced the original question
 query timeout independently of preparation or Dify dispatch.
 No index, timeout, infrastructure or live-run mutation is authorized by diagnostics.
@@ -81,12 +81,88 @@ providers, twelve agent fixtures, typecheck, focused lint and 215 documentation
 links. Tests cover compact/legacy J09, J11 and J12 output equivalence, exact
 lettering, historical report definitions, unknown creator instructions and
 best-effort diagnostic failures. No provider installation, credential storage or
-use change is included. Two independent reviews passed; staging delivery remains pending.
+use change is included. Two independent source and port reviews passed.
 
 After the final feedback/diagnostic correction, 82 affected preparation/provider
 persistence cases passed again. The earlier 17 context-reader cases are unchanged.
 Vitest returned success after all cases passed; its MongoDB process cleanup
 reported a forced child-process exit. This is not a live-provider result.
+
+Slice B source PR #276 at `f25233652e280022d540ef32dd0fce9314dff5fa` passed
+CI `40192684268` and merged as `7da68d83ebc5efc31a8de5bfe0929ed8f1b4b30e`.
+Staging PR #277 at `a225f62039b110c9692178b4c16cf1994e02ef49` passed CI
+`40193027454`, port typecheck/lint and 127 units; release
+`13e5e18db713a367ab69124036215ff628122130` serves image
+`sha256:2767aa8a21ba45718998ceecc62f5f8062a37568f89ff35e9cd5801c67eeefb1`.
+Deploy observer `40193235456` expired while the host backed up; no replay or Stop
+was sent. Journal `40194475730` confirmed complete/archived, backup
+`staging-20261025T123201Z-762a0bafeba63d96`. Check `40194770386` and direct readiness
+passed. Read-only summaries retained Kid revision 3014, Parent 412 and Creator 470
+with the same counters and no active operation/preparation. Old measurements are
+unavailable; no provider request or continuation was sent.
+
+Slice C implementation contract: keep the frozen policy JSON/hash unchanged.
+Save a canonical `tokenPolicy` amendment snapshot/hash on new preparations and
+reservations. Its fixed version is `m4_context_policy_v2`, warning input 32,000,
+hard input 128,000, base-policy hash and required dev5 adapter package identity.
+New admission compares the snapshot with the reviewed grant; historical checks
+resolve the saved snapshot and require preparation/reservation agreement. Absence
+means the historical 32,000 ceiling. Provider v2 evidence echoes the effective
+policy and warning, while legacy v1 evidence remains readable. The original
+request digest covers immutable provider request bytes. `booklet_carrier_v2`
+adds trusted policy metadata only to the canonical authorization carrier; its
+separate carrier digest authenticates that envelope. The audited published Dify
+decoder hashes and forwards opaque canonical JSON without rewriting it. Preserve
+its frozen publication ID; dev5 removes policy metadata before counting and
+generation and checks the embedded original request digest. Candidate graph and
+adapter parity tests must prove this compatibility before activation. No prepared or dispatched
+operation changes policy in place. The full escaped carrier remains bounded.
+At the frozen assumed count allowance, maximum reservations are USD 0.017924 per
+decision, USD 0.020996 per specialist/final tester and USD 0.402820 per judge.
+These are liabilities, not invoice prices. The stopped campaign is not activated
+by this implementation or provider preparation.
+
+The compatibility candidate has no `tokenPolicy` in the live grant. It keeps
+dev4 selected while adding forward-only readers and advisory request-size targets.
+Local validation passed 105 units, 147 real-persistence cases with fake providers,
+focused hard-carrier and escaped-authorization advisory-completion cases, forty socket-denied dev5 adapter
+cases and 48 current Node/Python request vectors. After the final settlement
+ceiling check, 51 accounting/campaign/policy cases passed again; twelve graph/policy
+units were refreshed after a test-only lint correction. Typecheck, focused lint,
+twelve agent fixtures and 215 documentation links passed. No full-suite or paid
+execution result is claimed.
+
+The first two independent Slice C reviews found the same transport gap: removing
+the efficiency caps made requests reachable that fit the canonical carrier but
+exceed Dify's escaped 1 MiB HTTP response. Preparation now uses the same serializer
+as authorization to check that response before dispatch. The maximum authorized
+timeout bounds the later response size. An oversized report retains a typed
+`authorization` rejection and completes with evaluation incomplete, without a
+workflow, preparation, reservation or judge dispatch. The regression uses a
+request below 1 MiB before escaping and verifies terminal accounting and no replay.
+After this correction, 36 request/policy units, eighteen HTTP/policy persistence
+cases, seven preparation persistence cases, and 48 Node/Python parity vectors
+passed; typecheck and focused lint passed. The unchanged carrier-bound case also
+passed. No provider installation or live run mutation was used for these checks.
+
+Read-only Community workspace verification identified
+`ffac910f-2786-490e-90d8-07243d49741b`. All seventeen exact retained text workflow
+IDs returned their original publication and an exact match for the reviewed
+decoder source. The opaque decoder passes the v2 carrier unchanged in the role
+and persona fixtures. No workflow was republished and no provider was contacted.
+
+The ignored reviewed dev5 ZIP candidate is
+`output/issue65-openai-plugin-audit/openai-1.0.7-dev5-candidate.difypkg`, SHA-256
+`eeea0674e15c32b239713abc277095d6da5c49456d64e2b6183a367e99191aa9`.
+Its distinct Dify content identity is
+`langgenius/openai:1.0.7-dev5@eeba51ff094dadc68ffc2f94ab80422f8de0a6d3b640c50ff35f881190092a1f`.
+Exactly five of 98 members differ from the retained dev4 package; the other 93
+remain byte-identical. Local preparation does not establish installation. Obtain
+the action-time installation/signature-window handoff only after compatibility
+delivery, then read back the exact identity and enable the reviewed amendment in
+a separate source/staging change. Preserve the stopped campaign and retained
+failure until its exact continuation is authorized. Credential inventory records
+only the changed provider-consumer metadata; no secret storage or scope changes.
 
 ### Repeated page-4 preparation failure — 2026-10-25
 

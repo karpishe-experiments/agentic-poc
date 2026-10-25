@@ -2,7 +2,7 @@ import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/do
 import type { M4Authority } from "@/db/experiment-campaign";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
-import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4PolicySnapshot, m4PreparationTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 
 // remoteStatus is written by authenticated execution observation, never by a
@@ -12,6 +12,7 @@ export function m4UnclaimedFailureDigest(authority: M4Authority, run: Experiment
   op: ExperimentOperationDocument): string | null {
   try {
     const snapshot = m4PolicySnapshot(authority.policy), prep = op.m4Preparation;
+    if (prep) m4PreparationTokenPolicy(snapshot.policy, prep);
     if (run.mode !== "balanced" || run.generationCompletedAtMs != null && op.createdAtMs >= run.generationCompletedAtMs || op.runId !== run._id ||
         op.mode !== "balanced" || op.role !== "manager" || op.taskId !== null || op.providerKind !== "text" ||
         op.subjectKind !== "book" || op.subjectId !== run.bookletId || op.state !== "failed" ||

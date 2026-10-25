@@ -54,21 +54,54 @@ def _count_request_id(value: Any) -> str | None:
 
 
 def _count_failure(model: str, digest: str, stdio_sdk: dict[str, str], code: str,
-                   counted: int | None, request_id: str | None, elapsed: float) -> LLMResult:
+                   counted: int | None, request_id: str | None, elapsed: float,
+                   effective_policy: dict[str, Any] | None) -> LLMResult:
     # This is transport evidence only. It does not assert usage or a free count
     # request, and can only be returned before entering responses.create.
     wrapper = {
-        "schemaVersion": "booklet_pre_generation_failure_v1", "content": "",
+        "schemaVersion": "booklet_pre_generation_failure_v2" if effective_policy else "booklet_pre_generation_failure_v1", "content": "",
         "failureEvidence": {
             "provider": "openai", "apiBaseUrl": "https://api.openai.com/v1",
             "stdioSdk": stdio_sdk, "model": model, "serviceTier": "default",
             "requestDigest": digest, "stage": "input_count", "code": code,
-            "adapterVersion": "1.0.7-dev4", "countedInputTokens": counted, "limit": 32000, "generationStarted": False,
+            "adapterVersion": "1.0.7-dev5", "countedInputTokens": counted,
+            "limit": effective_policy["maxInputTokens"] if effective_policy else 32000, "generationStarted": False,
             "elapsedMs": max(0, int(elapsed * 1000)), "countRequestId": request_id,
+            **({"effectivePolicy": effective_policy, "contextWarnings": _context_warnings(counted, effective_policy)}
+               if effective_policy else {}),
         },
     }
     return LLMResult(model=model, message=AssistantPromptMessage(content=json.dumps(wrapper)),
                      usage=LLMUsage.empty_usage())
+
+
+def _context_warnings(counted: int | None, policy: dict[str, Any] | None) -> list[str]:
+    return (["input_tokens_above_32000"] if policy and counted is not None
+            and counted > policy["warningInputTokens"] else [])
+
+
+def _effective_policy(params: dict[str, Any]) -> dict[str, Any] | None:
+    names = ("booklet_token_policy_version", "booklet_token_policy_hash",
+             "booklet_max_input_tokens", "booklet_warning_input_tokens")
+    present = [name in params for name in names]
+    if not any(present):
+        return None
+    if not all(present):
+        raise InvokeBadRequestError("Booklet token policy parameters are incomplete.")
+    version, digest, maximum, warning = (params.pop(name) for name in names)
+    if (version == "m4_legacy_v1" and digest == "none" and
+            type(maximum) is int and maximum == 32000 and
+            type(warning) is int and warning == 32000):
+        return None
+    if isinstance(digest, str) and digest.startswith("sha256:"):
+        digest = digest[len("sha256:"):]
+    if (version != "m4_context_policy_v2" or type(digest) is not str or
+            re.fullmatch(r"[0-9a-f]{64}", digest) is None or
+            type(maximum) is not int or maximum != 128000 or
+            type(warning) is not int or warning != 32000):
+        raise InvokeBadRequestError("Booklet token policy differs from the fixed amendment.")
+    return {"version": version, "hash": digest, "maxInputTokens": maximum,
+            "warningInputTokens": warning}
 
 
 def _usage(response: Any) -> dict[str, Any]:
@@ -137,6 +170,10 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     expected_digest = params.pop("booklet_request_digest", None)
     carrier = params.pop("booklet_prepared_request", False)
     deadline_at_ms = params.pop("booklet_deadline_at_ms", None)
+    dynamic_policy_present = any(name in params for name in (
+        "booklet_token_policy_version", "booklet_token_policy_hash",
+        "booklet_max_input_tokens", "booklet_warning_input_tokens"))
+    effective_policy = _effective_policy(params)
     # Graphon coerces all-numeric dynamic parameter strings to numbers. The
     # explicit prefix keeps the authorized digest a string through that boundary.
     if isinstance(expected_digest, str) and expected_digest.startswith("sha256:"):
@@ -172,6 +209,7 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     if any(message.role.value not in ("system", "developer", "user") or not isinstance(message.content, str)
            for message in messages):
         raise InvokeBadRequestError("Booklet requires explicit text-only context.")
+    carrier_provider_digest = None
     if carrier:
         if (len(messages) != 1 or messages[0].role.value != "user"
                 or len(messages[0].content.encode("utf-8")) > 2 * 1024 * 1024):
@@ -180,6 +218,39 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
             payload = json.loads(messages[0].content)
         except (ValueError, TypeError):
             raise InvokeBadRequestError("Booklet prepared request is invalid.") from None
+        # The published graph relays this canonical carrier unchanged. Bind its
+        # metadata to the authorization digest before extracting provider fields.
+        try:
+            carrier_encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                                         ensure_ascii=False, allow_nan=False).encode()
+        except (TypeError, ValueError):
+            raise InvokeBadRequestError("Booklet prepared carrier is not canonical JSON.") from None
+        if (len(carrier_encoded) > 2 * 1024 * 1024 or
+                messages[0].content != carrier_encoded.decode() or
+                hashlib.sha256(carrier_encoded).hexdigest() != expected_digest):
+            raise InvokeBadRequestError("Booklet prepared carrier differs from authorization.")
+        if isinstance(payload, dict) and "bookletPolicy" in payload:
+            metadata = payload["bookletPolicy"]
+            if (not isinstance(metadata, dict) or
+                    set(metadata) != {"contractVersion", "requestDigest", "tokenPolicy"} or
+                    metadata["contractVersion"] != "booklet_carrier_v2" or
+                    type(metadata["requestDigest"]) is not str or
+                    re.fullmatch(r"[0-9a-f]{64}", metadata["requestDigest"]) is None or
+                    not isinstance(metadata["tokenPolicy"], dict) or
+                    set(metadata["tokenPolicy"]) != {"version", "hash", "maxInputTokens", "warningInputTokens"}):
+                raise InvokeBadRequestError("Booklet carrier policy metadata is invalid.")
+            token_policy = metadata["tokenPolicy"]
+            carrier_policy = _effective_policy({
+                "booklet_token_policy_version": token_policy["version"],
+                "booklet_token_policy_hash": token_policy["hash"],
+                "booklet_max_input_tokens": token_policy["maxInputTokens"],
+                "booklet_warning_input_tokens": token_policy["warningInputTokens"],
+            })
+            if carrier_policy is None or dynamic_policy_present and effective_policy != carrier_policy:
+                raise InvokeBadRequestError("Booklet carrier and dynamic token policies differ.")
+            effective_policy = carrier_policy
+            carrier_provider_digest = metadata["requestDigest"]
+            payload = {key: value for key, value in payload.items() if key != "bookletPolicy"}
         if (not isinstance(payload, dict)
                 or set(payload) != {"model", "input", "max_output_tokens", "reasoning", "service_tier", "text", "store", "truncation", "include"}
                 or payload["model"] != model or type(payload["max_output_tokens"]) is not int
@@ -207,10 +278,12 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     payload["truncation"] = "disabled"
     # Own the admitted snapshot; callers and counting must not mutate generation.
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
-    if carrier and messages[0].content != encoded.decode():
+    if carrier and len(encoded) > 2 * 1024 * 1024:
+        raise InvokeBadRequestError("Booklet canonical prepared carrier exceeds its limit.")
+    if carrier and carrier_provider_digest is None and messages[0].content != encoded.decode():
         raise InvokeBadRequestError("Booklet prepared carrier must preserve exact canonical bytes.")
     digest = hashlib.sha256(encoded).hexdigest()
-    if digest != expected_digest:
+    if digest != (carrier_provider_digest or expected_digest):
         raise InvokeBadRequestError("Booklet request differs from authorized preparation.")
     payload = json.loads(encoded)
     stdio_sdk = _verify_stdio_sdk()
@@ -235,16 +308,16 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
             # Never persist exception text, credentials or provider error bodies.
             # Generation errors are deliberately outside this catch boundary.
             return _count_failure(model, digest, stdio_sdk, "input_count_request_failed",
-                                  None, None, clock() - started)
+                                  None, None, clock() - started, effective_policy)
         raw_count = _field(count, "input_tokens")
         input_count = _integer(raw_count)
         code = ("input_count_unavailable" if raw_count is None else
                 "input_count_invalid" if input_count is None or input_count > 9007199254740991 else
-                "input_limit_exceeded" if input_count > 32000 else None)
+                "input_limit_exceeded" if input_count > (effective_policy["maxInputTokens"] if effective_policy else 32000) else None)
         if code:
             return _count_failure(model, digest, stdio_sdk, code,
                                   input_count if code == "input_limit_exceeded" else None,
-                                  _count_request_id(count), clock() - started)
+                                  _count_request_id(count), clock() - started, effective_policy)
         remaining = seconds - (clock() - started)
         if carrier:
             remaining = min(remaining, (deadline_at_ms - time.time() * 1000) / 1000)
@@ -273,10 +346,12 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
         "refused": refused, "incompleteReason": incomplete_reason,
         "requestDigest": digest, "countedInputTokens": input_count,
         "usage": usage,
+        **({"effectivePolicy": effective_policy,
+            "contextWarnings": _context_warnings(input_count, effective_policy)} if effective_policy else {}),
     }
     # Dify LLM nodes expose text. Do not depend on opaque_body being exported.
     # Creative output remains a string for the trusted downstream parser to validate.
-    wrapper = {"schemaVersion": "booklet_provider_v1", "content": _final_content(response),
+    wrapper = {"schemaVersion": "booklet_provider_v2" if effective_policy else "booklet_provider_v1", "content": _final_content(response),
                "providerEvidence": evidence}
     measured = (llm._calc_response_usage(model, credentials, usage["inputTokens"], usage["outputTokens"])
                 if usage["source"] == "provider_reported" else LLMUsage.empty_usage())

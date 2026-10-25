@@ -12,7 +12,7 @@ import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { loadPublishedRehearsal, publishedReturn } from "@/tests/helpers/m4-published-rehearsal";
 import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
-import { m4PolicySchema } from "@/lib/experiment-runner/m4-policy";
+import { m4PolicySchema, m4PolicySnapshot, m4TokenPolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { writeFileSync } from "node:fs";
 
 const databases: Database[] = [];
@@ -26,11 +26,17 @@ function create(body: unknown, key = id(50)) {
   return new Request("http://localhost:3000/api/experiments/booklet-runs", { method: "POST",
     headers: { origin: "http://localhost:3000", "idempotency-key": key }, body: JSON.stringify(body) });
 }
-async function setup(prepare = true) {
+async function setup(prepare = true, amended = false) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const policy = m4PolicySchema.parse({ ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash(),
     ...(process.env.M4_PUBLICATION_REHEARSAL === "1" ? { publications: manifest.policy.publications, pluginIdentity: manifest.policy.pluginIdentity } : {}) });
-  const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-only" } };
+  const adapterUpdate = { fromIdentity: policy.pluginIdentity, version: "1.0.7-dev5" as const,
+    packageSha256: "b".repeat(64), identity: `langgenius/openai:1.0.7-dev5@${"e".repeat(64)}`, reference: "fake-reviewed-package" };
+  const tokenPolicy = m4TokenPolicySnapshot({ version: "m4_context_policy_v2", basePolicyHash: m4PolicySnapshot(policy).hash,
+    maxInputTokens: 128000, warningInputTokens: 32000, requiredProviderAdapterIdentity: adapterUpdate.identity,
+    requiredProviderPackageSha256: adapterUpdate.packageSha256, reference: "fake-reviewed-policy" });
+  const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-only",
+    ...(amended ? { providerAdapterUpdate: adapterUpdate, tokenPolicy } : {}) } };
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "http://localhost:3000", callbackKey: "x".repeat(32),
     bindings: policy.publications.map((binding) => ({ ...binding, taskId: specialistTaskSchema.nullable().parse(binding.taskId), apiKey: "fake-test-key" })),
     m4: { state: "granted", authority } };
@@ -53,6 +59,26 @@ async function setup(prepare = true) {
 }
 
 describe("granted M4 HTTP boundary with fake Dify reads", () => {
+  it("authenticates the policy carrier separately and preserves the saved provider request and reservation digest", async () => {
+    const { http, repository, runtime } = await setup(true, true);
+    const preparation = (await repository.getOperation(id(12)))!.m4Preparation!;
+    const response = await http.tool(callback(), "authorize");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const carrier = JSON.parse(body.data.m4.requestJson);
+    expect(carrier.bookletPolicy).toMatchObject({ contractVersion: "booklet_carrier_v2", requestDigest: preparation.requestDigest,
+      tokenPolicy: { hash: preparation.tokenPolicy!.hash, maxInputTokens: 128000, warningInputTokens: 32000 } });
+    expect(body.data.m4.requestDigest).toBe(m4Hash(body.data.m4.requestJson));
+    expect(body.data.m4.requestDigest).not.toBe(preparation.requestDigest);
+    delete carrier.bookletPolicy;
+    expect(carrier).toEqual(JSON.parse(preparation.requestJson));
+    const saved = (await repository.getOperation(id(12)))!;
+    expect(saved.m4Preparation).toEqual(preparation);
+    expect(saved.m4Reservation).toMatchObject({ requestDigest: preparation.requestDigest,
+      effectivePolicyHash: preparation.tokenPolicy!.hash, maxInputTokens: 128000 });
+    expect((await http.tool(callback(), "authorize")).status).toBe(200);
+    expect(runtime.start).not.toHaveBeenCalled();
+  });
   it("creates once when valid binding order differs from the manifest without rewriting its snapshot", async () => {
     const { http, db, config, runtime } = await setup(false);
     // The protected prepared settings place image before manager; the frozen
