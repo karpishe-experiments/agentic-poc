@@ -28,7 +28,8 @@ evidence boundaries hard. Changes to provider consumers require metadata-only
 credential-inventory reconciliation. Slice A has no credential-inventory impact.
 
 Slices A and B and Slice C compatibility are delivered. Dev5 is installed and
-identity-verified; the separate amendment-enablement change is awaiting delivery.
+identity-verified; amendment enablement is delivered and staging checks passed.
+The exact retained Creator continuation still requires its separate approval.
 Returned JSON sizes are not
 wire-byte measurements. The bounded read probe reproduced the original question
 query timeout independently of preparation or Dify dispatch.
@@ -192,6 +193,26 @@ Enablement local verification passed 41 units, 51 real-persistence cases with fa
 providers, typecheck, focused lint and 215 documentation links. No request/agent
 definition or provider source changed in this enablement; prior fixture/parity
 results remain applicable. No campaign activation or paid request was used.
+
+### Context-policy activation checkpoint — 2026-10-25
+
+Source PR #280 at `7f2f113092b25267a32eb6b0392c83b6659db12c` and staging
+PR #281 at `87b08e1c8b519ea8c901f05a9f5e9b4a6c095c42` each passed two
+independent reviews and lean CI (`40214089036` / `40214242269`). The staging
+release is `c9bd79d8254d51a02a9ee4f087dd6e8a8c6ad0d8`, image
+`sha256:2c129e754d8a467667a9ae59ea75e98929e0a346ad2696828742b5fc746827bf`.
+Deploy `40214455961` reached its client observation limit during backup; it did
+not stop or replay the host operation. Read-only journal `40215376795` confirmed
+the same request complete/archived. Independent Check `40215488278` passed.
+
+Read-only saved summaries retain Kid revision 3014, Parent 412 and Creator 470,
+unchanged counters and zero paid images. No active operation or preparation is
+shown. Creator remains stopped at exact failure
+`928cb32d-daf7-4703-b005-fdaf076d6cb6`; this release grants no continuation.
+The dev5 installation and restored signature check enable new amended requests,
+but do not demonstrate a successful live amended provider call. That evidence
+must come from the authorized same-Creator continuation. M4 remains incomplete;
+M5 execution is not authorized.
 
 ### Repeated page-4 preparation failure — 2026-10-25
 
