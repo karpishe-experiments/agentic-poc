@@ -188,7 +188,7 @@ const managerRunFields = ["bookletId", "persona", "generationStatus"];
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 // Routing consumes status and provenance. Creative bodies belong to specialists
-// and independent reports, and otherwise grow with every completed image.
+// and tester review/report evidence, and otherwise grow with every completed image.
 function artifactProjection(raw: unknown, report: boolean): Record<string, unknown> {
   const artifact = record(raw);
   const current = list(artifact.versions).map(record).find(version => version.id === artifact.currentVersionId);
@@ -240,6 +240,12 @@ function projectionFields(selector: M4RequestSelector) {
       ["role", "bookletId", "brief", "persona", "currentArtifacts", "creatorMessages", "operationHistory", "counters", "limits", "warnings", "imageEvidence", "reportEvidence"] :
       ["role", "bookletId", "brief", "persona", "currentArtifacts", "pendingDecision", "activeDelegation", "creatorMessages", "eligibleTaskIds", "revisionCounts"];
 }
+const testerEvidenceScope = {
+  artifactVersions: "Current versions only, including drafts awaiting review. Version numbers, source relationships, warnings and approvals are retained; historical creative bodies are omitted and remain saved.",
+  transport: "Duplicated execution prompts, upload metadata and transport identifiers are omitted. Current creative fields, exact lettering, reference identities and the canonical J08 style module are retained.",
+  revisions: "Saved creator messages and revisionCounts are supplied. Do not infer a historical version's content or repeat a completed control because its earlier body is omitted.",
+  images: "Images are simulated and this request is text-only. Visual assessment is not_assessed; assess supplied textual requirements and reference identities only.",
+};
 export function projectM4Context(selector: M4RequestSelector, raw: unknown, operationId: string): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || (raw as Record<string, unknown>).role !== selector.role) throw new Error("M4 context role differs.");
   const context = raw as Record<string, unknown>;
@@ -255,7 +261,8 @@ export function projectM4Context(selector: M4RequestSelector, raw: unknown, oper
     // target. Repeating the booklet provenance graph grows quadratically with
     // pages without giving this routing decision another permissible choice.
   }
-  if (selector.report) result.currentArtifacts = list(result.currentArtifacts).map(value => artifactProjection(value, true));
+  if (selector.report || selector.role === "tester") result.currentArtifacts = list(result.currentArtifacts).map(value => artifactProjection(value, true));
+  if (selector.role === "tester" && !selector.report) result.evidenceScope = { ...testerEvidenceScope };
   if (selector.report) {
     result.operationHistory = reportOperationSummary(list(result.operationHistory), operationId);
     result.evidenceScope = {
@@ -333,11 +340,13 @@ function compileM4RequestDefinition(selector: M4RequestSelector) {
   } else {
     instruction = `Act as the saved ${persona} creator persona. Give a meaningful decision on the current pending work using exact supplied versions/question/grant identities. Preserve current delegation: do not repeat an existing valid grant. Kid/Parent may delegate routine approvals. Creator must explicitly approve current artifacts and exercise the saved detailed control/revision requirement; never delegate around it. Use saved revisionCounts and creator messages to avoid repeating a completed control. Answer clarifications from the saved goal. Revise missing or technically invalid content, or fulfill an explicit saved creator control; advisory quality findings alone do not require another attempt.`;
     instruction += " For J09, attireRequirements and accessories are immutable copies of approved J06 source evidence, not editable design fields. Do not request their deletion or rewriting through J09. A note that appearance is not established in the manuscript is not a prohibition on later creator-specified design. Assess whether characterDesignProfile and sheetPromptModule implement saved creator answers and required views; do not repeat a revision solely because the inherited note remains. Actual approved hard constraints remain binding. If a creator request contradicts one, request clarification or an upstream revision rather than overriding it. This distinction does not require approval of missing, contradictory or technically invalid work.";
+    instruction += " Use evidenceScope to distinguish supplied current creative evidence from omitted history and transport data. Do not assess unseen historical versions or treat omitted execution prompts as missing creative work. Preserve exact current version targets and saved creator feedback when deciding. Images are simulated and text-only: visual assessment is not_assessed; do not claim to have inspected rendered images. State any relevant evidence limitation in the decision explanation; required current creative and technical checks still apply.";
   }
-  const definition = { version: role === "specialist" && taskId === "J09" || role === "tester" && !report
+  const definition = { version: role === "tester" && !report ? "m4_request_tester_current_v3" : role === "specialist" && taskId === "J09"
     ? "m4_request_j09_ownership_v2" : "m4_request_v1", rendering: "exact-context-string-v1", role, taskId, persona, report,
     projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
       ...(role === "specialist" && taskId === "J11" ? { layoutContract: M4_LAYOUT_CONTRACT } : {}),
+      ...(role === "tester" && !report ? { artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: testerEvidenceScope } : {}),
       ...(role === "manager" || report ? { artifactProjection: report ? "compact-advisory-v3" : "eligible-route-v3", creativeContent: report } : {}) },
     preparationByteLimit: role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null,
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };

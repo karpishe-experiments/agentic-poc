@@ -37,6 +37,30 @@ export function m4PreGenerationFailure(raw: unknown, policyRaw: unknown, op: Exp
   return parsed.data;
 }
 
+// Eligibility only: callers must also verify authenticated execution, original
+// preparation, reservation, global output absence and ownership in a transaction.
+// Final advisory reports and other reviewer failures never qualify.
+export function isM4ReviewerInputFailure(policy: unknown, run: ExperimentRunDocument, op: ExperimentOperationDocument): boolean {
+  if (op.role !== "tester" || op.taskId !== null ||
+      run.generationCompletedAtMs != null || run.evaluationStatus !== "pending" ||
+      op.m4Reservation?.bucket !== "decision" || !op.m4Observation?.evidenceJson ||
+      op.m4Observation.issue !== "provider_failure" || op.m4Observation.remoteStatus !== "succeeded" ||
+      op.lifecycle?.stop || op.m4PreGenerationRecovery) return false;
+  try {
+    return m4PreGenerationFailure(JSON.parse(op.m4Observation.evidenceJson), policy, op)?.failureEvidence.code === "input_limit_exceeded";
+  } catch { return false; }
+}
+
+// Historical accounting/inspection must use the retained decision-stage identity,
+// even after the same run reaches final evaluation. This does not grant Resume.
+export function isM4ContinuedReviewerInputFailure(policy: unknown, run: ExperimentRunDocument, op: ExperimentOperationDocument): boolean {
+  const saved = op.m4Continuation;
+  if (!saved || saved.kind !== undefined || !saved.reference || !Number.isSafeInteger(saved.resumedAtMs) ||
+      saved.evidenceDigest !== op.m4Observation?.evidenceDigest || saved.requestDigest !== op.m4Reservation?.requestDigest ||
+      run.generationCompletedAtMs != null && saved.resumedAtMs > run.generationCompletedAtMs) return false;
+  return isM4ReviewerInputFailure(policy, { ...run, generationCompletedAtMs: undefined, evaluationStatus: "pending" }, op);
+}
+
 /** Read-only diagnostic projection; this grants no recovery or provider action. */
 export function m4CountFailureDiagnostic(op: ExperimentOperationDocument, run: ExperimentRunDocument) {
   if (!run.m4 || !op.m4PreGenerationRecovery && op.m4Observation?.issue !== "provider_failure") return null;

@@ -14,6 +14,7 @@ import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 import { countVerificationQuery, measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
+import { isM4ContinuedReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 
 function invalid(): never { throw new ExperimentRepositoryError("invalid_state", "Balanced completion requires complete attributable accounting."); }
 
@@ -85,7 +86,12 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
         const provenance = failed?.m4Continuation;
         const unclaimedDigest = failed ? m4UnclaimedFailureDigest({ policy,
           grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, failed) : null;
-        if (!failed || !provenance || provenance.kind !== undefined || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
+        // A reviewer continuation remains attributable history after generation
+        // completes. Eligibility is evaluated at its saved pre-generation stage;
+        // authenticated evidence and all proof predicates are checked below.
+        const reviewerFailure = failed && isM4ContinuedReviewerInputFailure(policy, run, failed);
+        if (!failed || !provenance || provenance.kind !== undefined || failed.safeFailure !== "definite_failure" ||
+            !(["manager", "specialist"].includes(failed.role) || reviewerFailure) ||
             failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false ||
             failed.lifecycle.stop && !validateLegacyCountFailureProof(policy, run, failed) ||
             provenance.evidenceDigest !== (unclaimedDigest ?? failed.m4PreGenerationRecovery?.proofDigest ?? failed.m4Observation?.evidenceDigest) ||

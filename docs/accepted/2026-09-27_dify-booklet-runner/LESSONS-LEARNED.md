@@ -882,3 +882,15 @@ deployment's latency. Count both directions and all commands; a smaller response
 alone is insufficient evidence to adopt an optimization. The measured gate kept
 normal admission unchanged. Evidence: the M4 live-result table. Promotion target:
 **Documentation** for measured persistence changes.
+
+## Bound reviewer evidence to its current decision
+
+A mid-run Creator reviewer exceeded the unchanged 32,000-token guard while its
+context still included historical artifact bodies and repeated execution prompts.
+Final reports already used a smaller current-version projection. Reuse that
+projection for reviewers while retaining drafts, exact lettering, source identities,
+approvals, saved feedback and revision counts. State omitted evidence explicitly;
+missing historical bodies are not evidence of missing current creative work.
+Evidence: the retained first-J12 count rejection and all-persona projection tests.
+Smaller inputs do not guarantee a later provider count will fit. Promotion
+candidate: **Documentation** for bounded agent evidence.
