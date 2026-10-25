@@ -64,7 +64,9 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
       stylePromptModuleHash: styleModuleHash(z.string().parse(creative.stylePromptModule)) }).content;
   } else if (selector.taskId === "J09" || selector.taskId === "J10") {
     const final = select(selector.taskId === "J09" ? "J06" : "J07"); const styleSource = select("J08");
-    const style = parseReferenceProposal("J08", "assembled", styleSource.content).content;
+    const style = context.evidenceProjection === "current_creative_v2"
+      ? z.object({ stylePromptModule: z.string().min(1), stylePromptModuleHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(styleSource.content)
+      : parseReferenceProposal("J08", "assembled", styleSource.content).content;
     const common = { ...creative, finalListVersionId: final.id, styleVersionId: styleSource.id,
       stylePromptModule: style.stylePromptModule, stylePromptModuleHash: style.stylePromptModuleHash };
     if (selector.taskId === "J09") {
@@ -80,7 +82,7 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
         stableAnchors: subject.stableAnchors, requiredFeatures: subject.requiredFeatures }).content;
     }
   } else if (selector.taskId === "J11" && layoutSubjects) {
-    const catalog = m4LayoutCatalog(saved.approvedSources);
+    const catalog = m4LayoutCatalog(saved.approvedSources, context.evidenceProjection === "current_creative_v2");
     const pages = creative.pages as Array<{ panels: Array<{ sheetSubjects: Array<{ subjectKind: string; subjectId: string }> }> }>;
     hydrated = pageLayoutProposalSchema.parse({ ...creative, pages: pages.map(page => ({ ...page, panels: page.panels.map(panel => {
       const { sheetSubjects, ...rest } = panel;
@@ -92,7 +94,9 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
     }) })) });
   } else if (selector.taskId === "J12") {
     const layoutSource = select("J11"); const manuscript = select("J05"); const style = select("J08");
-    const layout = storedPageLayoutSchema.parse(layoutSource.content);
+    const layout = context.evidenceProjection === "current_creative_v2"
+      ? z.object({ pages: z.array(storedPageLayoutSchema.shape.pages.element).length(1) }).parse(layoutSource.content)
+      : storedPageLayoutSchema.parse(layoutSource.content);
     const page = layout.pages.find((row) => row.pageId === saved.subjectId);
     if (!page) throw new Error("M4 prepared page is absent from its approved layout.");
     hydrated = pageSubjectProposalSchema.parse({ ...creative, pageId: page.pageId, pageIndex: page.pageIndex,

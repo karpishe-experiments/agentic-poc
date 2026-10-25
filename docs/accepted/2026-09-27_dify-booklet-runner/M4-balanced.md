@@ -27,8 +27,9 @@ rates and preserves legacy 32,000-token evidence. Keep carrier/storage/schema an
 evidence boundaries hard. Changes to provider consumers require metadata-only
 credential-inventory reconciliation. Slice A has no credential-inventory impact.
 
-Current implementation work starts with A. The live preparation timeout's exact
-command remains unconfirmed; returned JSON sizes are not wire-byte measurements.
+Slice A is delivered; Slice B is a local candidate. Returned JSON sizes are not
+wire-byte measurements. The bounded read probe reproduced the original question
+query timeout independently of preparation or Dify dispatch.
 No index, timeout, infrastructure or live-run mutation is authorized by diagnostics.
 M4 remains incomplete; M5 remains held.
 
@@ -47,7 +48,45 @@ without a pass claim and replaced by the focused cases. An additional unchanged
 J13 admission test expects `invalid_result` from a mocked raw operational error;
 the unchanged runtime preserves that error. Record that existing test mismatch
 separately; do not claim the full J13 admission file passed. Live read comparisons
-and delivery identities remain pending. There is no credential-inventory impact.
+and delivery identities are recorded below. There is no credential-inventory impact.
+
+Slice A source PR #274 (`165996fe9286543f250fcdb59427f24c886ace4f`) and staging
+PR #275 (`9e5d07d2fe35ad79d8728d10f7f29750e8718ed6`) each passed two independent
+reviews. CI `40186941322` and `40187176516` passed; port typecheck/lint and 73 units
+passed. Source merged as `27629035974ca7ee6d0327e90c3f16d97a3174fc`; staging serves
+`f9c55a612f326b6c12461902ea39cf25eaed9d9c`, image
+`sha256:6ba2f1ace837344aacab7b10933ccb7149bfb9e23f2a5394fb237a4fa025ad09`.
+Deploy observer `40187379171` ended before host completion. No replay or Stop was
+sent. Journal `40188541100` confirmed request `40187379171-1` complete/archived,
+backup `staging-20261025T110802Z-9946bb7c64e8fc7a`; direct readiness passed.
+
+At unchanged Creator revision 470, one manager probe returned equivalent fields:
+original 11,096 JSON bytes/128 ms; projected 354 bytes/29 ms. One question probe
+completed its five selection/ownership reads in 19–108 ms each, then its original
+question `find` timed out at 30,002 ms (30,467 ms total; checkout total 163 ms).
+The projected comparison was not reached within the budget. The browser's
+navigation observer expired first; measurements were retrieved through the saved
+diagnostic buffer without submitting another probe. This reproduces the original
+question-read failure but establishes no live projected-read speed or equivalence
+result. Persistence fixtures verify equivalent consumed answers. No run changed.
+
+Slice B adds a versioned current creative projection, selected J12 layout plus
+exact required lettering derived from the full approved layout, deterministic
+feedback and optional size-only operation diagnostics. Legacy saved context readers
+and local report rejection definitions remain supported. It does not enable the
+higher token ceiling: the separate Slice C amendment/adapter must be verified first.
+
+Slice B local validation passed 127 units, 99 real-persistence cases with fake
+providers, twelve agent fixtures, typecheck, focused lint and 215 documentation
+links. Tests cover compact/legacy J09, J11 and J12 output equivalence, exact
+lettering, historical report definitions, unknown creator instructions and
+best-effort diagnostic failures. No provider installation, credential storage or
+use change is included. Two independent reviews passed; staging delivery remains pending.
+
+After the final feedback/diagnostic correction, 82 affected preparation/provider
+persistence cases passed again. The earlier 17 context-reader cases are unchanged.
+Vitest returned success after all cases passed; its MongoDB process cleanup
+reported a forced child-process exit. This is not a live-provider result.
 
 ### Repeated page-4 preparation failure — 2026-10-25
 
