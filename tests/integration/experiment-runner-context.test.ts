@@ -130,6 +130,44 @@ describe("saved experiment context", () => {
     expect(await context.getOperationContext(specialist.identity)).toMatchObject({ questionAnswers: [{ questionId: id(421), taskId: null, question: "Which tone?", answer: "Playful" }] });
   });
 
+  it("keeps exact saved answers while excluding large historical preparation bodies from question reads", async () => {
+    const { context, database, start } = await setup();
+    const manager = await start(510, "manager");
+    await manager.complete({ kind: "ask", payload: { question: "Which tone?" } });
+    const answer = await start(511, "tester");
+    const text = 'Keep “stars” gentle.\\n Literal $sign and \\backslash.';
+    await answer.complete(decision({ action: "answer", questionId: id(510), text }));
+    await database.database.collection("experiment_operations").updateOne({ _id: id(510) } as never,
+      { $set: { m4Preparation: { contextJson: "private".repeat(150_000), requestJson: "unused".repeat(150_000) } } });
+    const specialist = await start(512, "specialist", "J01");
+    const find = vi.spyOn(database.collections.experiment_operations, "find");
+    const messageFind = vi.spyOn(database.collections.messages, "find");
+    const value = await context.getOperationContext(specialist.identity);
+    expect(value).toMatchObject({ questionAnswers: [{ questionId: id(510), taskId: null, question: "Which tone?", answer: text }] });
+    expect(find.mock.calls.some(([filter, options]) => "state" in filter && filter.state === "succeeded" &&
+      JSON.stringify(options?.projection) === JSON.stringify({ _id: 1, taskId: 1, resultJson: 1 }))).toBe(true);
+    expect(messageFind.mock.calls.some(([, options]) => options?.projection?.uiMessageJson === 1 && options.projection._id === 0)).toBe(true);
+    expect(JSON.stringify(value)).not.toContain("privateprivate");
+  });
+
+  it("reads current report versions without inspection history or failed preparation diagnostics", async () => {
+    const { context, database, start } = await setup();
+    const specialist = await start(520, "specialist", "J01");
+    const saved = await specialist.complete(proposal("J01", concept));
+    const versionId = JSON.parse(saved.operation.materializationJson!).versionId as string;
+    const current = await database.collections.artifact_versions.findOne({ _id: versionId });
+    await database.collections.artifact_versions.insertOne({ ...current!, _id: id(525), versionNumber: 0, sourceOperationId: id(526),
+      contentJson: JSON.stringify({ historicalUnused: "private".repeat(100_000) }) });
+    const versionFind = vi.spyOn(database.collections.artifact_versions, "find");
+    const operationFind = vi.spyOn(database.collections.experiment_operations, "find");
+    const report = await context.getRunView(runId, "report");
+    expect(report?.currentArtifacts[0].versions.map(version => version.id)).toEqual([versionId]);
+    expect(versionFind.mock.calls[0][0]).toEqual({ _id: { $in: [versionId] } });
+    expect(operationFind.mock.calls).toHaveLength(1);
+    expect(JSON.stringify(report)).not.toContain("historicalUnused");
+    expect((await context.getRunView(runId))?.currentArtifacts[0].versions).toHaveLength(2);
+  });
+
   it("restores saved clarification and answer for a restarted revision specialist", async () => {
     const { context, repository, start } = await setup();
     const first = await start(460, "specialist", "J01");

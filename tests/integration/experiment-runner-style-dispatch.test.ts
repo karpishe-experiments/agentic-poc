@@ -1884,12 +1884,18 @@ describe("automatic saved J08 sample dispatch", () => {
   });
   it("recovers a discarded image response using GET and never generates that sample twice", async () => {
     const env = await setup(); await env.reachSamples(); env.faults({ lost: true });
+    const selectionReads = vi.spyOn(env.database.collections.experiment_operations, "find");
+    const candidateReads = vi.spyOn(env.database.collections.experiment_operations, "findOne");
     await env.dispatcher().advance(env.runId);
     expect(env.runtime.retrieve).toHaveBeenCalledTimes(1);
     for (let step = 0; step < 10; step++) if (await env.dispatcher().advance(env.runId) === "boundary") break;
     expect((await env.context.getRunView(env.runId))?.nextNarrativeTask).toBe("slice_complete");
     expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image")).toHaveLength(2);
     expect((await env.repository.getRun(env.runId))?.counters.logicalImage).toBe(2);
+    expect(selectionReads.mock.calls.some(([filter, options]) => "role" in filter && filter.role === "image" &&
+      options?.projection?.attempt === 1 && !Object.hasOwn(options.projection, "imageRequestJson"))).toBe(true);
+    expect(candidateReads.mock.calls.some(([filter, options]) => "state" in filter && filter.state === "succeeded" &&
+      options?.projection?.imageRequestJson === 1 && !Object.hasOwn(options.projection, "m4Preparation"))).toBe(true);
   });
   it("saves an in-flight paused sample but admits no second sample until resume", async () => {
     const env = await setup(); await env.reachSamples(); env.faults({ pause: true });

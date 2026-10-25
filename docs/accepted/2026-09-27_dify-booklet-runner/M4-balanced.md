@@ -5,6 +5,50 @@
 
 ## Current Creator admission checkpoint
 
+### Approved efficient-read and context-warning contract — 2026-10-25
+
+Implement the user's four-slice handoff on issue #65: A reduces unused database
+fields, separates report evidence from inspection, adds preparation measurements
+and compact list polling; B supplies task-specific current creative evidence and
+deterministic feedback with non-blocking size warnings; C introduces a forward-only
+128,000-token amendment with matching Booklet/Dify enforcement and reservations;
+D verifies staging and obtains exact authority before continuing Creator's retained
+failure `928cb32d-daf7-4703-b005-fdaf076d6cb6`. Each slice requires focused tests,
+two clean independent reviews and lean CI before delivery. A/B delivery does not
+depend on provider installation. No historical request, policy or liability is
+rewritten. Complete original verification remains authoritative.
+
+Efficiency warnings use 16 KiB manager requests, 128 KiB other requests, estimated
+or counted input above 24,000 tokens, counted input above 32,000 tokens, and reads
+above 256 KiB JSON or ten seconds. Warnings do not pause or block work. Slice C
+retains the USD 5/500-request campaign and persona ceilings, zero paid images,
+original deadlines and no automatic retries. Its higher reservation uses frozen
+rates and preserves legacy 32,000-token evidence. Keep carrier/storage/schema and
+evidence boundaries hard. Changes to provider consumers require metadata-only
+credential-inventory reconciliation. Slice A has no credential-inventory impact.
+
+Current implementation work starts with A. The live preparation timeout's exact
+command remains unconfirmed; returned JSON sizes are not wire-byte measurements.
+No index, timeout, infrastructure or live-run mutation is authorized by diagnostics.
+M4 remains incomplete; M5 remains held.
+
+Slice A's local candidate projects question/answer and manager-parent reads,
+selects image attempts through metadata before exact candidate request checks,
+and builds reports from current evidence without inspection-history loading.
+The UI uses the compatible compact list option and batched booklet titles.
+Fixed read-only Creator probes compare original/projected reads in one snapshot;
+preparation phases now include the formerly unmeasured question/answer work.
+No policy, provider, request-definition or spending change is in this slice.
+
+Local checks passed 25 core persistence cases, four focused image/report dispatch
+cases, 67 HTTP/UI units, six diagnostic units, twelve agent fixtures, typecheck,
+focused lint and 215 documentation links. The broad dispatch run was interrupted
+without a pass claim and replaced by the focused cases. An additional unchanged
+J13 admission test expects `invalid_result` from a mocked raw operational error;
+the unchanged runtime preserves that error. Record that existing test mismatch
+separately; do not claim the full J13 admission file passed. Live read comparisons
+and delivery identities remain pending. There is no credential-inventory impact.
+
 ### Repeated page-4 preparation failure — 2026-10-25
 
 After the authorized continuation below, new J12 operation
