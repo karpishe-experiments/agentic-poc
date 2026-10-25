@@ -21,7 +21,7 @@ type Operation = { id: string; role: string; taskId: string | null; state: strin
   localReportFailure?: { code: string; scope: "context" | "request"; requestBytes: number; byteLimit: number } | null;
   elapsedMs?: number; remoteStatus?: string | null; deadlineAtMs?: number | null; lifecycle?: { phase: string; startedAtMs: number; lastProgressAtMs: number; attemptOutcome?: string; unresolved?: boolean; stop?: { delivery: string } } | null };
 type Run = {
-  runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; brief?: string; status: string; revision: number; pauseRequested: boolean;
+  runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; title?: string | null; brief?: string; status: string; revision: number; pauseRequested: boolean;
   createdAtMs?: number; updatedAtMs?: number;
   counters: { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
   m4Accounting?: { campaignId: string; state: "active" | "stopped" | "completed"; requests: number; maxRequests: number;
@@ -100,7 +100,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
     const epoch = controlEpoch.current;
     pollBusy.current = true;
     try {
-      const response = await fetch(focusedRunId ? `/api/experiments/booklet-runs/${encodeURIComponent(focusedRunId)}` : `/api/experiments/booklet-runs/summaries?page=${page}`, { cache: "no-store", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
+      const response = await fetch(focusedRunId ? `/api/experiments/booklet-runs/${encodeURIComponent(focusedRunId)}` : `/api/experiments/booklet-runs?view=summary&page=${page}`, { cache: "no-store", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
       const result = focusedRunId ? { runs: [await read<Run>(response)], hasMore: false } : await read<{ runs: Run[]; hasMore: boolean }>(response);
       if (epoch !== controlEpoch.current || controlInFlight.current) return false;
       // A stale read must not replace a control acknowledgement or its retained details.
@@ -283,6 +283,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <h3 className="text-xl font-semibold">{personas.find((item) => item.id === run.persona)?.label ?? run.persona}</h3>
+          {!focusedRunId && run.title ? <p>{run.title}</p> : null}
           <div className="flex flex-wrap gap-2 text-sm">
             <span className="rounded-full border border-[var(--border)] px-3 py-1">{label(run.mode)}</span>
             <span className={`rounded-full px-3 py-1 font-semibold ${run.status === "blocked" || run.status === "failed" ? "bg-amber-100 text-amber-950" : run.status === "completed" ? "bg-emerald-100 text-emerald-950" : "bg-stone-100 text-stone-800"}`}>{run.status === "completed" && run.evaluationStatus === "failed" ? "Completed — evaluation incomplete" : label(run.status)}</span>

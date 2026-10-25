@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { budgetRemaining, safeFailure } from "@/lib/operations/completion-failure";
 import type { AdmissionReadDiagnostic } from "@/lib/contracts/experiment-admission-diagnostics";
+import type { PreparationReadDiagnostic } from "@/lib/contracts/experiment-preparation-diagnostics";
 
 type Identity = { runId: string; operationId?: string };
 type Counters = { queryCount: number; storageCallCount: number; transactionAttempts: number;
@@ -22,6 +23,14 @@ const buffer = processState[bufferKey] ??= { startedAt: new Date(Date.now() - pr
 const readKey = Symbol.for("booklet.admission-read-results");
 const readState = globalThis as typeof globalThis & { [readKey]?: (AdmissionReadDiagnostic & { timestamp: string })[] };
 const admissionReads = readState[readKey] ??= [];
+const preparationReadKey = Symbol.for("booklet.preparation-read-results");
+const preparationReadState = globalThis as typeof globalThis & { [preparationReadKey]?: (PreparationReadDiagnostic & { timestamp: string })[] };
+const preparationReads = preparationReadState[preparationReadKey] ??= [];
+
+export function retainPreparationRead(result: PreparationReadDiagnostic) {
+  preparationReads.push(structuredClone({ ...result, timestamp: new Date().toISOString() }));
+  if (preparationReads.length > 20) preparationReads.shift();
+}
 
 export function retainAdmissionRead(result: AdmissionReadDiagnostic) {
   admissionReads.push(structuredClone({ ...result, timestamp: new Date().toISOString() }));
@@ -32,7 +41,8 @@ export function recentDiagnostics(runId: string | undefined, limit: number) {
   const matching = runId ? buffer.events.filter(event => event.runId === runId) : buffer.events;
   return { processStartedAt: buffer.startedAt, truncated: buffer.dropped > 0 || matching.length > limit,
     events: matching.slice(-limit).map(event => ({ ...event })),
-    admissionReads: structuredClone(admissionReads.filter(result => !runId || result.runId === runId).slice(-limit)) };
+    admissionReads: structuredClone(admissionReads.filter(result => !runId || result.runId === runId).slice(-limit)),
+    preparationReads: structuredClone(preparationReads.filter(result => !runId || result.runId === runId).slice(-limit)) };
 }
 
 export function countVerificationQuery(count = 1) {

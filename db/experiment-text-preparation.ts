@@ -12,6 +12,7 @@ import { M4ReportSizeError, prepareM4Request, projectM4Context, m4RequestBundleM
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
+import { measurePhase, countVerificationQuery, countVerificationRead } from "@/lib/experiment-runner/diagnostics";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, nowMs: z.number().int().nonnegative() });
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
@@ -108,7 +109,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
           run.m4?.campaignId !== grant.campaignId || run.m4.policyHash !== snapshot.hash || run.m4.policyJson !== snapshot.json) conflict("M4 preparation is not current or admitted for this protected policy.");
       return { run, operation, sourceFingerprint: await m4SourceFingerprint(database, session, run) };
     };
-    const before = await withMongoTransaction(database, load);
+    const before = await measurePhase(input, "preparation_initial_snapshot", () => withMongoTransaction(database, load));
     const selector: M4RequestSelector = { role: before.operation.role as M4RequestSelector["role"], taskId: before.operation.taskId as SpecialistTask | null,
       persona: before.run.persona, report: (before.operation.role === "tester" || before.operation.role === "judge") && before.run.generationCompletedAtMs != null };
     if (before.operation.localReportFailure) {
@@ -127,13 +128,16 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       return saved;
     }
     if (before.operation.dispatchStartedAtMs != null) conflict("M4 preparation must precede dispatch.");
-    const rawContext = await contexts.getPreparationContext({ ...input, nowMs: now() });
-    const context = projectM4Context(selector, { ...rawContext,
-      revisionCounts: { text: before.run.textRevisions, image: before.run.imageRevisions } }, input.operationId);
-    const contextJson = JSON.stringify(context);
+    const rawContext = await measurePhase(input, "preparation_current_role_evidence", () => contexts.getPreparationContext({ ...input, nowMs: now() }));
+    const { context, contextJson } = await measurePhase(input, "preparation_context_projection", async () => {
+      const context = projectM4Context(selector, { ...rawContext,
+        revisionCounts: { text: before.run.textRevisions, image: before.run.imageRevisions } }, input.operationId);
+      return { context, contextJson: JSON.stringify(context) };
+    });
     let request: ReturnType<typeof prepareM4Request>;
     try {
-      request = prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context), grant);
+      request = await measurePhase(input, "preparation_request_construction", async () =>
+        prepareM4Request(snapshot.policy, selector, contextJson, m4AllowedContextValues(selector, context), grant));
     } catch (error) {
       if (!(error instanceof M4ReportSizeError) || !selector.report) throw error;
       await withMongoTransaction(database, async (session) => {
@@ -163,8 +167,12 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     const publication = snapshot.policy.publications.find((p) => p.role === selector.role && p.taskId === selector.taskId &&
       p.persona === (selector.role === "tester" ? selector.persona : null));
     if (!publication) conflict("M4 publication is not in the frozen policy.");
-    const manager = selector.role === "specialist" ? await database.collections.experiment_operations.findOne({ runId: input.runId, role: "manager", state: "succeeded" },
-      { sort: { createdAtMs: -1, _id: -1 } }) : null;
+    const manager = selector.role === "specialist" ? await measurePhase(input, "preparation_manager_parent", async () => {
+      countVerificationQuery();
+      const manager = await database.collections.experiment_operations.findOne({ runId: input.runId, role: "manager", state: "succeeded" },
+        { sort: { createdAtMs: -1, _id: -1 }, projection: { _id: 1, workflowRunId: 1, mode: 1, reservationCount: 1, verifiedWorkflowId: 1, resultJson: 1 } });
+      countVerificationRead(manager ? [manager] : []); return manager;
+    }) : null;
     if (selector.role === "specialist" && !manager?.workflowRunId) conflict("M4 specialist requires its saved manager parent.");
     if (manager) {
       const selected = JSON.parse(manager.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string; subjectId?: string; subjectKind?: string } } | null;
@@ -182,8 +190,8 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       modelParametersJson: JSON.stringify(request.modelParameters), sourceFingerprint: before.sourceFingerprint,
       operationFingerprint: m4OperationFingerprint(before.operation),
       publishedWorkflowId: publication.publishedWorkflowId, parentWorkflowRunId: manager?.workflowRunId ?? null, preparedAtMs: now() };
-    return withMongoTransaction(database, async (session) => {
-      const current = await load(session);
+    return measurePhase(input, "preparation_attachment_transaction", () => withMongoTransaction(database, async (session) => {
+      const current = await measurePhase(input, "preparation_final_source_recheck", () => load(session));
       if (current.sourceFingerprint !== before.sourceFingerprint || current.operation.dispatchStartedAtMs != null) conflict("M4 sources changed during preparation.");
       if (current.operation.localReportFailure) conflict("A retained local report rejection forbids preparation replay.");
       if (current.operation.m4Preparation) {
@@ -197,7 +205,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
         { $inc: { revision: 1 } }, { session });
       if (touched.modifiedCount !== 1) conflict("Run changed before preparation was retained.");
       return saved;
-    });
+    }));
   }
   return { prepare };
 }
