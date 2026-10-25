@@ -104,7 +104,12 @@ describe("protected M4 preparation and atomic text claim", () => {
     const run = (await repository.getRun(id(10)))!;
     await repository.prepareOperation({ runId: id(10), operationId: id(14), expectedRevision: run.revision, role: "specialist", taskId: "J01",
       subjectKind: "book", subjectId: id(11), inputFingerprint: "c".repeat(64), attempt: 1, providerKind: "text", nowMs: 8 });
+    const parentRead = vi.spyOn(db.collections.experiment_operations, "findOne");
     const prepared = await preparation.prepare({ runId: id(10), operationId: id(14), nowMs: 9 });
+    expect(parentRead.mock.calls.some(([filter, options]) => "role" in filter && filter.role === "manager" &&
+      options?.projection?.resultJson === 1 && options.projection.mode === 1 && options.projection.reservationCount === 1 &&
+      !Object.hasOwn(options.projection, "m4Preparation"))).toBe(true);
+    parentRead.mockRestore();
     expect(prepared.parentWorkflowRunId).toBe(id(13));
     expect(prepared.requestJson).toContain('"proposal"');
     await expect(repository.beginDispatch({ runId: id(10), operationId: id(14), parentWorkflowRunId: id(99), nowMs: 10 })).rejects.toMatchObject({ code: "conflict" });

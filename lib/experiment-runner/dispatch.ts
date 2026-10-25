@@ -48,6 +48,11 @@ function canonical(value: unknown): string {
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 }
 function fingerprint(value: unknown) { return createHash("sha256").update(canonical(value)).digest("hex"); }
+// Selection uses attempt and outcome metadata. Exact request bytes are fetched
+// only for a retained candidate that will be compared or assembled.
+const imageAttemptProjection = { _id: 1, role: 1, taskId: 1, subjectKind: 1, subjectId: 1,
+  parentWorkflowRunId: 1, inputFingerprint: 1, state: 1, safeFailure: 1,
+  reservationCount: 1, verifiedWorkflowId: 1, workflowRunId: 1, attempt: 1 };
 
 export function createExperimentDispatcher(deps: {
   database: Database; config: BookletRunnerConfig; runtime?: WorkflowRuntime;
@@ -63,6 +68,12 @@ export function createExperimentDispatcher(deps: {
   const rawRuntime = deps.runtime ?? createWorkflowRuntime(deps.config);
   const mutate = deps.mutate ?? runTrackedMutation;
   const now = deps.now ?? Date.now;
+  async function exactImageRequestMatches(runId: string, operation: ExperimentOperationDocument, request: unknown) {
+    const saved = await deps.database.collections.experiment_operations.findOne({ _id: operation._id, runId,
+      state: "succeeded", inputFingerprint: operation.inputFingerprint, verifiedWorkflowId: operation.verifiedWorkflowId,
+      workflowRunId: operation.workflowRunId }, { projection: { _id: 1, imageRequestJson: 1 } });
+    return !!saved && canonical(JSON.parse(saved.imageRequestJson ?? "null")) === canonical(request);
+  }
   const runtime: WorkflowRuntime = {
     ...rawRuntime,
     start: (binding, input, options) => rawRuntime.start(binding, input, { ...options, signal: operationSignal() ?? options?.signal }),
@@ -121,7 +132,8 @@ export function createExperimentDispatcher(deps: {
     });
     const request = sources.request.request;
     const inputFingerprint = imageRequestFingerprint(request);
-    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: "J13", subjectId: work.subjectId }).sort({ createdAtMs: 1, _id: 1 }).toArray();
+    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: "J13", subjectId: work.subjectId },
+      { projection: imageAttemptProjection }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const matches = history.filter((item) => item.role === "image" && item.taskId === "J13" && item.subjectKind === "page" &&
       item.subjectId === work.subjectId && item.parentWorkflowRunId === manager.workflowRunId && item.inputFingerprint === inputFingerprint);
     const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
@@ -168,13 +180,14 @@ export function createExperimentDispatcher(deps: {
     if (!draft || canonical(draft.dependencyVersionIds) !== canonical(work.target.sourceVersionIds)) throw new ExperimentRepositoryError("conflict", "Sheet image sources changed.");
     const request = referenceSheetRequest(work.target.taskId, draft.content);
     const inputFingerprint = imageRequestFingerprint(request);
-    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: work.target.taskId, subjectId: work.target.subjectId, inputFingerprint }).sort({ createdAtMs: 1, _id: 1 }).toArray();
+    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: work.target.taskId, subjectId: work.target.subjectId, inputFingerprint },
+      { projection: imageAttemptProjection }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const matches = history.filter((item) => item.role === "image" && item.taskId === work.target.taskId &&
       item.subjectKind === work.target.subjectKind && item.subjectId === work.target.subjectId && item.inputFingerprint === inputFingerprint);
     const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
       item.reservationCount === 0 && item.verifiedWorkflowId && item.workflowRunId));
-    if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId ||
-        canonical(JSON.parse(item.imageRequestJson ?? "null")) !== canonical(request))) throw new ExperimentRepositoryError("conflict", "Saved sheet image requires reconciliation.");
+    if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId) ||
+        executable.length === 1 && !await exactImageRequestMatches(run._id, executable[0], request)) throw new ExperimentRepositoryError("conflict", "Saved sheet image requires reconciliation.");
     if (executable.length === 1) {
       const assembled = await createExperimentSheetAssembly({ database: deps.database, store: store(), now }).assemble({
         runId: run._id, draftSheetVersionId: draft.id, imageOperationId: executable[0]._id,
@@ -197,7 +210,8 @@ export function createExperimentDispatcher(deps: {
     }
     const slots = styleSampleRequests(draft.content, { draftStyleVersionId: draft.id, conceptVersionId: sources[0],
       outlineVersionId: sources[1], manuscriptVersionId: sources[2], finalCharactersVersionId: sources[3], finalLocationsVersionId: sources[4] });
-    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: "J08", subjectId: run.bookletId }).sort({ createdAtMs: 1, _id: 1 }).toArray();
+    const history = await deps.database.collections.experiment_operations.find({ runId: run._id, role: "image", taskId: "J08", subjectId: run.bookletId },
+      { projection: imageAttemptProjection }).sort({ createdAtMs: 1, _id: 1 }).toArray();
     const savedIds: string[] = [];
     for (const slot of slots) {
       const inputFingerprint = imageRequestFingerprint(slot.request);
@@ -206,8 +220,8 @@ export function createExperimentDispatcher(deps: {
       const executable = matches.filter((item) => !(item.state === "failed" && item.safeFailure === null &&
         item.reservationCount === 0 && item.verifiedWorkflowId && item.workflowRunId));
       // An existing uncertain/failed attempt is not permission to generate again.
-      if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId ||
-          canonical(JSON.parse(item.imageRequestJson ?? "null")) !== canonical(slot.request))) {
+      if (executable.length > 1 || executable.some((item) => item.state !== "succeeded" || !item.verifiedWorkflowId) ||
+          executable.length === 1 && !await exactImageRequestMatches(run._id, executable[0], slot.request)) {
         throw new ExperimentRepositoryError("conflict", "Saved style sample requires reconciliation.");
       }
       if (executable.length === 1) { savedIds.push(executable[0]._id); continue; }

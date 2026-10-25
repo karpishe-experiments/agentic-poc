@@ -9,7 +9,7 @@ beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 }));
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
     const response = await fetchMock(url, options) as Response;
-    if (!url.includes("/summaries?")) return response;
+    if (!url.includes("?view=summary")) return response;
     const body = await response.clone().json();
     return Array.isArray(body.data) ? new Response(JSON.stringify({ data: { runs: body.data, hasMore: false } }), { status: response.status }) : response;
   });
@@ -18,6 +18,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("renders a compact list row and opens full detail through its run link", async () => {
+    const summary = { runId: run.runId, bookletId: "book-1", title: "Saved booklet title", persona: run.persona,
+      mode: run.mode, status: "running", revision: 3, pauseRequested: false, activeOperationId: null,
+      generationStatus: "in_progress", evaluationStatus: "pending", counters: run.counters, limits: run.limits,
+      createdAtMs: run.createdAtMs, updatedAtMs: run.updatedAtMs };
+    fetchMock.mockResolvedValue(Response.json({ data: { runs: [summary], hasMore: false } }));
+    render(<BookletRunner />);
+    expect(await screen.findByText("Saved booklet title")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
+    expect(screen.queryByText("Operation trace (1)")).toBeNull();
+    expect(fetchMock.mock.calls.every(([url]) => url.includes("?view=summary"))).toBe(true);
+  });
   it("keeps completed advisory failures terminal and does not infer a missing tester from summary data", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed", evaluationStatus: "failed", generationStatus: "complete", activeOperationId: null }] })));
     render(<BookletRunner />);
@@ -145,7 +157,7 @@ describe("booklet runner inspector", () => {
     const terminal = fetchMock.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
     expect(fetchMock.mock.calls).toHaveLength(terminal);
-    expect(fetchMock.mock.calls.every(([url]) => url.includes("/summaries?"))).toBe(true);
+    expect(fetchMock.mock.calls.every(([url]) => url.includes("?view=summary"))).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(fetchMock.mock.calls.length).toBeGreaterThan(terminal);
