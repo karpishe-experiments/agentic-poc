@@ -1,9 +1,44 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued at J09 on 2026-10-25 after the reviewed repair and exact proof, then stopped at the first J12 review because its input exceeded the unchanged token ceiling. The campaign is stopped; no replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The same campaign is active; no replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Reviewer-input delivery and exact continuation — 2026-10-25
+
+Source [PR #268](https://github.com/karpishe-experiments/agentic-poc/pull/268),
+reviewed `8b5a64c0e68296b66551c6ba005766ac20254626`, passed two independent
+reviews and CI `40176449632`; merge `74351c12983fe951582dbd104cdde8a3439ed0b3`.
+Staging [PR #269](https://github.com/karpishe-experiments/agentic-poc/pull/269),
+reviewed `a3bf7a73d39ea0e9528bc1a326ed2fda66dd13e5`, passed two independent
+port reviews and CI `40176760840`; release `bfb3f0abcdbbed2d085920d3f295f68670956810`.
+Port typecheck, 47 units, 22 selected persistence cases, lint and 12 agent fixtures
+passed. Existing staging overlays and six prior documentation-link failures remain.
+
+Deploy `40176994598` selected image
+`sha256:237181030332098f5d8e4cb8802d6ca92251e16019bfa20b320c33ce7b51a9da`
+and backup `staging-20261025T083521Z-86d4bc1f8c704d25`. Its observer exited 124
+during backup; no Stop or replay was sent. Journal `40177653787` confirmed the
+exact request complete/archived. Check deployment `40177786707` and direct
+application readiness passed.
+
+Fresh compact state remained revision 392, blocked, with no active operation or
+preparation before one normal continuation click. At 08:46:55 UTC the application
+acknowledged queued state and reopened the same campaign. Creator text/image/step
+counts stayed 56/9/65, campaign requests stayed 150 and all monetary exposure was
+unchanged. The failed operation and full reservation remain saved. The next compact
+read reached revision 407 with active new operation
+`789b9405-50f0-46f3-8551-caeeba5ebe63` and no failure. Live generation and final M4
+acceptance remain unverified.
+
+The new compact tester `ecbe5c68-9d83-4ef3-8a63-dee3f8181037` succeeded through
+workflow `8837de32-f9ae-4a5e-a6dd-f8916c4350eb` and explicitly approved the retained
+first J12 version in decision 17. Subsequent saved evidence shows two approved
+Page Bibles and a third draft. Campaign exposure reached 156/500 requests,
+USD 0.166640 reserved, USD 0.175985 settled upper bound and USD 4.657375 remaining.
+Creator has 62 text admissions and paid images remain zero. This is an interim
+production checkpoint; the runner continues under the same limits.
 
 ### Authorized reviewer-input repair contract — 2026-10-25
 
@@ -55,8 +90,8 @@ sizing, not live replay or acceptance evidence:
 
 No provider requests were issued for sizing. Authoritative token counts are
 unavailable; byte reduction does not establish a live count or guarantee later
-reviews fit. The existing guard remains authoritative. Delivery and the exact
-live continuation have not yet occurred for this candidate.
+reviews fit. The existing guard remains authoritative. These sizing results alone
+did not establish the subsequently verified delivery or exact live continuation.
 
 Local verification passed all 75 provider-result persistence cases, including
 22 reviewer-continuation cases, plus 47 focused units, typecheck, focused lint,
@@ -99,7 +134,8 @@ for all mid-run reviewer personas with their saved feedback and revision counts.
 Preserve the original request and ceiling; do not truncate or retry automatically.
 The user subsequently authorized this exact tester continuation after the bounded
 repair, independent reviews and staging checks. The earlier J09 grant alone did
-not cover this new failure. Delivery and continuation remain pending.
+not cover this new failure. The delivery checkpoint above records its successful
+continuation without replaying the failed operation.
 
 ### Creator J09 stop and proposed repair — 2026-10-24
 
@@ -699,8 +735,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `3980e5b0fd49fe68c5b1055ae7cc584677c53860`,
-image `sha256:fe175c1c670618b22302f7763d2b064bb6dd0c35384a9cd531c3d54e220e17d1`.
+The verified serving release is `bfb3f0abcdbbed2d085920d3f295f68670956810`,
+image `sha256:237181030332098f5d8e4cb8802d6ca92251e16019bfa20b320c33ce7b51a9da`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
