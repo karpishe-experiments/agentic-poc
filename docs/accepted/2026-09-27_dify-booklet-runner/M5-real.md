@@ -18,12 +18,15 @@ The current [M4 diagnosis checkpoint](M4-balanced.md#current-creator-admission-c
 retains accepted Kid and Parent generation/accounting with incomplete advisory
 evaluation. The initial Creator was admitted with the deployed creation-only
 60-second server/browser budgets and the user's explicit new-key permission.
-The reviewed J09/Pause repair was delivered and its exact continuation passed. It is now blocked at the first J12 review because 32,923 input tokens exceeded the unchanged 32,000-token ceiling; generation did not start for that review and its reservation remains. The same campaign is stopped. The user accepts observed
+The reviewed J09/Pause and compact-reviewer repairs were delivered, and both exact
+continuations passed. Creator is progressing through Page Bible approval in the
+same active campaign. Its retained 32,923/32,000-token rejection started no
+generation and keeps its full reservation. The user accepts observed
 latency for M4; no performance improvement is required for acceptance. Generation,
 ownership and accounting checks remain mandatory. Preserve the campaign, failed
 reports and saved Creator `47894c71-7991-4b15-8dc2-810395ec3f01`.
-Last verified campaign exposure is 150/500 requests, USD 0.161240 reserved,
-USD 0.162534 settled upper bound and USD 4.676226 remaining. Invoice cost is
+The interim campaign checkpoint is 156/500 requests, USD 0.166640 reserved,
+USD 0.175985 settled upper bound and USD 4.657375 remaining. Invoice cost is
 unavailable and paid images remain zero. The current M4 record separates the
 J09 review loop from its subsequent un-dispatched preparation failure and the
 bounded repair/recovery authorized on 2026-10-25. Delivery and live continuation
