@@ -20,7 +20,7 @@ import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
 import { experimentPageBatchSchema, type ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 import type { ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
-import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { measurePhase, countVerificationQuery, countVerificationRead } from "@/lib/experiment-runner/diagnostics";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4CountFailureDiagnostic } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { CASES } from "@/lib/contracts/experiment-runner";
@@ -200,7 +200,7 @@ export function createExperimentContextService(database: Database, options: { st
       revision: pending ? { pageId: pending.subjectId!, artifactVersionId: pending.artifactVersionId! } : null });
   }
 
-  async function getRunView(runId: string, projection: "inspection" | "execution" | "role" = "inspection") {
+  async function getRunView(runId: string, projection: "inspection" | "execution" | "role" | "report" = "inspection") {
     const checked = opaqueIdSchema.parse(runId);
     const run = await runs.findOne({ _id: checked });
     if (!run) return null;
@@ -241,14 +241,17 @@ export function createExperimentContextService(database: Database, options: { st
     const grant = run.activeDelegationId ? await delegations.findOne({ _id: run.activeDelegationId, runId: run._id }) : null;
     const creatorRows = await messages.find({ experimentRunId: run._id, role: "user" },
       projection === "execution" ? { projection: { _id: 1, sequence: 1, createdAtMs: 1 } } : {}).sort({ sequence: 1 }).toArray();
-    const operationRows = projection === "inspection" ? await operations.find({ runId: run._id }, { projection: {
+    const operationRows = projection === "inspection" || projection === "report" ? await operations.find({ runId: run._id }, { projection: {
       _id: 1, role: 1, taskId: 1, state: 1, workflowRunId: 1, parentWorkflowRunId: 1,
       verifiedWorkflowId: 1, workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1,
       dispatchStartedAtMs: 1, createdAtMs: 1, updatedAtMs: 1, reservationCount: 1, safeFailure: 1,
       "localReportFailure.code": 1, "localReportFailure.scope": 1, "localReportFailure.requestBytes": 1, "localReportFailure.byteLimit": 1,
       resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
     } }).sort({ createdAtMs: 1, _id: 1 }).toArray()
-      : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
+      : run.generationCompletedAtMs != null ? await operations.find({ runId: run._id, role: { $in: ["tester", "judge"] }, state: "succeeded" },
+        { projection: { _id: 1, role: 1, taskId: 1, state: 1, workflowRunId: 1, parentWorkflowRunId: 1, verifiedWorkflowId: 1,
+          workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1, dispatchStartedAtMs: 1, createdAtMs: 1,
+          updatedAtMs: 1, reservationCount: 1, safeFailure: 1, resultJson: 1 } }).sort({ createdAtMs: 1, _id: 1 }).toArray() : [];
     // Only retained count failures need the full preparation for diagnostic
     // verification. Keep normal history rows and execution scheduling light.
     const countFailureRows = projection === "inspection" && run.mode === "balanced"
@@ -276,7 +279,7 @@ export function createExperimentContextService(database: Database, options: { st
           configurationHash: run.configurationHash, layoutVersionId: layoutVersion.id, pages };
       }
     }
-    const m4Accounting = projection === "inspection" && hasM4SimulatedImagePolicy(run) && run.m4 ? await (async () => {
+    const m4Accounting = (projection === "inspection" || projection === "report") && hasM4SimulatedImagePolicy(run) && run.m4 ? await (async () => {
       const { policy, hash } = m4PolicySnapshot(JSON.parse(run.m4!.policyJson));
       const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.m4!.campaignId }, { projection: {
         _id: 1, policyHash: 1, state: 1, requests: 1, requestCounts: 1, reservedMicrodollars: 1, settledMicrodollars: 1,
@@ -290,7 +293,7 @@ export function createExperimentContextService(database: Database, options: { st
     })() : null;
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
-      ...(run.mode === "balanced" && projection === "inspection" ? { m4Accounting } : {}),
+      ...(run.mode === "balanced" && (projection === "inspection" || projection === "report") ? { m4Accounting } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
       generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
@@ -339,9 +342,15 @@ export function createExperimentContextService(database: Database, options: { st
     };
   }
 
-  async function getQuestionAnswers(runId: string, taskId: ExperimentTask, subjectId: string) {
-    const questionRows = await operations.find({ runId, state: "succeeded", $or: [{ taskId: null }, { taskId, subjectId }] }).sort({ createdAtMs: 1, _id: 1 }).toArray();
-    const creatorRows = await messages.find({ experimentRunId: runId, role: "user" }).sort({ sequence: 1 }).toArray();
+  async function getQuestionAnswers(runId: string, taskId: ExperimentTask, subjectId: string, operationId: string) {
+    const measured = async <T>(phase: string, read: () => Promise<T[]>) => measurePhase({ runId, operationId }, phase, async () => {
+      countVerificationQuery(); const rows = await read(); countVerificationRead(rows); return rows;
+    });
+    const questionRows = await measured("preparation_question_operations", () => operations.find(
+      { runId, state: "succeeded", $or: [{ taskId: null }, { taskId, subjectId }] },
+      { projection: { _id: 1, taskId: 1, resultJson: 1 } }).sort({ createdAtMs: 1, _id: 1 }).toArray());
+    const creatorRows = await measured("preparation_answer_messages", () => messages.find({ experimentRunId: runId, role: "user" },
+      { projection: { _id: 0, uiMessageJson: 1 } }).sort({ sequence: 1 }).toArray());
     const answers = new Map<string, string>();
     for (const row of creatorRows) {
       const content = parseJson(row.uiMessageJson) as { decision?: { action?: string; questionId?: string; text?: string } } | null;
@@ -369,7 +378,7 @@ export function createExperimentContextService(database: Database, options: { st
         .authorizeFixture({ ...identity, inputFingerprint: operation.inputFingerprint });
       const imageContext = { role: "image" as const, mode: run.mode, inputFingerprint: operation.inputFingerprint, imageRequest,
         ...(run.mode === "balanced" ? { imageProvider: "simulated" as const } : {}),
-        ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId) } : {}) };
+        ...(operation.taskId === "J13" && operation.subjectId ? { answers: await getQuestionAnswers(run._id, "J13", operation.subjectId, operation._id) } : {}) };
       // Preserve the optional absent text fields in the existing inferred union.
       return imageContext as typeof imageContext & {
         [K in Exclude<keyof Awaited<ReturnType<typeof getTextRoleContext>>, keyof typeof imageContext>]?: never;
@@ -397,7 +406,7 @@ export function createExperimentContextService(database: Database, options: { st
   async function getTextRoleContext(run: ExperimentRunDocument, operation: ExperimentOperationDocument, preparationNowMs?: number) {
     const identity = { runId: run._id, operationId: operation._id };
     const report = (operation.role === "judge" || operation.role === "tester") && run.generationCompletedAtMs != null;
-    const view = await measurePhase(identity, "role_context", () => getRunView(run._id, report ? "inspection" : "role"));
+    const view = await measurePhase(identity, "role_context", () => getRunView(run._id, report ? "report" : "role"));
     if (!view) deny("Run view is unavailable.");
     if ((operation.role === "judge" || operation.role === "tester") &&
         run.generationCompletedAtMs != null &&
@@ -450,7 +459,7 @@ export function createExperimentContextService(database: Database, options: { st
       const pending = view.pendingDecision as { kind?: string; taskId?: SpecialistTask; subjectKind?: string; subjectId?: string; artifactVersionId?: string } | null;
       const matchingRevision = pending?.kind === "revision" && pending.taskId === taskId && pending.artifactVersionId === operation.expectedTargetVersionId &&
         (!isPageBible || (pending.subjectKind === "page" && pending.subjectId === operation.subjectId)) ? pending : null;
-      return { role: "specialist" as const, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, brief: view.brief, persona: view.persona, currentTarget, approvedSources, approvedUpstream: taskId === "J02" ? approvedSources[0] ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, taskId, operation.subjectId) };
+      return { role: "specialist" as const, taskId, subjectKind: operation.subjectKind, subjectId: operation.subjectId, brief: view.brief, persona: view.persona, currentTarget, approvedSources, approvedUpstream: taskId === "J02" ? approvedSources[0] ?? null : null, matchingRevision, questionAnswers: await getQuestionAnswers(run._id, taskId, operation.subjectId, operation._id) };
     }
     deny("Role context is not supported in this slice.");
   }

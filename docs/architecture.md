@@ -4,6 +4,31 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Preparation reads have separate execution and report projections. Question/answer
+reads return only the saved question identity/task/result and exact answer text;
+manager-parent selection reads only its validation fields. Report preparation
+reads current versions and compact operation metadata without inspection history
+or count-failure proof loading. Full inspection and historical verification keep
+their existing contracts. Image-attempt selection reads metadata first and loads
+exact request JSON only when comparing a retained candidate; assembly still
+validates original evidence.
+
+The run-list UI requests `?view=summary`; the existing summaries alias and default
+full list response remain compatible. Summary reads use run fields plus one
+batched booklet-title projection, without full detail or historical proof work.
+Selected-run detail loading remains independent. Preparation diagnostics measure
+initial sources, complete role evidence (including question/answer reads), request
+construction, manager lookup and final transactional attachment separately.
+Sizes describe returned JSON, not wire bytes, and counters cover instrumented work.
+
+Authenticated staging diagnostics accept the fixed
+`probe=preparation-read&part=questions|manager` for the retained stopped Creator.
+They resolve campaign membership, failed J12 subject and ownership on the server,
+compare original and projected reads in one snapshot, and retain only bounded
+counts/sizes/timings/equivalence in `preparationReads`. They never prepare, claim,
+activate, write accounting or contact Dify. Failed reads expose sanitized failure
+metadata within the original 30-second budget. They grant no continuation.
+
 The opt-in Balanced provider adapter selects exactly one completed assistant
 `final_answer` message. It excludes commentary and reasoning. Legacy responses
 can use one phase-less assistant message; mixed or ambiguous messages produce

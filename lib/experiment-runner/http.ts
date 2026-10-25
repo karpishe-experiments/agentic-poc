@@ -156,6 +156,32 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       context: createExperimentContextService(db, { store: () => callbackStore }) };
   }
   async function run(operation: () => Promise<Response>, budgetMs = 30_000) { try { return await withOperationBudget(Date.now() + budgetMs, operation); } catch (error) { return safeError(error); } }
+  async function runSummaries(request: Request) {
+    const query = new URL(request.url).searchParams;
+    const page = z.coerce.number().int().min(0).max(10000).parse(query.get("page") ?? 0);
+    const limit = z.coerce.number().int().min(1).max(50).parse(query.get("limit") ?? 20);
+    const collections = database().collections;
+    const rows = await collections.experiment_runs.find({}, { projection: {
+      _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
+      counters: 1, limits: 1, safeFailure: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
+      preparation: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1,
+    } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
+    const selected = rows.slice(0, limit);
+    const bookletIds = [...new Set(selected.map(row => row.bookletId).filter((id): id is string => !!id))];
+    const booklets = bookletIds.length ? await collections.booklets.find({ _id: { $in: bookletIds } },
+      { projection: { _id: 1, workingTitle: 1 } }).toArray() : [];
+    const titles = new Map(booklets.map(booklet => [booklet._id, booklet.workingTitle]));
+    return { runs: selected.map(row => ({ runId: row._id, bookletId: row.bookletId,
+      title: titles.get(row.bookletId) || row.brief || null,
+      predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
+      revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
+      pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
+      safeFailure: row.safeFailure, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
+      generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
+      preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
+        deadlineAtMs: row.preparation.deadlineAtMs, unresolved: row.preparation.unresolved ?? false } : null,
+    })), page, hasMore: rows.length > limit };
+  }
   return {
     probePreflight(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
@@ -166,23 +192,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }); },
     summaries(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
-      const query = new URL(request.url).searchParams;
-      const page = z.coerce.number().int().min(0).max(10000).parse(query.get("page") ?? 0);
-      const limit = z.coerce.number().int().min(1).max(50).parse(query.get("limit") ?? 20);
-      const rows = await database().collections.experiment_runs.find({}, { projection: {
-        _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
-        counters: 1, limits: 1, safeFailure: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
-        preparation: 1, createdAtMs: 1, updatedAtMs: 1,
-      } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
-      return data({ runs: rows.slice(0, limit).map(row => ({ runId: row._id, bookletId: row.bookletId,
-        predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
-        revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
-        pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
-        safeFailure: row.safeFailure, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
-        generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
-        preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
-          deadlineAtMs: row.preparation.deadlineAtMs, unresolved: row.preparation.unresolved ?? false } : null,
-      })), page, hasMore: rows.length > limit });
+      return data(await runSummaries(request));
     }); },
     operationControl(request: Request, runId: string, action: "inspect" | "stop") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
@@ -218,7 +228,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       database: database(), store: diagnosticAssetStore(store()) }).complete({ identity: input, content }), { admitted: true, runId: input.runId, operationId: input.operationId }));
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
-    list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied; const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
+    list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      if (new URL(request.url).searchParams.get("view") === "summary") return data(await runSummaries(request));
+      const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
     detail(request: Request, runId: string) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
       const id = opaqueIdSchema.parse(runId);

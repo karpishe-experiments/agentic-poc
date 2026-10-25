@@ -220,23 +220,27 @@ describe("booklet runner HTTP boundary", () => {
     } finally { factory.mockRestore(); }
   });
   it("pages summary metadata without constructing artifact or storage views", async () => {
-    const rows = [{ _id: "run-1", persona: "playful_kid", status: "completed", createdAtMs: 1000, updatedAtMs: 2000, counters: {}, limits: {}, configurationJson: "private" },
+    const rows = [{ _id: "run-1", bookletId: "book-1", brief: "Fallback title", persona: "playful_kid", status: "completed", createdAtMs: 1000, updatedAtMs: 2000, counters: {}, limits: {}, configurationJson: "private" },
       { _id: "run-2" }];
     const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) };
     const find = vi.fn().mockReturnValue(cursor);
+    const findBooklets = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([{ _id: "book-1", workingTitle: "Saved booklet title" }]) });
     const store = vi.fn(() => { throw new Error("Summary must not read bytes"); });
     const http = createBookletRunnerHttp({ config: () => enabled,
-      database: () => ({ collections: { experiment_runs: { find } } } as unknown as Database), store });
-    const response = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?page=2&limit=1"));
+      database: () => ({ collections: { experiment_runs: { find }, booklets: { find: findBooklets } } } as unknown as Database), store });
+    const response = await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary&page=2&limit=1"));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ data: { page: 2, hasMore: true, runs: [{ runId: "run-1", createdAtMs: 1000, updatedAtMs: 2000 }] } });
+    expect(await response.json()).toMatchObject({ data: { page: 2, hasMore: true, runs: [{ runId: "run-1", title: "Saved booklet title", createdAtMs: 1000, updatedAtMs: 2000 }] } });
     expect(cursor.skip).toHaveBeenCalledWith(2);
     expect(cursor.limit).toHaveBeenCalledWith(2);
     expect(find.mock.calls[0][1].projection.configurationJson).toBeUndefined();
     expect(find.mock.calls[0][1].projection).toMatchObject({ createdAtMs: 1, updatedAtMs: 1 });
+    expect(findBooklets).toHaveBeenCalledWith({ _id: { $in: ["book-1"] } }, { projection: { _id: 1, workingTitle: 1 } });
     expect(store).not.toHaveBeenCalled();
-    expect((await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?limit=1000"))).status).toBe(400);
-    expect(find).toHaveBeenCalledTimes(1);
+    expect((await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary&limit=1000"))).status).toBe(400);
+    const legacy = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?page=2&limit=1"));
+    expect((await legacy.json()).data.runs[0].title).toBe("Saved booklet title");
+    expect(find).toHaveBeenCalledTimes(2);
   });
   it("protects inspect and stop before reading operation state", async () => {
     const database = vi.fn(() => { throw new Error("unexpected database access"); });

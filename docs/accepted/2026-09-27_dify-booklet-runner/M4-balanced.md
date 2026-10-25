@@ -1,9 +1,118 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The campaign subsequently stopped at a new J12 preparation failure; the exact guarded continuation is authorized pending reviewed delivery. No replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The campaign subsequently stopped at a new J12 preparation failure. Its exact guarded continuation was delivered and acknowledged on 2026-10-25; a new page-4 preparation failure then stopped the campaign again. No replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Approved efficient-read and context-warning contract — 2026-10-25
+
+Implement the user's four-slice handoff on issue #65: A reduces unused database
+fields, separates report evidence from inspection, adds preparation measurements
+and compact list polling; B supplies task-specific current creative evidence and
+deterministic feedback with non-blocking size warnings; C introduces a forward-only
+128,000-token amendment with matching Booklet/Dify enforcement and reservations;
+D verifies staging and obtains exact authority before continuing Creator's retained
+failure `928cb32d-daf7-4703-b005-fdaf076d6cb6`. Each slice requires focused tests,
+two clean independent reviews and lean CI before delivery. A/B delivery does not
+depend on provider installation. No historical request, policy or liability is
+rewritten. Complete original verification remains authoritative.
+
+Efficiency warnings use 16 KiB manager requests, 128 KiB other requests, estimated
+or counted input above 24,000 tokens, counted input above 32,000 tokens, and reads
+above 256 KiB JSON or ten seconds. Warnings do not pause or block work. Slice C
+retains the USD 5/500-request campaign and persona ceilings, zero paid images,
+original deadlines and no automatic retries. Its higher reservation uses frozen
+rates and preserves legacy 32,000-token evidence. Keep carrier/storage/schema and
+evidence boundaries hard. Changes to provider consumers require metadata-only
+credential-inventory reconciliation. Slice A has no credential-inventory impact.
+
+Current implementation work starts with A. The live preparation timeout's exact
+command remains unconfirmed; returned JSON sizes are not wire-byte measurements.
+No index, timeout, infrastructure or live-run mutation is authorized by diagnostics.
+M4 remains incomplete; M5 remains held.
+
+Slice A's local candidate projects question/answer and manager-parent reads,
+selects image attempts through metadata before exact candidate request checks,
+and builds reports from current evidence without inspection-history loading.
+The UI uses the compatible compact list option and batched booklet titles.
+Fixed read-only Creator probes compare original/projected reads in one snapshot;
+preparation phases now include the formerly unmeasured question/answer work.
+No policy, provider, request-definition or spending change is in this slice.
+
+Local checks passed 25 core persistence cases, four focused image/report dispatch
+cases, 67 HTTP/UI units, six diagnostic units, twelve agent fixtures, typecheck,
+focused lint and 215 documentation links. The broad dispatch run was interrupted
+without a pass claim and replaced by the focused cases. An additional unchanged
+J13 admission test expects `invalid_result` from a mocked raw operational error;
+the unchanged runtime preserves that error. Record that existing test mismatch
+separately; do not claim the full J13 admission file passed. Live read comparisons
+and delivery identities remain pending. There is no credential-inventory impact.
+
+### Repeated page-4 preparation failure — 2026-10-25
+
+After the authorized continuation below, new J12 operation
+`928cb32d-daf7-4703-b005-fdaf076d6cb6` failed before dispatch. Creator is blocked
+at revision 470, Pause false, generation in progress and evaluation pending.
+There is no active operation or preparation. The failed operation has no workflow,
+zero reservations and a finished, resolved lifecycle. Four Page Bibles remain
+approved; page 4 is still next. No second continuation was sent.
+
+Diagnostics show operation preparation succeeded in 5,079 ms and role context in
+1,823 ms. `text_preparation` then failed with `MongoOperationTimeoutError` after
+32,606 ms, with 229,900 ms of operation budget remaining. A later preparation phase
+failed after 32,750 ms, with 194,141 ms remaining. The instrumented query count is
+not a complete database query count. Available evidence identifies the phase but
+cannot distinguish its individual reads, command transfer or preparation writes.
+It does not establish an indexing defect, Atlas throttling or an exhausted overall
+operation deadline.
+
+The campaign is stopped at 162/500 requests. Creator retains 68 text admissions,
+nine simulated images, 77 steps and zero paid images. Accounting retains
+USD 0.172040 reserved, USD 0.187143 settled upper bound and USD 4.640817 remaining.
+The additional manager succeeded; the failed specialist consumed no reservation.
+These are ledger bounds, not invoice charges. Kid and Parent remain unchanged.
+
+The latest exact grant covers only operation `26606176-6380-4dab-ac59-c903e90bf3f7`
+and has been used once. It does not cover this new failure. Repeated grants alone
+have not resolved the preparation failure. The next bounded proposal is to measure
+the existing preparation substeps separately: initial source read, context/request
+construction, saved manager lookup and final transactional source recheck/attachment.
+Retain only phase timings and allowlisted error kinds, with no request, context or
+credential content. Choose any correction from those measurements. No such runtime
+change, timeout increase or further live continuation has been delivered here.
+M4 remains incomplete and M5 remains held.
+
+### J12 grant delivery and continuation — 2026-10-25
+
+Source [PR #271](https://github.com/karpishe-experiments/agentic-poc/pull/271),
+reviewed `bf2a8b7410a335b9e1c2c6b1ffa4573e2ba30361`, passed two independent
+reviews and CI `40181797107`; merge `625900f9a0283549151c5b588fe5f428b54ba872`.
+Staging [PR #272](https://github.com/karpishe-experiments/agentic-poc/pull/272),
+reviewed `d3c7c733a2f9388a81c735ab619f4f8a24272bd5`, passed two independent
+port reviews and CI `40182062857`; release `9d03d1157fa14df126d469c6ed09fc16d335a553`.
+The change adds only the exact operation grant and aligned documentation.
+Local verification passed 37 no-dispatch persistence cases with fake providers,
+ten configuration/policy units, typecheck, focused lint and 215 documentation
+links. Port units, typecheck and lint passed; six prior staging link failures
+remain unchanged. Runtime proof and test inputs are unchanged.
+
+Deploy `40182226703` selected image
+`sha256:6a08844ac3da6f4287f6076b28336ab37e8af5c0e05e1ea47998da917ffbd299`
+and backup `staging-20261025T095232Z-0340b638d4d9a9ec`. The observer exited 124;
+no Stop or replay was sent. Journal `40182968745` confirmed exact request
+`40182226703-1` complete/archived with no Stop requested. Check deployment
+`40183062325` and direct application readiness passed.
+
+Fresh compact state was still revision 461, blocked, with no active operation or
+preparation. One normal continuation acknowledged “Change saved” at 10:03:03 UTC.
+A read-only reconciliation confirmed queued revision 464 with new active manager
+`8a5f3c4e-5c24-4c03-95f5-5612348d527e`. No second mutation was sent.
+At acknowledgement, 67 text admissions, nine simulated images, 76 steps and all
+campaign exposure were unchanged. The failed operation remains saved with zero
+reservations and no workflow. The new manager subsequently succeeded through
+workflow `70a29a68-8003-4cbf-984c-2fa544cc532d`; page-4 specialist preparation
+followed under a new operation. Creator acceptance remains unverified.
 
 ### Authorized J12 preparation continuation — 2026-10-25
 
@@ -769,8 +878,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `bfb3f0abcdbbed2d085920d3f295f68670956810`,
-image `sha256:237181030332098f5d8e4cb8802d6ca92251e16019bfa20b320c33ce7b51a9da`.
+The verified serving release is `9d03d1157fa14df126d469c6ed09fc16d335a553`,
+image `sha256:6a08844ac3da6f4287f6076b28336ab37e8af5c0e05e1ea47998da917ffbd299`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
