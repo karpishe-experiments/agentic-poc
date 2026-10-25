@@ -1,9 +1,42 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` was admitted and is blocked at J09 after repeated revisions and an undispatched preparation failure. The campaign is stopped; Creator retains Pause requested and no active operation/preparation. The approved creation-only 60-second server budget and browser wait are deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued at J09 on 2026-10-25 after the reviewed repair and exact proof, then stopped at the first J12 review because its input exceeded the unchanged token ceiling. The campaign is stopped; no replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### First Page Bible review count rejection — 2026-10-25
+
+Creator reached revision 392 and is blocked with definite failure, Pause false,
+generation in progress, evaluation pending and no active operation/preparation.
+Booklet `d7b1f338-f177-4842-8fa1-6b25a94283ba` retains approved character and
+location sheets and approved J11 version `89a8e22e-1176-4ecb-8b9a-2f69b2995b5f`:
+cover plus eight story pages, with two panels on story pages 2, 4 and 6. The first
+J12 Page Bible `90b0ee2c-f865-4265-96c9-3c959342e1d0` remains a saved draft.
+
+Tester operation `97007a0e-3811-4c5a-974b-1c3b2f7cd24a`, workflow
+`aae0947d-4473-4edf-9bed-2719c017b9cc`, stopped the campaign at 06:52:06 UTC.
+Authenticated original Dify GET confirms a successful controlled workflow with a
+`booklet_pre_generation_failure_v1` result: `input_limit_exceeded`, **32,923/32,000
+tokens**, `generationStarted: false`, adapter `1.0.7-dev4`. This is a measured
+provider count, not an estimate. The one reservation and count liability remain;
+no generated output or usage was invented. This is a generation-stage reviewer,
+not a final advisory report, so it cannot be waived as incomplete evaluation.
+
+The run retains 56 text admissions, nine simulated images, 65 steps and 16 saved
+decisions; paid images remain zero. Campaign exposure is 150/500 requests,
+USD 0.161240 reserved, USD 0.162534 settled upper bound and USD 4.676226 remaining.
+These are ledger bounds, not invoice charges. No second continuation was sent.
+
+Code inspection identifies a bounded correction to evaluate: non-report testers
+currently receive complete current-artifact version histories and transport
+prompts. Final reports already use a deterministic projection that retains current
+creative content, exact lettering, targets, approvals and source relationships,
+while omitting obsolete versions and repeated transport data. Reuse that projection
+for all mid-run reviewer personas with their saved feedback and revision counts.
+Preserve the original request and ceiling; do not truncate or retry automatically.
+The exact new tester continuation requires separate authority and proof because
+the approved J09 grant named only operation `865ca52b-36d1-460e-bc18-e2249c87b5a7`.
 
 ### Creator J09 stop and proposed repair — 2026-10-24
 
@@ -14,8 +47,8 @@ Paid images remain zero. The stopped campaign retains 129/500 requests,
 USD 0.137316 reserved, USD 0.131931 settled upper bound and USD 4.730753 remaining.
 These are ledger bounds, not an invoice. Kid and Parent remain unchanged.
 
-The creator answered J09's appearance question and then requested three revisions
-of Friend Two's sheet. The current design profile and editable sheet module
+The creator answered J09's appearance question and then requested two revisions
+of Friend Two's sheet before approving it in saved decision 10. The current design profile and editable sheet module
 include that answer and the required side view. However, J06's inherited attire
 array says no specific clothing is established in the approved manuscript. The
 application copies that array unchanged into every J09 proposal and checks exact
@@ -61,6 +94,45 @@ proof formats and image serialization remain unchanged. Verify real persistence,
 concurrent control/dispatch, negative evidence and historical compatibility before
 two independent reviews and staging delivery. No credential-inventory impact:
 credential names, storage, transfer and consumers do not change.
+
+### Bounded repair delivery and exact continuation — 2026-10-25
+
+Source [PR #265](https://github.com/karpishe-experiments/agentic-poc/pull/265)
+was reviewed at `4d878619e39048507d38747b10fe12d0c2b347f8`; CI
+`40168083784` passed. Staging [PR #266](https://github.com/karpishe-experiments/agentic-poc/pull/266)
+was reviewed at `505a27b49eb68855b896eb526dfc34d987460283`; CI
+`40168521053` passed. Both changes passed two independent reviews. Source merged
+as `ef3339fc7178643b9f5155038ddfebf9b74d65f7`; staging merged as
+`3980e5b0fd49fe68c5b1055ae7cc584677c53860`.
+
+Local verification passed 37 new persistence cases, seven focused dispatch cases
+covering all personas and predecessor admission, 56 provider-result/HTTP cases,
+49 units, 12 agent fixtures, typecheck, focused lint and 215 documentation links.
+The port passed typecheck, 49 units, 37 persistence cases, lint and 12 fixtures.
+Its six pre-existing documentation-link failures are unchanged. No full-suite
+pass is claimed: the unrelated broad recovery run was replaced with focused cases.
+
+Deploy `40168742098` selected image
+`sha256:fe175c1c670618b22302f7763d2b064bb6dd0c35384a9cd531c3d54e220e17d1`
+and backup `staging-20261025T062329Z-deb6ecacdf90c3ad`. The observer exited 124
+while the backup remained active; it sent no Stop or replay. Journal inspection
+`40169322443` confirmed request `40168742098-1` complete and archived. Check
+deployment `40169412965` and direct application readiness passed.
+
+The retained Creator was still revision 242, blocked and paused with no active
+operation/preparation before one normal continuation click. At 06:33:44 UTC the
+application acknowledged queued state and reopened the same campaign. Text/image
+counts remained 35/5 and campaign requests remained 129; reserved and settled
+amounts were unchanged. The server verified the exact failed operation's original
+no-dispatch/output/ownership proof and complete accounting before committing.
+The failed operation remains retained; new work continues under normal source
+checks and cumulative allowances.
+
+A fresh saved-decision read corrects the earlier provisional review-loop summary:
+decisions 8 and 9 requested revisions; decision 10 had already approved Friend Two
+before the retained preparation failed. Do not attribute that prior approval to
+this repair. The next saved answer defines Friend One as Rowan. Live production
+and final M4 acceptance remain separate from the passing local tests.
 
 ### Initial Creator admitted — 2026-10-24
 
@@ -564,8 +636,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `a996fa5eb114d1d3eed012342ebfe53a50a1f643`,
-image `sha256:2251ae6df4e6c05345ea8ad45e3d2c60e8310cd8b1db5c90aa13f572f0ddb66e`.
+The verified serving release is `3980e5b0fd49fe68c5b1055ae7cc584677c53860`,
+image `sha256:fe175c1c670618b22302f7763d2b064bb6dd0c35384a9cd531c3d54e220e17d1`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.
