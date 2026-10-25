@@ -205,6 +205,11 @@
     "continuations": [
       {
         "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
+        "operationId": "26606176-6380-4dab-ac59-c903e90bf3f7",
+        "reference": "User 2026-10-25 authorized this exact guarded J12 preparation continuation after reviews, CI and staging checks. Verify original no-dispatch, zero reservation, global output absence, resolved ownership and intact accounting through the existing proof before continuing the same Creator once. Retain failed history and conditional USD5/500-request/persona/image limits; no timeout increase, speculative optimization, infrastructure change, replacement or automatic retry."
+      },
+      {
+        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
         "operationId": "97007a0e-3811-4c5a-974b-1c3b2f7cd24a",
         "reference": "User 2026-10-25 authorized bounded review-input repair and exact same-Creator continuation after reviews and staging checks. Verify authenticated 32923/32000 input_limit_exceeded before generation, original request, full reservation/count liability and resolved ownership/output. Retain failed history, 32000-token guard and conditional USD5/500-request/persona/image limits; no replacement or automatic retry."
       },
