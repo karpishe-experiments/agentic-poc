@@ -29,6 +29,7 @@ import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { reportCleanup } from "@/lib/operations/completion-failure";
 import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
@@ -292,7 +293,23 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       if (run.pauseRequested) return run;
-      const updated = await runs.findOneAndUpdate({ _id: input.runId, revision: input.expectedRevision }, { $set: { pauseRequested: true, status: run.status === "queued" || run.status === "running" ? "paused" : run.status, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      const active = run.activeOperationId ? await operations.findOne({ _id: run.activeOperationId, runId: run._id }, { session }) : null;
+      const cancellationDigest = options.m4Authority && active?.state === "prepared" && !run.preparation ?
+        await verifyUndispatchedText(database, session, options.m4Authority, run, active._id) : null;
+      if (cancellationDigest && active) {
+        // The run write fences beginDispatch in the same transaction. An already
+        // committed dispatch keeps its identity and follows ordinary observation.
+        const cancelled = await operations.updateOne({ _id: active._id, state: "prepared", dispatchStartedAtMs: null }, { $set: {
+          state: "failed", safeFailure: null, updatedAtMs: input.nowMs,
+          localPreparationCancellation: { kind: "paused_text_v1", evidenceDigest: cancellationDigest, cancelledAtMs: input.nowMs },
+          lifecycle: { ...active.lifecycle!, phase: "finished", attemptOutcome: "failed", unresolved: false,
+            endedAtMs: input.nowMs, lastProgressAtMs: input.nowMs },
+        } }, { session });
+        if (cancelled.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Preparation changed during Pause.");
+      }
+      const updated = await runs.findOneAndUpdate({ _id: input.runId, revision: input.expectedRevision }, { $set: { pauseRequested: true,
+        ...(cancellationDigest ? { activeOperationId: null } : {}),
+        status: run.status === "queued" || run.status === "running" ? "paused" : run.status, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       return updated;
     });

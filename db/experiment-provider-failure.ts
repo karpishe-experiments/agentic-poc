@@ -14,6 +14,7 @@ import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { m4Digest, m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 
@@ -27,6 +28,12 @@ const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSc
 export async function hasM4KnownFailure(database: Database, session: ClientSession,
   authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number, attempt?: VerificationAttempt): Promise<boolean> {
   const ledger = createExperimentCampaignLedger(database, authority);
+  if (op.state === "failed" && op.safeFailure === "definite_failure" && op.dispatchStartedAtMs == null &&
+      await verifyUndispatchedText(database, session, authority, run, op._id)) {
+    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
+    return !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
+      campaign.grantReference === ledger.grant.reference && campaign.slots[run.persona] === run._id;
+  }
   if (validateLegacyCountFailureProof(ledger.snapshot.policy, run, op)) {
     const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
     return run.m4?.campaignId === ledger.grant.campaignId && !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
@@ -104,7 +111,7 @@ export async function closeM4KnownFailure(database: Database, authority: M4Autho
     const op = await database.collections.experiment_operations.findOne({ _id: input.operationId, runId: input.runId }, { session });
     if (!run || !op || !await hasM4KnownFailure(database, session, authority, run, op, input.nowMs)) return "deferred";
     // Exact Resume owns unclaimed lifecycle closure and continuation together.
-    if (m4UnclaimedFailureDigest(authority, run, op)) return "deferred";
+    if (op.dispatchStartedAtMs == null || m4UnclaimedFailureDigest(authority, run, op)) return "deferred";
     const observation = op.m4Observation!;
     if (op.state === "failed" && op.safeFailure === "definite_failure" && op.lifecycle?.phase === "finished" &&
         op.lifecycle.unresolved === false && (op.m4Continuation && op.m4Continuation.evidenceDigest === op.m4Observation?.evidenceDigest ||

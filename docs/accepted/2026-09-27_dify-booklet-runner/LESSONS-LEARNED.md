@@ -4,6 +4,19 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Share observation contexts when a cached client crosses module bundles
+
+A process-global MongoDB client can retain listeners from a different Next.js
+bundle than the request that starts a diagnostic scope. Module-local
+AsyncLocalStorage then yields empty observations despite successful reads. A
+module-reload fixture reproduces this boundary; process-shared observation scopes
+restore live command and checkout events. Treat missing events as unavailable,
+not evidence of zero work. Keep numeric diagnostic results in a small, sanitized
+process buffer when a read can exceed the observer's wait; later retrieval must
+not repeat the query. The original execution deadline still bounds that read.
+See the [M4 measured evidence](M4-balanced.md#current-creator-admission-checkpoint).
+Promotion candidate: **Documentation** for application diagnostics.
+
 ### Select the final structured answer before JSON validation
 
 The bounded provider extractor joined every assistant message and reasoning
@@ -813,6 +826,26 @@ from model output. Keep downstream currentness and asset checks. Evidence: the
 retained Parent J11 failure and M4 output/dispatch tests. Promotion candidate:
 **Documentation** for application-owned reference assembly.
 
+## Distinguish inherited evidence from editable design
+
+J09 copies approved J06 attire evidence unchanged. A Creator reviewer repeatedly
+requested removal of an inherited note even though the editable design already
+contained the requested appearance. Tell specialists and reviewers which fields
+the application owns, and distinguish an earlier unknown detail from a binding
+constraint. Preserve actual constraints and current image-lineage checks. Evidence:
+the retained Creator J09 history, request-definition and hydration regressions.
+Promotion candidate: **Documentation** for agent field ownership.
+
+## Fence both dispatch and late cleanup when cancelling preparation
+
+Pause can arrive while a text request is being prepared. Cancelling that local
+attempt requires a transaction that fences dispatch, retains the operation and
+proves no reservation, output or unresolved claim. A worker error arriving later
+must recheck the exact cancellation before it blocks the run. Inspection failure
+must preserve that cancellation too. Evidence: `experiment-undispatched-text.test.ts`
+and the shared no-dispatch proof. Promotion candidate: **Documentation** for
+concurrent control handling; no provider retry or persisted validity flag follows.
+
 ## Measure evidence reads separately from proof validation
 
 Creator admission exhausted its existing budget while auditing retained Kid and
@@ -840,3 +873,12 @@ establish a live speedup. Measure both the smaller response and the additional
 comparison input before adoption. Evidence: `experiment-candidate-proofs.test.ts`
 and the M4 candidate contract. Promotion candidate: **Documentation** for lossless
 proof-read optimization.
+
+The live candidate reduced combined Kid/Parent returned JSON by about 41%, with
+all nine contexts matching and no fallback. Combined read time increased from
+14,669 to 14,879 ms because the comparison request added 4,514/1,808 ms. Moving
+duplicate text from a response into a verification command did not improve this
+deployment's latency. Count both directions and all commands; a smaller response
+alone is insufficient evidence to adopt an optimization. The measured gate kept
+normal admission unchanged. Evidence: the M4 live-result table. Promotion target:
+**Documentation** for measured persistence changes.

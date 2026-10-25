@@ -1,9 +1,84 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. No initial Balanced Creator is saved. The user accepts the observed persistence/admission latency as an M4 limitation; a speed improvement is not an acceptance prerequisite. Earlier creation attempts exhausted the implemented 30-second request budget. That execution constraint still requires a bounded solution before Creator can be saved. M4 remains incomplete.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` was admitted and is blocked at J09 after repeated revisions and an undispatched preparation failure. The campaign is stopped; Creator retains Pause requested and no active operation/preparation. The approved creation-only 60-second server budget and browser wait are deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Creator J09 stop and proposed repair — 2026-10-24
+
+Creator is retained at revision 242, blocked with `definite_failure`, Pause
+requested, generation in progress and evaluation pending. It has ten saved
+creator decisions, 35 text calls, five simulated images and 41 operation records.
+Paid images remain zero. The stopped campaign retains 129/500 requests,
+USD 0.137316 reserved, USD 0.131931 settled upper bound and USD 4.730753 remaining.
+These are ledger bounds, not an invoice. Kid and Parent remain unchanged.
+
+The creator answered J09's appearance question and then requested three revisions
+of Friend Two's sheet. The current design profile and editable sheet module
+include that answer and the required side view. However, J06's inherited attire
+array says no specific clothing is established in the approved manuscript. The
+application copies that array unchanged into every J09 proposal and checks exact
+equality in both narrative and sheet validation. The reviewer asks J09 to delete
+that inherited sentence, which J09's model cannot do. This is an ownership and
+provenance mismatch; it does not justify discarding actual approved constraints
+or forcing approval. Historical image serialization must remain byte-identical:
+assembly reconstructs expected requests to verify lineage.
+
+Pause was requested to prevent further repetition. The bounded diagnostics for
+operation `865ca52b-36d1-460e-bc18-e2249c87b5a7` show successful operation/context
+preparation followed by `text_preparation` repository conflict at 15:41:11 UTC,
+after the Pause request. The preparation guard rejects paused state; the worker
+then retains the prepared operation until its deadline, when local failure closes
+it and stops the campaign. The retained trace shows zero reservations, no workflow
+identity and no active owner. These observations do not themselves grant recovery;
+the exact no-dispatch predicates and global accounting still need verification.
+The supported inspection control was used once; no Resume or replacement POST
+was sent.
+
+Repair authorized on 2026-10-25 for this exact run and failed operation: clarify specialist and
+reviewer ownership of inherited source facts versus later resolved design; keep
+hard source constraints and required views binding. Preserve historical requests,
+artifacts, hashes and frozen prices/count allowances. Handle Pause during
+un-dispatched text preparation without converting a normal control action into
+an unexplained generation failure. Any retained recovery must pin this exact run
+and operation, prove no dispatch/reservation/materialization or unresolved owner,
+and retain the failed record. Verify real persistence with fake providers, legacy
+proof compatibility, hard-constraint rejection, concurrent Pause and failure
+boundaries; obtain two independent clean reviews and lean CI before normal
+staging delivery. No new persona, allowance reset, report retry, paid image,
+provider/signature change or infrastructure work is included.
+
+Change-surface forecast: version only J09 specialist and non-report tester
+instructions. Add transaction-local no-dispatch proof for Pause cancellation and
+the exact protected continuation grant. Preserve the original failed operation;
+record continuation provenance and count its verified undispatched attempt as
+zero provider calls. Pause must fence a prepared text operation before releasing
+its active pointer. Dispatch, reservation, output, or any unresolved save claim
+prevents that cancellation. Revalidate global output absence and accounting on
+Resume and completion. Optional provenance fields require no migration; existing
+proof formats and image serialization remain unchanged. Verify real persistence,
+concurrent control/dispatch, negative evidence and historical compatibility before
+two independent reviews and staging delivery. No credential-inventory impact:
+credential names, storage, transfer and consumers do not change.
+
+### Initial Creator admitted — 2026-10-24
+
+After confirming old pending run `272ad2ef-920d-4aad-8feb-393bd2c56506` absent and
+preflight ready/idle, the user explicitly allowed a new key for the initial
+Creator because the original pending tab's in-memory key was lost. This amends
+the retained-key boundary only; it grants no replacement persona, extra budget,
+report retry or provider change. One normal UI submission saved
+`47894c71-7991-4b15-8dc2-810395ec3f01` at 15:21:54 UTC (18:51:54 Asia/Tehran).
+The unchanged admission verifier accepted both completed predecessors and
+activated the same campaign atomically. No second POST was sent.
+
+The saved title is **Mending the Star Room**. The initial brief retains eight
+story pages plus cover, two recurring characters, two locations and at least two
+multi-panel pages. After separately authorized repair and exact continuation,
+retain its existing automated production and advisory ordering within the
+unchanged campaign limits. No completed predecessor is
+reopened and no paid image execution is authorized.
 
 ### Accepted latency limitation — 2026-10-24
 
@@ -18,8 +93,8 @@ All generation, current approval, dependency, original image-byte, ownership and
 accounting checks remain required. Latency acceptance cannot establish a
 successful verification or save when a request actually expires. The user
 separately approved increasing creation's budget from 30 to 60 seconds. Staging
-delivery remains pending. The implementation slice changes only creation's
-outer HTTP budget; other endpoints, per-read limits, provider deadlines and
+delivery is verified below. The change applies only to creation's outer HTTP
+budget and its browser response wait; other endpoints, per-read limits, provider deadlines and
 cleanup budgets retain their existing bounds. Verification and atomic creation
 must finish within that one inherited deadline; no retry renews it. Preserve the exact pending Creator key, reconcile saved
 state before submission, and do not retry an uncertain mutation automatically.
@@ -35,6 +110,36 @@ transactional checks/rollback and ownership cleanup. Verify success beyond
 read/control bounds and duplicate creation. No migration, credential or provider
 policy change is required. Local checks/review and normal staging delivery must
 precede reconciliation of the retained Creator.
+
+### Creation-budget delivery and retained identity — 2026-10-24
+
+Source #260 at `c1a888273090d26afde35c7d97731fe69682ebaa` and client correction
+#262 at `b6e9f9f2ede7c91d562613b1f1158be7a8c41e25` passed two independent reviews
+and CI `40103762435` / `40104506586`. The browser correction prevents its previous
+30-second wait from hiding server work allowed by the approved 60-second budget.
+Combined staging #261 at `2a9e37a307b5f00a2e68bb21e77e9dfb9e55ffd3` passed two
+independent reviews and CI `40104618661`. Source checks passed 69 UI/server/budget
+units, four focused real-persistence cases with fake providers, typecheck,
+focused lint and 213 documentation links. Port checks passed the same 69 units,
+three HTTP persistence cases, typecheck/lint and diff checks; unchanged source
+Creator persistence evidence remains applicable. Six pre-existing staging link
+failures remain unchanged. No credential-inventory impact.
+
+Deployment `40104810340-1` exceeded its client observation wait (exit 124) without
+stop or replay. Journal check `40105588513` verified complete/archived at
+`a996fa5eb114d1d3eed012342ebfe53a50a1f643`, image
+`sha256:2251ae6df4e6c05345ea8ad45e3d2c60e8310cd8b1db5c90aa13f572f0ddb66e`,
+backup `staging-20261024T150149Z-9552304ee6439f73`. Check deployment `40105684457`
+and direct readiness passed. Post-deployment read-only reconciliation found
+Creator `272ad2ef-920d-4aad-8feb-393bd2c56506` absent; manager preflight was
+ready/idle at publication `64d08408-4ab7-4413-a5a1-0fccadd2ff26`.
+
+At this delivery checkpoint, the original pending-creation tab was unavailable.
+Browser continuation was authorized, but submission still required the original
+pending control or key. The saved run ID is derived from that key and cannot
+replace it. No replacement key, Creator submission or provider call was made
+during this delivery. The later explicit new-key amendment and initial admission
+are recorded above; predecessor evidence and campaign allowances were preserved.
 
 ### Duplicate-context live result — 2026-10-24
 
@@ -294,6 +399,35 @@ evidence volume from read latency without another database query. These are not
 wire-byte counts. Local preservation tests and live admission remain separate
 gates; no deadline or proof predicate changes.
 
+Source [#248](https://github.com/karpishe-experiments/agentic-poc/pull/248) and
+staging [#249](https://github.com/karpishe-experiments/agentic-poc/pull/249) passed
+two independent reviews each and lean CI. Source validation passed 45 focused
+persistence cases (43 unrelated cases skipped), 47 units, typecheck, focused lint
+and 210 documentation checks. The port passed 38 accounting cases and 47 units;
+seven unchanged source cases remain applicable. Release
+`5bcbd6fab9c0721e2bdac0ff8bf6f183e1fb79bb` started normal deployment
+`40082936544`. Client observation expired with exit 124 while the host continued.
+The last available journal reported active backup
+`staging-20261024T094527Z-783dbe9b52522de8`, image
+`sha256:e1e0f954a0899808d59270ec4f195205e4fd54c00a99680ed06f4592a4da0f13`.
+Later status jobs `40083572316` and `40083726000` did not start: GitHub's
+annotation reports failed account payments or a spending-limit restriction.
+No stop or deployment replay was sent. The operator's read-only status for exact
+request `40082936544-1` confirmed complete/archived at the selected release and
+image. Direct application readiness reports MongoDB/assets ready, maintenance
+off and a healthy runner. GitHub Actions remains unavailable; the separate Check
+deployment workflow was not run. Creator's pending identity remained absent and
+preflight was idle before one same-key submission on this release. Admission
+still failed after 30,159 ms. Kid's six proof records returned 1,116,251 decoded
+JSON bytes in 10,457 ms; Parent's three returned 445,586 bytes in 4,211 ms. These
+are application JSON sizes, not wire/BSON bytes. The narrower reads did not
+establish a live latency improvement. Creator's exact pending identity is still
+not found and preflight is ready/idle. Preserve key
+`272ad2ef-920d-4aad-8feb-393bd2c56506`; no provider work or allowance was added.
+Further correction requires evidence about actual compressor negotiation and
+query/read behavior. GitHub's account restriction blocks the required CI and
+normal delivery for another correction; billing repair is an operator handoff.
+
 Staging release `89abbd829be1ee94ae8d52ef1c892639f4b3e97b` delivered source
 [#241](https://github.com/karpishe-experiments/agentic-poc/pull/241) and staging
 [#242](https://github.com/karpishe-experiments/agentic-poc/pull/242), with two clean
@@ -430,8 +564,8 @@ sizing evidence only. Their report bytes were 88,753/88,750 and 121,885/121,881;
 Kid was 72,876/72,873. Compact input does not guarantee a report fits the token
 ceiling. Oversize remains a visible advisory failure, with no truncation or retry.
 
-The verified serving release is `18dbba7436554d8cad0a546b7614b81dae59ebd9`,
-image `sha256:e91c61a95a2f7f2c580b75c78c7f80be8bbe02dede58d4b90e1ba522ecbb43d8`.
+The verified serving release is `a996fa5eb114d1d3eed012342ebfe53a50a1f643`,
+image `sha256:2251ae6df4e6c05345ea8ad45e3d2c60e8310cd8b1db5c90aa13f572f0ddb66e`.
 The reviewed dev4 provider installation is complete and signature verification was
 restored. Do not repeat its installation or signature-policy handoff. Credential
 storage, transfers and consumers are unchanged by this application correction.

@@ -10,6 +10,7 @@ import { m4MaximumCharge, m4PolicySnapshot } from "@/lib/experiment-runner/m4-po
 import { m4Hash } from "@/lib/experiment-runner/m4-request";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 import { countVerificationQuery, measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
@@ -60,6 +61,22 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
         // paid history. Load their full proof on this exceptional path only.
         const failed = failedOperations ? failedOperations.get(operation._id) :
           await database.collections.experiment_operations.findOne({ _id: operation._id, runId: run._id }, { session });
+        if (failed?.localPreparationCancellation || failed?.m4Continuation?.kind === "undispatched_text_v1") {
+          const digest = await verifyUndispatchedText(database, session, { policy,
+            grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, failed._id);
+          if (!digest) invalid();
+          if (failed.localPreparationCancellation) {
+            if (failed.safeFailure !== null || failed.m4Continuation || failed.localPreparationCancellation.kind !== "paused_text_v1" ||
+                failed.localPreparationCancellation.evidenceDigest !== digest ||
+                !Number.isSafeInteger(failed.localPreparationCancellation.cancelledAtMs)) invalid();
+          } else {
+            const continuation = failed.m4Continuation!;
+            if (failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
+                continuation.evidenceDigest !== digest || continuation.requestDigest !== (failed.m4Preparation?.requestDigest ?? null) ||
+                !continuation.reference || !Number.isSafeInteger(continuation.resumedAtMs)) invalid();
+          }
+          continue;
+        }
         if (failed && run.status === "completed" && run.evaluationStatus === "failed" &&
             await isVerifiedAdvisoryFailure(database, session, run, failed, run.updatedAtMs, attempt)) {
           texts += failed.reservationCount;
@@ -68,7 +85,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
         const provenance = failed?.m4Continuation;
         const unclaimedDigest = failed ? m4UnclaimedFailureDigest({ policy,
           grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, failed) : null;
-        if (!failed || !provenance || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
+        if (!failed || !provenance || provenance.kind !== undefined || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
             failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false ||
             failed.lifecycle.stop && !validateLegacyCountFailureProof(policy, run, failed) ||
             provenance.evidenceDigest !== (unclaimedDigest ?? failed.m4PreGenerationRecovery?.proofDigest ?? failed.m4Observation?.evidenceDigest) ||
