@@ -274,6 +274,14 @@ operation links once to that failed operation and reserves normally. Failed outp
 charges, counters and approved artifacts remain saved. Accounting exit includes
 these explicitly continued failed requests and revalidates their proof. Ordinary
 blocked runs remain blocked; no automatic provider retry or budget reset is added.
+A generation-stage tester can continue only an exactly granted, authenticated
+`input_limit_exceeded` rejection before generation. It must retain the decision
+reservation in full, no Stop or legacy recovery, no global artifact/message/asset
+output and no operation/preparation/mutation owner, including expired claims.
+The current tracked Resume owner is excluded from that last check. Final advisory
+reports and other tester failures do not qualify. Accounting revalidates the saved
+decision-stage failure after later generation/evaluation; it does not reinterpret
+that original reservation as a report charge or release its liability.
 An exact grant can also continue an authenticated terminal failed manager before
 any reservation. Its prepared request, execution/publication identity and absence
 of claims, output and reservation form a separate digest; no provider usage is
@@ -300,6 +308,14 @@ tester request definitions distinguish immutable J06 source evidence from later
 editable design choices. Unknown earlier clothing details do not prohibit later
 creator choices; approved hard constraints and required sheet views remain binding.
 Historical requests, hydration and image serialization remain unchanged.
+Mid-run testers across all personas receive the same current-artifact creative
+projection used by advisory reports. Drafts awaiting approval retain their current
+version, exact lettering, source references, warnings and approval identities.
+Historical creative bodies and repeated execution/transport data remain stored but
+are omitted from new requests. Saved feedback, pending controls, delegation and
+revision counts remain. Explicit evidence scope prevents claims about unseen
+history or simulated image visuals. Only non-report tester definitions are
+versioned by this correction; the authoritative 32,000-token ceiling stays fixed.
 Optional continuation metadata is backward compatible and requires no migration. A protected
 request-definition amendment can bind the frozen policy's original bundle hash to
 one reviewed replacement. New preparation/claim requires that exact amendment and

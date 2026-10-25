@@ -8,6 +8,56 @@ import { m4TestId, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { m4RequestVectors } from "@/tests/helpers/m4-request-vectors";
 
 describe("M4 reviewed request contract", () => {
+  it.each(personaSchema.options)("compacts %s pending tester evidence while preserving review controls and exact creative content", (persona) => {
+    const selector = { role: "tester", taskId: null, persona, report: false } as const;
+    const current = { id: "current", number: 8, dependencyVersionIds: ["approved-source"], sourceVersionId: "revision-7",
+      warnings: ["Keep current warning"], approval: { id: "approval", delegationId: "grant" }, content: {
+        manuscript: "A new ending respects the creator's request.", lettering: [{ text: "Wait!  Is that our kite?\nYes." }],
+        characterDesignProfile: "Blue jacket", sheetPromptModule: "Front, back and side views in a blue jacket.",
+        attireRequirements: ["Preserve approved clothes"], accessories: ["Bag"],
+        build: { prompt: "duplicated execution prompt ".repeat(4000), assetId: "sheet-asset", operationId: "transport" },
+        sheetReferences: [{ subjectId: "character", artifactVersionId: "sheet-version", assetId: "sheet-asset" }],
+        stylePromptModule: "duplicated style", stylePromptModuleHash: "transport-hash" } };
+    const raw = { role: "tester", bookletId: "book", brief: "A playful rescue", persona,
+      currentArtifacts: [{ id: "artifact", taskId: "J09", subjectKind: "character", subjectId: "character", state: "draft", currentVersionId: "current",
+        versions: [...Array.from({ length: 7 }, (_, i) => ({ id: `revision-${i + 1}`, content: { prose: "historical body ".repeat(2000) } })), current] },
+      { id: "style", taskId: "J08", state: "approved", currentVersionId: "style-current", versions: [{ id: "style-current", content: { stylePromptModule: "canonical style" } }] }],
+      pendingDecision: { kind: "review", artifactVersionId: "current", questionId: "question" },
+      activeDelegation: { id: "grant", taskIds: ["J09"] }, eligibleTaskIds: ["J09"],
+      creatorMessages: [{ sequence: 1, content: "Please use a blue jacket." }, { sequence: 2, content: "The jacket revision is complete." }],
+      revisionCounts: { text: 7, image: 1 } };
+    const original = structuredClone(raw);
+    const result = projectM4Context(selector, raw, "operation");
+    const serialized = JSON.stringify(result);
+    expect(raw).toEqual(original);
+    expect(projectM4Context(selector, raw, "operation")).toEqual(result);
+    for (const field of ["brief", "persona", "bookletId", "pendingDecision", "activeDelegation", "eligibleTaskIds", "creatorMessages", "revisionCounts"] as const) {
+      expect(result[field]).toEqual(raw[field]);
+    }
+    expect(result.currentArtifacts).toMatchObject([{ id: "artifact", state: "draft", currentVersionId: "current", versions: [{
+      id: "current", number: 8, dependencyVersionIds: current.dependencyVersionIds, sourceVersionId: "revision-7", warnings: current.warnings,
+      approval: current.approval, content: { manuscript: current.content.manuscript, lettering: current.content.lettering,
+        characterDesignProfile: current.content.characterDesignProfile, sheetPromptModule: current.content.sheetPromptModule,
+        attireRequirements: current.content.attireRequirements, accessories: current.content.accessories, sheetReferences: current.content.sheetReferences,
+        build: { assetId: "sheet-asset" } } }] }, { versions: [{ content: { stylePromptModule: "canonical style" } }] }]);
+    expect((result.currentArtifacts as { versions: unknown[] }[])[0].versions).toHaveLength(1);
+    for (const omitted of ["historical body", "duplicated execution prompt", "duplicated style", "transport-hash"]) expect(serialized).not.toContain(omitted);
+    expect(Buffer.byteLength(serialized)).toBeLessThan(Buffer.byteLength(JSON.stringify(raw)) / 10);
+    const lessHistory = { ...raw, currentArtifacts: [{ ...raw.currentArtifacts[0], versions: [current] }, raw.currentArtifacts[1]] };
+    expect(projectM4Context(selector, lessHistory, "operation")).toEqual(result);
+    expect(result.evidenceScope).toMatchObject({ artifactVersions: expect.stringContaining("including drafts"), images: expect.stringContaining("not_assessed") });
+    const definition = m4RequestDefinition(selector);
+    expect(definition.version).toBe("m4_request_tester_current_v3");
+    expect(definition.projection).toMatchObject({ artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: result.evidenceScope });
+    expect(definition.systemPrompt).toContain("Do not assess unseen historical versions");
+    expect(definition.systemPrompt).toContain("required current creative and technical checks still apply");
+  });
+  it("preserves J09 specialist and report definitions when compacting pending testers", () => {
+    expect(m4RequestDefinition({ role: "specialist", taskId: "J09", persona: "playful_kid", report: false }).hash)
+      .toBe("9c10d49c293b1035080d849e2d3ff4fa925548d96fb4c5df186d9dc6ae6a11d7");
+    expect(m4RequestDefinition({ role: "tester", taskId: null, persona: "playful_kid", report: true }).hash)
+      .toBe("c029e95876aea579de9232d4bce510d3cd74e49c6e4d3c18c2a3229c83a9d0b8");
+  });
   it("versions only J09 ownership and non-report tester instructions across personas", () => {
     const unchanged = personaSchema.options.flatMap(persona => [
       m4RequestDefinition({ role: "manager", taskId: null, persona, report: false }),
@@ -22,7 +72,7 @@ describe("M4 reviewed request contract", () => {
       const specialist = m4RequestDefinition({ role: "specialist", taskId: "J09", persona, report: false });
       const tester = m4RequestDefinition({ role: "tester", taskId: null, persona, report: false });
       for (const definition of [specialist, tester]) {
-        expect(definition.version).toBe("m4_request_j09_ownership_v2");
+        expect(definition.version).toBe(definition.role === "tester" ? "m4_request_tester_current_v3" : "m4_request_j09_ownership_v2");
         expect(definition.systemPrompt).toContain("characterDesignProfile and sheetPromptModule");
         expect(definition.systemPrompt).toContain("not a prohibition on later");
         expect(definition.systemPrompt).toContain("approved hard constraints");
