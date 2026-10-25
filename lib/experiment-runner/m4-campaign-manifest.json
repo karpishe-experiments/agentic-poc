@@ -204,6 +204,11 @@
     "reference": "User grant 2026-10-16: Kid-Parent-Creator initial only; USD5 conditional on frozen prices and assumed USD0.0009 count fee; 120/160/220 requests,500 total,3 judges; simulated images; stop on technical failure; no retries/tools/escalation/smoke/successors.",
     "continuations": [
       {
+        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
+        "operationId": "865ca52b-36d1-460e-bc18-e2249c87b5a7",
+        "reference": "User 2026-10-25 authorized bounded repair and exact continuation: prove no dispatch, reservation, output or unresolved owner before continuing this same Creator after reviewed J09 ownership and Pause repair. Retain history, conditional USD5/500-request and persona limits; no replacement run or automatic retry."
+      },
+      {
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
         "operationId": "7d490c15-5ae1-4276-83ce-7d86a0da7ba4",
         "reference": "User 2026-10-21 context/count correction plan and Kid-only completion instruction: exact inspected count-guard failure; supported closure with full reservation/history retained, reviewed correction and explicit same-run continuation; conditional USD5 and all cumulative limits unchanged."
@@ -271,8 +276,8 @@
     },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
-      "toBundleHash": "67346ebedab1bc46b70096c655cae57c2c5c12c392826921ecf0383b6ffe8ea9",
-      "reference": "User approved remaining Parent/Creator execution and blocker fixes: eligible-route manager projection, compact advisory evidence and application-owned J11 sheet identities; preserve frozen policy, 32000-token guard and prior requests."
+      "toBundleHash": "6852d6a830b19a4b6ed0e55299b0b1400aba08bbc4ea1d172ea22427d9f3ac84",
+      "reference": "User 2026-10-25 approved bounded Creator J09 ownership repair: clarify inherited evidence versus editable resolved design for J09 specialist and non-report testers; retain eligible-route manager, compact reports and J11 sheet routing; preserve frozen policy, 32000-token guard and historical requests."
     },
     "remainingPersonaAdmission": {
       "anchorRunId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
