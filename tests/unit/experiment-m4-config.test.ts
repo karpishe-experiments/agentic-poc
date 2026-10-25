@@ -3,7 +3,7 @@ import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import releaseManifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
-import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4AdmittedTokenPolicy, m4EffectiveTokenPolicy, m4GrantSchema, m4MaximumCharge, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 
 const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
 const env = { DEPLOYMENT_ENV: "_staging", DIFY_BOOKLET_RUNNER_ENABLED: "true", DIFY_BOOKLET_BASE_URL: "https://dify.test",
@@ -25,8 +25,16 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     const state = readM4RunnerConfig(releaseEnv);
     expect(state).toMatchObject({ enabled: true, config: { m4: { state: "granted", authority: { grant: releaseManifest.grant } } } });
     if (!state.enabled) throw new Error("Missing ready configuration");
-    expect(m4PolicySnapshot(releaseManifest.policy).hash).toBe("b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3");
+    const frozen = m4PolicySnapshot(releaseManifest.policy);
+    expect(frozen.hash).toBe("b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3");
     expect(releaseManifest.grant.reference).toContain("User grant 2026-10-16");
+    const effective = m4AdmittedTokenPolicy(frozen.policy, m4GrantSchema.parse(releaseManifest.grant));
+    expect(effective).toMatchObject({ maxInputTokens: 128000, warningInputTokens: 32000,
+      hash: "1bae98d7fa53d84d8818798afca94436bfa889dbe07a7b443a7473f74ab7ff2c" });
+    expect(m4EffectiveTokenPolicy(frozen.policy).maxInputTokens).toBe(32000);
+    expect(m4MaximumCharge(frozen.policy, "specialist", effective.snapshot)).toBe(20996);
+    expect(m4MaximumCharge(frozen.policy, "specialist")).toBe(8996);
+    expect(releaseManifest.grant.continuations.some(entry => entry.operationId === "928cb32d-daf7-4703-b005-fdaf076d6cb6")).toBe(false);
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "local" })).toMatchObject({ config: { m4: { state: "invalid" } } });
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "_prod" })).toEqual({ enabled: false, reason: "production" });
     expect(readM4RunnerConfig(env)).toMatchObject({ config: { m4: { state: "invalid" } } });

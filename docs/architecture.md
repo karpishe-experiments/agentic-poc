@@ -53,9 +53,10 @@ generates from those same original bytes at most once. V2 evidence echoes policy
 identity, enforced ceiling and the above-32,000 warning; legacy dev4 v1 readers
 remain. Missing/invalid count, above-128,000 count, spending, storage, schema and
 evidence failures remain hard. SDK retries and provider truncation stay disabled.
-The compatibility release does not activate this amendment: dev4 and the legacy
-limit remain selected until reviewed installation/readback and a separate grant
-enablement. Disabling new amendments must retain their historical readers.
+The reviewed manifest selects the installed dev5 identity and the forward-only
+amendment after exact package readback and operator-confirmed signature restoration.
+This configuration does not activate a stopped campaign or authorize a new failure
+continuation. Disabling new amendments must retain their historical readers.
 
 Specialist dependencies remain application-owned: J01 has no approved source;
 J02 uses J01; J03/J04 use J01/J02; J05 uses J01–J04; J06 uses J02/J03/J05;

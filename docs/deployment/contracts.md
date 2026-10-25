@@ -276,7 +276,7 @@ Source: [installer](../../scripts/deploy/vps-deployment.sh) and
 | Credential | Variable / identifier | Storage | Consumer and purpose |
 | --- | --- | --- | --- |
 | Human Dify account passwords | No Booklet variable | Dify account store; private user custody | Workspace owner/developer login and administration; distinct accounts |
-| Dify model/image provider keys | Provider-specific Dify binding fields; no runner variable | Private Dify workspace provider bindings | Real model/image calls; Simulated execution does not call a paid provider. Installed OpenAI dev4 and eighteen published Booklet graphs conditionally reuse the same Dify-held key for input counting and Responses; Booklet requires a separate paid grant. The reviewed dev5 candidate reuses that storage and purpose after confirmed installation and exact readback. Other workflows retain existing routes. Retained Balanced executions verify model use; count-call invoice cost remains unavailable under the disclosed allowance. No new provider secret name, storage or transfer copy |
+| Dify model/image provider keys | Provider-specific Dify binding fields; no runner variable | Private Dify workspace provider bindings | Real model/image calls; Simulated execution does not call a paid provider. Installed OpenAI dev5 and eighteen published Booklet graphs conditionally reuse the same Dify-held key for input counting and Responses; Booklet requires a separate paid grant. Exact dev5 installation identity is verified; its new effective-policy route remains separate from paid execution. Other workflows retain existing routes. Retained Balanced executions verify historical model use; count-call invoice cost remains unavailable under the disclosed allowance. No new provider secret name, storage or transfer copy |
 | MCP device tokens and console cookies | `__Host-access_token`, `__Host-refresh_token`, `__Host-csrf_token`; `DIFYWF_HOME` identifies the store, not a secret | Plaintext `hosts.json` protected by Windows ACLs under `%LOCALAPPDATA%\DifyWf-Community-Codex`; Cloud uses separate `%LOCALAPPDATA%\DifyWf-Codex` | Local-stdio MCP administration; credential file ACL must limit access to the user, SYSTEM and Administrators |
 | Official CLI session tokens | Separate Community/Cloud `difyctl` profiles; no Booklet variable | CLI-managed local credential state; exact file path must be checked for the installed CLI | CLI fallback administration; CLI login does not authenticate MCP |
 | Dedicated Dify backup R2 credentials and restic password | Names/provision path not yet established | Intended root-owned host files and independent password-manager recovery copies | Deferred, not active: Dify backup setup and restore/upgrade rehearsal remain incomplete |
@@ -287,13 +287,15 @@ and [Community runbook](dify-community.md). Do not retrieve provider key values
 to verify a binding. A local session file or discoverable tool is not proof of
 authenticated access; use read-only workspace checks.
 
-The reviewed M4 dev5 candidate reuses the existing Dify-held OpenAI key for exact
+The installed and identity-verified M4 dev5 provider reuses the existing Dify-held OpenAI key for exact
 input counting and Responses. Its versioned policy carrier adds no credential,
 storage location, transfer copy or access scope. New 128,000-token admissions
 require the exact package ZIP checksum and Dify content identity after installed
-readback; the compatibility release keeps dev4 selected. Legacy operations retain
-their saved provider/policy evidence. Candidate validation uses dummy credentials
-and forbids sockets; it does not establish live installation or paid execution.
+readback. The operator confirmed signature verification restored after installation;
+the reviewed enablement manifest pins the separate forward-only amendment. Legacy
+operations retain their saved provider/policy evidence. Offline candidate validation
+uses dummy credentials and forbids sockets; live installation is verified separately
+and does not establish a paid execution result.
 
 ### Shared deployment and administrator credentials
 
