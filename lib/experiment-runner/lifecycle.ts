@@ -73,8 +73,9 @@ export function createOperationCoordinator(deps: {
       operation = (await operations.findOne({ _id: operation._id }))!;
       run = (await runs.findOne({ _id: run._id }))!;
       if (await deps.resolvedFailure?.(run, operation)) return operation;
-      if (operation.localPreparationCancellation || operation.m4Continuation?.kind === "undispatched_text_v1") {
-        throw new ExperimentRepositoryError("invalid_state", "Saved no-dispatch proof could not be verified.");
+      if (operation.localPreparationCancellation || operation.m4Continuation?.kind === "undispatched_text_v1" ||
+          operation.role === "tester" && operation.m4Continuation) {
+        throw new ExperimentRepositoryError("invalid_state", "Saved continuation or cancellation proof could not be verified.");
       }
       if (operation.state === "succeeded" && operation.verifiedWorkflowId && run.safeFailure !== "definite_failure") {
         return operation.lifecycle?.attemptOutcome === "failed" ? finishAttempt(input) : operation;
@@ -136,7 +137,8 @@ export function createOperationCoordinator(deps: {
               input.expectedRevision !== undefined && run.revision !== input.expectedRevision && !operation.lifecycle?.stop) throw error;
           return operation;
         });
-        if (!retained || retained.localPreparationCancellation || retained.m4Continuation?.kind === "undispatched_text_v1") throw error;
+        if (!retained || retained.localPreparationCancellation || retained.m4Continuation?.kind === "undispatched_text_v1" ||
+            retained.role === "tester" && retained.m4Continuation) throw error;
         return finishAttempt(input);
       }
     }, { now });

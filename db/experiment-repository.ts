@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
+import { isM4ReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { CASES, EXPERIMENT_PROFILE, MAX_NARRATIVE_CONTENT_BYTES, experimentModeSchema, experimentRoleSchema, experimentTaskSchema, parseNarrativeTaskProposal, personaSchema, resultEnvelopeSchema, validateRoleResult, type RoleResult } from "@/lib/contracts/experiment-runner";
 import { isNarrativeTask } from "@/lib/experiment-runner/narrative-tasks";
@@ -328,7 +329,8 @@ export function createExperimentRepository(database: Database, options: { store?
         if (!campaignLedger || !options.m4Authority || !options.m4ExecutionEnabled ||
             !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant) || run.safeFailure !== "definite_failure" ||
             run.activeOperationId !== null || run.preparation || !hasM4SimulatedImagePolicy(run) || !failed ||
-            failed.state !== "failed" || failed.safeFailure !== "definite_failure" || !["manager", "specialist"].includes(failed.role) ||
+            failed.state !== "failed" || failed.safeFailure !== "definite_failure" ||
+            !(["manager", "specialist"].includes(failed.role) || isM4ReviewerInputFailure(campaignLedger.snapshot.policy, run, failed)) ||
             run.generationCompletedAtMs != null ||
             !failed.lifecycle || failed.lifecycle.stop && !validateLegacyCountFailureProof(campaignLedger.snapshot.policy, run, failed) ||
             (!m4UnclaimedFailureDigest(options.m4Authority, run, failed) &&

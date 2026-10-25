@@ -9,6 +9,7 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { currentMutationOwnerId } from "@/lib/application/deployment-control";
+import { isM4ReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -167,6 +168,8 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     if (campaign.state === "active") await touch(campaign, session, { state: "stopped" }, nowMs);
   }
   async function continueFailure(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, nowMs: number) {
+    requireState(operation.role !== "tester" || isM4ReviewerInputFailure(snapshot.policy, run, operation),
+      "Only a generation-stage reviewer input-limit failure may continue.");
     const permission = grant.continuations?.find((item) => item.runId === run._id && item.operationId === operation._id);
     requireState(permission && !operation.m4Continuation && run.m4?.campaignId === grant.campaignId &&
       run.m4.policyHash === snapshot.hash && run.m4.policyJson === snapshot.json, "No unused continuation grant matches this failure.");
@@ -179,15 +182,18 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
     const undispatchedDigest = operation.dispatchStartedAtMs == null ?
       await verifyUndispatchedText(database, session, authority, run, operation._id) : null;
-    if (undispatchedDigest) {
-      const controls = await database.collections.deployment_control.find({ "mutationOwners.runId": { $in: runIds } }, { session }).toArray();
+    const strictOwnership = !!undispatchedDigest || operation.role === "tester";
+    if (strictOwnership) {
+      const controls = await database.collections.deployment_control.find({ $or: [
+        { "mutationOwners.runId": { $in: runIds } }, { "mutationOwners.operationId": operation._id },
+      ] }, { session }).toArray();
       requireState(!controls.some(control => control.mutationOwners?.some(owner =>
-        owner.runId && runIds.includes(owner.runId) && owner.id !== currentMutationOwnerId())),
+        (owner.runId && runIds.includes(owner.runId) || owner.operationId === operation._id) && owner.id !== currentMutationOwnerId())),
       "Campaign has an unresolved mutation owner.");
     }
     requireState(!await database.collections.experiment_operations.findOne({ runId: { $in: runIds }, $or: [
       { state: { $in: ["prepared", "started", "unknown"] } }, { "lifecycle.unresolved": true },
-      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map((key) => undispatchedDigest ?
+      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map((key) => strictOwnership ?
         { [key]: { $ne: null } } : { [`${key}.expiresAtMs`]: { $gt: nowMs } }),
     ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved operation work.");
     requireState(!await database.collections.experiment_runs.findOne({ _id: { $in: runIds }, $or: [

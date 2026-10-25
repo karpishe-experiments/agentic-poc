@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 and efficiency acceptance remain complete. M4 Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. The initial Balanced Creator is saved but blocked at J09; the same campaign is stopped. Creation-only 60-second server/browser budgets are deployed. M4 is incomplete; use the [current M4 record](M4-balanced.md#current-creator-admission-checkpoint) for the retained run, usage and repair boundary.
+**Status:** M3 and efficiency acceptance remain complete. M4 Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. The initial Balanced Creator is saved but blocked at the first J12 review after a 32,923/32,000-token input rejection; the same campaign is stopped. Creation-only 60-second server/browser budgets are deployed. M4 is incomplete; use the [current M4 record](M4-balanced.md#current-creator-admission-checkpoint) for the retained run, usage and repair boundary.
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
