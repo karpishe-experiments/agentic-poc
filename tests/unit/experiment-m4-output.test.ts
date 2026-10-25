@@ -28,6 +28,19 @@ const context = { role: "specialist", subjectId: id(8), approvedSources: [
 const proposal = (taskId: string, content: unknown) => JSON.stringify({ result: { kind: "proposal", payload: { taskId, content } } });
 
 describe("M4 trusted creative output assembly", () => {
+  it("retains manuscript evidence while preserving the creator's resolved J09 design", () => {
+    const attire = "No specific clothing is established in the approved manuscript; keep attire practical and consistent across the observatory dome and attached workshop.";
+    const saved = structuredClone(context);
+    const final = saved.approvedSources[0].content as typeof context.approvedSources[0]["content"] & { characters: ReturnType<typeof character>[] };
+    final.characters[0].attireRequirements = [attire];
+    const design = "Green sweater, cream shirt, dark trousers and glasses. Include the full-body side view.";
+    const creative = { ...sheetCreative, characterDesignProfile: design, sheetPromptModule: design };
+    for (const persona of ["playful_kid", "enthusiast_parent", "professional_creator"] as const) {
+      const result = parseM4CreativeOutput({ ...selector, persona }, proposal("J09", creative), JSON.stringify(saved));
+      expect(result).toMatchObject({ payload: { content: { attireRequirements: [attire], accessories: ["Bag"],
+        characterDesignProfile: design, sheetPromptModule: design, requiredViews: ["front", "back", "side", "neutral_facial"] } } });
+    }
+  });
   it("distinguishes malformed model bytes from an unreadable saved context", () => {
     const manager = { role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false };
     const valid = JSON.stringify({ result: { kind: "delegate", payload: { taskId: "J01", subjectKind: "book", subjectId: id(1) } } });

@@ -8,6 +8,31 @@ import { m4TestId, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { m4RequestVectors } from "@/tests/helpers/m4-request-vectors";
 
 describe("M4 reviewed request contract", () => {
+  it("versions only J09 ownership and non-report tester instructions across personas", () => {
+    const unchanged = personaSchema.options.flatMap(persona => [
+      m4RequestDefinition({ role: "manager", taskId: null, persona, report: false }),
+      m4RequestDefinition({ role: "tester", taskId: null, persona, report: true }),
+      m4RequestDefinition({ role: "judge", taskId: null, persona, report: true }),
+      ...specialistTaskSchema.options.filter(taskId => taskId !== "J09").map(taskId =>
+        m4RequestDefinition({ role: "specialist", taskId, persona, report: false })),
+    ]);
+    // Pinned before the ownership correction: includes complete schemas, prompts and hashes.
+    expect(m4Hash(m4CanonicalJson(unchanged))).toBe("39bc0b62187edaa4240bdf362d7e91e23085003591d8873abf289c0e634e96e4");
+    for (const persona of personaSchema.options) {
+      const specialist = m4RequestDefinition({ role: "specialist", taskId: "J09", persona, report: false });
+      const tester = m4RequestDefinition({ role: "tester", taskId: null, persona, report: false });
+      for (const definition of [specialist, tester]) {
+        expect(definition.version).toBe("m4_request_j09_ownership_v2");
+        expect(definition.systemPrompt).toContain("characterDesignProfile and sheetPromptModule");
+        expect(definition.systemPrompt).toContain("not a prohibition on later");
+        expect(definition.systemPrompt).toContain("approved hard constraints");
+        expect(definition.systemPrompt).toContain("clarification or an upstream revision");
+      }
+      expect(specialist.systemPrompt).toContain("J09 cannot edit them");
+      expect(tester.systemPrompt).toContain("do not repeat a revision solely because the inherited note remains");
+      expect(tester.systemPrompt).toContain("does not require approval of missing, contradictory or technically invalid work");
+    }
+  });
   it.each(personaSchema.options)("retains typed local report-size rejection for %s without truncation", (persona) => {
     const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
     const allowed = { runId: [m4TestId(1)], artifactId: [m4TestId(2)], versionId: [m4TestId(3)], pageId: [m4TestId(4)] };

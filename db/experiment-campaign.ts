@@ -4,9 +4,11 @@ import type { ExperimentCampaignDocument, ExperimentOperationDocument, Experimen
 import { CASES, personaSchema } from "@/lib/contracts/experiment-runner";
 import { m4Digest, m4GrantSchema, m4MaximumCharge, m4ModelBucket, m4PolicySnapshot, type M4Grant } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { currentMutationOwnerId } from "@/lib/application/deployment-control";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -175,16 +177,27 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       campaign.settledMicrodollars + campaign.reservedMicrodollars + m4MaximumCharge(snapshot.policy, "decision") <= snapshot.policy.maxMicrodollars,
       "Continuation has no remaining allowance.");
     const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
+    const undispatchedDigest = operation.dispatchStartedAtMs == null ?
+      await verifyUndispatchedText(database, session, authority, run, operation._id) : null;
+    if (undispatchedDigest) {
+      const controls = await database.collections.deployment_control.find({ "mutationOwners.runId": { $in: runIds } }, { session }).toArray();
+      requireState(!controls.some(control => control.mutationOwners?.some(owner =>
+        owner.runId && runIds.includes(owner.runId) && owner.id !== currentMutationOwnerId())),
+      "Campaign has an unresolved mutation owner.");
+    }
     requireState(!await database.collections.experiment_operations.findOne({ runId: { $in: runIds }, $or: [
       { state: { $in: ["prepared", "started", "unknown"] } }, { "lifecycle.unresolved": true },
-      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map((key) => ({ [`${key}.expiresAtMs`]: { $gt: nowMs } })),
+      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map((key) => undispatchedDigest ?
+        { [key]: { $ne: null } } : { [`${key}.expiresAtMs`]: { $gt: nowMs } }),
     ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved operation work.");
     requireState(!await database.collections.experiment_runs.findOne({ _id: { $in: runIds }, $or: [
       { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
     ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
     const unclaimedDigest = m4UnclaimedFailureDigest(authority, run, operation);
-    const provenance = { reference: permission!.reference, evidenceDigest: unclaimedDigest ?? operation.m4PreGenerationRecovery?.proofDigest ?? operation.m4Observation!.evidenceDigest!,
-      requestDigest: unclaimedDigest ? operation.m4Preparation!.requestDigest : operation.m4Reservation!.requestDigest, resumedAtMs: nowMs, runRevision: run.revision,
+    const provenance: NonNullable<ExperimentOperationDocument["m4Continuation"]> = { reference: permission!.reference,
+      evidenceDigest: undispatchedDigest ?? unclaimedDigest ?? operation.m4PreGenerationRecovery?.proofDigest ?? operation.m4Observation!.evidenceDigest!,
+      ...(undispatchedDigest ? { kind: "undispatched_text_v1" as const, requestDigest: operation.m4Preparation?.requestDigest ?? null } :
+        { requestDigest: unclaimedDigest ? operation.m4Preparation!.requestDigest : operation.m4Reservation!.requestDigest }), resumedAtMs: nowMs, runRevision: run.revision,
       campaignRevision: campaign.revision, nextOperationId: null };
     const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
       state: "failed", m4Continuation: { $exists: false } }, { $set: { m4Continuation: provenance,

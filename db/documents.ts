@@ -59,8 +59,10 @@ export type ExperimentOperationDocument = BaseDocument & {
     sourceFingerprint: string; operationFingerprint: string; generationCompletedAtMs: number;
     generationVersionIds: string[]; recordedAtMs: number };
   m4PreGenerationRecovery?: import("@/lib/experiment-runner/m4-legacy-count-failure").LegacyCountFailureProof;
-  m4Continuation?: { reference: string; evidenceDigest: string; requestDigest: string; resumedAtMs: number;
-    runRevision: number; campaignRevision: number; nextOperationId: string | null };
+  localPreparationCancellation?: { kind: "paused_text_v1"; evidenceDigest: string; cancelledAtMs: number };
+  m4Continuation?: { reference: string; evidenceDigest: string; resumedAtMs: number;
+    runRevision: number; campaignRevision: number; nextOperationId: string | null } &
+    ({ kind?: undefined; requestDigest: string } | { kind: "undispatched_text_v1"; requestDigest: string | null });
   m4ContinuedFromOperationId?: string;
   m4CompletionRecovery?: { reference: string; evidenceDigest: string; requestDigest: string; recoveredAtMs: number };
   m4Observation?: { workflowRunId: string; publishedWorkflowId: string; wrapperDigest: string | null;

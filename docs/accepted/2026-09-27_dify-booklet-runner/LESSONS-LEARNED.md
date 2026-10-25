@@ -826,6 +826,26 @@ from model output. Keep downstream currentness and asset checks. Evidence: the
 retained Parent J11 failure and M4 output/dispatch tests. Promotion candidate:
 **Documentation** for application-owned reference assembly.
 
+## Distinguish inherited evidence from editable design
+
+J09 copies approved J06 attire evidence unchanged. A Creator reviewer repeatedly
+requested removal of an inherited note even though the editable design already
+contained the requested appearance. Tell specialists and reviewers which fields
+the application owns, and distinguish an earlier unknown detail from a binding
+constraint. Preserve actual constraints and current image-lineage checks. Evidence:
+the retained Creator J09 history, request-definition and hydration regressions.
+Promotion candidate: **Documentation** for agent field ownership.
+
+## Fence both dispatch and late cleanup when cancelling preparation
+
+Pause can arrive while a text request is being prepared. Cancelling that local
+attempt requires a transaction that fences dispatch, retains the operation and
+proves no reservation, output or unresolved claim. A worker error arriving later
+must recheck the exact cancellation before it blocks the run. Inspection failure
+must preserve that cancellation too. Evidence: `experiment-undispatched-text.test.ts`
+and the shared no-dispatch proof. Promotion candidate: **Documentation** for
+concurrent control handling; no provider retry or persisted validity flag follows.
+
 ## Measure evidence reads separately from proof validation
 
 Creator admission exhausted its existing budget while auditing retained Kid and

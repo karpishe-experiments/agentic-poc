@@ -282,6 +282,24 @@ Accounting excludes the unclaimed attempt from paid counts while preserving its
 history; later inspection verifies the same terminal execution without requiring
 a provider-result wrapper. Claimed, unknown, stopped or conflicting attempts do
 not qualify for this branch.
+An additional no-dispatch proof supports an exact granted terminal text failure
+before a workflow starts. It requires the original operation, no dispatch marker,
+remote identity, reservation, output or save claim, and global absence of artifact,
+message and asset materialization. Optional saved preparation remains exact;
+absence of preparation is recorded as a null request digest, not invented evidence.
+Continuation records `undispatched_text_v1` provenance and retains zero calls and
+all failed history. It does not replay the operation. Accounting rechecks this
+proof within its own transaction.
+
+Pause uses the same proof to cancel a prepared Balanced text operation atomically
+with its run update. The run write fences concurrent dispatch. It records a
+`paused_text_v1` cancellation, closes local ownership and clears the active pointer;
+it neither stops the campaign nor consumes allowance. Already dispatched or
+unresolved work keeps its existing observation path. J09 specialist and non-report
+tester request definitions distinguish immutable J06 source evidence from later
+editable design choices. Unknown earlier clothing details do not prohibit later
+creator choices; approved hard constraints and required sheet views remain binding.
+Historical requests, hydration and image serialization remain unchanged.
 Optional continuation metadata is backward compatible and requires no migration. A protected
 request-definition amendment can bind the frozen policy's original bundle hash to
 one reviewed replacement. New preparation/claim requires that exact amendment and
