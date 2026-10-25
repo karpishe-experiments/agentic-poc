@@ -5,6 +5,68 @@
 
 ## Current Creator admission checkpoint
 
+### Authorized reviewer-input repair contract — 2026-10-25
+
+The user authorized compact mid-run reviewer inputs and exact continuation past
+tester operation `97007a0e-3811-4c5a-974b-1c3b2f7cd24a` after review and staging
+checks. Reuse the existing current-artifact projection for every persona. Retain
+creative content, exact lettering, current identities/dependencies/approvals,
+creator feedback and revision counts. Explicitly describe omitted historical
+versions and transport prompts. Version only affected tester definitions and amend
+the protected bundle identity; preserve saved requests and frozen policy bytes.
+
+The persistence change permits only an exactly granted generation-stage tester
+with authenticated `input_limit_exceeded` evidence before generation. Resume must
+revalidate its original request, terminal execution, full reservation/count
+liability, global absence of output and all ownership, including expired claims.
+It records continuation atomically with the same campaign/run activation. It must
+reject final-report retries, other tester failures, unknown outcomes, stale proof
+and duplicate continuation. No stored evidence is rewritten or approval bypassed.
+
+Expected surfaces: request projection/definition, exact failure eligibility,
+campaign ownership checks, accounting validation, protected grant and focused
+unit/persistence/agent tests. Public controls and persisted continuation shape
+remain unchanged. Keep the 32,000-token ceiling, campaign/persona limits and zero
+paid images. Test all-persona current evidence and revision histories, negative
+proof/ownership/output cases, concurrent Resume and late inspection. Obtain two
+clean independent source and staging reviews, lean CI and normal deployment before
+one inspected continuation. Smaller inputs do not guarantee later requests fit.
+No credential-inventory impact: names, storage, transfer and consumers stay fixed.
+
+The local candidate uses `m4_request_tester_current_v3` and bundle
+`cad10d2db952b4e0acc4f29de4c9f6a27799d30d4ae2d98a64206094dadd853e`.
+J09 specialist and final-report definitions remain unchanged. Continuation retains
+the existing persisted shape. Shared historical eligibility keeps a continued
+reviewer failure in its original decision stage after generation; failed proof
+reads cannot fall through into Stop or attempt-finalization writes. Ownership
+checks cover campaign runs and the exact failed operation under any run identity.
+Independent initial reviews found these two boundary gaps; the runtime corrections
+are in scope and regression validation remains required before a clean final review.
+
+Read-only sizing reused synthetic full-suite artifact fixtures with two historical
+copies per artifact and a fixed bounded output schema. This is controlled payload
+sizing, not live replay or acceptance evidence:
+
+| Persona | Current artifacts retained | Historical request bytes | Compact request bytes |
+| --- | ---: | ---: | ---: |
+| Kid | 20 | 286,715 | 65,763 |
+| Parent | 24 | 350,866 | 80,211 |
+| Creator | 31 | 466,084 | 110,956 |
+
+No provider requests were issued for sizing. Authoritative token counts are
+unavailable; byte reduction does not establish a live count or guarantee later
+reviews fit. The existing guard remains authoritative. Delivery and the exact
+live continuation have not yet occurred for this candidate.
+
+Local verification passed all 75 provider-result persistence cases, including
+22 reviewer-continuation cases, plus 47 focused units, typecheck, focused lint,
+12 agent fixtures and 215 documentation links. MongoDB test-binary provisioning
+completed; teardown needed its existing SIGINT-to-SIGKILL fallback and the test
+command exited zero. Seven affected dispatch cases also passed, including all
+three full persona graphs, predecessor admission and Pause. The other 45 dispatch
+cases were not selected; no full-suite pass is claimed. These local results do
+not establish reviewed delivery or live continuation.
+
 ### First Page Bible review count rejection — 2026-10-25
 
 Creator reached revision 392 and is blocked with definite failure, Pause false,
@@ -35,8 +97,9 @@ creative content, exact lettering, targets, approvals and source relationships,
 while omitting obsolete versions and repeated transport data. Reuse that projection
 for all mid-run reviewer personas with their saved feedback and revision counts.
 Preserve the original request and ceiling; do not truncate or retry automatically.
-The exact new tester continuation requires separate authority and proof because
-the approved J09 grant named only operation `865ca52b-36d1-460e-bc18-e2249c87b5a7`.
+The user subsequently authorized this exact tester continuation after the bounded
+repair, independent reviews and staging checks. The earlier J09 grant alone did
+not cover this new failure. Delivery and continuation remain pending.
 
 ### Creator J09 stop and proposed repair — 2026-10-24
 

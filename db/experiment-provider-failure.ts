@@ -15,7 +15,7 @@ import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-reque
 import { m4Digest, m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
-import { m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
+import { isM4ContinuedReviewerInputFailure, m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
@@ -47,6 +47,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
       !await readM4FailureSourceVersion(database, session, op._id, attempt);
   }
   const prep = op?.m4Preparation, reservation = op?.m4Reservation, observation = op?.m4Observation;
+  const continuedReviewer = isM4ContinuedReviewerInputFailure(ledger.snapshot.policy, run, op);
   if (!run || !op || !prep || !reservation || !observation || run.mode !== "balanced" || op.mode !== "balanced" ||
       op.providerKind !== "text" || op.role === "image" || op.reservationCount !== 1 || !op.workflowRunId || op.dispatchStartedAtMs == null ||
       run.m4?.campaignId !== ledger.grant.campaignId || run.m4.policyHash !== ledger.snapshot.hash || run.m4.policyJson !== ledger.snapshot.json ||
@@ -58,7 +59,7 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
       !["succeeded", "failed", "stopped"].includes(observation.remoteStatus) || !["provider_failure", "creative_invalid"].includes(observation.issue ?? "") ||
       !m4Digest.safeParse(observation.wrapperDigest).success || observation.content === null || observation.evidenceJson === null ||
       observation.evidenceDigest !== m4Hash(observation.evidenceJson) ||
-      reservation.bucket !== m4ModelBucket(op.role, run.generationCompletedAtMs != null) ||
+      reservation.bucket !== m4ModelBucket(op.role, run.generationCompletedAtMs != null && !continuedReviewer) ||
       reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket)) return false;
   const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
   if (!campaign || campaign.policyHash !== ledger.snapshot.hash || campaign.policyJson !== ledger.snapshot.json ||
@@ -73,6 +74,10 @@ export async function hasM4KnownFailure(database: Database, session: ClientSessi
     if (request.input.filter((p) => p.role === "user").length !== 1 || request.input.find((p) => p.role === "user")?.content !== prep.contextJson) return false;
     const preGeneration = m4PreGenerationFailure(JSON.parse(observation.evidenceJson), ledger.snapshot.policy, op);
     if (preGeneration) {
+      // Reviewer continuation must never conceal a saved message or image under
+      // another owner. Source-version lookup below is global for the same reason.
+      if (op.role === "tester" && (await database.collections.messages.findOne({ operationId: op._id }, { session, projection: { _id: 1 } }) ||
+          await database.collections.assets.findOne({ _id: op._id }, { session, projection: { _id: 1 } }))) return false;
       return observation.issue === "provider_failure" && observation.content === "" &&
         reservation.settledMicrodollars === null && reservation.evidenceDigest === null &&
         reservation.unsettledMicrodollars === reservation.maximumMicrodollars &&
