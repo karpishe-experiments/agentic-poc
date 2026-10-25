@@ -1,5 +1,5 @@
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
-import { assessM4ProviderResult } from "@/lib/experiment-runner/m4-provider-result";
+import { assessM4ProviderResult, m4RetainedProviderWrapper } from "@/lib/experiment-runner/m4-provider-result";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
@@ -23,8 +23,8 @@ export function m4ObservedRoleResult(run: ExperimentRunDocument, operation: Expe
       observation.evidenceDigest !== m4Hash(observation.evidenceJson) || reservation.evidenceDigest !== observation.evidenceDigest) {
     throw new Error("Balanced completion accounting identity differs.");
   }
-  const assessed = assessM4ProviderResult({ schemaVersion: "booklet_provider_v1", content: observation.content,
-    providerEvidence: JSON.parse(observation.evidenceJson) as unknown }, snapshot.policy, operation);
+  const assessed = assessM4ProviderResult(m4RetainedProviderWrapper(observation.content,
+    JSON.parse(observation.evidenceJson) as unknown), snapshot.policy, operation);
   if (!assessed.canMaterialize || assessed.chargeUpperMicrodollars !== reservation.settledMicrodollars ||
       reservation.unsettledMicrodollars !== (snapshot.policy.countChargeStatus === "assumed" ? snapshot.policy.countChargeCeilingMicrodollars : 0)) {
     throw new Error("Balanced completion has unresolved or invalid provider usage.");

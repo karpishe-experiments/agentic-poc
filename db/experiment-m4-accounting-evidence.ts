@@ -159,6 +159,7 @@ export function readM4AccountingOperations(database: Database, session: ClientSe
       materializationJson: { $cond: [{ $eq: ["$state", "failed"] }, "$materializationJson", null] },
       authorizationClaim: 1, resultFinalizationClaim: 1, imageCompletionClaim: 1,
       m4Reservation: 1, "m4Preparation.policyHash": 1, "m4Preparation.configurationHash": 1, "m4Preparation.requestDigest": 1,
+      "m4Preparation.tokenPolicy": 1, "m4Preparation.adapterUpdate": 1,
       "m4Preparation.publishedWorkflowId": 1, "m4Observation.evidenceJson": 1, "m4Observation.evidenceDigest": 1,
       "m4Observation.remoteStatus": 1, "m4Observation.issue": 1,
     } }).toArray();

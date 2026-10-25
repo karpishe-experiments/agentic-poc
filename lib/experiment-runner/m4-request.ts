@@ -13,7 +13,7 @@ import {
 import { visualStyleProposalSchema, characterSheetProposalSchema, locationSheetProposalSchema } from "@/lib/contracts/experiment-references";
 import { pageLayoutProposalSchema, pageSubjectProposalSchema } from "@/lib/contracts/experiment-pages";
 import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
-import { m4ModelBucket, type M4Policy, type M4Grant } from "@/lib/experiment-runner/m4-policy";
+import { m4AdmittedTokenPolicy, m4ModelBucket, type M4Policy, type M4Grant, type M4TokenPolicy } from "@/lib/experiment-runner/m4-policy";
 
 // The restricted wire format deliberately permits only integer JSON numbers.
 // Fractional story/layout values live inside the exact user-context STRING.
@@ -373,7 +373,7 @@ export function m4BindAllowedValues(schema: JsonSchema, allowed: M4AllowedValues
   assertM4SchemaLimits(bound);
   return bound;
 }
-function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = false) {
+function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = false, legacyLimits = false) {
   const { role, taskId, persona, report } = selector;
   z.enum(["manager", "specialist", "tester", "judge"]).parse(role);
   z.boolean().parse(report);
@@ -395,13 +395,14 @@ function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = 
     instruction += " For J09, attireRequirements and accessories are immutable copies of approved J06 source evidence, not editable design fields. Do not request their deletion or rewriting through J09. A note that appearance is not established in the manuscript is not a prohibition on later creator-specified design. Assess whether characterDesignProfile and sheetPromptModule implement saved creator answers and required views; do not repeat a revision solely because the inherited note remains. Actual approved hard constraints remain binding. If a creator request contradicts one, request clarification or an upstream revision rather than overriding it. This distinction does not require approval of missing, contradictory or technically invalid work.";
     instruction += " Use evidenceScope to distinguish supplied current creative evidence from omitted history and transport data. Do not assess unseen historical versions or treat omitted execution prompts as missing creative work. Preserve exact current version targets and saved creator feedback when deciding. Images are simulated and text-only: visual assessment is not_assessed; do not claim to have inspected rendered images. State any relevant evidence limitation in the decision explanation; required current creative and technical checks still apply.";
   }
-  const definition = { version: role === "manager" || legacyReport ? "m4_request_v1" : "m4_context_current_v2", rendering: "exact-context-string-v1", role, taskId, persona, report,
+  const definition = { version: legacyReport || legacyLimits && role === "manager" ? "m4_request_v1" : legacyLimits ? "m4_context_current_v2" : "m4_context_policy_v3", rendering: "exact-context-string-v1", role, taskId, persona, report,
     projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
       ...(role === "specialist" && taskId === "J11" ? { layoutContract: M4_LAYOUT_CONTRACT } : {}),
       ...(role === "tester" && !report ? { artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: testerEvidenceScope } : {}),
       ...(role !== "manager" && !legacyReport ? { feedbackProjection: "saved_decisions_v1", evidenceProjection: "current_creative_v2" } : {}),
       ...(role === "manager" || report ? { artifactProjection: report ? "compact-advisory-v3" : "eligible-route-v3", creativeContent: report } : {}) },
-    preparationByteLimit: role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null,
+    preparationByteLimit: legacyReport || legacyLimits ? role === "manager" ? 16 * 1024 : report ? 128 * 1024 : null : null,
+    ...(!legacyReport && !legacyLimits ? { carrierByteLimit: 2 * 1024 * 1024, authorizationByteLimit: 1_048_576, efficiencyLimits: "advisory_v1" } : {}),
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
   return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
 }
@@ -427,7 +428,9 @@ export function m4SavedReportDefinition(selector: M4RequestSelector, hash: strin
   if (!selector.report) return null;
   const current = m4RequestDefinition(selector);
   if (current.hash === hash) return current;
-  const legacy = compileM4RequestDefinition(selector, true);
+  const previous = compileM4RequestDefinition(selector, false, true);
+  if (previous.hash === hash) return previous;
+  const legacy = compileM4RequestDefinition(selector, true, true);
   return legacy.hash === hash ? legacy : null;
 }
 
@@ -452,10 +455,34 @@ export function m4RequestBundleMatches(policy: M4Policy, grant?: M4Grant): boole
 
 export class M4ReportSizeError extends Error {
   constructor(readonly requestBytes: number, readonly byteLimit: number, readonly definitionHash: string, readonly requestDigest: string,
-    readonly scope: "context" | "request" = "request") {
+    readonly scope: "context" | "request" | "authorization" = "request") {
     super("M4 report request exceeds its preparation byte limit; required content was not truncated.");
     this.name = "M4ReportSizeError";
   }
+}
+
+/** Shared serialization keeps preparation's transport preflight equal to HTTP. */
+export function m4AuthorizationEnvelope(summary: { role: string; taskId: string | null; subjectKind: string;
+  subjectId: string; mode: string; inputFingerprint: string }, requestJson: string, tokenPolicy: M4TokenPolicy | undefined,
+  timeoutSeconds: number, deadlineAtMs: number, report: boolean) {
+  return JSON.stringify({ data: { started: true, reason: null, ...summary, m4: {
+    ...m4AuthorizedCarrier(requestJson, tokenPolicy), timeoutSeconds, deadlineAtMs, report,
+  } } });
+}
+
+/** Policy metadata is authenticated by the carrier digest, never sent to OpenAI. */
+class M4CarrierSizeError extends Error {
+  constructor(readonly requestBytes: number) { super("M4 complete canonical carrier exceeds its transport byte limit."); }
+}
+export function m4AuthorizedCarrier(requestJson: string, tokenPolicy?: M4TokenPolicy) {
+  if (!tokenPolicy) return { requestJson, requestDigest: m4Hash(requestJson) };
+  const request = JSON.parse(requestJson) as Record<string, unknown>;
+  if (m4CanonicalJson(request) !== requestJson || Object.hasOwn(request, "bookletPolicy")) throw new Error("Provider request is not an original canonical payload.");
+  const carrier = m4CanonicalJson({ ...request, bookletPolicy: { contractVersion: "booklet_carrier_v2",
+    requestDigest: m4Hash(requestJson), tokenPolicy: { version: tokenPolicy.amendment.version, hash: tokenPolicy.hash,
+      maxInputTokens: tokenPolicy.amendment.maxInputTokens, warningInputTokens: tokenPolicy.amendment.warningInputTokens } } });
+  if (Buffer.byteLength(carrier, "utf8") > 2 * 1024 * 1024) throw new M4CarrierSizeError(Buffer.byteLength(carrier, "utf8"));
+  return { requestJson: carrier, requestDigest: m4Hash(carrier) };
 }
 
 export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, contextJson: string, allowed: M4AllowedValues, grant?: M4Grant) {
@@ -482,6 +509,17 @@ export function prepareM4Request(policy: M4Policy, selector: M4RequestSelector, 
     max_output_tokens: model.maxOutputTokens, reasoning: { effort: model.reasoningEffort, mode: "standard" }, service_tier: "default",
     text: { format }, store: false, truncation: "disabled", include: ["reasoning.encrypted_content"] };
   const requestJson = m4CanonicalJson(payload);
+  try { m4AuthorizedCarrier(requestJson, grant ? m4AdmittedTokenPolicy(policy, grant).snapshot : undefined); }
+  catch (error) {
+    if (error instanceof M4CarrierSizeError && selector.report) throw new M4ReportSizeError(error.requestBytes, 2 * 1024 * 1024,
+      definition.hash, m4Hash(requestJson), "request");
+    throw error;
+  }
+  if (Buffer.byteLength(requestJson, "utf8") > 2 * 1024 * 1024) {
+    if (selector.report) throw new M4ReportSizeError(Buffer.byteLength(requestJson, "utf8"), 2 * 1024 * 1024,
+      definition.hash, m4Hash(requestJson), "request");
+    throw new Error("M4 complete canonical carrier exceeds its transport byte limit.");
+  }
   const requestByteLimit = definition.preparationByteLimit;
   if (requestByteLimit !== null && Buffer.byteLength(requestJson, "utf8") > requestByteLimit) {
     if (selector.report && (selector.role === "tester" || selector.role === "judge")) {

@@ -2,7 +2,7 @@
 +++ b/models/llm/llm.py
 @@ -16,0 +17 @@
 +from . import booklet_bounded
-@@ -72,0 +74,9 @@
+@@ -72,0 +74,13 @@
 +        if model_parameters.get("booklet_bounded_execution") is not None and model_parameters.get("booklet_bounded_execution") is not False:
 +            return booklet_bounded.generate(self, OpenAI, model, credentials, prompt_messages,
 +                                            model_parameters, tools, stop, stream, user)
@@ -12,9 +12,13 @@
 +        model_parameters.pop("booklet_request_digest", None)
 +        model_parameters.pop("booklet_prepared_request", None)
 +        model_parameters.pop("booklet_deadline_at_ms", None)
++        model_parameters.pop("booklet_token_policy_version", None)
++        model_parameters.pop("booklet_token_policy_hash", None)
++        model_parameters.pop("booklet_max_input_tokens", None)
++        model_parameters.pop("booklet_warning_input_tokens", None)
 --- a/models/llm/gpt-6-luna.yaml
 +++ b/models/llm/gpt-6-luna.yaml
-@@ -129,0 +130,24 @@
+@@ -129,0 +130,40 @@
 +  - name: booklet_bounded_execution
 +    label: {en_US: Booklet bounded execution}
 +    type: boolean
@@ -38,10 +42,26 @@
 +  - name: booklet_deadline_at_ms
 +    label: {en_US: Booklet original operation deadline milliseconds}
 +    type: float
++    required: false
++  - name: booklet_token_policy_version
++    label: {en_US: Booklet token policy version}
++    type: string
++    required: false
++  - name: booklet_token_policy_hash
++    label: {en_US: Booklet token policy SHA-256}
++    type: string
++    required: false
++  - name: booklet_max_input_tokens
++    label: {en_US: Booklet maximum input tokens}
++    type: int
++    required: false
++  - name: booklet_warning_input_tokens
++    label: {en_US: Booklet warning input tokens}
++    type: int
 +    required: false
 --- a/models/llm/gpt-6-sol.yaml
 +++ b/models/llm/gpt-6-sol.yaml
-@@ -129,0 +130,24 @@
+@@ -129,0 +130,40 @@
 +  - name: booklet_bounded_execution
 +    label: {en_US: Booklet bounded execution}
 +    type: boolean
@@ -65,4 +85,20 @@
 +  - name: booklet_deadline_at_ms
 +    label: {en_US: Booklet original operation deadline milliseconds}
 +    type: float
++    required: false
++  - name: booklet_token_policy_version
++    label: {en_US: Booklet token policy version}
++    type: string
++    required: false
++  - name: booklet_token_policy_hash
++    label: {en_US: Booklet token policy SHA-256}
++    type: string
++    required: false
++  - name: booklet_max_input_tokens
++    label: {en_US: Booklet maximum input tokens}
++    type: int
++    required: false
++  - name: booklet_warning_input_tokens
++    label: {en_US: Booklet warning input tokens}
++    type: int
 +    required: false

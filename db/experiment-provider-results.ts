@@ -9,11 +9,11 @@ import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import type { RoleResult } from "@/lib/contracts/experiment-runner";
 import { savedConfigurationSchema, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
-import { assessM4ProviderResult, m4ProviderWrapperSchema } from "@/lib/experiment-runner/m4-provider-result";
+import { assessM4ProviderResult, m4ProviderReadbackSchema } from "@/lib/experiment-runner/m4-provider-result";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { M4CreativeOutputError } from "@/lib/experiment-runner/m4-output";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
-import { m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import { m4MaximumCharge, m4ModelBucket, m4OperationTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { mergeAuthoritativeCount } from "@/lib/experiment-runner/context-diagnostics";
 import type { WorkflowRuntime, RuntimeResult } from "@/lib/experiment-runner/transport";
@@ -45,7 +45,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
         reservation.campaignId !== ledger.grant.campaignId || prep.configurationHash !== run.configurationHash ||
         prep.operationFingerprint !== m4OperationFingerprint(operation) ||
         reservation.bucket !== m4ModelBucket(operation.role, run.generationCompletedAtMs != null) ||
-        reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket) ||
+        reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket, m4OperationTokenPolicy(ledger.snapshot.policy, operation).snapshot) ||
         prep.requestDigest !== reservation.requestDigest || prep.requestDigest !== m4Hash(prep.requestJson) ||
         prep.parentWorkflowRunId !== operation.parentWorkflowRunId || prep.publishedWorkflowId !== operation.verifiedWorkflowId) conflict();
     const expected = ledger.snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
@@ -96,14 +96,14 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     }
     const value = execution.outputs?.booklet_provider_result;
     const wrapperText = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 2_500_000 ? value : null;
-    let parsed: ReturnType<typeof m4ProviderWrapperSchema.safeParse> = m4ProviderWrapperSchema.safeParse(null);
+    let parsed: ReturnType<typeof m4ProviderReadbackSchema.safeParse> = m4ProviderReadbackSchema.safeParse(null);
     let originalContent: string | null = null;
     let preGeneration: ReturnType<typeof m4PreGenerationFailure> = null;
     if (wrapperText !== null) {
       try {
         const rawWrapper: unknown = JSON.parse(wrapperText);
         preGeneration = m4PreGenerationFailure(rawWrapper, ledger.snapshot.policy, before.operation);
-        parsed = m4ProviderWrapperSchema.safeParse(rawWrapper);
+        parsed = m4ProviderReadbackSchema.safeParse(rawWrapper);
         const creative = z.object({ content: z.string().max(2 * 1024 * 1024) }).safeParse(rawWrapper);
         if (creative.success) originalContent = creative.data.content;
       } catch { /* No arbitrary error/body is saved. */ }

@@ -27,7 +27,9 @@ export async function isVerifiedAdvisoryFailure(database: Database, session: Cli
     return run.mode === "balanced" && !!run.m4 && op.reservationCount === 0 && !op.m4Reservation && !op.m4Preparation && !op.m4Observation &&
       !op.workflowRunId && !op.parentWorkflowRunId && !op.verifiedWorkflowId && !op.workflowTaskId && !op.remoteStatus && op.dispatchStartedAtMs == null &&
       proof.code === "report_request_too_large" && Number.isSafeInteger(proof.requestBytes) && proof.requestBytes > proof.byteLimit &&
-      (proof.scope === "context" && proof.byteLimit === 2 * 1024 * 1024 || proof.scope === "request" && proof.byteLimit === definition.preparationByteLimit) &&
+      (proof.scope === "context" && proof.byteLimit === 2 * 1024 * 1024 || proof.scope === "request" &&
+        (proof.byteLimit === definition.preparationByteLimit || proof.byteLimit === definition.carrierByteLimit) ||
+        proof.scope === "authorization" && proof.byteLimit === definition.authorizationByteLimit) &&
       proof.definitionHash === definition.hash && /^[a-f0-9]{64}$/.test(proof.requestDigest) &&
       proof.policyHash === run.m4.policyHash && proof.configurationHash === run.configurationHash &&
       proof.generationCompletedAtMs === run.generationCompletedAtMs &&

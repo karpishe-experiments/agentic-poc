@@ -16,8 +16,8 @@ import type { AssetStore } from "@/lib/assets/asset-store";
 import sharp from "sharp";
 import { configurationSnapshot, savedConfigurationSchema, validToolKey, type ConfigState, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
-import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
-import { m4Hash } from "@/lib/experiment-runner/m4-request";
+import { m4AdmittedTokenPolicy, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4AuthorizationEnvelope, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { createRunInputSchema, experimentTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
 import { opaqueIdSchema } from "@/lib/contracts/common";
@@ -363,11 +363,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           if (timeoutSeconds < 1) return reply(409, "conflict");
           // Measure the actual escaped JSON envelope, not the unescaped request.
           // These immutable prepared bytes are the only context sent to M4 text.
-          const authorized = { started: true, reason: null, ...summary, m4: {
-            requestJson: prep.requestJson, requestDigest: prep.requestDigest, timeoutSeconds, deadlineAtMs,
-            report: (operation.role === "tester" || operation.role === "judge") && savedRun.generationCompletedAtMs != null,
-          } };
-          const encoded = JSON.stringify({ data: authorized });
+          const encoded = m4AuthorizationEnvelope(summary, prep.requestJson,
+            m4AdmittedTokenPolicy(snapshot.policy, authority.grant, prep).snapshot, timeoutSeconds, deadlineAtMs,
+            (operation.role === "tester" || operation.role === "judge") && savedRun.generationCompletedAtMs != null);
           if (Buffer.byteLength(encoded, "utf8") > 1_048_576) return reply(422, "invalid_result");
           const execution = remote.execution;
           const claim = await measurePhase(body, "authorization_admission", () => mutate(() =>

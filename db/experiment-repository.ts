@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { m4AdmittedTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { z } from "zod";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -114,6 +115,7 @@ export function createExperimentRepository(database: Database, options: { store?
   }
   async function assertM4Prepared(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, parent: string | null, phase: "dispatch" | "claim") {
     const prepared = operation.m4Preparation;
+    if (campaignLedger && prepared) m4AdmittedTokenPolicy(campaignLedger.snapshot.policy, campaignLedger.grant, prepared);
     const binding = campaignLedger?.snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
       item.persona === (operation.role === "tester" ? run.persona : null));
     const selector = { role: operation.role, taskId: operation.taskId, persona: run.persona,

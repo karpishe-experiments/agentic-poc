@@ -54,7 +54,7 @@ describe("M4 reviewed request contract", () => {
     expect(projectM4Context(selector, lessHistory, "operation")).toEqual(result);
     expect(result.evidenceScope).toMatchObject({ artifactVersions: expect.stringContaining("including drafts"), images: expect.stringContaining("not_assessed") });
     const definition = m4RequestDefinition(selector);
-    expect(definition.version).toBe("m4_context_current_v2");
+    expect(definition.version).toBe("m4_context_policy_v3");
     expect(definition.projection).toMatchObject({ artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: result.evidenceScope });
     expect(definition.systemPrompt).toContain("Do not assess unseen historical versions");
     expect(definition.systemPrompt).toContain("required current creative and technical checks still apply");
@@ -66,6 +66,8 @@ describe("M4 reviewed request contract", () => {
     const legacyHash = "c029e95876aea579de9232d4bce510d3cd74e49c6e4d3c18c2a3229c83a9d0b8";
     expect(m4RequestDefinition(report).hash).not.toBe(legacyHash);
     expect(m4SavedReportDefinition(report, legacyHash)?.hash).toBe(legacyHash);
+    const previousHash = "615e0473e6a8f5e39c9fc36a20ded50ce17df853fb259cbfc28847cf348db3c6";
+    expect(m4SavedReportDefinition(report, previousHash)?.hash).toBe(previousHash);
     expect(m4SavedReportDefinition(report, "0".repeat(64))).toBeNull();
   });
   it("versions creative contexts across personas and preserves ownership instructions", () => {
@@ -76,12 +78,12 @@ describe("M4 reviewed request contract", () => {
       ...specialistTaskSchema.options.filter(taskId => taskId !== "J09").map(taskId =>
         m4RequestDefinition({ role: "specialist", taskId, persona, report: false })),
     ]);
-    for (const definition of unchanged) expect(definition.version).toBe(definition.role === "manager" ? "m4_request_v1" : "m4_context_current_v2");
+    for (const definition of unchanged) expect(definition.version).toBe("m4_context_policy_v3");
     for (const persona of personaSchema.options) {
       const specialist = m4RequestDefinition({ role: "specialist", taskId: "J09", persona, report: false });
       const tester = m4RequestDefinition({ role: "tester", taskId: null, persona, report: false });
       for (const definition of [specialist, tester]) {
-        expect(definition.version).toBe("m4_context_current_v2");
+        expect(definition.version).toBe("m4_context_policy_v3");
         expect(definition.systemPrompt).toContain("characterDesignProfile and sheetPromptModule");
         expect(definition.systemPrompt).toContain("not a prohibition on later");
         expect(definition.systemPrompt).toContain("approved hard constraints");
@@ -92,17 +94,14 @@ describe("M4 reviewed request contract", () => {
       expect(tester.systemPrompt).toContain("does not require approval of missing, contradictory or technically invalid work");
     }
   });
-  it.each(personaSchema.options)("retains typed local report-size rejection for %s without truncation", (persona) => {
+  it.each(personaSchema.options)("permits large %s reports but retains the hard carrier bound without truncation", (persona) => {
     const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
     const allowed = { runId: [m4TestId(1)], artifactId: [m4TestId(2)], versionId: [m4TestId(3)], pageId: [m4TestId(4)] };
     for (const role of ["tester", "judge"] as const) {
       const selector = { role, taskId: null, persona, report: true } as const;
-      let caught: unknown;
-      try { prepareM4Request(policy, selector, JSON.stringify({ brief: "x".repeat(128 * 1024) }), allowed); } catch (error) { caught = error; }
-      expect(caught).toBeInstanceOf(M4ReportSizeError);
-      expect(caught).toMatchObject({ byteLimit: 128 * 1024, definitionHash: m4RequestDefinition(selector).hash,
-        requestDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
-      expect((caught as M4ReportSizeError).requestBytes).toBeGreaterThan(128 * 1024);
+      const prepared = prepareM4Request(policy, selector, JSON.stringify({ brief: "x".repeat(128 * 1024) }), allowed);
+      expect(Buffer.byteLength(prepared.requestJson)).toBeGreaterThan(128 * 1024);
+      expect(m4RequestDefinition(selector).preparationByteLimit).toBeNull();
       expect(() => prepareM4Request(policy, selector, JSON.stringify({ brief: "x".repeat(2 * 1024 * 1024) }), allowed))
         .toThrow(expect.objectContaining({ scope: "context", byteLimit: 2 * 1024 * 1024 }));
       expect(() => prepareM4Request(policy, selector, "{" + "x".repeat(2 * 1024 * 1024), allowed)).not.toThrow(M4ReportSizeError);
@@ -183,12 +182,13 @@ describe("M4 reviewed request contract", () => {
       expect.objectContaining({ safeFailure: "unknown_outcome", measuredTimings: 1, elapsedMsTotal: 0 }),
     ]));
   });
-  it("rejects complete manager/report requests above local byte bounds without truncating required text", () => {
+  it("permits efficiency-size excess but rejects complete escaped carriers above the hard bound", () => {
     const policy = { ...m4TestPolicy(), requestDefinitionHash: m4RequestBundleHash() };
     const allowed = { taskId: ["J01"], subjectKind: ["book"], subjectId: [m4TestId(1)], runId: [m4TestId(1)], artifactId: [m4TestId(2)], versionId: [m4TestId(3)], pageId: [m4TestId(4)] };
     for (const selector of [{ role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false },
       { role: "judge" as const, taskId: null, persona: "playful_kid" as const, report: true }]) {
-      expect(() => prepareM4Request(policy, selector, JSON.stringify({ required: "🙂".repeat(34000) }), allowed)).toThrow("required content was not truncated");
+      expect(() => prepareM4Request(policy, selector, JSON.stringify({ required: "🙂".repeat(34000) }), allowed)).not.toThrow();
+      expect(() => prepareM4Request(policy, selector, JSON.stringify({ required: '"'.repeat(600000) }), allowed)).toThrow();
     }
   });
   it("matches independent Python canonical bytes and digests, including Unicode and numeric keys", () => {

@@ -3,7 +3,7 @@ import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import type { M4Authority } from "@/db/experiment-campaign";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
-import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { m4PolicySnapshot, m4PreparationTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 
@@ -35,6 +35,7 @@ export function undispatchedTextDigest(authority: M4Authority, run: ExperimentRu
         saved[0].publishedWorkflowId !== expected[0].publishedWorkflowId || saved[0].toolProviderId !== expected[0].toolProviderId) return null;
     const prep = op.m4Preparation;
     if (prep) {
+      m4PreparationTokenPolicy(snapshot.policy, prep);
       const request = JSON.parse(prep.requestJson) as { input?: { role: string; content: string }[] };
       const users = Array.isArray(request.input) ? request.input.filter(p => p.role === "user") : [];
       if (prep.policyHash !== snapshot.hash || prep.configurationHash !== run.configurationHash ||

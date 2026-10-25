@@ -4,6 +4,17 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Check each transport's serialized boundary before dispatch
+
+A provider request can fit its canonical carrier but exceed a smaller HTTP
+response limit after JSON escaping. Removing efficiency caps exposed this gap.
+Use the same serializer for preparation and authorization, and bound changing
+fields conservatively. Retain transport limits as hard limits while treating
+efficiency targets as warnings. The M4 escaped-report integration case verifies
+that a below-1-MiB request can fail before dispatch, preserve accounting, and end
+advisory evaluation without a retry. Promotion candidate: **Documentation** for
+provider transport boundaries.
+
 ### Separate current creative evidence from execution history
 
 Model context and verification need different views of the same saved record.
