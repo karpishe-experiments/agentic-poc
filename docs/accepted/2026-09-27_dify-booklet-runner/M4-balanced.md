@@ -1,9 +1,43 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The same campaign is active; no replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The campaign subsequently stopped at a new J12 preparation failure; the exact guarded continuation is authorized pending reviewed delivery. No replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Authorized J12 preparation continuation — 2026-10-25
+
+Creator is blocked at revision 461 after four approved Page Bibles (cover and
+story pages 1–3). J12 operation `26606176-6380-4dab-ac59-c903e90bf3f7`
+failed while preparing story page 4. Saved state has no workflow, reservation,
+active operation or preparation owner. Diagnostics show `MongoOperationTimeoutError`
+in `text_preparation`, with 229,815 ms and 194,159 ms of operation budget remaining
+at the two failed phases. They do not identify the exact query, indexing defect
+or Atlas throttling. The campaign is stopped; no continuation has been sent for
+this failure.
+
+The user authorized one guarded continuation of this exact operation after
+reviews, CI and staging checks. Add only its manifest grant. Reuse the existing
+`undispatched_text_v1` verifier: read original evidence and prove no dispatch,
+reservation, global output or unresolved ownership, with intact accounting,
+before atomically continuing the same run. The observations above do not replace
+that proof. Preserve the failure and all historical evidence. No runtime change,
+timeout increase, speculative optimization, infrastructure change or automatic
+retry is included. The architecture's existing control and proof contracts remain
+unchanged. There is no credential-inventory impact.
+
+Verification covers manifest/policy units, the existing real-persistence
+no-dispatch continuation cases with fake providers, typecheck and documentation
+links. Obtain two clean independent source and staging reviews and lean CI before
+normal staging delivery. After readiness, inspect saved state and use one normal
+continuation; reconcile an uncertain response read-only.
+
+The current ledger retains 67 Creator text admissions, nine simulated images,
+76 steps and zero paid images. Campaign usage is 161/500 requests,
+USD 0.171140 reserved, USD 0.187044 settled upper bound and USD 4.641816 remaining.
+These are accounting bounds, not invoice charges. Five Page Bibles and all nine
+page images remain, followed by approvals, advisory evaluation and final generation,
+ownership and accounting verification. Kid and Parent remain unchanged; M5 is held.
 
 ### Reviewer-input delivery and exact continuation — 2026-10-25
 
@@ -123,7 +157,7 @@ not a final advisory report, so it cannot be waived as incomplete evaluation.
 The run retains 56 text admissions, nine simulated images, 65 steps and 16 saved
 decisions; paid images remain zero. Campaign exposure is 150/500 requests,
 USD 0.161240 reserved, USD 0.162534 settled upper bound and USD 4.676226 remaining.
-These are ledger bounds, not invoice charges. No second continuation was sent.
+These were ledger bounds, not invoice charges. The later delivery checkpoint records its authorized continuation.
 
 Code inspection identifies a bounded correction to evaluate: non-report testers
 currently receive complete current-artifact version histories and transport
