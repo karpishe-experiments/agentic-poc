@@ -6,6 +6,7 @@ import { simulatePaginationProposal } from "@/lib/experiment-runner/pagination-f
 import { paginationSources } from "@/tests/helpers/pagination-fixtures";
 import { M4_LAYOUT_CONTRACT, projectM4Context } from "@/lib/experiment-runner/m4-request";
 import { parsePageProposal } from "@/lib/contracts/experiment-pages";
+import { simulatePageBibleProposal } from "@/lib/experiment-runner/page-bible-fixtures";
 
 const style = { schemaVersion: "2", title: "Warm ink", styleDefinition: { mediumAndLineWork: "ink", shapeLanguageAndProportions: "round",
   colourAndContrast: "warm", textureAndRendering: "paper", lightingAndAtmosphere: "sunny", emotionalTone: "hopeful", accessibilityAndReadability: "clear" },
@@ -134,6 +135,33 @@ describe("M4 trusted creative output assembly", () => {
       stylePromptModuleHash: styleModuleHash(style.stylePromptModule) } } });
     expect(() => parseM4CreativeOutput(selector, proposal("J09", sheetCreative), JSON.stringify({ ...context, subjectId: id(99) }))).toThrow("not eligible");
     expect(() => parseM4CreativeOutput(selector, proposal("J09", sheetCreative), JSON.stringify({ ...context, approvedSources: [...context.approvedSources, context.approvedSources[0]] }))).toThrow("ambiguous");
+  });
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("hydrates %s compact J09 sources exactly as legacy sources", persona => {
+    const selected = { ...selector, persona };
+    const saved = projectM4Context(selected, context, id(30));
+    expect(JSON.stringify(saved)).not.toContain('"prompt":');
+    expect(saved.evidenceProjection).toBe("current_creative_v2");
+    expect(parseM4CreativeOutput(selected, proposal("J09", sheetCreative), JSON.stringify(saved))).toEqual(
+      parseM4CreativeOutput(selected, proposal("J09", sheetCreative), JSON.stringify(context)));
+  });
+  it.each(["playful_kid", "enthusiast_parent", "professional_creator"] as const)("keeps %s selected-page lettering and legacy J12 hydration with a compact layout", persona => {
+    const sources = paginationSources(persona);
+    const pagination = simulatePaginationProposal({ persona, sources });
+    if (pagination.kind !== "proposal") throw new Error("Expected pagination");
+    const layout = { ...pagination.content, pages: pagination.content.pages.map((page, index) => ({ ...page, pageId: id(1000 + index) })) };
+    const currentSources = [...sources, { id: id(900), taskId: "J11", content: layout }];
+    const pageId = layout.pages[1].pageId;
+    const bible = simulatePageBibleProposal({ persona, pageId, sources: currentSources });
+    if (bible.kind !== "proposal") throw new Error("Expected page Bible");
+    const pageSelector = { ...selector, persona, taskId: "J12" as const };
+    const raw = { role: "specialist", subjectId: pageId, approvedSources: currentSources };
+    const compact = projectM4Context(pageSelector, raw, id(901));
+    const projected = compact.approvedSources as { taskId: string; content: { pages?: unknown[] } }[];
+    expect(projected.find(source => source.taskId === "J11")?.content.pages).toHaveLength(1);
+    expect(compact.requiredLettering).toEqual(bible.content.panels.map(panel => ({ panelKey: panel.panelKey,
+      lettering: panel.lettering.map(line => ({ kind: line.kind, text: line.text, speakerId: line.speakerEntityId })) })));
+    expect(parseM4CreativeOutput(pageSelector, proposal("J12", bible.content), JSON.stringify(compact))).toEqual(
+      parseM4CreativeOutput(pageSelector, proposal("J12", bible.content), JSON.stringify(raw)));
   });
   it("supplies report identity and cost fields without claiming visual inspection", () => {
     const note = { status: "observed", explanation: "Text evidence" };

@@ -1,6 +1,7 @@
 import type { ExperimentMode, ExperimentRole, ExperimentTask, Persona } from "@/lib/contracts/experiment-runner";
 import type { M4ModelBucket, M4Grant } from "@/lib/experiment-runner/m4-policy";
 import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
+import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 
 export type BaseDocument = { _id: string };
 
@@ -70,6 +71,7 @@ export type ExperimentOperationDocument = BaseDocument & {
     costEvidence?: ExperimentReport["costEvidence"];
     remoteStatus: "succeeded" | "failed" | "stopped"; observedAtMs: number;
     issue: "missing_wrapper" | "invalid_evidence" | "provider_failure" | "creative_invalid" | "conflicting_evidence" | null };
+  contextDiagnostics?: ContextDiagnostics;
   m4Preparation?: { policyHash: string; configurationHash: string; definitionHash: string; requestDigest: string;
     adapterUpdate?: M4Grant["providerAdapterUpdate"];
     definitionUpdate?: { fromBundleHash: string; toBundleHash: string; reference: string };

@@ -15,6 +15,7 @@ import { M4CreativeOutputError } from "@/lib/experiment-runner/m4-output";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { m4MaximumCharge, m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
 import { m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
+import { mergeAuthoritativeCount } from "@/lib/experiment-runner/context-diagnostics";
 import type { WorkflowRuntime, RuntimeResult } from "@/lib/experiment-runner/transport";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
@@ -129,8 +130,14 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
         await ledger.stop(session, input.nowMs); return { stopped: true, reused: false };
       }
       if (!prior) {
+        // Count evidence was authenticated above; this optional measurement has
+        // no authority over settlement or materialization.
+        const diagnostics = current.operation.contextDiagnostics;
+        const counted = preGeneration?.failureEvidence.countedInputTokens ??
+          (parsed.success && assessment && !assessment.violations.some(code => ["model_mismatch", "tier_mismatch", "stdio_unverified"].includes(code))
+            ? parsed.data.providerEvidence.countedInputTokens : null);
         const saved = await database.collections.experiment_operations.updateOne({ _id: current.operation._id, m4Observation: { $exists: false } },
-          { $set: { m4Observation: observation } }, { session });
+          { $set: { m4Observation: observation, ...(diagnostics ? { contextDiagnostics: mergeAuthoritativeCount(diagnostics, counted) } : {}) } }, { session });
         if (saved.modifiedCount !== 1) conflict();
       }
       if (assessment?.chargeUpperMicrodollars != null) {

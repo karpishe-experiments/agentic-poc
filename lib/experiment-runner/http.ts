@@ -28,6 +28,7 @@ import { readStreamChunk } from "@/lib/operations/read-stream";
 import { RECONCILIATION_RESERVE_MS, withOperationBudget } from "@/lib/operations/budget";
 import { checkProbeReadiness, probeIdentitySchema } from "@/lib/experiment-runner/probe-preflight";
 import { operationRecoveryOutcome } from "@/lib/operations/operation-recovery-outcome";
+import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -171,8 +172,20 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const booklets = bookletIds.length ? await collections.booklets.find({ _id: { $in: bookletIds } },
       { projection: { _id: 1, workingTitle: 1 } }).toArray() : [];
     const titles = new Map(booklets.map(booklet => [booklet._id, booklet.workingTitle]));
+    const runIds = selected.map(row => row._id);
+    const measured = runIds.length ? await collections.experiment_operations.find({ runId: { $in: runIds },
+      contextDiagnostics: { $exists: true } }, { projection: { _id: 0, runId: 1, "contextDiagnostics.warnings": 1 } }).toArray() : [];
+    const warningCounts = new Map<string, { measuredOperations: number; warningCount: number }>();
+    for (const operation of measured as Array<{ runId: string; contextDiagnostics?: Pick<ContextDiagnostics, "warnings"> }>) {
+      if (!operation.contextDiagnostics) continue;
+      const current = warningCounts.get(operation.runId) ?? { measuredOperations: 0, warningCount: 0 };
+      current.measuredOperations += 1;
+      current.warningCount += operation.contextDiagnostics.warnings?.length ?? 0;
+      warningCounts.set(operation.runId, current);
+    }
     return { runs: selected.map(row => ({ runId: row._id, bookletId: row.bookletId,
       title: titles.get(row.bookletId) || row.brief || null,
+      contextWarningSummary: warningCounts.get(row._id) ?? null,
       predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
       revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
       pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
