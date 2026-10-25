@@ -27,7 +27,9 @@ rates and preserves legacy 32,000-token evidence. Keep carrier/storage/schema an
 evidence boundaries hard. Changes to provider consumers require metadata-only
 credential-inventory reconciliation. Slice A has no credential-inventory impact.
 
-Slices A and B are delivered; Slice C is a local compatibility candidate. Returned JSON sizes are not
+Slices A and B and Slice C compatibility are delivered. Dev5 is installed and
+identity-verified; the separate amendment-enablement change is awaiting delivery.
+Returned JSON sizes are not
 wire-byte measurements. The bounded read probe reproduced the original question
 query timeout independently of preparation or Dify dispatch.
 No index, timeout, infrastructure or live-run mutation is authorized by diagnostics.
@@ -122,8 +124,8 @@ decision, USD 0.020996 per specialist/final tester and USD 0.402820 per judge.
 These are liabilities, not invoice prices. The stopped campaign is not activated
 by this implementation or provider preparation.
 
-The compatibility candidate has no `tokenPolicy` in the live grant. It keeps
-dev4 selected while adding forward-only readers and advisory request-size targets.
+The compatibility release had no `tokenPolicy` in its grant and kept dev4 selected
+while adding forward-only readers and advisory request-size targets.
 Local validation passed 105 units, 147 real-persistence cases with fake providers,
 focused hard-carrier and escaped-authorization advisory-completion cases, forty socket-denied dev5 adapter
 cases and 48 current Node/Python request vectors. After the final settlement
@@ -157,12 +159,39 @@ The ignored reviewed dev5 ZIP candidate is
 Its distinct Dify content identity is
 `langgenius/openai:1.0.7-dev5@eeba51ff094dadc68ffc2f94ab80422f8de0a6d3b640c50ff35f881190092a1f`.
 Exactly five of 98 members differ from the retained dev4 package; the other 93
-remain byte-identical. Local preparation does not establish installation. Obtain
-the action-time installation/signature-window handoff only after compatibility
-delivery, then read back the exact identity and enable the reviewed amendment in
-a separate source/staging change. Preserve the stopped campaign and retained
-failure until its exact continuation is authorized. Credential inventory records
-only the changed provider-consumer metadata; no secret storage or scope changes.
+remain byte-identical. After action-time approval, Dify reported installation
+successful and authenticated plugin listing matched that exact identity in the
+intended workspace. The operator confirmed signature verification restored to
+`true`, with the plugin daemon running. No provider request or run mutation was
+sent during installation. The existing key binding remains in place; credential
+inventory records changed consumer metadata only, without storage or scope changes.
+
+Slice C compatibility source #278 (`0997211fc7ec51c65831b280c4cebab5816e86e3`)
+and staging #279 (`8638710cf895e1dbdaa8eaaead02f26f5cce7a49`) each passed two
+independent reviews and CI `40208528374`/`40208786728`. Serving release
+`c5d8a98947c65e9d58236225c32152278cdd6207` uses image
+`sha256:1b6ddf2c1388fa970afbb1ba74a3e00600a1a40cc9bbba71e3aba55baeaa0577`.
+Deploy `40208983774` ended its observation window while the host continued backup.
+Journal `40209916246` confirmed complete/archived without replay or Stop; independent
+Check `40210066289` and direct readiness passed. After private browser sign-in,
+read-only summaries confirmed unchanged Kid 3014, Parent 412 and Creator 470,
+unchanged counters, zero paid images and no active operation/preparation.
+
+Enablement contract: select only the verified dev5 ZIP/content identity and save
+amendment hash `1bae98d7fa53d84d8818798afca94436bfa889dbe07a7b443a7473f74ab7ff2c`,
+based on unchanged frozen policy hash
+`b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3`.
+The grant authorizes 128,000 hard input with a 32,000 warning only for new work.
+Legacy specialist maximum remains 8,996 microdollars; amended maximum is 20,996.
+The last verified remaining campaign allowance is USD 4.640817, not a spending
+reset or guaranteed capacity for every future operation. Preserve the stopped
+campaign and retained failure: this enablement adds no exact-928 continuation.
+Tests must verify the selected release authority, historical ceiling/reservations,
+mixed accounting and unchanged admission guards before two reviews and lean CI.
+Enablement local verification passed 41 units, 51 real-persistence cases with fake
+providers, typecheck, focused lint and 215 documentation links. No request/agent
+definition or provider source changed in this enablement; prior fixture/parity
+results remain applicable. No campaign activation or paid request was used.
 
 ### Repeated page-4 preparation failure — 2026-10-25
 

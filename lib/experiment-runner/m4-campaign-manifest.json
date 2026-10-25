@@ -280,14 +280,15 @@
     ],
     "providerAdapterUpdate": {
       "fromIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
-      "version": "1.0.7-dev4",
-      "packageSha256": "38ebc9d89b9b8eef3c6ec69d3f88e282001777d1155c45a352d23ec06e035e1a",
-      "reference": "User 2026-10-22 approved blocker fixes and continuation: one final-answer message selection, preserve strict JSON and usage, no automatic retries. Exact unsigned package installation requires separate action-time confirmation."
+      "version": "1.0.7-dev5",
+      "identity": "langgenius/openai:1.0.7-dev5@eeba51ff094dadc68ffc2f94ab80422f8de0a6d3b640c50ff35f881190092a1f",
+      "packageSha256": "eeea0674e15c32b239713abc277095d6da5c49456d64e2b6183a367e99191aa9",
+      "reference": "User approved reviewed dev5 installation on 2026-10-25. Exact Dify identity readback matched; operator restored signature verification before amendment activation. Existing provider key storage and scope remain unchanged."
     },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
       "toBundleHash": "4a2a09264e332e3696e3bd37f48145705ba234e35f193272f71bb2398b60a29b",
-      "reference": "User 2026-10-25 approved current creative contexts and advisory efficiency-size warnings. Preserve historical request definitions and complete carrier/transport limits. The effective 128000-token amendment remains disabled until exact dev5 installation and published decoder compatibility readback; legacy 32000 counting, all liabilities and no retries remain."
+      "reference": "User 2026-10-25 approved focused current contexts and advisory efficiency-size warnings. Exact dev5 installation and published decoder readback permit the separately saved m4_context_policy_v2 grant. Preserve historical definitions, carrier/transport limits, liabilities and no retries."
     },
     "remainingPersonaAdmission": {
       "anchorRunId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
@@ -297,6 +298,18 @@
         "professional_creator"
       ],
       "reference": "User 2026-10-22 approved both remaining initial Balanced personas and required blocker fixes; admit only after verified completed preceding runs, resolved ownership and intact accounting; no successor, replay or allowance reset."
+    },
+    "tokenPolicy": {
+      "amendment": {
+        "version": "m4_context_policy_v2",
+        "basePolicyHash": "b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3",
+        "warningInputTokens": 32000,
+        "maxInputTokens": 128000,
+        "requiredProviderAdapterIdentity": "langgenius/openai:1.0.7-dev5@eeba51ff094dadc68ffc2f94ab80422f8de0a6d3b640c50ff35f881190092a1f",
+        "requiredProviderPackageSha256": "eeea0674e15c32b239713abc277095d6da5c49456d64e2b6183a367e99191aa9",
+        "reference": "User approved efficient-read/context-warning implementation plan 2026-10-25: forward-only 128000 hard input and 32000 warning after exact dev5 installation/readback. Preserve frozen rates, USD5/500-request/persona/image ceilings, liabilities, original deadlines and no automatic retries."
+      },
+      "hash": "1bae98d7fa53d84d8818798afca94436bfa889dbe07a7b443a7473f74ab7ff2c"
     }
   }
 }
