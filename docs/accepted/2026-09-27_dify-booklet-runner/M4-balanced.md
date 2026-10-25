@@ -36,7 +36,7 @@ the exact no-dispatch predicates and global accounting still need verification.
 The supported inspection control was used once; no Resume or replacement POST
 was sent.
 
-Proposed repair, pending separate continuation authority: clarify specialist and
+Repair authorized on 2026-10-25 for this exact run and failed operation: clarify specialist and
 reviewer ownership of inherited source facts versus later resolved design; keep
 hard source constraints and required views binding. Preserve historical requests,
 artifacts, hashes and frozen prices/count allowances. Handle Pause during
@@ -48,6 +48,19 @@ proof compatibility, hard-constraint rejection, concurrent Pause and failure
 boundaries; obtain two independent clean reviews and lean CI before normal
 staging delivery. No new persona, allowance reset, report retry, paid image,
 provider/signature change or infrastructure work is included.
+
+Change-surface forecast: version only J09 specialist and non-report tester
+instructions. Add transaction-local no-dispatch proof for Pause cancellation and
+the exact protected continuation grant. Preserve the original failed operation;
+record continuation provenance and count its verified undispatched attempt as
+zero provider calls. Pause must fence a prepared text operation before releasing
+its active pointer. Dispatch, reservation, output, or any unresolved save claim
+prevents that cancellation. Revalidate global output absence and accounting on
+Resume and completion. Optional provenance fields require no migration; existing
+proof formats and image serialization remain unchanged. Verify real persistence,
+concurrent control/dispatch, negative evidence and historical compatibility before
+two independent reviews and staging delivery. No credential-inventory impact:
+credential names, storage, transfer and consumers do not change.
 
 ### Initial Creator admitted — 2026-10-24
 

@@ -26,7 +26,8 @@ Last verified campaign exposure is 129/500 requests, USD 0.137316 reserved,
 USD 0.131931 settled upper bound and USD 4.730753 remaining. Invoice cost is
 unavailable and paid images remain zero. The current M4 record separates the
 J09 review loop from its subsequent un-dispatched preparation failure and the
-proposed repair/recovery boundary. M5 has no execution authority from this work.
+bounded repair/recovery authorized on 2026-10-25. Delivery and live continuation
+remain separate checkpoints in that record. M5 has no execution authority from this work.
 Complete Creator and record M4 acceptance before assembling the Real authorization
 handoff. Reuse exact retained bindings/evidence through the M4 record; no new image
 spending, reset or Real execution is granted here.

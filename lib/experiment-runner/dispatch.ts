@@ -9,6 +9,7 @@ import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
+import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { createExperimentStyleAssembly } from "@/db/experiment-style";
@@ -262,6 +263,15 @@ export function createExperimentDispatcher(deps: {
       return;
     }
     if (current.m4Continuation && current.reservationCount === 0) {
+      if (current.m4Continuation.kind === "undispatched_text_v1") {
+        const digest = authority ? await withMongoTransaction(deps.database, session =>
+          verifyUndispatchedText(deps.database, session, authority, run, current._id)) : null;
+        if (!digest || digest !== current.m4Continuation.evidenceDigest ||
+            current.m4Continuation.requestDigest !== (current.m4Preparation?.requestDigest ?? null) || result.kind === "execution") {
+          await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+        }
+        return;
+      }
       const digest = authority ? m4UnclaimedFailureDigest(authority, run, current) : null;
       if (!digest || digest !== current.m4Continuation.evidenceDigest ||
           current.m4Continuation.requestDigest !== current.m4Preparation?.requestDigest ||
@@ -476,8 +486,14 @@ export function createExperimentDispatcher(deps: {
   }
 
   const coordinator = createOperationCoordinator({ database: deps.database, runtime, now, binding: bindingFor,
-    resolvedFailure: async (run, operation) => !!authority && run.mode === "balanced" && operation.state === "failed" &&
-      await closeM4KnownFailure(deps.database, authority, { runId: run._id, operationId: operation._id, nowMs: now() }) === "closed",
+    resolvedFailure: async (run, operation) => {
+      if (!authority || run.mode !== "balanced" || operation.state !== "failed") return false;
+      const local = operation.localPreparationCancellation ??
+        (operation.m4Continuation?.kind === "undispatched_text_v1" ? operation.m4Continuation : null);
+      if (local) return await withMongoTransaction(deps.database, session =>
+        verifyUndispatchedText(deps.database, session, authority, run, operation._id)) === local.evidenceDigest;
+      return await closeM4KnownFailure(deps.database, authority, { runId: run._id, operationId: operation._id, nowMs: now() }) === "closed";
+    },
     reconcile: (run, operation, result) => reconcile(run, operation, result, true) });
 
   async function advanceWork(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
@@ -844,6 +860,17 @@ export function createExperimentDispatcher(deps: {
         return "waiting";
       }
       const current = await repository.getRun(runId);
+      if (current) {
+        const cancelled = await deps.database.collections.experiment_operations.find({ runId,
+          ...(operation ? { _id: operation._id } : { "lifecycle.ownerId": ownerId,
+            createdAtMs: { $gte: run.preparation?.startedAtMs ?? now() } }),
+          "localPreparationCancellation.kind": "paused_text_v1" }).limit(2).toArray();
+        // Resume or another controller may already have advanced the run. This
+        // worker still owns only its cancelled attempt, never that newer state.
+        if (cancelled.length === 1 && authority && await withMongoTransaction(deps.database, session =>
+          verifyUndispatchedText(deps.database, session, authority, current, cancelled[0]._id)) ===
+            cancelled[0].localPreparationCancellation!.evidenceDigest) return "waiting";
+      }
       if (!current?.activeOperationId && current?.preparation?.ownerId === ownerId && current.preparation.stopRequestedAtMs) {
         await deps.database.collections.experiment_runs.updateOne({ _id: runId, activeOperationId: null,
           "preparation.ownerId": ownerId, "preparation.stopRequestedAtMs": current.preparation.stopRequestedAtMs },
