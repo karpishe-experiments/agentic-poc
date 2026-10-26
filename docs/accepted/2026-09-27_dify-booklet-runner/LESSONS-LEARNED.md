@@ -4,6 +4,42 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Offer only actions that remain eligible
+
+The M4 reviewer received saved revision counts but its schema still offered an
+exhausted revision. It repeatedly interpreted accepted simulated image geometry
+as a required regeneration, and the repository correctly rejected the next
+revision. Supply the simulation boundary explicitly and bind task/version choices
+to remaining allowances. Keep final source and byte validation authoritative.
+Preserve a successful provider response that requests an unavailable action;
+record a separately proven semantic rejection instead of changing it to approval
+or calling valid JSON malformed. The focused persistence cases and full Creator
+fixture verify unchanged response/charges, atomic rollback, one fresh reviewer
+and accounting after completion. Promotion candidate: **Documentation** for
+model action contracts and authenticated-result recovery.
+
+### Separate failed preparation from repeated creative decisions
+
+An explicitly verified continuation can leave creative evidence unchanged. The
+next valid manager decision must not inherit a loop count accumulated across the
+earlier technical failures. Retain the fingerprint, original operations and all
+liabilities, but start a new observation interval only after the exact continuation
+proof passes. Keep the normal repeated-decision limit. The M4 accounting and
+control cases cover this reset, genuine-loop blocking, concurrent recovery and a
+later separately authorized continuation. Promotion candidate: **Documentation**
+for agent progress and recovery contracts.
+
+### Test recovery with the dependency graph that the failed stage uses
+
+A J01 recovery fixture passed without exercising J12's reference verifiers.
+Those verifiers re-read persisted run state and correctly reject a blocked run;
+passing a changed in-memory object does not make that state eligible. Stage the
+eligibility change inside the same transaction, then create fresh verification
+metadata and check original assets and accounting before commit. Roll back all
+tentative changes on failure. The full-reference J12 case verifies corrupt-byte
+rollback, successful recovery and specialist dispatch with the saved manager
+parent. Promotion candidate: **Documentation** for transactional recovery tests.
+
 ### Check each transport's serialized boundary before dispatch
 
 A provider request can fit its canonical carrier but exceed a smaller HTTP

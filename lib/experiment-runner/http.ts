@@ -1,4 +1,4 @@
-import { controlState, controlStateProjection } from "@/lib/experiment-runner/control-state";
+import { controlState, controlStateProjection, hasRetainedDecisionContinuation } from "@/lib/experiment-runner/control-state";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
@@ -157,7 +157,11 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       context: createExperimentContextService(db, { store: () => callbackStore }) };
   }
   async function run(operation: () => Promise<Response>, budgetMs = 30_000) { try { return await withOperationBudget(Date.now() + budgetMs, operation); } catch (error) { return safeError(error); } }
-  async function runSummaries(request: Request) {
+  function withContinuation<T extends { runId: string }>(view: T, state: ConfigState) {
+    const grants = state.enabled && state.config.m4?.state === "granted" ? state.config.m4.authority?.grant.continuations : undefined;
+    return hasRetainedDecisionContinuation(view, grants) ? { ...view, retainedDecisionContinuation: true as const } : view;
+  }
+  async function runSummaries(request: Request, state: ConfigState) {
     const query = new URL(request.url).searchParams;
     const page = z.coerce.number().int().min(0).max(10000).parse(query.get("page") ?? 0);
     const limit = z.coerce.number().int().min(1).max(50).parse(query.get("limit") ?? 20);
@@ -183,7 +187,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       current.warningCount += operation.contextDiagnostics.warnings?.length ?? 0;
       warningCounts.set(operation.runId, current);
     }
-    return { runs: selected.map(row => ({ runId: row._id, bookletId: row.bookletId,
+    return { runs: selected.map(row => withContinuation({ runId: row._id, bookletId: row.bookletId,
       title: titles.get(row.bookletId) || row.brief || null,
       contextWarningSummary: warningCounts.get(row._id) ?? null,
       predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
@@ -193,7 +197,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
       preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
         deadlineAtMs: row.preparation.deadlineAtMs, unresolved: row.preparation.unresolved ?? false } : null,
-    })), page, hasMore: rows.length > limit };
+    }, state)), page, hasMore: rows.length > limit };
   }
   return {
     probePreflight(request: Request) { return run(async () => {
@@ -205,7 +209,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }); },
     summaries(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
-      return data(await runSummaries(request));
+      return data(await runSummaries(request, state));
     }); },
     operationControl(request: Request, runId: string, action: "inspect" | "stop") { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
@@ -242,17 +246,19 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
     list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
-      if (new URL(request.url).searchParams.get("view") === "summary") return data(await runSummaries(request));
-      const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map((row) => context.getRunView(row._id)))); }); },
+      if (new URL(request.url).searchParams.get("view") === "summary") return data(await runSummaries(request, state));
+      const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map(async row => {
+        const view = await context.getRunView(row._id); return view ? withContinuation(view, state) : view;
+      }))); }); },
     detail(request: Request, runId: string) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
       const id = opaqueIdSchema.parse(runId);
       if (new URL(request.url).searchParams.get("view") === "control") {
         const saved = await database().collections.experiment_runs.findOne({ _id: id }, { projection: controlStateProjection });
-        return saved ? data(controlState(saved)) : reply(404, "not_found");
+        return saved ? data(withContinuation(controlState(saved), state)) : reply(404, "not_found");
       }
       const view = await services(state).context.getRunView(id);
-      return view ? data(view) : reply(404, "not_found");
+      return view ? data(withContinuation(view, state)) : reply(404, "not_found");
     }); },
     create(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
@@ -290,7 +296,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           }
           return repository[action](input);
         }, { runId });
-        return data(responseMode === "receipt" ? controlState(saved) : await context.getRunView(saved._id));
+        if (responseMode === "receipt") return data(withContinuation(controlState(saved), state));
+        const view = await context.getRunView(saved._id);
+        return data(view ? withContinuation(view, state) : view);
       } catch (error) {
         if (responseMode === "receipt" && error instanceof ExperimentRepositoryError && error.code === "stale_revision") return reply(409, "stale_revision");
         throw error;

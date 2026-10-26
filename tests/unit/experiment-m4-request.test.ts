@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { personaSchema, specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { M4ReportSizeError, assertM4SchemaLimits, m4BindAllowedValues, m4CanonicalJson, m4Hash, m4RequestBundleHash,
-  m4RequestDefinition, m4SavedReportDefinition, m4StrictSchema, prepareM4Request, projectM4Context } from "@/lib/experiment-runner/m4-request";
+  m4RequestDefinition, m4SavedReportDefinition, m4SavedTesterDefinition, m4StrictSchema, prepareM4Request, projectM4Context } from "@/lib/experiment-runner/m4-request";
 import { m4TestId, m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { m4RequestVectors } from "@/tests/helpers/m4-request-vectors";
 
@@ -54,7 +54,7 @@ describe("M4 reviewed request contract", () => {
     expect(projectM4Context(selector, lessHistory, "operation")).toEqual(result);
     expect(result.evidenceScope).toMatchObject({ artifactVersions: expect.stringContaining("including drafts"), images: expect.stringContaining("not_assessed") });
     const definition = m4RequestDefinition(selector);
-    expect(definition.version).toBe("m4_context_policy_v3");
+    expect(definition.version).toBe("m4_tester_eligibility_v4");
     expect(definition.projection).toMatchObject({ artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: result.evidenceScope });
     expect(definition.systemPrompt).toContain("Do not assess unseen historical versions");
     expect(definition.systemPrompt).toContain("required current creative and technical checks still apply");
@@ -83,7 +83,7 @@ describe("M4 reviewed request contract", () => {
       const specialist = m4RequestDefinition({ role: "specialist", taskId: "J09", persona, report: false });
       const tester = m4RequestDefinition({ role: "tester", taskId: null, persona, report: false });
       for (const definition of [specialist, tester]) {
-        expect(definition.version).toBe("m4_context_policy_v3");
+        expect(definition.version).toBe(definition.role === "tester" ? "m4_tester_eligibility_v4" : "m4_context_policy_v3");
         expect(definition.systemPrompt).toContain("characterDesignProfile and sheetPromptModule");
         expect(definition.systemPrompt).toContain("not a prohibition on later");
         expect(definition.systemPrompt).toContain("approved hard constraints");
@@ -92,6 +92,35 @@ describe("M4 reviewed request contract", () => {
       expect(specialist.systemPrompt).toContain("J09 cannot edit them");
       expect(tester.systemPrompt).toContain("do not repeat a revision solely because the inherited note remains");
       expect(tester.systemPrompt).toContain("does not require approval of missing, contradictory or technically invalid work");
+    }
+  });
+  it.each(personaSchema.options)("supplies %s explicit simulation geometry and hard revision limits", persona => {
+    const selector = { role: "tester", taskId: null, persona, report: false } as const;
+    const context = projectM4Context(selector, { role: "tester", currentArtifacts: [], revisionCounts: { text: 0, image: 0 } }, "operation");
+    expect(context.imageReviewPolicy).toMatchObject({ version: "simulated_image_review_v1", geometryMismatch: "advisory",
+      instruction: expect.stringContaining("Missing or corrupt bytes") });
+    expect(context.revisionLimits).toEqual(persona === "professional_creator" ? { text: 3, image: 2 } : { text: 1, image: 1 });
+    const definition = m4RequestDefinition(selector);
+    expect(definition.systemPrompt).toContain("must never alone cause regeneration");
+    expect(definition.systemPrompt).toContain("Missing/corrupt original bytes");
+    expect(definition.systemPrompt).toContain("J13 consumes image revisions");
+    expect(m4SavedTesterDefinition(selector, definition.hash)?.hash).toBe(definition.hash);
+    expect(m4SavedTesterDefinition(selector, "0".repeat(64))).toBeNull();
+  });
+  it("retains the exact previous mid-run tester definitions for every persona", () => {
+    const hashes = {
+      playful_kid: "9c456f72bb087c7f6c5c44ca961b16e76334440683bdfdba0c074348ff84a752",
+      enthusiast_parent: "5d7d9cfead53013a89d998fe7591fef0770fef9542703c06fdbaa306e748503e",
+      professional_creator: "2de3e3163ae5db39e6880ea48c69bb81008c475fdcbb289bda8344b7efb106dd",
+    };
+    for (const persona of personaSchema.options) {
+      const selector = { role: "tester", taskId: null, persona, report: false } as const;
+      const previous = m4SavedTesterDefinition(selector, hashes[persona]);
+      expect(previous?.hash).toBe(hashes[persona]);
+      expect(previous?.version).toBe("m4_context_policy_v3");
+      expect(previous?.projection.fields).not.toContain("imageReviewPolicy");
+      expect(previous?.systemPrompt).not.toContain("must never alone cause regeneration");
+      expect(m4RequestDefinition(selector).hash).not.toBe(hashes[persona]);
     }
   });
   it.each(personaSchema.options)("permits large %s reports but retains the hard carrier bound without truncation", (persona) => {
