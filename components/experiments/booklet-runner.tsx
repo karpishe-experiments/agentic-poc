@@ -8,6 +8,8 @@ import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 import type { ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 import { PageBatchSelector, type PageSelection } from "./page-batch-selector";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
+import { failureReasonLabels, type FailureDiagnostics } from "@/lib/contracts/experiment-failure";
+import type { ImageCapacity } from "@/lib/experiment-runner/image-capacity";
 
 const personas = [
   { id: "playful_kid", label: "Playful kid" },
@@ -36,6 +38,8 @@ type Run = {
   activeDelegation?: { id: string; taskIds: string[]; subjectKind: string; subjectId: string; testerDecisionId: string } | null;
   operationHistory?: Operation[];
   contextWarningSummary?: { measuredOperations: number; warningCount: number } | null;
+  failureDiagnostics?: FailureDiagnostics | null;
+  imageCapacity?: ImageCapacity | null;
   bookletId?: string;
   generationStatus?: "in_progress" | "complete";
   evaluationStatus?: "pending" | "running" | "complete" | "failed";
@@ -333,6 +337,16 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         </dl>
         {run.status === "completed" && run.evaluationStatus === "failed" ? <p>{run.reports === undefined ? "Open the run for the retained evaluation failure." : run.reports.some(item => item.report.role === "tester") ? "The independent judge assessment is incomplete." : "The judge was not run because tester evaluation failed."} No evaluation retry is scheduled.</p> : null}
         {run.safeFailure ? <p>Failure classification: {label(run.safeFailure)}</p> : null}
+        {run.failureDiagnostics ? <p>{run.status === "blocked" && run.failureDiagnostics.runRevision === run.revision ? "Stopped reason" : "Previous stop"}: {failureReasonLabels[run.failureDiagnostics.reason] ?? "Reason details unavailable."} Phase: {label(run.failureDiagnostics.phase)}. Recorded at revision {run.failureDiagnostics.runRevision}.</p> : null}
+        {run.status === "blocked" && run.failureDiagnostics?.runRevision !== run.revision ? <p>Reason details unavailable.</p> : null}
+        {run.imageCapacity ? <div aria-label="Image allowance">
+          <p>Remaining image calls: {run.imageCapacity.remainingImageCalls}.</p>
+          {run.imageCapacity.status === "available" ? <>
+            <p>Final pages needing a new image: {run.imageCapacity.requiredNewImages}. Saved drafts awaiting approval: {run.imageCapacity.savedDraftsAwaitingApproval}. Spare image calls: {run.imageCapacity.spareImageCalls}.</p>
+            {run.imageCapacity.spareImageCalls === 0 && run.imageCapacity.requiredNewImages > 0 ? <p>No spare image calls remain after required pages. Execution can continue within the saved limit.</p> : null}
+            {run.imageCapacity.spareImageCalls < 0 ? <p>The remaining image allowance is below the current required output count.</p> : null}
+          </> : <p>Image capacity is unavailable while source or attempt evidence remains unresolved.</p>}
+        </div> : null}
       </section>
       <details className="text-sm text-[var(--muted-ink)]"><summary className="cursor-pointer">Run identifiers</summary><div className="mt-2 space-y-1 break-all"><p>Run {run.runId}</p>{run.bookletId ? <p>Booklet {run.bookletId}</p> : null}<p>Revision {run.revision}</p></div></details>
       {run.pageSelection ? <PageBatchSelector key={`${run.runId}:${run.pageSelection.layoutVersionId}:${run.pageSelection.pages.map((page) => `${page.pageBibleVersionId}:${page.previousPageVersionId}`).join(",")}`}

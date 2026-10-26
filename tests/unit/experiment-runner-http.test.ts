@@ -284,7 +284,7 @@ describe("booklet runner HTTP boundary", () => {
     } finally { factory.mockRestore(); }
   });
   it("pages summary metadata without constructing artifact or storage views", async () => {
-    const rows = [{ _id: "run-1", bookletId: "book-1", brief: "Fallback title", persona: "playful_kid", status: "completed", createdAtMs: 1000, updatedAtMs: 2000, counters: {}, limits: {}, configurationJson: "private" },
+    const rows = [{ _id: "run-1", bookletId: "book-1", brief: "Fallback title", persona: "playful_kid", status: "completed", createdAtMs: 1000, updatedAtMs: 2000, counters: {}, limits: {}, configurationJson: "private", failureDiagnostics: { reason: "invalid_assets", runRevision: 1 } },
       { _id: "run-2" }];
     const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) };
     const find = vi.fn().mockReturnValue(cursor);
@@ -301,6 +301,7 @@ describe("booklet runner HTTP boundary", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ data: { page: 2, hasMore: true, runs: [{ runId: "run-1", title: "Saved booklet title",
       contextWarningSummary: { measuredOperations: 2, warningCount: 2 }, createdAtMs: 1000, updatedAtMs: 2000 }] } });
+    expect(find.mock.calls[0][1].projection.failureDiagnostics).toBe(1);
     expect(cursor.skip).toHaveBeenCalledWith(2);
     expect(cursor.limit).toHaveBeenCalledWith(2);
     expect(find.mock.calls[0][1].projection.configurationJson).toBeUndefined();

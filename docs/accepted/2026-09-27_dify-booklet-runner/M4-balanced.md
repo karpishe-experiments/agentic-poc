@@ -5,6 +5,48 @@
 
 ## Current Creator admission checkpoint
 
+### Forward execution correction contract — 2026-10-26
+
+The user approved three sequential slices before the retained Creator continues:
+project successful evaluation-operation reads to their consumed report/identity
+fields; retain versioned, content-free failure reasons in existing blocked-state
+writes; and expose selected-run image capacity with an exact-ceiling regression.
+Keep the reviewed pre-deployment recovery as a separate commit. New diagnostics
+are observational, excluded from creative/request/accounting hashes, and cannot
+alter eligibility. Preserve malformed-report behavior and every original proof.
+Measure returned JSON as application bytes, without making latency an acceptance
+gate. Verify persistence with fake providers, HTTP/UI compatibility and two clean
+independent reviews before source/staging delivery. Build the reviewed candidate,
+verify installed capability, close only the authorized retained tester, then use
+normal deployment/readiness and one continuation. Reconcile state before action.
+Do not infer success from the last revision-657 checkpoint. No credential consumer,
+storage, transfer or permission change is planned. Capture distinct causes and
+regression evidence in this record and promote reusable verified lessons.
+
+Local forward-correction evidence: the projected reader and durable diagnostics
+passed 25 focused persistence cases including the existing pre-dispatch image
+allowance rejection. One hundred and one focused UI/HTTP/eligibility/diagnostic
+units passed. The full Creator fixture passed three cases: primary assembly byte
+failure with unavailable capacity, ordinary exact continuation, and candidate
+recovery followed by completion at a tightened disposable-fixture image ceiling.
+Terminal advancement dispatched no further work. The original stored response
+and cumulative accounting remained valid. Typecheck and focused lint passed;
+later documentation-only edits still require link checks and final review.
+
+Review also found that successful image output before page assembly can resemble
+a missing image. Capacity now checks compact successful-operation identities
+against retained version provenance and reports unavailable until assembly.
+Review corrected historical failure attribution and classified malformed report
+parsing without changing its rejection. These corrections are covered by the
+focused cases above. No live continuation or recovery was performed for this work.
+
+Recovery PR #292 Linux validation `40314396719` passed typecheck, lint, contracts,
+fixtures and selected tests, then exposed an existing flat secret-validator `jq`
+grouping error in full shell tests. A bounded grouping correction preserves all
+credential rules and requires both shell suites in Linux CI before delivery.
+Thirty-seven deployment/recovery-storage units with fake validator inputs passed
+locally. Full shell validation and installed recovery capability remain gates.
+
 ### Decision-repair delivery checkpoint — 2026-10-26
 
 Source PR #289 (`63c2d18dd178020da0b7ec7ea583236129354133`) and staging PR
