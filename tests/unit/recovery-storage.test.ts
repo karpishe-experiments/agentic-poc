@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, NoSuchKey, type S3Client } from "@aws-sdk/client-s3";
 import { backupIdSchema, digest, parseManifest, RecoveryStorage } from "@/scripts/recovery-storage";
 
 function fixture() {
@@ -87,6 +87,24 @@ describe("completed maintenance backup verification", () => {
     const { storage, objects, writes } = completed();
     objects.set(`recovery/${key}`, Buffer.from("corrupt"));
     await expect(storage.verifiedCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).rejects.toThrow();
+    expect(writes).toEqual([]);
+  });
+  it("reports an incomplete backup only for a modeled missing completion marker", async () => {
+    const client = { send: async () => { throw new NoSuchKey({ message: "private object", $metadata: { httpStatusCode: 404 } }); } } as unknown as S3Client;
+    await expect(new RecoveryStorage(client, "recovery").inspectCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).resolves.toBeNull();
+  });
+  it("does not treat permission or transport failure as an incomplete backup", async () => {
+    for (const name of ["AccessDenied", "AbortError", "NotFound"]) {
+      const original = Object.assign(new Error("private endpoint"), { name });
+      const client = { send: async () => { throw original; } } as unknown as S3Client;
+      await expect(new RecoveryStorage(client, "recovery").inspectCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).rejects.toBe(original);
+    }
+  });
+  it("fully verifies a completed backup during inspection and rejects corrupt completion evidence", async () => {
+    const { storage, manifest, objects, writes } = completed();
+    expect(await storage.inspectCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).toEqual(manifest);
+    objects.set("recovery/database/b.complete", Buffer.from("corrupt"));
+    await expect(storage.inspectCompletedBackup("b", "kids_booklet", "_staging", imageDigest)).rejects.toThrow("completion marker");
     expect(writes).toEqual([]);
   });
   it("rejects missing completion evidence", async () => {

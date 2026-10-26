@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/deploy/vps-deployment.sh
-          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-host.test.sh tests/shell/vps-deployment-script.test.sh
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/deploy/vps-deployment.sh tests/shell/vps-host.test.sh tests/shell/vps-deployment-script.test.sh tests/shell/vps-backup-helper.test.sh
       - uses: hashicorp/setup-terraform@v3
         if: steps.scope.outputs.terraform == 'true' || steps.scope.outputs.bootstrap == 'true'
         with: {terraform_version: 1.11.4}
