@@ -5,6 +5,7 @@ import { withMongoTransaction } from "@/db/client";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { verifyMongoStructure } from "@/db/setup";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
+import { selectBinding } from "@/lib/experiment-runner/config";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import { m4CanonicalJson } from "@/lib/experiment-runner/m4-request";
 import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
@@ -18,6 +19,10 @@ import { operationBudgetRemainingMs } from "@/lib/operations/budget";
 import { createLegacyCountFailureProof, validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
 import { m4SourceFingerprint } from "@/db/experiment-text-sources";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { closeM4DecisionRejection, m4DecisionRecoveryGrant, m4DecisionRejectionFacts, verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
+import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
+import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 
 export const BOOKLET_RECOVERY_CONTRACT = "booklet-recovery-v1";
 export class BookletRecoveryError extends Error {
@@ -102,7 +107,7 @@ export type ClaimReleaseProof = { previewDigest: string; claim: { id: string; ex
   restoreAs: "missing" | "null" };
 export type RecoverySnapshot = {
   // Absence retains the original full-inventory checkpoint interpretation.
-  scope?: "pre-generation-target-v1";
+  scope?: "pre-generation-target-v1" | "decision-rejection-target-v1";
   sourceFingerprint?: string;
   rows: Record<string, Record<string, string>>;
   runInvariant: string; operationInvariant: string; campaignInvariant: string; bookletInvariant: string;
@@ -135,13 +140,32 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   function authority(target: RecoveryTarget) {
     requireProof(config.m4?.state === "granted" && config.m4.authority, "grant_missing");
     const grant = config.m4.authority.grant;
-    requireProof([...(grant.completionRecoveries ?? []), ...(grant.preGenerationRecoveries ?? [])]
+    requireProof([...(grant.completionRecoveries ?? []), ...(grant.preGenerationRecoveries ?? []),
+      ...(grant.continuations ?? []).filter(item => item.preDeploymentRecovery === "decision_rejection_v1")]
       .filter(item => item.runId === target.runId && item.operationId === target.operationId).length === 1,
       "exact_completion_grant_missing");
     return grant;
   }
   function legacyGrant(target: RecoveryTarget) {
     return authority(target).preGenerationRecoveries?.find(item => item.runId === target.runId && item.operationId === target.operationId);
+  }
+  function decisionGrant(target: RecoveryTarget) {
+    authority(target);
+    return m4DecisionRecoveryGrant(config.m4!.authority!, target.runId, target.operationId);
+  }
+  // This preview reads original bytes without changing run eligibility. Apply
+  // additionally runs the unchanged current J13 graph verifier before commit.
+  async function decisionAssets(bookletId: string, session: ClientSession) {
+    const assets = await c.assets.find({ bookletId }, { session }).sort({ _id: 1 }).toArray();
+    const store = (deps.store ?? createAssetStore)();
+    for (const asset of assets) {
+      const metadata = JSON.parse(asset.metadataJson ?? "null") as { sha256?: string; byteLength?: number } | null;
+      requireProof(metadata?.sha256 && metadata.byteLength && asset.width && asset.height, "asset_evidence_missing");
+      const decoded = await validateExperimentImage(await store.get(asset.uri));
+      requireProof(decoded.sha256 === metadata.sha256 && decoded.byteLength === metadata.byteLength &&
+        decoded.width === asset.width && decoded.height === asset.height && decoded.mimeType === asset.mimeType, "asset_evidence_changed");
+    }
+    return Object.fromEntries(assets.map(asset => [asset._id, recoveryDigest(asset)]));
   }
   async function reservationRows(campaign: Awaited<ReturnType<typeof state>>["campaign"], session?: ClientSession) {
     const maxRequests = m4PolicySnapshot(config.m4!.authority!.policy).policy.maxRequests;
@@ -161,8 +185,10 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     return Object.fromEntries(reservations.map(row => [row._id, recoveryDigest(row)]));
   }
   function snapshotScope(target: RecoveryTarget, previous?: Pick<RecoverySnapshot, "scope">) {
-    const scope = previous ? previous.scope : legacyGrant(target) ? "pre-generation-target-v1" as const : undefined;
-    requireProof(scope === undefined || scope === "pre-generation-target-v1" && legacyGrant(target), "snapshot_scope_unsupported");
+    const scope = previous ? previous.scope : decisionGrant(target) ? "decision-rejection-target-v1" as const
+      : legacyGrant(target) ? "pre-generation-target-v1" as const : undefined;
+    requireProof(scope === undefined || scope === "pre-generation-target-v1" && legacyGrant(target) ||
+      scope === "decision-rejection-target-v1" && decisionGrant(target), "snapshot_scope_unsupported");
     return scope;
   }
   async function snapshot(target: RecoveryTarget, previous?: RecoverySnapshot): Promise<RecoverySnapshot> {
@@ -182,15 +208,25 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
         campaign_reservations: reservations,
       };
     } else rows = await readRecoveryInventory(c);
-    const sourceFingerprint = legacyGrant(target) ? await recoveryRead("current_sources", () =>
+    if (scope === "decision-rejection-target-v1") {
+      rows.assets = await withMongoTransaction(database, async session => {
+        await verifyM4Accounting(database, session, run, undefined, undefined, { authority: config.m4!.authority!, operationId: target.operationId });
+        return decisionAssets(run.bookletId, session);
+      });
+    }
+    const sourceFingerprint = legacyGrant(target) || decisionGrant(target) ? await recoveryRead("current_sources", () =>
       withMongoTransaction(database, session => m4SourceFingerprint(database, session, run))) : undefined;
     return inspectStep("snapshot.invariants", async () => ({ rows, campaignId: campaign._id, bookletId: booklet._id,
       ...(scope ? { scope } : {}),
       ...(sourceFingerprint ? { sourceFingerprint } : {}),
-      runInvariant: recoveryDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "progressFingerprint", "progressOperationId", "noProgressCount"])),
-      operationInvariant: recoveryDigest(omit(op, ["state", "remoteStatus", "lifecycle", "resultFinalizationClaim", "resultJson", "resultDigest", "warningsJson", "materializationJson", "safeFailure", "updatedAtMs", "m4CompletionRecovery", "m4PreGenerationRecovery"])),
-      campaignInvariant: recoveryDigest(omit(campaign, ["state", "revision", "updatedAtMs"])),
-      bookletInvariant: recoveryDigest(omit(booklet, ["currentStage", "updatedAtMs"])),
+      runInvariant: recoveryDigest(omit(run, scope === "decision-rejection-target-v1"
+        ? ["revision", "updatedAtMs", "activeOperationId", "pauseRequested"]
+        : ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "progressFingerprint", "progressOperationId", "noProgressCount"])),
+      operationInvariant: recoveryDigest(omit(op, scope === "decision-rejection-target-v1"
+        ? ["state", "lifecycle", "safeFailure", "updatedAtMs", "m4DecisionRejection"]
+        : ["state", "remoteStatus", "lifecycle", "resultFinalizationClaim", "resultJson", "resultDigest", "warningsJson", "materializationJson", "safeFailure", "updatedAtMs", "m4CompletionRecovery", "m4PreGenerationRecovery"])),
+      campaignInvariant: recoveryDigest(scope === "decision-rejection-target-v1" ? campaign : omit(campaign, ["state", "revision", "updatedAtMs"])),
+      bookletInvariant: recoveryDigest(scope === "decision-rejection-target-v1" ? booklet : omit(booklet, ["currentStage", "updatedAtMs"])),
       countersDigest: recoveryDigest(run.counters), deadlineAtMs: op.deadlineAtMs ?? 0,
       requestDigest: op.m4Preparation?.requestDigest ?? "", evidenceDigest: op.m4Observation?.evidenceDigest ?? "",
       wrapperDigest: op.m4Observation?.wrapperDigest ?? "",
@@ -208,6 +244,22 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     const grant = authority(target);
     const { run, op, campaign } = await state(target);
     requireProof(run.revision === target.expectedRevision, "revision_changed");
+    if (decisionGrant(target)) {
+      const facts = m4DecisionRejectionFacts(config.m4!.authority!, run, op);
+      requireProof(!releasingClaim && facts?.taskId === "J13" && run.status === "blocked" && run.safeFailure === "definite_failure" &&
+        run.activeOperationId === op._id && !run.preparation && !run.generationCompletedAtMs && op.state === "started" &&
+        !op.m4DecisionRejection && !op.m4Continuation && op.lifecycle && ["running", "reconciling"].includes(op.lifecycle.phase) &&
+        op.lifecycle.attemptOutcome == null && op.deadlineAtMs != null && op.deadlineAtMs < now() &&
+        campaign.state === "stopped" && campaign._id === grant.campaignId && campaign.grantReference === grant.reference,
+      "unsupported_decision_recovery");
+      requireProof(await withMongoTransaction(database, session => verifyM4DecisionRejection(database, session,
+        config.m4!.authority!, run, { ...op, m4DecisionRejection: { ...facts, proofDigest: recoveryDigest(facts),
+          reference: decisionGrant(target)!.reference, recordedAtMs: now() } })), "decision_output_or_owner_unresolved");
+      requireProof(await c.artifacts.findOne({ experimentRunId: run._id, bookletId: run.bookletId, taskId: facts.taskId,
+        subjectKind: facts.subjectKind, subjectId: facts.subjectId, currentVersionId: facts.artifactVersionId,
+        state: { $in: ["draft", "approved"] } }, { projection: { _id: 1 } }), "decision_target_changed");
+      return { run, op };
+    }
     if (legacyGrant(target)) {
       requireProof(!releasingClaim && run.status === "blocked" && run.activeOperationId === op._id &&
         ["started", "unknown"].includes(op.state) && !op.m4PreGenerationRecovery && campaign.state === "stopped" &&
@@ -234,7 +286,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   }
   async function observe(target: RecoveryTarget) {
     const { run, op } = await eligible(target);
-    const binding = config.bindings.find(item => item.role === op.role && item.taskId === op.taskId);
+    const binding = selectBinding(config, op.role, op.taskId as Parameters<typeof selectBinding>[2], run.persona);
     requireProof(binding && binding.publishedWorkflowId === op.verifiedWorkflowId, "publication_changed");
     const result = await runtime.retrieve(binding, op.workflowRunId!, { deadlineAtMs: now() + 20_000 });
     const legacy = legacyGrant(target);
@@ -277,6 +329,30 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     authority(target);
     snapshotScope(target, before);
     const { run, op, campaign } = await state(target);
+    if (decisionGrant(target)) {
+      requireProof(before.scope === "decision-rejection-target-v1" && run.revision === target.expectedRevision + 1 &&
+        run.status === "blocked" && run.pauseRequested && run.safeFailure === "definite_failure" && !run.activeOperationId &&
+        op.state === "failed" && op.safeFailure === "definite_failure" && !op.m4Continuation &&
+        op.lifecycle?.phase === "finished" && op.lifecycle.attemptOutcome === "failed" && op.lifecycle.unresolved === false &&
+        campaign.state === "stopped" && campaign.grantReference === authority(target).reference &&
+        await withMongoTransaction(database, session => verifyM4DecisionRejection(database, session, config.m4!.authority!, run, op)),
+      "decision_recovery_unverified");
+      const after = await snapshot(target, before);
+      for (const key of ["runInvariant", "operationInvariant", "campaignInvariant", "bookletInvariant", "countersDigest", "deadlineAtMs", "lifecycleOrigin", "sourceFingerprint"] as const)
+        requireProof(after[key] === before[key], "preservation_mismatch");
+      requireProof((before.priorEndedAtMs === null || op.lifecycle.endedAtMs === before.priorEndedAtMs) &&
+        (before.priorTimeoutAtMs === null || op.lifecycle.timeoutAtMs === before.priorTimeoutAtMs), "attempt_history_changed");
+      for (const name of Object.keys(before.rows)) {
+        requireProof(recoveryDigest(Object.keys(after.rows[name])) === recoveryDigest(Object.keys(before.rows[name])), "inventory_changed");
+        for (const [id, digest] of Object.entries(before.rows[name])) {
+          if (name === "experiment_runs" && id === target.runId || name === "experiment_operations" && id === target.operationId) continue;
+          requireProof(after.rows[name][id] === digest, "retained_data_changed");
+        }
+      }
+      await quiet(target, true);
+      return { verified: true as const, outcome: "failure_closed" as const, accounting: "preserved" as const,
+        admission: "closed" as const, runId: target.runId, operationId: target.operationId, providerPosts: 0 };
+    }
     if (legacyGrant(target)) {
       requireProof(validateLegacyCountFailureProof(m4PolicySnapshot(config.m4!.authority!.policy).policy, run, op) &&
         run.status === "blocked" && run.revision === target.expectedRevision + 1 && run.safeFailure === "definite_failure" && run.pauseRequested && !run.activeOperationId &&
@@ -359,6 +435,36 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
     await quiet(target, true);
     requireProof(recoveryDigest({ target, snapshot: proof.snapshot, grant: authority(target) }) === expectedDigest, "grant_changed");
     const legacy = legacyGrant(target);
+    if (decisionGrant(target)) {
+      await withMongoTransaction(database, async session => {
+        const run = await c.experiment_runs.findOne({ _id: target.runId }, { session });
+        const op = await c.experiment_operations.findOne({ _id: target.operationId, runId: target.runId }, { session });
+        const campaign = run?.m4 ? await c.experiment_campaigns.findOne({ _id: run.m4.campaignId }, { session }) : null;
+        const booklet = run ? await c.booklets.findOne({ _id: run.bookletId }, { session }) : null;
+        const control = await c.deployment_control.findOne({ environment: "_staging" }, { session });
+        requireProof(run && op && campaign?.state === "stopped" && booklet && run.revision === target.expectedRevision &&
+          control?.maintenance && !control.draining && control.activeMutations === 0 && (control.interruptedMutations ?? 0) === 0 &&
+          !(control.mutationOwners ?? []).length && recoveryDigest(run) === proof.snapshot.rows.experiment_runs[run._id] &&
+          recoveryDigest(op) === proof.snapshot.rows.experiment_operations[op._id] &&
+          recoveryDigest(campaign) === proof.snapshot.rows.experiment_campaigns[campaign._id] &&
+          recoveryDigest(booklet) === proof.snapshot.rows.booklets[booklet._id] &&
+          await m4SourceFingerprint(database, session, run) === proof.snapshot.sourceFingerprint &&
+          recoveryDigest(await reservationRows(campaign, session)) === recoveryDigest(proof.snapshot.rows.campaign_reservations) &&
+          recoveryDigest(await decisionAssets(run.bookletId, session)) === recoveryDigest(proof.snapshot.rows.assets), "decision_state_changed");
+        const closed = await closeM4DecisionRejection(database, session, config.m4!.authority!, run, op, now());
+        requireProof(closed?.revision === target.expectedRevision + 1 && closed.activeOperationId === null, "decision_closure_failed");
+        // Source verifiers re-read saved eligibility. Stage paused status only
+        // inside this transaction; restore blocked status before accounting/commit.
+        await c.experiment_runs.updateOne({ _id: run._id, revision: closed.revision }, { $set: { status: "paused", pauseRequested: true } }, { session });
+        await createExperimentPageIllustrationAssembly({ database, store: (deps.store ?? createAssetStore)() })
+          .verifyVersion({ runId: run._id, versionId: op.m4DecisionRejection?.artifactVersionId ?? m4DecisionRejectionFacts(config.m4!.authority!, run, op)!.artifactVersionId }, session);
+        const paused = await c.experiment_runs.findOneAndUpdate({ _id: run._id, revision: closed.revision },
+          { $set: { status: "blocked" } }, { session, returnDocument: "after" });
+        requireProof(paused, "decision_state_changed");
+        await verifyM4Accounting(database, session, paused, undefined, undefined, { authority: config.m4!.authority!, operationId: op._id });
+      });
+      return proof;
+    }
     if (legacy) {
       requireProof(observed.kind === "execution", "remote_outcome_unverified");
       await withMongoTransaction(database, async session => {

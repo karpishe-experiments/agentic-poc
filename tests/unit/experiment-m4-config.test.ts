@@ -62,6 +62,14 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(readM4RunnerConfig(env, { ...granted, grant: { ...granted.grant, continuations: [continuation], progressRecoveries: [continuation] } }))
       .toMatchObject({ config: { m4: { state: "invalid" } } });
   });
+  it("requires an explicit rejection kind for pre-deployment decision recovery", () => {
+    const target = { runId: id(10), operationId: id(12), reference: "exact pre-deployment closure",
+      preDeploymentRecovery: "decision_rejection_v1" };
+    expect(m4GrantSchema.safeParse({ ...granted.grant, continuations: [target] }).success).toBe(false);
+    const marked = { ...target, decisionRejection: "revision_allowance_exhausted_v1" };
+    expect(m4GrantSchema.safeParse({ ...granted.grant, continuations: [marked] }).success).toBe(true);
+    expect(m4GrantSchema.safeParse({ ...granted.grant, continuations: [{ ...marked, preDeploymentRecovery: "any_failure" }] }).success).toBe(false);
+  });
   it("ignores environment spending instructions and requires an exact reviewed manifest", () => {
     expect(readM4RunnerConfig({ ...env, M4_EXECUTION_GRANTED: "true", M4_BUDGET: "100" }, { state: "disabled" })).toMatchObject({ config: { m4: { state: "disabled" } } });
     expect(readM4RunnerConfig(env, { ...granted, budget: 100 })).toMatchObject({ config: { m4: { state: "invalid" } } });

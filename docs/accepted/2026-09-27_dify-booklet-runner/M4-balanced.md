@@ -34,7 +34,8 @@ J11/J12 completion and exact pre-generation failures; it does not authorize this
 semantic rejection. The local continuation fixture did not exercise this
 old-release-to-new-release drain boundary.
 
-Proposed bounded follow-up, pending approval of the changed live order: extend
+The user approved the exact pre-deployment recovery on 2026-10-26. Bounded
+follow-up contract: extend
 the existing candidate recovery contract for this exact marked tester decision.
 Preview must authenticate the original successful response, exhausted saved
 allowance, unchanged target, original assets, no global output or claims, and
@@ -45,8 +46,44 @@ response, revision, asset and charge evidence. Repeated verification must issue
 no provider request. Test the complete retained-state recovery, normal deployment
 drain/readiness and subsequent single continuation, including rollback and lost
 acknowledgement. Do not weaken the drain, replay deployment, edit shared records
-directly, or treat the failed deployment as an M4 exit. No credential-inventory
-change is proposed.
+directly, or treat the failed deployment as an M4 exit. The credential inventory
+clarifies conditional read-only recovery use of the existing persona-specific
+tester key; no secret name, storage, transfer copy or permission changes.
+
+Implementation forecast: extend the existing candidate service and protected
+grant with an explicit pre-deployment semantic-rejection capability. Preserve
+legacy snapshot interpretation. A targeted checkpoint pins the exact run,
+operation, current creative sources and campaign reservations; original asset
+and cumulative-accounting verification remain mandatory. Recovery must leave a
+blocked, paused Creator and stopped campaign, without consuming continuation.
+The existing host recovery must also pin and archive only the failed pre-backup
+deployment journal after proving its process is stopped and its serving release
+unchanged. Unknown phases, outputs, processes, owners or changed journals reject
+recovery. Test preview, apply rollback, repeated verification/lost acknowledgement,
+normal delivery and one fresh reviewer on a full Creator graph. No provider,
+signature, infrastructure resource, deadline or spending-policy change belongs
+to this correction. Two independent reviews, affected checks and lean CI precede
+candidate use; installed host capability is a separate verification checkpoint.
+
+The local extension now implements that contract. The marked candidate uses a
+targeted versioned snapshot and the existing semantic proof. Recovery selects
+the tester binding by persona, using the dispatcher's shared selector. It leaves
+the exact run blocked with Pause requested, the campaign stopped and continuation
+unused. Ordinary accounting still rejects an uncontinued closure; only the exact
+recovery audit accepts this intermediate state. Original J13 graph and byte
+checks gate the transaction. The host pins the failed pre-backup journal and
+archives its exact bytes before closing admission, without replaying deployment.
+
+Validation passed 102 provider/semantic recovery persistence cases, then seven
+final selected cases including full Creator recovery/rollback, repeated
+verification and completion after one continuation. The earlier 102-case process
+used Windows MongoDB's SIGKILL shutdown fallback after exit-zero test results.
+Fifty-five configuration/recovery/storage units, typecheck, focused lint,
+ShellCheck and 225 documentation links passed. All six new isolated mocked host
+scenarios passed. Both full shell suites were attempted: existing Windows
+permission and symlink behavior prevented completion; Linux CI is still required.
+Two independent reviews and publication remain pending. No candidate recovery,
+new deployment or reviewer request has been issued for this extension.
 
 ### Current decision-eligibility blocker — 2026-10-26
 

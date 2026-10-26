@@ -207,7 +207,8 @@
         "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
         "operationId": "2380f45a-5d66-482c-a6d2-7fed96f48466",
         "decisionRejection": "revision_allowance_exhausted_v1",
-        "reference": "User 2026-10-26 authorized bounded reviewer eligibility repair and this exact continuation after reviews, CI and staging checks. Prove the authenticated exhausted-revision decision, no materialization, resolved ownership and intact accounting; preserve original response and charges. Close only that ineligible decision, then permit one fresh reviewer on the same saved page. Keep all revision, USD5/500-request/persona/image limits. No replacement, automatic retry or provider installation."
+        "preDeploymentRecovery": "decision_rejection_v1",
+        "reference": "User 2026-10-26 authorized exact pre-deployment recovery of this tester decision after two reviews and CI. Prove original response, exhausted allowance, no output/claims, original bytes and accounting; preserve evidence/charges, leave Creator paused and campaign stopped. Normal deployment/readiness still precede one fresh reviewer. Keep all revision/USD5/500-request/persona/image limits. No provider replay, drain bypass, replacement or automatic retry."
       },
       {
         "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",

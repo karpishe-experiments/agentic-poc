@@ -12,6 +12,7 @@ import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import type { WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { createBookletRecovery } from "@/lib/operations/booklet-recovery";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
@@ -98,10 +99,39 @@ async function setup(imageCount = 2) {
     const currentOp = (await db.collections.experiment_operations.findOne({ _id: id(12) }, { session }))!;
     return closeM4DecisionRejection(db, session, authority, currentRun, currentOp, 10);
   });
-  return { db, repository, authority, runtime, snapshot, close };
+  return { db, repository, authority, runtime, config, snapshot, close };
 }
 
 describe("authenticated semantic decision rejection", () => {
+  it.each(["grant", "claim", "foreign_output", "target", "accounting", "remote"])(
+    "pre-deployment preview rejects %s without mutation or provider replay", async fault => {
+      const env = await setup();
+      const authority = { ...env.authority, grant: { ...env.authority.grant, continuations: env.authority.grant.continuations.map(item => ({
+        ...item, ...(fault === "grant" ? {} : { preDeploymentRecovery: "decision_rejection_v1" as const }),
+      })) } };
+      if (fault === "claim") await env.db.collections.experiment_operations.updateOne({ _id: id(12) },
+        { $set: { resultFinalizationClaim: { id: "expired-still-unresolved", expiresAtMs: 1 } } });
+      if (fault === "foreign_output") await env.db.collections.messages.insertOne({ _id: id(998), bookletId: id(999),
+        operationId: id(12), role: "assistant", sequence: 1, schemaVersion: "2", uiMessageJson: "{}", createdAtMs: 1 });
+      if (fault === "target") await env.db.collections.artifacts.updateOne({ _id: id(20) }, { $set: { currentVersionId: id(999) } });
+      if (fault === "accounting") await env.db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $inc: { reservedMicrodollars: 1 } });
+      if (fault === "remote") vi.mocked(env.runtime.retrieve).mockResolvedValueOnce({ kind: "execution", execution: {
+        id: id(13), workflow_id: env.config.bindings.find(p => p.role === "tester" && p.persona === "professional_creator")!.publishedWorkflowId,
+        status: "succeeded", outputs: { booklet_provider_result: "changed" },
+      } });
+      await env.db.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: {
+        schemaVersion: "1", environment: "_staging", maintenance: false, draining: false, activeMutations: 0,
+        interruptedMutations: 0, mutationOwners: [], updatedAtMs: 10,
+      }, $setOnInsert: { _id: "environment:_staging" } }, { upsert: true });
+      const before = await env.snapshot();
+      const service = createBookletRecovery({ database: env.db, config: { ...env.config, m4: { state: "granted", authority } },
+        runtime: env.runtime, now: () => 1_000_000 });
+      await expect(service.preview({ runId: id(10), operationId: id(12), expectedRevision: before.run.revision })).rejects.toThrow();
+      expect(await env.snapshot()).toEqual(before);
+      expect(env.runtime.start).not.toHaveBeenCalled();
+      expect(env.runtime.stop).toBeUndefined();
+    });
+
   it("closes a valid-schema exhausted revision without changing original evidence or liabilities", async () => {
     const env = await setup(), before = await env.snapshot();
     expect(m4DecisionRejectionFacts(env.authority, before.run, before.op)).toMatchObject({
