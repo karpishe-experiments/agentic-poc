@@ -1,9 +1,41 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Normal staging deployment is interrupted during backup; no continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Maintenance backup recovery completed with a verified fresh backup and prior-service readiness under closed admission. Normal staging delivery stopped during its pre-backup drain; a reviewed dispatcher correction and exact resume remain pending. No continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Verified backup recovery and normal delivery — 2026-10-26
+
+Normal delivery subsequently stopped at draining before selecting another backup.
+The handoff leaves admission closed, but its new deployment branch invokes the
+ordinary drain transition, which requires maintenance to be false. The selected
+prior release contains that rejection predicate. Reproduce the closed-handoff
+lifecycle with the real shell dispatcher before correction. Reuse the established
+closed-and-quiet admission proof only after the full helper/decision provenance
+checks; retain ordinary drain for open admission and reject ambiguous owners or
+mixed states. This is a host-only transition correction. Keep the reviewed
+application image and its tree fixed, preserve the failed request/deadline, and
+require two independent reviews and Linux CI before any installed dispatcher
+update or supported resume. No deployment replay, database edit or provider call
+is authorized by a diagnostic observation.
+
+Source PR #296 and staging PR #297 each passed two independent reviews and Linux
+CI, including both complete deployment shell suites. The operator installed the
+reviewed dispatcher without changing the failed journal. Preview `40356657404`
+passed; the exact apply `40357162445` completed successfully. Its fresh immutable
+backup passed completion-marker, manifest, archive and asset verification. Original
+deployment and decision-recovery evidence remain preserved. Prior-service readiness
+passed with admission closed; no Creator continuation or provider request was made.
+
+Sanitized progress measurements show successful manifest and completion-marker
+write/readback, with approximately 22 minutes remaining in the 30-minute backup
+budget at the last measurement. This confirms backup progress and success; it does
+not establish the direction, size or cause of the original timed-out transfer.
+No reset or repeated recovery mutation was used. Staging merged as
+`ffefe4c87685b7b0a5c0f6499547d1dc3d17506d`; its source tree matches the reviewed
+helper. Normal Deploy `40359148858` stopped during draining and requires the reviewed dispatcher correction, exact resume and readiness before the
+authorized same-Creator continuation. M4 remains incomplete.
 
 ### Maintenance storage correction contract — 2026-10-26
 

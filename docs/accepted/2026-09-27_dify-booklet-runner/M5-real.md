@@ -16,19 +16,14 @@ reset data, deploy changes or grant paid execution authority.
 
 The current [M4 checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
 retains accepted Kid and Parent generation/accounting with incomplete advisory
-evaluation. Creator completed all nine Page Bibles after the exact saved-manager
-recovery, then stopped while saving a tester decision that requested an exhausted
-third image revision. Its 43,977-token provider execution succeeded. The newly
-authorized repair restricts reviewer choices and distinguishes accepted simulation
-geometry warnings; its exact closure/continuation remains subject to review, CI,
-staging delivery and proof. Preserve the response, all charges and the same run.
-The [decision-repair delivery checkpoint](M4-balanced.md#decision-repair-delivery-checkpoint--2026-10-26)
-records a further verified boundary: the reviewed repair cannot deploy while its
-retained started operation blocks the old release's drain. No replacement was
-installed. The user has authorized the exact pre-deployment recovery extension;
-local implementation and focused checks are recorded in M4. Review, CI,
-publication, installed capability and live recovery remain delivery gates. The
-extension must not bypass the drain or dispatch a model.
+evaluation. Creator has all nine Page Bibles approved. The authorized exact
+recovery closed its exhausted reviewer decision while preserving the successful
+43,977-token response, all charges and the same run. The reviewed repair restricts
+reviewer choices and distinguishes accepted simulated-image geometry warnings.
+Maintenance backup recovery also completed, with a verified fresh backup and
+prior-service readiness under closed admission. Normal staging delivery and
+readiness still precede the authorized continuation. These recovery results do
+not establish Creator completion or grant M5 execution.
 The M4 record owns current usage and release evidence. No M5 execution, new image
 spending or reset is granted. Accepted latency and size warnings do not block M4;
 generation, ownership and accounting verification remain mandatory.
