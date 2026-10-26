@@ -29,7 +29,8 @@ credential-inventory reconciliation. Slice A has no credential-inventory impact.
 
 Slices A and B and Slice C compatibility are delivered. Dev5 is installed and
 identity-verified; amendment enablement is delivered and staging checks passed.
-The exact retained Creator continuation still requires its separate approval.
+The user authorized the required continuation on 2026-10-26; its exact grant
+requires reviewed delivery and normal proof before execution.
 Returned JSON sizes are not
 wire-byte measurements. The bounded read probe reproduced the original question
 query timeout independently of preparation or Dify dispatch.
@@ -213,6 +214,37 @@ The dev5 installation and restored signature check enable new amended requests,
 but do not demonstrate a successful live amended provider call. That evidence
 must come from the authorized same-Creator continuation. M4 remains incomplete;
 M5 execution is not authorized.
+
+### Authorized exact page-4 continuation — 2026-10-26
+
+The user renewed the M4 completion objective and approved all required PR and
+Chrome actions after the pending exact continuation was identified. Add only
+Creator `47894c71-7991-4b15-8dc2-810395ec3f01` / failed operation
+`928cb32d-daf7-4703-b005-fdaf076d6cb6` to the existing protected grant. Read-only
+control state still shows revision 470, blocked/definite failure, no active
+operation or preparation, generation in progress and evaluation pending.
+
+The correction changes no proof predicate or provider behavior. The existing
+transactional continuation must read original evidence, prove no dispatch,
+reservation, global output or unresolved ownership, and verify cumulative
+accounting before atomically recording continuation and activation. Preserve the
+failed operation and all history. New work uses the delivered effective policy;
+historical work keeps its original policy and liabilities. Keep existing campaign
+and persona limits, zero paid images, original deadlines and no automatic retry.
+
+Verify the exact released grant, existing no-dispatch continuation rejection and
+concurrency/accounting cases with real persistence and fake providers, then run
+typecheck, focused lint and documentation checks. Require two independent source
+and staging reviews, lean CI, normal staging delivery and read-only readiness
+before one normal Continue action. Reconcile an uncertain acknowledgement by
+reading the same run; do not send a second mutation. Credential-inventory impact:
+none; no credential consumer, storage or scope changes.
+
+Local verification passed five released-configuration units, 46 real-persistence
+continuation/campaign cases with fake providers, typecheck, focused lint and 223
+documentation links. The first grant-reference draft exceeded the existing
+500-character schema bound; shortening only that reference restored the released
+configuration pass. No proof predicate, policy limit or live state changed.
 
 ### Repeated page-4 preparation failure — 2026-10-25
 

@@ -45,7 +45,8 @@ records reviewed dev5 installation, signature restoration and staging delivery.
 New requests can use the saved 128,000-token amendment with a 32,000-token warning;
 historical requests keep their original policy. Local compatibility tests and a
 healthy deployment do not prove live amended generation, real-image support or
-M5 readiness. The exact Creator continuation remains a separate approval gate.
+M5 readiness. The exact Creator continuation is authorized, pending reviewed
+delivery and normal proof; it has not been executed.
 
 The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
