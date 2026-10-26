@@ -583,7 +583,7 @@ The current full suite has eighteen Community bindings: manager, J01-J12,
 three testers, simulated image transport (including J13), and judge. Simulated
 acceptance is complete. Balanced Kid and Parent have verified generation with
 incomplete advisory evaluation; the admitted Creator is stopped at a J12
-preparation failure pending its exact continuation grant. The subsections
+preparation failure pending reviewed delivery of its exact continuation grant. The subsections
 below retain incremental foundation details; current live status is owned by the
 [M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md).
 
