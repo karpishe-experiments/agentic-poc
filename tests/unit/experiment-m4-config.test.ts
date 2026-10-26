@@ -34,7 +34,9 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(m4EffectiveTokenPolicy(frozen.policy).maxInputTokens).toBe(32000);
     expect(m4MaximumCharge(frozen.policy, "specialist", effective.snapshot)).toBe(20996);
     expect(m4MaximumCharge(frozen.policy, "specialist")).toBe(8996);
-    expect(releaseManifest.grant.continuations.some(entry => entry.operationId === "928cb32d-daf7-4703-b005-fdaf076d6cb6")).toBe(false);
+    expect(releaseManifest.grant.continuations.filter(entry => entry.operationId === "928cb32d-daf7-4703-b005-fdaf076d6cb6"))
+      .toEqual([{ runId: "47894c71-7991-4b15-8dc2-810395ec3f01", operationId: "928cb32d-daf7-4703-b005-fdaf076d6cb6",
+        reference: expect.stringContaining("User 2026-10-26") }]);
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "local" })).toMatchObject({ config: { m4: { state: "invalid" } } });
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "_prod" })).toEqual({ enabled: false, reason: "production" });
     expect(readM4RunnerConfig(env)).toMatchObject({ config: { m4: { state: "invalid" } } });
