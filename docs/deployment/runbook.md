@@ -91,6 +91,12 @@ An invalid recovery response also reports application-output byte sizes and JSON
 value/object/verified-result counts. Malformed JSON reports no shape. These
 measurements contain no response or stderr content and do not relax validation.
 Without a valid preview digest, do not apply recovery or infer that it succeeded.
+Recovery output may include known read diagnostics before or after its receipt.
+The host validates their exact fields, numeric measurements and successful
+outcomes; callback diagnostics also match the selected run and operation. It then
+requires exactly one verified receipt and passes only that receipt to proof
+checks. Unknown or conflicting records fail. Diagnostic labels alone cannot make
+a record safe to discard.
 
 For an exact retained manager completion, first verify that the reviewed image
 advertises `granted-j12-manager-completion` and the protected manifest grants that

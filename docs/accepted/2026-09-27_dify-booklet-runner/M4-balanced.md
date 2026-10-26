@@ -18,6 +18,14 @@ recovery proofs, deadlines, provider restrictions and the existing staging image
 This diagnostic correction changes no credential use. It does not authorize
 recovery apply without a verified preview.
 
+The measured preview response contains eleven JSON objects and exactly one
+verified result. The single-object wrapper rejects that stream. Normalize only
+one verified receipt accompanied by fully validated known read-diagnostic records;
+unknown records, duplicate receipts, failed diagnostics and content-bearing extra
+fields remain errors. This is a transport-boundary correction, not a relaxation
+of recovery evidence. Preserve the staging image and all proof predicates. Test
+mixed records and adversarial diagnostic shapes before the next bounded preview.
+
 ### Forward execution correction contract — 2026-10-26
 
 The user approved three sequential slices before the retained Creator continues:
