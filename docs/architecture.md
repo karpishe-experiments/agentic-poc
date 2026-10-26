@@ -18,7 +18,32 @@ Recovery establishes queued eligibility inside its transaction before source
 verifiers re-read the run; original reference-byte and accounting checks still
 gate commit. Failed verification rolls back run and campaign eligibility together.
 
-New Balanced requests use `m4_context_policy_v3`. Specialists receive
+New Balanced mid-run tester requests use `m4_tester_eligibility_v4`; other roles
+retain `m4_context_policy_v3`. The server supplies revision limits/counts and
+binds revision task/version pairs to remaining allowance. Accepted simulated
+geometry differences are advisory; original bytes, identities, references and
+required content remain hard checks. Historical tester definitions and exact
+requests remain readable.
+
+An exact authorized continuation can atomically reject a retained, authenticated
+tester decision that exhausts its saved revision allowance. Separate
+`m4DecisionRejection` provenance pins the request, response, target and allowance;
+it never changes `m4Observation` or liabilities. Closure verifies no global output
+or unresolved claim, then ordinary continuation verifies campaign ownership,
+original page bytes and accounting before commit. Failure rolls back closure and
+continuation together. The original decision cannot become an approval. This
+fixed semantic proof does not catch arbitrary materialization errors or retry a
+provider automatically.
+
+Summary, detail and compact control responses can expose the optional
+`retainedDecisionContinuation` flag for an exact configured continuation with the
+`decisionRejection` marker. It permits the normal Continue control while that
+retained operation is still active. The flag performs no proof read and grants no
+execution by itself; Resume still verifies the complete rejection, ownership,
+source and accounting predicates. Ordinary ungranted active failures keep their
+existing controls.
+
+Specialists receive
 current approved creative sources without per-image execution prompts and upload
 metadata. J12 receives only its selected current layout page plus exact required
 lettering derived from the full approved layout; the manuscript remains once for
@@ -1217,7 +1242,7 @@ Completed items and active assets are never discarded because another item fails
 
 The progress panel and persisted progress cards share one poller per job. Running jobs poll every five seconds; non-running observable states poll every fifteen seconds. Publishing a retry or Continue response updates the same coordinator immediately. Diagnostics record safe job/item boundaries and waiting heartbeats without prompts, image bytes, credentials, or arbitrary provider response bodies.
 
-`IMAGE_PROVIDER_MODE` selects only `fake` or `real`. The selected frozen image-agent profile supplies provider, model, quality, and resolution; no global image model or quality setting exists. Real requests use provider-native square, landscape, or portrait sizes, then Sharp normalizes them to the approved final canvas without stretching or drawing text. PDF export uses approved composed assets in deterministic cover-first order.
+In the application-managed generation path, `IMAGE_PROVIDER_MODE` selects only `fake` or `real`. The selected frozen image-agent profile supplies provider, model, quality, and resolution; no global image model or quality setting exists. Real requests use provider-native square, landscape, or portrait sizes, then Sharp normalizes them to the approved final canvas without stretching or drawing text. PDF export uses approved composed assets in deterministic cover-first order. This does not enable Real execution in the Dify experiment runner: its current admission and image-accounting policy allow simulated images only, and its image workflow uses synthetic transport.
 
 ## Changing the architecture
 

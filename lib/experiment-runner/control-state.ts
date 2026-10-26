@@ -13,9 +13,21 @@ export const controlStateSchema = z.object({
   updatedAtMs: z.number().finite(),
   safeFailure: z.enum(["limit_exhausted", "unknown_outcome", "definite_failure"]).nullable(),
   activeOperationId: z.string().nullable(),
+  retainedDecisionContinuation: z.boolean().optional(),
   preparation: z.object({ identity: z.string(), startedAtMs: z.number(), deadlineAtMs: z.number(), unresolved: z.boolean() }).nullable(),
 });
 export type ControlState = z.infer<typeof controlStateSchema>;
+
+// Factual control availability only. Resume still authenticates original output,
+// ownership, current evidence and accounting before it can change saved state.
+export function hasRetainedDecisionContinuation(state: { runId: string; status?: string; safeFailure?: string | null;
+  activeOperationId?: string | null; generationStatus?: string; preparation?: unknown },
+grants: readonly { runId: string; operationId: string; decisionRejection?: string }[] | undefined): boolean {
+  return state.status === "blocked" && state.safeFailure === "definite_failure" &&
+    state.generationStatus === "in_progress" && state.preparation == null && !!state.activeOperationId &&
+    !!grants?.some(grant => grant.runId === state.runId && grant.operationId === state.activeOperationId &&
+      grant.decisionRejection === "revision_allowance_exhausted_v1");
+}
 
 export const controlStateProjection = {
   _id: 1, revision: 1, status: 1, pauseRequested: 1, generationCompletedAtMs: 1,

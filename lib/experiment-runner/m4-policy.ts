@@ -67,7 +67,9 @@ export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, refere
   remainingPersonaAdmission: z.strictObject({ anchorRunId: opaqueIdSchema, anchorRevision: z.number().int().nonnegative(),
     personas: z.tuple([z.literal("enthusiast_parent"), z.literal("professional_creator")]),
     reference: z.string().min(1).max(500) }).optional(),
-  continuations: z.array(m4ContinuationGrantSchema).max(20).optional(),
+  continuations: z.array(m4ContinuationGrantSchema.extend({
+    decisionRejection: z.literal("revision_allowance_exhausted_v1").optional(),
+  })).max(20).optional(),
   progressRecoveries: z.array(m4ContinuationGrantSchema).max(1).optional(),
   completionRecoveries: z.array(m4ContinuationGrantSchema).max(20).optional(),
   preGenerationRecoveries: z.array(legacyCountRecoveryGrantSchema).max(1).optional(),

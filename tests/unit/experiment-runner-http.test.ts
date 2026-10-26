@@ -182,6 +182,70 @@ describe("booklet runner HTTP boundary", () => {
     } finally { context.mockRestore(); }
   });
 
+  it("exposes only an exact marked retained-decision continuation through compact state", async () => {
+    const operationId = "00000000-0000-4000-8000-000000000002";
+    const retained = { ...savedControl, status: "blocked", pauseRequested: false, safeFailure: "definite_failure", activeOperationId: operationId };
+    const grant = { runId: controlRunId, operationId, reference: "exact fixture",
+      decisionRejection: "revision_allowance_exhausted_v1" as const };
+    const configured = (permission: object, granted = true): ConfigState => ({ ...enabled, config: { ...enabled.config,
+      m4: { state: granted ? "granted" : "ready", authority: { policy: {}, grant: { campaignId: controlRunId, reference: "fixture",
+        continuations: [permission as typeof grant] } } } } });
+    const findOne = vi.fn().mockResolvedValue(retained);
+    const database = vi.fn(() => ({ collections: { experiment_runs: { findOne } } } as unknown as Database));
+    const store = vi.fn(() => { throw new Error("Compact state must not inspect evidence"); });
+    const url = `http://localhost:3000/api/experiments/booklet-runs/${controlRunId}?view=control`;
+    for (const [permission, saved, granted, expected] of [
+      [grant, retained, true, true],
+      [{ ...grant, runId: operationId }, retained, true, false],
+      [{ ...grant, operationId: controlRunId }, retained, true, false],
+      [{ ...grant, decisionRejection: undefined }, retained, true, false],
+      [grant, retained, false, false],
+      [grant, { ...retained, safeFailure: "unknown_outcome" }, true, false],
+      [grant, { ...retained, status: "completed", generationCompletedAtMs: 1000 }, true, false],
+      [grant, { ...retained, preparation: { ownerId: "owner", startedAtMs: 1, deadlineAtMs: 2 } }, true, false],
+    ] as const) {
+      findOne.mockResolvedValue(saved);
+      const http = createBookletRunnerHttp({ config: () => configured(permission, granted), database, store });
+      const response = await http.detail(new Request(url), controlRunId);
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.retainedDecisionContinuation).toBe(expected ? true : undefined);
+    }
+    expect(findOne).toHaveBeenCalledTimes(8);
+    expect(store).not.toHaveBeenCalled();
+    vi.stubEnv("DEPLOYMENT_ENV", "_staging"); vi.stubEnv("ACCESS_GATE_PASSWORD", "fixture-password-long-enough");
+    try {
+      const http = createBookletRunnerHttp({ config: () => configured(grant), database, store });
+      expect((await http.detail(new Request(url), controlRunId)).status).toBe(401);
+      expect(findOne).toHaveBeenCalledTimes(8);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("adds retained-decision availability to saved detail and default control responses without another read", async () => {
+    const operationId = "00000000-0000-4000-8000-000000000002";
+    const view = { runId: controlRunId, status: "blocked", safeFailure: "definite_failure", generationStatus: "in_progress",
+      activeOperationId: operationId, preparation: null };
+    const state: ConfigState = { ...enabled, config: { ...enabled.config, m4: { state: "granted", authority: { policy: {},
+      grant: { campaignId: controlRunId, reference: "fixture", continuations: [{ runId: controlRunId, operationId,
+        reference: "exact", decisionRejection: "revision_allowance_exhausted_v1" }] } } } } };
+    const getRunView = vi.fn().mockResolvedValue(view);
+    const saved = { ...savedControl, ...view, _id: controlRunId };
+    const repository = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({
+      getRun: async () => saved, pause: vi.fn().mockResolvedValue(saved),
+    } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    try {
+      const http = createBookletRunnerHttp({ config: () => state, database: () => ({ collections: {} } as Database),
+        store: () => ({} as AssetStore), mutate: async operation => operation() });
+      expect((await (await http.detail(new Request("http://localhost:3000"), controlRunId)).json()).data)
+        .toEqual({ ...view, retainedDecisionContinuation: true });
+      expect((await (await http.control(request({ origin: enabled.config.publicOrigin }, '{"expectedRevision":8}'), controlRunId, "pause")).json()).data)
+        .toEqual({ ...view, retainedDecisionContinuation: true });
+      const receipt = await http.control(request({ origin: enabled.config.publicOrigin }, '{"expectedRevision":8,"responseMode":"receipt"}'), controlRunId, "pause");
+      expect((await receipt.json()).data.retainedDecisionContinuation).toBe(true);
+      expect(getRunView).toHaveBeenCalledTimes(2);
+    } finally { repository.mockRestore(); context.mockRestore(); }
+  });
+
   it("validates receipt controls and authenticates compact reads before database access", async () => {
     const database = vi.fn(() => { throw new Error("Unexpected database access"); });
     const http = createBookletRunnerHttp({ config: () => enabled, database });
@@ -252,6 +316,24 @@ describe("booklet runner HTTP boundary", () => {
     const historical = await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary&page=2&limit=1"));
     expect((await historical.json()).data.runs[0].contextWarningSummary).toBeNull();
     expect(find).toHaveBeenCalledTimes(3);
+  });
+  it("includes the retained-decision control in summaries using only existing metadata reads", async () => {
+    const operationId = "00000000-0000-4000-8000-000000000002";
+    const row = { ...savedControl, bookletId: "book", status: "blocked", safeFailure: "definite_failure", activeOperationId: operationId };
+    const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue([row]) };
+    const find = vi.fn().mockReturnValue(cursor);
+    const operationFind = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    const state: ConfigState = { ...enabled, config: { ...enabled.config, m4: { state: "granted", authority: { policy: {}, grant: {
+      campaignId: controlRunId, reference: "fixture", continuations: [{ runId: controlRunId, operationId, reference: "exact",
+        decisionRejection: "revision_allowance_exhausted_v1" }] } } } } };
+    const http = createBookletRunnerHttp({ config: () => state, database: () => ({ collections: {
+      experiment_runs: { find }, booklets: { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) },
+      experiment_operations: { find: operationFind },
+    } } as unknown as Database), store: () => { throw new Error("Summary must not read evidence"); } });
+    const response = await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary"));
+    expect((await response.json()).data.runs[0].retainedDecisionContinuation).toBe(true);
+    expect(find).toHaveBeenCalledOnce(); expect(operationFind).toHaveBeenCalledOnce();
+    expect(operationFind.mock.calls[0][1].projection).toEqual({ _id: 0, runId: 1, "contextDiagnostics.warnings": 1 });
   });
   it("protects inspect and stop before reading operation state", async () => {
     const database = vi.fn(() => { throw new Error("unexpected database access"); });

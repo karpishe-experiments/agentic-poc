@@ -12,6 +12,7 @@ import { currentMutationOwnerId } from "@/lib/application/deployment-control";
 import { isM4ReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
+import { verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -233,10 +234,12 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       recoveredAtMs: nowMs, priorNoProgressCount: run.noProgressCount!, progressFingerprint: run.progressFingerprint! } };
   }
   async function continueFailure(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, nowMs: number) {
-    requireState(operation.role !== "tester" || isM4ReviewerInputFailure(snapshot.policy, run, operation),
-      "Only a generation-stage reviewer input-limit failure may continue.");
+    requireState(operation.role !== "tester" || isM4ReviewerInputFailure(snapshot.policy, run, operation) ||
+      await verifyM4DecisionRejection(database, session, authority, run, operation),
+      "Reviewer continuation requires a verified bounded input or decision rejection.");
     const permission = grant.continuations?.find((item) => item.runId === run._id && item.operationId === operation._id);
-    requireState(permission && !operation.m4Continuation && run.m4?.campaignId === grant.campaignId &&
+    requireState(permission && (!operation.m4DecisionRejection || permission.decisionRejection === operation.m4DecisionRejection.kind) &&
+      !operation.m4Continuation && run.m4?.campaignId === grant.campaignId &&
       run.m4.policyHash === snapshot.hash && run.m4.policyJson === snapshot.json, "No unused continuation grant matches this failure.");
     const campaign = await current(session);
     requireState(campaign.state === "stopped" && campaign.slots[run.persona] === run._id, "Campaign cannot continue this run.");
@@ -266,7 +269,7 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
     const unclaimedDigest = m4UnclaimedFailureDigest(authority, run, operation);
     const provenance: NonNullable<ExperimentOperationDocument["m4Continuation"]> = { reference: permission!.reference,
-      evidenceDigest: undispatchedDigest ?? unclaimedDigest ?? operation.m4PreGenerationRecovery?.proofDigest ?? operation.m4Observation!.evidenceDigest!,
+      evidenceDigest: undispatchedDigest ?? unclaimedDigest ?? operation.m4DecisionRejection?.proofDigest ?? operation.m4PreGenerationRecovery?.proofDigest ?? operation.m4Observation!.evidenceDigest!,
       ...(undispatchedDigest ? { kind: "undispatched_text_v1" as const, requestDigest: operation.m4Preparation?.requestDigest ?? null } :
         { requestDigest: unclaimedDigest ? operation.m4Preparation!.requestDigest : operation.m4Reservation!.requestDigest }), resumedAtMs: nowMs, runRevision: run.revision,
       campaignRevision: campaign.revision, nextOperationId: null };
