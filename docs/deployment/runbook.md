@@ -81,6 +81,10 @@ completion, or `expired-deployment-recover` for a stopped expired deployment.
 Preview first, retain its digest, then apply the same exact target. The protected
 workflow exposes structured blocker IDs and phases. Inspection failure is not a
 clear work inventory. Use bounded blocker pages instead of copying private logs.
+An invalid recovery response also reports application-output byte sizes and JSON
+value/object/verified-result counts. Malformed JSON reports no shape. These
+measurements contain no response or stderr content and do not relax validation.
+Without a valid preview digest, do not apply recovery or infer that it succeeded.
 
 For an exact retained manager completion, first verify that the reviewed image
 advertises `granted-j12-manager-completion` and the protected manifest grants that
