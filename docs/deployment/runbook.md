@@ -1,5 +1,10 @@
 # VPS deployment runbook
 
+Flat secret-input validation evaluates required and allowed keys on the original
+object before serialization. A validator expression failure is a delivery error;
+it does not establish invalid credentials. Keep the existing secret rules and
+use fake-input shell checks before requesting an operator to re-enter values.
+
 Before planning shared-host changes, read the private
 [srv1 inventory](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/inventory/srv1.md)
 and [shared operations guidance](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).

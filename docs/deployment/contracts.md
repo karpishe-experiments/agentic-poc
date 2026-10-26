@@ -1,5 +1,10 @@
 # Deployment contracts and verification
 
+Secret-input validation must retain the original object while binding its required
+and optional key sets. The reviewed grouping correction changes no credential name,
+owner, storage, transfer, consumer or validation rule. It corrects evaluation order
+for valid existing inputs; live secret repair is not required by that correction.
+
 ## Shared infrastructure documentation boundary
 
 The private [Uniwares infrastructure repository](https://github.com/Uniwares-LTD/infrastructure/blob/main/README.md)
