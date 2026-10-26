@@ -74,6 +74,14 @@ owned containers or changed journal bytes reject this handoff. Historical recove
 snapshots retain their original interpretation. Live installation is a separate
 checkpoint in the M4 record.
 
+Protected recovery commands can emit known structured diagnostics alongside
+their receipt. The host validates complete diagnostic shapes, positive outcomes,
+measurements and applicable command target identities, then requires exactly one
+verified receipt for the original proof checks. Unknown records and duplicate
+receipts fail. Normal deployment's saved handoff supplies its target through
+explicit arguments; it does not require recovery globals. Telemetry grants no
+recovery authority.
+
 Summary, detail and compact control responses can expose the optional
 `retainedDecisionContinuation` flag for an exact configured continuation with the
 `decisionRejection` marker. It permits the normal Continue control while that
@@ -318,6 +326,24 @@ It archives that exact handoff only after prior-release compatibility and readin
 pass, preserving the original recovery and deployment evidence. This separates
 successful saved-result recovery from a later corrective release after failed
 initialization.
+
+Maintenance storage transfers inherit the enclosing backup/verification (30-minute)
+or restore (60-minute) deadline; only calls outside a maintenance budget use a
+30-second default. Fixed `recovery_transfer_v1` diagnostics on stderr identify
+phase, direction, object category/ordinal, application byte counts, elapsed time,
+remaining budget and a safe failure category. Success receipts remain on stdout.
+Diagnostics cannot change operation results or expose object names/content.
+
+An explicit staging expired-backup recovery can pin a reviewed, compatible backup
+helper separately from the prior application image recorded in the manifest.
+It inspects the original completion marker and verifies complete backups; an
+incomplete backup requires a fresh immutable ID. A persisted checkpoint forbids
+replaying an uncertain backup and retains one recovery deadline across reentry.
+The original deployment and decision-recovery handoff remain byte-pinned. Only
+verified backup and preserved target evidence permit prior-service readiness with
+admission closed. The next normal deployment must match the helper source tree
+and use that helper for its own backup before retiring the helper handoff.
+No database initialization, provider call or credential-scope change is involved.
 
 Balanced completion separates the durable transaction from progress observation.
 Image-source verification reads projected image and parent-manager lineage fields;

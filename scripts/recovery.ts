@@ -12,32 +12,42 @@ import { getServerEnv } from "@/lib/config/env";
 import { backupIdSchema, digest, parseManifest, RecoveryStorage } from "./recovery-storage";
 import { operationSignal, remainingOperationMs, withOperationBudget } from "@/lib/operations/budget";
 
+import { RecoveryDiagnostics } from "./recovery-diagnostics";
+
+const diagnostics = new RecoveryDiagnostics();
 const execute = promisify(execFile);
 async function executeMongo(tool: "mongodump" | "mongorestore", args: string[]) {
   try { await execute(tool, args, { timeout: remainingOperationMs(tool === "mongodump" ? 1_800_000 : 3_600_000), signal: operationSignal(), killSignal: "SIGKILL", maxBuffer: 1024 * 1024 }); }
   catch { throw new Error(`${tool} failed; keep maintenance enabled and check database permissions, connectivity and archive validity. Tool output is suppressed because it can contain credentials.`); }
+}
+// Capability discovery performs no environment, database or storage access.
+if (process.argv[2] === "capabilities") {
+  console.log(JSON.stringify({ contract: "booklet-backup-helper-v1", manifestVersion: "1", dataContractVersion: "booklet-data-v1", initializationRequired: false, migrationRequired: false }));
+  process.exit(0);
 }
 const env = getServerEnv();
 if (env.RUNNER_ENABLED !== "false") throw new Error("Recovery requires RUNNER_ENABLED=false.");
 if (!env.RECOVERY_BUCKET || !env.ASSETS_BUCKET || env.DEPLOYMENT_ENV === "local") throw new Error("Recovery requires deployed environment and asset/recovery buckets.");
 const assetsBucket = env.ASSETS_BUCKET;
 const operation = process.argv[2];
-if (operation !== "backup" && operation !== "restore" && operation !== "verify") throw new Error("Usage: recovery.ts backup|restore|verify");
+if (operation !== "backup" && operation !== "restore" && operation !== "verify" && operation !== "inspect") throw new Error("Usage: recovery.ts backup|restore|verify|inspect|capabilities");
 if (operation === "restore" && (!process.env.BACKUP_ID || process.env.CONFIRM_DATABASE !== env.MONGODB_DATABASE)) throw new Error("Restore requires BACKUP_ID and exact CONFIRM_DATABASE.");
-if (operation === "verify" && (!process.env.BACKUP_ID || !process.env.RELEASE_IMAGE_DIGEST)) throw new Error("Verification requires exact BACKUP_ID and selected RELEASE_IMAGE_DIGEST.");
+if ((operation === "verify" || operation === "inspect") && (!process.env.BACKUP_ID || !process.env.RELEASE_IMAGE_DIGEST)) throw new Error("Verification requires exact BACKUP_ID and selected RELEASE_IMAGE_DIGEST.");
 const backupId = backupIdSchema.parse(process.env.BACKUP_ID || `${env.DEPLOYMENT_ENV}-${new Date().toISOString().replaceAll(/[:.]/g, "-")}-${randomUUID()}`);
 const key = `database/${backupId}.archive.gz`;
 const s3 = createObjectStoreClient(env);
-const storage = new RecoveryStorage(s3, env.RECOVERY_BUCKET);
-if (operation === "verify") {
+const storage = new RecoveryStorage(s3, env.RECOVERY_BUCKET, diagnostics);
+if (operation === "verify" || operation === "inspect") {
   // Verify the retained snapshot without opening MongoDB, writing temporary
   // files, reserving a snapshot, restoring data, or changing admission.
   try {
-    const manifest = await withOperationBudget(Date.now() + 1_800_000, () => storage.verifiedCompletedBackup(
+    const manifest = await withOperationBudget(Date.now() + 1_800_000, () => operation === "inspect" ? storage.inspectCompletedBackup(
+      backupId, env.MONGODB_DATABASE, env.DEPLOYMENT_ENV, process.env.RELEASE_IMAGE_DIGEST!,
+    ) : storage.verifiedCompletedBackup(
       backupId, env.MONGODB_DATABASE, env.DEPLOYMENT_ENV, process.env.RELEASE_IMAGE_DIGEST!,
     ));
-    console.log(JSON.stringify({ verified: true, backupId, database: manifest.database,
-      environment: manifest.environment, imageDigest: manifest.imageDigest, assetCount: manifest.assets.length }));
+    console.log(JSON.stringify(manifest ? { verified: true, backupId, database: manifest.database,
+      environment: manifest.environment, imageDigest: manifest.imageDigest, assetCount: manifest.assets.length } : { complete: false, backupId }));
   } finally { s3.destroy(); }
 } else {
 const database = getDatabase();
@@ -51,12 +61,15 @@ try {
   await writeFile(archive, "", { mode: 0o600, flag: "wx" });
   if (operation === "backup") {
     await storage.reserve(backupId);
-    await executeMongo("mongodump", [`--config=${configFile}`, `--db=${env.MONGODB_DATABASE}`, `--archive=${archive}`, "--gzip"]);
+    await diagnostics.measure({ phase: "database_dump", action: "phase", category: "archive" }, () => executeMongo("mongodump", [`--config=${configFile}`, `--db=${env.MONGODB_DATABASE}`, `--archive=${archive}`, "--gzip"]));
     const bytes = await readFile(archive);
     const sha256 = digest(bytes);
-    const collections = await database.database.listCollections({}, { nameOnly: true }).toArray();
-    const inventory = Object.fromEntries(await Promise.all(collections.map(async ({ name }) => [name, await database.database.collection(name).countDocuments()] as const)));
-    const documents = await database.collections.assets.find({}, { projection: { uri: 1 } }).toArray();
+    const { inventory, documents } = await diagnostics.measure({ phase: "inventory", action: "phase" }, async () => {
+      const collections = await database.database.listCollections({}, { nameOnly: true }).toArray();
+      const inventory = Object.fromEntries(await Promise.all(collections.map(async ({ name }) => [name, await database.database.collection(name).countDocuments()] as const)));
+      const documents = await database.collections.assets.find({}, { projection: { uri: 1 } }).toArray();
+      return { inventory, documents };
+    });
     const assetKeys = new Set(documents.map(({ uri }) => normalizeAssetUri(uri)));
     if (process.env.BACKUP_ALL_ASSETS === "true") {
       if (env.DEPLOYMENT_ENV !== "_staging" || env.ASSETS_BUCKET !== "kids-booklet-staging-assets") throw new Error("Full-bucket backup is limited to the approved staging target.");
@@ -68,13 +81,13 @@ try {
       } while (token);
     }
     const assets = [];
-    for (const uri of assetKeys) assets.push(await storage.snapshot(backupId, uri, assetsBucket));
+    for (const uri of assetKeys) assets.push(await storage.snapshot(backupId, uri, assetsBucket, assets.length + 1));
     const manifest = { schemaVersion: "1", backupId, database: env.MONGODB_DATABASE, environment: env.DEPLOYMENT_ENV, imageDigest: process.env.RELEASE_IMAGE_DIGEST ?? null, sha256, collections: inventory, assets };
     parseManifest(manifest, backupId, env.MONGODB_DATABASE, env.DEPLOYMENT_ENV);
     const manifestBytes = JSON.stringify(manifest);
-    await storage.writeVerified(key, bytes, "application/gzip");
-    await storage.writeVerified(`database/${backupId}.manifest.json`, manifestBytes, "application/json");
-    await storage.writeVerified(`database/${backupId}.complete`, digest(manifestBytes), "text/plain");
+    await storage.writeVerified(key, bytes, "application/gzip", { phase: "archive_upload", category: "archive" });
+    await storage.writeVerified(`database/${backupId}.manifest.json`, manifestBytes, "application/json", { phase: "manifest", category: "manifest" });
+    await storage.writeVerified(`database/${backupId}.complete`, digest(manifestBytes), "text/plain", { phase: "completion_marker", category: "completion_marker" });
     console.log(JSON.stringify({ backupId, key, bytes: bytes.length, sha256, database: env.MONGODB_DATABASE, collections: inventory, assetCount: assets.length }));
   } else {
     const rawManifest = (await storage.read(`database/${backupId}.manifest.json`)).bytes;
