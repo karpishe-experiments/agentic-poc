@@ -789,17 +789,60 @@ recovery_response_diagnostic() {
   jq -nc --arg phase "$phase" --argjson stdoutBytes "$stdout_bytes" --argjson stderrBytes "$stderr_bytes" --argjson shape "$shape" \
     '{environment:"_staging",diagnostic:"recovery_response",phase:$phase,code:"invalid_recovery_response",stdoutBytes:$stdoutBytes,stderrBytes:$stderrBytes,shape:$shape}' || true
 }
+recovery_normalize_response() {
+  # Instrumented accounting can put JSON diagnostics in the receipt stream.
+  # Accept only their complete known shapes; never drop arbitrary log records.
+  jq -ces --arg run "$2" --arg operation "$3" '
+    def count: type=="number" and .>=0 and floor==.;
+    def duration: .==null or count;
+    def read_diagnostic:
+      if type!="object" then false
+      elif .diagnostic=="recovery_read" then
+        keys==["diagnostic","elapsedMs","operation","remainingBudgetMs","returnedBytes","returnedRows"] and
+        (.operation|IN("target_state","campaign_reservations","target_materialization","current_sources")) and
+        (.elapsedMs|count) and (.remainingBudgetMs|duration) and (.returnedBytes|count) and (.returnedRows|count)
+      elif .diagnostic=="deployment_read" then
+        keys==["diagnostic","elapsedMs","operation","outcome","phase","remainingBudgetMs","returnedRows"] and
+        .outcome=="completed" and
+        ([.phase,.operation]|IN(["connection","ping"],["structure","collections_and_indexes"],["admission","deployment_control"],["cleanup","database_close"])) and
+        (.elapsedMs|count) and (.remainingBudgetMs|duration) and (.returnedRows|count)
+      elif .event=="booklet_callback_phase" then
+        ((keys-["event","timestamp","runId","operationId","phase","elapsedMs","outcome","budgetAtStartMs","remainingBudgetMs","queryCount","storageCallCount","transactionAttempts","readRows","readJsonBytes"])|length)==0 and
+        (["event","timestamp","runId","phase","elapsedMs","outcome","budgetAtStartMs","remainingBudgetMs","queryCount","storageCallCount","transactionAttempts"]-keys|length)==0 and
+        .runId==$run and ((has("operationId")|not) or .operationId==$operation) and .outcome=="succeeded" and
+        (.timestamp|type=="string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$")) and
+        (.phase|IN("accounting_campaign_read","accounting_campaign_operations_read","accounting_failed_proofs_read","accounting_failure_sources_read","accounting_run_operations_read","accounting_operation_validation","generation_accounting","evaluation_operations_read","source_verification")) and
+        (.elapsedMs|count) and (.budgetAtStartMs|duration) and (.remainingBudgetMs|duration) and
+        (.queryCount|count) and (.storageCallCount|count) and (.transactionAttempts|count) and
+        ((has("readRows")|not) or (.readRows|count)) and ((has("readJsonBytes")|not) or (.readJsonBytes|duration))
+      else false end;
+    [ .[] | select(read_diagnostic|not) ] as $receipts |
+    if ($receipts|length)==1 and ($receipts[0]|type)=="object" and
+      $receipts[0].verified==true and ($receipts[0]|has("diagnostic") or has("event")|not)
+    then $receipts[0] else error("invalid recovery response") end
+  ' "$1"
+}
 recovery_app_json() {
   local release="$1" evidence="$2" phase="$3" output="$4"; shift 4
+  local response_run="$RUN_ID" response_operation="$OPERATION_ID" index
+  local -a response_args=("$@")
+  # Normal deployment supplies the saved handoff target through command arguments.
+  for ((index=0; index<${#response_args[@]}; index++)); do
+    case "${response_args[$index]}" in
+      --run-id) response_run="${response_args[$((index+1))]:-}";;
+      --operation-id) response_operation="${response_args[$((index+1))]:-}";;
+    esac
+  done
   if ! recovery_oneoff "$release" "$evidence" "$phase" "$@" > "$output" 2> "$output.stderr"; then
     # Never print arbitrary provider errors or private maintenance logs.
     jq -Rc 'fromjson? | select(type=="object") | {environment:"_staging",verified,phase,stage,outcome,code:(if (.code|type)=="string" and (.code|test("^[a-z0-9_]{1,80}$")) then .code else null end),blockers,inspectionError,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,observedCount,blockerIds}' "$output" || true
     die "Recovery $phase failed; inspect private evidence; no automatic replay"
   fi
-  if ! jq -se 'length==1 and (.[0]|type=="object") and (.[0].verified==true)' "$output" >/dev/null 2>&1; then
+  if ! recovery_normalize_response "$output" "$response_run" "$response_operation" > "$output.receipt" 2>/dev/null; then
     recovery_response_diagnostic "$phase" "$output" || true
     die 'Recovery result is missing or malformed'
   fi
+  mv "$output.receipt" "$output"
 }
 recovery_finish_candidate() {
   local current="$1" candidate="$2" evidence="$3" journal="$4" app_digest="$5"
