@@ -4,6 +4,20 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Test repair delivery from the retained failure
+
+The M4 semantic-decision repair passed the full Creator continuation fixture,
+reviews and CI. Normal staging deployment still stopped during draining because
+the serving release retained the very started tester operation that the new
+release was meant to close. Read-only journal and blocker inspection proved this
+ordering conflict; it was not an observer timeout alone. Test the complete
+serving-release, exact recovery, deployment and continuation boundary. Keep
+unknown operations and unrelated owners as drain blockers. Reuse the protected
+recovery interface for a separately authorized exact closure rather than adding
+a general drain exception. The [M4 checkpoint](M4-balanced.md#decision-repair-delivery-checkpoint--2026-10-26)
+records the observed failure and the still-proposed correction. Promotion
+candidate: **Documentation** for repair delivery and acceptance fixtures.
+
 ### Offer only actions that remain eligible
 
 The M4 reviewer received saved revision counts but its schema still offered an

@@ -5,6 +5,49 @@
 
 ## Current Creator admission checkpoint
 
+### Decision-repair delivery checkpoint — 2026-10-26
+
+Source PR #289 (`63c2d18dd178020da0b7ec7ea583236129354133`) and staging PR
+#290 (`0d15dcadc818f15768f5fd49af65c34a39ab4a95`) passed two independent
+reviews and CI runs `40303512401` and `40304037377`. They merged as
+`9e1879dd0680fbf5edd9365708d77d88a9f79b52` and staging
+`0a8f9146f72c3cd76bee2b2365743274c9d55a43`. These results prove reviewed
+implementation and validation, not installation or live recovery.
+
+Deployment `40304474072-1` pulled candidate image
+`sha256:4e52abedfe0cb1b3ecb89564f07a711cbf12c498e136d42e6cd04e6e3bfc218e`
+but stopped during draining, before backup or application replacement. The client
+first expired while the host was active; subsequent journal workflow
+`40305884598` established a failed host service and interrupted deployment.
+No second deployment was issued. Read-only blocker inspection `40306241650`
+then found exactly one unresolved run and operation: Creator and tester operation
+`2380f45a-5d66-482c-a6d2-7fed96f48466`. The operation remains `started`, has no
+claims, result or materialization, and has no saved recovery. Admission is open,
+not draining, with zero active/interrupted mutations or mutation owners. A compact
+read confirmed Creator remains blocked at revision 657. The new release is not
+installed; no fresh reviewer was dispatched.
+
+The normal drain correctly rejects the retained operation. The implemented
+normal-control closure requires the new release, so delivery cannot use that
+closure to make the old release quiet. Existing candidate recovery permits
+J11/J12 completion and exact pre-generation failures; it does not authorize this
+semantic rejection. The local continuation fixture did not exercise this
+old-release-to-new-release drain boundary.
+
+Proposed bounded follow-up, pending approval of the changed live order: extend
+the existing candidate recovery contract for this exact marked tester decision.
+Preview must authenticate the original successful response, exhausted saved
+allowance, unchanged target, original assets, no global output or claims, and
+cumulative accounting. Apply must recheck the proof under closed admission and
+transaction ownership, save only semantic-rejection provenance and failure
+closure, and leave Creator paused and the campaign stopped. Preserve all request,
+response, revision, asset and charge evidence. Repeated verification must issue
+no provider request. Test the complete retained-state recovery, normal deployment
+drain/readiness and subsequent single continuation, including rollback and lost
+acknowledgement. Do not weaken the drain, replay deployment, edit shared records
+directly, or treat the failed deployment as an M4 exit. No credential-inventory
+change is proposed.
+
 ### Current decision-eligibility blocker — 2026-10-26
 
 Read-only application inspection found revision 657, `definite_failure`, active
