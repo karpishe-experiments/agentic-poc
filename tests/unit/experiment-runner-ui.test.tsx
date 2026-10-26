@@ -18,6 +18,27 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("shows zero spare image calls and historical stop details without disabling execution", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, activeOperationId: null,
+      failureDiagnostics: { version: "failure_diagnostics_v1", runRevision: 1, timestampMs: 1, phase: "page_assembly",
+        operationId: null, reason: "invalid_assets", errorCategory: "validation", elapsedMs: 1, remainingBudgetMs: null },
+      imageCapacity: { status: "available", remainingImageCalls: 7, requiredNewImages: 7, savedDraftsAwaitingApproval: 1, spareImageCalls: 0 },
+    }] }), { status: 200 }));
+    render(<BookletRunner />);
+    expect(await screen.findByText(/Previous stop: Saved image evidence/)).toBeTruthy();
+    expect(screen.getByText(/No spare image calls remain/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+  it("keeps an earlier diagnostic historical when a newer block has no reason details", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "blocked", revision: 4,
+      failureDiagnostics: { version: "failure_diagnostics_v1", runRevision: 1, timestampMs: 1, phase: "page_assembly",
+        operationId: null, reason: "invalid_assets", errorCategory: "validation", elapsedMs: 1, remainingBudgetMs: null },
+    }] }), { status: 200 }));
+    render(<BookletRunner />);
+    expect(await screen.findByText(/Previous stop: Saved image evidence/)).toBeTruthy();
+    expect(screen.getByText("Reason details unavailable.")).toBeTruthy();
+    expect(screen.queryByText(/Stopped reason:/)).toBeNull();
+  });
   it("shows saved context warnings without treating estimates as provider counts or disabling controls", async () => {
     const diagnostics = { version: "context_diagnostics_v1", projectionVersion: "role_v1", requestDigest: "a".repeat(64),
       contextBytes: 82000, systemPromptBytes: 1200, schemaBytes: 400, requestBytes: 85000,

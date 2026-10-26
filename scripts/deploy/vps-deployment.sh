@@ -169,7 +169,7 @@ validate_arguments() {
     [[ "$ENVIRONMENT" == staging && -n "$REQUEST_ID" && -n "$COMMIT" && -n "$IMAGE_DIGEST" ]] || die 'Recovery requires staging, new request ID and pinned commit/image'
     [[ "$APPLY" == false || ( "$CONFIRMATION" == kids_booklet && "$PREVIEW_DIGEST" =~ ^[a-f0-9]{64}$ ) ]] || die 'Recovery apply requires confirmation and preview digest'
     if [[ "$ACTION" == candidate-reconcile && "$INSPECTION_ONLY" == false ]]; then
-      [[ -n "$RUN_ID" && "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ && "$EXPECTED_REVISION" =~ ^[0-9]{1,10}$ && ( -z "$ORIGINAL_REQUEST_ID" || "$RELEASE_EXPIRED_CLAIM" == true ) ]] || die 'Candidate recovery requires exact run, operation and revision'
+      [[ -n "$RUN_ID" && "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ && "$EXPECTED_REVISION" =~ ^[0-9]{1,10}$ && ( -z "$ORIGINAL_REQUEST_ID" || ( "$ORIGINAL_REQUEST_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ && "$ORIGINAL_REQUEST_ID" != "$REQUEST_ID" ) ) ]] || die 'Candidate recovery requires exact run, operation and revision'
     elif [[ "$ACTION" == expired-deployment-recover ]]; then
       [[ "$ORIGINAL_REQUEST_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ && "$ORIGINAL_REQUEST_ID" != "$REQUEST_ID" && -z "$RUN_ID$OPERATION_ID$EXPECTED_REVISION" ]] || die 'Expired recovery requires a distinct original request ID'
     fi
@@ -572,6 +572,28 @@ recovery_no_containers() {
 recovery_host_fingerprint() {
   sha256sum "$1/manifest.sha256" "$SECRETS/staging/secrets.json" "$CONFIG_FILE" | sha256sum | awk '{print $1}'
 }
+recovery_prebackup_deployment_hash() {
+  local current="$1" file="$STATE/operation.json"
+  [[ -n "$ORIGINAL_REQUEST_ID" && "$ORIGINAL_REQUEST_ID" != "$REQUEST_ID" ]] || die 'Exact pre-backup deployment is required'
+  [[ -e "$file" ]] || file="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+  [[ -f "$file" && ! -L "$file" ]] || die 'Original pre-backup journal is missing'
+  jq -e --arg id "$ORIGINAL_REQUEST_ID" --arg prior "$current" '
+    .requestId==$id and .action=="deploy" and .environment=="staging" and .step=="draining" and
+    .priorRelease==$prior and (.backupId // "")=="" and ((.backupHistory // [])|length)==0' "$file" >/dev/null || die 'Original deployment advanced beyond the supported pre-backup boundary'
+  [[ "$(timeout 10s systemctl show "kids-booklet-operation-$ORIGINAL_REQUEST_ID.service" --property=ActiveState --value)" =~ ^(inactive|failed)$ ]] || die 'Original deployment remains active or unknown'
+  recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original deployment still owns containers'
+  sha256sum "$file" | awk '{print $1}'
+}
+recovery_archive_prebackup_deployment() {
+  local current="$1" expected="$2" archive="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+  [[ "$(recovery_prebackup_deployment_hash "$current")" == "$expected" ]] || die 'Original pre-backup deployment changed'
+  if [[ -e "$STATE/operation.json" ]]; then
+    cp --no-clobber "$STATE/operation.json" "$archive"
+    [[ -f "$archive" && ! -L "$archive" && "$(sha256sum "$archive" | awk '{print $1}')" == "$expected" ]] || die 'Original deployment archive differs'
+    cmp -s "$STATE/operation.json" "$archive" || die 'Original deployment changed during archival'
+    rm "$STATE/operation.json"
+  fi
+}
 expired_recovery_handoff_hash() {
   local current="$1" marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" original="$STATE/operation.json" id parent tree image
   [[ -e "$original" ]] || original="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
@@ -594,6 +616,9 @@ expired_recovery_handoff_hash() {
 recovery_verify_fingerprint() {
   local journal="$1" current="$2" supplied="$BACKUP_ID" fingerprint backup digest
   fingerprint="$(recovery_host_fingerprint "$current")" || die 'Recovery fingerprint inspection failed'
+  if [[ "$(jq -r .action "$journal")" == candidate-reconcile && -n "$ORIGINAL_REQUEST_ID" && "$RELEASE_EXPIRED_CLAIM" == false ]]; then
+    [[ "$(recovery_prebackup_deployment_hash "$current")" == "$(jq -er .originalJournalSha256 "$journal")" ]] || die 'Original deployment changed since preview'
+  fi
   if [[ "$(jq -r .action "$journal")" == expired-deployment-recover ]] && jq -e 'has("handoffSha256")' "$journal" >/dev/null; then
     local handoff_hash
     handoff_hash="$(expired_recovery_handoff_hash "$current")" || die 'Recovery handoff inspection failed'
@@ -1026,7 +1051,12 @@ supported_recovery_host() (
   cp "$current/compose.yml" "$current/environment.yml" "$current/runtime.env" "$candidate/"
   if [[ "$ACTION" == candidate-reconcile ]]; then
     if [[ "$INSPECTION_ONLY" == false ]]; then
-      [[ ! -e "$STATE/operation.json" && ! -e "$STATE/recovery-handoff-staging.json" ]] || die 'Unresolved host operation or recovery handoff exists'
+      [[ ! -e "$STATE/recovery-handoff-staging.json" ]] || die 'Unresolved recovery handoff exists'
+      if [[ -n "$ORIGINAL_REQUEST_ID" ]]; then
+        old_hash="$(recovery_prebackup_deployment_hash "$current")" || die 'Original pre-backup deployment is unverified'
+      else
+        [[ ! -e "$STATE/operation.json" ]] || die 'Unresolved host operation exists'
+      fi
       verify_drain_support "$current"
     fi
     [[ "$IMAGE_DIGEST" == "$(jq -er .image "$CONFIG_FILE")"@sha256:* ]] || die 'Candidate image repository differs'
@@ -1049,6 +1079,9 @@ supported_recovery_host() (
     recovery_app_json "$candidate" '' preview "$TEMP_DIR/preview.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION"
     app_digest="$(jq -er .previewDigest "$TEMP_DIR/preview.json")"
     [[ "$app_digest" =~ ^[a-f0-9]{64}$ ]] || die 'Application preview digest missing'
+    if [[ -n "$ORIGINAL_REQUEST_ID" ]]; then
+      jq -e '.scope=="decision-rejection-target-v1" and .providerPosts==0' "$TEMP_DIR/preview.json" >/dev/null || die 'Pre-backup deployment requires exact decision-rejection recovery'
+    fi
   else
     [[ "$current" == "$STATE/releases/staging/$COMMIT" && "$image" == "$IMAGE_DIGEST" ]] || die 'Prior release identity differs'
     [[ -f "$STATE/operation.json" ]] || die 'Original failed journal missing'
@@ -1083,6 +1116,11 @@ supported_recovery_host() (
   jq -n --arg requestId "$REQUEST_ID" --arg action "$ACTION" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg prior "$current" --arg run "$RUN_ID" --arg operation "$OPERATION_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg backup "$BACKUP_ID" --arg digest "$digest" --arg appDigest "$app_digest" --arg oldHash "$old_hash" --arg revision "$EXPECTED_REVISION" --arg tree "$source_tree" --arg priorImage "$image" --arg fingerprint "$host_fingerprint" --arg previewBackup "$BACKUP_ID" --arg handoff "$handoff_hash" --argjson compatibility "$compatibility_proof" --argjson target "$target_digest" \
     '{requestId:$requestId,action:$action,environment:"staging",phase:"prepared",commit:$commit,image:$image,priorRelease:$prior,runId:$run,operationId:$operation,originalRequestId:$original,backupId:$backup,previewDigest:$digest,appPreviewDigest:$appDigest,originalJournalSha256:$oldHash,expectedRevision:$revision,sourceTree:$tree,priorImage:$priorImage,hostFingerprint:$fingerprint,previewBackupId:$previewBackup} + (if $action=="expired-deployment-recover" then {handoffSha256:$handoff,compatibilityProof:$compatibility,targetDigest:$target} else {} end)' > "$journal"
   cp "$TEMP_DIR/"*.json "$evidence/"
+  if [[ "$ACTION" == candidate-reconcile && -n "$ORIGINAL_REQUEST_ID" ]]; then
+    # Archive only a proven stopped pre-backup request. Its exact bytes remain
+    # pinned in this recovery journal; never alter its phase or replay it.
+    recovery_archive_prebackup_deployment "$current" "$old_hash"
+  fi
   # An uncertain admission reopen must be closed again. Cleanup has its own
   # bounded budget; it cannot continue business recovery or alter old journals.
   recovery_install_fail_closed_trap "$current" "$evidence"
@@ -3427,7 +3465,7 @@ build_secret_override() {
       jq 'with_entries(select(.key|startswith("DIFY_BOOKLET_")|not))' "$secret_input" > "$TEMP_DIR/legacy-secret-input.json"
       secret_input="$TEMP_DIR/legacy-secret-input.json"
     fi
-    jq -e 'type=="object" and ["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_WORKFLOW_API_KEY","DIFY_COMMUNITY_CALLBACK_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_PROBE_ENABLED")|not) or (.DIFY_COMMUNITY_PROBE_ENABLED == "true" or .DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((has("DIFY_COMMUNITY_BASE_URL")|not) or .DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((has("DIFY_COMMUNITY_WORKFLOW_API_KEY")|not) or (.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_CALLBACK_KEY")|not) or (.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and ((.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (has("DIFY_COMMUNITY_BASE_URL") and has("DIFY_COMMUNITY_WORKFLOW_API_KEY") and has("DIFY_COMMUNITY_CALLBACK_KEY")))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
+    jq -e 'type=="object" and (["OPENAI_API_KEY","MONGODB_URI","ACCESS_GATE_PASSWORD","AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"] as $required | ["DIFY_API_KEY","DIFY_TOOL_KEY","DIFY_IMAGE_OPENAI_API_KEY","DIFY_COMMUNITY_PROBE_ENABLED","DIFY_COMMUNITY_BASE_URL","DIFY_COMMUNITY_WORKFLOW_API_KEY","DIFY_COMMUNITY_CALLBACK_KEY"] as $optional | (($required - keys)|length==0) and ((keys - ($required + $optional))|length==0) and (.OPENAI_API_KEY|length>0) and (.MONGODB_URI|test("^mongodb(\\+srv)?://")) and (.ACCESS_GATE_PASSWORD|length>=16) and (.AWS_ACCESS_KEY_ID|test("^[A-Za-z0-9]{32}$")) and (.AWS_SECRET_ACCESS_KEY|test("^[A-Fa-f0-9]{64}$")) and ((has("DIFY_API_KEY")|not) or (.DIFY_API_KEY|type=="string" and length>0)) and ((has("DIFY_TOOL_KEY")|not) or (.DIFY_TOOL_KEY|type=="string" and utf8bytelength>=32)) and ((has("DIFY_IMAGE_OPENAI_API_KEY")|not) or (.DIFY_IMAGE_OPENAI_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_PROBE_ENABLED")|not) or (.DIFY_COMMUNITY_PROBE_ENABLED == "true" or .DIFY_COMMUNITY_PROBE_ENABLED == "false")) and ((has("DIFY_COMMUNITY_BASE_URL")|not) or .DIFY_COMMUNITY_BASE_URL == "https://dify.uniwares.co.uk") and ((has("DIFY_COMMUNITY_WORKFLOW_API_KEY")|not) or (.DIFY_COMMUNITY_WORKFLOW_API_KEY|type=="string" and length>0)) and ((has("DIFY_COMMUNITY_CALLBACK_KEY")|not) or (.DIFY_COMMUNITY_CALLBACK_KEY|type=="string" and utf8bytelength>=32)) and ((.DIFY_COMMUNITY_PROBE_ENABLED // "false") != "true" or (has("DIFY_COMMUNITY_BASE_URL") and has("DIFY_COMMUNITY_WORKFLOW_API_KEY") and has("DIFY_COMMUNITY_CALLBACK_KEY"))))' "$secret_input" >/dev/null || die 'Secret input file does not satisfy the application secret contract'
     [[ -z "$runner_input" ]] || secret_input="$runner_input"
     jq '{services:{app:{environment:(with_entries(.value |= gsub("\\$";"$$")))}}}' "$secret_input" > "$destination"
     if [[ -n "${GENERATED_MONGODB_URI[$environment]:-}" ]]; then jq --arg value "${GENERATED_MONGODB_URI[$environment]}" '.services.app.environment.MONGODB_URI=$value' "$destination" > "$TEMP_DIR/next.json"; mv "$TEMP_DIR/next.json" "$destination"; fi

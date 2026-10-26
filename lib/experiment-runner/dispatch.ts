@@ -42,6 +42,7 @@ import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-ou
 import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, OperationBudgetExpired, operationSignal, operationBudgetRemainingMs, remainingOperationMs, withOperationBudget, withCleanupBudget } from "@/lib/operations/budget";
 import { CompletionReconciliationError, safeFailure } from "@/lib/operations/completion-failure";
 import { cancelOwnedControllers, withOwnedController } from "@/lib/operations/controllers";
+import { buildFailureDiagnostics } from "@/lib/experiment-runner/failure-diagnostics";
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
@@ -88,6 +89,11 @@ export function createExperimentDispatcher(deps: {
   const batches = () => createExperimentPageBatchRepository({ database: deps.database, store: store(), now });
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
     operation.role, operation.taskId as SpecialistTask | null, run.persona);
+  const assemblyFailures = new WeakMap<object, { startedAt: number; operationId: string }>();
+  const assemblyDiagnostic = (error: unknown) => {
+    const origin = error && typeof error === "object" ? assemblyFailures.get(error) : undefined;
+    return origin ? buildFailureDiagnostics(error, { ...origin, phase: "page_assembly", timestampMs: now() }) : undefined;
+  };
 
   async function retrieveOperation(run: ExperimentRunDocument, operation: ExperimentOperationDocument) {
     return measurePhase({ runId: run._id, operationId: operation._id }, "publication_readback", () =>
@@ -95,6 +101,8 @@ export function createExperimentDispatcher(deps: {
   }
 
   async function assemblePage(runId: string, pageId: string, imageOperationId: string) {
+    const startedAt = performance.now();
+    try {
     // An assembly is immutable and unique to this provider operation. Current
     // approval and final acceptance still verify its sources and original bytes.
     const saved = await deps.database.collections.artifact_versions.findOne({ sourceOperationId: imageOperationId, createdBy: "application" });
@@ -105,6 +113,10 @@ export function createExperimentDispatcher(deps: {
     await measurePhase({ runId, operationId: imageOperationId }, "delegated_approval", () =>
       approveAssembledDelegation(deps.database, runId, assembled.version._id, now(), store));
     return assembled;
+    } catch (error) {
+      if (error && typeof error === "object") assemblyFailures.set(error, { startedAt, operationId: imageOperationId });
+      throw error;
+    }
   }
 
   const prepareOperation = (input: { runId: string; operationId: string } & Record<string, unknown>) =>
@@ -484,10 +496,10 @@ export function createExperimentDispatcher(deps: {
         (JSON.parse(saved.resultJson ?? "null") as { kind?: string } | null)?.kind !== "clarification") {
       try {
         await assemblePage(run._id, saved.subjectId, saved._id);
-      } catch {
+      } catch (error) {
         // The provider result is known and retained. A materialization failure
         // is not permission to create a new manager/image operation.
-        await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
+        await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now(), failureDiagnostics: assemblyDiagnostic(error) });
         return;
       }
     }
@@ -535,14 +547,16 @@ export function createExperimentDispatcher(deps: {
       if (!run.activeOperationId && run.status !== "blocked") {
         const last = await repository.latestOperation(runId);
         if (last?.role === "image" && last.taskId === "J13" && last.state === "succeeded" && last.verifiedWorkflowId && last.imageCompletionDigest) {
+          const startedAt = performance.now();
           try {
             await assemblePage(runId, last.subjectId, last._id);
             for (const batch of await batches().listActive(runId)) {
               if (batch.items.some((item) => item.operationId === last._id)) await batches().reconcile({ runId, jobId: batch.jobId });
             }
             run = (await repository.getRun(runId))!;
-          } catch {
-            await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+          } catch (error) {
+            await repository.blockRun({ runId, category: "definite_failure", nowMs: now(),
+              failureDiagnostics: buildFailureDiagnostics(error, { phase: "page_assembly", operationId: last._id, startedAt, timestampMs: now() }) });
             return "blocked";
           }
         }
@@ -609,6 +623,8 @@ export function createExperimentDispatcher(deps: {
         let evaluationRole: "tester" | "judge" | null = null;
         if (view.nextNarrativeTask === "slice_complete") {
           if (!savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).some((binding) => binding.role === "judge")) return "boundary";
+          const startedAt = performance.now();
+          let phase: "generation_verification" | "evaluation_completion" = "generation_verification";
           try {
             const completion = createExperimentCompletionService(deps.database, store());
             run = await completion.markGenerationComplete({ runId, expectedRevision: run.revision, nowMs: now() });
@@ -616,12 +632,14 @@ export function createExperimentDispatcher(deps: {
             evaluationRole = !reports.some((item) => item.report.role === "tester" && item.matchesCurrentVersions) ? "tester" :
               !reports.some((item) => item.report.role === "judge" && item.matchesCurrentVersions) ? "judge" : null;
             if (!evaluationRole) {
+              phase = "evaluation_completion";
               await completion.completeEvaluation({ runId, expectedRevision: run.revision, nowMs: now() });
               return "boundary";
             }
           } catch (error) {
             if (error instanceof ExperimentRepositoryError && error.code === "stale_revision") return "waiting";
-            await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+            await repository.blockRun({ runId, category: "definite_failure", nowMs: now(),
+              failureDiagnostics: buildFailureDiagnostics(error, { phase, operationId: latest?._id, startedAt, timestampMs: now() }) });
             return "blocked";
           }
         }
@@ -638,7 +656,7 @@ export function createExperimentDispatcher(deps: {
             // Concurrent admission and Pause are re-observed rather than retried.
             const current = await repository.getRun(runId);
             if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
-            await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
+            await repository.blockRun({ runId, category: "definite_failure", nowMs: now(), failureDiagnostics: assemblyDiagnostic(error) });
             return "blocked";
           }
         } else {

@@ -15,6 +15,7 @@ import { validateExperimentImage } from "@/lib/experiment-runner/image-validatio
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { verificationMetadata } from "@/db/experiment-verification-metadata";
+import type { FailureReason } from "@/lib/contracts/experiment-failure";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, pageId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -32,8 +33,8 @@ const managerDelegateSchema = z.strictObject({ kind: z.literal("delegate"), payl
   subjectKind: z.literal("page"), subjectId: opaqueIdSchema }) });
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
   ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => left.localeCompare(right))) : item);
-function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
-function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
+function invalid(message: string, reason?: FailureReason): never { throw new ExperimentRepositoryError("invalid_state", message, reason); }
+function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message, "invalid_dependencies"); }
 function json(raw: string | null | undefined, message: string): unknown {
   try { return JSON.parse(raw ?? ""); } catch { return invalid(message); }
 }
@@ -101,7 +102,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
       canonical(operation.dependencyVersionIds) !== canonical(sources.request.request.sourceVersionIds)) conflict("Page illustration operation request or sources differ from current approved evidence.");
     const acknowledgements = acknowledgementSchema.parse(json(operation.referenceUploadsJson, "Saved page reference uploads are malformed."));
     const asset = snapshot ? snapshot.assets.find((item) => item._id === operation._id) : await database.collections.assets.findOne({ _id: operation._id, bookletId: run.bookletId }, options);
-    if (!asset || asset.kind !== "page_source" || !asset.metadataJson || asset.width === null || asset.height === null) invalid("Saved page illustration asset is missing.");
+    if (!asset || asset.kind !== "page_source" || !asset.metadataJson || asset.width === null || asset.height === null) invalid("Saved page illustration asset is missing.", "invalid_assets");
     const metadata = assetMetadataSchema.parse(json(asset.metadataJson, "Saved page illustration metadata is malformed."));
     const decodedOutput = await decodedOutputEvidence(asset.uri, { sha256: metadata.sha256, byteLength: metadata.byteLength,
       width: asset.width, height: asset.height });
@@ -173,18 +174,18 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
       const decoded = await validateExperimentImage(bytes);
       if (decoded.byteLength !== expected.byteLength || decoded.sha256 !== expected.sha256 || decoded.width !== expected.width ||
         decoded.height !== expected.height || createHash("sha256").update(bytes).digest("hex") !== expected.sha256) {
-        invalid("Saved page illustration bytes are corrupt.");
+        invalid("Saved page illustration bytes are corrupt.", "invalid_assets");
       }
       return { output: { mimeType: decoded.mimeType, sha256: decoded.sha256, byteLength: decoded.byteLength, width: decoded.width, height: decoded.height } };
     } catch (error) {
       if (error instanceof ExperimentRepositoryError) throw error;
-      invalid("Page illustration storage verification failed.");
+      invalid("Page illustration storage verification failed.", "invalid_assets");
     }
   }
 
   async function verifyBytes(evidence: { uri: string; output: z.infer<typeof outputSchema> }) {
     const decoded = await decodedOutputEvidence(evidence.uri, evidence.output);
-    if (decoded.output.mimeType !== evidence.output.mimeType) invalid("Saved page illustration MIME evidence is inconsistent.");
+    if (decoded.output.mimeType !== evidence.output.mimeType) invalid("Saved page illustration MIME evidence is inconsistent.", "invalid_assets");
   }
 
   async function verifyVersion(identity: { runId: string; versionId: string }, session: ClientSession, attempt?: VerificationAttempt) {

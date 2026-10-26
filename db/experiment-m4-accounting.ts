@@ -15,16 +15,33 @@ import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-lega
 import { countVerificationQuery, measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
 import { isM4ContinuedReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
+import type { M4Authority } from "@/db/experiment-campaign";
+import { m4DecisionRecoveryGrant, m4DecisionRejectionFacts, verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
 
 function invalid(): never { throw new ExperimentRepositoryError("invalid_state", "Balanced completion requires complete attributable accounting."); }
 
 // Read-only exit evidence. Projection omits creative output and prepared context;
 // owning completion already checks those against original authenticated output.
-export async function verifyM4Accounting(database: Database, session: ClientSession, run: ExperimentRunDocument, reportOperationId?: string, attempt?: VerificationAttempt) {
+export async function verifyM4Accounting(database: Database, session: ClientSession, run: ExperimentRunDocument, reportOperationId?: string, attempt?: VerificationAttempt,
+  decisionRecovery?: { authority: M4Authority; operationId: string }) {
   if (!hasM4SimulatedImagePolicy(run) || !run.m4 || run.counters.payableImage !== 0) invalid();
   const { policy, hash } = m4PolicySnapshot(JSON.parse(run.m4.policyJson));
   const campaign = await readM4FailureCampaign(database, session, run.m4.campaignId, run._id, attempt);
-  if (!campaign || (campaign.state !== "active" && !(campaign.state === "stopped" && run.status === "completed" && run.evaluationStatus === "failed")) || campaign.policyHash !== hash || campaign.policyJson !== run.m4.policyJson ||
+  let recoveryOperation: string | undefined;
+  if (decisionRecovery) {
+    const op = await database.collections.experiment_operations.findOne({ _id: decisionRecovery.operationId, runId: run._id }, { session });
+    if (!m4DecisionRecoveryGrant(decisionRecovery.authority, run._id, decisionRecovery.operationId) || !op ||
+        !campaign || campaign.state !== "stopped" || campaign.grantReference !== decisionRecovery.authority.grant.reference ||
+        run.status !== "blocked" || run.safeFailure !== "definite_failure" || run.preparation || run.generationCompletedAtMs != null ||
+        op.m4Continuation || op.authorizationClaim || op.resultFinalizationClaim || op.imageCompletionClaim ||
+        op.resultJson !== null || op.resultDigest !== null || op.materializationJson !== null || op.lifecycle?.unresolved === true ||
+        !m4DecisionRejectionFacts(decisionRecovery.authority, run, op) ||
+        !(op.state === "started" && run.activeOperationId === op._id && !op.m4DecisionRejection ||
+          op.state === "failed" && run.activeOperationId === null && run.pauseRequested &&
+          await verifyM4DecisionRejection(database, session, decisionRecovery.authority, run, op))) invalid();
+    recoveryOperation = op._id;
+  }
+  if (!campaign || (campaign.state !== "active" && !recoveryOperation && !(campaign.state === "stopped" && run.status === "completed" && run.evaluationStatus === "failed")) || campaign.policyHash !== hash || campaign.policyJson !== run.m4.policyJson ||
       campaign.slots[run.persona] !== run._id || campaign.requests > policy.maxRequests || campaign.judgeRunIds.length > policy.maxJudges ||
       campaign.settledMicrodollars + campaign.reservedMicrodollars > policy.maxMicrodollars) invalid();
   const campaignOperations = await measurePhase({ runId: run._id }, "accounting_campaign_operations_read", async () => {
@@ -84,6 +101,12 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
           continue;
         }
         const provenance = failed?.m4Continuation;
+        if (failed && recoveryOperation && failed._id === recoveryOperation && failed.state === "failed" && !provenance &&
+            failed.lifecycle?.phase === "finished" && failed.lifecycle.attemptOutcome === "failed" && failed.lifecycle.unresolved === false &&
+            await verifyM4DecisionRejection(database, session, decisionRecovery!.authority, run, failed)) {
+          texts += failed.reservationCount;
+          continue;
+        }
         const unclaimedDigest = failed ? m4UnclaimedFailureDigest({ policy,
           grant: { campaignId: campaign._id, reference: campaign.grantReference } }, run, failed) : null;
         // A reviewer continuation remains attributable history after generation
@@ -103,7 +126,7 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
         continue;
       }
       if (operation.mode !== "balanced" || operation.reservationCount !== 1 || !operation.workflowRunId || !operation.verifiedWorkflowId ||
-          operation.state !== "succeeded" && !(operation._id === reportOperationId && ["tester", "judge"].includes(operation.role) && ["started", "unknown"].includes(operation.state))) invalid();
+          operation.state !== "succeeded" && !([reportOperationId, recoveryOperation].includes(operation._id) && ["tester", "judge"].includes(operation.role) && ["started", "unknown"].includes(operation.state))) invalid();
       if (operation.providerKind === "image") {
         if (operation.m4Reservation || operation.role !== "image") invalid();
         images++; continue;

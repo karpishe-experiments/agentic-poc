@@ -25,8 +25,10 @@ staging delivery and proof. Preserve the response, all charges and the same run.
 The [decision-repair delivery checkpoint](M4-balanced.md#decision-repair-delivery-checkpoint--2026-10-26)
 records a further verified boundary: the reviewed repair cannot deploy while its
 retained started operation blocks the old release's drain. No replacement was
-installed. An exact pre-deployment recovery extension is proposed, pending
-approval of that changed order; it must not bypass the drain or dispatch a model.
+installed. The user has authorized the exact pre-deployment recovery extension;
+local implementation and focused checks are recorded in M4. Review, CI,
+publication, installed capability and live recovery remain delivery gates. The
+extension must not bypass the drain or dispatch a model.
 The M4 record owns current usage and release evidence. No M5 execution, new image
 spending or reset is granted. Accepted latency and size warnings do not block M4;
 generation, ownership and accounting verification remain mandatory.

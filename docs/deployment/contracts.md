@@ -1,5 +1,10 @@
 # Deployment contracts and verification
 
+Secret-input validation must retain the original object while binding its required
+and optional key sets. The reviewed grouping correction changes no credential name,
+owner, storage, transfer, consumer or validation rule. It corrects evaluation order
+for valid existing inputs; live secret repair is not required by that correction.
+
 ## Shared infrastructure documentation boundary
 
 The private [Uniwares infrastructure repository](https://github.com/Uniwares-LTD/infrastructure/blob/main/README.md)
@@ -165,7 +170,7 @@ infer their presence from `.env.example`.
 | --- | --- | --- |
 | Manager application key: `DIFY_BOOKLET_BINDINGS_JSON[].apiKey`, role `manager` | Dify app API-key store; staging host override and private preparation copies below | Booklet submits the manager workflow and retrieves its existing run/result with Bearer authentication; the bounded-operation candidate also stops the exact persisted task using this same application key |
 | Twelve specialist application keys: same field, role `specialist`, `taskId` `J01` through `J12` | Same stores; one independent key per app | Execute/recover specialist workflows |
-| Three tester application keys: same field, role `tester`, personas `playful_kid`, `enthusiast_parent`, `professional_creator` | Same stores; one independent key per tester app | Execute/recover external creator-persona workflows |
+| Three tester application keys: same field, role `tester`, personas `playful_kid`, `enthusiast_parent`, `professional_creator` | Same stores; one independent key per tester app | Execute/recover external creator-persona workflows. The exact decision-rejection candidate conditionally uses the saved persona's existing key for authenticated read-only execution retrieval; provider start/stop are unavailable in recovery. Implementation does not establish live candidate use; no new storage, transfer copy or permission |
 | Image application key: same field, role `image` | Same stores | Execute/recover the generic image workflow, including J13 final-page illustrations; J13 has no separate specialist key |
 | Judge application key: same field, role `judge` | Same stores | Execute/recover independent advisory evaluation |
 | Shared callback/tool key: Booklet `DIFY_BOOKLET_TOOL_KEY`; Dify secret variable `BOOKLET_TOOL_KEY` | Staging host override; Dify workflow secret variables; private preparation copies | Dify sends `x-booklet-tool-key` to Booklet authorization, callback and image-transfer routes; independent of Cloud and diagnostic probe keys |

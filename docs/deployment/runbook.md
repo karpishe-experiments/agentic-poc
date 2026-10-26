@@ -1,5 +1,10 @@
 # VPS deployment runbook
 
+Flat secret-input validation evaluates required and allowed keys on the original
+object before serialization. A validator expression failure is a delivery error;
+it does not establish invalid credentials. Keep the existing secret rules and
+use fake-input shell checks before requesting an operator to re-enter values.
+
 Before planning shared-host changes, read the private
 [srv1 inventory](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/inventory/srv1.md)
 and [shared operations guidance](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).
@@ -106,6 +111,22 @@ exact request ID after interruption.
 Read-only `operation-status` runs independently of the same request's mutation
 queue. It reports the retained phase without stopping, replaying or acquiring the
 mutation lock. A phase is not proof that the application result committed.
+
+For an explicitly granted exhausted J13 tester decision, the candidate must
+advertise `granted-decision-rejection` and preview must return
+`decision-rejection-target-v1`. Use the existing candidate-reconcile flow with the
+exact run/operation/revision. When the failed deployment stopped in `draining`
+before any backup, pass that exact deployment as `original_request_id`. The host
+must prove a stopped process, no owned containers, unchanged serving release and
+unchanged journal bytes. Apply archives the original journal without changing its
+phase, then uses the normal protected close/stop/backup/reconcile sequence.
+Recovery leaves the run blocked and paused, its campaign stopped and all charges
+retained. It neither consumes continuation nor starts a reviewer. Repeat only
+verification after an uncertain acknowledgement. Deliver the exact recovered
+source tree normally, verify readiness, then use the separately authorized
+Continue control. A later deployment phase or unknown process is unsupported;
+do not bypass the drain or edit records directly. Matching installed host and
+candidate capabilities are required before this path is used.
 
 If candidate recovery stopped before committing business changes, use the same
 target and preview digest with `abort_recovery="true"` in the recovery JSON and
