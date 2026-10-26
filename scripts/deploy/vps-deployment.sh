@@ -18,7 +18,7 @@ RUN_ID=''
 OPERATION_ID='' EXPECTED_REVISION='' PREVIEW_DIGEST='' ORIGINAL_REQUEST_ID=''
 BACKUP_HELPER_IMAGE='' BACKUP_HELPER_COMMIT='' BACKUP_SUBJECT_IMAGE=''
 BACKUP_HELPER_RELEASE='' MAINTENANCE_DETACHED=false
-ABORT_RECOVERY=false RELEASE_EXPIRED_CLAIM=false
+ABORT_RECOVERY=false RELEASE_EXPIRED_CLAIM=false RETIRE_PREBACKUP_ONLY=false
 RECOVERY_ORIGINAL_EVIDENCE=''
 INSPECTION_ONLY=false RECOVERY_PAGE=0 RECOVERY_LIMIT=5
 COMPOSE_TIMEOUT_SECONDS=300
@@ -69,6 +69,7 @@ Options:
   --request-id ID                   identifies an operation; reused by resume/status
                                    required exact retained/completed ID for operation-status/operation-stop
   --release-expired-claim           linked recovery for an exact retained expired claim
+  --retire-prebackup-only           close the exact expired pre-backup staging attempt
   --abort-recovery                  apply: close and archive an unstarted repair
   --inspection-only --page N --limit N  read-only paginated candidate inspection
   --operation-id UUID --expected-revision N  exact candidate recovery target
@@ -98,6 +99,7 @@ parse_arguments() {
       --apply) APPLY=true; shift ;;
       --generate-password) GENERATE_PASSWORD=true; shift ;;
       --inspection-only) INSPECTION_ONLY=true; shift ;;
+      --retire-prebackup-only) RETIRE_PREBACKUP_ONLY=true; shift ;;
       --abort-recovery) ABORT_RECOVERY=true; shift ;;
       --release-expired-claim) RELEASE_EXPIRED_CLAIM=true; shift ;;
       --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--operation-id|--expected-revision|--preview-digest|--original-request-id|--backup-helper-image|--backup-helper-commit|--page|--limit|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
@@ -183,6 +185,7 @@ validate_arguments() {
   else
     [[ -z "$OPERATION_ID$EXPECTED_REVISION$PREVIEW_DIGEST$ORIGINAL_REQUEST_ID" ]] || die 'Recovery arguments require a recovery action'
   fi
+  [[ "$RETIRE_PREBACKUP_ONLY" == false || ( "$ACTION" == expired-deployment-recover && "$ENVIRONMENT" == staging && "$ORIGINAL_REQUEST_ID" == 40359148858-1 && "$REQUEST_ID" == m4-retire-prebackup-40359148858-v1 && -z "$BACKUP_HELPER_IMAGE$BACKUP_HELPER_COMMIT$BACKUP_ID" && "$ABORT_RECOVERY" == false && "$RELEASE_EXPIRED_CLAIM" == false && "$INSPECTION_ONLY" == false ) ]] || die 'Pre-backup retirement requires the exact isolated staging request'
   [[ "$RELEASE_EXPIRED_CLAIM" == false || ( "$ACTION" == candidate-reconcile && "$INSPECTION_ONLY" == false && "$ORIGINAL_REQUEST_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$ && "$ORIGINAL_REQUEST_ID" != "$REQUEST_ID" ) ]] || die 'Claim release requires a distinct original recovery request'
   [[ "$ABORT_RECOVERY" == false || ( "$ACTION" == candidate-reconcile && "$APPLY" == true && "$INSPECTION_ONLY" == false ) ]] || die 'Abort requires candidate recovery apply'
   [[ "$RECOVERY_PAGE" =~ ^[0-9]{1,5}$ && "$RECOVERY_LIMIT" =~ ^[0-9]{1,2}$ && "$RECOVERY_PAGE" -le 10000 && "$RECOVERY_LIMIT" -ge 1 && "$RECOVERY_LIMIT" -le 50 ]] || die 'Invalid recovery inspection page or limit'
@@ -267,6 +270,7 @@ host_call() {
   [[ -z "$BACKUP_HELPER_IMAGE" ]] || remote+=(--backup-helper-image "$BACKUP_HELPER_IMAGE" --backup-helper-commit "$BACKUP_HELPER_COMMIT")
   [[ "$ABORT_RECOVERY" == false ]] || remote+=(--abort-recovery)
   [[ "$RELEASE_EXPIRED_CLAIM" == false ]] || remote+=(--release-expired-claim)
+  [[ "$RETIRE_PREBACKUP_ONLY" == false ]] || remote+=(--retire-prebackup-only)
   if [[ "$INSPECTION_ONLY" == true ]]; then remote+=(--inspection-only --page "$RECOVERY_PAGE" --limit "$RECOVERY_LIMIT"); fi
   [[ "$APPLY" == false ]] || remote+=(--apply)
   printf -v remote_command ' %s' "${remote[@]}"
@@ -1202,10 +1206,82 @@ backup_deployment_recovery() {
   recovery_phase "$journal" complete
   recovery_result "$journal"
 }
+retire_prebackup_host() {
+  # Called only under the canonical operation lock; no application writes.
+  local current="$STATE/releases/staging/c26887c6d8b2186b42d0108168751f91d69126d6"
+  local original="$STATE/operation.json" archive="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+  local evidence="$STATE/recoveries/$REQUEST_ID" receipt="$STATE/recoveries/$REQUEST_ID/host.json"
+  local marker="$STATE/backup-helper-staging.json" digest old_hash fingerprint installed ids state now expires prior_image
+  local CONTROL_DEADLINE_SECONDS=$((SECONDS + 180)) MAINTENANCE_DETACHED=true
+  [[ "$COMMIT" == ffefe4c87685b7b0a5c0f6499547d1dc3d17506d && "$IMAGE_DIGEST" == ghcr.io/karpishe-experiments/agentic-poc@sha256:644e10d74a2c47e36da8c7550012cdb6481903231f0892c2dd856d8b97d20f00 ]] || die 'Retirement candidate identity differs'
+  if [[ -e "$receipt" ]]; then
+    [[ -f "$receipt" && ! -L "$receipt" ]] || die 'Closure receipt type differs'
+    jq -e --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" '
+      .requestId==$id and .originalRequestId==$original and .purpose=="prebackup-retirement-v1" and
+      .action=="expired-deployment-recover" and .environment=="staging" and .commit==$commit and .image==$image and
+      (.phase|IN("prepared","complete")) and
+      ([.originalJournalSha256,.previewDigest,.dispatcherSha256]|all(.[]; type=="string" and test("^[a-f0-9]{64}$"))) and
+      (.previewExpiresAtSeconds|type=="number" and .>0 and .==floor)
+    ' "$receipt" >/dev/null || die 'Closure receipt identity differs'
+    if [[ -f "$archive" && ! -L "$archive" ]]; then
+      [[ "$(sha256sum "$archive" | awk '{print $1}')" == "$(jq -er .originalJournalSha256 "$receipt")" ]] || die 'Archived deployment differs'
+      [[ ! -e "$original" ]] || ! jq -e --arg id "$ORIGINAL_REQUEST_ID" '.requestId==$id' "$original" >/dev/null || die 'Original deployment remains active'
+      [[ "$APPLY" == false || "$PREVIEW_DIGEST" == "$(jq -er .previewDigest "$receipt")" ]] || die 'Closure acknowledgement identity differs'
+      if [[ "$APPLY" == true && "$(jq -r .phase "$receipt")" == prepared ]]; then recovery_phase "$receipt" complete; fi
+      recovery_result "$receipt"; return 0
+    fi
+    [[ "$(jq -r .phase "$receipt")" == prepared ]] || die 'Completed closure archive is missing'
+  fi
+  [[ ! -e "$archive" ]] || die 'Deployment archive already exists without matching closure proof'
+  recovery_unresolved_guard "$REQUEST_ID"
+  [[ -f "$original" && ! -L "$original" && "$(stat -c %u "$original")" == 0 ]] || die 'Original deployment journal differs'
+  now="$(date +%s)"
+  jq -e --arg prior "$current" --argjson now "$now" '
+    .requestId=="40359148858-1" and .action=="deploy" and .environment=="staging" and .step=="draining" and
+    .backupId=="" and ((.backupHistory // [])|length)==0 and .priorRelease==$prior and
+    .commit=="ffefe4c87685b7b0a5c0f6499547d1dc3d17506d" and
+    .image=="ghcr.io/karpishe-experiments/agentic-poc@sha256:644e10d74a2c47e36da8c7550012cdb6481903231f0892c2dd856d8b97d20f00" and
+    .budgetDeadlineAtSeconds==1793034829 and .budgetDeadlineAtSeconds<$now and .stopRequestedAt==null
+  ' "$original" >/dev/null || die 'Exact expired pre-backup deployment proof differs'
+  [[ "$(< "$STATE/releases/staging/current")" == "$current" ]] || die 'Serving release changed'
+  private_temp
+  control_timeout 10 systemctl show "kids-booklet-operation-$ORIGINAL_REQUEST_ID.service" --property=ActiveState,MainPID,ControlPID,Job > "$TEMP_DIR/retire-unit"
+  grep -Eq '^ActiveState=(failed|inactive)$' "$TEMP_DIR/retire-unit" && grep -qx 'MainPID=0' "$TEMP_DIR/retire-unit" && grep -qx 'ControlPID=0' "$TEMP_DIR/retire-unit" && grep -Eq '^Job=(0)?$' "$TEMP_DIR/retire-unit" || die 'Original operation is active or uncertain'
+  state="$(control_timeout 10 systemctl list-units --all --plain --no-legend --state=activating,active,deactivating,reloading 'kids-booklet-operation-*.service')" || die 'Cannot inspect operation services'
+  [[ -z "$state" ]] || die 'An operation service is active'
+  recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original owned containers remain'
+  recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging --filter label=com.docker.compose.oneoff=True || die 'Maintenance containers remain'
+  ids="$(control_timeout 10 docker ps -q --filter label=com.docker.compose.project=kids-booklet-staging)" || die 'Cannot inspect prior service'
+  [[ -n "$ids" && "$ids" != *$'\n'* ]] || die 'Expected one prior staging service'
+  prior_image="$(control_timeout 10 docker inspect --format '{{.Config.Image}}' "$ids")" || die 'Prior service image inspection failed'
+  [[ "$prior_image" == ghcr.io/karpishe-experiments/agentic-poc@sha256:21737fcf0168b9b04ffead4b252124ed998213aab61e08e683cf33a896a33ffb ]] || die 'Prior service image differs'
+  [[ -f "$ROOT/vps-deployment.sh" && ! -L "$ROOT/vps-deployment.sh" && "$(stat -c %u "$ROOT/vps-deployment.sh")" == 0 ]] || die 'Installed dispatcher differs'
+  cmp -s "${BASH_SOURCE[0]}" "$ROOT/vps-deployment.sh" || die 'Executing dispatcher differs from installed source'
+  installed="$(sha256sum "$ROOT/vps-deployment.sh" | awk '{print $1}')"
+  old_hash="$(sha256sum "$original" | awk '{print $1}')"
+  backup_helper_for_deploy "$current"
+  recovery_oneoff "$BACKUP_HELPER_RELEASE" '' inspect-blockers --page 0 --limit 5 > "$TEMP_DIR/retire-inspection.json" 2> "$TEMP_DIR/retire-inspection.stderr" || die 'Read-only retirement inspection failed'
+  jq -e '.outcome=="clear" and .inspectionError==null and (.blockers|type=="array" and length==0) and .admission.maintenance==false and .admission.draining==false and .admission.activeMutations==0 and .admission.interruptedMutations==0 and .admission.mutationOwnerCount==0' "$TEMP_DIR/retire-inspection.json" >/dev/null || die 'Admission or ownership is not clear'
+  fingerprint="$(recovery_host_fingerprint "$current")"
+  expires=$(( (now / 600 + 1) * 600 ))
+  digest="$(printf '%s\n' "$REQUEST_ID" "$ORIGINAL_REQUEST_ID" "$old_hash" "$installed" "$fingerprint" "$(sha256sum "$marker" | awk '{print $1}')" "$expires" | sha256sum | awk '{print $1}')"
+  printf 'result: recovery preview request=%s action=expired-deployment-recover digest=%s expiresAtSeconds=%s\n' "$REQUEST_ID" "$digest" "$expires"
+  [[ "$APPLY" == true ]] || return 0
+  [[ "$PREVIEW_DIGEST" == "$digest" && "$(date +%s)" -lt "$expires" ]] || die 'Closure preview changed or expired; preview again'
+  [[ "$(sha256sum "$original" | awk '{print $1}')" == "$old_hash" ]] || die 'Deployment journal changed during inspection'
+  mkdir -p "$evidence"; chmod 700 "$evidence"
+  jq -n --arg request "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg digest "$digest" --arg hash "$old_hash" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" --arg installed "$installed" --argjson expires "$expires" '{requestId:$request,originalRequestId:$original,action:"expired-deployment-recover",purpose:"prebackup-retirement-v1",environment:"staging",phase:"prepared",commit:$commit,image:$image,previewDigest:$digest,originalJournalSha256:$hash,dispatcherSha256:$installed,previewExpiresAtSeconds:$expires}' > "$receipt.next"
+  mv "$receipt.next" "$receipt"
+  mv -T "$original" "$archive"
+  [[ "$(sha256sum "$archive" | awk '{print $1}')" == "$old_hash" ]] || die 'Archived deployment verification failed'
+  recovery_phase "$receipt" complete
+  recovery_result "$receipt"
+}
 supported_recovery_host() (
   require_root
   dify_diagnostic_identity
   exec 9>"$STATE/operation.lock"; flock -n 9 || die 'Another host operation is running'
+  if [[ "$RETIRE_PREBACKUP_ONLY" == true ]]; then retire_prebackup_host; return; fi
   if [[ "$RELEASE_EXPIRED_CLAIM" == true ]] && recovery_child_receipt "$STATE/recoveries/$REQUEST_ID/host.json"; then return 0; fi
   if [[ "$INSPECTION_ONLY" == false ]]; then
     if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_unresolved_guard "$REQUEST_ID" "$ORIGINAL_REQUEST_ID"; else recovery_unresolved_guard "$REQUEST_ID"; fi

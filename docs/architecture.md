@@ -351,6 +351,13 @@ Resume preserves allowlisted status for a stopped transient systemd unit, resets
 its failed state and verifies unloading before recreating it with only the
 original remaining runtime. Persistent units, live processes, queued jobs or
 failed unloading reject resume; runtime properties are not edited in place.
+The exact expired pre-backup staging attempt can instead be retired under the
+operation lock. Independent bounded inspection proves the unchanged journal,
+prior service, helper provenance, open admission and absence of owners. A preview
+digest binds those identities and an expiry. Apply archives the original journal
+unchanged and records a separate closure receipt. Interrupted acknowledgement
+and repeated apply verify that archive; they do not repeat deployment or alter a
+later active journal. A fresh normal deployment retains all ordinary checks.
 No database initialization, provider call or credential-scope change is involved.
 
 Balanced completion separates the durable transaction from progress observation.

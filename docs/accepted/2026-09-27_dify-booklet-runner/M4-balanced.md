@@ -1,9 +1,36 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Maintenance backup recovery completed with a verified fresh backup and prior-service readiness under closed admission. Normal staging delivery stopped during its pre-backup drain; a reviewed dispatcher correction and exact resume remain pending. No continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Maintenance backup recovery completed with a verified fresh backup and prior-service readiness under closed admission. Normal staging delivery stopped during its pre-backup drain; the admission and systemd corrections are installed, but the retained deadline has expired. Exact pre-backup closure and one fresh normal deployment remain pending. No continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Expired pre-backup closure contract — 2026-10-26
+
+Close only deployment `40359148858-1` through the existing protected recovery
+interface with explicit `retire_prebackup_only`. Preserve its original journal
+bytes and expired deadline. Under the operation lock, verify exact candidate and
+prior-service identities, no selected backup, stopped work, open quiet admission,
+no unresolved owners and intact completed backup-helper evidence. Bounded
+inspection is independent of the expired deployment budget. Preview binds the
+journal, dispatcher, configuration, helper and expiry; apply requires that digest.
+A separate receipt reconciles interruption after archival and repeated verification.
+No application write or admission change belongs in closure.
+
+Change surfaces are the canonical dispatcher, operation-control input, focused
+host tests, CI wiring and operating documentation. Require two independent clean
+reviews, both Linux deployment suites, ShellCheck and affected recovery contracts.
+Credential inventory impact: none; credential names, storage and consumers stay
+unchanged. This correction protects continuation of the retained Creator without
+resetting its completed work or replaying provider calls.
+
+After closure, confirm the retained staging commit and immutable image, then
+start one normal deployment with a new request ID and the existing 45-minute
+budget. Inspect saved status after observer timeout. Readiness and fresh Creator
+reconciliation must pass before its authorized continuation. M4 acceptance and
+all campaign/persona/image limits remain unchanged. Local checks do not establish
+live closure, deployment success or M4 completion.
+
 
 ### Verified backup recovery and normal delivery — 2026-10-26
 
