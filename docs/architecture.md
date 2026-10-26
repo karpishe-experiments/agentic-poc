@@ -14,6 +14,9 @@ the consumed original no-dispatch continuation chain, global ownership and
 cumulative accounting in one transaction. Single-use run provenance records the
 recovery. It reuses the saved manager as specialist parent and issues no replacement
 manager request. Ordinary Resume and terminal-run behavior remain unchanged.
+Recovery establishes queued eligibility inside its transaction before source
+verifiers re-read the run; original reference-byte and accounting checks still
+gate commit. Failed verification rolls back run and campaign eligibility together.
 
 New Balanced requests use `m4_context_policy_v3`. Specialists receive
 current approved creative sources without per-image execution prompts and upload
