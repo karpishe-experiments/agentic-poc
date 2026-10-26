@@ -68,6 +68,7 @@ export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, refere
     personas: z.tuple([z.literal("enthusiast_parent"), z.literal("professional_creator")]),
     reference: z.string().min(1).max(500) }).optional(),
   continuations: z.array(m4ContinuationGrantSchema).max(20).optional(),
+  progressRecoveries: z.array(m4ContinuationGrantSchema).max(1).optional(),
   completionRecoveries: z.array(m4ContinuationGrantSchema).max(20).optional(),
   preGenerationRecoveries: z.array(legacyCountRecoveryGrantSchema).max(1).optional(),
   requestDefinitionUpdate: z.strictObject({ fromBundleHash: m4Digest, toBundleHash: m4Digest,
@@ -77,7 +78,7 @@ export const m4GrantSchema = z.strictObject({ campaignId: opaqueIdSchema, refere
     identity: m4PolicySchema.shape.pluginIdentity.optional(), reference: z.string().min(1).max(500) }).optional(),
   tokenPolicy: m4TokenPolicySchema.optional(),
 }).superRefine((grant, context) => {
-  const keys = [...grant.continuations ?? [], ...grant.completionRecoveries ?? []].map((item) => item.operationId);
+  const keys = [...grant.continuations ?? [], ...grant.completionRecoveries ?? [], ...grant.progressRecoveries ?? []].map((item) => item.operationId);
   if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: "Continuation operations must be unique." });
   if (grant.preGenerationRecoveries?.some(item => grant.completionRecoveries?.some(other => other.operationId === item.operationId))) {
     context.addIssue({ code: "custom", message: "Recovery operations must have one exact recovery kind." });

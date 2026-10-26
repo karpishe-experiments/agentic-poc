@@ -23,15 +23,18 @@ continuations passed. Creator has four approved Page Bibles. A new page-4 J12 pr
 stopped the campaign; its exact guarded continuation passed reviewed delivery,
 staging readiness and normal proof, and was acknowledged once at 10:03:03 UTC.
 A new J12 preparation operation then failed before dispatch and stopped the campaign
-again. No further continuation has been sent for that new operation; it has zero
-reservations. The earlier reviewer failure `97007a0e-3811-4c5a-974b-1c3b2f7cd24a`
+again. Its exact continuation was delivered and acknowledged once on 2026-10-26.
+The next manager completed with the correct page-4 delegation, but the inherited
+no-progress count stopped Creator at revision 477 before specialist preparation.
+The bounded interval-count correction and exact saved-manager recovery are under
+validation; no further continuation has been sent. The earlier reviewer failure `97007a0e-3811-4c5a-974b-1c3b2f7cd24a`
 retains its 32,923/32,000-token rejection and full reservation, with no generation
 started by that failed request. The user accepts observed
 latency for M4; no performance improvement is required for acceptance. Generation,
 ownership and accounting checks remain mandatory. Preserve the campaign, failed
 reports and saved Creator `47894c71-7991-4b15-8dc2-810395ec3f01`.
-The latest stopped campaign retains 162/500 requests, USD 0.172040 reserved,
-USD 0.187143 settled upper bound and USD 4.640817 remaining. Invoice cost is
+The latest stopped campaign retains 163/500 requests, USD 0.172940 reserved,
+USD 0.187242 settled upper bound and USD 4.639818 remaining. Invoice cost is
 unavailable and paid images remain zero. The current M4 record separates the
 J09 review loop from its subsequent un-dispatched preparation failure and the
 bounded repair/recovery authorized on 2026-10-25. Delivery and live continuation
@@ -45,8 +48,8 @@ records reviewed dev5 installation, signature restoration and staging delivery.
 New requests can use the saved 128,000-token amendment with a 32,000-token warning;
 historical requests keep their original policy. Local compatibility tests and a
 healthy deployment do not prove live amended generation, real-image support or
-M5 readiness. The exact Creator continuation is authorized, pending reviewed
-delivery and normal proof; it has not been executed.
+M5 readiness. The completed manager used the amendment with 555 counted input
+tokens; this does not prove the above-32,000 live warning path or M4 completion.
 
 The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
