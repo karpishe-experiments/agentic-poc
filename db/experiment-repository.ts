@@ -329,11 +329,16 @@ export function createExperimentRepository(database: Database, options: { store?
           if (!options.m4Authority || !options.m4ExecutionEnabled || !hasM4SimulatedImagePolicy(run) ||
               !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant))
             throw new ExperimentRepositoryError("invalid_state", "Progress recovery requires current M4 authority.");
-          const recovery = await campaignLedger.recoverProgress(session, run, input.nowMs, options.store);
+          const recovery = await campaignLedger.recoverProgress(session, run, input.nowMs);
           const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, status: "blocked", activeOperationId: null },
             { $set: { status: "queued", safeFailure: null, pauseRequested: false, noProgressCount: 0,
-              m4ProgressRecovery: recovery, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+              m4ProgressRecovery: recovery.provenance, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
           if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed during progress recovery.");
+          // Reference verifiers re-read the persisted run. Make eligibility visible
+          // only inside this transaction before checking the current J12 sources.
+          // Any source/byte/accounting failure rolls both state changes back.
+          await prepareNarrativeContext(database, session, updated, recovery.target.taskId,
+            recovery.target.subjectKind, recovery.target.subjectId, options.store);
           await verifyM4Accounting(database, session, updated);
           return updated;
         }
