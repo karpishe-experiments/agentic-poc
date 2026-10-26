@@ -787,6 +787,15 @@ recovery_expired_verifier() {
   local candidate="$1" proof="$2"
   jq -n --arg image "$(jq -er .verifierImage <<< "$proof")" '{services:{app:{image:$image}}}' > "$candidate/image.json"
 }
+recovery_response_diagnostic() {
+  local phase="$1" output="$2" stdout_bytes stderr_bytes shape
+  # Sizes describe application output, not wire traffic. Never echo its content.
+  stdout_bytes="$(wc -c < "$output")"
+  stderr_bytes="$(wc -c < "$output.stderr")"
+  shape="$(jq -cs '{jsonValues:length,objects:([.[]|select(type=="object")]|length),verifiedResults:([.[]|select(type=="object")|select(.verified==true)]|length)}' "$output" 2>/dev/null)" || shape='null'
+  jq -nc --arg phase "$phase" --argjson stdoutBytes "$stdout_bytes" --argjson stderrBytes "$stderr_bytes" --argjson shape "$shape" \
+    '{environment:"_staging",diagnostic:"recovery_response",phase:$phase,code:"invalid_recovery_response",stdoutBytes:$stdoutBytes,stderrBytes:$stderrBytes,shape:$shape}' || true
+}
 recovery_app_json() {
   local release="$1" evidence="$2" phase="$3" output="$4"; shift 4
   if ! recovery_oneoff "$release" "$evidence" "$phase" "$@" > "$output" 2> "$output.stderr"; then
@@ -794,7 +803,10 @@ recovery_app_json() {
     jq -Rc 'fromjson? | select(type=="object") | {environment:"_staging",verified,phase,stage,outcome,code:(if (.code|type)=="string" and (.code|test("^[a-z0-9_]{1,80}$")) then .code else null end),blockers,inspectionError,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,observedCount,blockerIds}' "$output" || true
     die "Recovery $phase failed; inspect private evidence; no automatic replay"
   fi
-  jq -se 'length==1 and (.[0]|type=="object") and (.[0].verified==true)' "$output" >/dev/null || die 'Recovery result is missing or malformed'
+  if ! jq -se 'length==1 and (.[0]|type=="object") and (.[0].verified==true)' "$output" >/dev/null 2>&1; then
+    recovery_response_diagnostic "$phase" "$output" || true
+    die 'Recovery result is missing or malformed'
+  fi
 }
 recovery_finish_candidate() {
   local current="$1" candidate="$2" evidence="$3" journal="$4" app_digest="$5"

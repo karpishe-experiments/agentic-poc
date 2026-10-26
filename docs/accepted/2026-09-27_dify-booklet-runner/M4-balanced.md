@@ -5,6 +5,19 @@
 
 ## Current Creator admission checkpoint
 
+### Recovery response diagnosis contract — 2026-10-26
+
+The installed dispatcher matches the reviewed source successor. The first exact
+read-only recovery preview stopped at response validation before producing a
+preview digest. Creator remains unchanged at revision 657. The command's response
+shape is unknown because the wrapper discarded its temporary output after a
+generic error. Add fixed response-shape and application-byte measurements on that
+failure path, without printing content or accepting an invalid response. Test
+empty, malformed, multiple and valid responses with fake commands. Preserve all
+recovery proofs, deadlines, provider restrictions and the existing staging image.
+This diagnostic correction changes no credential use. It does not authorize
+recovery apply without a verified preview.
+
 ### Forward execution correction contract — 2026-10-26
 
 The user approved three sequential slices before the retained Creator continues:
