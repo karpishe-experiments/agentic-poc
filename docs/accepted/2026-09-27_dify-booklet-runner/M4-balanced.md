@@ -7,6 +7,35 @@
 
 ### Progress after a verified preparation continuation — 2026-10-26
 
+The first interval repair passed source/staging reviews and CI in PRs #285/#286.
+Staging `2c3f5bdb9138ae9222f1422cdfd4f282092e95bb` completed deployment
+`40288386012-1`; journal `40289662618` confirmed completion after the observer
+expired during backup. Independent Check `40289797920` and browser readiness
+passed. One normal Continue returned a state conflict. Read-only reconciliation
+confirmed revision 477, unchanged counters, stopped campaign and no active work.
+No second Continue was sent.
+
+The first fixture used J01 and missed J12's stored-state boundary: reference
+verifiers re-read the run and reject blocked definite-failure state. The recovery
+checked the target before establishing queued eligibility. Correct only the
+transaction ordering: authenticate the original recovery proof and ownership,
+then stage campaign/run eligibility inside the transaction, verify the current
+target and original image bytes, and audit cumulative accounting before commit.
+Every failure must roll back both state changes. Add a full J12 persistence
+fixture and corrupted-byte rollback case; do not relax reference verifier states,
+change authority, replay the manager or increase a timeout. Two clean independent
+reviews and normal CI/staging delivery remain required before another guarded
+control action. This is a correction of the same exact authorized recovery.
+
+Correction verification passed the representative full-reference J12 recovery
+case (one selected case; 53 unrelated cases not run), all 49 accounting cases,
+refreshed typecheck, focused lint and 223 documentation links/anchors. Corrupt
+original bytes roll back both tentative state changes; valid bytes allow recovery
+and exactly one specialist dispatch with the retained manager parent. The earlier
+66 control/loop cases and five configuration units remain applicable because
+their relevant behavior is unchanged. No new credential consumer or inventory
+change is involved. Two independent source reviews passed. Staging review, CI and delivery remain pending.
+
 PRs #283/#284 delivered the exact `928cb32d-daf7-4703-b005-fdaf076d6cb6`
 continuation at staging `660e49d62ead05b3d883a81c11a0ce734e74f695`.
 Deployment `40280231418-1` completed; journal `40281823048` and independent
