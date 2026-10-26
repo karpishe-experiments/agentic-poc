@@ -12,6 +12,12 @@ import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 type Rejection = NonNullable<ExperimentOperationDocument["m4DecisionRejection"]>;
 type Facts = Omit<Rejection, "proofDigest" | "reference" | "recordedAtMs">;
 
+export function m4DecisionRecoveryGrant(authority: M4Authority, runId: string, operationId: string) {
+  const matches = authority.grant.continuations?.filter(item => item.runId === runId && item.operationId === operationId &&
+    item.decisionRejection === "revision_allowance_exhausted_v1" && item.preDeploymentRecovery === "decision_rejection_v1") ?? [];
+  return matches.length === 1 ? matches[0] : null;
+}
+
 // A successful provider response can be valid JSON but request an unavailable
 // action. Prove only this fixed semantic failure; never catch arbitrary source,
 // storage or materialization errors and call them harmless decisions.
@@ -79,8 +85,8 @@ export async function verifyM4DecisionRejection(database: Database, session: Cli
   return true;
 }
 
-// Called only inside exact Resume's transaction. No observation, reservation or
-// creative bytes change; closure and continuation roll back together on failure.
+// Exact Resume or separately granted candidate recovery owns this transaction.
+// No observation, reservation or creative bytes change.
 export async function closeM4DecisionRejection(database: Database, session: ClientSession, authority: M4Authority,
   run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number): Promise<ExperimentRunDocument | null> {
   const permission = authority.grant.continuations?.find(p => p.runId === run._id && p.operationId === op._id);
@@ -99,7 +105,7 @@ export async function closeM4DecisionRejection(database: Database, session: Clie
   const changed = await database.collections.experiment_operations.updateOne({ _id: op._id, state: "started",
     "m4Observation.wrapperDigest": op.m4Observation!.wrapperDigest }, { $set: {
     m4DecisionRejection: rejection, state: "failed", safeFailure: "definite_failure", updatedAtMs: nowMs,
-    lifecycle: { ...op.lifecycle, phase: "finished", attemptOutcome: "failed", unresolved: false, endedAtMs: nowMs, lastProgressAtMs: nowMs },
+    lifecycle: { ...op.lifecycle, phase: "finished", attemptOutcome: "failed", unresolved: false, endedAtMs: op.lifecycle.endedAtMs ?? nowMs, lastProgressAtMs: nowMs },
   } }, { session });
   if (changed.modifiedCount !== 1) throw new Error("Decision rejection changed concurrently.");
   const updated = await database.collections.experiment_runs.findOneAndUpdate({ _id: run._id, revision: run.revision,

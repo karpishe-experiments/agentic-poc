@@ -104,6 +104,7 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
   let blockCompletionTask: string | null = null;
   let blockManagerPageBible = false;
   let forcedImageRevisions = 0;
+  let corruptNextPage = false;
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
       expect(input.mode).toBe("balanced");
@@ -160,6 +161,14 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
         const completed = await createExperimentImageStorage({ database, store, now: () => clock }).complete({
           identity: { ...identity, inputFingerprint: operation.inputFingerprint }, content: bytes,
         });
+        if (corruptNextPage && operation.taskId === "J13") {
+          // A saved successful output has not been assembled yet. Its already
+          // consumed call must not be counted as another required image.
+          expect((await context.getRunView(runId))!.imageCapacity).toMatchObject({ status: "unavailable" });
+          const asset = (await database.collections.assets.findOne({ _id: operation._id }))!;
+          store.files.set(asset.uri, Uint8Array.of(0));
+          corruptNextPage = false;
+        }
         const outputs: Record<string, unknown> = { image_result: JSON.stringify({ ...identity, inputFingerprint: operation.inputFingerprint,
           assetId: operation._id, sha256: completed.operation.resultDigest }) };
         if (operation.taskId === "J13" && input.referenceFileIds !== undefined) {
@@ -280,11 +289,29 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
     blockCompletion: (taskId: string) => { blockCompletionTask = taskId; },
     blockManagerPageBible: () => { blockManagerPageBible = true; },
     forceImageRevisions: (count: number) => { forcedImageRevisions = count; },
+    corruptPageAfterCompletion: () => { corruptNextPage = true; },
     badLayout: (value: boolean) => { badLayout = value; }, incompleteLayout: (value: boolean) => { incompleteLayout = value; } };
 }
 
 describe("offline Balanced dispatcher", () => {
-  it("continues an exhausted reviewer decision atomically with original image bytes and no replay", async () => {
+  it("retains the primary page assembly failure cause and uncertain capacity without another image", async () => {
+    const env = await setup();
+    env.corruptPageAfterCompletion();
+    for (let step = 0; step < 160; step++) {
+      await env.dispatcher.advance(env.runId);
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+      env.tick();
+    }
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "blocked", failureDiagnostics: { phase: "page_assembly", reason: "invalid_assets", runRevision: run.revision } });
+    const fresh = createExperimentContextService(env.database, { store: () => env.store });
+    expect((await fresh.getRunView(env.runId))!.imageCapacity).toMatchObject({ status: "unavailable", reason: "unresolved_attempts" });
+    expect((await fresh.getRunView(env.runId))!.failureDiagnostics).toEqual(run.failureDiagnostics);
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    await env.dispatcher.advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+  }, 120_000);
+  it.each([false, true])("continues an exhausted reviewer decision with original image bytes and no replay (candidate=%s)", async candidate => {
     const env = await setup(false, false, "professional_creator");
     env.forceImageRevisions(3);
     for (let step = 0; step < 220; step++) {
@@ -299,6 +326,7 @@ describe("offline Balanced dispatcher", () => {
     expect(JSON.parse(failed.m4Observation!.content!).result.payload.decision.action).toBe("revise");
     const authority = { ...env.authority, grant: { ...env.authority.grant,
       continuations: [{ runId: env.runId, operationId: failed._id, decisionRejection: "revision_allowance_exhausted_v1" as const,
+        ...(candidate ? { preDeploymentRecovery: "decision_rejection_v1" as const } : {}),
         reference: "exact exhausted reviewer fixture" }] } };
     const repository = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
     const snapshot = async () => ({ run: await repository.getRun(env.runId),
@@ -313,8 +341,51 @@ describe("offline Balanced dispatcher", () => {
     await expect(repository.resume({ runId: env.runId, expectedRevision: blocked.revision, nowMs: env.now() })).rejects.toThrow();
     expect(await snapshot()).toEqual(before);
     env.store.files.set(asset.uri, bytes);
+    if (candidate) {
+      while (env.now() <= failed.deadlineAtMs!) env.tick();
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: {
+        schemaVersion: "1", environment: "_staging", maintenance: false, draining: false,
+        activeMutations: 0, interruptedMutations: 0, mutationOwners: [], updatedAtMs: env.now(),
+      }, $setOnInsert: { _id: "environment:_staging" } }, { upsert: true });
+      const service = createBookletRecovery({ database: env.database, config: { ...env.config, m4: { state: "granted", authority } },
+        runtime: env.runtime, store: () => env.store, now: env.now });
+      const recoveryTarget = { runId: env.runId, operationId: failed._id, expectedRevision: blocked.revision };
+      const preview = await service.preview(recoveryTarget);
+      expect(preview.snapshot.scope).toBe("decision-rejection-target-v1");
+      expect(await snapshot()).toEqual(before);
+      expect((await inspectRecoveryWork(env.database, { environment: "_staging" })).blockers.map(row => row.code))
+        .toEqual(["unresolved_runs", "operations"]);
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+      // Corrupt original bytes after the closure write, before source checks.
+      // Both tentative run eligibility and semantic closure must roll back.
+      const operations = env.database.collections.experiment_operations;
+      const write = operations.updateOne.bind(operations);
+      const spy = vi.spyOn(operations, "updateOne").mockImplementation(async (...args) => {
+        const result = await write(...args);
+        if ((args[1] as { $set?: { m4DecisionRejection?: unknown } }).$set?.m4DecisionRejection) env.store.files.set(asset.uri, Uint8Array.of(0));
+        return result;
+      });
+      await expect(service.apply(recoveryTarget, preview.previewDigest, async () => {})).rejects.toThrow();
+      spy.mockRestore(); env.store.files.set(asset.uri, bytes);
+      expect(await snapshot()).toEqual(before);
+      await service.apply(recoveryTarget, preview.previewDigest, async () => {});
+      const closed = await snapshot();
+      expect(closed.run).toMatchObject({ status: "blocked", pauseRequested: true, activeOperationId: null, counters: blocked.counters });
+      expect(closed.campaign).toEqual(before.campaign);
+      await expect(withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, closed.run!))).rejects.toThrow();
+      const gets = vi.mocked(env.runtime.retrieve).mock.calls.length;
+      for (let repeat = 0; repeat < 2; repeat++) expect(await service.verifyCompleted(recoveryTarget, preview.snapshot))
+        .toMatchObject({ outcome: "failure_closed", accounting: "preserved", providerPosts: 0 });
+      expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets);
+      expect(await snapshot()).toEqual(closed);
+      // The unchanged normal drain's work inventory is now clear. No operation
+      // is excluded by identity, and the campaign/Creator have not resumed.
+      expect(await inspectRecoveryWork(env.database, { environment: "_staging" })).toMatchObject({ outcome: "clear", blockers: [] });
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: false } });
+    }
+    const resumeRevision = (await repository.getRun(env.runId))!.revision;
     const results = await Promise.allSettled([0, 1].map(() => repository.resume({ runId: env.runId,
-      expectedRevision: blocked.revision, nowMs: env.now() })));
+      expectedRevision: resumeRevision, nowMs: env.now() })));
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     const after = await snapshot();
     expect(after.run).toMatchObject({ status: "queued", activeOperationId: null, imageRevisions: 2, counters: blocked.counters });
@@ -325,6 +396,19 @@ describe("offline Balanced dispatcher", () => {
       expect(after.campaign![key]).toEqual(before.campaign![key]);
     await repository.resume({ runId: env.runId, expectedRevision: after.run!.revision, nowMs: env.now() });
     expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    if (candidate) {
+      const capacity = (await env.context.getRunView(env.runId))!.imageCapacity!;
+      expect(capacity.status).toBe("available");
+      if (capacity.status !== "available") throw new Error("Fixture capacity must be exact.");
+      expect(capacity.savedDraftsAwaitingApproval).toBe(1);
+      // Tighten only this disposable fixture so the remaining distinct outputs
+      // consume its exact saved ceiling. No production allowance is changed.
+      const resumed = (await repository.getRun(env.runId))!;
+      await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: {
+        "limits.image": resumed.counters.logicalImage + capacity.requiredNewImages,
+      } });
+      expect((await env.context.getRunView(env.runId))!.imageCapacity).toMatchObject({ status: "available", spareImageCalls: 0 });
+    }
     const dispatcher = createExperimentDispatcher({ database: env.database, config: { ...env.config,
       m4: { state: "granted", authority } }, runtime: env.runtime, now: env.now,
       mutate: async action => action(), store: () => env.store, uploadReference: env.uploadReference });
@@ -340,6 +424,12 @@ describe("offline Balanced dispatcher", () => {
     }
     const completed = (await repository.getRun(env.runId))!;
     expect(completed.status).toBe("completed");
+    if (candidate) {
+      expect(completed.counters.logicalImage).toBe(completed.limits.image);
+      const imageStarts = vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image").length;
+      expect(await dispatcher.advance(env.runId)).toBe("boundary");
+      expect(vi.mocked(env.runtime.start).mock.calls.filter(([binding]) => binding.role === "image")).toHaveLength(imageStarts);
+    }
     await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, completed));
     expect((await repository.getOperation(failed._id))!.m4Observation).toEqual(failed.m4Observation);
   }, 120_000);

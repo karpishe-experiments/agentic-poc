@@ -46,7 +46,7 @@ async function main() {
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
     emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", ...dataContract,
-      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
+      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = await inspectStep("environment", async () => getServerEnv());
   if (env.RUNNER_ENABLED !== "false" || env.DEPLOYMENT_ENV !== "_staging" || env.MONGODB_DATABASE !== "kids_booklet" ||
@@ -112,7 +112,8 @@ async function main() {
     const admission = await inspectStep("admission", () => database!.collections.deployment_control.findOne({ environment: "_staging" }));
     const preview = await service.preview(target, input.phase === "verify-closed" || admission?.maintenance === true);
     if (input.phase === "verify-closed" && preview.previewDigest !== input["preview-digest"]) throw new BookletRecoveryError("preview_changed");
-    emit({ verified: true, phase, contract: preview.contract, previewDigest: preview.previewDigest, ...target, providerPosts: 0 }); return;
+    emit({ verified: true, phase, contract: preview.contract, previewDigest: preview.previewDigest,
+      ...(preview.snapshot.scope ? { scope: preview.snapshot.scope } : {}), ...target, providerPosts: 0 }); return;
   }
   if (!input["evidence-dir"] || !input["preview-digest"]) throw new BookletRecoveryError("evidence_required");
   const dir = await lstat(input["evidence-dir"]);

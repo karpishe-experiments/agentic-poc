@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { imageCapacity } from "@/lib/experiment-runner/image-capacity";
 import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
@@ -292,6 +293,23 @@ export function createExperimentContextService(database: Database, options: { st
         remainingMicrodollars: Math.max(0, policy.maxMicrodollars - campaign.reservedMicrodollars - campaign.settledMicrodollars),
         maxMicrodollars: policy.maxMicrodollars, countChargeStatus: policy.countChargeStatus, invoiceCostAvailable: false as const };
     })() : null;
+    let capacity;
+    if (projection === "inspection" && configuredPageIllustrationTask(run.configurationJson)) {
+      const pendingOutputs = await operations.find({ runId: run._id, role: "image", taskId: "J13", state: "succeeded",
+        imageCompletionDigest: { $type: "string" } }, { projection: { _id: 1 } }).toArray();
+      const materializedIds = new Set(currentArtifacts.flatMap(a => a.versions.flatMap(v => v.sourceOperationId ? [v.sourceOperationId] : [])));
+      const unresolved = pendingOutputs.some(op => !materializedIds.has(op._id)) || !!run.activeOperationId || !!run.preparation || !!await operations.findOne({ runId: run._id,
+        role: "image", $or: [{ state: { $in: ["prepared", "started", "unknown"] } }, { "lifecycle.unresolved": true },
+          { authorizationClaim: { $ne: null } }, { imageCompletionClaim: { $ne: null } }, { resultFinalizationClaim: { $ne: null } }] },
+      { projection: { _id: 1 } });
+      const layout = currentArtifacts.find(a => a.taskId === "J11");
+      let pageIds: string[] = [];
+      try { pageIds = parseStoredPageLayout(run.persona, layout?.versions.find(v => v.id === layout.currentVersionId)?.content).pages.map(p => p.pageId); }
+      catch { /* Incomplete source evidence yields unavailable capacity. */ }
+      const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectId?: string } | null;
+      capacity = imageCapacity({ runId: run._id, limit: run.limits.image, used: run.counters.logicalImage, pageIds,
+        artifacts: currentArtifacts, unresolved, revisionPageId: pending?.kind === "revision" && pending.taskId === "J13" ? pending.subjectId : null });
+    }
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       ...(run.mode === "balanced" && (projection === "inspection" || projection === "report") ? { m4Accounting } : {}),
@@ -300,6 +318,7 @@ export function createExperimentContextService(database: Database, options: { st
       generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
       generationCompletedAtMs: run.generationCompletedAtMs ?? null,
       safeFailure: run.safeFailure, activeOperationId: run.activeOperationId,
+      ...(projection === "inspection" ? { failureDiagnostics: run.failureDiagnostics ?? null, imageCapacity: capacity ?? null } : {}),
       preparation: run.preparation ? { identity: run.preparation.ownerId, startedAtMs: run.preparation.startedAtMs,
         deadlineAtMs: run.preparation.deadlineAtMs, unresolved: run.preparation.unresolved ?? false,
         stopRequestedAtMs: run.preparation.stopRequestedAtMs ?? null } : null,

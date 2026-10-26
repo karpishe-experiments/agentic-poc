@@ -4,6 +4,31 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Evaluation ordering and completion share a transaction-local operation reader.
+It retains the original succeeded tester/judge filter and returns report results
+and dispatch identity only. Historical preparation and upload bodies remain in
+storage and in their owning accounting proof paths. The fixed
+`evaluation_operations_read` phase records row count, elapsed time and returned
+JSON bytes as application measurements, not wire bytes.
+
+Page assembly and generation/evaluation transition failures can attach optional
+`failure_diagnostics_v1` evidence to the existing blocked run write. Fixed reason
+codes originate in validation and retain no exception text or creative content.
+Timeout classification takes precedence over an accounting classification.
+Invalid optional measurements cannot prevent blocking. The saved revision marks
+the observation; a different revision displays it as a previous stop and does
+not infer the current reason. Diagnostics do not participate in source fingerprints,
+requests, preparation hashes or accounting. Detail and list-summary responses
+expose it; control receipts keep their contract. Older runs have no inferred reason.
+
+Selected-run inspection exposes an informational image-capacity snapshot from
+current pages, packages, counters and unresolved-attempt identities. Valid saved
+drafts await approval without another image call. Unfinished sources, active or
+ambiguous attempts and invalid packages make capacity unavailable. Zero spare
+calls warns without changing controls or eligibility. Dispatch still verifies
+original sources/bytes and owns all spending and request limits. Neither capacity
+nor failure diagnostics enters model contexts; list summaries do not load capacity.
+
 An exact verified M4 failure continuation starts a new no-progress observation
 interval. It resets only `noProgressCount`, preserving the creative fingerprint,
 progress operation, original failure and all counters and liabilities. The same
@@ -34,6 +59,20 @@ original page bytes and accounting before commit. Failure rolls back closure and
 continuation together. The original decision cannot become an approval. This
 fixed semantic proof does not catch arbitrary materialization errors or retry a
 provider automatically.
+
+An additional exact `preDeploymentRecovery: decision_rejection_v1` grant permits
+the existing candidate recovery service to close a retained exhausted J13 revision
+before the repair can pass the serving release's drain. It authenticates a fresh
+read-only provider response and pins a versioned target/source/asset/reservation
+snapshot. The transaction preserves campaign state and charges, stages paused
+eligibility only for original J13 verification, then commits a blocked, paused run
+with no active operation. It does not consume continuation. Repeated recovery
+reads verify the saved closure without dispatch. Normal deployment and readiness
+still precede an explicit Continue. A stopped pre-backup deployment journal can
+be archived only by its exact pinned identity; later phases, active processes,
+owned containers or changed journal bytes reject this handoff. Historical recovery
+snapshots retain their original interpretation. Live installation is a separate
+checkpoint in the M4 record.
 
 Summary, detail and compact control responses can expose the optional
 `retainedDecisionContinuation` flag for an exact configured continuation with the

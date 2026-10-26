@@ -22,6 +22,13 @@ third image revision. Its 43,977-token provider execution succeeded. The newly
 authorized repair restricts reviewer choices and distinguishes accepted simulation
 geometry warnings; its exact closure/continuation remains subject to review, CI,
 staging delivery and proof. Preserve the response, all charges and the same run.
+The [decision-repair delivery checkpoint](M4-balanced.md#decision-repair-delivery-checkpoint--2026-10-26)
+records a further verified boundary: the reviewed repair cannot deploy while its
+retained started operation blocks the old release's drain. No replacement was
+installed. The user has authorized the exact pre-deployment recovery extension;
+local implementation and focused checks are recorded in M4. Review, CI,
+publication, installed capability and live recovery remain delivery gates. The
+extension must not bypass the drain or dispatch a model.
 The M4 record owns current usage and release evidence. No M5 execution, new image
 spending or reset is granted. Accepted latency and size warnings do not block M4;
 generation, ownership and accounting verification remain mandatory.
@@ -56,6 +63,7 @@ the retained Creator outcome and allowance when M4 completes.
 | A saved control change could be hidden by a failed detail refresh | Receipts acknowledge tracked mutation completion; read-only reconciliation handles lost acknowledgements without a second mutation. | Preserve request keys and reconcile the same run/operation after interruption. Do not treat an observer timeout as a failed generation or permission to replay. |
 | Advisory failure was confused with generation failure | Verified terminal advisory failures permit M4 completion; missing or unknown provider outcomes remain unresolved. | Preserve those M4 results. The separate Real acceptance requirements below still govern M5 reports and uninterrupted runs. |
 | Technical continuations inherited an earlier creative-loop count | Verified continuations reset only the observation interval; the exact saved-manager recovery preserves history and the genuine loop limit. Its J12 fixture verifies original-byte rollback and retained-parent reuse. | Verify the live recovery and Creator outcome at M4 exit. Exercise recovery with the actual stage's dependency graph; transaction-local eligibility must precede readers that re-read saved state. |
+| A repair depended on a release that could not drain past the retained failure | The decision repair passed local continuation tests and review, but normal delivery stopped on the same started tester operation. The existing recovery contract does not cover that semantic rejection. No drain exception or provider replay was used. | Resolve the exact recovery before M4 exit. For any M5 repair, test delivery from the failed serving release through recovery, normal drain/readiness and explicit continuation; a new-release repository test alone is insufficient. |
 
 Remaining entry gaps are specific: Creator's valid M4 completion; a separately
 authorized finite Real campaign; and verified real-image configuration, reference

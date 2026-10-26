@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { readOperationResponse } from "@/lib/http/read-operation-response";
@@ -24,6 +25,19 @@ describe("deployment contracts", () => {
     expect(compose).toContain("DIFY_BASE_URL: https://api.dify.ai/v1");
   });
 
+  it("evaluates flat secret keys on the original object and retains the existing validation rules", () => {
+    const script = readFileSync("scripts/deploy/vps-deployment.sh", "utf8");
+    const filter = script.match(/jq -e '([^']+)' "\$secret_input" >\/dev\/null \|\| die 'Secret input file does not satisfy/)!;
+    expect(filter).toBeTruthy();
+    const valid = { OPENAI_API_KEY: "fixture", MONGODB_URI: "mongodb://fixture", ACCESS_GATE_PASSWORD: "sixteen-chars-ok!",
+      AWS_ACCESS_KEY_ID: "a".repeat(32), AWS_SECRET_ACCESS_KEY: "b".repeat(64) };
+    for (const [payload, accepted] of [[valid, true], [{ ...valid, ACCESS_GATE_PASSWORD: "short" }, false],
+      [{ ...valid, unexpected: "fixture" }, false], [{ ...valid, DIFY_TOOL_KEY: "short" }, false], [null, false]] as const) {
+      const result = spawnSync("jq", ["-e", filter[1]], { input: JSON.stringify(payload), encoding: "utf8" });
+      expect(result.error).toBeUndefined();
+      expect(result.status === 0).toBe(accepted);
+    }
+  });
   it("lets read-only exact status bypass mutation queues without changing mutation serialization", () => {
     const workflow = readFileSync(".github/workflows/vps-operation-control.yml", "utf8");
     const concurrency = workflow.split("\nconcurrency:")[1].split("\ndefaults:")[0];

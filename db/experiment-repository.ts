@@ -38,6 +38,7 @@ import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-ou
 import { closeM4DecisionRejection, verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
+import { failureDiagnosticsSchema, type FailureReason } from "@/lib/contracts/experiment-failure";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -52,11 +53,13 @@ const completeInput = z.strictObject({ envelope: resultEnvelopeSchema, parentWor
 const failInput = claimInput.extend({ category: z.enum(["unknown_outcome", "definite_failure"]) });
 const outcomeInput = dispatchInput.extend({ category: z.enum(["unknown_outcome", "definite_failure", "observed_failure", "observed_stop", "paused"]) });
 const progressInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, fingerprint64: fingerprint, nowMs: time });
-const blockInput = z.strictObject({ runId: opaqueIdSchema, category: z.enum(["unknown_outcome", "definite_failure"]), nowMs: time });
+const blockInput = z.strictObject({ runId: opaqueIdSchema, category: z.enum(["unknown_outcome", "definite_failure"]), nowMs: time,
+  failureDiagnostics: z.unknown().optional() });
 const terminalConflictInput = claimInput.extend({ workflowId: opaqueIdSchema, status: z.enum(["failed", "stopped"]) });
 
 export class ExperimentRepositoryError extends Error {
-  constructor(public readonly code: "invalid_input" | "not_found" | "conflict" | "stale_revision" | "invalid_state" | "invalid_result", message: string) {
+  constructor(public readonly code: "invalid_input" | "not_found" | "conflict" | "stale_revision" | "invalid_state" | "invalid_result", message: string,
+    public readonly failureReason?: FailureReason) {
     super(message); this.name = "ExperimentRepositoryError";
   }
 }
@@ -796,7 +799,14 @@ export function createExperimentRepository(database: Database, options: { store?
         }
         throw new ExperimentRepositoryError("conflict", "Run is blocked for another reason.");
       }
-      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      // An invalid optional diagnostic cannot prevent the original block write.
+      let diagnostic: ExperimentRunDocument["failureDiagnostics"];
+      try {
+        const parsed = failureDiagnosticsSchema.safeParse({ ...(input.failureDiagnostics as object), runRevision: run.revision + 1 });
+        if (parsed.success) diagnostic = parsed.data;
+      } catch { /* Keep the original failure authoritative. */ }
+      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: input.category, updatedAtMs: input.nowMs,
+        ...(diagnostic ? { failureDiagnostics: diagnostic } : {}) }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed before block.");
       await failTerminalPageBatchItems(database, updated, session, input.nowMs);
       return updated;

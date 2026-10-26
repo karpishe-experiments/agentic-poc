@@ -5,6 +5,9 @@ set -euo pipefail
 # Each scenario runs in a separate Bash process so expected-failure assertions
 # cannot accidentally disable errexit inside the lifecycle being tested.
 if [[ $# -eq 0 ]]; then
+  for scenario in candidate-recovery-prebackup-apply candidate-recovery-prebackup-drift candidate-recovery-prebackup-resume candidate-recovery-prebackup-active candidate-recovery-prebackup-advanced candidate-recovery-prebackup-unsupported; do
+    bash "$0" "$scenario"
+  done
   for scenario in expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
@@ -322,7 +325,10 @@ LEGACY_CLAIMS
             printf '{"verified":true,"targetDigest":"%064d"}\n' "$target"; return
           fi
           printf '{"verified":true}\n';;
-        preview) printf '{"verified":true,"previewDigest":"%064d"}\n' 1;;
+        preview)
+          if [[ "$scenario" == candidate-recovery-prebackup-* && "$scenario" != candidate-recovery-prebackup-unsupported ]]; then
+            printf '{"verified":true,"scope":"decision-rejection-target-v1","providerPosts":0,"previewDigest":"%064d"}\n' 1
+          else printf '{"verified":true,"previewDigest":"%064d"}\n' 1; fi;;
         verify-unapplied) if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then printf '{"verified":false,"phase":"verify-unapplied","code":"snapshot_changed"}\n'; return 1; fi; printf '{"verified":true,"outcome":"unapplied","providerPosts":0}\n';;
         apply) if [[ "$scenario" == candidate-recovery-unapplied-* ]]; then printf '{"phase":"started","retained":"original"}\n' > "$2/application-recovery.json"; return 1; fi; if [[ "$scenario" == candidate-recovery-failure ]]; then printf '{"verified":false,"phase":"apply","code":"snapshot_changed","stage":"snapshot_verification","errorKind":"operation_budget_expired","elapsedMs":149000,"remainingBudgetMs":1000,"cleanupOutcome":"verified","commitState":"not_started","privateMessage":"do-not-print"}\n'; return 1; fi; printf '{"verified":true}\n';;
         *) printf '{"verified":true}\n';;
@@ -355,6 +361,21 @@ LEGACY_CLAIMS
         exit 0
       fi
     fi
+    if [[ "$scenario" == candidate-recovery-prebackup-* ]]; then
+      ORIGINAL_REQUEST_ID=old-deploy
+      jq -n --arg prior "$prior" '{requestId:"old-deploy",action:"deploy",environment:"staging",step:"draining",priorRelease:$prior,backupId:""}' > "$STATE/operation.json"
+      cp "$STATE/operation.json" "$TEMP_DIR/original.json"
+      systemctl() { if [[ "$scenario" == candidate-recovery-prebackup-active ]]; then printf 'active\n'; else printf 'failed\n'; fi; }
+      if [[ "$scenario" == candidate-recovery-prebackup-advanced ]]; then
+        jq '.step="backup"' "$STATE/operation.json" > "$STATE/operation.next"; mv "$STATE/operation.next" "$STATE/operation.json"
+      fi
+      if [[ "$scenario" =~ ^candidate-recovery-prebackup-(active|advanced|unsupported)$ ]]; then
+        if (supported_recovery_host); then exit 1; fi
+        [[ -e "$STATE/operation.json" && ! -e "$STATE/recoveries" ]]
+        ! grep -q 'deployment-control enable' "$CALLS"
+        exit 0
+      fi
+    fi
     supported_recovery_host > "$TEMP_DIR/preview-output"
     rm -rf "$TEMP_DIR/candidate"
     [[ ! -e "$STATE/recoveries" && ! -e "$STATE/recovery-handoff-staging.json" ]]
@@ -379,6 +400,13 @@ LEGACY_CLAIMS
     fi
     if [[ "$scenario" == *-preview ]]; then exit 0; fi
     APPLY=true
+    if [[ "$scenario" == candidate-recovery-prebackup-drift ]]; then
+      printf '\n' >> "$STATE/operation.json"
+      if (supported_recovery_host); then exit 1; fi
+      [[ -e "$STATE/operation.json" && ! -e "$STATE/recoveries" ]]
+      ! grep -q 'deployment-control enable' "$CALLS"
+      exit 0
+    fi
     if [[ "$scenario" == candidate-recovery-mismatch ]]; then
       PREVIEW_DIGEST="$(printf '%064d' 9)"
       if (supported_recovery_host); then exit 1; fi
@@ -484,8 +512,12 @@ LEGACY_CLAIMS
         [[ -e "$STATE/recovery-handoff-staging.json" ]]
         ! grep -q 'deployment-control disable' "$CALLS"
         [[ "$(grep -c '^recovery apply$' "$CALLS")" == 1 ]]
-        if [[ "$scenario" == candidate-recovery-repeat || "$scenario" == candidate-recovery-resume ]]; then
-          if [[ "$scenario" == candidate-recovery-resume ]]; then
+        if [[ "$scenario" == candidate-recovery-prebackup-* ]]; then
+          cmp -s "$TEMP_DIR/original.json" "$STATE/operations/old-deploy.json"
+          [[ ! -e "$STATE/operation.json" ]]
+        fi
+        if [[ "$scenario" == candidate-recovery-repeat || "$scenario" == candidate-recovery-resume || "$scenario" == candidate-recovery-prebackup-resume ]]; then
+          if [[ "$scenario" == candidate-recovery-resume || "$scenario" == candidate-recovery-prebackup-resume ]]; then
             recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" reconciling
             rm "$STATE/recovery-handoff-staging.json"
             rm -rf "$TEMP_DIR/candidate"
