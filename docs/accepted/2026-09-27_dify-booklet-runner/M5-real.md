@@ -40,6 +40,14 @@ Complete Creator and record M4 acceptance before assembling the Real authorizati
 handoff. Reuse exact retained bindings/evidence through the M4 record; no new image
 spending, reset or Real execution is granted here.
 
+The [context-policy activation checkpoint](M4-balanced.md#context-policy-activation-checkpoint--2026-10-25)
+records reviewed dev5 installation, signature restoration and staging delivery.
+New requests can use the saved 128,000-token amendment with a 32,000-token warning;
+historical requests keep their original policy. Local compatibility tests and a
+healthy deployment do not prove live amended generation, real-image support or
+M5 readiness. The exact Creator continuation is authorized, pending reviewed
+delivery and normal proof; it has not been executed.
+
 The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
 reference ordering, provider permissions, retry behavior and price limits before
@@ -49,6 +57,28 @@ no image spending. See the [M4 selected policy](M4-balanced.md#selected-policy-a
 and [official model reference](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst).
 
 ## Three execution checkpoints
+
+### Carry-forward review before the M4 exit
+
+This is a readiness review, not an M4 exit claim or M5 execution grant. Refresh
+the retained Creator outcome and allowance when M4 completes.
+
+| Boundary exposed during M4 | Delivered correction or retained limitation | M5 action |
+| --- | --- | --- |
+| Historical records grew both database responses and model inputs | Consumer projections, current creative contexts and separate size/phase diagnostics are delivered. The lossless proof-read candidate reduced bytes but failed its measured speed gate and was not adopted. Underlying external latency remains unconfirmed. | Reuse these corrections. Inspect saved warnings at normal checkpoints; investigate the measured phase if a new failure occurs. Do not make a speed target an acceptance gate. |
+| Local efficiency targets stopped otherwise eligible text work | New amended requests warn above 32,000 authoritative tokens and enforce 128,000. Historical operations retain their saved policy and liabilities. | Verify the live amended Creator result at M4 exit. Carry exact policy identities and frozen-rate reservations into any separately approved Real configuration. |
+| Removing efficiency limits exposed a smaller escaped HTTP boundary | Preparation now checks the same serialized authorization response as dispatch. Carrier and transport limits remain hard. | Include real reference transport in image-specific compatibility checks; text-only parity does not prove that path. |
+| A saved control change could be hidden by a failed detail refresh | Receipts acknowledge tracked mutation completion; read-only reconciliation handles lost acknowledgements without a second mutation. | Preserve request keys and reconcile the same run/operation after interruption. Do not treat an observer timeout as a failed generation or permission to replay. |
+| Advisory failure was confused with generation failure | Verified terminal advisory failures permit M4 completion; missing or unknown provider outcomes remain unresolved. | Preserve those M4 results. The separate Real acceptance requirements below still govern M5 reports and uninterrupted runs. |
+
+Remaining entry gaps are specific: Creator's valid M4 completion; a separately
+authorized finite Real campaign; and verified real-image configuration, reference
+transport, original-byte retrieval and pre-call accounting. The shared runner
+currently rejects `mode: real` in `lib/experiment-runner/http.ts`; the M4 policy
+authorizes simulated images only. Readiness therefore requires reviewed Real
+admission and image-policy support, not merely selecting a different model in
+Dify. M4 text reservations and zero paid images do not prove paid-image liability
+enforcement. Model availability, plugin support and prices remain unverified here.
 
 | Checkpoint | Work | Exit |
 | --- | --- | --- |
@@ -62,8 +92,11 @@ and the verified M4 release when they still satisfy the prerequisites.
 
 ## Checkpoint 1 — Readiness and authorization
 
-Reconcile M4's tested release, usage and provider bindings. Require its three
-Balanced successes and simulated recovery suite. Verify actual reference-image
+Reconcile M4's tested release, usage and provider bindings. Require completed
+generation and accounting for all three Balanced personas under the accepted M4
+criterion, with evaluation complete or a verified advisory failure explicitly
+recorded. Do not require replay of failed advisory reports. Reuse the valid
+simulated recovery suite. Verify actual reference-image
 transport, model availability evidence and request accounting. Official image
 API capability is not proof that the configured Dify plugin supports it.
 

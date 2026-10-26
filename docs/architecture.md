@@ -96,7 +96,8 @@ can use one phase-less assistant message; mixed or ambiguous messages produce
 invalid creative content while retaining the provider usage wrapper. The normal
 strict JSON parser remains authoritative. It does not repair malformed JSON or
 retry generation. Historical dev3 preparations and count-failure evidence remain
-readable; the exact protected dev4 package grant applies to new preparations.
+readable; new preparations use the exact protected dev5 package and effective
+policy grant described above. Historical dev4 evidence retains its original policy.
 
 Balanced J11 preparation uses `sheet-subjects-v1`. The model selects unique
 character/location subjects per panel. Application code resolves their exact
@@ -581,7 +582,8 @@ Historical run configuration hashes remain unchanged. See the
 The current full suite has eighteen Community bindings: manager, J01-J12,
 three testers, simulated image transport (including J13), and judge. Simulated
 acceptance is complete. Balanced Kid and Parent have verified generation with
-incomplete advisory evaluation; Creator admission remains blocked. The subsections
+incomplete advisory evaluation; the admitted Creator is stopped at a J12
+preparation failure pending reviewed delivery of its exact continuation grant. The subsections
 below retain incremental foundation details; current live status is owned by the
 [M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md).
 
