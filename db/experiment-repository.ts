@@ -35,6 +35,9 @@ import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { reportCleanup } from "@/lib/operations/completion-failure";
 import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
+import { closeM4DecisionRejection, verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
+import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
+import { createAssetStore } from "@/lib/assets/create-asset-store";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
@@ -321,10 +324,16 @@ export function createExperimentRepository(database: Database, options: { store?
   async function resume(raw: unknown): Promise<ExperimentRunDocument> {
     const input = parse(controlInput, raw);
     return withMongoTransaction(database, async (session) => {
-      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      let run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       if (run.status === "completed" || run.status === "failed") throw new ExperimentRepositoryError("invalid_state", "Terminal run cannot resume.");
       if (run.status === "blocked") {
+        if (run.activeOperationId && options.m4Authority && options.m4ExecutionEnabled && campaignLedger &&
+            hasM4SimulatedImagePolicy(run) && m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant) &&
+            campaignLedger.grant.continuations?.some(item => item.runId === run._id && item.operationId === run.activeOperationId)) {
+          const active = await operations.findOne({ _id: run.activeOperationId, runId: run._id }, { session });
+          if (active) run = await closeM4DecisionRejection(database, session, options.m4Authority, run, active, input.nowMs) ?? run;
+        }
         if (!run.m4ProgressRecovery && campaignLedger?.grant.progressRecoveries?.some(item => item.runId === run._id && item.operationId === run.progressOperationId)) {
           if (!options.m4Authority || !options.m4ExecutionEnabled || !hasM4SimulatedImagePolicy(run) ||
               !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant))
@@ -349,7 +358,8 @@ export function createExperimentRepository(database: Database, options: { store?
             !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant) || run.safeFailure !== "definite_failure" ||
             run.activeOperationId !== null || run.preparation || !hasM4SimulatedImagePolicy(run) || !failed ||
             failed.state !== "failed" || failed.safeFailure !== "definite_failure" ||
-            !(["manager", "specialist"].includes(failed.role) || isM4ReviewerInputFailure(campaignLedger.snapshot.policy, run, failed)) ||
+            !(["manager", "specialist"].includes(failed.role) || isM4ReviewerInputFailure(campaignLedger.snapshot.policy, run, failed) ||
+              await verifyM4DecisionRejection(database, session, options.m4Authority, run, failed)) ||
             run.generationCompletedAtMs != null ||
             !failed.lifecycle || failed.lifecycle.stop && !validateLegacyCountFailureProof(campaignLedger.snapshot.policy, run, failed) ||
             (!m4UnclaimedFailureDigest(options.m4Authority, run, failed) &&
@@ -364,6 +374,16 @@ export function createExperimentRepository(database: Database, options: { store?
           { $set: { status: "queued", safeFailure: null, pauseRequested: false, noProgressCount: 0, updatedAtMs: input.nowMs }, $inc: { revision: 1 } },
           { session, returnDocument: "after" });
         if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed during continuation.");
+        if (failed.m4DecisionRejection) {
+          const rejected = failed.m4DecisionRejection;
+          if (rejected.taskId === "J13") {
+            await createExperimentPageIllustrationAssembly({ database, store: (options.store ?? createAssetStore)() })
+              .verifyVersion({ runId: updated._id, versionId: rejected.artifactVersionId }, session);
+          } else {
+            await prepareNarrativeContext(database, session, updated, rejected.taskId,
+              rejected.subjectKind as "book" | "character" | "location" | "page", rejected.subjectId, options.store);
+          }
+        }
         await verifyM4Accounting(database, session, updated);
         return updated;
       }

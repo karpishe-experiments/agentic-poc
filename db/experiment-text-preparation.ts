@@ -15,6 +15,7 @@ import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-tex
 import { measurePhase, countVerificationQuery, countVerificationRead, recentDiagnostics } from "@/lib/experiment-runner/diagnostics";
 import { buildContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 import { RECONCILIATION_RESERVE_MS } from "@/lib/operations/budget";
+import { m4TesterRevisionEligibility } from "@/lib/experiment-runner/tester-decision-eligibility";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, nowMs: z.number().int().nonnegative() });
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
@@ -65,14 +66,18 @@ export function m4AllowedContextValues(selector: M4RequestSelector, contextRaw: 
     put("subjectKind", [target.subjectKind ?? "book"]);
   } else if (selector.role === "tester" && !selector.report) {
     const pending = object(context.pendingDecision); const grant = object(context.activeDelegation);
+    const eligibility = m4TesterRevisionEligibility(selector.persona, context);
     put("subjectId", [context.bookletId]); put("subjectKind", ["book"]);
-    put("taskId", Array.isArray(context.eligibleTaskIds) ? context.eligibleTaskIds : []);
-    put("taskIds", Array.isArray(context.eligibleTaskIds) ? context.eligibleTaskIds : []);
+    put("taskId", eligibility.revisionTargets.map(target => target.taskId));
+    put("taskIds", eligibility.eligibleTaskIds);
+    put("revisionTargetTaskIds", eligibility.revisionTargets.map(target => target.taskId));
+    for (const taskId of experimentTaskSchema.options) put(`revisionVersionIds:${taskId}`,
+      eligibility.revisionTargets.filter(target => target.taskId === taskId).map(target => target.versionId));
     put("questionId", [pending.questionId]); put("delegationId", [grant.id]);
     const current = artifacts.filter((a) => a.currentVersionId);
     put("versionIds", current.filter((a) => a.state !== "approved").map((a) => a.currentVersionId));
-    put("artifactVersionId", current.map((a) => a.currentVersionId));
-    put("action", pending.kind === "question" ? ["answer"] : ["approve", "revise",
+    sets.set("artifactVersionId", new Set(eligibility.revisionTargets.map(target => target.versionId)));
+    put("action", pending.kind === "question" ? ["answer"] : ["approve", ...(eligibility.revisionTargets.length ? ["revise"] : []),
       ...(selector.persona !== "professional_creator" && !grant.id ? ["delegate"] : []), ...(grant.id ? ["revoke_delegation"] : [])]);
   }
   if (selector.role === "specialist" && (selector.taskId === "J11" || selector.taskId === "J12")) {

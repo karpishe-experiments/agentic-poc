@@ -31,6 +31,7 @@ type Run = {
     remainingMicrodollars: number; maxMicrodollars: number; countChargeStatus: "verified" | "assumed"; invoiceCostAvailable: false };
   limits: { text: number; image: number; steps: number }; currentArtifacts?: Artifact[];
   pendingDecision?: unknown; nextNarrativeTask?: string | null; safeFailure?: string | null; activeOperationId?: string | null;
+  retainedDecisionContinuation?: boolean;
   creatorMessages?: { id: string; sequence: number; content: unknown; createdAtMs: number }[];
   activeDelegation?: { id: string; taskIds: string[]; subjectKind: string; subjectId: string; testerDecisionId: string } | null;
   operationHistory?: Operation[];
@@ -46,6 +47,9 @@ type Run = {
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
 type Mode = "simulated" | "balanced";
+const retainedDecisionControl = (state: Pick<Run, "status" | "safeFailure" | "generationStatus" | "activeOperationId" | "preparation" | "retainedDecisionContinuation">) =>
+  state.retainedDecisionContinuation === true && state.status === "blocked" && state.safeFailure === "definite_failure" &&
+  state.generationStatus === "in_progress" && !!state.activeOperationId && !state.preparation;
 type PendingCreate = { persona: Persona; mode: Mode; key: string; predecessorRunId?: string };
 class RunnerRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
@@ -202,9 +206,10 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
     const applyState = (state: ControlState) => {
       const previous = latestRuns.current.get(state.runId);
       if (!previous || state.revision < previous.revision) throw new Error("Stale control state");
-      latestRuns.current.set(state.runId, { ...previous, ...state });
+      const patch = { ...state, retainedDecisionContinuation: state.retainedDecisionContinuation ?? false };
+      latestRuns.current.set(state.runId, { ...previous, ...patch });
       if (alive.current) {
-        setRuns(rows => rows.map(row => row.runId === state.runId && row.revision <= state.revision ? { ...row, ...state } : row));
+        setRuns(rows => rows.map(row => row.runId === state.runId && row.revision <= state.revision ? { ...row, ...patch } : row));
         detailRefreshPending.current.add(state.runId);
         setPendingDetails([...detailRefreshPending.current]);
       }
@@ -230,7 +235,8 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         if (caught instanceof RunnerRequestError && caught.status === 409 && caught.code === "stale_revision") {
           const current = await readState(); applyState(current);
           if (requestedState(current)) { observed = true; }
-          else if (current.status === "failed" || current.status === "completed" || current.status === "blocked" || current.preparation?.unresolved) {
+          else if (current.status === "failed" || current.status === "completed" ||
+              current.status === "blocked" && !(action === "resume" && retainedDecisionControl(current)) || current.preparation?.unresolved) {
             throw new RunnerRequestError("The run changed state. Inspect its saved status before trying again.", 409);
           } else {
             // Only a definite revision rejection permits this single retry.
@@ -310,7 +316,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         </div>
         <div className="flex flex-wrap gap-2">
           {!focusedRunId ? <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--ink)] px-5 py-2 font-semibold hover:opacity-90" style={{ color: "var(--surface)" }} href={`/experiments/booklet-runs/${encodeURIComponent(run.runId)}`} aria-label={`Open run: ${personas.find(item => item.id === run.persona)?.label ?? run.persona} (${run.runId})`}>Open run <span aria-hidden="true">&rarr;</span></Link> : null}
-          {(run.mode === "balanced" || run.generationStatus === "complete") && run.status === "blocked" && run.safeFailure === "definite_failure" && !run.activeOperationId ? <button className={secondaryAction} disabled={mutationDisabled} onClick={() => void control(run, "resume")}>{run.generationStatus === "complete" ? "Finalize completed booklet" : "Continue inspected run"}</button> : run.pauseRequested || run.status === "paused" ? <button className={secondaryAction} disabled={mutationDisabled || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button className={secondaryAction} disabled={mutationDisabled || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}
+          {(run.mode === "balanced" || run.generationStatus === "complete") && run.status === "blocked" && run.safeFailure === "definite_failure" && (!run.activeOperationId || retainedDecisionControl(run)) ? <button className={secondaryAction} disabled={mutationDisabled} onClick={() => void control(run, "resume")}>{run.generationStatus === "complete" ? "Finalize completed booklet" : "Continue inspected run"}</button> : run.pauseRequested || run.status === "paused" ? <button className={secondaryAction} disabled={mutationDisabled || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button className={secondaryAction} disabled={mutationDisabled || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}
         </div>
       </header>
       <dl className="grid gap-4 border-y border-[var(--border)] py-4 text-sm sm:grid-cols-2">

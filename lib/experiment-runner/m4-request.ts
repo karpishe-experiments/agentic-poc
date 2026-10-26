@@ -4,6 +4,7 @@ import { m4LayoutCatalog } from "@/lib/experiment-runner/m4-layout";
 import { buildFeedbackLedger, type SavedCreatorMessage } from "@/lib/experiment-runner/feedback-ledger";
 import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { pageLetteringContext } from "@/lib/experiment-runner/page-lettering-context";
+import { M4_SIMULATED_IMAGE_REVIEW_POLICY } from "@/lib/experiment-runner/tester-decision-eligibility";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import {
   conceptBriefSchema, storyOutlineSchema, draftCharacterListSchema, draftLocationListSchema, manuscriptSchema,
@@ -237,11 +238,12 @@ function reportOperationSummary(rows: unknown[], operationId: string) {
   }
   return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, group]) => group);
 }
-function projectionFields(selector: M4RequestSelector) {
+function projectionFields(selector: M4RequestSelector, testerEligibility = true) {
   return selector.role === "manager" ? ["role", "run", "eligibleRoute", "eligibleTarget"] : selector.role === "specialist" ?
     ["role", "taskId", "subjectKind", "subjectId", "brief", "persona", "currentTarget", "approvedSources", "matchingRevision", "questionAnswers", "creatorMessages"] : selector.report ?
       ["role", "bookletId", "brief", "persona", "currentArtifacts", "creatorMessages", "operationHistory", "counters", "limits", "warnings", "imageEvidence", "reportEvidence"] :
-      ["role", "bookletId", "brief", "persona", "currentArtifacts", "pendingDecision", "activeDelegation", "creatorMessages", "eligibleTaskIds", "revisionCounts"];
+      ["role", "bookletId", "brief", "persona", "currentArtifacts", "pendingDecision", "activeDelegation", "creatorMessages", "eligibleTaskIds", "revisionCounts",
+        ...(testerEligibility ? ["revisionLimits", "imageReviewPolicy"] : [])];
 }
 const testerEvidenceScope = {
   artifactVersions: "Current versions only, including drafts awaiting review. Version numbers, source relationships, warnings and approvals are retained; historical creative bodies are omitted and remain saved.",
@@ -314,7 +316,11 @@ export function projectM4Context(selector: M4RequestSelector, raw: unknown, oper
     // pages without giving this routing decision another permissible choice.
   }
   if (selector.report || selector.role === "tester") result.currentArtifacts = list(result.currentArtifacts).map(value => artifactProjection(value, true));
-  if (selector.role === "tester" && !selector.report) result.evidenceScope = { ...testerEvidenceScope };
+  if (selector.role === "tester" && !selector.report) {
+    result.evidenceScope = { ...testerEvidenceScope };
+    result.revisionLimits = { text: CASES[selector.persona].textRevisionLimit, image: CASES[selector.persona].imageRevisionLimit };
+    result.imageReviewPolicy = M4_SIMULATED_IMAGE_REVIEW_POLICY;
+  }
   if (selector.report) {
     result.operationHistory = reportOperationSummary(list(result.operationHistory), operationId);
     result.evidenceScope = {
@@ -331,8 +337,23 @@ export type M4AllowedValues = Readonly<Record<string, readonly string[]>>;
 // The protected projection supplies field-specific identities/actions. Prune an
 // impossible decision branch rather than asking the model to invent an identity.
 export function m4BindAllowedValues(schema: JsonSchema, allowed: M4AllowedValues): JsonSchema {
-  function bind(source: JsonSchema, field: string): JsonSchema | null {
+  function bind(source: JsonSchema, field: string, revisionBound = false): JsonSchema | null {
     const value = { ...source };
+    const properties = value.properties as Record<string, JsonSchema> | undefined;
+    if (!revisionBound && Object.hasOwn(allowed, "revisionTargetTaskIds") &&
+        (properties?.action?.enum as string[] | undefined)?.includes("revise")) {
+      if (!allowed.action?.includes("revise")) return null;
+      const alternatives = allowed.revisionTargetTaskIds.flatMap(taskId => {
+        const versions = allowed[`revisionVersionIds:${taskId}`] ?? [];
+        if (!versions.length) return [];
+        const candidate = bind({ ...source, properties: { ...properties,
+          taskId: { ...properties!.taskId, enum: [taskId] },
+          artifactVersionId: { ...properties!.artifactVersionId, enum: [...versions] },
+        } }, field, true);
+        return candidate ? [candidate] : [];
+      });
+      return alternatives.length ? { anyOf: alternatives } : null;
+    }
     if (value.type === "string" && (value.format === "uuid" || Array.isArray(value.enum) && allowed[field])) {
       const choices = allowed[field];
       if (!choices) throw new Error(`M4 preparation lacks allowed values for ${field}.`);
@@ -373,8 +394,9 @@ export function m4BindAllowedValues(schema: JsonSchema, allowed: M4AllowedValues
   assertM4SchemaLimits(bound);
   return bound;
 }
-function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = false, legacyLimits = false) {
+function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = false, legacyLimits = false, legacyTester = false) {
   const { role, taskId, persona, report } = selector;
+  const testerEligibility = role === "tester" && !report && !legacyReport && !legacyLimits && !legacyTester;
   z.enum(["manager", "specialist", "tester", "judge"]).parse(role);
   z.boolean().parse(report);
   personaSchema.parse(persona);
@@ -394,9 +416,10 @@ function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = 
     instruction = `Act as the saved ${persona} creator persona. Give a meaningful decision on the current pending work using exact supplied versions/question/grant identities. Preserve current delegation: do not repeat an existing valid grant. Kid/Parent may delegate routine approvals. Creator must explicitly approve current artifacts and exercise the saved detailed control/revision requirement; never delegate around it. Use saved revisionCounts and creator messages to avoid repeating a completed control. Answer clarifications from the saved goal. Revise missing or technically invalid content, or fulfill an explicit saved creator control; advisory quality findings alone do not require another attempt.`;
     instruction += " For J09, attireRequirements and accessories are immutable copies of approved J06 source evidence, not editable design fields. Do not request their deletion or rewriting through J09. A note that appearance is not established in the manuscript is not a prohibition on later creator-specified design. Assess whether characterDesignProfile and sheetPromptModule implement saved creator answers and required views; do not repeat a revision solely because the inherited note remains. Actual approved hard constraints remain binding. If a creator request contradicts one, request clarification or an upstream revision rather than overriding it. This distinction does not require approval of missing, contradictory or technically invalid work.";
     instruction += " Use evidenceScope to distinguish supplied current creative evidence from omitted history and transport data. Do not assess unseen historical versions or treat omitted execution prompts as missing creative work. Preserve exact current version targets and saved creator feedback when deciding. Images are simulated and text-only: visual assessment is not_assessed; do not claim to have inspected rendered images. State any relevant evidence limitation in the decision explanation; required current creative and technical checks still apply.";
+    if (testerEligibility) instruction += " Follow imageReviewPolicy: a decoded simulated image's geometry mismatch with the working canvas is advisory and must never alone cause regeneration. Missing/corrupt original bytes, wrong identities, invalid references and missing required content remain defects. Follow revisionCounts and revisionLimits; J13 consumes image revisions, J01-J12 consume text revisions. Never request an exhausted revision or repeat a completed control. Choose only a supplied current revision target; when revising is unavailable, approve valid work or use another eligible control without inventing a revision.";
   }
-  const definition = { version: legacyReport || legacyLimits && role === "manager" ? "m4_request_v1" : legacyLimits ? "m4_context_current_v2" : "m4_context_policy_v3", rendering: "exact-context-string-v1", role, taskId, persona, report,
-    projection: { fields: projectionFields(selector), managerRunFields: role === "manager" ? managerRunFields : [],
+  const definition = { version: testerEligibility ? "m4_tester_eligibility_v4" : legacyReport || legacyLimits && role === "manager" ? "m4_request_v1" : legacyLimits ? "m4_context_current_v2" : "m4_context_policy_v3", rendering: "exact-context-string-v1", role, taskId, persona, report,
+    projection: { fields: projectionFields(selector, testerEligibility), managerRunFields: role === "manager" ? managerRunFields : [],
       ...(role === "specialist" && taskId === "J11" ? { layoutContract: M4_LAYOUT_CONTRACT } : {}),
       ...(role === "tester" && !report ? { artifactProjection: "compact-current-review-v1", creativeContent: true, evidenceScope: testerEvidenceScope } : {}),
       ...(role !== "manager" && !legacyReport ? { feedbackProjection: "saved_decisions_v1", evidenceProjection: "current_creative_v2" } : {}),
@@ -405,6 +428,15 @@ function compileM4RequestDefinition(selector: M4RequestSelector, legacyReport = 
     ...(!legacyReport && !legacyLimits ? { carrierByteLimit: 2 * 1024 * 1024, authorizationByteLimit: 1_048_576, efficiencyLimits: "advisory_v1" } : {}),
     systemPrompt: `${common}\n${instruction}`, outputSchema: m4StrictSchema(modelOutputSchema(selector, true)) };
   return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
+}
+
+/** Saved mid-run tester requests retain their original definition identity. */
+export function m4SavedTesterDefinition(selector: M4RequestSelector, hash: string) {
+  if (selector.role !== "tester" || selector.report) return null;
+  const current = m4RequestDefinition(selector);
+  if (current.hash === hash) return current;
+  const previous = compileM4RequestDefinition(selector, false, false, true);
+  return previous.hash === hash ? previous : null;
 }
 
 const definitions = new Map<string, ReturnType<typeof compileM4RequestDefinition>>();

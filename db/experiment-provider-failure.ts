@@ -17,6 +17,7 @@ import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { isM4ContinuedReviewerInputFailure, m4PreGenerationFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
+import { verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema,
   nowMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) });
@@ -28,6 +29,13 @@ const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSc
 export async function hasM4KnownFailure(database: Database, session: ClientSession,
   authority: M4Authority, run: ExperimentRunDocument, op: ExperimentOperationDocument, nowMs: number, attempt?: VerificationAttempt): Promise<boolean> {
   const ledger = createExperimentCampaignLedger(database, authority);
+  if (op.m4DecisionRejection) {
+    const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
+    return !!campaign && campaign.policyHash === ledger.snapshot.hash && campaign.policyJson === ledger.snapshot.json &&
+      campaign.grantReference === ledger.grant.reference && campaign.slots[run.persona] === run._id &&
+      op.state === "failed" && op.safeFailure === "definite_failure" && op.lifecycle?.phase === "finished" &&
+      op.lifecycle.unresolved === false && await verifyM4DecisionRejection(database, session, authority, run, op);
+  }
   if (op.state === "failed" && op.safeFailure === "definite_failure" && op.dispatchStartedAtMs == null &&
       await verifyUndispatchedText(database, session, authority, run, op._id)) {
     const campaign = await readM4FailureCampaign(database, session, ledger.grant.campaignId, run._id, attempt);
