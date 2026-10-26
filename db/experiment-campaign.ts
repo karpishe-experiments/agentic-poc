@@ -10,6 +10,9 @@ import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { currentMutationOwnerId } from "@/lib/application/deployment-control";
 import { isM4ReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
+import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
+import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
+import { prepareNarrativeContext } from "@/db/experiment-narrative";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -175,6 +178,62 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     const campaign = await current(session);
     if (campaign.state === "active") await touch(campaign, session, { state: "stopped" }, nowMs);
   }
+  // Only an exact reviewed grant can repair the historical false loop stop.
+  // The saved successful manager remains the next specialist's parent.
+  async function recoverProgress(session: ClientSession, run: ExperimentRunDocument, nowMs: number, assetStore?: () => AssetStore) {
+    const permission = grant.progressRecoveries?.find(item => item.runId === run._id && item.operationId === run.progressOperationId);
+    requireState(permission && !run.m4ProgressRecovery && run.mode === "balanced" &&
+      run.status === "blocked" && run.safeFailure === "definite_failure" && run.noProgressCount === 3 &&
+      typeof run.progressFingerprint === "string" && run.activeOperationId === null && !run.preparation &&
+      run.generationCompletedAtMs == null && run.m4?.campaignId === grant.campaignId &&
+      run.m4.policyHash === snapshot.hash && run.m4.policyJson === snapshot.json, "No exact progress recovery matches this stop.");
+    const operation = await database.collections.experiment_operations.findOne({ runId: run._id },
+      { session, sort: { createdAtMs: -1, _id: -1 } });
+    requireState(operation && operation._id === permission!.operationId && operation.role === "manager" &&
+      operation.state === "succeeded" && operation.verifiedWorkflowId && operation.workflowRunId &&
+      operation.lifecycle?.phase === "finished" && operation.lifecycle.unresolved === false && !operation.lifecycle.stop &&
+      operation.safeFailure === null && operation.m4ContinuedFromOperationId, "Progress recovery requires its latest completed manager.");
+    const failed = await database.collections.experiment_operations.findOne({ _id: operation!.m4ContinuedFromOperationId, runId: run._id }, { session });
+    const digest = failed ? await verifyUndispatchedText(database, session, authority, run, failed._id) : null;
+    requireState(digest && failed?.role === "specialist" && failed.m4Continuation?.kind === "undispatched_text_v1" &&
+      failed.m4Continuation.evidenceDigest === digest && failed.m4Continuation.nextOperationId === operation!._id &&
+      failed.m4Continuation.requestDigest === (failed.m4Preparation?.requestDigest ?? null) &&
+      grant.continuations?.some(item => item.runId === run._id && item.operationId === failed._id),
+      "Progress recovery requires its original verified continuation chain.");
+    const result = m4ObservedRoleResult(run, operation!);
+    requireState(result.kind === "delegate" && result.payload.taskId === failed!.taskId &&
+      result.payload.subjectKind === failed!.subjectKind && result.payload.subjectId === failed!.subjectId &&
+      operation!.resultJson && m4CanonicalJson(JSON.parse(operation!.resultJson)) === m4CanonicalJson(result) &&
+      operation!.resultDigest === m4Hash(operation!.resultJson!) && operation!.materializationJson &&
+      m4CanonicalJson(JSON.parse(operation!.materializationJson)) === m4CanonicalJson({ delegatedTaskId: failed!.taskId }),
+      "Progress recovery manager result or target differs.");
+    if (result.kind !== "delegate" || result.payload.taskId === "J13") throw new CampaignAdmissionError("Progress recovery requires a text target.");
+    await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore);
+    const campaign = await current(session);
+    requireState(campaign.state === "stopped" && campaign.slots[run.persona] === run._id, "Campaign cannot recover progress.");
+    requireAllowance(campaign.requests < snapshot.policy.maxRequests && campaign.requestCounts[run.persona] < CASES[run.persona].llmLimit &&
+      run.counters.steps < run.limits.steps && run.counters.logicalText < run.limits.text &&
+      campaign.settledMicrodollars + campaign.reservedMicrodollars + m4MaximumCharge(snapshot.policy, "specialist", m4AdmittedTokenPolicy(snapshot.policy, grant).snapshot) <= snapshot.policy.maxMicrodollars,
+      "Progress recovery has no remaining allowance.");
+    const runIds = Object.values(campaign.slots).filter((value): value is string => value !== null);
+    const operationIds = [operation!._id, failed!._id];
+    const controls = await database.collections.deployment_control.find({ $or: [
+      { "mutationOwners.runId": { $in: runIds } }, { "mutationOwners.operationId": { $in: operationIds } },
+    ] }, { session }).toArray();
+    requireState(!controls.some(control => control.mutationOwners?.some(owner =>
+      (owner.runId && runIds.includes(owner.runId) || owner.operationId && operationIds.includes(owner.operationId)) && owner.id !== currentMutationOwnerId())),
+      "Campaign has an unresolved mutation owner.");
+    requireState(!await database.collections.experiment_operations.findOne({ runId: { $in: runIds }, $or: [
+      { state: { $in: ["prepared", "started", "unknown"] } }, { "lifecycle.unresolved": true },
+      ...["authorizationClaim", "resultFinalizationClaim", "imageCompletionClaim"].map(key => ({ [key]: { $ne: null } })),
+    ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved operation work.");
+    requireState(!await database.collections.experiment_runs.findOne({ _id: { $in: runIds }, $or: [
+      { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
+    ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved preparation.");
+    await touch(campaign, session, { state: "active" }, nowMs);
+    return { operationId: operation!._id, failedOperationId: failed!._id, reference: permission!.reference,
+      recoveredAtMs: nowMs, priorNoProgressCount: run.noProgressCount!, progressFingerprint: run.progressFingerprint! };
+  }
   async function continueFailure(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, nowMs: number) {
     requireState(operation.role !== "tester" || isM4ReviewerInputFailure(snapshot.policy, run, operation),
       "Only a generation-stage reviewer input-limit failure may continue.");
@@ -244,5 +303,5 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
     ] }, { session, projection: { _id: 1 } }), "Campaign has active or unresolved preparation.");
     await touch(campaign, session, { state: "active" }, nowMs);
   }
-  return { snapshot, grant, create, claimPersona, reserve, settle, stop, continueFailure, recoverCompletion };
+  return { snapshot, grant, create, claimPersona, reserve, settle, stop, continueFailure, recoverCompletion, recoverProgress };
 }

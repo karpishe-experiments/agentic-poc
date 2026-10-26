@@ -325,6 +325,18 @@ export function createExperimentRepository(database: Database, options: { store?
       if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       if (run.status === "completed" || run.status === "failed") throw new ExperimentRepositoryError("invalid_state", "Terminal run cannot resume.");
       if (run.status === "blocked") {
+        if (!run.m4ProgressRecovery && campaignLedger?.grant.progressRecoveries?.some(item => item.runId === run._id && item.operationId === run.progressOperationId)) {
+          if (!options.m4Authority || !options.m4ExecutionEnabled || !hasM4SimulatedImagePolicy(run) ||
+              !m4RequestBundleMatches(campaignLedger.snapshot.policy, campaignLedger.grant))
+            throw new ExperimentRepositoryError("invalid_state", "Progress recovery requires current M4 authority.");
+          const recovery = await campaignLedger.recoverProgress(session, run, input.nowMs, options.store);
+          const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, status: "blocked", activeOperationId: null },
+            { $set: { status: "queued", safeFailure: null, pauseRequested: false, noProgressCount: 0,
+              m4ProgressRecovery: recovery, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+          if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed during progress recovery.");
+          await verifyM4Accounting(database, session, updated);
+          return updated;
+        }
         const permitted = campaignLedger?.grant.continuations?.filter((item) => item.runId === run._id).map((item) => item.operationId) ?? [];
         const failed = permitted.length ? await operations.findOne({ _id: { $in: permitted }, runId: run._id,
           m4Continuation: { $exists: false } }, { session, sort: { createdAtMs: -1, _id: -1 } }) : null;
@@ -342,7 +354,9 @@ export function createExperimentRepository(database: Database, options: { store?
         }
         await campaignLedger.continueFailure(session, run, failed, input.nowMs);
         const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, status: "blocked", activeOperationId: null },
-          { $set: { status: "queued", safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs }, $inc: { revision: 1 } },
+          // Explicitly verified continuation starts a new loop-observation interval.
+          // Failed preparations must not consume another interval's progress budget.
+          { $set: { status: "queued", safeFailure: null, pauseRequested: false, noProgressCount: 0, updatedAtMs: input.nowMs }, $inc: { revision: 1 } },
           { session, returnDocument: "after" });
         if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run changed during continuation.");
         await verifyM4Accounting(database, session, updated);
