@@ -8,9 +8,10 @@ if [[ $# -eq 0 ]]; then
   for scenario in candidate-recovery-prebackup-apply candidate-recovery-prebackup-drift candidate-recovery-prebackup-resume candidate-recovery-prebackup-active candidate-recovery-prebackup-advanced candidate-recovery-prebackup-unsupported; do
     bash "$0" "$scenario"
   done
-  for scenario in expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in recovery-response-diagnostic expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
+  bash tests/shell/vps-backup-helper.test.sh
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
   exit 0
 fi
@@ -52,6 +53,63 @@ verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
+  recovery-response-diagnostic)
+    RUN_ID=11111111-1111-1111-1111-111111111111 OPERATION_ID=22222222-2222-2222-2222-222222222222
+    fixture_run="$RUN_ID" fixture_operation="$OPERATION_ID"
+    callback_fixture() {
+      jq -nc --arg run "$fixture_run" --arg operation "$fixture_operation" '{event:"booklet_callback_phase",timestamp:"2026-10-26T13:19:26.000Z",runId:$run,operationId:$operation,phase:"accounting_campaign_read",elapsedMs:1,outcome:"succeeded",budgetAtStartMs:150000,remainingBudgetMs:149999,queryCount:1,storageCallCount:0,transactionAttempts:0,readRows:1,readJsonBytes:42}'
+    }
+    recovery_oneoff() {
+      case "$scenario" in
+        empty) :;;
+        malformed) printf 'private-response-not-json\n';;
+        multiple) printf '{"verified":true,"private":"do-not-print"}\n{"verified":true}\n';;
+        false) printf '{"verified":false,"private":"do-not-print"}\n';;
+        scalar) printf '"private-response-scalar"\n';;
+        unknown) printf '{"diagnostic":"unknown","private":"do-not-print"}\n{"verified":true}\n';;
+        extra-field) printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1,"private":"do-not-print"}\n{"verified":true}\n';;
+        invalid-count) printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":"private","returnedBytes":1}\n{"verified":true}\n';;
+        failed-read) printf '{"diagnostic":"deployment_read","phase":"cleanup","operation":"database_close","outcome":"failed","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1}\n{"verified":true}\n';;
+        forged-receipt) printf '{"diagnostic":"unknown","verified":true}\n';;
+        wrong-run) callback_fixture | jq '.runId="another-run"'; printf '{"verified":true}\n';;
+        failed-callback) callback_fixture | jq '.outcome="failed"'; printf '{"verified":true}\n';;
+        callback-extra) callback_fixture | jq '.private="do-not-print"'; printf '{"verified":true}\n';;
+        unknown-phase) callback_fixture | jq '.phase="another-phase"'; printf '{"verified":true}\n';;
+        diagnostics-only) printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1}\n';;
+        mixed)
+          printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1}\n'
+          callback_fixture
+          printf '{"verified":true,"phase":"preview","previewDigest":"original-proof"}\n'
+          printf '{"diagnostic":"deployment_read","phase":"cleanup","operation":"database_close","outcome":"completed","elapsedMs":1,"remainingBudgetMs":null,"returnedRows":0}\n'
+          ;;
+        valid) printf '{"verified":true}\n';;
+      esac
+      printf 'private-stderr-do-not-print\n' >&2
+    }
+    for scenario in empty malformed multiple false scalar unknown extra-field invalid-count failed-read forged-receipt wrong-run failed-callback callback-extra unknown-phase diagnostics-only; do
+      if (recovery_app_json unused '' preview "$TEMP_DIR/response") > "$TEMP_DIR/diagnostic" 2> "$TEMP_DIR/error"; then exit 1; fi
+      jq -e '.diagnostic=="recovery_response" and .code=="invalid_recovery_response" and .phase=="preview" and (.stdoutBytes|type)=="number" and .stderrBytes>0' "$TEMP_DIR/diagnostic" >/dev/null
+      ! grep -Eq 'private|do-not-print' "$TEMP_DIR/diagnostic" "$TEMP_DIR/error"
+      case "$scenario" in
+        empty) jq -e '.stdoutBytes==0 and .shape.jsonValues==0' "$TEMP_DIR/diagnostic" >/dev/null;;
+        malformed) jq -e '.shape==null' "$TEMP_DIR/diagnostic" >/dev/null;;
+        multiple) jq -e '.shape.jsonValues==2 and .shape.verifiedResults==2' "$TEMP_DIR/diagnostic" >/dev/null;;
+        false) jq -e '.shape.objects==1 and .shape.verifiedResults==0' "$TEMP_DIR/diagnostic" >/dev/null;;
+        scalar) jq -e '.shape.jsonValues==1 and .shape.objects==0' "$TEMP_DIR/diagnostic" >/dev/null;;
+      esac
+    done
+    for scenario in valid mixed; do
+      recovery_app_json unused '' preview "$TEMP_DIR/response" > "$TEMP_DIR/diagnostic"
+      [[ ! -s "$TEMP_DIR/diagnostic" ]]
+      jq -se 'length==1 and .[0].verified==true and (.[0]|has("diagnostic")|not)' "$TEMP_DIR/response" >/dev/null
+      [[ "$scenario" != mixed ]] || jq -e '.phase=="preview" and .previewDigest=="original-proof"' "$TEMP_DIR/response" >/dev/null
+    done
+    # Normal Deploy has no recovery CLI globals; it supplies the saved handoff.
+    RUN_ID='' OPERATION_ID='' scenario=mixed
+    recovery_app_json unused '' verify-completed "$TEMP_DIR/response" --run-id "$fixture_run" --operation-id "$fixture_operation" > "$TEMP_DIR/diagnostic"
+    [[ ! -s "$TEMP_DIR/diagnostic" ]]
+    jq -se 'length==1 and .[0].verified==true' "$TEMP_DIR/response" >/dev/null
+    ;;
   recovery-contract-*)
     scenario="$1"
     contract='{"dataContractVersion":"booklet-data-v1","supportedDataContractVersions":["booklet-data-v1"],"initializationRequired":false,"migrationRequired":false}'

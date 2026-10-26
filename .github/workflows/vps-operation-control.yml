@@ -8,7 +8,7 @@ on:
       commit: {description: Backup selected commit or bootstrap NEW reviewed staging commit, required: false}
       image_digest: {description: Backup selected image or bootstrap NEW reviewed staging image, required: false}
       backup_id: {description: Exact backup ID for verification; optional new ID for bootstrap backup, required: false}
-      recovery: {description: 'Recovery JSON: run_id, operation_id, expected_revision, preview_digest, original_request_id, inspection_only, abort_recovery, release_expired_claim, page, limit', required: false}
+      recovery: {description: 'Recovery JSON: run_id, operation_id, expected_revision, preview_digest, original_request_id, backup_helper_image, backup_helper_commit, inspection_only, abort_recovery, release_expired_claim, page, limit', required: false}
       confirmation: {description: Bootstrap apply requires kids_booklet, required: false}
       apply: {description: Apply exact stop or staging bootstrap; otherwise preview/read-only, type: boolean, default: false}
 permissions: {contents: read}
@@ -68,7 +68,7 @@ jobs:
           [[ -z "$CONFIRMATION" ]] || args+=(--confirmation "$CONFIRMATION")
           if [[ "$OPERATION" == candidate-reconcile || "$OPERATION" == expired-deployment-recover ]]; then
             [[ "$TARGET" == staging ]]
-            jq -e 'type=="object" and ((keys-["run_id","operation_id","expected_revision","preview_digest","original_request_id","inspection_only","abort_recovery","release_expired_claim","page","limit"])|length==0) and all(.[]; type=="string")' <<< "$RECOVERY" >/dev/null
+            jq -e 'type=="object" and ((keys-["run_id","operation_id","expected_revision","preview_digest","original_request_id","backup_helper_image","backup_helper_commit","inspection_only","abort_recovery","release_expired_claim","page","limit"])|length==0) and all(.[]; type=="string")' <<< "$RECOVERY" >/dev/null
             release_claim="$(jq -r ' .release_expired_claim // "false"' <<< "$RECOVERY")"
             [[ "$release_claim" == true || "$release_claim" == false ]]
             [[ "$release_claim" == false ]] || args+=(--release-expired-claim)
@@ -78,7 +78,7 @@ jobs:
             inspection="$(jq -r '.inspection_only // "false"' <<< "$RECOVERY")"
             [[ "$inspection" == true || "$inspection" == false ]]
             [[ "$inspection" == false ]] || args+=(--inspection-only)
-            for key in run_id operation_id expected_revision preview_digest original_request_id page limit; do
+            for key in run_id operation_id expected_revision preview_digest original_request_id backup_helper_image backup_helper_commit page limit; do
               value="$(jq -r --arg key "$key" '.[$key] // ""' <<< "$RECOVERY")"
               [[ -z "$value" ]] || args+=("--${key//_/-}" "$value")
             done
@@ -102,7 +102,8 @@ jobs:
               printf '```text\n'
               grep -E '^(result: recovery preview |result: operation |result: backup verified |result: bootstrap (old|candidate) |exists: operation |would update: (stop exact operation|exact staging page bookkeeping) |updated: (exact operation stopped|exact staging bookkeeping repaired))' "$RUNNER_TEMP/operation-control.txt" || true
               jq -Rc 'fromjson? | select(.environment=="staging" and (.action=="candidate-reconcile" or .action=="expired-deployment-recover")) | {requestId,action,purpose,phase,environment,commit,image,runId,operationId,originalRequestId,backupId,previewDigest,historical,compatibilityProof}' "$RUNNER_TEMP/operation-control.txt"
-              jq -Rc 'fromjson? | select(.environment=="_staging" and (.outcome!=null or .code!=null)) | {schemaVersion,environment,inspectedAtMs,outcome,code,diagnostic,phase,stage,operation,collection,returnedRows,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,admission,blockers,inspectionError}' "$RUNNER_TEMP/operation-control.txt"
+              jq -Rc 'fromjson? | select(.version=="recovery_transfer_v1") | {version,phase,action,category,ordinal,expectedBytes,completedBytes,elapsedMs,remainingBudgetMs,outcome,failureCategory}' "$RUNNER_TEMP/operation-control.txt"
+              jq -Rc 'fromjson? | select(.environment=="_staging" and (.outcome!=null or .code!=null)) | {schemaVersion,environment,inspectedAtMs,outcome,code,diagnostic,phase,stage,operation,collection,returnedRows,errorKind,elapsedMs,remainingBudgetMs,cleanupOutcome,commitState,admission,blockers,inspectionError,stdoutBytes,stderrBytes,shape:(if .diagnostic=="recovery_response" then (.shape|if type=="object" then {jsonValues,objects,verifiedResults} else null end) else null end)}' "$RUNNER_TEMP/operation-control.txt"
               printf '```\n'
             fi
             printf '\nStopping a process does not prove that its output failed. Inspect and reconcile the retained phase before resume.\n'

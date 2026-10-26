@@ -1,9 +1,97 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles after the reviewed exact saved-manager recovery. It is now blocked at revision 657 while saving a tester decision requesting an exhausted third image revision. The 43,977-token provider request succeeded; size warnings did not stop execution. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Normal staging deployment is interrupted during backup; no continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Maintenance storage correction contract — 2026-10-26
+
+The operator approved implementation of the backup correction and M4 continuation.
+The private stack classification identifies an S3 HTTP abort from the operation
+budget timer. Storage calls currently receive a nested 30-second cap inside the
+30-minute backup budget. The transfer identity and reason for its duration remain
+unknown. Correct maintenance deadline propagation, add fixed content-free phase
+diagnostics on stderr, and retain immutable backup and checksum contracts.
+
+The delivery correction must run the reviewed helper before installing the new
+application. Keep the prior release as the backup subject and record the helper
+identity separately. A stopped, expired deployment at backup may create one fresh
+backup after read-only inspection of its original backup. Retain the original
+journal and partial objects; never renew the failed deployment or replay Creator
+decision recovery. Pin helper, subject, journal and configuration in a preview and
+recovery journal. Reconcile uncertain checkpoints through reads. Normal deployment
+must use the pinned helper until the corrected application is installed.
+
+Change surfaces are recovery storage/CLI, the canonical dispatcher/control
+workflow, focused storage and fake-host tests, architecture and deployment
+contracts/runbook. Preserve the existing overall maintenance bounds, experiment
+and provider deadlines, campaign allowances and zero paid images. No database
+migration, infrastructure/provider change or credential-use change is included.
+Require two independent clean reviews, lean CI and Linux shell validation before
+the private-root dispatcher handoff and guarded recovery. Creator remains paused
+until normal staging delivery and readiness pass.
+
+Local verification covers 50 focused storage/budget/deployment units, 16 CI
+selection tests, typecheck, focused lint and documentation links. Fake-host cases
+cover immutable fresh/reused backup selection, no write during preview, uncertain
+backup verification without replay, helper and original-evidence drift, retained
+deadlines, normal-delivery tree binding and bounded owned cleanup after expiration.
+Review corrections preserve the original control deadline through preflight and
+reentry, reuse the full decision-handoff provenance proof, and separate expired
+work from finite cleanup. Linux shell CI and live delivery remain separate gates;
+these local results do not establish backup success or M4 completion.
+
+### Verified recovery and pending normal delivery — 2026-10-26
+
+Receipt diagnostics measured eleven JSON objects with one verified result. The
+single-object host parser rejected the stream because accounting instrumentation
+also emits JSON to standard output. PR #295 normalizes only fully validated known
+diagnostics around one verified receipt. Review caught the normal-deployment
+handoff's explicit target arguments; the final parser binds those identities
+instead of assuming populated recovery globals. Source and handoff each passed
+two independent reviews. Linux CI `40331379727` passed both complete shell suites.
+No credential-use change was made.
+
+Preview `40331971181` passed. Apply `40333646824` completed the exact recovery and
+verified preserved evidence/accounting before and after service restart, with
+backup `staging-recovery-m4-decision-recovery-2380f45a-v1`. The live compact read
+confirmed revision 658, Pause requested and no active operation or preparation.
+Staging PR #293 merged as `d89097aee8ecbfb90b694c7af99c37e6ac73089e`; its tree
+`30cd0897794a3d66c8da01dd9e80491e06c8d69d` matches the reviewed recovery image.
+Normal deployment request `40336251070-1` first remained active after its GitHub
+observer expired at five minutes without stopping or replaying it. A later
+read-only journal check at 14:16:13 UTC established a failed service, exit status
+1 and interrupted backup phase. This later host failure is distinct from the
+observer timeout. Sanitized private-journal inspection reports `AbortError`,
+`OperationBudgetExpired`, maintenance failure and the S3 HTTP handler. Code review
+identifies the nested default 30-second storage limit inside the 30-minute backup
+budget. The aborted transfer's direction, object and reason for exceeding that
+limit remain unknown. A fresh status read `40349206610` confirms the same failed
+backup checkpoint. The candidate has not reached initialization or startup. Readiness and one
+authorized continuation remain pending. Do not repeat recovery apply or deployment
+to diagnose this failure.
+
+### Recovery response diagnosis contract — 2026-10-26
+
+The installed dispatcher matches the reviewed source successor. The first exact
+read-only recovery preview stopped at response validation before producing a
+preview digest. Creator remains unchanged at revision 657. The command's response
+shape is unknown because the wrapper discarded its temporary output after a
+generic error. Add fixed response-shape and application-byte measurements on that
+failure path, without printing content or accepting an invalid response. Test
+empty, malformed, multiple and valid responses with fake commands. Preserve all
+recovery proofs, deadlines, provider restrictions and the existing staging image.
+This diagnostic correction changes no credential use. It does not authorize
+recovery apply without a verified preview.
+
+The measured preview response contains eleven JSON objects and exactly one
+verified result. The single-object wrapper rejects that stream. Normalize only
+one verified receipt accompanied by fully validated known read-diagnostic records;
+unknown records, duplicate receipts, failed diagnostics and content-bearing extra
+fields remain errors. This is a transport-boundary correction, not a relaxation
+of recovery evidence. Preserve the staging image and all proof predicates. Test
+mixed records and adversarial diagnostic shapes before the next bounded preview.
 
 ### Forward execution correction contract — 2026-10-26
 

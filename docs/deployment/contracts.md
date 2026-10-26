@@ -414,6 +414,26 @@ Build and anonymous digest pull precede maintenance. Existing writers drain for 
 
 Backups reserve an ID before writes, upload objects conditionally, verify downloaded checksums, and publish a completion marker last. The operation journal records the backup ID, release digest, non-secret configuration hash, and prior release. Restore validates the marker, manifest, archive, and every asset before target writes. Partial backup IDs stay reserved and a resumed failed backup receives a new ID. Recovery credentials must permit reads from source assets and create-only writes to recovery; restore additionally requires asset writes.
 
+Storage transfers inherit the enclosing maintenance deadline, including response
+body consumption. Backup and verification retain 30-minute budgets; restore
+retains 60 minutes. Unscoped storage calls retain a 30-second bound. Fixed
+`recovery_transfer_v1` diagnostics go to stderr; stdout retains the existing
+receipt contract. Diagnostics contain no object names, contents or credentials.
+
+For stopped expired staging deployments at backup, an explicitly pinned helper
+image/commit can inspect the original backup and create a new immutable backup
+when its completion marker is absent. Corrupt completed backups and uncertain
+storage failures reject recovery. The helper must declare compatible data and
+backup contracts; it cannot initialize, migrate or start application work.
+The manifest image remains the prior release; helper identity is recorded in the
+recovery journal. The recovery retains its own finite deadline, original journal
+and completed decision proof. Interrupted backup writes permit verification only.
+Successful recovery leaves admission closed and pins the helper for the next
+same-tree normal deployment, which still creates its own pre-change backup.
+Credential inventory impact: existing protected application R2 and MongoDB values
+are consumed by the same maintenance commands in the reviewed helper image;
+names, storage, transfer copies, ownership and permission scopes are unchanged.
+
 The staging-only `retire-staging-artifact-index` action defaults to real read-only
 preview. Apply requires the exact deployed commit and `kids_booklet` confirmation.
 It rejects unresolved experiment run pointers, prepared/started/unknown operations,

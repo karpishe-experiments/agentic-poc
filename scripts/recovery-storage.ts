@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
-import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, NoSuchKey, NotFound, type S3Client } from "@aws-sdk/client-s3";
 import { z } from "zod";
 import { normalizeAssetUri } from "@/lib/assets/asset-uri";
 import { operationSignal, remainingOperationMs, withOperationBudget } from "@/lib/operations/budget";
+
+import { RecoveryDiagnostics, type RecoveryMeasurement } from "./recovery-diagnostics";
+
+// Maintenance owns the deadline. Calls outside maintenance retain a finite 30s bound.
+function transferDeadline() { return Date.now() + remainingOperationMs(operationSignal() ? Number.MAX_SAFE_INTEGER : 30_000); }
+const unspecifiedRead = { phase: "backup_verification", action: "read" } as const;
 
 const checksum = z.string().regex(/^[a-f0-9]{64}$/);
 export const backupIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/);
@@ -30,52 +36,61 @@ export function parseManifest(value: unknown, backupId: string, database: string
 }
 
 export class RecoveryStorage {
-  constructor(private readonly s3: S3Client, private readonly bucket: string) {}
+  constructor(private readonly s3: S3Client, private readonly bucket: string, private readonly diagnostics = new RecoveryDiagnostics()) {}
+  async inspectCompletedBackup(backupId: string, database: string, environment: string, imageDigest: string): Promise<RecoveryManifest | null> {
+    backupIdSchema.parse(backupId);
+    if (!/^(?:ghcr\.io\/[a-z0-9._/-]+@)?sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error("Backup verification requires the selected immutable image digest.");
+    try { await this.read(`database/${backupId}.complete`, this.bucket, { phase: "backup_verification", action: "read", category: "completion_marker" }); }
+    catch (error) { if (error instanceof NoSuchKey || error instanceof NotFound) return null; throw error; }
+    return this.verifiedCompletedBackup(backupId, database, environment, imageDigest);
+  }
   // Maintenance verifies the retained pre-change snapshot without reserving or
   // writing another backup. Callers separately enforce admission and target scope.
   async verifiedCompletedBackup(backupId: string, database: string, environment: string, imageDigest: string): Promise<RecoveryManifest> {
     backupIdSchema.parse(backupId);
     if (!/^(?:ghcr\.io\/[a-z0-9._/-]+@)?sha256:[a-f0-9]{64}$/.test(imageDigest)) throw new Error("Backup verification requires the selected immutable image digest.");
-    const raw = (await this.read(`database/${backupId}.manifest.json`)).bytes;
-    const complete = (await this.read(`database/${backupId}.complete`)).bytes;
+    const raw = (await this.read(`database/${backupId}.manifest.json`, this.bucket, { phase: "backup_verification", action: "read", category: "manifest" })).bytes;
+    const complete = (await this.read(`database/${backupId}.complete`, this.bucket, { phase: "backup_verification", action: "read", category: "completion_marker" })).bytes;
     if (Buffer.from(complete).toString() !== digest(raw)) throw new Error("Backup completion marker does not match manifest.");
     const manifest = parseManifest(JSON.parse(Buffer.from(raw).toString()), backupId, database, environment);
     if (manifest.imageDigest !== imageDigest) throw new Error("Backup image does not match the selected release.");
-    const archive = (await this.read(`database/${backupId}.archive.gz`)).bytes;
+    const archive = (await this.read(`database/${backupId}.archive.gz`, this.bucket, { phase: "backup_verification", action: "read", category: "archive" })).bytes;
     if (digest(archive) !== manifest.sha256) throw new Error("Backup archive checksum verification failed.");
     for (const asset of manifest.assets) await this.verifiedAsset(asset);
     return manifest;
   }
-  async read(key: string, bucket = this.bucket) {
-    return withOperationBudget(Date.now() + remainingOperationMs(), async () => {
+  async read(key: string, bucket = this.bucket, measurement: RecoveryMeasurement = unspecifiedRead) {
+    return this.diagnostics.measure(measurement, () => withOperationBudget(transferDeadline(), async () => {
       const signal = operationSignal()!;
       const result = await this.s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: signal });
       const body = result.Body;
       if (!body) throw new Error("Recovery object body is missing.");
       const abort = () => { if ("destroy" in body) body.destroy(); };
       signal.addEventListener("abort", abort, { once: true });
-      try { signal.throwIfAborted(); return { bytes: await body.transformToByteArray(), contentType: result.ContentType ?? "application/octet-stream" }; }
+      try { if (signal.aborted) abort(); signal.throwIfAborted(); return { bytes: await body.transformToByteArray(), contentType: result.ContentType ?? "application/octet-stream" }; }
       finally { signal.removeEventListener("abort", abort); }
-    });
+    }), (result) => result.bytes.length);
   }
   async reserve(backupId: string) {
     backupIdSchema.parse(backupId);
     // Failed reservations persist. Retrying requires a new ID and cannot overwrite a snapshot.
-    await withOperationBudget(Date.now() + remainingOperationMs(), () => this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: `database/${backupId}.reserved`, Body: backupId, IfNoneMatch: "*" }), { abortSignal: operationSignal() }));
+    await this.diagnostics.measure({ phase: "reservation", action: "write", category: "reservation", expectedBytes: Buffer.byteLength(backupId) }, () => withOperationBudget(transferDeadline(), () => this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: `database/${backupId}.reserved`, Body: backupId, IfNoneMatch: "*" }), { abortSignal: operationSignal() })), () => Buffer.byteLength(backupId));
   }
-  async writeVerified(key: string, bytes: Uint8Array | string, contentType: string) {
-    await withOperationBudget(Date.now() + remainingOperationMs(), () => this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, IfNoneMatch: "*" }), { abortSignal: operationSignal() }));
-    if (digest((await this.read(key)).bytes) !== digest(bytes)) throw new Error("Uploaded recovery object failed checksum verification.");
+  async writeVerified(key: string, bytes: Uint8Array | string, contentType: string, metadata: Omit<RecoveryMeasurement, "action" | "expectedBytes"> = { phase: "backup_verification" }) {
+    const expectedBytes = typeof bytes === "string" ? Buffer.byteLength(bytes) : bytes.length;
+    await this.diagnostics.measure({ ...metadata, action: "write", expectedBytes }, () => withOperationBudget(transferDeadline(), () => this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, IfNoneMatch: "*" }), { abortSignal: operationSignal() })), () => expectedBytes);
+    if (digest((await this.read(key, this.bucket, { ...metadata, action: "verification_read", expectedBytes })).bytes) !== digest(bytes)) throw new Error("Uploaded recovery object failed checksum verification.");
   }
-  async snapshot(backupId: string, uri: string, sourceBucket: string) {
+  async snapshot(backupId: string, uri: string, sourceBucket: string, ordinal?: number) {
     const key = normalizeAssetUri(uri);
-    const source = await this.read(key, sourceBucket);
+    const metadata = { phase: "asset_copy", category: "asset", ordinal } as const;
+    const source = await this.read(key, sourceBucket, { ...metadata, action: "read" });
     const recoveryKey = `assets/${backupId}/${key}`;
-    await this.writeVerified(recoveryKey, source.bytes, source.contentType);
+    await this.writeVerified(recoveryKey, source.bytes, source.contentType, metadata);
     return { uri: key, recoveryKey, bytes: source.bytes.length, sha256: digest(source.bytes), contentType: source.contentType };
   }
   async verifiedAsset(asset: RecoveryManifest["assets"][number]) {
-    const object = await this.read(asset.recoveryKey);
+    const object = await this.read(asset.recoveryKey, this.bucket, { phase: "backup_verification", action: "verification_read", category: "asset", expectedBytes: asset.bytes });
     if (object.bytes.length !== asset.bytes || digest(object.bytes) !== asset.sha256) throw new Error("Backup asset checksum verification failed.");
     return object.bytes;
   }
