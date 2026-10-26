@@ -19,6 +19,7 @@ import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt, ImageEvidenceMismatch, type VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { verificationMetadata } from "@/db/experiment-verification-metadata";
+import type { FailureReason } from "@/lib/contracts/experiment-failure";
 
 type Verification = { verifyBytes?: boolean; attempt?: VerificationAttempt };
 
@@ -37,7 +38,7 @@ export function materializePageLayout(
 
 const fixedTasks = ["J01", "J02", "J05", "J06", "J07", "J08"] as const;
 type Reference = { subjectKind: "character" | "location"; subjectId: string; artifactVersionId: string; assetId: string };
-function reject(message: string): never { throw new ExperimentRepositoryError("invalid_result", message); }
+function reject(message: string, reason: FailureReason = "invalid_dependencies"): never { throw new ExperimentRepositoryError("invalid_result", message, reason); }
 function canonical(value: unknown): string { return JSON.stringify(value, (_key, item: unknown) =>
   item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item); }
 
@@ -336,8 +337,8 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
   const assets = metadata.assets;
   for (const reference of request.references) {
     const asset = assets.find((item) => item._id === reference.assetId);
-    if (!asset) reject("J13 selected sheet asset is missing.");
-    if (!asset.metadataJson) reject("Saved sheet asset metadata is missing.");
+    if (!asset) reject("J13 selected sheet asset is missing.", "invalid_assets");
+    if (!asset.metadataJson) reject("Saved sheet asset metadata is missing.", "invalid_assets");
     const metadata = imageMetadata(asset.metadataJson);
     // Fixture creation needs current lineage, not reference bytes. Admission
     // and final acceptance always use the default complete byte verification.
@@ -345,11 +346,11 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     let bytes: Uint8Array;
     try { bytes = await attempt.read({ ...metadata, assetId: asset._id, uri: asset.uri }); }
     catch (error) { return reject(error instanceof ImageEvidenceMismatch
-      ? "J13 selected sheet bytes are corrupt or saved evidence differs." : "J13 selected sheet bytes are unavailable."); }
+      ? "J13 selected sheet bytes are corrupt or saved evidence differs." : "J13 selected sheet bytes are unavailable.", "invalid_assets"); }
     let decoded: Awaited<ReturnType<typeof validateExperimentImage>>;
-    try { decoded = await validateExperimentImage(bytes); } catch { return reject("J13 selected sheet bytes are corrupt."); }
+    try { decoded = await validateExperimentImage(bytes); } catch { return reject("J13 selected sheet bytes are corrupt.", "invalid_assets"); }
     if (metadata.byteLength !== decoded.byteLength || metadata.sha256 !== decoded.sha256 ||
-        asset.width !== decoded.width || asset.height !== decoded.height) reject("J13 selected sheet evidence differs from original bytes.");
+        asset.width !== decoded.width || asset.height !== decoded.height) reject("J13 selected sheet evidence differs from original bytes.", "invalid_assets");
     if (asset.mimeType !== decoded.mimeType) warnings.push(`Selected sheet ${asset._id} metadata MIME ${asset.mimeType} differs from decoded ${decoded.mimeType}.`);
     attachments.push({ ...reference, bytes: Uint8Array.from(bytes), mimeType: decoded.mimeType, byteLength: decoded.byteLength,
       sha256: decoded.sha256, width: decoded.width, height: decoded.height });

@@ -20,9 +20,11 @@ import { createVerificationAttempt, type VerificationReadOptions } from "@/lib/e
 import { isBalancedImageVerificationRun, verificationMetadata } from "@/db/experiment-verification-metadata";
 import { isVerifiedAdvisoryFailure } from "@/db/experiment-advisory-failure";
 import { currentMutationOwnerId } from "@/lib/application/deployment-control";
-import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { measurePhase, countVerificationQuery, countVerificationRead } from "@/lib/experiment-runner/diagnostics";
+import type { FailureReason } from "@/lib/contracts/experiment-failure";
+import { tagFailureReason } from "@/lib/experiment-runner/failure-diagnostics";
 
-function incomplete(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
+function incomplete(message: string, reason?: FailureReason): never { throw new ExperimentRepositoryError("invalid_state", message, reason); }
 
 // Read-only evidence for the generation/evaluation boundary. The caller owns
 // the transaction and any later run transition; this does not mark completion.
@@ -31,7 +33,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   phase: "completion" | "context" | "preparation" = "completion", nowMs?: number, reads: VerificationReadOptions = {}) {
   const attempt = createVerificationAttempt(store, reads);
   const run = await database.collections.experiment_runs.findOne({ _id: inputRun._id }, { session });
-  if (!run || run.revision !== inputRun.revision || run.configurationHash !== inputRun.configurationHash) incomplete("Generation run evidence changed before verification.");
+  if (!run || run.revision !== inputRun.revision || run.configurationHash !== inputRun.configurationHash) incomplete("Generation run evidence changed before verification.", "invalid_dependencies");
   const preparation = phase === "preparation";
   if (preparation && (!reportOperationId || !isBalancedImageVerificationRun(run) || run.pauseRequested ||
       !["queued", "running"].includes(run.status) || nowMs == null || !Number.isSafeInteger(nowMs) || nowMs < 0)) {
@@ -62,18 +64,21 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
       (run.activeOperationId && run.activeOperationId !== reportOperationId) || run.pendingDecisionJson ||
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
-      (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.");
+      (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.", "unresolved_ownership");
   // Preparation is a read-only source projection, not accounting acceptance.
   // Generation/report materialization and final exit require retained usage.
-  if (run.mode === "balanced" && !preparation) await measurePhase({ runId: run._id,
-    ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
-    verifyM4Accounting(database, session, run, reportOperationId, attempt));
+  if (run.mode === "balanced" && !preparation) {
+    try {
+      await measurePhase({ runId: run._id, ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
+        verifyM4Accounting(database, session, run, reportOperationId, attempt));
+    } catch (error) { tagFailureReason(error, "invalid_accounting"); throw error; }
+  }
   const metadata = await verificationMetadata(database, session, run._id, attempt);
   const artifacts = metadata.artifacts;
   const tasks = Array.from({ length: 13 }, (_, index) => `J${String(index + 1).padStart(2, "0")}`);
   if (tasks.some((task) => !artifacts.some((artifact) => artifact.taskId === task)) ||
       artifacts.some((artifact) => !artifact.taskId || !tasks.includes(artifact.taskId) || artifact.state !== "approved" || !artifact.currentVersionId)) {
-    incomplete("All thirteen responsibilities require current approved artifacts.");
+    incomplete("All thirteen responsibilities require current approved artifacts.", "missing_approvals");
   }
   const evidence: { artifactId: string; versionId: string; pageId: string | null }[] = [];
   const currentVersionIds = new Set(artifacts.map((artifact) => artifact.currentVersionId!));
@@ -88,18 +93,18 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   const approvedVersionIds = new Set(approvals.map((approval) => approval.artifactVersionId));
   for (const artifact of artifacts) {
     const version = versionsById.get(artifact.currentVersionId!);
-    if (!version || version.artifactId !== artifact._id || !approvedVersionIds.has(artifact.currentVersionId!)) incomplete("Current artifact version or approval evidence is missing.");
+    if (!version || version.artifactId !== artifact._id || !approvedVersionIds.has(artifact.currentVersionId!)) incomplete("Current artifact version or approval evidence is missing.", "missing_approvals");
     const dependencies = JSON.parse(version.dependencyVersionIdsJson) as unknown;
     if (!Array.isArray(dependencies) || dependencies.some((id) => typeof id !== "string") ||
-        new Set(dependencies).size !== dependencies.length) incomplete("Artifact dependencies are malformed.");
+        new Set(dependencies).size !== dependencies.length) incomplete("Artifact dependencies are malformed.", "invalid_dependencies");
     const edges = dependencyEdges.filter((edge) => edge.downstreamVersionId === version._id);
     if (edges.length !== dependencies.length || new Set(edges.map((edge) => edge.upstreamVersionId)).size !== edges.length ||
-        edges.some((edge) => !dependencies.includes(edge.upstreamVersionId))) incomplete("Artifact dependency edges differ from saved sources.");
+        edges.some((edge) => !dependencies.includes(edge.upstreamVersionId))) incomplete("Artifact dependency edges differ from saved sources.", "invalid_dependencies");
     for (const dependency of dependencies as string[]) {
       if (currentVersionIds.has(dependency)) continue;
       const originatingDraft = version.createdBy === "application" && ["J08", "J09", "J10"].includes(artifact.taskId!) &&
         version.sourceVersionId === dependency && versions.some((item) => item._id === dependency && item.artifactId === artifact._id);
-      if (!originatingDraft) incomplete("Artifact depends on a superseded source.");
+      if (!originatingDraft) incomplete("Artifact depends on a superseded source.", "invalid_dependencies");
     }
     evidence.push({ artifactId: artifact._id, versionId: version._id, pageId: artifact.subjectKind === "page" ? artifact.subjectId ?? null : null });
     contents.set(artifact._id, JSON.parse(version.contentJson) as unknown);
@@ -150,13 +155,32 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
 
 const transitionInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: z.number().int().nonnegative() });
 
+function evaluationResult(raw: string | null) {
+  try { return JSON.parse(raw ?? "null"); }
+  catch (error) { tagFailureReason(error, "invalid_report_evidence"); throw error; }
+}
+
+// These consumers validate report results and dispatch identity. Historical
+// preparation/request bodies belong to the separate accounting proof reader.
+export function readExperimentEvaluationOperations(database: Database, session: ClientSession, runId: string) {
+  return measurePhase({ runId }, "evaluation_operations_read", async () => {
+    countVerificationQuery();
+    const rows = await database.collections.experiment_operations.find({ runId, state: "succeeded",
+      role: { $in: ["tester", "judge"] } }, { session, projection: {
+      _id: 1, role: 1, taskId: 1, subjectKind: 1, subjectId: 1, providerKind: 1, mode: 1,
+      reservationCount: 1, workflowRunId: 1, verifiedWorkflowId: 1, dispatchStartedAtMs: 1, resultJson: 1,
+    } }).toArray();
+    countVerificationRead(rows);
+    return rows;
+  });
+}
+
 export async function assertExperimentEvaluationOrder(database: Database, session: ClientSession, run: ExperimentRunDocument, role: "tester" | "judge") {
   if (run.generationCompletedAtMs == null || !run.generationVersionIds) incomplete("Evaluation requires saved generation completion.");
   const bindings = savedConfigurationSchema.parse(JSON.parse(run.configurationJson));
-  const rows = await database.collections.experiment_operations.find({ runId: run._id, state: "succeeded",
-    role: { $in: ["tester", "judge"] } }, { session }).toArray();
+  const rows = await readExperimentEvaluationOperations(database, session, run._id);
   const reports = rows.flatMap((operation) => {
-    const result = JSON.parse(operation.resultJson ?? "null");
+    const result = evaluationResult(operation.resultJson);
     if (result?.kind !== (operation.role === "tester" ? "feedback" : "assessment")) return [];
     const report = experimentReportSchema.safeParse(result.payload);
     const binding = bindings.find((item) => item.role === operation.role && item.taskId === null);
@@ -165,11 +189,11 @@ export async function assertExperimentEvaluationOrder(database: Database, sessio
         operation.subjectId !== run.bookletId || operation.taskId !== null || operation.providerKind !== "text" || operation.mode !== run.mode ||
         report.data.role !== operation.role || report.data.runId !== run._id || report.data.mode !== run.mode ||
         report.data.configurationHash !== run.configurationHash || report.data.evidence.versionIds.length !== run.generationVersionIds!.length ||
-        report.data.evidence.versionIds.some((id) => !run.generationVersionIds!.includes(id))) incomplete("Saved evaluation report evidence is invalid.");
+        report.data.evidence.versionIds.some((id) => !run.generationVersionIds!.includes(id))) incomplete("Saved evaluation report evidence is invalid.", "invalid_report_evidence");
     return [operation.role];
   });
   if (reports.includes("judge") || reports.filter((item) => item === "tester").length !== (role === "judge" ? 1 : 0)) {
-    incomplete("Evaluation must save one tester report before one independent judge report.");
+    incomplete("Evaluation must save one tester report before one independent judge report.", "invalid_report_evidence");
   }
 }
 
@@ -188,20 +212,20 @@ export function createExperimentCompletionService(database: Database, store: Ass
         throw new ExperimentRepositoryError("stale_revision", "Completion run revision changed.");
       }
       if (run.activeOperationId || run.preparation || run.pendingDecisionJson || run.generationCompletedAtMs == null ||
-          run.status === "failed" || run.safeFailure === "unknown_outcome") incomplete("Evaluation ownership remains unresolved.");
+          run.status === "failed" || run.safeFailure === "unknown_outcome") incomplete("Evaluation ownership remains unresolved.", "unresolved_ownership");
       const controls = await database.collections.deployment_control.find({ "mutationOwners.runId": run._id }, { session }).toArray();
       if (controls.some(control => control.mutationOwners?.some(owner => owner.runId === run._id && owner.id !== currentMutationOwnerId()))) {
-        incomplete("Another mutation still owns this run.");
+        incomplete("Another mutation still owns this run.", "unresolved_ownership");
       }
       const operations = await database.collections.experiment_operations.find({ runId: run._id }, { session,
         projection: { _id: 1, createdAtMs: 1, state: 1, safeFailure: 1, authorizationClaim: 1, resultFinalizationClaim: 1,
           imageCompletionClaim: 1, "lifecycle.unresolved": 1 } }).toArray();
       if (operations.some(op => !["succeeded", "failed"].includes(op.state) || op.authorizationClaim ||
           op.resultFinalizationClaim || op.imageCompletionClaim || op.lifecycle?.unresolved ||
-          op.safeFailure === "unknown_outcome")) incomplete("Evaluation has unfinished work.");
+          op.safeFailure === "unknown_outcome")) incomplete("Evaluation has unfinished work.", "unresolved_ownership");
       const latestId = [...operations].sort((a, b) => b.createdAtMs - a.createdAtMs || b._id.localeCompare(a._id))[0]?._id;
       const latest = latestId ? await database.collections.experiment_operations.findOne({ _id: latestId, runId: run._id }, { session }) : null;
-      if (!latest || !await isVerifiedAdvisoryFailure(database, session, run, latest, input.nowMs)) incomplete("Evaluation failure has no verified terminal evidence.");
+      if (!latest || !await isVerifiedAdvisoryFailure(database, session, run, latest, input.nowMs)) incomplete("Evaluation failure has no verified terminal evidence.", "invalid_report_evidence");
       await assertExperimentEvaluationOrder(database, session, run, latest.role as "tester" | "judge");
       // Set the candidate terminal state within this transaction so the normal
       // generation verifier can inspect it. Any failed check rolls it back.
@@ -224,21 +248,20 @@ export function createExperimentCompletionService(database: Database, store: Ass
       if (bindings.filter((binding) => binding.role === "judge").length !== 1) incomplete("Full completion requires the independent judge binding.");
       if (evaluation) {
         if (run.generationCompletedAtMs == null) incomplete("Generation success must be retained before evaluation completion.");
-        const rows = await database.collections.experiment_operations.find({ runId: run._id, state: "succeeded",
-          role: { $in: ["tester", "judge"] } }, { session }).toArray();
+        const rows = await readExperimentEvaluationOperations(database, session, run._id);
         for (const role of ["tester", "judge"] as const) {
-          const reports = rows.filter((row) => row.role === role && JSON.parse(row.resultJson ?? "null")?.kind === (role === "tester" ? "feedback" : "assessment"));
+          const reports = rows.filter((row) => row.role === role && evaluationResult(row.resultJson)?.kind === (role === "tester" ? "feedback" : "assessment"));
           const binding = bindings.find((item) => item.role === role && item.taskId === null);
-          if (reports.length !== 1 || !binding) incomplete("Exactly one saved tester report and independent judge report are required.");
+          if (reports.length !== 1 || !binding) incomplete("Exactly one saved tester report and independent judge report are required.", "invalid_report_evidence");
           const operation = reports[0];
           if (operation.taskId !== null || operation.subjectKind !== "book" || operation.subjectId !== run.bookletId ||
               operation.providerKind !== "text" || operation.reservationCount !== 1 || !operation.workflowRunId ||
-              operation.dispatchStartedAtMs == null || operation.verifiedWorkflowId !== binding.publishedWorkflowId) incomplete("Report publication or authorization evidence is incomplete.");
+              operation.dispatchStartedAtMs == null || operation.verifiedWorkflowId !== binding.publishedWorkflowId) incomplete("Report publication or authorization evidence is incomplete.", "invalid_report_evidence");
           try {
             validateExperimentReport(JSON.parse(operation.resultJson!).payload, { role, mode: run.mode, runId: run._id,
               configurationHash: run.configurationHash, artifacts: evidence.artifacts,
               availableAssetIds: [...evidence.referenceAssetIds, ...evidence.finalAssetIds], requiredFinalAssetIds: evidence.finalAssetIds });
-          } catch { incomplete("Saved report no longer matches current generation evidence."); }
+          } catch { incomplete("Saved report no longer matches current generation evidence.", "invalid_report_evidence"); }
         }
       }
       if (evaluation ? run.status === "completed" && run.evaluationStatus === "complete" : run.generationCompletedAtMs != null) return run;

@@ -2,6 +2,7 @@ import type { ExperimentMode, ExperimentRole, ExperimentTask, Persona } from "@/
 import type { M4ModelBucket, M4Grant } from "@/lib/experiment-runner/m4-policy";
 import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
+import type { FailureDiagnostics } from "@/lib/contracts/experiment-failure";
 
 export type BaseDocument = { _id: string };
 
@@ -44,6 +45,7 @@ export type ExperimentCampaignDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentRunDocument = BaseDocument & {
+  failureDiagnostics?: FailureDiagnostics;
   m4?: { campaignId: string; policyHash: string; policyJson: string };
   schemaVersion: "2"; bookletId: string; persona: Persona; mode: ExperimentMode; brief: string;
   predecessorRunId: string | null; configurationJson: string; configurationHash: string;

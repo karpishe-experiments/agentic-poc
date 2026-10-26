@@ -30,6 +30,22 @@ const proposal = (taskId: "J01" | "J02", content: unknown) => ({ kind: "proposal
 const decision = (decision: unknown) => ({ kind: "decision", payload: { decision } });
 
 describe("saved experiment context", () => {
+  it("retains bounded failure diagnostics across fresh repository and detail reads", async () => {
+    const { database, repository } = await setup();
+    const counters = (await repository.getRun(runId))!.counters;
+    const diagnostic = { version: "failure_diagnostics_v1", timestampMs: 2, phase: "generation_verification",
+      operationId: null, reason: "missing_approvals", errorCategory: "validation", elapsedMs: 3, remainingBudgetMs: null };
+    const blocked = await repository.blockRun({ runId, category: "definite_failure", nowMs: 2, failureDiagnostics: diagnostic });
+    expect(blocked.failureDiagnostics).toEqual({ ...diagnostic, runRevision: blocked.revision });
+    const fresh = createExperimentRepository(database);
+    expect((await fresh.getRun(runId))!.failureDiagnostics).toEqual(blocked.failureDiagnostics);
+    expect((await createExperimentContextService(database).getRunView(runId))!.failureDiagnostics).toEqual(blocked.failureDiagnostics);
+    expect((await fresh.getRun(runId))!.counters).toEqual(counters);
+    const other = await setup();
+    expect(await other.repository.blockRun({ runId, category: "definite_failure", nowMs: 2,
+      failureDiagnostics: { arbitrarySecret: "must not persist" } })).toMatchObject({ status: "blocked" });
+    expect((await other.repository.getRun(runId))!.failureDiagnostics).toBeUndefined();
+  });
   it("projects inspection history without retained preparation or non-report output bodies", async () => {
     const { context, database, start } = await setup();
     const manager = await start(480, "manager");

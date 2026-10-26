@@ -168,7 +168,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const collections = database().collections;
     const rows = await collections.experiment_runs.find({}, { projection: {
       _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
-      counters: 1, limits: 1, safeFailure: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
+      counters: 1, limits: 1, safeFailure: 1, failureDiagnostics: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
       preparation: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1,
     } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
     const selected = rows.slice(0, limit);
@@ -193,7 +193,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
       revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
       pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
-      safeFailure: row.safeFailure, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
+      safeFailure: row.safeFailure, failureDiagnostics: row.failureDiagnostics ?? null, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
       generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
       preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
         deadlineAtMs: row.preparation.deadlineAtMs, unresolved: row.preparation.unresolved ?? false } : null,

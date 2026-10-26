@@ -4,6 +4,26 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Keep completion reads proportional to their consumers
+
+Evaluation ordering and completion used full successful tester/judge documents,
+although they consumed only identity fields and report results. Large historical
+preparations therefore crossed the database boundary again near the final gate.
+The shared projected reader preserves the filter and malformed JSON while
+omitting unused bodies. Persistence tests verify exact consumed values for all
+three personas and unchanged stored records. Keep accounting proof inputs complete;
+use separate projections for report selection. Promotion candidate:
+**Documentation** for consumer-specific database reads.
+
+### Associate a saved failure reason with its recorded revision
+
+A continuation retains the previous diagnostic as history. A later block can have
+no classified reason; status alone must not make the earlier reason current again.
+Display a diagnostic as current only for its recorded blocked revision, and show
+unavailable current details otherwise. Use fixed origin classifications without
+exception text. Persistence and UI regressions verify durable storage and historical
+display. Promotion candidate: **Documentation** for saved failure visibility.
+
 ### Test repair delivery from the retained failure
 
 The M4 semantic-decision repair passed the full Creator continuation fixture,
