@@ -7,6 +7,14 @@
 
 ### Verified backup recovery and normal delivery — 2026-10-26
 
+The corrected dispatcher installed successfully. Exact resume then stopped before
+service restart because systemd rejected the existing `set-property` call for
+`RuntimeMaxSec`. Replace only a proven stopped transient unit after preserving
+allowlisted status and verifying unloading; recreate it through the canonical
+unit builder with the same journal and original deadline. No data reset, new
+application image or provider call belongs in this correction. Credential use is
+unchanged. Source reviews, focused rejection tests and Linux CI remain required.
+
 Normal delivery subsequently stopped at draining before selecting another backup.
 The handoff leaves admission closed, but its new deployment branch invokes the
 ordinary drain transition, which requires maintenance to be false. The selected

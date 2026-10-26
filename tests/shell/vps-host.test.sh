@@ -13,6 +13,8 @@ if [[ $# -eq 0 ]]; then
   done
   bash "$0" backup-handoff-closed-admission
   bash "$0" backup-handoff-resume
+  bash "$0" resume-unit-retirement
+  bash tests/shell/vps-systemd-resume.test.sh
   bash tests/shell/vps-backup-helper.test.sh
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
   exit 0
@@ -82,6 +84,66 @@ case "$1" in
     }
     if (trap - EXIT; host_dispatch) > /dev/null 2>&1; then exit 1; fi
     ! grep -q resumed "$CALLS";;
+  resume-unit-retirement)
+    fixture='Transient=yes
+ActiveState=failed
+MainPID=0
+ControlPID=0
+Job=
+RuntimeMaxUSec=45min'
+    systemctl() {
+      case "$1" in
+        show) if [[ "$*" == *LoadState* ]]; then printf 'not-found\n'; else printf '%b\n' "$fixture"; fi;;
+        reset-failed) printf 'reset %s\n' "$2" >> "$CALLS";;
+        *) return 1;;
+      esac
+    }
+    before="$(sha256sum "$STATE/operation.json")"
+    retire_stopped_operation_unit > /dev/null
+    [[ "$(sha256sum "$STATE/operation.json")" == "$before" ]]
+    grep -q 'reset kids-booklet-operation-test.service' "$CALLS"
+    for fixture in 'Transient=no
+ActiveState=failed
+MainPID=0
+ControlPID=0
+Job=
+RuntimeMaxUSec=45min' 'Transient=yes
+ActiveState=active
+MainPID=0
+ControlPID=0
+Job=
+RuntimeMaxUSec=45min' 'Transient=yes
+ActiveState=failed
+MainPID=1
+ControlPID=0
+Job=
+RuntimeMaxUSec=45min' 'Transient=yes
+ActiveState=failed
+MainPID=0
+ControlPID=0
+Job=12
+RuntimeMaxUSec=45min' 'Transient=yes
+ActiveState=failed
+MainPID=0
+ControlPID=0
+Job=
+RuntimeMaxUSec=infinity'; do
+      : > "$CALLS"
+      if (trap - EXIT; retire_stopped_operation_unit) >/dev/null 2>&1; then exit 1; fi
+      [[ ! -s "$CALLS" ]]
+    done
+    fixture='Transient=yes\nActiveState=failed\nMainPID=0\nControlPID=0\nJob=\nRuntimeMaxUSec=45min'
+    sleep() { SECONDS=$((SECONDS+6)); }
+    for failure in reset unload drift; do
+      systemctl() {
+        case "$1" in
+          show) if [[ "$*" == *LoadState* ]]; then if [[ "$failure" == unload ]]; then printf 'loaded\n'; else printf 'not-found\n'; fi; else printf '%b\n' "$fixture"; fi;;
+          reset-failed) if [[ "$failure" == reset ]]; then return 1; elif [[ "$failure" == drift ]]; then printf '{"requestId":"changed"}\n' > "$STATE/operation.json"; fi;;
+          *) return 1;;
+        esac
+      }
+      if (trap - EXIT; retire_stopped_operation_unit) >/dev/null 2>&1; then exit 1; fi
+    done;;
   backup-handoff-closed-admission)
     printf '{}' > "$STATE/backup-helper-staging.json"
     backup_helper_for_deploy() { printf 'helper-proof\n' >> "$CALLS"; }

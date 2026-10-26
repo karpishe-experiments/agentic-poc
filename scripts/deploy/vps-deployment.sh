@@ -1448,6 +1448,34 @@ start_operation_unit() {
     --property="ExecStopPost=$ROOT/vps-deployment.sh --action host-cleanup --request-id $REQUEST_ID --environment $ENVIRONMENT --apply" \
     "$ROOT/vps-deployment.sh" --action host-run --request-id "$REQUEST_ID" --apply
 }
+retire_stopped_operation_unit() {
+  local unit="kids-booklet-operation-$REQUEST_ID.service" proof journal_hash current_hash state load_state end
+  private_temp
+  proof="$(mktemp "$TEMP_DIR/resume-unit.XXXXXXXX")"
+  timeout --kill-after=2s 5s systemctl show "$unit" --property=Transient,ActiveState,MainPID,ControlPID,Job,RuntimeMaxUSec > "$proof" || die 'Cannot inspect stopped operation unit'
+  grep -qx 'Transient=yes' "$proof" || die 'Resume requires a transient operation unit'
+  grep -Eq '^ActiveState=(failed|inactive)$' "$proof" || die 'Operation unit is not stopped'
+  grep -qx 'MainPID=0' "$proof" && grep -qx 'ControlPID=0' "$proof" || die 'Operation unit still owns a process'
+  grep -Eq '^Job=(0)?$' "$proof" || die 'Operation unit has a queued job'
+  state="$(sed -n 's/^RuntimeMaxUSec=//p' "$proof")"
+  [[ -n "$state" && "$state" != infinity && "$state" != 0 ]] || die 'Operation unit has no finite runtime bound'
+  journal_hash="$(sha256sum "$STATE/operation.json")"; journal_hash="${journal_hash%% *}"
+  local evidence
+  evidence="$(mktemp -d "$STATE/operations/resume-unit-$REQUEST_ID.XXXXXXXX")"
+  cp "$proof" "$evidence/unit.before"
+  printf '%s\n' "$journal_hash" > "$evidence/journal.sha256"
+  timeout --kill-after=2s 5s systemctl reset-failed "$unit" || die 'Cannot reset stopped transient unit'
+  end=$((SECONDS + 5))
+  while :; do
+    load_state="$(timeout --kill-after=2s 2s systemctl show "$unit" --property=LoadState --value)" || [[ "$load_state" == not-found ]] || die 'Cannot verify transient unit unloading'
+    [[ "$load_state" == not-found ]] && break
+    [[ "$SECONDS" -lt "$end" ]] || die 'Stopped transient unit remains loaded; inspect before resume'
+    sleep 0.1
+  done
+  current_hash="$(sha256sum "$STATE/operation.json")"; current_hash="${current_hash%% *}"
+  [[ "$current_hash" == "$journal_hash" ]] || die 'Operation journal changed during unit retirement'
+  printf 'verified: stopped transient unit retired; journal unchanged; evidence=%s\n' "$evidence"
+}
 cleanup_operation_oneoffs() {
   [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] || return 0
   local ids id deadline=$((SECONDS + 35)) remaining
@@ -2840,16 +2868,13 @@ host_dispatch() {
     REQUEST_ID="$old_id"
     local remaining
     remaining="$(ensure_operation_budget)" || die 'Original operation budget expired; reconcile outputs before a new approved attempt'
-    flock -u 9
     if systemctl cat "kids-booklet-operation-$old_id.service" >/dev/null 2>&1; then
-      local unit_bound
-      unit_bound="$(systemctl show --property=RuntimeMaxUSec --value "kids-booklet-operation-$old_id.service")"
-      [[ -n "$unit_bound" && "$unit_bound" != infinity ]] || die 'Legacy operation unit has no runtime bound; inspect and replace the inactive unit before resume'
-      systemctl set-property --runtime "kids-booklet-operation-$old_id.service" "RuntimeMaxSec=${remaining}s"
-      systemctl restart "kids-booklet-operation-$old_id.service"
-    else
-      start_operation_unit
+      retire_stopped_operation_unit
     fi
+    # RuntimeMaxSec is set when the transient unit is created, not through the
+    # limited set-property API. Recompute only the original remaining budget.
+    flock -u 9
+    start_operation_unit
     wait_operation
     exit 0
   fi

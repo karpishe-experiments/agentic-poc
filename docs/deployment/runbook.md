@@ -192,6 +192,10 @@ After full handoff verification, closed and quiet admission can proceed directly
 open admission uses the ordinary drain. Resume is limited to the same request ID
 at `draining` with no selected backup, rechecked under the operation lock, and
 retains the original deadline.
+Resume preserves allowlisted status for a stopped transient systemd unit, resets
+its failed state and verifies unloading before recreating it with only the
+original remaining runtime. Persistent units, live processes, queued jobs or
+failed unloading reject resume; runtime properties are not edited in place.
 The protected dispatcher must support this helper pair before use; prepare a
 reviewed checksum handoff if the installed version lacks it.
 
