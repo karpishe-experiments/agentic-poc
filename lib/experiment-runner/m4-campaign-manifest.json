@@ -259,6 +259,13 @@
         "reference": "User 2026-10-23 authorized blocker fixes then continuation: authenticated terminal J11 output duplicates a sheet subject and mixes saved version/image identities. Continue the same Parent only after reviewed subject-routing correction and normal validation; retain failed output, all charges and cumulative limits. No output repair, automatic retry or successor."
       }
     ],
+    "progressRecoveries": [
+      {
+        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
+        "operationId": "3d705816-f6fd-4434-a807-222958ef39c8",
+        "reference": "User 2026-10-26 authorized required bounded M4 repairs and same-Creator continuation. Recover only the verified false progress stop following exact consumed failure 928cb32d-daf7-4703-b005-fdaf076d6cb6; preserve saved manager, history and all liabilities; no replay or automatic retry."
+      }
+    ],
     "completionRecoveries": [
       {
         "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",

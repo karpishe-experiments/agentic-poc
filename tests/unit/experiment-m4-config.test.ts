@@ -37,6 +37,10 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(releaseManifest.grant.continuations.filter(entry => entry.operationId === "928cb32d-daf7-4703-b005-fdaf076d6cb6"))
       .toEqual([{ runId: "47894c71-7991-4b15-8dc2-810395ec3f01", operationId: "928cb32d-daf7-4703-b005-fdaf076d6cb6",
         reference: expect.stringContaining("User 2026-10-26") }]);
+    expect(releaseManifest.grant.progressRecoveries).toEqual([{
+      runId: "47894c71-7991-4b15-8dc2-810395ec3f01", operationId: "3d705816-f6fd-4434-a807-222958ef39c8",
+      reference: expect.stringContaining("User 2026-10-26"),
+    }]);
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "local" })).toMatchObject({ config: { m4: { state: "invalid" } } });
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "_prod" })).toEqual({ enabled: false, reason: "production" });
     expect(readM4RunnerConfig(env)).toMatchObject({ config: { m4: { state: "invalid" } } });
@@ -54,6 +58,8 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(readM4RunnerConfig(env, { ...granted, grant: { ...granted.grant, continuations: [continuation] } }))
       .toMatchObject({ config: { m4: { authority: { grant: { continuations: [continuation] } } } } });
     expect(readM4RunnerConfig(env, { ...granted, grant: { ...granted.grant, continuations: [continuation, continuation] } }))
+      .toMatchObject({ config: { m4: { state: "invalid" } } });
+    expect(readM4RunnerConfig(env, { ...granted, grant: { ...granted.grant, continuations: [continuation], progressRecoveries: [continuation] } }))
       .toMatchObject({ config: { m4: { state: "invalid" } } });
   });
   it("ignores environment spending instructions and requires an exact reviewed manifest", () => {

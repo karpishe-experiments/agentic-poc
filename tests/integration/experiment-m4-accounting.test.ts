@@ -5,6 +5,8 @@ import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { readM4AccountingOperations, readM4FailedOperations } from "@/db/experiment-m4-accounting-evidence";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { undispatchedTextDigest } from "@/db/experiment-undispatched-text";
+import type { ExperimentOperationDocument } from "@/db/documents";
 import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { m4RequestBundleHash } from "@/lib/experiment-runner/m4-request";
@@ -213,5 +215,106 @@ describe.each([false, true])("Balanced accounting and original-result completion
     const before = await env.records();
     await expect(env.verify()).rejects.toThrow("complete attributable accounting");
     expect(await env.records()).toEqual(before);
+  });
+});
+
+describe("exact retained-manager progress recovery", () => {
+  async function blockedProgress() {
+    const env = await setup();
+    await env.observe(); await env.repository.completeOperation(env.completion);
+    const run = (await env.repository.getRun(id(10)))!;
+    // Seed the historical linkage that predates the loop-counter correction.
+    // The manager itself uses setup's real preparation/claim/original GET/save.
+    const failed: ExperimentOperationDocument = {
+      _id: id(14), runId: run._id, role: "specialist", taskId: "J01",
+      subjectKind: "book", subjectId: run.bookletId, idempotencyKey: "historical-undispatched-specialist",
+      inputFingerprint: "c".repeat(64), attempt: 1, mode: "balanced", providerKind: "text", state: "failed",
+      workflowRunId: null, parentWorkflowRunId: null, reservationCount: 0, deadlineAtMs: 100,
+      resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: null,
+      dependencyVersionIds: [], materializationJson: null, safeFailure: "definite_failure",
+      lifecycle: { startedAtMs: 1, ownerId: id(15), phase: "finished", lastProgressAtMs: 1,
+        endedAtMs: 1, attemptOutcome: "failed", unresolved: false }, createdAtMs: 1, updatedAtMs: 1,
+    };
+    const proof = undispatchedTextDigest(env.authority, run, failed);
+    expect(proof).toMatch(/^[a-f0-9]{64}$/);
+    failed.m4Continuation = { kind: "undispatched_text_v1", evidenceDigest: proof!, requestDigest: null,
+      reference: "exact-historical-preparation", resumedAtMs: 2, runRevision: 1, campaignRevision: 1, nextOperationId: id(12) };
+    await env.db.collections.experiment_operations.insertOne(failed);
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { m4ContinuedFromOperationId: failed._id } });
+    await env.db.collections.experiment_runs.updateOne({ _id: run._id }, { $set: {
+      status: "blocked", safeFailure: "definite_failure", noProgressCount: 3,
+      progressOperationId: id(12), progressFingerprint: "d".repeat(64),
+    } });
+    await env.db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { state: "stopped" } });
+    const authority = { ...env.authority, grant: { ...env.authority.grant,
+      continuations: [{ runId: run._id, operationId: failed._id, reference: failed.m4Continuation.reference }],
+      progressRecoveries: [{ runId: run._id, operationId: id(12), reference: "exact-retained-manager" }] } };
+    const repository = createExperimentRepository(env.db, { m4Authority: authority, m4ExecutionEnabled: true, elapsedNow: () => 0 });
+    const snapshot = async () => ({ run: await repository.getRun(run._id), campaign: await env.campaign(),
+      operations: await env.db.collections.experiment_operations.find({ runId: run._id }).sort({ _id: 1 }).toArray() });
+    return { ...env, authority, repository, snapshot };
+  }
+
+  it("recovers once under concurrency, preserves evidence and reuses the saved manager parent", async () => {
+    const env = await blockedProgress(), before = await env.snapshot();
+    const providerCalls = vi.mocked(env.runtime.retrieve).mock.calls.length;
+    const input = { runId: id(10), expectedRevision: before.run!.revision, nowMs: 10 };
+    const results = await Promise.allSettled([env.repository.resume(input), env.repository.resume(input)]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const after = await env.snapshot();
+    expect(after.run).toMatchObject({ status: "queued", safeFailure: null, noProgressCount: 0,
+      progressFingerprint: before.run!.progressFingerprint, progressOperationId: id(12), counters: before.run!.counters,
+      m4ProgressRecovery: { operationId: id(12), failedOperationId: id(14), priorNoProgressCount: 3 } });
+    expect(after.operations).toEqual(before.operations);
+    for (const key of ["requests", "requestCounts", "reservedMicrodollars", "settledMicrodollars"] as const)
+      expect(after.campaign![key]).toEqual(before.campaign![key]);
+    expect(await env.repository.resume({ ...input, expectedRevision: after.run!.revision })).toEqual(after.run);
+    await env.verify();
+    expect(env.runtime.start).not.toHaveBeenCalled();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(providerCalls);
+    const successor = await env.repository.prepareOperation({ runId: id(10), operationId: id(16),
+      expectedRevision: after.run!.revision, role: "specialist", taskId: "J01", subjectKind: "book", subjectId: id(11),
+      inputFingerprint: "e".repeat(64), attempt: 1, providerKind: "text", nowMs: 11 });
+    const preparation = await createM4TextPreparation(env.db, env.authority, { elapsedNow: () => 0 })
+      .prepare({ runId: id(10), operationId: successor._id, nowMs: 12 });
+    expect(preparation.parentWorkflowRunId).toBe(id(13));
+    expect((await env.repository.listOperations(id(10))).filter(operation => operation.role === "manager")).toHaveLength(1);
+    expect(env.runtime.start).not.toHaveBeenCalled();
+    // A consumed progress grant must not shadow a later, separately authorized
+    // preparation failure while the saved manager is still the progress owner.
+    await env.repository.failPreparation(id(10), successor._id, 13);
+    const blockedAgain = (await env.repository.getRun(id(10)))!;
+    const nextAuthority = { ...env.authority, grant: { ...env.authority.grant, continuations: [
+      ...env.authority.grant.continuations, { runId: id(10), operationId: successor._id, reference: "separate-next-failure" },
+    ] } };
+    const nextRepository = createExperimentRepository(env.db, { m4Authority: nextAuthority, m4ExecutionEnabled: true, elapsedNow: () => 0 });
+    const continued = await nextRepository.resume({ runId: id(10), expectedRevision: blockedAgain.revision, nowMs: 14 });
+    expect(continued).toMatchObject({ status: "queued", noProgressCount: 0, m4ProgressRecovery: after.run!.m4ProgressRecovery });
+    expect(continued.counters).toEqual(blockedAgain.counters);
+    expect(env.runtime.start).not.toHaveBeenCalled();
+    expect(env.runtime.retrieve).toHaveBeenCalledTimes(providerCalls);
+  });
+
+  it.each(["result", "materialization", "digest", "publication", "proof", "chain", "owner", "expired_claim", "target", "accounting"] as const)
+  ("rolls back recovery for changed %s", async fault => {
+    const env = await blockedProgress();
+    const operations = env.db.collections.experiment_operations;
+    if (fault === "result") await operations.updateOne({ _id: id(12) }, { $set: { resultJson: JSON.stringify({ kind: "ask", payload: { question: "changed" } }) } });
+    if (fault === "materialization") await operations.updateOne({ _id: id(12) }, { $set: { materializationJson: JSON.stringify({ delegatedTaskId: "J02" }) } });
+    if (fault === "digest") await operations.updateOne({ _id: id(12) }, { $set: { resultDigest: "f".repeat(64) } });
+    if (fault === "publication") await operations.updateOne({ _id: id(12) }, { $set: { verifiedWorkflowId: id(999) } });
+    if (fault === "proof") await operations.updateOne({ _id: id(14) }, { $set: { "m4Continuation.evidenceDigest": "f".repeat(64) } });
+    if (fault === "chain") await operations.updateOne({ _id: id(14) }, { $set: { "m4Continuation.nextOperationId": id(999) } });
+    if (fault === "owner") await env.db.collections.deployment_control.insertOne({ _id: "environment:_staging", schemaVersion: "1", environment: "_staging",
+      maintenance: false, activeMutations: 1, interruptedMutations: 0, reason: null, updatedAtMs: 9,
+      mutationOwners: [{ id: id(20), processId: id(21), operationId: id(12), startedAtMs: 9, state: "active" }] });
+    if (fault === "expired_claim") await operations.updateOne({ _id: id(14) }, { $set: { authorizationClaim: { id: id(22), expiresAtMs: 1 } } });
+    if (fault === "target") await env.db.collections.artifacts.insertOne({ _id: id(30), bookletId: id(11), experimentRunId: id(10),
+      artifactType: "concept", taskId: "J01", subjectKind: "book", subjectId: id(11), state: "approved", currentVersionId: id(31), createdAtMs: 1, updatedAtMs: 1 });
+    if (fault === "accounting") await env.db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $inc: { settledMicrodollars: 1 } });
+    const before = await env.snapshot(), calls = vi.mocked(env.runtime.retrieve).mock.calls.length;
+    await expect(env.repository.resume({ runId: id(10), expectedRevision: before.run!.revision, nowMs: 10 })).rejects.toThrow();
+    expect(await env.snapshot()).toEqual(before);
+    expect(env.runtime.start).not.toHaveBeenCalled(); expect(env.runtime.retrieve).toHaveBeenCalledTimes(calls);
   });
 });

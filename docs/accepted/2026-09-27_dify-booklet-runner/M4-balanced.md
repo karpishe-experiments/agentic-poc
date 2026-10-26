@@ -1,9 +1,56 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The campaign subsequently stopped at a new J12 preparation failure. Its exact guarded continuation was delivered and acknowledged on 2026-10-25; a new page-4 preparation failure then stopped the campaign again. No replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
+**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The exact page-4 preparation continuation was delivered and acknowledged on 2026-10-26. Its next manager completed with the correct target, but inherited no-progress state stopped Creator at revision 477 before specialist preparation. The bounded correction and exact saved-manager recovery are under validation. No replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Progress after a verified preparation continuation — 2026-10-26
+
+PRs #283/#284 delivered the exact `928cb32d-daf7-4703-b005-fdaf076d6cb6`
+continuation at staging `660e49d62ead05b3d883a81c11a0ce734e74f695`.
+Deployment `40280231418-1` completed; journal `40281823048` and independent
+Check `40281954086` passed. One normal Continue saved successfully.
+Manager `3d705816-f6fd-4434-a807-222958ef39c8` then completed at Dify run
+`fb19ae96-2fc0-48a6-96b4-6beb8f5592d0`, selecting the correct J12 page-4
+target. Its authenticated input count was 555, with 58 output tokens and no
+context warning. No new specialist operation followed. Creator stopped at
+revision 477; the completed manager was the last operation. The progress path
+counts unchanged creative state across the earlier failed preparations and
+blocks at three repeats. This is a loop-accounting defect, not a context-size
+or provider failure.
+
+Bounded correction contract: a verified, explicitly authorized failure
+continuation starts a new no-progress interval. Preserve the progress fingerprint,
+all prior operations, counters and liabilities. Genuine repeated successful
+cycles still stop at three. Add an exact, server-configured recovery for the
+retained successful manager above: verify its direct link to the consumed
+undispatched failure, the original no-dispatch proof, latest/progress identity,
+terminal ownership, stopped campaign, allowance and cumulative accounting in one
+transaction. Record recovery provenance, reset only the interval count, and reuse
+the saved manager selection. Do not dispatch another manager or clear an unknown
+outcome. Recovery is through normal controls, not deployment or a polling read.
+
+Verification must cover unchanged loop limits, concurrent/lost-ack recovery,
+stale or forged chains, missing grants, active/expired owners, original output
+materialization, accounting rollback and no provider dispatch. This protects
+Creator's continuation and the same failure boundary for every Balanced persona.
+No request definition, provider, timeout, image, price or credential change is
+included. User authority is the 2026-10-26 instruction to finish M4 and perform
+the required PR and Chrome actions. M4 remains incomplete.
+
+Local verification passed five configuration units and a final 115-case
+real-persistence run with fake providers (49 accounting and 66 control/loop cases),
+process exit zero. Eleven accounting cases cover recovery, concurrent and repeated
+control requests, saved-manager parent reuse, unchanged evidence and liabilities,
+and rollback for ten changed-evidence/ownership/accounting conditions. Review
+identified a consumed recovery grant shadowing a later exact failure continuation;
+selection now requires an unused progress recovery, with a regression for the later
+authorized continuation. Refreshed typecheck, focused lint and 223 documentation
+links/anchors passed. Local MongoDB shutdown used its Windows SIGKILL fallback
+after SIGINT. Two independent source reviews passed. Delivery is pending. No live recovery or
+additional provider request has been issued for this correction. Credential
+inventory impact: none; no credential storage, transfer or consumer changed.
 
 ### Approved efficient-read and context-warning contract — 2026-10-25
 
@@ -29,7 +76,7 @@ credential-inventory reconciliation. Slice A has no credential-inventory impact.
 
 Slices A and B and Slice C compatibility are delivered. Dev5 is installed and
 identity-verified; amendment enablement is delivered and staging checks passed.
-The user authorized the required continuation on 2026-10-26; its exact grant
+The required preparation continuation was delivered and acknowledged on 2026-10-26. The separate saved-manager progress recovery
 requires reviewed delivery and normal proof before execution.
 Returned JSON sizes are not
 wire-byte measurements. The bounded read probe reproduced the original question
