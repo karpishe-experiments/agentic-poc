@@ -35,6 +35,20 @@ continuation together. The original decision cannot become an approval. This
 fixed semantic proof does not catch arbitrary materialization errors or retry a
 provider automatically.
 
+An additional exact `preDeploymentRecovery: decision_rejection_v1` grant permits
+the existing candidate recovery service to close a retained exhausted J13 revision
+before the repair can pass the serving release's drain. It authenticates a fresh
+read-only provider response and pins a versioned target/source/asset/reservation
+snapshot. The transaction preserves campaign state and charges, stages paused
+eligibility only for original J13 verification, then commits a blocked, paused run
+with no active operation. It does not consume continuation. Repeated recovery
+reads verify the saved closure without dispatch. Normal deployment and readiness
+still precede an explicit Continue. A stopped pre-backup deployment journal can
+be archived only by its exact pinned identity; later phases, active processes,
+owned containers or changed journal bytes reject this handoff. Historical recovery
+snapshots retain their original interpretation. Live installation is a separate
+checkpoint in the M4 record.
+
 Summary, detail and compact control responses can expose the optional
 `retainedDecisionContinuation` flag for an exact configured continuation with the
 `decisionRejection` marker. It permits the normal Continue control while that

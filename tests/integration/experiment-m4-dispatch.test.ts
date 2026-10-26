@@ -284,7 +284,7 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
 }
 
 describe("offline Balanced dispatcher", () => {
-  it("continues an exhausted reviewer decision atomically with original image bytes and no replay", async () => {
+  it.each([false, true])("continues an exhausted reviewer decision with original image bytes and no replay (candidate=%s)", async candidate => {
     const env = await setup(false, false, "professional_creator");
     env.forceImageRevisions(3);
     for (let step = 0; step < 220; step++) {
@@ -299,6 +299,7 @@ describe("offline Balanced dispatcher", () => {
     expect(JSON.parse(failed.m4Observation!.content!).result.payload.decision.action).toBe("revise");
     const authority = { ...env.authority, grant: { ...env.authority.grant,
       continuations: [{ runId: env.runId, operationId: failed._id, decisionRejection: "revision_allowance_exhausted_v1" as const,
+        ...(candidate ? { preDeploymentRecovery: "decision_rejection_v1" as const } : {}),
         reference: "exact exhausted reviewer fixture" }] } };
     const repository = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
     const snapshot = async () => ({ run: await repository.getRun(env.runId),
@@ -313,8 +314,51 @@ describe("offline Balanced dispatcher", () => {
     await expect(repository.resume({ runId: env.runId, expectedRevision: blocked.revision, nowMs: env.now() })).rejects.toThrow();
     expect(await snapshot()).toEqual(before);
     env.store.files.set(asset.uri, bytes);
+    if (candidate) {
+      while (env.now() <= failed.deadlineAtMs!) env.tick();
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: {
+        schemaVersion: "1", environment: "_staging", maintenance: false, draining: false,
+        activeMutations: 0, interruptedMutations: 0, mutationOwners: [], updatedAtMs: env.now(),
+      }, $setOnInsert: { _id: "environment:_staging" } }, { upsert: true });
+      const service = createBookletRecovery({ database: env.database, config: { ...env.config, m4: { state: "granted", authority } },
+        runtime: env.runtime, store: () => env.store, now: env.now });
+      const recoveryTarget = { runId: env.runId, operationId: failed._id, expectedRevision: blocked.revision };
+      const preview = await service.preview(recoveryTarget);
+      expect(preview.snapshot.scope).toBe("decision-rejection-target-v1");
+      expect(await snapshot()).toEqual(before);
+      expect((await inspectRecoveryWork(env.database, { environment: "_staging" })).blockers.map(row => row.code))
+        .toEqual(["unresolved_runs", "operations"]);
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: true } });
+      // Corrupt original bytes after the closure write, before source checks.
+      // Both tentative run eligibility and semantic closure must roll back.
+      const operations = env.database.collections.experiment_operations;
+      const write = operations.updateOne.bind(operations);
+      const spy = vi.spyOn(operations, "updateOne").mockImplementation(async (...args) => {
+        const result = await write(...args);
+        if ((args[1] as { $set?: { m4DecisionRejection?: unknown } }).$set?.m4DecisionRejection) env.store.files.set(asset.uri, Uint8Array.of(0));
+        return result;
+      });
+      await expect(service.apply(recoveryTarget, preview.previewDigest, async () => {})).rejects.toThrow();
+      spy.mockRestore(); env.store.files.set(asset.uri, bytes);
+      expect(await snapshot()).toEqual(before);
+      await service.apply(recoveryTarget, preview.previewDigest, async () => {});
+      const closed = await snapshot();
+      expect(closed.run).toMatchObject({ status: "blocked", pauseRequested: true, activeOperationId: null, counters: blocked.counters });
+      expect(closed.campaign).toEqual(before.campaign);
+      await expect(withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, closed.run!))).rejects.toThrow();
+      const gets = vi.mocked(env.runtime.retrieve).mock.calls.length;
+      for (let repeat = 0; repeat < 2; repeat++) expect(await service.verifyCompleted(recoveryTarget, preview.snapshot))
+        .toMatchObject({ outcome: "failure_closed", accounting: "preserved", providerPosts: 0 });
+      expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets);
+      expect(await snapshot()).toEqual(closed);
+      // The unchanged normal drain's work inventory is now clear. No operation
+      // is excluded by identity, and the campaign/Creator have not resumed.
+      expect(await inspectRecoveryWork(env.database, { environment: "_staging" })).toMatchObject({ outcome: "clear", blockers: [] });
+      await env.database.collections.deployment_control.updateOne({ environment: "_staging" }, { $set: { maintenance: false } });
+    }
+    const resumeRevision = (await repository.getRun(env.runId))!.revision;
     const results = await Promise.allSettled([0, 1].map(() => repository.resume({ runId: env.runId,
-      expectedRevision: blocked.revision, nowMs: env.now() })));
+      expectedRevision: resumeRevision, nowMs: env.now() })));
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     const after = await snapshot();
     expect(after.run).toMatchObject({ status: "queued", activeOperationId: null, imageRevisions: 2, counters: blocked.counters });
