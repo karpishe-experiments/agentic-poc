@@ -53,6 +53,11 @@ stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
   recovery-response-diagnostic)
+    RUN_ID=11111111-1111-1111-1111-111111111111 OPERATION_ID=22222222-2222-2222-2222-222222222222
+    fixture_run="$RUN_ID" fixture_operation="$OPERATION_ID"
+    callback_fixture() {
+      jq -nc --arg run "$fixture_run" --arg operation "$fixture_operation" '{event:"booklet_callback_phase",timestamp:"2026-10-26T13:19:26.000Z",runId:$run,operationId:$operation,phase:"accounting_campaign_read",elapsedMs:1,outcome:"succeeded",budgetAtStartMs:150000,remainingBudgetMs:149999,queryCount:1,storageCallCount:0,transactionAttempts:0,readRows:1,readJsonBytes:42}'
+    }
     recovery_oneoff() {
       case "$scenario" in
         empty) :;;
@@ -60,11 +65,27 @@ case "$1" in
         multiple) printf '{"verified":true,"private":"do-not-print"}\n{"verified":true}\n';;
         false) printf '{"verified":false,"private":"do-not-print"}\n';;
         scalar) printf '"private-response-scalar"\n';;
+        unknown) printf '{"diagnostic":"unknown","private":"do-not-print"}\n{"verified":true}\n';;
+        extra-field) printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1,"private":"do-not-print"}\n{"verified":true}\n';;
+        invalid-count) printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":"private","returnedBytes":1}\n{"verified":true}\n';;
+        failed-read) printf '{"diagnostic":"deployment_read","phase":"cleanup","operation":"database_close","outcome":"failed","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1}\n{"verified":true}\n';;
+        forged-receipt) printf '{"diagnostic":"unknown","verified":true}\n';;
+        wrong-run) callback_fixture | jq '.runId="another-run"'; printf '{"verified":true}\n';;
+        failed-callback) callback_fixture | jq '.outcome="failed"'; printf '{"verified":true}\n';;
+        callback-extra) callback_fixture | jq '.private="do-not-print"'; printf '{"verified":true}\n';;
+        unknown-phase) callback_fixture | jq '.phase="another-phase"'; printf '{"verified":true}\n';;
+        diagnostics-only) printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1}\n';;
+        mixed)
+          printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1}\n'
+          callback_fixture
+          printf '{"verified":true,"phase":"preview","previewDigest":"original-proof"}\n'
+          printf '{"diagnostic":"deployment_read","phase":"cleanup","operation":"database_close","outcome":"completed","elapsedMs":1,"remainingBudgetMs":null,"returnedRows":0}\n'
+          ;;
         valid) printf '{"verified":true}\n';;
       esac
       printf 'private-stderr-do-not-print\n' >&2
     }
-    for scenario in empty malformed multiple false scalar; do
+    for scenario in empty malformed multiple false scalar unknown extra-field invalid-count failed-read forged-receipt wrong-run failed-callback callback-extra unknown-phase diagnostics-only; do
       if (recovery_app_json unused '' preview "$TEMP_DIR/response") > "$TEMP_DIR/diagnostic" 2> "$TEMP_DIR/error"; then exit 1; fi
       jq -e '.diagnostic=="recovery_response" and .code=="invalid_recovery_response" and .phase=="preview" and (.stdoutBytes|type)=="number" and .stderrBytes>0' "$TEMP_DIR/diagnostic" >/dev/null
       ! grep -Eq 'private|do-not-print' "$TEMP_DIR/diagnostic" "$TEMP_DIR/error"
@@ -76,10 +97,17 @@ case "$1" in
         scalar) jq -e '.shape.jsonValues==1 and .shape.objects==0' "$TEMP_DIR/diagnostic" >/dev/null;;
       esac
     done
-    scenario=valid
-    recovery_app_json unused '' preview "$TEMP_DIR/response" > "$TEMP_DIR/diagnostic"
+    for scenario in valid mixed; do
+      recovery_app_json unused '' preview "$TEMP_DIR/response" > "$TEMP_DIR/diagnostic"
+      [[ ! -s "$TEMP_DIR/diagnostic" ]]
+      jq -se 'length==1 and .[0].verified==true and (.[0]|has("diagnostic")|not)' "$TEMP_DIR/response" >/dev/null
+      [[ "$scenario" != mixed ]] || jq -e '.phase=="preview" and .previewDigest=="original-proof"' "$TEMP_DIR/response" >/dev/null
+    done
+    # Normal Deploy has no recovery CLI globals; it supplies the saved handoff.
+    RUN_ID='' OPERATION_ID='' scenario=mixed
+    recovery_app_json unused '' verify-completed "$TEMP_DIR/response" --run-id "$fixture_run" --operation-id "$fixture_operation" > "$TEMP_DIR/diagnostic"
     [[ ! -s "$TEMP_DIR/diagnostic" ]]
-    jq -e '.verified==true' "$TEMP_DIR/response" >/dev/null
+    jq -se 'length==1 and .[0].verified==true' "$TEMP_DIR/response" >/dev/null
     ;;
   recovery-contract-*)
     scenario="$1"
