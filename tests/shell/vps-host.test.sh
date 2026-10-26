@@ -16,6 +16,7 @@ if [[ $# -eq 0 ]]; then
   bash "$0" resume-unit-retirement
   bash tests/shell/vps-systemd-resume.test.sh
   bash tests/shell/vps-backup-helper.test.sh
+  bash tests/shell/vps-prebackup-retirement.test.sh
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
   exit 0
 fi

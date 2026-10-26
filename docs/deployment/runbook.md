@@ -196,6 +196,20 @@ Resume preserves allowlisted status for a stopped transient systemd unit, resets
 its failed state and verifies unloading before recreating it with only the
 original remaining runtime. Persistent units, live processes, queued jobs or
 failed unloading reject resume; runtime properties are not edited in place.
+If the exact retained pre-backup request `40359148858-1` expires, use
+`expired-deployment-recover` with recovery JSON
+`{"original_request_id":"40359148858-1","retire_prebackup_only":"true"}`
+and request ID `m4-retire-prebackup-40359148858-v1`. Supply candidate commit
+`ffefe4c87685b7b0a5c0f6499547d1dc3d17506d` and its reviewed immutable image.
+Preview uses bounded read-only inspection independent of the expired deadline.
+It requires the original draining phase, no selected backup, stopped work,
+the expected prior service, open and quiet admission, and intact helper evidence.
+Apply requires the matching preview digest before its printed expiry and the
+usual confirmation. It archives the journal byte-for-byte and records closure;
+it does not mark deployment successful or change admission. Reconcile an uncertain
+acknowledgement through the same receipt. After verified closure, dispatch one
+normal deployment with a new request ID and the normal budget. Do not repeat
+deployment after an observer timeout; inspect its saved request.
 The protected dispatcher must support this helper pair before use; prepare a
 reviewed checksum handoff if the installed version lacks it.
 
