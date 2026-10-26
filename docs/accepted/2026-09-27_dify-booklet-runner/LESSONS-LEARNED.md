@@ -4,6 +4,33 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Propagate the owning maintenance deadline through storage
+
+A backup storage request was aborted by the operation budget timer while the
+overall backup budget still had time. Recovery storage used an implicit
+30-second nested maximum. Focused fake-clock tests verify that transfers can
+exceed 30 seconds within their parent budget, and that sequential transfers and
+reentry do not renew that budget. Keep timeout ownership explicit. Cancellation
+must cover response bodies and a separately bounded cleanup of the exact owned
+container. Emit fixed phase and byte measurements on stderr so future failures
+identify the transfer boundary without exposing object names or breaking receipts.
+The original transfer's size and cause of delay remain unknown; local tests do
+not prove live recovery. Promotion candidate: **Documentation** for maintenance
+deadline and command-response contracts.
+
+### Separate command receipts from structured telemetry
+
+Accounting instrumentation emitted JSON to standard output during a protected
+read-only recovery preview. The command returned eleven objects including one
+verified result; a single-object wrapper rejected the entire stream. Keep a
+machine response protocol explicit. If existing telemetry shares that channel,
+validate its complete known shape, measurements, outcome and applicable target
+identity before separating it from exactly one receipt. Unknown records and
+duplicate results remain errors. Test the normal deployment handoff as well as
+direct recovery: the handoff supplies target arguments without recovery globals.
+PR #295, its shell regressions and successful retained preview/apply verify this
+correction. Promotion candidate: **Documentation** for command response contracts.
+
 ### Keep completion reads proportional to their consumers
 
 Evaluation ordering and completion used full successful tester/judge documents,
@@ -35,7 +62,8 @@ serving-release, exact recovery, deployment and continuation boundary. Keep
 unknown operations and unrelated owners as drain blockers. Reuse the protected
 recovery interface for a separately authorized exact closure rather than adding
 a general drain exception. The [M4 checkpoint](M4-balanced.md#decision-repair-delivery-checkpoint--2026-10-26)
-records the observed failure and the still-proposed correction. Promotion
+records the observed failure and verified exact recovery. Normal delivery and
+Creator acceptance remain separate gates. Promotion
 candidate: **Documentation** for repair delivery and acceptance fixtures.
 
 ### Offer only actions that remain eligible

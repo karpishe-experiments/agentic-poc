@@ -65,6 +65,7 @@ export function select(changes, full = false) {
     }
     else if (p.startsWith('tests/agent/') || p === 'scripts/test-agent-fixtures.ts') { flags.agent = true; category = 'agent'; }
     else if (/^(deploy\/|infra\/config\/|scripts\/deploy\/|tests\/shell\/)/.test(p)) { flags.shell = true; deploy(); category = 'deployment'; }
+    else if (/^scripts\/recovery(?:-[a-z-]+)?\.ts$/.test(p)) { flags.static = true; deploy(); tests.add('tests/unit/recovery-storage-budget.test.ts'); tests.add('tests/unit/operation-budget.test.ts'); category = 'recovery'; }
     else if (p.startsWith('infra/terraform/bootstrap/')) { flags.bootstrap = true; category = 'bootstrap'; }
     else if (p.startsWith('infra/terraform/')) { flags.terraform = true; category = 'terraform'; }
     else if (/^\.github\/(workflows|actions)\//.test(p)) { flags.workflow = true; deploy(); category = 'workflow'; }

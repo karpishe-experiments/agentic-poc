@@ -168,6 +168,29 @@ Repeated terminal child requests return a historical receipt even after the
 parent advances. This proves the saved recovery outcome, not current admission or
 database state. Check current status separately before another action.
 
+For a stopped, expired staging deployment whose retained phase is `backup`, the
+reviewed `expired-deployment-recover` action also accepts
+`backup_helper_image` and `backup_helper_commit` in its recovery JSON. The usual
+`commit` and `image_digest` identify the selected prior release. The helper pair
+identifies a separately reviewed build-only candidate; it must declare compatible
+data and backup contracts. Supply a distinct recovery request ID and the exact
+`original_request_id`; omit `backup_id` because the dispatcher resolves it.
+Preview verifies the completed decision-recovery target and inspects the original
+backup. Only a missing completion marker permits a fresh immutable backup ID.
+Apply requires the exact preview digest and normal `kids_booklet` confirmation.
+
+Checkpoints are `prepared`, `backing-up`, `backup-verified`,
+`prior-service-ready-closed` and `complete`. A retained `backing-up` checkpoint
+allows verification of a completed backup, never another backup invocation. The
+recovery deadline is retained across reentry. On failure, inspect its exact journal
+and fixed storage diagnostics; do not replay the backup or overwrite partial
+objects. Successful recovery archives the original failed deployment and decision
+handoff unchanged, restores prior-service readiness with admission closed, and
+pins a helper handoff. Normal staging deployment must match its source tree and
+use the helper for its own backup. It retires the handoff only after success.
+The protected dispatcher must support this helper pair before use; prepare a
+reviewed checksum handoff if the installed version lacks it.
+
 Mutating reentry requires unchanged host configuration fingerprints. For an old
 candidate journal, the dispatcher reconstructs its original digest with bounded
 backup-ID candidates. If the original preview used a custom backup ID later

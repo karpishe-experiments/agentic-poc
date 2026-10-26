@@ -16,6 +16,8 @@ CONFIG_FILE='' VPS_HOST='' VPS_USER='' COMMIT='' REQUEST_ID=''
 SECRET_NAME=''
 RUN_ID=''
 OPERATION_ID='' EXPECTED_REVISION='' PREVIEW_DIGEST='' ORIGINAL_REQUEST_ID=''
+BACKUP_HELPER_IMAGE='' BACKUP_HELPER_COMMIT='' BACKUP_SUBJECT_IMAGE=''
+BACKUP_HELPER_RELEASE='' MAINTENANCE_DETACHED=false
 ABORT_RECOVERY=false RELEASE_EXPIRED_CLAIM=false
 RECOVERY_ORIGINAL_EVIDENCE=''
 INSPECTION_ONLY=false RECOVERY_PAGE=0 RECOVERY_LIMIT=5
@@ -72,6 +74,7 @@ Options:
   --operation-id UUID --expected-revision N  exact candidate recovery target
   --preview-digest SHA256            required recovery apply preview identity
   --original-request-id ID           expired deployment being recovered
+  --backup-helper-image DIGEST --backup-helper-commit SHA  reviewed staging backup helper for expired recovery
   --run-id UUID                     staging recovery or dify-diagnostics run
   --secret-name NAME                one secret, or staging-only DIFY_COMMUNITY_PROBE/DIFY_BOOKLET_RUNNER bundle
   --generate-password               generate and display ACCESS_GATE_PASSWORD once
@@ -97,7 +100,7 @@ parse_arguments() {
       --inspection-only) INSPECTION_ONLY=true; shift ;;
       --abort-recovery) ABORT_RECOVERY=true; shift ;;
       --release-expired-claim) RELEASE_EXPIRED_CLAIM=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--operation-id|--expected-revision|--preview-digest|--original-request-id|--page|--limit|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--operation-id|--expected-revision|--preview-digest|--original-request-id|--backup-helper-image|--backup-helper-commit|--page|--limit|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -111,6 +114,7 @@ parse_arguments() {
           --page) RECOVERY_PAGE="$value";; --limit) RECOVERY_LIMIT="$value";;
           --operation-id) OPERATION_ID="$value";; --expected-revision) EXPECTED_REVISION="$value";;
           --preview-digest) PREVIEW_DIGEST="$value";; --original-request-id) ORIGINAL_REQUEST_ID="$value";;
+          --backup-helper-image) BACKUP_HELPER_IMAGE="$value";; --backup-helper-commit) BACKUP_HELPER_COMMIT="$value";;
           --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
           --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
@@ -137,6 +141,9 @@ validate_arguments() {
   [[ -z "$BACKUP_ID" || "$BACKUP_ID" =~ ^[a-zA-Z0-9_-]{1,160}$ ]] || die 'Invalid backup ID'
   [[ -z "$CONFIRMATION" || "$CONFIRMATION" =~ ^kids_booklet(_prod)?$ ]] || die 'Invalid database confirmation'
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
+  if [[ -n "$BACKUP_HELPER_IMAGE$BACKUP_HELPER_COMMIT" ]]; then
+    [[ "$ACTION" == expired-deployment-recover && "$ENVIRONMENT" == staging && "$BACKUP_HELPER_IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ && "$BACKUP_HELPER_COMMIT" =~ ^[a-f0-9]{40}$ && -z "$BACKUP_ID" ]] || die 'Backup helper requires expired staging recovery, pinned image/commit and server-resolved backup ID'
+  fi
   [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY|DIFY_COMMUNITY_PROBE|DIFY_BOOKLET_RUNNER)$ ]] || die 'Invalid application secret name'
   [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
   if [[ "$SECRET_NAME" == DIFY_COMMUNITY_PROBE || "$SECRET_NAME" == DIFY_BOOKLET_RUNNER ]]; then
@@ -257,6 +264,7 @@ host_call() {
   [[ -z "$EXPECTED_REVISION" ]] || remote+=(--expected-revision "$EXPECTED_REVISION")
   [[ -z "$PREVIEW_DIGEST" ]] || remote+=(--preview-digest "$PREVIEW_DIGEST")
   [[ -z "$ORIGINAL_REQUEST_ID" ]] || remote+=(--original-request-id "$ORIGINAL_REQUEST_ID")
+  [[ -z "$BACKUP_HELPER_IMAGE" ]] || remote+=(--backup-helper-image "$BACKUP_HELPER_IMAGE" --backup-helper-commit "$BACKUP_HELPER_COMMIT")
   [[ "$ABORT_RECOVERY" == false ]] || remote+=(--abort-recovery)
   [[ "$RELEASE_EXPIRED_CLAIM" == false ]] || remote+=(--release-expired-claim)
   if [[ "$INSPECTION_ONLY" == true ]]; then remote+=(--inspection-only --page "$RECOVERY_PAGE" --limit "$RECOVERY_LIMIT"); fi
@@ -288,6 +296,11 @@ compose() {
     seconds="$(remaining_operation_seconds "$seconds")" || return 124
     record_operation_command compose-up "$seconds"
   fi
+  if [[ "$CONTROL_DEADLINE_SECONDS" -gt 0 ]]; then
+    local control_remaining=$((CONTROL_DEADLINE_SECONDS - SECONDS))
+    [[ "$control_remaining" -gt 0 ]] || return 124
+    if [[ "$seconds" -le 0 || "$seconds" -gt "$control_remaining" ]]; then seconds="$control_remaining"; fi
+  fi
   if [[ "$seconds" -gt 0 ]]; then bound=(timeout --kill-after=5s "${seconds}s"); fi
   "${bound[@]}" docker compose --project-name "kids-booklet-$ENVIRONMENT" --env-file "$release/runtime.env" -f "$release/compose.yml" -f "$release/environment.yml" -f "${COMPOSE_SECRET_FILE:-$SECRETS/$ENVIRONMENT/secrets.json}" -f "$release/image.json" "$@"
 }
@@ -295,11 +308,12 @@ maintenance() {
   local release="$1" command="$2"; shift 2
   local release_image
   release_image="$(jq -er .services.app.image "$release/image.json")"
+  [[ -z "$BACKUP_SUBJECT_IMAGE" ]] || release_image="$BACKUP_SUBJECT_IMAGE"
   local full_asset_backup=false
   [[ "$ACTION" != reset-staging || "$command" != recovery ]] || full_asset_backup=true
   local phase_seconds=300 status=0 name="booklet-operation-${ENVIRONMENT}-${REQUEST_ID:-local}-$$-$RANDOM"
   case "$command:${1:-}" in
-    recovery:backup|recovery:verify) phase_seconds=1800;; recovery:restore) phase_seconds=3600;;
+    recovery:backup|recovery:verify|recovery:inspect) phase_seconds=1800;; recovery:restore) phase_seconds=3600;;
     check-deployment-readiness:*) phase_seconds=180;;
   esac
   # Cleanup may reopen the original service after a failed drain. It is not a
@@ -318,11 +332,12 @@ maintenance() {
   else status=$?; fi
   # Killing the Compose client does not stop its daemon-owned container. Stop
   # only this named/labelled one-off; never infer that its writes failed.
-  stop_owned_oneoff "$name" 20 || printf 'error: Owned maintenance container remains unverified; inspect before resume\n' >&2
+  CONTROL_DEADLINE_SECONDS=0 stop_owned_oneoff "$name" 20 || printf 'error: Owned maintenance container remains unverified; inspect before resume\n' >&2
   printf 'error: Maintenance command %s stopped (exit=%s); inspect retained phase and outputs before resume\n' "$command" "$status" >&2
   return "$status"
 }
 record_operation_command() {
+  [[ "$MAINTENANCE_DETACHED" == false ]] || return 0
   [[ -n "$REQUEST_ID" && -f "$STATE/operation.json" ]] || return 0
   local started; started="$(date +%s)"
   jq --arg id "$REQUEST_ID" --arg command "$1" --argjson started "$started" --argjson seconds "$2" \
@@ -595,7 +610,7 @@ recovery_archive_prebackup_deployment() {
   fi
 }
 expired_recovery_handoff_hash() {
-  local current="$1" marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" original="$STATE/operation.json" id parent tree image
+  local current="$1" marker="$STATE/recovery-handoff-staging.json" archive="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" original="${2:-$STATE/operation.json}" id parent tree image
   [[ -e "$original" ]] || original="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
   if [[ -e "$marker" && -e "$archive" ]]; then cmp -s "$marker" "$archive" || die 'Recovery handoff archive differs'; fi
   [[ -e "$marker" ]] || marker="$archive"
@@ -734,7 +749,7 @@ recovery_oneoff() {
   if COMPOSE_TIMEOUT_SECONDS=180 compose "$release" run --rm --no-deps -T --interactive=false --name "$name" \
     --label "uk.co.uniwares.booklet.request=$REQUEST_ID" --label uk.co.uniwares.booklet.environment=staging \
     -e RUNNER_ENABLED=false "${mounts[@]}" app "${command[@]}" "$@"; then return 0; else status=$?; fi
-  stop_owned_oneoff "$name" 20 || die 'Recovery one-off cleanup is unverified; inspect retained evidence'
+  CONTROL_DEADLINE_SECONDS=0 stop_owned_oneoff "$name" 20 || die 'Recovery one-off cleanup is unverified; inspect retained evidence'
   return "$status"
 }
 recovery_schema_digest() {
@@ -750,7 +765,7 @@ recovery_schema_digest() {
 # from arbitrary optional fields, a matching schema version or a new image.
 recovery_data_contract() {
   local name="booklet-operation-staging-${REQUEST_ID}-contract-$$-$RANDOM" status=0
-  if timeout --kill-after=5s 30s docker run --rm --network none --name "$name" \
+  if control_timeout 30 docker run --rm --network none --name "$name" \
     --label "uk.co.uniwares.booklet.request=$REQUEST_ID" --label uk.co.uniwares.booklet.environment=staging \
     --entrypoint node "$1" -e 'const fs=require("fs"); const p="db/deployment-contract.json"; console.log(fs.existsSync(p)?JSON.stringify(JSON.parse(fs.readFileSync(p,"utf8"))):"null");'; then return 0; else status=$?; fi
   stop_owned_oneoff "$name" 20 || die 'Contract inspection cleanup is unverified'
@@ -1004,6 +1019,173 @@ recovery_release_expired_claim() {
   recovery_phase "$journal" complete
   recovery_result "$journal"
 }
+# The helper executes backup code only. Its image is distinct from the release
+# described by RELEASE_IMAGE_DIGEST in the saved manifest.
+prepare_backup_helper() {
+  local current="$1" helper="$2" commit="$3" name status=0 proof
+  [[ "$helper" == "$(jq -er .image "$CONFIG_FILE")"@sha256:* && "$commit" =~ ^[a-f0-9]{40}$ ]] || die 'Backup helper identity is invalid'
+  private_temp
+  mkdir -p "$TEMP_DIR/docker"
+  DOCKER_CONFIG="$TEMP_DIR/docker" control_timeout 300 docker pull "$helper" >/dev/null
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$helper")" == "$commit" ]] || die 'Backup helper commit differs'
+  proof="$(recovery_expired_compatibility "$(jq -er .services.app.image "$current/image.json")" "$helper")" || die 'Backup helper data compatibility is unverified'
+  [[ "$(jq -r .kind <<< "$proof")" == data-contract ]] || die 'Backup helper requires explicit compatible data contracts'
+  name="booklet-operation-staging-${REQUEST_ID}-backup-capabilities"
+  if ! control_timeout 30 docker run --rm --network none --name "$name" \
+    --label "uk.co.uniwares.booklet.request=$REQUEST_ID" --label uk.co.uniwares.booklet.environment=staging \
+    --label com.docker.compose.project=kids-booklet-staging --label com.docker.compose.oneoff=True \
+    --entrypoint node "$helper" --import tsx scripts/recovery.ts capabilities > "$TEMP_DIR/backup-capabilities.json"; then
+    status=1; CONTROL_DEADLINE_SECONDS=0 stop_owned_oneoff "$name" 20 || die 'Backup capability cleanup is unverified'
+  fi
+  [[ "$status" == 0 ]] || die 'Backup helper discovery failed'
+  jq -e '.=={contract:"booklet-backup-helper-v1",manifestVersion:"1",dataContractVersion:"booklet-data-v1",initializationRequired:false,migrationRequired:false}' "$TEMP_DIR/backup-capabilities.json" >/dev/null || die 'Backup helper capability differs'
+  BACKUP_HELPER_RELEASE="$(mktemp -d "$TEMP_DIR/backup-helper.XXXXXXXX")"
+  cp "$current/compose.yml" "$current/environment.yml" "$current/runtime.env" "$BACKUP_HELPER_RELEASE/"
+  jq -n --arg image "$helper" '{services:{app:{image:$image}}}' > "$BACKUP_HELPER_RELEASE/image.json"
+}
+helper_maintenance() (
+  local BACKUP_SUBJECT_IMAGE="$1"; shift
+  # The failed original operation never receives a renewed deadline or writes.
+  if [[ "$ACTION" == expired-deployment-recover ]]; then MAINTENANCE_DETACHED=true; fi
+  maintenance "$BACKUP_HELPER_RELEASE" recovery "$@"
+)
+recovery_backup_diagnostics() {
+  # Strict complete shapes only. Never forward raw stderr or arbitrary errors.
+  jq -Rcs '
+    def count: type=="number" and .>=0 and floor==.;
+    def optional_count: .==null or count;
+    split("\n") | map(fromjson? | select(type=="object") | select(
+      keys==["action","category","completedBytes","elapsedMs","expectedBytes","failureCategory","ordinal","outcome","phase","remainingBudgetMs","version"] and
+      .version=="recovery_transfer_v1" and
+      (.phase|IN("reservation","database_dump","inventory","asset_copy","archive_upload","manifest","completion_marker","backup_verification","restore")) and
+      (.action|IN("phase","read","write","verification_read")) and
+      (.category|IN("reservation","asset","archive","manifest","completion_marker","unspecified")) and
+      (.outcome|IN("started","success","failure")) and
+      (.failureCategory|.==null or IN("deadline_expired","aborted","storage_failure")) and
+      (.ordinal|optional_count) and (.expectedBytes|optional_count) and (.completedBytes|optional_count) and
+      (.elapsedMs|count) and (.remainingBudgetMs|optional_count))) | .[-8:][]
+  ' "$1" || true
+}
+backup_helper_for_deploy() {
+  local current="$1" marker="$STATE/backup-helper-staging.json" parent tree original
+  [[ -f "$marker" && ! -L "$marker" ]] || die 'Backup helper handoff is invalid'
+  parent="$STATE/recoveries/$(jq -er .requestId "$marker")/host.json"
+  [[ -f "$parent" && ! -L "$parent" ]] || die 'Backup helper recovery evidence missing'
+  jq -e '.phase=="complete" and .purpose=="maintenance-backup-v1"' "$parent" >/dev/null || die 'Backup helper recovery is incomplete'
+  [[ "$(jq -Sc 'del(.phase)' "$marker")" == "$(jq -Sc 'del(.phase)' "$parent")" && "$(jq -er .priorRelease "$marker")" == "$current" && "$(jq -er .hostFingerprint "$marker")" == "$(recovery_host_fingerprint "$current")" ]] || die 'Backup helper provenance changed'
+  tree="$(docker image inspect --format '{{index .Config.Labels "uk.co.uniwares.booklet.source-tree"}}' "$IMAGE_DIGEST")"
+  [[ "$tree" == "$(jq -er .sourceTree "$marker")" ]] || die 'Delivery tree differs from reviewed backup helper'
+  original="$STATE/operations/$(jq -er .originalRequestId "$marker").json"
+  [[ "$(sha256sum "$original" | awk '{print $1}')" == "$(jq -er .originalJournalSha256 "$marker")" ]] || die 'Original failed deployment archive changed'
+  local ORIGINAL_REQUEST_ID
+  ORIGINAL_REQUEST_ID="$(jq -er .originalRequestId "$marker")"
+  [[ "$(expired_recovery_handoff_hash "$current" "$original")" == "$(jq -er .originalHandoffSha256 "$marker")" ]] || die 'Original decision handoff provenance changed'
+  prepare_backup_helper "$current" "$(jq -er .helperImage "$marker")" "$(jq -er .helperCommit "$marker")"
+  original="$STATE/operations/recovery-handoff-$(jq -er .originalRequestId "$marker").json"
+  backup_recovery_verify_target "$marker" "$BACKUP_HELPER_RELEASE" "$original"
+}
+backup_recovery_verify_target() {
+  local journal="$1" helper="$2" marker="$3" parent
+  parent="$STATE/recoveries/$(jq -er .requestId "$marker")"
+  jq -e '.phase=="complete"' "$parent/host.json" >/dev/null || die 'Original decision recovery is incomplete'
+  recovery_app_json "$helper" "$parent" verify-completed "$TEMP_DIR/backup-target.json" \
+    --run-id "$(jq -er .runId "$marker")" --operation-id "$(jq -er .operationId "$marker")" \
+    --expected-revision "$(jq -er .expectedRevision "$marker")" --preview-digest "$(jq -er .appPreviewDigest "$marker")" --evidence-dir /recovery
+  [[ -z "$journal" || "$(jq -er .originalHandoffSha256 "$journal")" == "$(sha256sum "$marker" | awk '{print $1}')" ]] || die 'Original decision handoff changed'
+}
+backup_deployment_recovery() {
+  local current="$1" image="$2" evidence="$3" journal="$4" original="$STATE/operation.json"
+  local marker="$STATE/recovery-handoff-staging.json" old_hash fingerprint handoff_hash digest phase tree deadline backup complete=false
+  if [[ -f "$journal" && "$APPLY" == true && "$(jq -r .phase "$journal")" != complete ]]; then
+    deadline="$(jq -er .deadlineAtSeconds "$journal")"
+    [[ "$deadline" -gt "$(date +%s)" ]] || die 'Backup recovery budget expired; inspect without replay'
+    CONTROL_DEADLINE_SECONDS=$((SECONDS + deadline - $(date +%s)))
+  fi
+  [[ -e "$original" ]] || original="$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+  [[ -e "$marker" ]] || marker="$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json"
+  [[ "$current" == "$STATE/releases/staging/$COMMIT" && "$image" == "$IMAGE_DIGEST" ]] || die 'Backup recovery prior release differs'
+  [[ -f "$original" && ! -L "$original" && -f "$marker" && ! -L "$marker" ]] || die 'Backup recovery original evidence missing'
+  jq -e --arg id "$ORIGINAL_REQUEST_ID" --arg prior "$current" --argjson now "$(date +%s)" \
+    '.requestId==$id and .action=="deploy" and .environment=="staging" and .priorRelease==$prior and .step=="backup" and .budgetDeadlineAtSeconds<$now and (.backupId|test("^[A-Za-z0-9_-]{1,160}$"))' "$original" >/dev/null || die 'Original deployment is not a stopped expired backup'
+  [[ "$(timeout 10s systemctl show "kids-booklet-operation-$ORIGINAL_REQUEST_ID.service" --property=ActiveState --value)" =~ ^(inactive|failed)$ ]] || die 'Original deployment service remains active or unknown'
+  recovery_no_containers -aq --filter "label=uk.co.uniwares.booklet.request=$ORIGINAL_REQUEST_ID" || die 'Original maintenance containers remain'
+  old_hash="$(sha256sum "$original" | awk '{print $1}')"
+  fingerprint="$(recovery_host_fingerprint "$current")"
+  handoff_hash="$(expired_recovery_handoff_hash "$current" "$original")" || die 'Original decision handoff provenance is unverified'
+  [[ "$handoff_hash" =~ ^[a-f0-9]{64}$ ]] || die 'Original decision handoff is missing'
+  prepare_backup_helper "$current" "$BACKUP_HELPER_IMAGE" "$BACKUP_HELPER_COMMIT"
+  tree="$(docker image inspect --format '{{index .Config.Labels "uk.co.uniwares.booklet.source-tree"}}' "$BACKUP_HELPER_IMAGE")"
+  [[ "$tree" =~ ^[a-f0-9]{40}$ ]] || die 'Backup helper source tree missing'
+  backup_recovery_verify_target '' "$BACKUP_HELPER_RELEASE" "$marker"
+  if [[ -f "$journal" ]]; then
+    jq -e --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg hash "$old_hash" --arg fp "$fingerprint" --arg hh "$handoff_hash" --arg helper "$BACKUP_HELPER_IMAGE" --arg hc "$BACKUP_HELPER_COMMIT" --arg tree "$tree" \
+      '.requestId==$id and .purpose=="maintenance-backup-v1" and .originalRequestId==$original and .originalJournalSha256==$hash and .hostFingerprint==$fp and .originalHandoffSha256==$hh and .helperImage==$helper and .helperCommit==$hc and .sourceTree==$tree' "$journal" >/dev/null || die 'Saved backup recovery identities changed'
+    recovery_result "$journal"
+    [[ "$(jq -r .phase "$journal")" != complete ]] || return 0
+    [[ "$APPLY" == true ]] || return 0
+    [[ "$PREVIEW_DIGEST" == "$(jq -er .previewDigest "$journal")" ]] || die 'Saved backup preview differs'
+    deadline="$(jq -er .deadlineAtSeconds "$journal")"
+    [[ "$deadline" -gt "$(date +%s)" ]] || die 'Backup recovery budget expired; inspect without replay'
+    CONTROL_DEADLINE_SECONDS=$((SECONDS + deadline - $(date +%s)))
+  else
+    [[ ! -e "$STATE/backup-helper-staging.json" ]] || die 'Another backup helper handoff remains'
+    recovery_no_containers -q --filter label=com.docker.compose.project=kids-booklet-staging || die 'Staging application must remain stopped'
+    BACKUP_ID="$(jq -er .backupId "$original")"
+    helper_maintenance "$image" inspect > "$TEMP_DIR/backup-inspect.json" 2> "$TEMP_DIR/backup-inspect.stderr" || die 'Original backup inspection failed; inspect private diagnostics'
+    if jq -e --arg id "$BACKUP_ID" '.verified==true and .backupId==$id' "$TEMP_DIR/backup-inspect.json" >/dev/null; then complete=true;
+    else jq -e --arg id "$BACKUP_ID" '.=={complete:false,backupId:$id}' "$TEMP_DIR/backup-inspect.json" >/dev/null || die 'Backup inspection response is invalid'; fi
+    backup="$BACKUP_ID"; [[ "$complete" == true ]] || backup="staging-storage-$REQUEST_ID"
+    [[ "$backup" =~ ^[A-Za-z0-9_-]{1,160}$ ]] || die 'Resolved backup identity invalid'
+    digest="$(printf '%s\n' "$old_hash" "$fingerprint" "$handoff_hash" "$BACKUP_HELPER_IMAGE" "$BACKUP_HELPER_COMMIT" "$tree" "$backup" "$complete" | sha256sum | awk '{print $1}')"
+    printf 'result: recovery preview request=%s action=%s digest=%s\n' "$REQUEST_ID" "$ACTION" "$digest"
+    [[ "$APPLY" == true ]] || return 0
+    [[ "$PREVIEW_DIGEST" == "$digest" ]] || die 'Backup recovery preview changed'
+    [[ ! -e "$evidence" ]] || die 'Incomplete local recovery evidence; inspect before apply'
+    mkdir -p "$STATE/recoveries"; mkdir "$evidence"; chmod 700 "$evidence"
+    jq -n --arg id "$REQUEST_ID" --arg original "$ORIGINAL_REQUEST_ID" --arg hash "$old_hash" --arg fp "$fingerprint" --arg hh "$handoff_hash" --arg helper "$BACKUP_HELPER_IMAGE" --arg hc "$BACKUP_HELPER_COMMIT" --arg tree "$tree" --arg backup "$backup" --arg digest "$digest" --arg prior "$current" --arg image "$image" --arg commit "$COMMIT" --argjson complete "$complete" --argjson deadline "$(( $(date +%s) + CONTROL_DEADLINE_SECONDS - SECONDS ))" \
+      '{requestId:$id,action:"expired-deployment-recover",purpose:"maintenance-backup-v1",environment:"staging",phase:"prepared",originalRequestId:$original,originalJournalSha256:$hash,hostFingerprint:$fp,originalHandoffSha256:$hh,helperImage:$helper,helperCommit:$hc,sourceTree:$tree,backupId:$backup,previewDigest:$digest,priorRelease:$prior,image:$image,commit:$commit,reuseComplete:$complete,deadlineAtSeconds:$deadline}' > "$journal"
+  fi
+  phase="$(jq -er .phase "$journal")"; BACKUP_ID="$(jq -er .backupId "$journal")"
+  if [[ "$phase" == prepared ]]; then
+    if [[ "$(jq -r .reuseComplete "$journal")" != true ]]; then
+      recovery_phase "$journal" backing-up
+      if ! helper_maintenance "$image" backup > "$evidence/backup.json" 2> "$evidence/backup.stderr"; then
+        recovery_backup_diagnostics "$evidence/backup.stderr"
+        die 'Fresh backup failed; inspect saved diagnostics, do not replay'
+      fi
+    fi
+  fi
+  # An interrupted backing-up checkpoint permits only read-only verification.
+  if ! helper_maintenance "$image" verify > "$evidence/verified.json" 2> "$evidence/verified.stderr"; then
+    recovery_backup_diagnostics "$evidence/verified.stderr"
+    die 'Completed backup proof unavailable; do not repeat backup'
+  fi
+  jq -e --arg backup "$BACKUP_ID" --arg image "$image" '.verified==true and .backupId==$backup and .environment=="_staging" and .database=="kids_booklet" and .imageDigest==$image' "$evidence/verified.json" >/dev/null || die 'Backup verification receipt differs'
+  recovery_phase "$journal" backup-verified
+  backup_recovery_verify_target "$journal" "$BACKUP_HELPER_RELEASE" "$marker"
+  (REQUEST_ID=''; maintenance "$current" deployment-control enable recovery) > "$evidence/admission.json"
+  jq -e '.maintenance==true and .draining==false and .activeMutations==0 and (.interruptedMutations // 0)==0 and ((.mutationOwners // [])|length)==0' "$evidence/admission.json" >/dev/null || die 'Backup recovery admission is not closed and quiet'
+  recovery_phase "$journal" prior-service-ready-closed
+  (REQUEST_ID=''; compose "$current" up -d --no-deps app; verify_application "$current") || die 'Prior service readiness failed'
+  backup_recovery_verify_target "$journal" "$BACKUP_HELPER_RELEASE" "$marker"
+  [[ "$(recovery_host_fingerprint "$current")" == "$fingerprint" && "$(sha256sum "$original" | awk '{print $1}')" == "$old_hash" ]] || die 'Original backup recovery state changed'
+  # Retain both original journals and install an exact helper for the next delivery.
+  if [[ "$original" == "$STATE/operation.json" ]]; then
+    [[ ! -e "$STATE/operations/$ORIGINAL_REQUEST_ID.json" ]] || cmp -s "$original" "$STATE/operations/$ORIGINAL_REQUEST_ID.json" || die 'Original archive differs'
+    cp --no-clobber "$original" "$STATE/operations/$ORIGINAL_REQUEST_ID.json"
+    cmp -s "$original" "$STATE/operations/$ORIGINAL_REQUEST_ID.json" || die 'Original journal archive differs'
+  fi
+  if [[ "$marker" == "$STATE/recovery-handoff-staging.json" ]]; then
+    [[ ! -e "$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" ]] || cmp -s "$marker" "$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" || die 'Original handoff archive differs'
+    cp --no-clobber "$marker" "$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json"
+    cmp -s "$marker" "$STATE/operations/recovery-handoff-$ORIGINAL_REQUEST_ID.json" || die 'Original handoff archive differs'
+  fi
+  cp "$journal" "$STATE/backup-helper-staging.json.next"; mv "$STATE/backup-helper-staging.json.next" "$STATE/backup-helper-staging.json"
+  [[ "$marker" != "$STATE/recovery-handoff-staging.json" ]] || rm "$marker"
+  [[ "$original" != "$STATE/operation.json" ]] || rm "$original"
+  recovery_phase "$journal" complete
+  recovery_result "$journal"
+}
 supported_recovery_host() (
   require_root
   dify_diagnostic_identity
@@ -1019,6 +1201,7 @@ supported_recovery_host() (
   (cd "$current" && sha256sum -c manifest.sha256 >/dev/null) || die 'Selected release files changed'
   image="$(jq -er .services.app.image "$current/image.json")"
   evidence="$STATE/recoveries/$REQUEST_ID"; journal="$evidence/host.json"
+  if [[ -n "$BACKUP_HELPER_IMAGE" ]]; then backup_deployment_recovery "$current" "$image" "$evidence" "$journal"; return; fi
   if [[ "$RELEASE_EXPIRED_CLAIM" == true ]]; then recovery_release_expired_claim "$current" "$image" "$evidence" "$journal"; return; fi
   if [[ -e "$evidence" ]]; then
     [[ -f "$journal" && ! -L "$evidence" ]] || die 'Recovery evidence is incomplete'
@@ -1216,7 +1399,7 @@ recovery_ready_for_deploy() {
 
 remaining_operation_seconds() {
   local maximum="$1" deadline remaining
-  if [[ -n "$REQUEST_ID" && -f "$STATE/operation.json" ]]; then
+  if [[ "$MAINTENANCE_DETACHED" == false && -n "$REQUEST_ID" && -f "$STATE/operation.json" ]]; then
     deadline="$(jq -er --arg id "$REQUEST_ID" 'select(.requestId==$id) | .budgetDeadlineAtSeconds // 0' "$STATE/operation.json")" || return 1
     if [[ "$deadline" -gt 0 ]]; then
       remaining=$((deadline - $(date +%s)))
@@ -1512,7 +1695,7 @@ save_success() {
   mv "$STATE/operation.json" "$STATE/operations/$REQUEST_ID.json"
 }
 run_lifecycle() {
-  local current='' candidate='' previous='' bootstrapped=false recovered=false
+  local current='' candidate='' previous='' bootstrapped=false recovered=false backup_helper=false
   [[ ! -f "$STATE/releases/$ENVIRONMENT/current" ]] || read -r current < "$STATE/releases/$ENVIRONMENT/current"
   case "$ACTION" in
     retire-staging-artifact-index) retire_staging_artifact_index_host; return;;
@@ -1530,11 +1713,16 @@ run_lifecycle() {
       pull_seconds="$(remaining_operation_seconds 1800)"
       record_operation_command pull "$pull_seconds"
       DOCKER_CONFIG="$TEMP_DIR/docker" timeout --kill-after=5s "${pull_seconds}s" docker pull "$IMAGE_DIGEST"
+      if [[ -e "$STATE/backup-helper-staging.json" ]]; then
+        [[ "$ENVIRONMENT" == staging && -n "$current" ]] || die 'Backup helper is staging only'
+        backup_helper_for_deploy "$current"; backup_helper=true
+      fi
       if [[ -n "$current" ]]; then
         set_step draining
         if [[ "$bootstrapped" == true ]]; then bootstrap_ready_for_deploy "$current"; elif [[ "$recovered" == true ]]; then recovery_ready_for_deploy "$current"; else drain_application "$current"; fi
         set_step stopping; stop_application "$current"
-        set_step backup; ensure_backup_id; maintenance "$current" recovery backup
+        set_step backup; ensure_backup_id
+        if [[ "$backup_helper" == true ]]; then helper_maintenance "$(jq -er .services.app.image "$current/image.json")" backup; else maintenance "$current" recovery backup; fi
       fi
       set_step initializing
       maintenance "$candidate" deployment-control enable deployment
@@ -1553,6 +1741,7 @@ run_lifecycle() {
       fi
       maintenance "$candidate" deployment-control disable
       save_success "$candidate" true
+      if [[ "$backup_helper" == true ]]; then mv "$STATE/backup-helper-staging.json" "$STATE/operations/backup-helper-$REQUEST_ID.json"; fi
       if [[ "$recovered" == true ]]; then mv "$STATE/recovery-handoff-staging.json" "$STATE/operations/recovery-handoff-$REQUEST_ID.json"; fi
       if [[ "$bootstrapped" == true ]]; then mv "$STATE/staging-bootstrap.json" "$STATE/operations/bootstrap-$REQUEST_ID.json"; fi ;;
     backup|restore|reset-staging|rollback|rotate-secrets)
@@ -2453,6 +2642,9 @@ host_dispatch() {
   if [[ "$ACTION" == dify-idle ]]; then dify_idle_host; exit 0; fi
   if [[ "$ACTION" == dify-diagnostics ]]; then dify_diagnostics_host; exit 0; fi
   if [[ "$ENVIRONMENT" == staging && "$ACTION" != status ]]; then recovery_unresolved_guard; fi
+  if [[ "$ENVIRONMENT" == staging && -e "$STATE/backup-helper-staging.json" && "$ACTION" != status ]]; then
+    [[ "$ACTION" == deploy ]] || die 'Backup helper handoff requires the exact reviewed staging deployment'
+  fi
   if [[ "$ENVIRONMENT" == staging && -e "$STATE/recovery-handoff-staging.json" && "$ACTION" != status ]]; then
     [[ "$ACTION" == deploy && "$ENVIRONMENT" == staging ]] || die 'Recovery admission requires the exact separate staging deployment'
   fi

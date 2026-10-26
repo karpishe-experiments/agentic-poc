@@ -8,6 +8,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const pick = (...paths) => select(paths.map(path => ({ path })));
+test('maintenance recovery changes select storage budgets without persona journeys', () => {
+  for (const source of ['scripts/recovery.ts', 'scripts/recovery-storage.ts', 'scripts/recovery-diagnostics.ts']) {
+    const selection = pick(source);
+    assert.equal(selection.flags.app, false);
+    assert.equal(selection.flags.agent, false);
+    assert.equal(selection.flags.static, true);
+    assert.ok(selection.tests.includes('tests/unit/recovery-storage.test.ts'));
+    assert.ok(selection.tests.includes('tests/unit/recovery-storage-budget.test.ts'));
+    assert.ok(selection.tests.includes('tests/unit/operation-budget.test.ts'));
+  }
+});
 test('PR validation skips unchanged acceptance journeys, not changed tests or full validation', () => {
   const shared = { mode: 'pr', ...pick('db/experiment-repository.ts') };
   assert.deepEqual(acceptanceExclusions(shared), acceptanceTests);
