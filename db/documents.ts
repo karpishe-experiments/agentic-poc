@@ -52,6 +52,8 @@ export type ExperimentRunDocument = BaseDocument & {
   activeDelegationId: string | null; decisionSequence: number; pendingDecisionJson: string | null;
   textRevisions: number; imageRevisions: number;
   progressFingerprint?: string | null; progressOperationId?: string | null; noProgressCount?: number;
+  m4ProgressRecovery?: { operationId: string; failedOperationId: string; reference: string;
+    recoveredAtMs: number; priorNoProgressCount: number; progressFingerprint: string };
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {

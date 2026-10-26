@@ -4,6 +4,17 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+An exact verified M4 failure continuation starts a new no-progress observation
+interval. It resets only `noProgressCount`, preserving the creative fingerprint,
+progress operation, original failure and all counters and liabilities. The same
+three-repeat loop limit applies to subsequent work. A separate exact protected
+`progressRecoveries` grant can repair the retained historical false loop stop:
+Resume authenticates the saved successful manager, its current eligible target,
+the consumed original no-dispatch continuation chain, global ownership and
+cumulative accounting in one transaction. Single-use run provenance records the
+recovery. It reuses the saved manager as specialist parent and issues no replacement
+manager request. Ordinary Resume and terminal-run behavior remain unchanged.
+
 New Balanced requests use `m4_context_policy_v3`. Specialists receive
 current approved creative sources without per-image execution prompts and upload
 metadata. J12 receives only its selected current layout page plus exact required

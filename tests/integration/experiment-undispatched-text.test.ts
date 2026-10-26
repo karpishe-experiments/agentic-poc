@@ -171,12 +171,16 @@ describe("undispatched Balanced text controls", () => {
   });
   it.each([false, true])("continues the exact retained local failure with preparation=%s without charging or replay", async prepared => {
     const env = await setup(prepared); const before = await env.op();
+    await env.db.collections.experiment_runs.updateOne({ _id: id(10) }, { $set: {
+      noProgressCount: 2, progressFingerprint: "d".repeat(64), progressOperationId: id(9),
+    } });
     await env.repository.failPreparation(id(10), id(12), 5);
     const blocked = await env.run(), campaign = (await env.campaign())!;
     const results = await Promise.allSettled([1, 2].map(() => env.repository.resume({ runId: blocked._id, expectedRevision: blocked.revision, nowMs: 6 })));
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     const resumed = await env.run(), retained = await env.op();
-    expect(resumed).toMatchObject({ status: "queued", safeFailure: null, activeOperationId: null });
+    expect(resumed).toMatchObject({ status: "queued", safeFailure: null, activeOperationId: null,
+      noProgressCount: 0, progressFingerprint: blocked.progressFingerprint, progressOperationId: blocked.progressOperationId });
     expect(retained).toMatchObject({ state: "failed", safeFailure: "definite_failure", reservationCount: 0,
       m4Continuation: { kind: "undispatched_text_v1", requestDigest: before.m4Preparation?.requestDigest ?? null, nextOperationId: null } });
     expect(retained.m4Preparation).toEqual(before.m4Preparation);
