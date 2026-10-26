@@ -1,5 +1,10 @@
 # VPS deployment runbook
 
+Flat secret-input validation evaluates required and allowed keys on the original
+object before serialization. A validator expression failure is a delivery error;
+it does not establish invalid credentials. Keep the existing secret rules and
+use fake-input shell checks before requesting an operator to re-enter values.
+
 This runbook operates the deployed Kids Booklet environments. Complete one operation at a time. Use the workflow summary as the primary result, and inspect the host journal after an interruption.
 
 PR Validate runs [selected non-build checks](../../scripts/ci/README.md). For a manual
