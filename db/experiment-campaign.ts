@@ -12,7 +12,6 @@ import { currentMutationOwnerId } from "@/lib/application/deployment-control";
 import { isM4ReviewerInputFailure } from "@/lib/experiment-runner/m4-pre-generation-failure";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
-import { prepareNarrativeContext } from "@/db/experiment-narrative";
 
 export type M4Authority = { policy: unknown; grant: M4Grant };
 export class CampaignAdmissionError extends Error {
@@ -180,7 +179,7 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
   }
   // Only an exact reviewed grant can repair the historical false loop stop.
   // The saved successful manager remains the next specialist's parent.
-  async function recoverProgress(session: ClientSession, run: ExperimentRunDocument, nowMs: number, assetStore?: () => AssetStore) {
+  async function recoverProgress(session: ClientSession, run: ExperimentRunDocument, nowMs: number) {
     const permission = grant.progressRecoveries?.find(item => item.runId === run._id && item.operationId === run.progressOperationId);
     requireState(permission && !run.m4ProgressRecovery && run.mode === "balanced" &&
       run.status === "blocked" && run.safeFailure === "definite_failure" && run.noProgressCount === 3 &&
@@ -208,7 +207,6 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       m4CanonicalJson(JSON.parse(operation!.materializationJson)) === m4CanonicalJson({ delegatedTaskId: failed!.taskId }),
       "Progress recovery manager result or target differs.");
     if (result.kind !== "delegate" || result.payload.taskId === "J13") throw new CampaignAdmissionError("Progress recovery requires a text target.");
-    await prepareNarrativeContext(database, session, run, result.payload.taskId, result.payload.subjectKind, result.payload.subjectId, assetStore);
     const campaign = await current(session);
     requireState(campaign.state === "stopped" && campaign.slots[run.persona] === run._id, "Campaign cannot recover progress.");
     requireAllowance(campaign.requests < snapshot.policy.maxRequests && campaign.requestCounts[run.persona] < CASES[run.persona].llmLimit &&
@@ -231,8 +229,8 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
       { activeOperationId: { $ne: null } }, { preparation: { $ne: null } },
     ] }, { session, projection: { _id: 1 } }), "Campaign has unresolved preparation.");
     await touch(campaign, session, { state: "active" }, nowMs);
-    return { operationId: operation!._id, failedOperationId: failed!._id, reference: permission!.reference,
-      recoveredAtMs: nowMs, priorNoProgressCount: run.noProgressCount!, progressFingerprint: run.progressFingerprint! };
+    return { target: result.payload, provenance: { operationId: operation!._id, failedOperationId: failed!._id, reference: permission!.reference,
+      recoveredAtMs: nowMs, priorNoProgressCount: run.noProgressCount!, progressFingerprint: run.progressFingerprint! } };
   }
   async function continueFailure(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, nowMs: number) {
     requireState(operation.role !== "tester" || isM4ReviewerInputFailure(snapshot.policy, run, operation),

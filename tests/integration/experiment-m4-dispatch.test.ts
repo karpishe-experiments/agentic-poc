@@ -7,6 +7,8 @@ import sharp from "sharp";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { undispatchedTextDigest } from "@/db/experiment-undispatched-text";
+import type { ExperimentOperationDocument } from "@/db/documents";
 import { createExperimentCompletionService, verifyExperimentGeneration } from "@/db/experiment-completion";
 import { candidateProofMetrics, readM4CandidateProofs } from "@/db/experiment-m4-accounting-evidence";
 import { diagnoseAdmissionRead } from "@/db/experiment-admission-diagnostics";
@@ -270,6 +272,79 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
 }
 
 describe("offline Balanced dispatcher", () => {
+  it("recovers a blocked J12 manager with original sheet bytes and reuses its selection", async () => {
+    const env = await setup();
+    let manager: ExperimentOperationDocument | null = null;
+    for (let step = 0; step < 160; step++) {
+      await env.dispatcher.advance(env.runId);
+      const latest = await env.repository.latestOperation(env.runId);
+      if (latest?.role === "manager" && latest.state === "succeeded" && latest.resultJson) {
+        const result = JSON.parse(latest.resultJson);
+        if (result.kind === "delegate" && result.payload.taskId === "J12") { manager = latest; break; }
+      }
+      expect((await env.repository.getRun(env.runId))!.status).not.toBe("blocked");
+      env.tick();
+    }
+    expect(manager).not.toBeNull();
+    const selected = JSON.parse(manager!.resultJson!).payload as { subjectKind: "page"; subjectId: string };
+    const run = (await env.repository.getRun(env.runId))!;
+    const failed: ExperimentOperationDocument = {
+      _id: randomUUID(), runId: env.runId, role: "specialist", taskId: "J12", ...selected,
+      idempotencyKey: randomUUID(), inputFingerprint: "c".repeat(64), attempt: 1, mode: "balanced", providerKind: "text",
+      state: "failed", workflowRunId: null, parentWorkflowRunId: null, reservationCount: 0, deadlineAtMs: null,
+      resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: null, dependencyVersionIds: [],
+      materializationJson: null, safeFailure: "definite_failure", createdAtMs: manager!.createdAtMs - 1,
+      updatedAtMs: manager!.createdAtMs - 1,
+      lifecycle: { startedAtMs: manager!.createdAtMs - 1, ownerId: randomUUID(), phase: "finished",
+        lastProgressAtMs: manager!.createdAtMs - 1, endedAtMs: manager!.createdAtMs - 1, attemptOutcome: "failed", unresolved: false },
+    };
+    const proof = undispatchedTextDigest(env.authority, run, failed);
+    expect(proof).toMatch(/^[a-f0-9]{64}$/);
+    failed.m4Continuation = { kind: "undispatched_text_v1", evidenceDigest: proof!, requestDigest: null,
+      reference: "exact J12 fixture continuation", resumedAtMs: manager!.createdAtMs, runRevision: run.revision,
+      campaignRevision: 1, nextOperationId: manager!._id };
+    await env.database.collections.experiment_operations.insertOne(failed);
+    await env.database.collections.experiment_operations.updateOne({ _id: manager!._id }, { $set: { m4ContinuedFromOperationId: failed._id } });
+    await env.database.collections.experiment_runs.updateOne({ _id: env.runId }, { $set: {
+      status: "blocked", safeFailure: "definite_failure", noProgressCount: 3, progressOperationId: manager!._id,
+      progressFingerprint: "d".repeat(64),
+    } });
+    await env.database.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { state: "stopped" } });
+    const authority = { ...env.authority, grant: { ...env.authority.grant,
+      continuations: [{ runId: env.runId, operationId: failed._id, reference: failed.m4Continuation.reference }],
+      progressRecoveries: [{ runId: env.runId, operationId: manager!._id, reference: "exact J12 progress fixture" }] } };
+    const repository = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
+    const snapshot = async () => ({ run: await repository.getRun(env.runId),
+      campaign: await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }),
+      operations: await env.database.collections.experiment_operations.find({ runId: env.runId }).sort({ _id: 1 }).toArray(),
+    });
+    const before = await snapshot();
+    const calls = vi.mocked(env.runtime.start).mock.calls.length, gets = vi.mocked(env.runtime.retrieve).mock.calls.length;
+    const [uri, bytes] = [...env.store.files][0];
+    env.store.files.set(uri, Uint8Array.of(0));
+    await expect(repository.resume({ runId: env.runId, expectedRevision: before.run!.revision, nowMs: env.now() })).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+    env.store.files.set(uri, bytes);
+    const recovered = await repository.resume({ runId: env.runId, expectedRevision: before.run!.revision, nowMs: env.now() });
+    expect(recovered).toMatchObject({ status: "queued", noProgressCount: 0, progressOperationId: manager!._id,
+      counters: before.run!.counters, m4ProgressRecovery: { operationId: manager!._id, failedOperationId: failed._id } });
+    const after = await snapshot();
+    expect(after.campaign!.state).toBe("active");
+    expect(after.operations).toEqual(before.operations);
+    for (const key of ["requests", "requestCounts", "reservedMicrodollars", "settledMicrodollars"] as const)
+      expect(after.campaign![key]).toEqual(before.campaign![key]);
+    expect(env.runtime.start).toHaveBeenCalledTimes(calls); expect(env.runtime.retrieve).toHaveBeenCalledTimes(gets);
+    const config = { ...env.config, m4: { state: "granted" as const, authority } };
+    const dispatcher = createExperimentDispatcher({ database: env.database, config, runtime: env.runtime, now: env.now,
+      mutate: async action => action(), store: () => env.store, uploadReference: env.uploadReference });
+    await dispatcher.advance(env.runId);
+    const next = await repository.latestOperation(env.runId);
+    expect(next).toMatchObject({ role: "specialist", taskId: "J12", subjectId: selected.subjectId,
+      m4Preparation: { parentWorkflowRunId: manager!.workflowRunId } });
+    expect(env.runtime.start).toHaveBeenCalledTimes(calls + 1);
+    expect(vi.mocked(env.runtime.start).mock.calls.at(-1)![0].role).toBe("specialist");
+  });
+
   it("recovers a claimed count failure, delivers readiness and completes the same Kid without replay", async () => {
     const env = await setup(false, true);
     for (let step = 0; step < 120; step++) {
