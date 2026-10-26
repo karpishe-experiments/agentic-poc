@@ -3,7 +3,7 @@
 # shellcheck disable=SC2034
 set -euo pipefail
 if [[ $# == 0 ]]; then
-  for scenario in preview apply reentry completed helper-mismatch active-containers changed-journal deadline tree-mismatch preflight-budget changed-parent changed-marker near-expired-preflight expired-maintenance-cleanup; do bash "$0" "$scenario"; done
+  for scenario in preview apply reentry completed helper-mismatch active-containers changed-journal deadline tree-mismatch preflight-budget changed-parent changed-marker near-expired-preflight expired-maintenance-cleanup admission-states; do bash "$0" "$scenario"; done
   printf 'backup helper recovery contracts passed\n'
   exit 0
 fi
@@ -85,6 +85,19 @@ assert_preserved() {
   [[ ! -e "$STATE/operation.json" && ! -e "$STATE/recovery-handoff-staging.json" ]]
 }
 case "$1" in
+  admission-states)
+    drain_application() { printf 'normal-drain\n' >> "$CALLS"; }
+    maintenance() { printf '%s\n' "$ADMISSION"; }
+    ADMISSION='{"maintenance":true,"draining":false,"activeMutations":0,"interruptedMutations":0,"mutationOwners":[]}'
+    backup_handoff_admission "$CURRENT" > /dev/null
+    ! grep -q normal-drain "$CALLS"
+    ADMISSION='{"maintenance":false,"draining":false}'
+    backup_handoff_admission "$CURRENT"
+    [[ "$(grep -c normal-drain "$CALLS")" == 1 ]]
+    for ADMISSION in '{"maintenance":true,"draining":true,"activeMutations":0}' '{"maintenance":true,"draining":false,"activeMutations":1}' '{"maintenance":true,"draining":false,"activeMutations":0,"interruptedMutations":1}' '{"maintenance":true,"draining":false,"activeMutations":0,"mutationOwners":[{}]}' '{}' 'not-json'; do
+      if (trap - EXIT; backup_handoff_admission "$CURRENT") > /dev/null 2>&1; then exit 1; fi
+    done
+    [[ "$(grep -c normal-drain "$CALLS")" == 1 ]];;
   expired-maintenance-cleanup)
     eval "$REAL_MAINTENANCE"
     MAINTENANCE_DETACHED=true

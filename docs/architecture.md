@@ -343,6 +343,10 @@ The original deployment and decision-recovery handoff remain byte-pinned. Only
 verified backup and preserved target evidence permit prior-service readiness with
 admission closed. The next normal deployment must match the helper source tree
 and use that helper for its own backup before retiring the helper handoff.
+After full handoff verification, closed and quiet admission can proceed directly;
+open admission uses the ordinary drain. Resume is limited to the same request ID
+at `draining` with no selected backup, rechecked under the operation lock, and
+retains the original deadline.
 No database initialization, provider call or credential-scope change is involved.
 
 Balanced completion separates the durable transaction from progress observation.

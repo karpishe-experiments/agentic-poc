@@ -11,6 +11,8 @@ if [[ $# -eq 0 ]]; then
   for scenario in recovery-response-diagnostic expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
+  bash "$0" backup-handoff-closed-admission
+  bash "$0" backup-handoff-resume
   bash tests/shell/vps-backup-helper.test.sh
   echo 'host lifecycle, secret serialization, dispatch and plan contracts passed'
   exit 0
@@ -53,6 +55,46 @@ verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; }
 stop_application() { printf 'stop %s\n' "$1" >> "$CALLS"; }
 verify_drain_support() { :; }
 case "$1" in
+  backup-handoff-resume)
+    require_root() { :; }; load_config() { :; }; flock() { :; }
+    systemctl() { return 1; }
+    start_operation_unit() { printf 'resumed\n' >> "$CALLS"; }
+    wait_operation() { :; }
+    printf '{}' > "$STATE/backup-helper-staging.json"
+    deadline=$(( $(date +%s) + 1200 ))
+    jq -n --argjson deadline "$deadline" '{requestId:"test",action:"deploy",environment:"staging",step:"draining",backupId:"",budgetDeadlineAtSeconds:$deadline}' > "$STATE/operation.json"
+    export SSH_ORIGINAL_COMMAND='--action resume --environment staging --request-id wrong --apply'
+    if (trap - EXIT; host_dispatch) > /dev/null 2>&1; then exit 1; fi
+    ! grep -q resumed "$CALLS"
+    export SSH_ORIGINAL_COMMAND='--action resume --environment staging --request-id test --apply'
+    (trap - EXIT; host_dispatch) > /dev/null
+    grep -q resumed "$CALLS"
+    jq -e --argjson deadline "$deadline" '.budgetDeadlineAtSeconds==$deadline' "$STATE/operation.json" >/dev/null
+    : > "$CALLS"
+    jq '.step="backup" | .backupId="selected"' "$STATE/operation.json" > "$TEMP_DIR/advanced"; mv "$TEMP_DIR/advanced" "$STATE/operation.json"
+    if (trap - EXIT; host_dispatch) > /dev/null 2>&1; then exit 1; fi
+    ! grep -q resumed "$CALLS"
+    jq '.step="draining" | .backupId=""' "$STATE/operation.json" > "$TEMP_DIR/restore"; mv "$TEMP_DIR/restore" "$STATE/operation.json"
+    flock() {
+      if [[ "${1:-}" == -n ]]; then
+        jq '.requestId="replaced"' "$STATE/operation.json" > "$TEMP_DIR/raced"; mv "$TEMP_DIR/raced" "$STATE/operation.json"
+      fi
+    }
+    if (trap - EXIT; host_dispatch) > /dev/null 2>&1; then exit 1; fi
+    ! grep -q resumed "$CALLS";;
+  backup-handoff-closed-admission)
+    printf '{}' > "$STATE/backup-helper-staging.json"
+    backup_helper_for_deploy() { printf 'helper-proof\n' >> "$CALLS"; }
+    drain_application() { printf 'unexpected-drain\n' >> "$CALLS"; return 1; }
+    maintenance() {
+      printf 'maintenance %s\n' "$*" >> "$CALLS"
+      if [[ "$2 ${3:-}" == 'deployment-control status' ]]; then printf '{"maintenance":true,"draining":false,"activeMutations":0,"interruptedMutations":0,"mutationOwners":[]}\n'; fi
+    }
+    helper_maintenance() { printf 'helper-backup\n' >> "$CALLS"; }
+    run_lifecycle
+    ! grep -q unexpected-drain "$CALLS"
+    grep -q helper-backup "$CALLS"
+    test -f "$STATE/operations/backup-helper-$REQUEST_ID.json";;
   recovery-response-diagnostic)
     RUN_ID=11111111-1111-1111-1111-111111111111 OPERATION_ID=22222222-2222-2222-2222-222222222222
     fixture_run="$RUN_ID" fixture_operation="$OPERATION_ID"

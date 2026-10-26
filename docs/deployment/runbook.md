@@ -188,6 +188,10 @@ objects. Successful recovery archives the original failed deployment and decisio
 handoff unchanged, restores prior-service readiness with admission closed, and
 pins a helper handoff. Normal staging deployment must match its source tree and
 use the helper for its own backup. It retires the handoff only after success.
+After full handoff verification, closed and quiet admission can proceed directly;
+open admission uses the ordinary drain. Resume is limited to the same request ID
+at `draining` with no selected backup, rechecked under the operation lock, and
+retains the original deadline.
 The protected dispatcher must support this helper pair before use; prepare a
 reviewed checksum handoff if the installed version lacks it.
 

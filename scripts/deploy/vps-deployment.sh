@@ -1084,6 +1084,22 @@ backup_helper_for_deploy() {
   original="$STATE/operations/recovery-handoff-$(jq -er .originalRequestId "$marker").json"
   backup_recovery_verify_target "$marker" "$BACKUP_HELPER_RELEASE" "$original"
 }
+backup_handoff_admission() {
+  local current="$1" state
+  # The helper provenance and completed target must already be verified by
+  # backup_helper_for_deploy. A recovery can leave admission closed and quiet;
+  # ordinary drain requires maintenance=false and cannot consume that state.
+  private_temp
+  state="$(mktemp "$TEMP_DIR/backup-admission.XXXXXXXX")"
+  maintenance "$current" deployment-control status > "$state" || die 'Backup handoff admission inspection failed'
+  if jq -e '.maintenance==true and .draining==false and .activeMutations==0 and (.interruptedMutations // 0)==0 and ((.mutationOwners // [])|length==0)' "$state" >/dev/null; then
+    printf 'verified: recovered admission remains closed and quiet\n'
+  elif jq -e '.maintenance==false and .draining==false' "$state" >/dev/null; then
+    drain_application "$current"
+  else
+    die 'Backup handoff admission is not an eligible closed or open state; inspect owners before resume'
+  fi
+}
 backup_recovery_verify_target() {
   local journal="$1" helper="$2" marker="$3" parent
   parent="$STATE/recoveries/$(jq -er .requestId "$marker")"
@@ -1719,7 +1735,7 @@ run_lifecycle() {
       fi
       if [[ -n "$current" ]]; then
         set_step draining
-        if [[ "$bootstrapped" == true ]]; then bootstrap_ready_for_deploy "$current"; elif [[ "$recovered" == true ]]; then recovery_ready_for_deploy "$current"; else drain_application "$current"; fi
+        if [[ "$bootstrapped" == true ]]; then bootstrap_ready_for_deploy "$current"; elif [[ "$recovered" == true ]]; then recovery_ready_for_deploy "$current"; elif [[ "$backup_helper" == true ]]; then backup_handoff_admission "$current"; else drain_application "$current"; fi
         set_step stopping; stop_application "$current"
         set_step backup; ensure_backup_id
         if [[ "$backup_helper" == true ]]; then helper_maintenance "$(jq -er .services.app.image "$current/image.json")" backup; else maintenance "$current" recovery backup; fi
@@ -2643,7 +2659,13 @@ host_dispatch() {
   if [[ "$ACTION" == dify-diagnostics ]]; then dify_diagnostics_host; exit 0; fi
   if [[ "$ENVIRONMENT" == staging && "$ACTION" != status ]]; then recovery_unresolved_guard; fi
   if [[ "$ENVIRONMENT" == staging && -e "$STATE/backup-helper-staging.json" && "$ACTION" != status ]]; then
-    [[ "$ACTION" == deploy ]] || die 'Backup helper handoff requires the exact reviewed staging deployment'
+    if [[ "$ACTION" == resume ]]; then
+      # Only an exact, definitely failed pre-backup delivery can resume under
+      # this handoff. Later/uncertain phases require output reconciliation.
+      jq -e --arg id "$REQUEST_ID" '.requestId==$id and .action=="deploy" and .environment=="staging" and .step=="draining" and .backupId==""' "$STATE/operation.json" >/dev/null || die 'Backup helper resume requires the exact pre-backup deployment'
+    else
+      [[ "$ACTION" == deploy ]] || die 'Backup helper handoff requires the exact reviewed staging deployment'
+    fi
   fi
   if [[ "$ENVIRONMENT" == staging && -e "$STATE/recovery-handoff-staging.json" && "$ACTION" != status ]]; then
     [[ "$ACTION" == deploy && "$ENVIRONMENT" == staging ]] || die 'Recovery admission requires the exact separate staging deployment'
@@ -2801,6 +2823,11 @@ host_dispatch() {
   fi
   if [[ "$ACTION" == resume ]]; then
     [[ -f "$STATE/operation.json" ]] || die 'No interrupted operation recorded'
+    # Repeat the helper checkpoint gate under the operation lock. The journal
+    # may have changed while this dispatcher waited for another operation.
+    if [[ "$ENVIRONMENT" == staging && -e "$STATE/backup-helper-staging.json" ]]; then
+      jq -e --arg id "$REQUEST_ID" '.requestId==$id and .action=="deploy" and .environment=="staging" and .step=="draining" and .backupId==""' "$STATE/operation.json" >/dev/null || die 'Backup helper permits only exact pre-backup deployment resume'
+    fi
     local old_id
     old_id="$(jq -r .requestId "$STATE/operation.json")"
     if systemctl is-active --quiet "kids-booklet-operation-$old_id.service"; then die 'Previous service remains active'; fi
