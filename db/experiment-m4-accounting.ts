@@ -89,12 +89,12 @@ export async function verifyM4Accounting(database: Database, session: ClientSess
         // A reviewer continuation remains attributable history after generation
         // completes. Eligibility is evaluated at its saved pre-generation stage;
         // authenticated evidence and all proof predicates are checked below.
-        const reviewerFailure = failed && isM4ContinuedReviewerInputFailure(policy, run, failed);
+        const reviewerFailure = failed && (isM4ContinuedReviewerInputFailure(policy, run, failed) || !!failed.m4DecisionRejection);
         if (!failed || !provenance || provenance.kind !== undefined || failed.safeFailure !== "definite_failure" ||
             !(["manager", "specialist"].includes(failed.role) || reviewerFailure) ||
             failed.lifecycle?.phase !== "finished" || failed.lifecycle.unresolved !== false ||
             failed.lifecycle.stop && !validateLegacyCountFailureProof(policy, run, failed) ||
-            provenance.evidenceDigest !== (unclaimedDigest ?? failed.m4PreGenerationRecovery?.proofDigest ?? failed.m4Observation?.evidenceDigest) ||
+            provenance.evidenceDigest !== (unclaimedDigest ?? failed.m4DecisionRejection?.proofDigest ?? failed.m4PreGenerationRecovery?.proofDigest ?? failed.m4Observation?.evidenceDigest) ||
             provenance.requestDigest !== (unclaimedDigest ? failed.m4Preparation?.requestDigest : failed.m4Reservation?.requestDigest) ||
             !provenance.reference || !Number.isSafeInteger(provenance.resumedAtMs) ||
             !await hasM4KnownFailure(database, session, { policy, grant: { campaignId: campaign._id, reference: campaign.grantReference } },

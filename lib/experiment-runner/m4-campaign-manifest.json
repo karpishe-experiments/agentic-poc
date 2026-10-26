@@ -205,6 +205,12 @@
     "continuations": [
       {
         "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
+        "operationId": "2380f45a-5d66-482c-a6d2-7fed96f48466",
+        "decisionRejection": "revision_allowance_exhausted_v1",
+        "reference": "User 2026-10-26 authorized bounded reviewer eligibility repair and this exact continuation after reviews, CI and staging checks. Prove the authenticated exhausted-revision decision, no materialization, resolved ownership and intact accounting; preserve original response and charges. Close only that ineligible decision, then permit one fresh reviewer on the same saved page. Keep all revision, USD5/500-request/persona/image limits. No replacement, automatic retry or provider installation."
+      },
+      {
+        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
         "operationId": "928cb32d-daf7-4703-b005-fdaf076d6cb6",
         "reference": "User 2026-10-26 approved required PR/Chrome actions to finish M4 after this exact continuation was identified. Continue the same Creator once after reviewed delivery and original no-dispatch, zero-reservation, global output, ownership and accounting proof. Retain history, frozen liabilities, new-request amendment, USD5/500-request/persona/image limits and deadlines. No replacement, automatic retry, paid image, infrastructure or signature-policy change."
       },
@@ -299,8 +305,8 @@
     },
     "requestDefinitionUpdate": {
       "fromBundleHash": "293dce288d003e7d65c7cced8d9c0becf5d74230495e46e6052f26d714fdcf5a",
-      "toBundleHash": "4a2a09264e332e3696e3bd37f48145705ba234e35f193272f71bb2398b60a29b",
-      "reference": "User 2026-10-25 approved focused current contexts and advisory efficiency-size warnings. Exact dev5 installation and published decoder readback permit the separately saved m4_context_policy_v2 grant. Preserve historical definitions, carrier/transport limits, liabilities and no retries."
+      "toBundleHash": "227c57c778bf11bf2ed48dc8aa2107e0d8ea8396f72da7018e180a3185c6035c",
+      "reference": "User 2026-10-26 approved bounded reviewer eligibility repair: new mid-run tester requests pair revision task/version choices with remaining saved allowances and distinguish accepted simulated geometry warnings. Preserve the prior focused contexts, advisory size warnings, saved definitions, dev5/token amendment, all hard evidence/transport/spending limits and no retries."
     },
     "remainingPersonaAdmission": {
       "anchorRunId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",

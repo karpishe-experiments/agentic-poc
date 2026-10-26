@@ -68,6 +68,11 @@ export type ExperimentOperationDocument = BaseDocument & {
     ({ kind?: undefined; requestDigest: string } | { kind: "undispatched_text_v1"; requestDigest: string | null });
   m4ContinuedFromOperationId?: string;
   m4CompletionRecovery?: { reference: string; evidenceDigest: string; requestDigest: string; recoveredAtMs: number };
+  m4DecisionRejection?: { kind: "revision_allowance_exhausted_v1"; runId: string; operationId: string;
+    policyHash: string; configurationHash: string; taskId: ExperimentTask;
+    artifactVersionId: string; subjectKind: "book" | "character" | "location" | "page"; subjectId: string; revisionCount: number; revisionLimit: number;
+    requestDigest: string; evidenceDigest: string; resultDigest: string; proofDigest: string;
+    reference: string; recordedAtMs: number };
   m4Observation?: { workflowRunId: string; publishedWorkflowId: string; wrapperDigest: string | null;
     content: string | null; evidenceJson: string | null; evidenceDigest: string | null;
     costEvidence?: ExperimentReport["costEvidence"];

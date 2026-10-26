@@ -103,6 +103,7 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
   let pending = false, badCreative = false, badLayout = false, incompleteLayout = false;
   let blockCompletionTask: string | null = null;
   let blockManagerPageBible = false;
+  let forcedImageRevisions = 0;
   const runtime: WorkflowRuntime = {
     start: vi.fn<WorkflowRuntime["start"]>(async (binding, input, options) => {
       expect(input.mode).toBe("balanced");
@@ -182,6 +183,16 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
           for (const key of workflowOwnedFields[binding.taskId ?? ""] ?? []) delete (result.payload.content as Record<string, unknown>)[key];
         }
         creative = { result };
+        if (forcedImageRevisions > 0 && binding.role === "tester") {
+          const target = roleContext.currentArtifacts?.find(artifact => artifact.taskId === "J13" && artifact.state === "draft");
+          if (target?.currentVersionId) {
+            // Deliberately violate the current provider schema on the final call
+            // to reproduce a historical syntactically valid, ineligible decision.
+            creative = { result: { kind: "decision", payload: { decision: { action: "revise", taskId: "J13",
+              artifactVersionId: target.currentVersionId, instruction: "Preserve all content and regenerate the requested canvas." } } } };
+            forcedImageRevisions--;
+          }
+        }
       }
       const layoutSubjects = binding.taskId === "J11" && JSON.parse(operation.m4Preparation!.contextJson).layoutContract === m4Request.M4_LAYOUT_CONTRACT;
       if (layoutSubjects) {
@@ -268,10 +279,71 @@ async function setup(amended = false, legacyCount = false, persona: "playful_kid
     pending: (value: boolean) => { pending = value; }, badCreative: () => { badCreative = true; },
     blockCompletion: (taskId: string) => { blockCompletionTask = taskId; },
     blockManagerPageBible: () => { blockManagerPageBible = true; },
+    forceImageRevisions: (count: number) => { forcedImageRevisions = count; },
     badLayout: (value: boolean) => { badLayout = value; }, incompleteLayout: (value: boolean) => { incompleteLayout = value; } };
 }
 
 describe("offline Balanced dispatcher", () => {
+  it("continues an exhausted reviewer decision atomically with original image bytes and no replay", async () => {
+    const env = await setup(false, false, "professional_creator");
+    env.forceImageRevisions(3);
+    for (let step = 0; step < 220; step++) {
+      await env.dispatcher.advance(env.runId);
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+      env.tick();
+    }
+    const blocked = (await env.repository.getRun(env.runId))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "definite_failure", imageRevisions: 2 });
+    const failed = (await env.repository.getOperation(blocked.activeOperationId!))!;
+    expect(failed).toMatchObject({ role: "tester", state: "started", m4Observation: { issue: null, remoteStatus: "succeeded" } });
+    expect(JSON.parse(failed.m4Observation!.content!).result.payload.decision.action).toBe("revise");
+    const authority = { ...env.authority, grant: { ...env.authority.grant,
+      continuations: [{ runId: env.runId, operationId: failed._id, decisionRejection: "revision_allowance_exhausted_v1" as const,
+        reference: "exact exhausted reviewer fixture" }] } };
+    const repository = createExperimentRepository(env.database, { m4Authority: authority, m4ExecutionEnabled: true, store: () => env.store });
+    const snapshot = async () => ({ run: await repository.getRun(env.runId),
+      operation: await repository.getOperation(failed._id), campaign: await env.database.collections.experiment_campaigns.findOne({ _id: id(1) }) });
+    const before = await snapshot(), starts = vi.mocked(env.runtime.start).mock.calls.length;
+    const target = JSON.parse(failed.m4Observation!.content!).result.payload.decision.artifactVersionId as string;
+    const version = (await env.database.collections.artifact_versions.findOne({ _id: target }))!;
+    const assetId = JSON.parse(version.contentJson).assetId as string;
+    const asset = (await env.database.collections.assets.findOne({ _id: assetId }))!;
+    const bytes = env.store.files.get(asset.uri)!;
+    env.store.files.set(asset.uri, Uint8Array.of(0));
+    await expect(repository.resume({ runId: env.runId, expectedRevision: blocked.revision, nowMs: env.now() })).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+    env.store.files.set(asset.uri, bytes);
+    const results = await Promise.allSettled([0, 1].map(() => repository.resume({ runId: env.runId,
+      expectedRevision: blocked.revision, nowMs: env.now() })));
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const after = await snapshot();
+    expect(after.run).toMatchObject({ status: "queued", activeOperationId: null, imageRevisions: 2, counters: blocked.counters });
+    expect(after.operation).toMatchObject({ state: "failed", m4DecisionRejection: { kind: "revision_allowance_exhausted_v1", revisionCount: 2, revisionLimit: 2 } });
+    expect(after.operation!.m4Observation).toEqual(failed.m4Observation);
+    expect(after.operation!.m4Reservation).toEqual(failed.m4Reservation);
+    for (const key of ["requests", "requestCounts", "reservedMicrodollars", "settledMicrodollars"] as const)
+      expect(after.campaign![key]).toEqual(before.campaign![key]);
+    await repository.resume({ runId: env.runId, expectedRevision: after.run!.revision, nowMs: env.now() });
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts);
+    const dispatcher = createExperimentDispatcher({ database: env.database, config: { ...env.config,
+      m4: { state: "granted", authority } }, runtime: env.runtime, now: env.now,
+      mutate: async action => action(), store: () => env.store, uploadReference: env.uploadReference });
+    await dispatcher.advance(env.runId);
+    expect(env.runtime.start).toHaveBeenCalledTimes(starts + 1);
+    const next = (await repository.latestOperation(env.runId))!;
+    expect(next).toMatchObject({ role: "tester", m4ContinuedFromOperationId: failed._id });
+    for (let step = 0; step < 100; step++) {
+      await dispatcher.advance(env.runId);
+      const run = (await repository.getRun(env.runId))!;
+      if (run.status === "completed") break;
+      expect(run.status).not.toBe("blocked"); env.tick();
+    }
+    const completed = (await repository.getRun(env.runId))!;
+    expect(completed.status).toBe("completed");
+    await withMongoTransaction(env.database, session => verifyM4Accounting(env.database, session, completed));
+    expect((await repository.getOperation(failed._id))!.m4Observation).toEqual(failed.m4Observation);
+  }, 120_000);
+
   it("recovers a blocked J12 manager with original sheet bytes and reuses its selection", async () => {
     const env = await setup();
     let manager: ExperimentOperationDocument | null = null;

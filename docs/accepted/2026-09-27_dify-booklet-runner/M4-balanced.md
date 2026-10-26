@@ -1,9 +1,110 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent are accepted under the revised generation-and-accounting criterion. Both retain incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` continued past its first J12 input-limit failure after the reviewed compact-input repair on 2026-10-25. The exact page-4 preparation continuation was delivered and acknowledged on 2026-10-26. Its next manager completed with the correct target, but inherited no-progress state stopped Creator at revision 477 before specialist preparation. The bounded correction and exact saved-manager recovery are under validation. No replacement run or failed-operation replay was sent. The approved creation-only 60-second server budget and browser wait remain deployed. M4 remains incomplete until Creator's generation, ownership and accounting checks pass.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles after the reviewed exact saved-manager recovery. It is now blocked at revision 657 while saving a tester decision requesting an exhausted third image revision. The 43,977-token provider request succeeded; size warnings did not stop execution. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
+
+### Current decision-eligibility blocker — 2026-10-26
+
+Read-only application inspection found revision 657, `definite_failure`, active
+tester operation `2380f45a-5d66-482c-a6d2-7fed96f48466` and no preparation owner.
+The operation remains started; do not treat the run-level failure flag as proof
+that result ownership or materialization is resolved. Dify execution
+`b6fe45bb-5913-4ab8-98eb-f128bac78ef8` succeeded in 21.212 seconds, with
+43,977 counted input tokens. Application diagnostics identify
+`repository_invalid_result` in `result_transaction` at 09:16:43 UTC, with
+151,868 ms remaining in the operation budget. This is not a token-limit or
+deadline rejection.
+
+The retained response requests another J13 revision of current page version
+`717e6a9b-04aa-4b12-898e-d93dacb12da2` because its simulated 8×8 output differs
+from the approved 2400×2400 working canvas. Saved decisions already consumed
+both permitted image revisions: cover decision `98ccfe73-ae95-4ca5-84a7-1e7cd02bcd7f`
+and page decision `9bd11b7e-eac6-480b-9712-b515c79017c5`. The repository enforces
+the two-revision ceiling. Preparation supplies revision counts but still offers
+`revise` and all current version targets without applying those ceilings. The
+generic diagnostic does not retain the exact exception message; this code and
+saved-decision mismatch must be reproduced in focused verification.
+
+The user authorized the bounded repair and exact continuation on 2026-10-26:
+describe accepted simulation geometry warnings explicitly;
+bind reviewer decision branches to current eligible targets and remaining text/image
+revision allowances for every persona; retain all hard evidence checks. Version
+new requests and preserve historical requests. Test exhausted and mixed allowances,
+stale targets, genuine missing/corrupt bytes and advisory geometry differences.
+Do not silently map a saved revision to approval or increase an allowance.
+
+The existing recovery does not cover a successfully generated, ineligible tester
+decision. The newly authorized exact grant must first prove the original
+authenticated response, ineligible decision, no materialized result, resolved
+ownership and intact cumulative accounting. Preserve that response and its charge
+before one separately authorized reviewer decision; no automatic retry.
+
+Change-surface forecast: update shared reviewer preparation/schema eligibility,
+version its protected request identity, and add separate semantic-rejection
+provenance plus an atomic normal-control closure/continuation path. Authenticate
+the original response and frozen usage; independently prove exhausted allowance
+from its saved context and unchanged current target. Never relabel valid JSON as
+malformed creative output. Historical accounting must verify this rejection after
+later generation completes. Keep old response bytes and legacy request readers.
+Focused units cover all persona/mixed revision limits; real-persistence cases
+cover original proof, global materialization, expired owners, rollback, concurrent
+and lost-ack continuation, exactly one new reviewer and final accounting. Two
+independent reviews, lean CI and staging checks gate the live action. Credential
+inventory impact: none; no credential storage, transfer or consumer changes.
+
+Local verification passed 44 request/configuration units, 12 offline agent
+fixtures, 69 original/new accounting cases and the full Creator continuation
+fixture. The full fixture completed in 66.70 seconds after its initial default
+30-second test budget expired; it now uses the existing 120-second full-persona
+test budget. Application/provider deadlines remain unchanged. Windows MongoDB
+used its shutdown SIGKILL fallback after the 69-case process passed with exit zero.
+Typecheck, focused lint and 223 documentation links/anchors passed.
+
+Primary integration then found a control gap: Continue was hidden while an active
+operation remained. The optional exact-grant response flag described in the
+architecture exposes that control only for the marked retained decision. The
+protected continuation now requires an explicit decision-rejection marker.
+Revalidation passed 33 HTTP and 47 UI units, plus 23 selected persistence cases
+including marker rejection and the full Creator fixture. Typecheck and focused
+lint passed again. The first two clean reviews do not cover these later changes;
+two fresh independent reviews and delivery remain required. No live mutation has
+been issued for this repair.
+
+Saved counters are 91/220 text, 13/20 simulated images and 104/300 steps; paid
+images remain zero. The stopped campaign has 185/500 requests, USD 0.192740
+reserved, USD 0.243817 settled upper bound and USD 4.563443 remaining. Count-call
+charges remain assumed and invoice cost unavailable. All nine Page Bibles are
+approved; final-page work and advisory reports remain incomplete. These are
+read-only observations, not M4 acceptance or a new spending grant.
+
+### Live corrected continuation — 2026-10-26
+
+PRs #287/#288 delivered the transaction-order correction at staging
+`c26887c6d8b2186b42d0108168751f91d69126d6`. Source CI `40291998771` and
+staging CI `40292157646` passed. Deployment `40292492714-1` completed;
+journal `40293856528` confirmed completion after the observer expired during
+backup. Independent Check `40294192763` and browser readiness passed. The image
+is `sha256:21737fcf0168b9b04ffead4b252124ed998213aab61e08e683cf33a896a33ffb`.
+
+One guarded Continue was acknowledged. J12 operation
+`20c8063a-6464-4554-bf51-41c974a9fbc3` reused manager workflow
+`fb19ae96-2fc0-48a6-96b4-6beb8f5592d0`, completed and obtained page-4 approval.
+Its request was 47,307 bytes with 11,906 authoritative input tokens and no warning.
+Reviewer `ebb2be4e-eae1-44b0-b3b2-89b4323970bf` then succeeded with 34,048
+authoritative input tokens, recording three advisory size warnings. This verifies
+live execution above the historical 32,000 ceiling under the saved amendment.
+The next manager and J12 work proceeded. A later compact read found Creator
+running at revision 518, with no failure or preparation owner; the summary showed
+76 text calls, nine simulated images and zero paid images. This is progress, not
+M4 completion.
+
+The reviewer's current artifact bodies were 105,059 of 113,718 context bytes;
+only current versions were supplied. Task-specific reviewer evidence is a future
+optimization candidate. Measure target/source/sibling buckets and verify required
+continuity and creator controls before removing current creative bodies. Do not
+interrupt this experiment or infer unnecessary input from an aggregate warning.
 
 ### Progress after a verified preparation continuation — 2026-10-26
 
@@ -34,7 +135,8 @@ original bytes roll back both tentative state changes; valid bytes allow recover
 and exactly one specialist dispatch with the retained manager parent. The earlier
 66 control/loop cases and five configuration units remain applicable because
 their relevant behavior is unchanged. No new credential consumer or inventory
-change is involved. Two independent source reviews passed. Staging review, CI and delivery remain pending.
+change is involved. Two independent source and staging reviews passed. The live
+corrected-continuation checkpoint above records subsequent CI and delivery.
 
 PRs #283/#284 delivered the exact `928cb32d-daf7-4703-b005-fdaf076d6cb6`
 continuation at staging `660e49d62ead05b3d883a81c11a0ce734e74f695`.
@@ -77,8 +179,9 @@ identified a consumed recovery grant shadowing a later exact failure continuatio
 selection now requires an unused progress recovery, with a regression for the later
 authorized continuation. Refreshed typecheck, focused lint and 223 documentation
 links/anchors passed. Local MongoDB shutdown used its Windows SIGKILL fallback
-after SIGINT. Two independent source reviews passed. Delivery is pending. No live recovery or
-additional provider request has been issued for this correction. Credential
+after SIGINT. Two independent source and staging reviews passed. PRs #285/#286
+delivered this first correction; the later transaction-order correction and live
+recovery are recorded above. Credential
 inventory impact: none; no credential storage, transfer or consumer changed.
 
 ### Approved efficient-read and context-warning contract — 2026-10-25

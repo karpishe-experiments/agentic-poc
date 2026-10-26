@@ -185,8 +185,9 @@ M3's deployed Simulated acceptance is complete. The operator's later continuatio
 authorizes non-billable M4 implementation under the
 [M4 contract](M4-balanced.md#incremental-implementation-slices). The local policy and
 campaign foundation is implemented. Kid and Parent have completed valid Balanced
-generation/accounting with incomplete advisory evaluation; Creator admission is
-the remaining execution blocker. Use the three
+generation/accounting with incomplete advisory evaluation. The initial Creator
+was admitted and completed all Page Bibles; its current reviewer decision-eligibility
+repair and remaining execution are recorded in M4. Use the three
 [M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |

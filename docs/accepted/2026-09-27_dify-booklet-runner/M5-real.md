@@ -14,42 +14,24 @@ proof is still required; test reuse does not replace it.
 M5 remains planned, pending M4 acceptance. This plan update does not start runs,
 reset data, deploy changes or grant paid execution authority.
 
-The current [M4 diagnosis checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
+The current [M4 checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
 retains accepted Kid and Parent generation/accounting with incomplete advisory
-evaluation. The initial Creator was admitted with the deployed creation-only
-60-second server/browser budgets and the user's explicit new-key permission.
-The reviewed J09/Pause and compact-reviewer repairs were delivered, and both exact
-continuations passed. Creator has four approved Page Bibles. A new page-4 J12 preparation failure
-stopped the campaign; its exact guarded continuation passed reviewed delivery,
-staging readiness and normal proof, and was acknowledged once at 10:03:03 UTC.
-A new J12 preparation operation then failed before dispatch and stopped the campaign
-again. Its exact continuation was delivered and acknowledged once on 2026-10-26.
-The next manager completed with the correct page-4 delegation, but the inherited
-no-progress count stopped Creator at revision 477 before specialist preparation.
-The bounded interval-count correction and exact saved-manager recovery are under
-validation; no further continuation has been sent. The earlier reviewer failure `97007a0e-3811-4c5a-974b-1c3b2f7cd24a`
-retains its 32,923/32,000-token rejection and full reservation, with no generation
-started by that failed request. The user accepts observed
-latency for M4; no performance improvement is required for acceptance. Generation,
-ownership and accounting checks remain mandatory. Preserve the campaign, failed
-reports and saved Creator `47894c71-7991-4b15-8dc2-810395ec3f01`.
-The latest stopped campaign retains 163/500 requests, USD 0.172940 reserved,
-USD 0.187242 settled upper bound and USD 4.639818 remaining. Invoice cost is
-unavailable and paid images remain zero. The current M4 record separates the
-J09 review loop from its subsequent un-dispatched preparation failure and the
-bounded repair/recovery authorized on 2026-10-25. Delivery and live continuation
-remain separate checkpoints in that record. M5 has no execution authority from this work.
-Complete Creator and record M4 acceptance before assembling the Real authorization
-handoff. Reuse exact retained bindings/evidence through the M4 record; no new image
-spending, reset or Real execution is granted here.
-
+evaluation. Creator completed all nine Page Bibles after the exact saved-manager
+recovery, then stopped while saving a tester decision that requested an exhausted
+third image revision. Its 43,977-token provider execution succeeded. The newly
+authorized repair restricts reviewer choices and distinguishes accepted simulation
+geometry warnings; its exact closure/continuation remains subject to review, CI,
+staging delivery and proof. Preserve the response, all charges and the same run.
+The M4 record owns current usage and release evidence. No M5 execution, new image
+spending or reset is granted. Accepted latency and size warnings do not block M4;
+generation, ownership and accounting verification remain mandatory.
 The [context-policy activation checkpoint](M4-balanced.md#context-policy-activation-checkpoint--2026-10-25)
 records reviewed dev5 installation, signature restoration and staging delivery.
 New requests can use the saved 128,000-token amendment with a 32,000-token warning;
 historical requests keep their original policy. Local compatibility tests and a
 healthy deployment do not prove live amended generation, real-image support or
 M5 readiness. The completed manager used the amendment with 555 counted input
-tokens; this does not prove the above-32,000 live warning path or M4 completion.
+tokens. A later reviewer succeeded with 34,048 input tokens and advisory warnings, proving that live text path above 32,000. This does not establish M4 completion or real-image readiness.
 
 The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
@@ -73,6 +55,7 @@ the retained Creator outcome and allowance when M4 completes.
 | Removing efficiency limits exposed a smaller escaped HTTP boundary | Preparation now checks the same serialized authorization response as dispatch. Carrier and transport limits remain hard. | Include real reference transport in image-specific compatibility checks; text-only parity does not prove that path. |
 | A saved control change could be hidden by a failed detail refresh | Receipts acknowledge tracked mutation completion; read-only reconciliation handles lost acknowledgements without a second mutation. | Preserve request keys and reconcile the same run/operation after interruption. Do not treat an observer timeout as a failed generation or permission to replay. |
 | Advisory failure was confused with generation failure | Verified terminal advisory failures permit M4 completion; missing or unknown provider outcomes remain unresolved. | Preserve those M4 results. The separate Real acceptance requirements below still govern M5 reports and uninterrupted runs. |
+| Technical continuations inherited an earlier creative-loop count | Verified continuations reset only the observation interval; the exact saved-manager recovery preserves history and the genuine loop limit. Its J12 fixture verifies original-byte rollback and retained-parent reuse. | Verify the live recovery and Creator outcome at M4 exit. Exercise recovery with the actual stage's dependency graph; transaction-local eligibility must precede readers that re-read saved state. |
 
 Remaining entry gaps are specific: Creator's valid M4 completion; a separately
 authorized finite Real campaign; and verified real-image configuration, reference
@@ -82,6 +65,19 @@ authorizes simulated images only. Readiness therefore requires reviewed Real
 admission and image-policy support, not merely selecting a different model in
 Dify. M4 text reservations and zero paid images do not prove paid-image liability
 enforcement. Model availability, plugin support and prices remain unverified here.
+
+Real admission requires coordinated changes to HTTP, repository creation/claims,
+dispatch, image completion and generation verification. The current Dify image
+workflow returns synthetic images; the older application's real-image path does
+not establish experiment-runner support. Implement pre-call image reservations,
+uncertain-liability retention and attributable settlement under a separate finite
+grant. Read back effective child workflow and provider identities; a published
+caller does not by itself pin a later child-tool binding.
+
+Real judge input must also include the actual images required by this experiment's
+PRD. Current M4 reports send text evidence and require simulated visual assessment
+to remain `not_assessed`. Review the Real request, schema, transport and accounting
+contracts together rather than removing that limitation from simulated evidence.
 
 | Checkpoint | Work | Exit |
 | --- | --- | --- |

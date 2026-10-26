@@ -288,6 +288,55 @@ describe("booklet runner inspector", () => {
     expect(screen.queryByText("The run could not be updated.")).toBeNull();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
   });
+  it("continues the exact server-marked retained active decision with one receipt POST", async () => {
+    const blocked = { ...run, mode: "balanced", status: "blocked", safeFailure: "definite_failure", retainedDecisionContinuation: true };
+    const queued = { ...blocked, status: "queued", safeFailure: null, activeOperationId: null, revision: 3,
+      retainedDecisionContinuation: undefined };
+    let saved = false;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") { saved = true; return Response.json({ data: queued }); }
+      if (saved) throw new Error("Detail refresh unavailable");
+      return Response.json({ data: blocked });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    const button = await screen.findByRole("button", { name: "Continue inspected run" });
+    expect((button as HTMLButtonElement).disabled).toBe(false); fireEvent.click(button);
+    await screen.findByText("Change saved. Run details could not be refreshed.");
+    const posts = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(posts).toHaveLength(1); expect(posts[0][0]).toBe(`/api/experiments/booklet-runs/${run.runId}/resume`);
+    expect(JSON.parse(String(posts[0][1]?.body))).toEqual({ expectedRevision: 2, responseMode: "receipt" });
+    expect(screen.queryByRole("button", { name: "Continue inspected run" })).toBeNull();
+  });
+  it.each(["ungranted", "unknown", "terminal", "preparing"])("does not offer retained-decision continuation for %s work", async kind => {
+    const saved = { ...run, mode: "balanced", status: kind === "terminal" ? "completed" : "blocked",
+      safeFailure: kind === "unknown" ? "unknown_outcome" : "definite_failure",
+      retainedDecisionContinuation: kind !== "ungranted",
+      preparation: kind === "preparing" ? { identity: "owner", startedAtMs: 1, deadlineAtMs: 2, unresolved: false } : null };
+    fetchMock.mockResolvedValue(Response.json({ data: saved }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    await screen.findByText(/Kite Rescue/);
+    expect(screen.queryByRole("button", { name: "Continue inspected run" })).toBeNull();
+    expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+  });
+  it.each([true, false])("retries an explicit conflict only while the exact retained-decision control remains available (%s)", async available => {
+    const blocked = { ...run, mode: "balanced", status: "blocked", safeFailure: "definite_failure", retainedDecisionContinuation: true };
+    const fresh = { ...blocked, revision: 4, retainedDecisionContinuation: available };
+    const queued = { ...fresh, revision: 5, status: "queued", safeFailure: null, activeOperationId: null, retainedDecisionContinuation: false };
+    let writes = 0;
+    fetchMock.mockImplementation(async (url, options) => {
+      if (options?.method === "POST") {
+        writes++;
+        return writes === 1 ? Response.json({ error: { code: "stale_revision", message: "Revision changed" } }, { status: 409 }) : Response.json({ data: queued });
+      }
+      return Response.json({ data: String(url).includes("view=control") ? fresh : writes > 1 ? queued : blocked });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue inspected run" }));
+    if (available) await waitFor(() => expect(writes).toBe(2)); else await screen.findByRole("alert");
+    expect(writes).toBe(available ? 2 : 1);
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(String(options?.body)).expectedRevision))
+      .toEqual(available ? [2, 4] : [2]);
+  });
   it.each(["lost", "malformed", "missing", "server"])("reconciles a %s response with one compact read and no write replay", async failure => {
     const paused = { ...run, status: "paused", pauseRequested: true, activeOperationId: null, revision: 3 };
     let saved = false;
