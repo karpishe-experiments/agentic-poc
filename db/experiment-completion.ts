@@ -231,7 +231,7 @@ export function createExperimentCompletionService(database: Database, store: Ass
       // generation verifier can inspect it. Any failed check rolls it back.
       const candidate = alreadyComplete ? run : await database.collections.experiment_runs.findOneAndUpdate(
         { _id: run._id, revision: run.revision, activeOperationId: null },
-        { $set: { status: "completed", evaluationStatus: "failed", safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs },
+        { $set: { status: "completed", evaluationStatus: "failed", terminalAtMs: input.nowMs, safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs },
           $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!candidate) throw new ExperimentRepositoryError("stale_revision", "Completion changed concurrently.");
       await verifyExperimentGeneration(database, session, candidate, store);
@@ -265,7 +265,8 @@ export function createExperimentCompletionService(database: Database, store: Ass
         }
       }
       if (evaluation ? run.status === "completed" && run.evaluationStatus === "complete" : run.generationCompletedAtMs != null) return run;
-      const patch = evaluation ? { status: "completed" as const, evaluationStatus: "complete" as const, updatedAtMs: input.nowMs } :
+      const patch = evaluation ? { status: "completed" as const, evaluationStatus: "complete" as const,
+        terminalAtMs: run.status === "completed" ? run.terminalAtMs ?? null : input.nowMs, updatedAtMs: input.nowMs } :
         { generationCompletedAtMs: input.nowMs, generationVersionIds: evidence.artifacts.map((item) => item.versionId), updatedAtMs: input.nowMs };
       const updated = await database.collections.experiment_runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null },
         { $set: patch, $inc: { revision: 1 } }, { session, returnDocument: "after" });

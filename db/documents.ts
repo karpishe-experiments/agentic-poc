@@ -46,6 +46,7 @@ export type ExperimentRunDocument = BaseDocument & {
   status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
   evaluationStatus: "pending" | "running" | "complete" | "failed";
   generationCompletedAtMs?: number;
+  terminalAtMs?: number | null;
   generationVersionIds?: string[];
   revision: number; pauseRequested: boolean; activeOperationId: string | null;
   preparation?: { ownerId: string; startedAtMs: number; deadlineAtMs: number; outcome?: "failed"; unresolved?: boolean; stopRequestedAtMs?: number } | null;

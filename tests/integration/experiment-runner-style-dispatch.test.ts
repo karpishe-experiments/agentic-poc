@@ -563,6 +563,7 @@ describe("automatic saved J08 sample dispatch", () => {
     const run = (await env.repository.getRun(env.runId))!;
     expect(run).toMatchObject({ status: "completed", evaluationStatus: "failed", activeOperationId: null });
     expect(run.generationCompletedAtMs).toBeTypeOf("number");
+    expect(run.terminalAtMs).toBeTypeOf("number");
     const view = (await env.context.getRunView(env.runId))!;
     expect(view.currentArtifacts.every(artifact => artifact.state === "approved")).toBe(true);
     expect(view.reports).toHaveLength(failedRole === "judge" ? 1 : 0);
@@ -574,6 +575,7 @@ describe("automatic saved J08 sample dispatch", () => {
     await env.dispatcher().advance(env.runId);
     await createExperimentCompletionService(env.database, env.store).completeAdvisoryFailure({ runId: env.runId,
       expectedRevision: run.revision, nowMs: env.next() });
+    expect((await env.repository.getRun(env.runId))?.terminalAtMs).toBe(run.terminalAtMs);
     expect(env.runtime.start).toHaveBeenCalledTimes(count);
   }, 120_000);
 
@@ -611,6 +613,7 @@ describe("automatic saved J08 sample dispatch", () => {
     const run = (await env.repository.getRun(env.runId))!;
     expect(run).toMatchObject({ status: "completed", evaluationStatus: "complete", activeOperationId: null,
       counters: { payableText: 0, payableImage: 0 } });
+    expect(run.terminalAtMs).toBeTypeOf("number");
     const operations = await env.repository.listOperations(env.runId);
     expect(run.counters).toMatchObject({ logicalText: operations.filter(op => op.providerKind === "text").length,
       logicalImage: operations.filter(op => op.providerKind === "image").length, steps: operations.length });
@@ -622,6 +625,7 @@ describe("automatic saved J08 sample dispatch", () => {
     expect(env.runtime.retrieve).toHaveBeenCalled();
     const completion = createExperimentCompletionService(env.database, env.store);
     expect((await completion.completeEvaluation({ runId: env.runId, expectedRevision: run.revision, nowMs: env.next() })).revision).toBe(run.revision);
+    expect((await env.repository.getRun(env.runId))?.terminalAtMs).toBe(run.terminalAtMs);
     const before = vi.mocked(env.runtime.start).mock.calls.length;
     await env.dispatcher().advance(env.runId);
     expect(env.runtime.start).toHaveBeenCalledTimes(before);

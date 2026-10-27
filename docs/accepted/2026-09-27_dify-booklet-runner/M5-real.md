@@ -65,6 +65,25 @@ surface changes. No routine reset, infrastructure exercise or speed target is
 part of M5 acceptance. The existing three-persona Real proposal remains a limit
 framework, not a combined spending grant.
 
+## Implementation checkpoint - 2026-10-27
+
+Package A is complete from retained evidence. Package B adds compact list summaries,
+per-run settled estimates and retained liabilities, local timestamps with UTC
+metadata, stable terminal duration and current attention. Selected-run artifacts
+precede reports; raw content and technical activity remain expandable. Historical
+runs without terminal or accounting evidence remain usable with unavailable values.
+
+Verification: 92 focused units passed, including receipt reconciliation, local
+clock display and historical duration. Three disposable MongoDB Kid journeys passed
+for completed reports and retained advisory failures, including stable repeated
+completion acknowledgements. The isolated browser journey passed creation, detail,
+Pause, saved page order, Resume, original asset access and completed duration with
+no external provider traffic. Typecheck and focused ESLint passed. Package C is the
+next implementation dependency; no new paid grant or Real run exists.
+
+Credential inventory impact: none. This package changes inspection and terminal
+metadata, with no credential names, storage, transfer or consumers changed.
+
 ## Three execution checkpoints
 
 ### Historical carry-forward review before the M4 exit
