@@ -1085,13 +1085,19 @@ backup_helper_for_deploy() {
   ORIGINAL_REQUEST_ID="$(jq -er .originalRequestId "$marker")"
   [[ "$(expired_recovery_handoff_hash "$current" "$original")" == "$(jq -er .originalHandoffSha256 "$marker")" ]] || die 'Original decision handoff provenance changed'
   prepare_backup_helper "$current" "$(jq -er .helperImage "$marker")" "$(jq -er .helperCommit "$marker")"
+}
+verify_backup_helper_target() {
+  # Completed application recovery requires closed admission. Provenance checks
+  # above also serve read-only retirement while admission remains open and idle.
+  local marker="$STATE/backup-helper-staging.json" original
   original="$STATE/operations/recovery-handoff-$(jq -er .originalRequestId "$marker").json"
   backup_recovery_verify_target "$marker" "$BACKUP_HELPER_RELEASE" "$original"
 }
 backup_handoff_admission() {
   local current="$1" state
-  # The helper provenance and completed target must already be verified by
-  # backup_helper_for_deploy. A recovery can leave admission closed and quiet;
+  # Helper provenance must already be verified by backup_helper_for_deploy.
+  # The completed target is verified after this closes admission. A recovery can
+  # leave admission closed and quiet;
   # ordinary drain requires maintenance=false and cannot consume that state.
   private_temp
   state="$(mktemp "$TEMP_DIR/backup-admission.XXXXXXXX")"
@@ -1840,6 +1846,7 @@ run_lifecycle() {
       if [[ -n "$current" ]]; then
         set_step draining
         if [[ "$bootstrapped" == true ]]; then bootstrap_ready_for_deploy "$current"; elif [[ "$recovered" == true ]]; then recovery_ready_for_deploy "$current"; elif [[ "$backup_helper" == true ]]; then backup_handoff_admission "$current"; else drain_application "$current"; fi
+        if [[ "$backup_helper" == true ]]; then verify_backup_helper_target; fi
         set_step stopping; stop_application "$current"
         set_step backup; ensure_backup_id
         if [[ "$backup_helper" == true ]]; then helper_maintenance "$(jq -er .services.app.image "$current/image.json")" backup; else maintenance "$current" recovery backup; fi

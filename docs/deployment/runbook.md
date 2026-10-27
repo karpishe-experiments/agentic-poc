@@ -210,6 +210,10 @@ it does not mark deployment successful or change admission. Reconcile an uncerta
 acknowledgement through the same receipt. After verified closure, dispatch one
 normal deployment with a new request ID and the normal budget. Do not repeat
 deployment after an observer timeout; inspect its saved request.
+Retirement verifies immutable helper provenance while admission remains open.
+Normal deployment verifies the completed application recovery after drain closes
+admission and before stopping the app. Do not close admission just to retire a
+pre-backup journal.
 The protected dispatcher must support this helper pair before use; prepare a
 reviewed checksum handoff if the installed version lacks it.
 

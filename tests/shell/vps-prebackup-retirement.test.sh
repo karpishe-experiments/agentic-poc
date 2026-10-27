@@ -23,10 +23,19 @@ JOURNAL="$STATE/operation.json" ARCHIVE="$STATE/operations/$ORIGINAL_REQUEST_ID.
 RECEIPT="$STATE/recoveries/$REQUEST_ID/host.json"
 NOW=1793034900 OWNER=0 BAD_UNIT=false DRIFT=false EXPIRE=false INTERRUPT=false INSPECT_ERROR=false
 APPLY=false PREVIEW_DIGEST='' CONFIRMATION=kids_booklet
-mkdir -p "$ROOT" "$CURRENT" "$STATE/operations"
+mkdir -p "$ROOT" "$CURRENT" "$STATE/operations" "$STATE/recoveries/helper-recovery"
 cp scripts/deploy/vps-deployment.sh "$ROOT/vps-deployment.sh"
 printf '%s\n' "$CURRENT" > "$STATE/releases/staging/current"
-printf '{}' > "$STATE/backup-helper-staging.json"
+TREE=cccccccccccccccccccccccccccccccccccccccc
+printf '{"requestId":"helper-original"}' > "$STATE/operations/helper-original.json"
+helper_original_hash="$(sha256sum "$STATE/operations/helper-original.json" | awk '{print $1}')"
+jq -n --arg current "$CURRENT" --arg tree "$TREE" --arg fingerprint "$(printf '%064d' 1)" \
+  --arg originalHash "$helper_original_hash" --arg handoffHash "$(printf '%064d' 2)" \
+  '{requestId:"helper-recovery",purpose:"maintenance-backup-v1",phase:"complete",priorRelease:$current,
+    sourceTree:$tree,hostFingerprint:$fingerprint,originalRequestId:"helper-original",
+    originalJournalSha256:$originalHash,originalHandoffSha256:$handoffHash,
+    helperImage:"fixture-helper-image",helperCommit:"fixture-helper-commit"}' > "$STATE/backup-helper-staging.json"
+cp "$STATE/backup-helper-staging.json" "$STATE/recoveries/helper-recovery/host.json"
 jq -n --arg prior "$CURRENT" --arg commit "$COMMIT" --arg image "$IMAGE_DIGEST" '{requestId:"40359148858-1",action:"deploy",environment:"staging",step:"draining",backupId:"",priorRelease:$prior,commit:$commit,image:$image,budgetDeadlineAtSeconds:1793034829,stopRequestedAt:null}' > "$JOURNAL"
 cp "$JOURNAL" "$TEMP_DIR/original.json"
 : > "$TEMP_DIR/calls"
@@ -42,10 +51,15 @@ systemctl() {
 recovery_no_containers() { return 0; }
 docker() {
   if [[ "$1" == ps ]]; then printf 'prior-container\n'
+  elif [[ "$1 $2" == 'image inspect' ]]; then printf '%s\n' "$TREE"
   elif [[ "$1" == inspect ]]; then printf 'ghcr.io/karpishe-experiments/agentic-poc@sha256:21737fcf0168b9b04ffead4b252124ed998213aab61e08e683cf33a896a33ffb\n'; [[ "$INSPECT_ERROR" == false ]]
   else return 1; fi
 }
-backup_helper_for_deploy() { printf 'helper-proof\n' >> "$TEMP_DIR/calls"; BACKUP_HELPER_RELEASE="$CURRENT"; }
+# Exercise the real helper composition. Only its lower-level image/provenance
+# interfaces are fake; retirement must never call the closed-admission verifier.
+prepare_backup_helper() { printf 'helper-proof\n' >> "$TEMP_DIR/calls"; BACKUP_HELPER_RELEASE="$CURRENT"; }
+expired_recovery_handoff_hash() { printf '%064d\n' 2; }
+recovery_app_json() { printf 'Unexpected closed target verification\n' >&2; return 99; }
 recovery_host_fingerprint() { printf '%064d\n' 1; }
 recovery_oneoff() {
   if [[ "$DRIFT" == true ]]; then printf '\n' >> "$JOURNAL"; fi
@@ -68,7 +82,7 @@ reject() {
 case "$1" in
   preview)
     preview; cmp "$JOURNAL" "$TEMP_DIR/original.json"
-    [[ ! -e "$ARCHIVE" && ! -e "$STATE/recoveries" ]];;
+    [[ ! -e "$ARCHIVE" && ! -e "$STATE/recoveries/$REQUEST_ID" ]];;
   apply|repeated|active-journal|interrupted|receipt-image|receipt-environment)
     preview
     if [[ "$1" == interrupted ]]; then

@@ -358,6 +358,10 @@ digest binds those identities and an expiry. Apply archives the original journal
 unchanged and records a separate closure receipt. Interrupted acknowledgement
 and repeated apply verify that archive; they do not repeat deployment or alter a
 later active journal. A fresh normal deployment retains all ordinary checks.
+Immutable helper provenance can be verified with admission open. The completed
+application recovery check requires closed admission, so normal deployment runs
+it after drain and before stopping the app. Retirement uses provenance and its
+open-idle ownership inspection; it does not close admission for a historical check.
 No database initialization, provider call or credential-scope change is involved.
 
 Balanced completion separates the durable transaction from progress observation.

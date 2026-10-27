@@ -12,6 +12,8 @@ if [[ $# -eq 0 ]]; then
     bash "$0" "$scenario"
   done
   bash "$0" backup-handoff-closed-admission
+  bash "$0" backup-handoff-open-admission
+  bash "$0" backup-handoff-target-rejected
   bash "$0" backup-handoff-resume
   bash "$0" resume-unit-retirement
   bash tests/shell/vps-systemd-resume.test.sh
@@ -145,17 +147,32 @@ RuntimeMaxUSec=infinity'; do
       }
       if (trap - EXIT; retire_stopped_operation_unit) >/dev/null 2>&1; then exit 1; fi
     done;;
-  backup-handoff-closed-admission)
+  backup-handoff-closed-admission|backup-handoff-open-admission|backup-handoff-target-rejected)
     printf '{}' > "$STATE/backup-helper-staging.json"
     backup_helper_for_deploy() { printf 'helper-proof\n' >> "$CALLS"; }
-    drain_application() { printf 'unexpected-drain\n' >> "$CALLS"; return 1; }
+    admission_closed=true
+    [[ "$1" != backup-handoff-open-admission ]] || admission_closed=false
+    drain_application() { printf 'ordinary-drain\n' >> "$CALLS"; admission_closed=true; }
+    verify_backup_helper_target() {
+      [[ "$admission_closed" == true ]] || return 1
+      printf 'closed-target-proof\n' >> "$CALLS"
+      [[ "$scenario" != backup-handoff-target-rejected ]] || die 'Fixture target rejection'
+    }
+    scenario="$1"
     maintenance() {
       printf 'maintenance %s\n' "$*" >> "$CALLS"
-      if [[ "$2 ${3:-}" == 'deployment-control status' ]]; then printf '{"maintenance":true,"draining":false,"activeMutations":0,"interruptedMutations":0,"mutationOwners":[]}\n'; fi
+      if [[ "$2 ${3:-}" == 'deployment-control status' ]]; then printf '{"maintenance":%s,"draining":false,"activeMutations":0,"interruptedMutations":0,"mutationOwners":[]}\n' "$admission_closed"; fi
     }
     helper_maintenance() { printf 'helper-backup\n' >> "$CALLS"; }
+    if [[ "$scenario" == backup-handoff-target-rejected ]]; then
+      if (trap - EXIT; run_lifecycle) >/dev/null 2>&1; then exit 1; fi
+      ! grep -q helper-backup "$CALLS"
+      ! grep -q '^stop ' "$CALLS"
+      exit 0
+    fi
     run_lifecycle
-    ! grep -q unexpected-drain "$CALLS"
+    grep -q closed-target-proof "$CALLS"
+    [[ "$(grep -n '^closed-target-proof' "$CALLS" | cut -d: -f1)" -lt "$(grep -n '^stop ' "$CALLS" | head -1 | cut -d: -f1)" ]]
     grep -q helper-backup "$CALLS"
     test -f "$STATE/operations/backup-helper-$REQUEST_ID.json";;
   recovery-response-diagnostic)
