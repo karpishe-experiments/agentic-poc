@@ -5,6 +5,8 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import type { ApprovalDocument, ArtifactDocument, ArtifactVersionDocument, ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
+import { runTiming, runAttention } from "@/lib/experiment-runner/run-summary";
+import { runAccounting } from "@/lib/experiment-runner/run-accounting";
 import { ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { opaqueIdSchema } from "@/lib/contracts/common";
@@ -247,6 +249,7 @@ export function createExperimentContextService(database: Database, options: { st
       verifiedWorkflowId: 1, workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1,
       ...(projection === "inspection" ? { contextDiagnostics: 1 } : {}),
       dispatchStartedAtMs: 1, createdAtMs: 1, updatedAtMs: 1, reservationCount: 1, safeFailure: 1,
+      ...(projection === "inspection" ? { "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1 } : {}),
       "localReportFailure.code": 1, "localReportFailure.scope": 1, "localReportFailure.requestBytes": 1, "localReportFailure.byteLimit": 1,
       resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
     } }).sort({ createdAtMs: 1, _id: 1 }).toArray()
@@ -314,6 +317,8 @@ export function createExperimentContextService(database: Database, options: { st
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       ...(run.mode === "balanced" && (projection === "inspection" || projection === "report") ? { m4Accounting } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
+      ...(projection === "inspection" ? { terminalAtMs: run.terminalAtMs ?? null, timing: runTiming(run), attention: runAttention(run),
+        runAccounting: runAccounting(run.mode, operationRows, run.counters.payableText) } : {}),
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
       generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
       generationCompletedAtMs: run.generationCompletedAtMs ?? null,

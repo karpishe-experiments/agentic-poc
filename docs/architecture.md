@@ -4,6 +4,17 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Run lists use one grouped, projected operation read for each visible page. Cards
+show run-specific settled estimates and retained reservation liabilities; campaign
+accounting remains separate. Missing historical accounting proof remains unavailable.
+Inspection responses add timing and attention fields without adding those fields
+to execution contexts. New terminal transitions retain `terminalAtMs`; subsequent
+acknowledgements preserve it. Historical terminal runs without reliable terminal
+evidence show unavailable duration. Elapsed time includes pauses, and timestamps
+use the viewer's timezone with UTC in their details. Selected-run artifacts precede
+reports, and raw artifact content and technical activity are collapsed by default.
+
+
 A reviewed Balanced campaign policy can select a positive monetary ceiling up to
 USD5 and an optional `allowedPersonas` subset. Admission checks the subset before
 claiming a persona slot. The frozen policy already owns reservation ceilings,

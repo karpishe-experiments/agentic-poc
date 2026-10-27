@@ -307,8 +307,10 @@ describe("booklet runner HTTP boundary", () => {
     expect(find.mock.calls[0][1].projection.configurationJson).toBeUndefined();
     expect(find.mock.calls[0][1].projection).toMatchObject({ createdAtMs: 1, updatedAtMs: 1 });
     expect(findBooklets).toHaveBeenCalledWith({ _id: { $in: ["book-1"] } }, { projection: { _id: 1, workingTitle: 1 } });
-    expect(findOperations).toHaveBeenCalledWith({ runId: { $in: ["run-1"] }, contextDiagnostics: { $exists: true } },
-      { projection: { _id: 0, runId: 1, "contextDiagnostics.warnings": 1 } });
+    expect(findOperations).toHaveBeenCalledWith({ runId: { $in: ["run-1"] } },
+      { projection: { _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
+        "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+        "contextDiagnostics.warnings": 1 } });
     expect(store).not.toHaveBeenCalled();
     expect((await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary&limit=1000"))).status).toBe(400);
     const legacy = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?page=2&limit=1"));
@@ -320,7 +322,9 @@ describe("booklet runner HTTP boundary", () => {
   });
   it("includes the retained-decision control in summaries using only existing metadata reads", async () => {
     const operationId = "00000000-0000-4000-8000-000000000002";
-    const row = { ...savedControl, bookletId: "book", status: "blocked", safeFailure: "definite_failure", activeOperationId: operationId };
+    const row = { ...savedControl, bookletId: "book", mode: "balanced" as const,
+      counters: { logicalText: 0, logicalImage: 0, payableText: 0, payableImage: 0, steps: 0 },
+      status: "blocked", safeFailure: "definite_failure", activeOperationId: operationId };
     const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue([row]) };
     const find = vi.fn().mockReturnValue(cursor);
     const operationFind = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
@@ -334,7 +338,40 @@ describe("booklet runner HTTP boundary", () => {
     const response = await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary"));
     expect((await response.json()).data.runs[0].retainedDecisionContinuation).toBe(true);
     expect(find).toHaveBeenCalledOnce(); expect(operationFind).toHaveBeenCalledOnce();
-    expect(operationFind.mock.calls[0][1].projection).toEqual({ _id: 0, runId: 1, "contextDiagnostics.warnings": 1 });
+    expect(operationFind.mock.calls[0][1].projection).toEqual({ _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
+      "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+      "contextDiagnostics.warnings": 1 });
+  });
+  it("groups paid reservations by run without mixing another campaign run into the card", async () => {
+    const rows = ["run-1", "run-2"].map((_id, index) => ({ _id, bookletId: `book-${index}`, brief: `Run ${index}`,
+      persona: "playful_kid", mode: "balanced", status: "blocked", revision: 1, createdAtMs: 1000,
+      updatedAtMs: 2000, pauseRequested: false, activeOperationId: null,
+      counters: { logicalText: 1, logicalImage: 0, payableText: 1, payableImage: 0, steps: 1 },
+      limits: { text: 120, image: 12, steps: 300 }, evaluationStatus: "pending" }));
+    const operations = [
+      { _id: "op-1", runId: "run-1", role: "specialist", reservationCount: 1,
+        m4Reservation: { settledMicrodollars: 125, unsettledMicrodollars: 0 } },
+      { _id: "op-2", runId: "run-1", role: "tester", reservationCount: 0,
+        m4Reservation: { settledMicrodollars: null, unsettledMicrodollars: 500 } },
+      { _id: "op-3", runId: "run-2", role: "specialist", reservationCount: 1,
+        m4Reservation: { settledMicrodollars: 900, unsettledMicrodollars: 0 } },
+    ];
+    const find = vi.fn().mockReturnValue({ sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) });
+    const findOperations = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(operations) });
+    const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {
+      experiment_runs: { find }, experiment_operations: { find: findOperations },
+      booklets: { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) },
+    } } as unknown as Database), store: () => { throw new Error("Summary must not read assets"); } });
+    const response = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries"));
+    expect(response.status).toBe(200);
+    const cards = (await response.json()).data.runs;
+    expect(cards[0].runAccounting).toMatchObject({ settledMicrodollars: 125, reservedMicrodollars: 500,
+      estimatedTotalMicrodollars: 625 });
+    expect(cards[1].runAccounting).toMatchObject({ settledMicrodollars: 900, reservedMicrodollars: 0,
+      estimatedTotalMicrodollars: 900 });
+    expect(findOperations).toHaveBeenCalledOnce();
+    expect(findOperations.mock.calls[0][0]).toEqual({ runId: { $in: ["run-1", "run-2"] } });
   });
   it("protects inspect and stop before reading operation state", async () => {
     const database = vi.fn(() => { throw new Error("unexpected database access"); });

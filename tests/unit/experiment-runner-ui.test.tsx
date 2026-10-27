@@ -1,15 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import { RunMetrics, RunTimestamp } from "@/components/experiments/run-metrics";
 import { BookletRunner } from "@/components/experiments/booklet-runner";
 
-const run = { generationStatus: "in_progress", evaluationStatus: "pending", safeFailure: null, preparation: null, createdAtMs: Date.parse("2026-10-22T08:00:00Z"), updatedAtMs: Date.parse("2026-10-22T09:15:00Z"), runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
+const run = { generationStatus: "in_progress", evaluationStatus: "pending", safeFailure: null, preparation: null, createdAtMs: Date.parse("2026-10-22T08:00:00Z"), updatedAtMs: Date.parse("2026-10-22T09:15:00Z"), runId: "00000000-0000-4000-8000-000000000001", persona: "playful_kid", mode: "simulated", brief: "Kite story", title: "Kite Rescue", status: "queued", revision: 2, pauseRequested: false, activeOperationId: "operation-1", activeDelegation: { id: "grant-1", taskIds: ["J01", "J02"], subjectKind: "book", subjectId: "book-1", testerDecisionId: "decision-1" }, creatorMessages: [{ id: "decision-1", sequence: 1, content: { action: "approve", versionIds: ["version"] }, createdAtMs: 1 }], operationHistory: [{ id: "operation-1", role: "specialist", taskId: "J02", state: "started", workflowRunId: "workflow-1", parentWorkflowRunId: "parent-1", reservationCount: 1, safeFailure: null, createdAtMs: 1, updatedAtMs: 2 }], counters: { logicalText: 1, logicalImage: 0, payableText: 0, payableImage: 0, steps: 1 }, limits: { text: 120, image: 12, steps: 300 }, nextNarrativeTask: "J02", pendingDecision: { kind: "question", question: "Which kite?" }, currentArtifacts: [{ id: "artifact", taskId: "J01", state: "approved", currentVersionId: "version", versions: [{ id: "version", number: 1, content: { title: "Kite Rescue" }, warnings: [{ field: "title", message: "Needs review." }], approval: { origin: "explicit" }, dependencyVersionIds: [] }] }] };
 let fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>();
 beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 }));
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
     const response = await fetchMock(url, options) as Response;
-    if (!url.includes("?view=summary")) return response;
+    if (!url.includes("?view=summary")) {
+      const body = await response.clone().json();
+      return Array.isArray(body.data) ? Response.json({ data: body.data[0] }, { status: response.status }) : response;
+    }
     const body = await response.clone().json();
     return Array.isArray(body.data) ? new Response(JSON.stringify({ data: { runs: body.data, hasMore: false } }), { status: response.status }) : response;
   });
@@ -24,7 +28,7 @@ describe("booklet runner inspector", () => {
         operationId: null, reason: "invalid_assets", errorCategory: "validation", elapsedMs: 1, remainingBudgetMs: null },
       imageCapacity: { status: "available", remainingImageCalls: 7, requiredNewImages: 7, savedDraftsAwaitingApproval: 1, spareImageCalls: 0 },
     }] }), { status: 200 }));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText(/Previous stop: Saved image evidence/)).toBeTruthy();
     expect(screen.getByText(/No spare image calls remain/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(false);
@@ -82,7 +86,8 @@ describe("booklet runner inspector", () => {
 
   it("keeps historical operations and list rows usable without measurements", async () => {
     render(<BookletRunner />);
-    expect(await screen.findByText("Context measurement unavailable.")).toBeTruthy();
+    expect(await screen.findByRole("link", { name: /^Open run:/ })).toBeTruthy();
+    expect(screen.queryByText("Context measurement unavailable.")).toBeNull();
     expect(screen.queryByText(/Context measurements:/)).toBeNull();
     expect((screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -96,7 +101,7 @@ describe("booklet runner inspector", () => {
     fetchMock.mockResolvedValue(Response.json({ data: { runs: [summary], hasMore: false } }));
     render(<BookletRunner />);
     expect(await screen.findByText("Saved booklet title")).toBeTruthy();
-    expect(screen.getByText("Context measurements: 3 operations · 2 warnings")).toBeTruthy();
+    expect(screen.getByText(/2 context warnings/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
     expect(screen.queryByText("Operation trace (1)")).toBeNull();
     expect(fetchMock.mock.calls.every(([url]) => url.includes("?view=summary"))).toBe(true);
@@ -113,7 +118,7 @@ describe("booklet runner inspector", () => {
   });
   it("explains tester failure and dependent judge omission in saved detail", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed", evaluationStatus: "failed", generationStatus: "complete", activeOperationId: null, reports: [] }] })));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText(/The judge was not run because tester evaluation failed/)).toBeTruthy();
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
   });
@@ -121,7 +126,7 @@ describe("booklet runner inspector", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed", evaluationStatus: "failed", generationStatus: "complete", activeOperationId: null,
       operationHistory: [{ ...run.operationHistory[0], role: "tester", taskId: null, state: "failed", reservationCount: 0,
         localReportFailure: { code: "report_request_too_large", scope: "request", requestBytes: 131073, byteLimit: 131072 } }] }] })));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText(/131073\/131072 bytes\. No provider request was sent or reserved/)).toBeTruthy();
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
   });
@@ -133,24 +138,24 @@ describe("booklet runner inspector", () => {
     expect(screen.queryByRole("button", { name: "Continue inspected run" })).toBeNull();
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
   });
-  it("shows recorded UTC times and a direct open link even without a booklet ID", async () => {
+  it("shows saved timestamps in the local zone and keeps their UTC identity", async () => {
     render(<BookletRunner />);
-    const started = await screen.findByText("22 Oct 2026, 08:00:00 UTC");
-    expect(started.getAttribute("datetime")).toBe("2026-10-22T08:00:00.000Z");
-    expect(screen.getByText("22 Oct 2026, 09:15:00 UTC").getAttribute("datetime")).toBe("2026-10-22T09:15:00.000Z");
+    await screen.findByText("Started");
+    expect(screen.getByText("Started").nextElementSibling?.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-22T08:00:00.000Z");
     expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, updatedAtMs: Date.parse("2026-10-22T09:20:00Z") }] })));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(await screen.findByText("22 Oct 2026, 09:20:00 UTC")).toBeTruthy();
-    expect(screen.getByText("22 Oct 2026, 08:00:00 UTC")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("Latest update").nextElementSibling?.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-22T09:20:00.000Z"));
+    expect(screen.getByText("Started").nextElementSibling?.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-22T08:00:00.000Z");
   });
   it("does not invent timestamps for historical records", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, createdAtMs: undefined, updatedAtMs: undefined }] })));
     render(<BookletRunner />);
-    expect(await screen.findAllByText("Unavailable", { exact: true })).toHaveLength(2);
+    await screen.findByText("Started");
+    expect(screen.getByText("Started").nextElementSibling?.textContent).toContain("Unavailable");
     expect(screen.getByText("Started")).toBeTruthy();
-    expect(screen.getByText("Latest update")).toBeTruthy();
+    expect(screen.getByText("Latest update").nextElementSibling?.textContent).toContain("Unavailable");
   });
 
   it("shows retained Balanced allowance separately from invoice cost", async () => {
@@ -159,7 +164,7 @@ describe("booklet runner inspector", () => {
       reservedMicrodollars: 6300, settledMicrodollars: 1000, remainingMicrodollars: 4992700, maxMicrodollars: 5000000,
       countChargeStatus: "assumed", invoiceCostAvailable: false,
     } }] })));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     const accounting = await screen.findByRole("region", { name: "Balanced campaign accounting" });
     expect(accounting.textContent).toContain("Campaign requests 7/500");
     expect(accounting.textContent).toContain("Run requests 7/120");
@@ -208,7 +213,7 @@ describe("booklet runner inspector", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, mode: "balanced", status: "blocked", activeOperationId: null,
       currentArtifacts: [{ ...run.currentArtifacts[0], taskId: "J13", versions: [{ ...run.currentArtifacts[0].versions[0],
         content: { pageIndex: 0, assetId: "00000000-0000-4000-8000-000000000020" } }] }] }] })));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText(/Cover image.*Simulated fixture/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start linked successor" })).toBeNull();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(0);
@@ -245,7 +250,7 @@ describe("booklet runner inspector", () => {
       }
       return new Response(JSON.stringify({ data: [paused] }));
     });
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Page 3" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Page 1" }));
     expect(screen.getByText("Selected order: Page 3 → Page 1")).toBeTruthy();
@@ -266,11 +271,11 @@ describe("booklet runner inspector", () => {
         verifiedWorkflowId: "published-1", matchesCurrentVersions: true, report },
       { operationId: "judge-1", workflowRunId: "run-2", verifiedWorkflowId: "published-2", matchesCurrentVersions: false,
         report: { ...report, role: "judge", summary: "Historical judge assessment." } }] }] }), { status: 200 }));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText("Booklet generation")).toBeTruthy();
     expect(screen.getByText("Complete", { exact: true })).toBeTruthy();
     expect(screen.getByText("Running", { exact: true })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /^Open run:/ }).getAttribute("href")).toBe(`/experiments/booklet-runs/${run.runId}`);
+    expect(screen.getByRole("link", { name: "Back to all runs" }).getAttribute("href")).toBe("/experiments/booklet-runs");
     expect(screen.getByText("Tester feedback · simulated")).toBeTruthy();
     expect(screen.getByText("Independent judge assessment · simulated")).toBeTruthy();
     expect(screen.getByText("Current artifact versions: do not match; report is historical")).toBeTruthy();
@@ -279,13 +284,15 @@ describe("booklet runner inspector", () => {
   it("shows unavailable duration for a terminal historical operation without an end timestamp", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, status: "completed",
       operationHistory: [{ ...run.operationHistory[0], state: "succeeded", elapsedMs: null }] }] })));
-    render(<BookletRunner />);
+    render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText(/Elapsed: unavailable/)).toBeTruthy();
   });
   it("loads a saved runner booklet through its detail API, not the legacy workspace", async () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { ...run, bookletId: "saved-book", status: "blocked" } })));
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { ...run, title: undefined, workingTitle: "Saved detail title", nextNarrativeTask: null, bookletId: "saved-book", status: "blocked" } })));
     render(<BookletRunner focusedRunId={run.runId} />);
     expect(await screen.findByText("Booklet saved-book")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Saved detail title" })).toBeTruthy();
+    expect(screen.getByText("Current task: J02")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to all runs" }).getAttribute("href")).toBe("/experiments/booklet-runs");
     expect(screen.queryByRole("button", { name: "Start selected" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Start linked successor" })).toBeNull();
@@ -304,9 +311,25 @@ describe("booklet runner inspector", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Finalize completed booklet" }));
     expect(await screen.findByText("Change saved. Run details could not be refreshed.")).toBeTruthy();
     expect(screen.getByText(/Completed . evaluation incomplete/)).toBeTruthy();
-    expect(screen.getByText(/Kite Rescue/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Kite Rescue" })).toBeTruthy();
     expect(screen.getByText("Saved details are awaiting refresh.")).toBeTruthy();
     expect(screen.queryByText("The run could not be updated.")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
+  it("clears stale paused attention after a resume receipt when details cannot refresh", async () => {
+    const paused = { ...run, status: "paused", activeOperationId: null, pauseRequested: true,
+      attention: { kind: "paused", explanation: "OLD PAUSED REASON", action: "resume" } };
+    const queued = { ...run, status: "queued", activeOperationId: null, pauseRequested: false, revision: 3 };
+    let saved = false;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") { saved = true; return Response.json({ data: queued }); }
+      if (saved) throw new Error("Details unavailable");
+      return Response.json({ data: paused });
+    });
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    expect(await screen.findByText("Change saved. Run details could not be refreshed.")).toBeTruthy();
+    expect(screen.queryByText(/OLD PAUSED REASON/)).toBeNull();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
   });
   it("continues the exact server-marked retained active decision with one receipt POST", async () => {
@@ -335,7 +358,7 @@ describe("booklet runner inspector", () => {
       preparation: kind === "preparing" ? { identity: "owner", startedAtMs: 1, deadlineAtMs: 2, unresolved: false } : null };
     fetchMock.mockResolvedValue(Response.json({ data: saved }));
     render(<BookletRunner focusedRunId={run.runId} />);
-    await screen.findByText(/Kite Rescue/);
+    await screen.findByRole("heading", { name: "Kite Rescue" });
     expect(screen.queryByRole("button", { name: "Continue inspected run" })).toBeNull();
     expect(fetchMock.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
   });
@@ -509,7 +532,7 @@ describe("booklet runner inspector", () => {
     const failed = { ...run, status: "blocked", predecessorRunId: "prior-run", activeOperationId: null };
     fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => options?.method === "POST" ? Promise.reject(new Error("Response lost")) : new Response(JSON.stringify({ data: [failed] }), { status: 200 }));
     render(<BookletRunner />);
-    expect(await screen.findByText("Predecessor run: prior-run")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Start linked successor" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start linked successor" }));
     fireEvent.click(await screen.findByRole("button", { name: "Retry pending creation" }));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(2));
@@ -519,12 +542,12 @@ describe("booklet runner inspector", () => {
     }
   });
   it("shows saved artifacts, decisions, limits and a bounded narrative slice", async () => {
-    render(<BookletRunner />);
-    expect(await screen.findByText("Kite Rescue", { exact: false })).toBeTruthy();
+    render(<BookletRunner focusedRunId={run.runId} />);
+    expect(await screen.findByRole("heading", { name: "Kite Rescue" })).toBeTruthy();
     expect(screen.getByText("Approved (explicit)", { exact: false })).toBeTruthy();
     expect(screen.getByText("title: Needs review.")).toBeTruthy();
     expect(screen.getByText("Text calls 1/120", { exact: false })).toBeTruthy();
-    expect(screen.getByText("Balanced and Real modes are unavailable.")).toBeTruthy();
+    expect(screen.queryByText("Balanced and Real modes are unavailable.")).toBeNull();
     expect(screen.getByText("Shorter suites stop at their slice boundary; full suites record generation and evaluation separately.", { exact: false })).toBeTruthy();
     expect(screen.getByText("Pending decision")).toBeTruthy();
     expect(screen.getByText("Active operation: specialist J02", { exact: false })).toBeTruthy();
@@ -556,5 +579,25 @@ describe("booklet runner inspector", () => {
     expect(screen.getByRole("alert").textContent).toContain("Retry will use the same request key.");
     view.unmount();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method !== "POST").length).toBeGreaterThan(0);
+  });
+});
+
+
+describe("run card timing", () => {
+  it("shows the viewer timezone and retains UTC in timestamp details", () => {
+    render(<RunTimestamp value={Date.parse("2026-10-22T08:00:00Z")} />);
+    const time = document.querySelector("time")!;
+    expect(time.textContent).toContain(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(time.title).toContain("08:00:00 UTC");
+    expect(time.dateTime).toBe("2026-10-22T08:00:00.000Z");
+  });
+  it("keeps terminal duration stable and does not infer historical duration", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<RunMetrics run={{ status: "completed", createdAtMs: 1000, terminalAtMs: 61000 }} />);
+    expect(screen.getByText("0h 1m 0s")).toBeTruthy();
+    act(() => { vi.advanceTimersByTime(60000); });
+    expect(screen.getByText("0h 1m 0s")).toBeTruthy();
+    rerender(<RunMetrics run={{ status: "completed", createdAtMs: 1000, updatedAtMs: 61000 }} />);
+    expect(screen.getByText("Duration unavailable")).toBeTruthy();
   });
 });

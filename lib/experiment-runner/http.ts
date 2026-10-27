@@ -29,6 +29,8 @@ import { RECONCILIATION_RESERVE_MS, withOperationBudget } from "@/lib/operations
 import { checkProbeReadiness, probeIdentitySchema } from "@/lib/experiment-runner/probe-preflight";
 import { operationRecoveryOutcome } from "@/lib/operations/operation-recovery-outcome";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
+import { runTiming, runAttention } from "@/lib/experiment-runner/run-summary";
+import { runAccounting } from "@/lib/experiment-runner/run-accounting";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -169,7 +171,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const rows = await collections.experiment_runs.find({}, { projection: {
       _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
       counters: 1, limits: 1, safeFailure: 1, failureDiagnostics: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
-      preparation: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1,
+      preparation: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1, terminalAtMs: 1,
     } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
     const selected = rows.slice(0, limit);
     const bookletIds = [...new Set(selected.map(row => row.bookletId).filter((id): id is string => !!id))];
@@ -177,9 +179,17 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       { projection: { _id: 1, workingTitle: 1 } }).toArray() : [];
     const titles = new Map(booklets.map(booklet => [booklet._id, booklet.workingTitle]));
     const runIds = selected.map(row => row._id);
-    const measured = runIds.length ? await collections.experiment_operations.find({ runId: { $in: runIds },
-      contextDiagnostics: { $exists: true } }, { projection: { _id: 0, runId: 1, "contextDiagnostics.warnings": 1 } }).toArray() : [];
+    const measured = runIds.length ? await collections.experiment_operations.find({ runId: { $in: runIds } },
+      { projection: { _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
+        "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+        "contextDiagnostics.warnings": 1 } }).toArray() : [];
     const warningCounts = new Map<string, { measuredOperations: number; warningCount: number }>();
+    const operationsByRun = new Map<string, typeof measured>();
+    for (const operation of measured) {
+      const group = operationsByRun.get(operation.runId) ?? [];
+      group.push(operation);
+      operationsByRun.set(operation.runId, group);
+    }
     for (const operation of measured as Array<{ runId: string; contextDiagnostics?: Pick<ContextDiagnostics, "warnings"> }>) {
       if (!operation.contextDiagnostics) continue;
       const current = warningCounts.get(operation.runId) ?? { measuredOperations: 0, warningCount: 0 };
@@ -191,7 +201,10 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       title: titles.get(row.bookletId) || row.brief || null,
       contextWarningSummary: warningCounts.get(row._id) ?? null,
       predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
-      revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs,
+      revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs, terminalAtMs: row.terminalAtMs ?? null,
+      timing: runTiming(row), attention: runAttention(row),
+      runAccounting: runAccounting(row.mode, operationsByRun.get(row._id) ?? [], row.counters?.payableText ?? 0),
+      currentTask: (operationsByRun.get(row._id) ?? []).find(operation => operation._id === row.activeOperationId)?.taskId ?? (operationsByRun.get(row._id) ?? []).find(operation => operation._id === row.activeOperationId)?.role ?? null,
       pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
       safeFailure: row.safeFailure, failureDiagnostics: row.failureDiagnostics ?? null, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
       generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
