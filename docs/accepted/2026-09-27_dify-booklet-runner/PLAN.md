@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 and efficiency acceptance remain complete. M4 Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. The initial Balanced Creator continued past its first J12 input-limit failure after the reviewed compact-reviewer repair; four Page Bibles are approved. The exact guarded continuation past a subsequent page-4 preparation failure was delivered and acknowledged; a new J12 preparation operation then failed before dispatch and stopped the campaign again. The user authorized its exact continuation on 2026-10-26, pending reviewed delivery and normal proof. Creation-only 60-second server/browser budgets remain deployed. M4 is incomplete; use the [current M4 record](M4-balanced.md#current-creator-admission-checkpoint) for the retained run, usage and repair boundary.
+**Status:** M3 and efficiency acceptance remain complete. M4 completed on 2026-10-27 under the accepted generation/accounting criterion; Kid and Parent retain terminal advisory failures, and Creator retains two current reports. See the [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27). The user authorized M5 implementation. Real acceptance remains pending a separate finite spending grant and verified readiness.
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
@@ -182,12 +182,12 @@ outside M3; this consolidation does not change PRD limits or acceptance criteria
 **Coverage:** AC01–AC03, AC05–AC08, AC10–AC12.
 
 M3's deployed Simulated acceptance is complete. The operator's later continuation
-authorizes non-billable M4 implementation under the
+authorized non-billable M4 implementation under the
 [M4 contract](M4-balanced.md#incremental-implementation-slices). The local policy and
-campaign foundation is implemented. Kid and Parent have completed valid Balanced
-generation/accounting with incomplete advisory evaluation. The initial Creator
-was admitted and completed all Page Bibles; its current reviewer decision-eligibility
-repair and remaining execution are recorded in M4. Use the three
+campaign foundation is implemented. All three original Balanced cases completed
+generation and accounting. Kid and Parent retain failed advisory evaluation;
+Creator completed evaluation. See the [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27).
+The three
 [M4 checkpoints](M4-balanced.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |
@@ -211,13 +211,23 @@ and reconcile active/uncertain work before configuration changes; do not replay
 unknown outcomes automatically. Existing PRD limits and release authority remain
 unchanged.
 
-**Exit:** all Balanced cases have verified generation and current configuration/accounting evidence. A verified terminal tester or judge failure permits completion with evaluation incomplete; unknown outcomes and unresolved ownership remain blocking. Reports remain advisory and their failure must not trigger generation replay. This does not prove image quality, successful advisory evaluation or Real acceptance. Observed persistence/admission latency is accepted and requires no speed improvement for M4 acceptance. Preserve completed Kid and Parent; finish the initial Creator after its existing verification and atomic creation can complete within the separately approved 60-second creation budget. A timeout is not successful verification. See M4 for exact retained identities and measurements.
+**Exit achieved:** all Balanced cases have verified generation and current configuration/accounting evidence. Kid and Parent have verified terminal tester failure with evaluation incomplete; Creator has two reports. No ownership remains unresolved. This does not prove image quality, complete report coverage across all three, or Real acceptance. Observed persistence/admission latency requires no speed improvement for M4 acceptance. See M4 for exact retained identities and measurements.
 
 ## Milestone 5 — Clean staging transition and Real acceptance
 
 **Coverage:** AC04–AC13.
 
-M5 remains planned, pending M4 acceptance. Use the three
+For M5, "uninterrupted" means no manual data or output repair. A recorded
+operator approval that extends a finite allowance may pause and continue the
+same run; that approval alone does not invalidate acceptance.
+
+M5 remains planned after M4 acceptance. Implement the accepted
+[A–F sequence](M5-real.md#accepted-m5-implementation-sequence---pending-delivery-and-paid-grants):
+close M4; add compact run cards and approval-only allowances; implement the shared
+Real image path; then run Kid, Parent and Creator under separate finite grants.
+Approval-only pauses may continue a run, but manual data/output repair requires a
+retained failure and an authorized linked successor. The selected Sunburst
+provider capability and price bound remain unverified. Use the three
 [M5 checkpoints](M5-real.md#three-execution-checkpoints):
 
 | Checkpoint | Work and exit |
@@ -226,8 +236,8 @@ M5 remains planned, pending M4 acceptance. Use the three
 | 2. Run the ordered Real campaign | Kid 3 pages → Parent 5 pages → Creator 8 pages, each plus cover. Advance only after an uninterrupted success. Use one checklist for required assets, exact versions/per-page approvals, lettering/style/reference routing, reports, durable bytes and usage. Retain persona-specific multi-panel requirements. |
 | 3. Record evidence and hand off | Keep one concise M5 exit record linking configuration, runs, assets, usage, failures and successors. Hand the retained baseline to M6; defer quality-only improvements. |
 
-Default proposal: three initial runs, zero successors, at most 500 LLM and 46 real
-image requests; explicit spending approval is still required. Per-run limits remain
+Default limit framework: three initial runs, zero successors, at most 500 LLM and 46 real
+image requests; separate explicit spending approval is still required for each run. Per-run limits remain
 120/160/220 LLM and 12/14/20 image requests; baseline outputs remain 9/11/15.
 Additional paid runs, including Balanced reruns, need remaining finite authority.
 
@@ -241,7 +251,7 @@ an in-place repaired run uninterrupted or increase limits/reset counters to conc
 failure. Missing/corrupt outputs, invalid authorization and exhausted limits remain
 technical blockers; creative inconsistencies remain warnings.
 
-**Exit:** three retained uninterrupted Real completions, required saved images/approvals, reports and reconciled request evidence. Quality warnings remain visible and do not fail completion.
+**Exit:** three retained Real completions without manual data/output repair, allowing only recorded approval-only allowance pauses; required saved images/approvals, reports and reconciled request evidence. Quality warnings remain visible and do not fail completion.
 
 ## Milestone 6 — Agent improvement and experiment closeout
 

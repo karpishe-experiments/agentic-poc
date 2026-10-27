@@ -1,7 +1,47 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Retained Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed generation and evaluation at revision 847 on 2026-10-27, with all nine final pages approved, 108 text calls and 20 simulated image calls. Final M4 evidence reconciliation remains separate from the additional Kid experience below. No M5 execution is authorized.
+**State:** Complete under the accepted Balanced generation/accounting criterion on 2026-10-27. Kid and Parent retain verified terminal advisory evaluation failures; Creator completed both reports. No M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## M4 exit evidence - 2026-10-27
+
+The original Kid, Parent and Creator runs completed generation with 75 approved
+current artifacts, 19 final pages (4, 6 and 9), 40 simulated image calls, 202
+paid text requests and zero paid image calls. The retained original-asset and dependency
+verification at generation completion remains the byte and lineage proof; this
+closeout uses fresh read-only run details and does not claim a new byte rehash.
+All three snapshots show no active operation, preparation, safe failure or
+unresolved lifecycle. The read-only details are retained locally at
+`output/m4-closeout-2026-10-27/{kid,parent,creator}.json` outside Git.
+
+| Persona and retained run | Final state | Usage and current artifacts | Advisory evaluation |
+| --- | --- | --- | --- |
+| Kid `c79b63dd-6ebb-4c49-8be3-d0bb409ac49e`, revision 3014 | Generation complete; 20 approved artifacts | 44 text, 9 simulated images | Failed. Tester input count was 39,891 against its saved 32,000 limit before generation; dependent judge skipped. No report retry. |
+| Parent `d07dace4-c4d0-4b57-879e-02fe54f0e530`, revision 412 | Generation complete; 24 approved artifacts | 50 text, 11 simulated images | Failed. Tester input count was 38,075 against its saved 32,000 limit before generation; dependent judge skipped. No report retry. |
+| Creator `47894c71-7991-4b15-8dc2-810395ec3f01`, revision 847 | Generation and evaluation complete; 31 approved artifacts, including nine J13 outputs | 108 text, 20 simulated images | Two current reports retained. |
+
+The original campaign `690b0237-9c0d-4eb2-99ec-edf02356b70a` records 202 of
+500 requests. Its USD 5 allowance has USD 0.208040 reserved upper-bound
+liability and USD 0.453415 settled upper-bound charges, totaling USD 0.661455
+exposure and leaving USD 4.338545. Count-request charges use the accepted fee
+assumption; invoice cost remains unavailable. This accounting includes retained
+failed and repaired operations. No new campaign, report replay, counter reset or
+paid image call is part of the exit. The stored campaign state remains `active`;
+closeout does not change it.
+
+M4 is complete under the [PRD's Balanced criterion](PRD.md#6-runner-ui-and-evaluation):
+valid generation and accounting plus a verified terminal advisory failure are
+sufficient when ownership is resolved. Kid and Parent do not pass report coverage.
+Simulated images do not prove visual quality or Real image-provider behavior.
+Observed size and latency are advisory; no performance gate or infrastructure
+campaign applies. [M5](M5-real.md) must establish its separate report, real-image
+and uninterrupted-run requirements under a new finite authorization.
+
+The separate USD 1 [additional Kid experience](#additional-balanced-kid-experience---2026-10-27)
+is retained as supporting experience, not added to the original campaign totals.
+It completed in 27.77 minutes with 39 text calls, 9 simulated images, 48 steps,
+20 approved artifacts and two current reports. Its allowance exposure is USD
+0.140632. It does not change the original Kid advisory disposition.
 
 ## Additional Balanced Kid experience - 2026-10-27
 
@@ -56,6 +96,10 @@ comparison. The operator report and detailed evidence remain local output
 artifacts, outside Git.
 
 ## Current Creator admission checkpoint
+
+The following 2026-10-27 continuation record predates the
+[M4 exit](#m4-exit-evidence---2026-10-27). Its pending-completion and admission
+instructions are historical evidence. Do not execute them.
 
 ### Verified closure, deployment and continuation - 2026-10-27
 
