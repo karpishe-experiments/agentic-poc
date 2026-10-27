@@ -1,7 +1,29 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. The expired pre-backup deployment is closed, and fresh normal staging deployment completed with a verified backup. Independent staging readiness passed. Retained Creator `47894c71-7991-4b15-8dc2-810395ec3f01` was continued once on 2026-10-27 after confirming seven remaining image calls for seven missing final-page images and one saved draft awaiting approval. Its campaign is active; generation is progressing. M4 remains incomplete until Creator generation, ownership, cumulative accounting and evaluation disposition are verified. No replacement run, failed-report replay or M5 execution is authorized.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Retained Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed generation and evaluation at revision 847 on 2026-10-27, with all nine final pages approved, 108 text calls and 20 simulated image calls. Final M4 evidence reconciliation remains separate from the additional Kid experience below. No M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
+
+## Additional Balanced Kid experience - 2026-10-27
+
+The user requested one additional Kid experience and a report, selected Balanced
+mode, and explicitly selected a USD1 maximum. This supersedes the earlier
+no-additional-run restriction only for this separate campaign. The reviewed grant
+candidate is `b5bc4f7e-6b48-4abc-b782-08700fc5ada8`, with a USD1 policy ceiling,
+Kid-only admission, 120 text calls, 12 simulated image calls and zero paid images.
+It has no historical recovery or continuation grants. Prior M4 campaign
+`690b0237-9c0d-4eb2-99ec-edf02356b70a` and all its evidence and liabilities remain
+retained. No new run has started; source review and normal staging delivery are
+pending. Do not admit Parent or Creator under this grant.
+
+The report must identify the new run, saved story and four approved final pages,
+terminal ownership, tester/judge disposition, timing, context measurements,
+accounting exposure and any interventions. Simulated image evidence cannot prove
+visual quality, and count-endpoint invoice cost remains unavailable under the
+existing explicit fee assumption. The USD1 ceiling includes settled and reserved
+upper-bound liabilities; it is not a promise of completion within that amount.
+Credential inventory impact: none; bindings, keys, storage and consumers are
+unchanged. No request definitions, provider retries or infrastructure changes are
+part of this grant delivery.
 
 ## Current Creator admission checkpoint
 

@@ -53,6 +53,7 @@ export function createExperimentCampaignLedger(database: Database, authority: M4
   }
   async function claimPersona(session: ClientSession, run: Pick<ExperimentRunDocument, "_id" | "persona" | "mode" | "predecessorRunId" | "configurationJson">, campaignId: string, nowMs: number, store?: AssetStore) {
     requireState(campaignId === grant.campaignId && run.mode === "balanced" && !run.predecessorRunId, "M4 requires one initial run in the granted campaign.");
+    requireState(!snapshot.policy.allowedPersonas || snapshot.policy.allowedPersonas.includes(run.persona), "Persona is outside this campaign grant.");
     const campaign = await current(session);
     const reopen = campaign.state === "stopped";
     requireState(campaign.state === "active" || reopen && grant.remainingPersonaAdmission?.personas.includes(run.persona as "enthusiast_parent" | "professional_creator"), "Campaign is not active.");

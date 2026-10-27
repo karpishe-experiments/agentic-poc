@@ -4,6 +4,14 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+A reviewed Balanced campaign policy can select a positive monetary ceiling up to
+USD5 and an optional `allowedPersonas` subset. Admission checks the subset before
+claiming a persona slot. The frozen policy already owns reservation ceilings,
+completion accounting and displayed remaining allowance, so a lower campaign cap
+uses those same paths. Historical policies without a subset retain their original
+three-persona behavior and canonical hash. New campaign identities retain prior
+campaigns and their liabilities; public requests cannot change the grant.
+
 Evaluation ordering and completion share a transaction-local operation reader.
 It retains the original succeeded tester/judge filter and returns report results
 and dispatch identity only. Historical preparation and upload bodies remain in
