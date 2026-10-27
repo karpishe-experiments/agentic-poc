@@ -78,6 +78,18 @@ host completed within its original budget; reconcile saved host status before
 interpreting a workflow timeout as deployment failure or submitting another job.
 Promotion candidate: **Documentation** for recovery composition and observation.
 
+### Verify a clean experience separately from repaired acceptance history
+
+The additional USD1 Balanced Kid experience completed generation and both reports
+in 27.77 minutes with 39 text calls, nine simulated image calls and no failed
+operation or mid-run intervention. Earlier Kid acceptance retained repairs and a
+failed advisory report. Keep those histories, but use a separately identified
+clean run to measure current behavior. Do not attribute differences to one fix
+without controlling the other changes. Delegated approvals prove the automated
+persona path; simulated images still do not prove visual quality or print
+readiness. See the [additional Kid result](M4-balanced.md#verified-additional-kid-result).
+Promotion candidate: **Documentation** for experiment evidence and comparison.
+
 ### Offer only actions that remain eligible
 
 The M4 reviewer received saved revision counts but its schema still offered an
