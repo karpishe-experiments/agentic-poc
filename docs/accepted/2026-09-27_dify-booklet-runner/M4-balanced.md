@@ -7,6 +7,16 @@
 
 ### Expired pre-backup closure contract — 2026-10-26
 
+PR #300 passed two reviews and full Linux CI, and its dispatcher was installed.
+Read-only preview `40376295235` rejected with `admission_changed`: helper preparation
+called a completed-recovery verifier that requires closed admission before the
+retirement path could inspect its required open-idle state. Accounting phases
+succeeded. No closure or deployment mutation ran. Separate immutable helper
+provenance from that application check; perform the latter only after normal
+deployment drain and before stopping the service. Regression tests must exercise
+the real helper composition rather than stub the whole helper. No new application
+image, deadline, credential use or experiment limit is needed.
+
 Close only deployment `40359148858-1` through the existing protected recovery
 interface with explicit `retire_prebackup_only`. Preserve its original journal
 bytes and expired deadline. Under the operation lock, verify exact candidate and
