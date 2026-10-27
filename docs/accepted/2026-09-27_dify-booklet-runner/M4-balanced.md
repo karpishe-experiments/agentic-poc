@@ -1,46 +1,59 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Maintenance backup recovery completed with a verified fresh backup and prior-service readiness under closed admission. Normal staging delivery stopped during its pre-backup drain; the admission and systemd corrections are installed, but the retained deadline has expired. Exact pre-backup closure and one fresh normal deployment remain pending. No continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. The expired pre-backup deployment is closed, and fresh normal staging deployment completed with a verified backup. Independent staging readiness passed. Retained Creator `47894c71-7991-4b15-8dc2-810395ec3f01` was continued once on 2026-10-27 after confirming seven remaining image calls for seven missing final-page images and one saved draft awaiting approval. Its campaign is active; generation is progressing. M4 remains incomplete until Creator generation, ownership, cumulative accounting and evaluation disposition are verified. No replacement run, failed-report replay or M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
 ## Current Creator admission checkpoint
 
-### Expired pre-backup closure contract — 2026-10-26
+### Verified closure, deployment and continuation - 2026-10-27
 
-PR #300 passed two reviews and full Linux CI, and its dispatcher was installed.
-Read-only preview `40376295235` rejected with `admission_changed`: helper preparation
-called a completed-recovery verifier that requires closed admission before the
-retirement path could inspect its required open-idle state. Accounting phases
-succeeded. No closure or deployment mutation ran. Separate immutable helper
-provenance from that application check; perform the latter only after normal
-deployment drain and before stopping the service. Regression tests must exercise
-the real helper composition rather than stub the whole helper. No new application
-image, deadline, credential use or experiment limit is needed.
+PR #301 corrected the admission ordering conflict exposed by the first retirement
+preview. Immutable helper provenance is checked before drain; completed-target
+verification runs after normal drain. Regression tests exercise the real helper
+composition. Two independent reviews and full Linux CI passed. The installed
+dispatcher is source commit `1a3ad025342be0cf5cf170091d7b737f097f0cbd`.
 
-Close only deployment `40359148858-1` through the existing protected recovery
-interface with explicit `retire_prebackup_only`. Preserve its original journal
-bytes and expired deadline. Under the operation lock, verify exact candidate and
-prior-service identities, no selected backup, stopped work, open quiet admission,
-no unresolved owners and intact completed backup-helper evidence. Bounded
-inspection is independent of the expired deployment budget. Preview binds the
-journal, dispatcher, configuration, helper and expiry; apply requires that digest.
-A separate receipt reconciles interruption after archival and repeated verification.
-No application write or admission change belongs in closure.
+Exact closure apply [40469698506](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40469698506)
+archived expired request `40359148858-1` without changing its journal bytes,
+deadline, application records or admission. Read-only verification
+[40473096380](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40473096380)
+confirmed the completed receipt and archived hash. Do not resume that request.
 
-Change surfaces are the canonical dispatcher, operation-control input, focused
-host tests, CI wiring and operating documentation. Require two independent clean
-reviews, both Linux deployment suites, ShellCheck and affected recovery contracts.
-Credential inventory impact: none; credential names, storage and consumers stay
-unchanged. This correction protects continuation of the retained Creator without
-resetting its completed work or replaying provider calls.
+Fresh normal Deploy [40473224893](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40473224893)
+reused staging commit `ffefe4c87685b7b0a5c0f6499547d1dc3d17506d` and image
+`sha256:644e10d74a2c47e36da8c7550012cdb6481903231f0892c2dd856d8b97d20f00`.
+Its five-minute observer expired while the host continued. Saved host inspection
+[40474297807](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40474297807)
+confirmed request `40473224893-1` complete and archived at 08:32:59 UTC, within its
+normal 45-minute budget. Backup `staging-20261027T082520Z-520579eb1e89ebc1` was
+retained. No second deployment was dispatched.
 
-After closure, confirm the retained staging commit and immutable image, then
-start one normal deployment with a new request ID and the existing 45-minute
-budget. Inspect saved status after observer timeout. Readiness and fresh Creator
-reconciliation must pass before its authorized continuation. M4 acceptance and
-all campaign/persona/image limits remain unchanged. Local checks do not establish
-live closure, deployment success or M4 completion.
+Independent [staging readiness](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40475108309)
+passed. An earlier check selected `master` and failed the branch guard before host
+access; the successful check used `_staging`. Fresh Creator detail confirmed
+91/220 text calls, 13/20 image calls, seven missing final-page images, one draft
+awaiting approval and zero spare image calls. The single continuation was saved at
+08:41:31 UTC; the campaign became active. At 08:46:07 UTC, saved details showed
+93 text calls, 14 image calls and active J13 preparation. Temporary unavailable
+capacity during active preparation is advisory. Completion remains unverified.
 
+The first two new tester operations succeeded in 95 and 120 seconds. Their
+requests were 154,352 and 157,455 application-measured bytes, with authoritative
+input counts of 43,501 and 44,794. Current artifacts were the largest sections
+(130,720 and 133,385 bytes). Size warnings remained advisory. The two new image
+operations succeeded in 99 and 100 seconds, each with one reservation. No paid
+image call or provider retry was introduced. Read JSON size/time were unavailable
+in the trace; these observations do not isolate database latency.
+
+Credential inventory impact: none. Credential names, storage and consumers are
+unchanged. All campaign, persona and image limits remain in force.
+
+## Retained earlier checkpoint evidence
+
+The sections below preserve earlier observations and decisions. Their pending
+recovery, installation, deployment and continuation instructions are superseded
+by the current checkpoint above. Do not execute those historical next steps.
+Historical acceptance limits and preservation requirements remain applicable.
 
 ### Verified backup recovery and normal delivery — 2026-10-26
 
