@@ -3,6 +3,10 @@
 **State:** Planned. **Coverage:** AC04–AC13.
 **Predecessor:** [M4](M4-balanced.md). Apply [EXECUTION](EXECUTION.md).
 
+For this milestone, "uninterrupted" means no manual data or output repair.
+A recorded operator approval that extends a finite allowance may pause and
+continue the same run; that approval alone does not invalidate acceptance.
+
 Track private setup, any new reset and campaign permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
 Keep model/image proof and acceptance evidence here. Apply the
@@ -11,29 +15,26 @@ focused checks during corrections, valid-result reuse at local commits, broader
 affected checks and two clean reviews before publication. Paid/live acceptance
 proof is still required; test reuse does not replace it.
 
-M5 remains planned, pending M4 acceptance. This plan update does not start runs,
-reset data, deploy changes or grant paid execution authority.
+M4 completed under its accepted Balanced criterion on 2026-10-27. M5 remains
+planned. This plan update does not start runs, reset data, deploy changes or grant
+paid execution authority.
 
-The current [M4 checkpoint](M4-balanced.md#current-creator-admission-checkpoint)
-retains accepted Kid and Parent generation/accounting with incomplete advisory
-evaluation. Creator has all nine Page Bibles approved. The authorized exact
-recovery closed its exhausted reviewer decision while preserving the successful
-43,977-token response, all charges and the same run. The reviewed repair restricts
-reviewer choices and distinguishes accepted simulated-image geometry warnings.
-Maintenance backup recovery also completed, with a verified fresh backup and
-prior-service readiness under closed admission. Normal staging delivery and
-readiness still precede the authorized continuation. These recovery results do
-not establish Creator completion or grant M5 execution.
-The M4 record owns current usage and release evidence. No M5 execution, new image
-spending or reset is granted. Accepted latency and size warnings do not block M4;
-generation, ownership and accounting verification remain mandatory.
+The [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27) records all three
+original Balanced generations complete with reconciled accounting and zero paid
+image calls. Kid and Parent retain terminal pre-generation tester count failures
+and no dependent judge reports. Creator retains two current reports. None has
+active or unresolved ownership. The original USD 5 campaign has 202 requests
+and USD 0.661455 upper-bound exposure, including reserved liabilities. The
+separate USD 1 Kid experience completed with two reports; it does not change the
+original campaign disposition or authorize M5 spending.
 The [context-policy activation checkpoint](M4-balanced.md#context-policy-activation-checkpoint--2026-10-25)
 records reviewed dev5 installation, signature restoration and staging delivery.
 New requests can use the saved 128,000-token amendment with a 32,000-token warning;
 historical requests keep their original policy. Local compatibility tests and a
 healthy deployment do not prove live amended generation, real-image support or
 M5 readiness. The completed manager used the amendment with 555 counted input
-tokens. A later reviewer succeeded with 34,048 input tokens and advisory warnings, proving that live text path above 32,000. This does not establish M4 completion or real-image readiness.
+tokens. A later reviewer succeeded with 34,048 input tokens and advisory warnings,
+proving that live text path above 32,000. This does not establish real-image readiness.
 
 The selected image target is `gpt-image-2.5-sunburst`, replacing the earlier
 `gpt-image-2` planning target. Verify quality, dimensions, output format/count,
@@ -43,12 +44,33 @@ Sunburst behavior. The M4 USD 5 budget covers its text campaign only; it grants
 no image spending. See the [M4 selected policy](M4-balanced.md#selected-policy-and-implementation-contract---2026-10-13)
 and [official model reference](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst).
 
+## Accepted M5 implementation sequence - pending delivery and paid grants
+
+These packages set the M5 implementation order. They do not assert delivery or
+authorize a paid call. Keep earlier M4 failure and recovery sections as historical
+evidence; use the current exit above for readiness decisions.
+
+| Package | Smallest useful result and verification |
+| --- | --- |
+| A. Close M4 | Reconcile the three retained read-only run snapshots and campaign accounting. Preserve the Kid/Parent failed advisory attempts, Creator reports and the separate Kid experience. Do not run another M4 persona, retry a report, reset data or add an infrastructure or performance gate. |
+| B. Compact run cards | Show run title/persona, progress, generation and evaluation states, timestamps and wall duration, per-run settled and reserved upper-bound exposure, call counts and one attention reason with available actions. Place artifact detail before reports; collapse traces by default. Do not label campaign exposure as a run cost. Verify the saved detail and UI flow with focused tests and browser evidence. |
+| C. Approval-only allowance | Add a versioned execution policy for new Balanced and Real runs, separate from the frozen M4 profile. Record each finite operator allowance and predecessor link in append-only history. Start with one new paid run per campaign; Parent and Creator need separate later grants. Keep current default ceilings of 120/160/220 text calls, 12/14/20 images, 300 steps and existing revision limits. Monetary, call, step, revision and no-progress exhaustion may pause pending approval. An explicit allowance must state new totals. Add a same-origin operator `POST /runs/:id/approval` endpoint with compare-and-swap, idempotency and a compact receipt. Resume does not grant allowance; callbacks cannot approve. Codex or the UI may submit approval only after a specific chat authorization. Approval cannot resolve an unknown outcome, edit saved data/output, renew a deadline or disguise a manual repair. Verify persistence and stale/duplicate requests. |
+| D. Shared Real path | Add Real admission and paid-image pre-call reservation, uncertain-liability retention, attributable usage, original-byte output recovery, ordered reference transport and a judge that sees actual images. Disable automatic paid retries. Before a paid request, verify the selected `gpt-image-2.5-sunburst` model's configured provider capability, permissions, settings and price bound. The official model page does not prove installed Dify plugin `0.2.2` support. If unsupported, report the concrete constraint and an alternative for approval; do not silently select another model. Use fake-provider and focused contract checks before reviewed delivery. |
+| E. Real Kid | Request a separate finite spending grant with an explicit amount for one 3-page-plus-cover Kid run, at most 120 text and 12 image calls. Use its first required image as the provider checkpoint, without a hidden paid probe. Verify images, lineage, approvals, both reports, bytes and accounting. An approval-only pause can resume the same run after authorization; manual data or output repair requires a retained failure and an authorized linked successor. Complete Kid-specific gaps before Parent; defer quality-only findings to M6. The earlier USD 1 Kid grant cannot fund this run. |
+| F. Parent then Creator | After accepted Kid evidence, request separate finite grants based on measured exposure. Run Parent (5 pages plus cover, 160 text/14 image ceiling) and then Creator (8 pages plus cover, 220 text/20 image ceiling). Retain predecessor links, required multi-panel outputs, reports, approval provenance, bytes and usage. Advance only after each accepted run. |
+
+Each reviewed release needs affected checks, lean CI and two independent clean
+reviews. Reuse unchanged validation. Host shell suites apply only if a host
+surface changes. No routine reset, infrastructure exercise or speed target is
+part of M5 acceptance. The existing three-persona Real proposal remains a limit
+framework, not a combined spending grant.
+
 ## Three execution checkpoints
 
-### Carry-forward review before the M4 exit
+### Historical carry-forward review before the M4 exit
 
-This is a readiness review, not an M4 exit claim or M5 execution grant. Refresh
-the retained Creator outcome and allowance when M4 completes.
+This table preserves the earlier readiness assessment. Its pending Creator and
+M4-exit actions are superseded by the [retained exit](M4-balanced.md#m4-exit-evidence---2026-10-27).
 
 | Boundary exposed during M4 | Delivered correction or retained limitation | M5 action |
 | --- | --- | --- |
@@ -60,8 +82,8 @@ the retained Creator outcome and allowance when M4 completes.
 | Technical continuations inherited an earlier creative-loop count | Verified continuations reset only the observation interval; the exact saved-manager recovery preserves history and the genuine loop limit. Its J12 fixture verifies original-byte rollback and retained-parent reuse. | Verify the live recovery and Creator outcome at M4 exit. Exercise recovery with the actual stage's dependency graph; transaction-local eligibility must precede readers that re-read saved state. |
 | A repair depended on a release that could not drain past the retained failure | The decision repair passed local continuation tests and review, but normal delivery stopped on the same started tester operation. The existing recovery contract does not cover that semantic rejection. No drain exception or provider replay was used. | Resolve the exact recovery before M4 exit. For any M5 repair, test delivery from the failed serving release through recovery, normal drain/readiness and explicit continuation; a new-release repository test alone is insufficient. |
 
-Remaining entry gaps are specific: Creator's valid M4 completion; a separately
-authorized finite Real campaign; and verified real-image configuration, reference
+Remaining entry gaps are specific: separately authorized finite Real runs and
+verified real-image configuration, reference
 transport, original-byte retrieval and pre-call accounting. The shared runner
 currently rejects `mode: real` in `lib/experiment-runner/http.ts`; the M4 policy
 authorizes simulated images only. Readiness therefore requires reviewed Real
@@ -84,7 +106,7 @@ contracts together rather than removing that limitation from simulated evidence.
 
 | Checkpoint | Work | Exit |
 | --- | --- | --- |
-| 1. Confirm readiness once | Reconcile M4 successes, published bindings, actual reference-image transport, provider accounting and model/token/retry settings. Reuse valid evidence; run missing or invalidated non-billable checks. Consolidate remaining private setup and Real spending approval into one handoff. | Exact configuration, permissions and finite campaign allowance are recorded. |
+| 1. Confirm readiness once | Reconcile M4 successes, published bindings, actual reference-image transport, provider accounting and model/token/retry settings. Reuse valid evidence; run missing or invalidated non-billable checks. Request the first finite Kid grant after readiness. | Exact configuration and permissions are recorded; Kid allowance is explicit. |
 | 2. Run the ordered Real campaign | Kid 3 pages → Parent 5 pages → Creator 8 pages, each plus cover. Use the same completion checklist for each. Advance only after an uninterrupted successful run. | Three successful runs retain all required artifacts, approvals, reports and durable images within limits. |
 | 3. Record evidence and hand off | Keep one concise M5 exit record linking runs, configuration, assets, usage, failures and successors. Defer quality-only improvements to M6. | Retained evidence supports PRD Real acceptance. |
 
@@ -121,6 +143,7 @@ claimed without an independently enforceable mechanism.
 If the operator authorizes no successors, Codex can diagnose/repair without paid
 calls but must pause before an extra Real run. Unattended execution never means
 unlimited spending. Do not consume acceptance allowance on a hidden preflight call.
+Request Parent and Creator grants separately after the preceding accepted run.
 
 ### Baseline check — no routine reset
 
@@ -180,7 +203,8 @@ and process-independent retrieval; request reservations, usage and no manual rep
 Creative inconsistencies remain warnings. Missing/corrupt outputs, invalid
 authorization and exhausted limits remain technical blockers.
 
-1. Create the Kid 3-page Real case through the runner. Freeze configuration evidence
+1. Create the Kid 3-page Real case through the runner after its separate finite
+   grant. Freeze configuration evidence
    at run start. Let Dify tester drive all choices/approvals/delegation; Codex only
    observes. Do not manually repair this run and retain it as uninterrupted.
 2. Observe saved status and trace IDs periodically. When a call exceeds observation
@@ -194,6 +218,8 @@ authorization and exhausted limits remain technical blockers.
    scope, rerun affected simulated/Balanced verification, complete two consecutive
    clean independent reviews and publish the correction. Paid Balanced reruns also need remaining
    campaign authority. Start a linked successor only within authorized allowance.
+   An approval-only allowance pause may continue the same run after a specific
+   recorded grant; it cannot repair saved data/output or resolve an unknown call.
 5. Advance only after an uninterrupted successful Kid run. Repeat for Parent
    5 pages (11 initial outputs, one two-panel page), then Creator 8 pages
    (15 initial outputs, at least two multi-panel pages).
