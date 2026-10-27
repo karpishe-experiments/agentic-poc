@@ -1,6 +1,7 @@
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { assessM4ProviderResult, m4RetainedProviderWrapper } from "@/lib/experiment-runner/m4-provider-result";
 import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
+import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 
@@ -9,7 +10,7 @@ import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
 export function m4ObservedRoleResult(run: ExperimentRunDocument, operation: ExperimentOperationDocument) {
   const observation = operation.m4Observation; const preparation = operation.m4Preparation;
   const reservation = operation.m4Reservation;
-  if (!run.m4 || run.mode !== "balanced" || operation.mode !== run.mode || operation.providerKind !== "text" ||
+  if ((!run.m4 && !run.execution) || run.mode !== "balanced" || operation.mode !== run.mode || operation.providerKind !== "text" ||
       !observation || observation.issue || observation.remoteStatus !== "succeeded" || observation.content === null ||
       !observation.evidenceJson || !preparation || !reservation ||
       observation.workflowRunId !== operation.workflowRunId || observation.publishedWorkflowId !== operation.verifiedWorkflowId ||
@@ -17,8 +18,11 @@ export function m4ObservedRoleResult(run: ExperimentRunDocument, operation: Expe
       preparation.requestDigest !== m4Hash(preparation.requestJson) || preparation.parentWorkflowRunId !== operation.parentWorkflowRunId) {
     throw new Error("Balanced completion has no verified original provider result.");
   }
-  const snapshot = m4PolicySnapshot(JSON.parse(run.m4.policyJson));
-  if (snapshot.hash !== run.m4.policyHash || snapshot.json !== run.m4.policyJson || reservation.campaignId !== run.m4.campaignId ||
+  const snapshot = run.execution ? executionPolicySnapshot(JSON.parse(run.execution.profileJson)) :
+    m4PolicySnapshot(JSON.parse(run.m4!.policyJson));
+  const owner = run.execution ? { campaignId: run.execution.campaignId, hash: run.execution.profileHash,
+    json: run.execution.profileJson } : { campaignId: run.m4!.campaignId, hash: run.m4!.policyHash, json: run.m4!.policyJson };
+  if (snapshot.hash !== owner.hash || snapshot.json !== owner.json || reservation.campaignId !== owner.campaignId ||
       reservation.policyHash !== snapshot.hash || preparation.policyHash !== snapshot.hash ||
       observation.evidenceDigest !== m4Hash(observation.evidenceJson) || reservation.evidenceDigest !== observation.evidenceDigest) {
     throw new Error("Balanced completion accounting identity differs.");
@@ -31,5 +35,5 @@ export function m4ObservedRoleResult(run: ExperimentRunDocument, operation: Expe
   }
   const selector = { role: operation.role, taskId: operation.taskId, persona: run.persona,
     report: (operation.role === "tester" || operation.role === "judge") && run.generationCompletedAtMs != null } as M4RequestSelector;
-  return parseM4CreativeOutput(selector, observation.content, preparation.contextJson, observation.costEvidence);
+  return parseM4CreativeOutput(selector, observation.content, preparation.contextJson, observation.costEvidence, !!run.execution);
 }

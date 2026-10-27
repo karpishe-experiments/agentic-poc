@@ -24,4 +24,8 @@ describe("run summary presentation", () => {
     expect(runAttention({ status: "blocked", revision: 2, failureDiagnostics })?.explanation).toMatch(/image evidence/i);
     expect(runAttention({ status: "blocked", safeFailure: "unknown_outcome" })?.kind).toBe("reconcile");
   });
+  it("routes a pending allowance to operator review instead of ordinary resume", () => {
+    expect(runAttention({ status: "paused", pendingApproval: { reason: "monetary" } })).toEqual({
+      kind: "approval", explanation: "Operator allowance review required: monetary.", action: "open_run" });
+  });
 });

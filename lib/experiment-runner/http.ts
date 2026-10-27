@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
+import { withMongoTransaction } from "@/db/client";
+import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
+import { defaultExecutionAllowance, executionAllowanceSchema, executionPolicyFromM4TechnicalProfile, executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
@@ -19,7 +22,7 @@ import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { m4AdmittedTokenPolicy, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4AuthorizationEnvelope, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
-import { createRunInputSchema, experimentTaskSchema, resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
+import { createRunInputSchema, experimentTaskSchema, resultEnvelopeSchema, personaSchema } from "@/lib/contracts/experiment-runner";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { hasValidBasicAuthorization } from "@/lib/http/basic-auth";
 import { assertMutationsAllowed, runTrackedMutation } from "@/lib/application/deployment-control";
@@ -36,6 +39,16 @@ const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSc
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
 const control = z.strictObject({ expectedRevision: z.number().int().nonnegative() });
 const runControl = control.extend({ responseMode: z.literal("receipt").optional() });
+const campaignGrant = z.strictObject({ mode: z.literal("balanced"), persona: personaSchema,
+  reference: z.string().trim().min(1).max(500), maxMicrodollars: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  predecessorRunId: opaqueIdSchema.optional(), totals: executionAllowanceSchema.omit({ maxMicrodollars: true }).optional() });
+const approvalBase = { expectedRevision: z.number().int().nonnegative(),
+  expectedCampaignRevision: z.number().int().nonnegative(), expectedPendingDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  reference: z.string().trim().min(1).max(500) };
+const approvalGrant = z.union([
+  z.strictObject({ ...approvalBase, action: z.literal("approve"), totals: executionAllowanceSchema }),
+  z.strictObject({ ...approvalBase, action: z.literal("decline") }),
+]);
 const operationControl = z.union([control.extend({ operationId: opaqueIdSchema }), control.extend({ preparationId: opaqueIdSchema })]);
 const pageSelection = control.extend({ batch: experimentPageBatchSchema });
 const failure = identity.extend({ category: z.enum(["definite_failure", "unknown_outcome"]) });
@@ -60,6 +73,7 @@ function safeError(error: unknown): Response {
     if (error.code === "invalid_result") return reply(422, "invalid_result");
     return reply(409, "conflict");
   }
+  if (error instanceof ExecutionAllowanceError) return reply(409, error.code === "stale_revision" ? "stale_revision" : "conflict");
   return reply(503, "unavailable");
 }
 const materialization = z.object({
@@ -171,13 +185,22 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const rows = await collections.experiment_runs.find({}, { projection: {
       _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
       counters: 1, limits: 1, safeFailure: 1, failureDiagnostics: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
-      preparation: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1, terminalAtMs: 1,
+      preparation: 1, pendingApproval: 1, execution: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1, terminalAtMs: 1,
     } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
     const selected = rows.slice(0, limit);
     const bookletIds = [...new Set(selected.map(row => row.bookletId).filter((id): id is string => !!id))];
     const booklets = bookletIds.length ? await collections.booklets.find({ _id: { $in: bookletIds } },
       { projection: { _id: 1, workingTitle: 1 } }).toArray() : [];
     const titles = new Map(booklets.map(booklet => [booklet._id, booklet.workingTitle]));
+    const campaignIds = selected.flatMap(row => row.execution ? [row.execution.campaignId] : []);
+    const campaignRows = campaignIds.length ? await collections.experiment_campaigns.find({ _id: { $in: campaignIds } },
+      { projection: { _id: 1, schemaVersion: 1, allowance: 1, runId: 1, revision: 1,
+        textRequests: 1, imageRequests: 1, reservedMicrodollars: 1, settledMicrodollars: 1 } }).toArray() : [];
+    const executionLimits = new Map(campaignRows.map(row => [row._id, row as unknown as {
+      _id: string; schemaVersion?: string; runId?: string; revision?: number;
+      textRequests?: number; imageRequests?: number; reservedMicrodollars?: number; settledMicrodollars?: number;
+      allowance?: { maxMicrodollars: number; textCalls: number; imageCalls: number; steps: number;
+        textRevisions: number; imageRevisions: number; noProgress: number } }]));
     const runIds = selected.map(row => row._id);
     const measured = runIds.length ? await collections.experiment_operations.find({ runId: { $in: runIds } },
       { projection: { _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
@@ -205,7 +228,21 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       timing: runTiming(row), attention: runAttention(row),
       runAccounting: runAccounting(row.mode, operationsByRun.get(row._id) ?? [], row.counters?.payableText ?? 0),
       currentTask: (operationsByRun.get(row._id) ?? []).find(operation => operation._id === row.activeOperationId)?.taskId ?? (operationsByRun.get(row._id) ?? []).find(operation => operation._id === row.activeOperationId)?.role ?? null,
-      pauseRequested: row.pauseRequested, counters: row.counters, limits: row.limits,
+      pauseRequested: row.pauseRequested, counters: row.counters, limits: (() => {
+        const campaign = row.execution ? executionLimits.get(row.execution.campaignId) : null;
+        return campaign?.schemaVersion === "execution_v1" && campaign.runId === row._id && campaign.allowance ?
+          { text: campaign.allowance.textCalls, image: campaign.allowance.imageCalls, steps: campaign.allowance.steps } : row.limits;
+      })(),
+      pendingApproval: row.pendingApproval ?? null,
+      executionAllowance: (() => {
+        const campaign = row.execution ? executionLimits.get(row.execution.campaignId) : null;
+        return campaign?.schemaVersion === "execution_v1" && campaign.runId === row._id && campaign.allowance ? {
+          campaignId: campaign._id, revision: campaign.revision, totals: campaign.allowance,
+          reservedMicrodollars: campaign.reservedMicrodollars, settledMicrodollars: campaign.settledMicrodollars,
+          textRequests: campaign.textRequests, imageRequests: campaign.imageRequests,
+          latestApprovalReference: null,
+        } : null;
+      })(),
       safeFailure: row.safeFailure, failureDiagnostics: row.failureDiagnostics ?? null, activeOperationId: row.activeOperationId, evaluationStatus: row.evaluationStatus,
       generationStatus: row.generationCompletedAtMs ? "complete" : "in_progress",
       preparation: row.preparation ? { identity: row.preparation.ownerId, startedAtMs: row.preparation.startedAtMs,
@@ -213,6 +250,49 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }, state)), page, hasMore: rows.length > limit };
   }
   return {
+    campaign(request: Request) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
+      if (!state.enabled) return reply(503, "runner_unavailable");
+      const key = opaqueIdSchema.safeParse(request.headers.get("idempotency-key"));
+      if (!key.success) return reply(400, "invalid_request");
+      const body = campaignGrant.parse(await boundedJson(request, 4096));
+      const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
+      if (!authority?.grant.tokenPolicy) return reply(422, "mode_unavailable");
+      const policy = executionPolicyFromM4TechnicalProfile(m4PolicySnapshot(authority.policy).policy,
+        authority.grant.tokenPolicy);
+      const campaignId = stableUuid(key.data, "execution-campaign");
+      const approvalId = stableUuid(key.data, "execution-initial-approval");
+      const totals = body.totals ? executionAllowanceSchema.parse({ ...body.totals, maxMicrodollars: body.maxMicrodollars }) :
+        defaultExecutionAllowance(body.persona, body.maxMicrodollars);
+      const ledger = createExecutionAllowanceLedger(database());
+      const campaign = await mutate(() => withMongoTransaction(database(), session => ledger.create(session, {
+        campaignId, mode: body.mode, persona: body.persona, profile: policy,
+        predecessorRunId: body.predecessorRunId ?? null, approvalId, reference: body.reference,
+        totals, nowMs: Date.now() })), {});
+      return data({ campaignId: campaign._id, approvalId: campaign.approvals[0].approvalId,
+        profileHash: campaign.profileHash, totals: campaign.allowance, revision: campaign.revision,
+        predecessorRunId: campaign.predecessorRunId, runId: campaign.runId }, campaign.createdAtMs === campaign.updatedAtMs ? 201 : 200);
+    }); },
+    approval(request: Request, runId: string) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
+      const key = opaqueIdSchema.safeParse(request.headers.get("idempotency-key"));
+      if (!key.success) return reply(400, "invalid_request");
+      const body = approvalGrant.parse(await boundedJson(request, 4096));
+      if (body.action === "decline") {
+        const saved = await mutate(() => withMongoTransaction(database(), session =>
+          createExecutionAllowanceLedger(database()).decline(session, { runId: opaqueIdSchema.parse(runId),
+            declineId: key.data, reference: body.reference, expectedRunRevision: body.expectedRevision,
+            expectedCampaignRevision: body.expectedCampaignRevision, expectedPendingDigest: body.expectedPendingDigest,
+            nowMs: Date.now() })), { runId });
+        return data({ runId, declineId: key.data, ...saved, status: "paused" });
+      }
+      const saved = await mutate(() => services(state).repository.approveExecutionAllowance({ runId: opaqueIdSchema.parse(runId),
+          approvalId: key.data, reference: body.reference, expectedRunRevision: body.expectedRevision,
+          expectedCampaignRevision: body.expectedCampaignRevision, expectedPendingDigest: body.expectedPendingDigest,
+          totals: body.totals, nowMs: Date.now() }), { runId });
+      return data({ runId, approvalId: saved.approval.approvalId, campaignRevision: saved.approval.campaignRevision,
+        runRevision: saved.runRevision, totals: saved.approval.totals, reused: saved.reused });
+    }); },
     probePreflight(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
       if (!state.enabled) return reply(503, "runner_unavailable");
@@ -280,18 +360,19 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       if (!key.success) return reply(400, "invalid_request");
       const body = createRunInputSchema.parse(await boundedJson(request, 4096));
       const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
-      if (body.mode === "real" || body.mode === "balanced" && (!authority || body.predecessorRunId)) return reply(422, "mode_unavailable");
+      if (body.mode === "real" || body.mode === "balanced" && (!body.executionCampaignId && (!authority || body.predecessorRunId))) return reply(422, "mode_unavailable");
       const { repository, context } = services(state);
       const runId = stableUuid(key.data, "booklet-run");
       const bookletId = stableUuid(key.data, "booklet");
       const prior = await repository.getRun(runId);
       if (prior) {
         if (prior.persona !== body.persona || prior.mode !== body.mode || prior.predecessorRunId !== (body.predecessorRunId ?? null) ||
-            body.mode === "balanced" && prior.m4?.campaignId !== authority!.grant.campaignId) return reply(409, "conflict");
+            body.mode === "balanced" && (body.executionCampaignId ? prior.execution?.campaignId !== body.executionCampaignId :
+              prior.m4?.campaignId !== authority!.grant.campaignId)) return reply(409, "conflict");
         return data(await measurePhase({ runId }, "create_existing_detail", () => context.getRunView(prior._id)), 200);
       }
       const saved = await measurePhase({ runId }, "create_mutation", () => mutate(() => repository.createRun({ runId, bookletId, ...body,
-        ...(body.mode === "balanced" ? { campaignId: authority!.grant.campaignId } : {}),
+        ...(body.mode === "balanced" && !body.executionCampaignId ? { campaignId: authority!.grant.campaignId } : {}),
         configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId }));
       return data(await measurePhase({ runId }, "create_detail", () => context.getRunView(saved._id)), 201);
     }, 60_000); },
@@ -355,11 +436,12 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           if (action === "context") return reply(422, "mode_unavailable");
           const body = identity.parse(raw);
           const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
-          if (!authority) return reply(422, "mode_unavailable");
+          if (!authority && !savedRun.execution) return reply(422, "mode_unavailable");
           const summary = { role: operation.role, taskId: operation.taskId, subjectKind: operation.subjectKind,
             subjectId: operation.subjectId, mode: operation.mode, inputFingerprint: operation.inputFingerprint };
           if (operation.state !== "prepared") return data({ started: false, reason: "already_started", ...summary, m4: null });
-          const snapshot = m4PolicySnapshot(authority.policy);
+          const snapshot = savedRun.execution ? executionPolicySnapshot(JSON.parse(savedRun.execution.profileJson)) :
+            m4PolicySnapshot(authority!.policy);
           const prep = operation.m4Preparation;
           const expected = snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
             item.persona === (operation.role === "tester" ? savedRun.persona : null));
@@ -368,7 +450,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
             item.persona === (operation.role === "tester" ? savedRun.persona : null));
           const binding = candidates[0];
           if (!prep || !expected || !saved || candidates.length !== 1 || !binding.apiKey ||
-              savedRun.m4?.campaignId !== authority.grant.campaignId || savedRun.m4.policyHash !== snapshot.hash ||
+              (savedRun.execution ? savedRun.execution.profileHash !== snapshot.hash ||
+                savedRun.execution.profileJson !== snapshot.json :
+                savedRun.m4?.campaignId !== authority!.grant.campaignId || savedRun.m4.policyHash !== snapshot.hash) ||
               prep.policyHash !== snapshot.hash || prep.configurationHash !== savedRun.configurationHash ||
               prep.requestDigest !== m4Hash(prep.requestJson) || prep.parentWorkflowRunId !== body.parentWorkflowRunId ||
               prep.publishedWorkflowId !== expected.publishedWorkflowId ||
@@ -385,7 +469,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           // Measure the actual escaped JSON envelope, not the unescaped request.
           // These immutable prepared bytes are the only context sent to M4 text.
           const encoded = m4AuthorizationEnvelope(summary, prep.requestJson,
-            m4AdmittedTokenPolicy(snapshot.policy, authority.grant, prep).snapshot, timeoutSeconds, deadlineAtMs,
+            savedRun.execution ? executionPolicySnapshot(JSON.parse(savedRun.execution.profileJson)).policy.tokenPolicy :
+              m4AdmittedTokenPolicy(m4PolicySnapshot(authority!.policy).policy, authority!.grant, prep).snapshot,
+            timeoutSeconds, deadlineAtMs,
             (operation.role === "tester" || operation.role === "judge") && savedRun.generationCompletedAtMs != null);
           if (Buffer.byteLength(encoded, "utf8") > 1_048_576) return reply(422, "invalid_result");
           const execution = remote.execution;
@@ -396,7 +482,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           return claim.started ? new Response(encoded, { headers: { ...headers, "Content-Type": "application/json" } }) :
             data({ started: false, reason: claim.reason ?? null, ...summary, m4: null });
         }
-        if (action === "authorize" && (state.config.m4?.state !== "granted" || !state.config.m4.authority)) return reply(422, "mode_unavailable");
+        if (action === "authorize" && !savedRun.execution && (state.config.m4?.state !== "granted" || !state.config.m4.authority)) return reply(422, "mode_unavailable");
       }
       const body = schema.parse(raw);
       if (action === "authorize") {

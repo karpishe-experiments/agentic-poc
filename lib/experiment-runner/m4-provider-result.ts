@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import { m4Digest, m4OperationTokenPolicy, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
+import { executionOperationTokenPolicy, executionPolicySnapshot, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 
 const tokens = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable();
 export const m4ProviderWrapperSchema = z.strictObject({ schemaVersion: z.literal("booklet_provider_v1"),
@@ -37,7 +38,9 @@ export function m4RetainedProviderWrapper(content: string, providerEvidence: unk
 // and model creative content cannot supply accounting evidence. The result is
 // independent of creative JSON validity, so malformed content cannot erase usage.
 export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operation: ExperimentOperationDocument) {
-  const snapshot = m4PolicySnapshot(policyRaw); const policy = snapshot.policy;
+  const execution = !!policyRaw && typeof policyRaw === "object" && "schemaVersion" in policyRaw && policyRaw.schemaVersion === "execution_v1";
+  const snapshot = execution ? executionPolicySnapshot(policyRaw) : m4PolicySnapshot(policyRaw);
+  const policy = snapshot.policy;
   const wrapper = m4ProviderReadbackSchema.parse(raw);
   const evidence = wrapper.providerEvidence; const reservation = operation.m4Reservation;
   if (!reservation || !operation.m4Preparation || operation.mode !== "balanced" || operation.providerKind !== "text" ||
@@ -46,7 +49,8 @@ export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operati
     throw new Error("M4 provider result has no matching prepared reservation.");
   }
   const model = policy.models[reservation.bucket]; const usage = evidence.usage;
-  const effective = m4OperationTokenPolicy(policy, operation);
+  const effective = execution ? executionOperationTokenPolicy(policy as ExecutionPolicy, operation) :
+    m4OperationTokenPolicy(policy as ReturnType<typeof m4PolicySnapshot>["policy"], operation);
   const violations: string[] = [];
   if (effective.snapshot) {
     if (wrapper.schemaVersion !== "booklet_provider_v2" || wrapper.providerEvidence.effectivePolicy.hash !== effective.hash ||

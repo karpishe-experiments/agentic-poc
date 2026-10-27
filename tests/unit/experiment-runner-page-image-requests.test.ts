@@ -142,4 +142,15 @@ describe("J13 page image request serialization", () => {
     expect(() => withPageImageRevisions(base, [revisions[0], revisions[0]])).toThrow();
     expect(() => withPageImageRevisions({ ...base, prompt: "x".repeat(15_900) }, [{ ...revisions[0], instruction: "x".repeat(200) }])).toThrow();
   });
+
+  it("allows a tagged new-profile third revision while rejecting the same untagged M4 request", () => {
+    const base = pageSourceRequest(setup("playful_kid", 1).input).request;
+    const revisions = [0, 1, 2].map(index => ({ decisionId: id(220 + index),
+      previousPageVersionId: id(230 + index), instruction: `Correction ${index + 1}` }));
+    expect(() => withPageImageRevisions(base, revisions)).toThrow();
+    const accepted = withPageImageRevisions(base, revisions, true);
+    expect(accepted).toHaveProperty("schemaVersion", "execution_page_request_v1");
+    expect(accepted.revisions).toHaveLength(3);
+    expect(imageRequestFingerprint(accepted)).not.toBe(imageRequestFingerprint(base));
+  });
 });

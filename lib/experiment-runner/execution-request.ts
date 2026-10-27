@@ -1,0 +1,90 @@
+import type { ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
+import { z } from "zod";
+import { personaSchema, specialistTaskSchema, roleResultSchema, executionAllowanceRequestSchema } from "@/lib/contracts/experiment-runner";
+import { m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import { m4AuthorizedCarrier, m4BindAllowedValues, m4CanonicalJson, m4Hash, m4RequestDefinition, m4StrictSchema,
+  M4ReportSizeError, type M4AllowedValues, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+
+const executionDefinitions = new Map<string, ReturnType<typeof m4RequestDefinition>>();
+export function executionRequestDefinition(selector: M4RequestSelector) {
+  const key = m4CanonicalJson(selector);
+  const cached = executionDefinitions.get(key);
+  if (cached) return cached;
+  const base = m4RequestDefinition(selector);
+  const decision = roleResultSchema.options.find(option => option.shape.kind.value === "decision")!;
+  const outputSchema = selector.role === "tester" && !selector.report
+    ? m4StrictSchema(z.strictObject({ result: z.union([decision, executionAllowanceRequestSchema]) }))
+    : base.outputSchema;
+  const definition = { ...base, version: "execution_request_v1",
+    systemPrompt: selector.role === "tester" && !selector.report ? `${base.systemPrompt} When a current eligible artifact requires a revision but its text or image revision allowance is exhausted, request an operator allowance with allowance_request, the exact current task/version, the exhausted revision kind and the intended instruction. This is a pause request, not approval. Never request money, calls, steps or no-progress changes yourself.` : base.systemPrompt,
+    outputSchema };
+  const { hash: _ignored, ...contents } = definition;
+  void _ignored;
+  const result = { ...contents, hash: m4Hash(m4CanonicalJson(contents)) } as ReturnType<typeof m4RequestDefinition>;
+  executionDefinitions.set(key, result);
+  return result;
+}
+
+let bundleHash: string | undefined;
+export function executionRequestBundleHash() {
+  if (bundleHash) return bundleHash;
+  const selectors: M4RequestSelector[] = personaSchema.options.flatMap(persona => [
+    { role: "manager", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: true },
+    { role: "judge", taskId: null, persona, report: true },
+    ...specialistTaskSchema.options.map(taskId => ({ role: "specialist" as const, taskId, persona, report: false })),
+  ]);
+  return bundleHash = m4Hash(m4CanonicalJson(selectors.map(executionRequestDefinition)));
+}
+
+/** Execution profiles retain the M4 carrier and preparation lifecycle. */
+export function prepareExecutionRequest(policy: ExecutionPolicy, selector: M4RequestSelector,
+  contextJson: string, allowed: M4AllowedValues) {
+  if (!contextJson.trim()) throw new Error("Execution context must not be blank.");
+  const context = JSON.parse(contextJson) as unknown;
+  if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("Execution context must be an object.");
+  const definition = executionRequestDefinition(selector);
+  const contextBytes = Buffer.byteLength(contextJson, "utf8");
+  if (contextBytes > 2 * 1024 * 1024) {
+    if (selector.report) throw new M4ReportSizeError(contextBytes, 2 * 1024 * 1024,
+      definition.hash, m4Hash(contextJson), "context");
+    throw new Error("Execution context exceeds the preparation byte limit.");
+  }
+  if ((selector.role === "manager" || selector.role === "tester" && !selector.report) &&
+      (!allowed.taskId || !allowed.subjectId || selector.role === "manager" && !allowed.subjectKind ||
+        selector.role === "tester" && (!allowed.action || !allowed.taskIds))) {
+    throw new Error("Execution decisions require protected choices.");
+  }
+  const model = policy.models[m4ModelBucket(selector.role, selector.report)];
+  const format = { type: "json_schema", name: "booklet_role_v1", strict: true,
+    schema: m4BindAllowedValues(definition.outputSchema, allowed) };
+  const payload = { model: model.model,
+    input: [{ type: "message", role: "system", content: definition.systemPrompt },
+      { type: "message", role: "user", content: contextJson }],
+    max_output_tokens: model.maxOutputTokens,
+    reasoning: { effort: model.reasoningEffort, mode: "standard" },
+    service_tier: policy.serviceTier, text: { format }, store: false,
+    truncation: "disabled", include: ["reasoning.encrypted_content"] };
+  const requestJson = m4CanonicalJson(payload);
+  // The installed Dify provider consumes this existing carrier format. The
+  // execution policy validates its fixed token identity independently of M4.
+  const carrier = m4AuthorizedCarrier(requestJson, policy.tokenPolicy);
+  const requestBytes = Buffer.byteLength(requestJson, "utf8");
+  const carrierBytes = Buffer.byteLength(carrier.requestJson, "utf8");
+  if (requestBytes > 2 * 1024 * 1024 || carrierBytes > 2 * 1024 * 1024) {
+    if (selector.report) throw new M4ReportSizeError(Math.max(requestBytes, carrierBytes),
+      2 * 1024 * 1024, definition.hash, m4Hash(requestJson), "request");
+    throw new Error("Execution request exceeds the transport byte limit.");
+  }
+  if (definition.preparationByteLimit !== null && requestBytes > definition.preparationByteLimit) {
+    if (selector.report) throw new M4ReportSizeError(requestBytes, definition.preparationByteLimit,
+      definition.hash, m4Hash(requestJson));
+    throw new Error("Execution request exceeds the preparation byte limit.");
+  }
+  return { definitionHash: definition.hash, requestJson, requestDigest: m4Hash(requestJson),
+    systemPrompt: definition.systemPrompt, contextJson,
+    modelParameters: { max_tokens: model.maxOutputTokens, reasoning_effort: model.reasoningEffort,
+      reasoning_mode: "standard", service_tier: policy.serviceTier, response_format: "json_schema",
+      json_schema: { name: format.name, strict: true, schema: format.schema } } };
+}

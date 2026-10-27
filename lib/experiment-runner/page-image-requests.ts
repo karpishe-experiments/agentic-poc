@@ -1,5 +1,6 @@
 import { opaqueIdSchema } from "@/lib/contracts/common";
-import { experimentImageRequestSchema, pageImageRevisionsSchema, type ExperimentImageRequest } from "@/lib/contracts/experiment-image";
+import { experimentImageRequestSchema, pageImageRevisionsSchema, executionPageImageRevisionsSchema,
+  executionImageRequestSchema, type ExperimentImageRequest } from "@/lib/contracts/experiment-image";
 import type { Persona } from "@/lib/contracts/experiment-runner";
 import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { parseStoredPageLayout } from "@/lib/contracts/experiment-pages";
@@ -40,14 +41,15 @@ function compactCanvas(value: unknown): string {
 
 // The database caller must verify every recorded tester decision. Append scoped
 // feedback without editing approved lettering, style bytes or reference routing.
-export function withPageImageRevisions(base: ExperimentImageRequest, revisions: unknown): ExperimentImageRequest {
+export function withPageImageRevisions(base: ExperimentImageRequest, revisions: unknown, execution = false): ExperimentImageRequest {
   const original = experimentImageRequestSchema.parse(base);
   if (original.kind !== "page_source" || original.revisions) throw new Error("Revision serializer requires the base page request.");
-  const accepted = pageImageRevisionsSchema.parse(revisions);
-  return experimentImageRequestSchema.parse({ ...original, revisions: accepted, prompt: [original.prompt,
+  const accepted = (execution ? executionPageImageRevisionsSchema : pageImageRevisionsSchema).parse(revisions);
+  const request = { ...original, ...(execution ? { schemaVersion: "execution_page_request_v1" } : {}), revisions: accepted, prompt: [original.prompt,
     "Apply the following creator image feedback in order. Preserve the approved exact lettering, reference identities and shared style module above.",
     ...accepted.map((revision, index) => `Image revision ${index + 1}: ${revision.instruction}`),
-  ].join("\n") });
+  ].join("\n") };
+  return (execution ? executionImageRequestSchema : experimentImageRequestSchema).parse(request);
 }
 
 // This serializer establishes a deterministic request only. Its caller must

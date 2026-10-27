@@ -1,5 +1,6 @@
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { z } from "zod";
@@ -60,7 +61,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     }
     if (preparation) await assertExperimentEvaluationOrder(database, session, run, operation.role as "tester" | "judge");
   }
-  if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
+  if ((run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       (run.activeOperationId && run.activeOperationId !== reportOperationId) || run.pendingDecisionJson ||
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
@@ -70,7 +71,8 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   if (run.mode === "balanced" && !preparation) {
     try {
       await measurePhase({ runId: run._id, ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
-        verifyM4Accounting(database, session, run, reportOperationId, attempt));
+        run.execution ? verifyExecutionAccounting(database, session, run, reportOperationId) :
+          verifyM4Accounting(database, session, run, reportOperationId, attempt));
     } catch (error) { tagFailureReason(error, "invalid_accounting"); throw error; }
   }
   const metadata = await verificationMetadata(database, session, run._id, attempt);

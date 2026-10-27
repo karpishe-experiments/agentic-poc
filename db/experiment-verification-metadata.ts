@@ -3,12 +3,12 @@ import type { Database } from "@/db/client";
 import { countVerificationQuery } from "@/lib/experiment-runner/diagnostics";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 import type { ExperimentRunDocument } from "@/db/documents";
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
 
 // Read-only evidence eligibility, never image admission or materialization.
 // Balanced retains its own operation identities while its image policy is synthetic.
 export function isBalancedImageVerificationRun(run: ExperimentRunDocument): boolean {
-  return ["queued", "running", "paused", "completed"].includes(run.status) && hasM4SimulatedImagePolicy(run);
+  return ["queued", "running", "paused", "completed"].includes(run.status) && hasExperimentSimulatedImagePolicy(run);
 }
 
 // Read-only transport of evidence, not a validity flag. Consumers must still

@@ -41,6 +41,12 @@ export type ExperimentCampaignDocument = BaseDocument & {
 export type ExperimentRunDocument = BaseDocument & {
   failureDiagnostics?: FailureDiagnostics;
   m4?: { campaignId: string; policyHash: string; policyJson: string };
+  execution?: { campaignId: string; profileHash: string; profileJson: string };
+  pendingApproval?: { kind: "allowance_v1"; reason: import("@/db/experiment-execution-allowance").ExecutionAllowanceReason;
+    requestDigest: string; requestedAtMs: number; operationId: string | null; targetTaskId?: ExperimentTask;
+      targetVersionId?: string; decisionOperationId?: string; instruction?: string;
+      requiredTotal?: number; nextAction?: { role: ExperimentRole; providerKind: "text" | "image"; taskId: ExperimentTask | null };
+      declinedAtMs?: number; declineId?: string; declineReference?: string } | null;
   schemaVersion: "2"; bookletId: string; persona: Persona; mode: ExperimentMode; brief: string;
   predecessorRunId: string | null; configurationJson: string; configurationHash: string;
   status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
@@ -60,6 +66,8 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  executionAllowanceCancellation?: { kind: "undispatched_allowance_v1"; proofDigest: string; cancelledAtMs: number };
+    executionApprovedDecision?: { approvalId: string; decisionJson: string; materializedAtMs: number };
   localReportFailure?: { code: "report_request_too_large"; scope: "context" | "request" | "authorization"; requestBytes: number; byteLimit: number;
     definitionHash: string; requestDigest: string; policyHash: string; configurationHash: string;
     sourceFingerprint: string; operationFingerprint: string; generationCompletedAtMs: number;

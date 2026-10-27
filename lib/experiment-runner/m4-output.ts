@@ -5,6 +5,7 @@ import { parseReferenceProposal, styleModuleHash } from "@/lib/contracts/experim
 import { pageLayoutProposalSchema, pageSubjectProposalSchema, storedPageLayoutSchema } from "@/lib/contracts/experiment-pages";
 import { experimentReportSchema, type ExperimentReport } from "@/lib/contracts/experiment-reports";
 import { M4_LAYOUT_CONTRACT, m4ModelOutputSchema, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+import { executionAllowanceRequestSchema } from "@/lib/contracts/experiment-runner";
 
 import { m4LayoutCatalog } from "@/lib/experiment-runner/m4-layout";
 
@@ -24,7 +25,7 @@ export class M4CreativeOutputError extends Error {
 }
 
 export function parseM4CreativeOutput(selector: M4RequestSelector, content: string, savedContextJson: string,
-  costEvidence: ExperimentReport["costEvidence"] = unavailableCost): RoleResult {
+  costEvidence: ExperimentReport["costEvidence"] = unavailableCost, execution = false): RoleResult {
   let parsed: {
     result?: { kind: string; payload: { taskId?: string; content?: unknown } }; report?: Record<string, unknown>;
   };
@@ -37,7 +38,10 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
   // Saved context, attribution and hydration failures remain separate blockers.
   try {
     if (Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("M4 model output exceeds its parsing bound.");
-    parsed = m4ModelOutputSchema(selector, layoutSubjects).parse(JSON.parse(content)) as typeof parsed;
+    const schema = execution && selector.role === "tester" && !selector.report
+      ? z.strictObject({ result: z.union([roleResultSchema.options.find(option => option.shape.kind.value === "decision")!, executionAllowanceRequestSchema]) })
+      : m4ModelOutputSchema(selector, layoutSubjects);
+    parsed = schema.parse(JSON.parse(content)) as typeof parsed;
   } catch (error) { throw new M4CreativeOutputError(error); }
   if (selector.report) {
     const evidence = z.object({ role: z.enum(["tester", "judge"]), mode: z.literal("balanced"), runId: opaqueIdSchema,

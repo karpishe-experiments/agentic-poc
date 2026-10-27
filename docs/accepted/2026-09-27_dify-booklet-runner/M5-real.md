@@ -54,7 +54,7 @@ evidence; use the current exit above for readiness decisions.
 | --- | --- |
 | A. Close M4 | Reconcile the three retained read-only run snapshots and campaign accounting. Preserve the Kid/Parent failed advisory attempts, Creator reports and the separate Kid experience. Do not run another M4 persona, retry a report, reset data or add an infrastructure or performance gate. |
 | B. Compact run cards | Show run title/persona, progress, generation and evaluation states, timestamps and wall duration, per-run settled and reserved upper-bound exposure, call counts and one attention reason with available actions. Place artifact detail before reports; collapse traces by default. Do not label campaign exposure as a run cost. Verify the saved detail and UI flow with focused tests and browser evidence. |
-| C. Approval-only allowance | Add a versioned execution policy for new Balanced and Real runs, separate from the frozen M4 profile. Record each finite operator allowance and predecessor link in append-only history. Start with one new paid run per campaign; Parent and Creator need separate later grants. Keep current default ceilings of 120/160/220 text calls, 12/14/20 images, 300 steps and existing revision limits. Monetary, call, step, revision and no-progress exhaustion may pause pending approval. An explicit allowance must state new totals. Add a same-origin operator `POST /runs/:id/approval` endpoint with compare-and-swap, idempotency and a compact receipt. Resume does not grant allowance; callbacks cannot approve. Codex or the UI may submit approval only after a specific chat authorization. Approval cannot resolve an unknown outcome, edit saved data/output, renew a deadline or disguise a manual repair. Verify persistence and stale/duplicate requests. |
+| C. Approval-only allowance | Add a versioned execution policy for new Balanced and Real runs, separate from the frozen M4 profile. Record each finite operator allowance and predecessor link in append-only history. Start with one new paid run per campaign; Parent and Creator need separate later grants. Keep current default ceilings of 120/160/220 text calls, 12/14/20 images, 300 steps and existing revision limits. Monetary, call, step, revision and no-progress exhaustion may pause pending approval. An explicit allowance must state new totals. Add a same-origin operator `POST /runs/:id/approval` endpoint with compare-and-swap, idempotency and a compact receipt. Resume does not grant allowance; callbacks cannot approve. An authenticated operator's UI approval is the decision; Codex may submit approval only after specific chat authorization. Approval cannot resolve an unknown outcome, edit saved data/output, renew a deadline or disguise a manual repair. Verify persistence and stale/duplicate requests. |
 | D. Shared Real path | Add Real admission and paid-image pre-call reservation, uncertain-liability retention, attributable usage, original-byte output recovery, ordered reference transport and a judge that sees actual images. Disable automatic paid retries. Before a paid request, verify the selected `gpt-image-2.5-sunburst` model's configured provider capability, permissions, settings and price bound. The official model page does not prove installed Dify plugin `0.2.2` support. If unsupported, report the concrete constraint and an alternative for approval; do not silently select another model. Use fake-provider and focused contract checks before reviewed delivery. |
 | E. Real Kid | Request a separate finite spending grant with an explicit amount for one 3-page-plus-cover Kid run, at most 120 text and 12 image calls. Use its first required image as the provider checkpoint, without a hidden paid probe. Verify images, lineage, approvals, both reports, bytes and accounting. An approval-only pause can resume the same run after authorization; manual data or output repair requires a retained failure and an authorized linked successor. Complete Kid-specific gaps before Parent; defer quality-only findings to M6. The earlier USD 1 Kid grant cannot fund this run. |
 | F. Parent then Creator | After accepted Kid evidence, request separate finite grants based on measured exposure. Run Parent (5 pages plus cover, 160 text/14 image ceiling) and then Creator (8 pages plus cover, 220 text/20 image ceiling). Retain predecessor links, required multi-panel outputs, reports, approval provenance, bytes and usage. Advance only after each accepted run. |
@@ -78,11 +78,28 @@ clock display and historical duration. Three disposable MongoDB Kid journeys pas
 for completed reports and retained advisory failures, including stable repeated
 completion acknowledgements. The isolated browser journey passed creation, detail,
 Pause, saved page order, Resume, original asset access and completed duration with
-no external provider traffic. Typecheck and focused ESLint passed. Package C is the
-next implementation dependency; no new paid grant or Real run exists.
+no external provider traffic. Typecheck and focused ESLint passed.
 
-Credential inventory impact: none. This package changes inspection and terminal
-metadata, with no credential names, storage, transfer or consumers changed.
+Package C adds an immutable `execution_v1` technical profile, a separate explicit
+finite allowance in one-run campaigns, pre-dispatch approval pauses, a new-only
+tester revision request, atomic approval/decline history and an operator review
+view. Approval queues a saved run after current ownership, source and accounting
+checks. The historical M4 profile and request hashes remain unchanged. Real
+admission remains closed pending Package D image-provider and liability work.
+
+Package C verification: 107 focused units and 64 historical M4 contract units
+passed; eight disposable MongoDB allowance cases passed with fake provider
+readback and no provider POST. They cover a claimed tester request through
+completion and approval, retained settled and held amounts, no-progress
+threshold, simultaneous allowance exhaustion, duplicate approvals, concurrent
+claim after repository reconstruction, and historical undispatched cancellation
+after source changes. Typecheck, ESLint and production build passed. The isolated
+waiting-for-approval browser case passed with mocked traffic. No new paid grant
+or Real run exists.
+
+Credential inventory impact: none. Packages B and C change inspection, terminal
+metadata and execution allowances. Credential names, storage, transfer and
+consumers remain unchanged.
 
 ## Three execution checkpoints
 

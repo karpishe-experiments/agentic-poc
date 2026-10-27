@@ -7,6 +7,8 @@ import { createExperimentRepository, ExperimentRepositoryError } from "@/db/expe
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
+import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
+import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
@@ -119,8 +121,27 @@ export function createExperimentDispatcher(deps: {
     }
   }
 
-  const prepareOperation = (input: { runId: string; operationId: string } & Record<string, unknown>) =>
-    measurePhase(input, "operation_preparation", () => repository.prepareOperation(input));
+  const prepareOperation = async (input: { runId: string; operationId: string } & Record<string, unknown>) => {
+    const observed = await repository.getRun(input.runId);
+    if (observed?.execution) {
+      const denied = await withMongoTransaction(deps.database, async session => {
+        const run = await deps.database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
+        if (!run?.execution || run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run changed before allowance check.");
+        const ledger = createExecutionAllowanceLedger(deps.database);
+        const result = await ledger.check(session, run, input.role as ExperimentOperationDocument["role"],
+          input.providerKind as ExperimentOperationDocument["providerKind"]);
+        if (!result.reason) return null;
+        await ledger.pause(session, run, result.reason, now(), null, ownerId, {
+          role: input.role as ExperimentOperationDocument["role"],
+          providerKind: input.providerKind as ExperimentOperationDocument["providerKind"],
+          taskId: input.taskId as ExperimentOperationDocument["taskId"],
+        });
+        return result.reason;
+      });
+      if (denied) throw new ExecutionAllowanceError("limit_exhausted", "Run is waiting for operator allowance.", denied);
+    }
+    return measurePhase(input, "operation_preparation", () => repository.prepareOperation(input));
+  };
 
   async function preparePageImage(run: ExperimentRunDocument, view: NonNullable<Awaited<ReturnType<typeof context.getRunView>>>, manager: ExperimentOperationDocument) {
     const work = view.nextPageIllustrationWork;
@@ -346,11 +367,12 @@ export function createExperimentDispatcher(deps: {
       }
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id, ...(execution.task_id ? { workflowTaskId: execution.task_id } : {}) });
       if (run.mode === "balanced" && operation.providerKind === "text" && current.reservationCount === 1) {
-        if (!authority) return;
+        if (!authority && !run.execution) return;
         if (current.state === "succeeded" && current.verifiedWorkflowId) {
           if (execution.status === "succeeded") await observeProgress(run._id, current);
           else if (execution.status === "failed" || execution.status === "stopped") {
-            await withMongoTransaction(deps.database, (session) => createExperimentCampaignLedger(deps.database, authority).stop(session, now()));
+            if (authority && run.m4) await withMongoTransaction(deps.database, (session) =>
+              createExperimentCampaignLedger(deps.database, authority).stop(session, now()));
             await repository.recordTerminalConflict({ ...identity, workflowRunId: execution.id,
               workflowId: execution.workflow_id, status: execution.status });
           }
@@ -362,7 +384,9 @@ export function createExperimentDispatcher(deps: {
         let outcome: Awaited<ReturnType<ReturnType<typeof createM4ProviderResults>["observe"]>>;
         const observationStartedAt = performance.now();
         try {
-          outcome = await createM4ProviderResults(deps.database, authority, deps.config, observationRuntime)
+          const executionProfile = run.execution ? executionPolicySnapshot(JSON.parse(run.execution.profileJson)).policy : null;
+          outcome = await createM4ProviderResults(deps.database, executionProfile ?
+            { executionProfile, campaignId: run.execution!.campaignId } : authority!, deps.config, observationRuntime)
             .observe({ runId: run._id, operationId: current._id, nowMs: now() });
         } catch (error) {
           throw new CompletionReconciliationError(error, "completion_readback", observationStartedAt, "unknown");
@@ -525,7 +549,7 @@ export function createExperimentDispatcher(deps: {
   async function advanceWork(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
     return mutate(async () => {
       let run = await repository.getRun(runId);
-      if (!run || run.mode === "real" || run.mode === "balanced" && (!authority || run.m4?.campaignId !== authority.grant.campaignId) ||
+      if (!run || run.mode === "real" || run.mode === "balanced" && !run.execution && (!authority || run.m4?.campaignId !== authority.grant.campaignId) ||
           run.status === "completed" || run.status === "failed") return "blocked";
       if (run.generationCompletedAtMs != null && !run.activeOperationId && run.status === "blocked" && run.safeFailure === "definite_failure") {
         try {
@@ -593,7 +617,7 @@ export function createExperimentDispatcher(deps: {
       if (run.status === "blocked" && (operation || run.safeFailure !== "unknown_outcome")) return "blocked";
       let parentWorkflowRunId: string | null = null;
       if (!operation) {
-        if (run.mode === "balanced") {
+        if (run.mode === "balanced" && run.m4) {
           const campaign = await deps.database.collections.experiment_campaigns.findOne({ _id: run.m4!.campaignId });
           if (campaign?.state !== "active") return "blocked";
         }
@@ -655,7 +679,8 @@ export function createExperimentDispatcher(deps: {
           } catch (error) {
             // Concurrent admission and Pause are re-observed rather than retried.
             const current = await repository.getRun(runId);
-            if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
+            if (error instanceof ExecutionAllowanceError && error.code === "limit_exhausted" ||
+                error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
             await repository.blockRun({ runId, category: "definite_failure", nowMs: now(), failureDiagnostics: assemblyDiagnostic(error) });
             return "blocked";
           }
@@ -699,7 +724,8 @@ export function createExperimentDispatcher(deps: {
           operation = await prepareOperation({ runId, operationId: randomUUID(), expectedRevision: run.revision, role, taskId, subjectKind, subjectId, inputFingerprint: fingerprint({ revision: run.revision, role, taskId, subjectKind, subjectId, view }), attempt: 1, providerKind: "text", nowMs: now() });
         } catch (error) {
           const current = await repository.getRun(runId);
-          if (error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
+          if (error instanceof ExecutionAllowanceError && error.code === "limit_exhausted" ||
+              error instanceof ExperimentRepositoryError && (error.code === "stale_revision" || current?.activeOperationId || current?.pauseRequested)) return "waiting";
           await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
           return "blocked";
         }
@@ -744,9 +770,11 @@ export function createExperimentDispatcher(deps: {
       }
       await bindTrackedMutationOperation(runId, operation._id);
       if (run.mode === "balanced" && operation.providerKind === "text") {
-        if (!authority) return "blocked";
+        if (!authority && !run.execution) return "blocked";
+        const executionProfile = run.execution ? executionPolicySnapshot(JSON.parse(run.execution.profileJson)).policy : null;
         await measurePhase({ runId, operationId: operation._id }, "text_preparation", () =>
-          createM4TextPreparation(deps.database, authority, { store }).prepare({ runId, operationId: operation!._id, nowMs: now() }));
+          createM4TextPreparation(deps.database, executionProfile ? { executionProfile, campaignId: run.execution!.campaignId } : authority!, { store })
+            .prepare({ runId, operationId: operation!._id, nowMs: now() }));
       }
       const admission = await measurePhase({ runId, operationId: operation._id }, "dispatch_admission", () =>
         repository.beginDispatch({ runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now() }));

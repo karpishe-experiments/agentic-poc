@@ -168,3 +168,59 @@ test("runs the isolated simulated runner UI fixture without provider or Dify tra
     "/api/experiments/booklet-runs", `/api/experiments/booklet-runs/${runId}/pause`, `/api/experiments/booklet-runs/${runId}/pages`, `/api/experiments/booklet-runs/${runId}/resume`,
   ]);
 });
+
+test("reviews an allowance pause and continues the same saved run without a new run request", async ({ page }) => {
+  const totals = { maxMicrodollars: 1_000_000, textCalls: 220, imageCalls: 20, steps: 300,
+    textRevisions: 3, imageRevisions: 2, noProgress: 3 };
+  const pending = { kind: "allowance_v1", reason: "monetary", requestDigest: "d".repeat(64),
+    requestedAtMs: 1792656300000, requiredTotal: 1_100_000,
+    nextAction: { role: "specialist", providerKind: "text", taskId: "J12" } };
+  const allowance = { campaignId: "00000000-0000-4000-8000-000000000730", revision: 8, totals,
+    settledMicrodollars: 700_000, reservedMicrodollars: 200_000, textRequests: 18, imageRequests: 4,
+    latestApprovalReference: "Initial operator grant" };
+  let state = { ...savedRun("paused", 9), mode: "balanced", pendingApproval: pending as typeof pending | null,
+    nextNarrativeTask: "J12", counters: { logicalText: 18, logicalImage: 4, payableText: 18, payableImage: 0, steps: 22 },
+    executionAllowance: allowance,
+    runAccounting: { settledMicrodollars: 700_000, reservedMicrodollars: 200_000,
+      estimatedTotalMicrodollars: 900_000, invoiceCostAvailable: false } };
+  const writes: Array<{ path: string; key: string | undefined; body: unknown }> = [];
+  const external: string[] = [];
+  page.context().on("request", request => {
+    const url = new URL(request.url());
+    if (!["127.0.0.1", "localhost"].includes(url.hostname)) external.push(url.origin);
+  });
+  await page.context().route("**/api/assets/**", route => route.fulfill({ status: 200, contentType: "image/png", body: png }));
+  await page.context().route("**/api/experiments/booklet-runs**", async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "GET") return route.fulfill({ json: { data: path.endsWith(runId)
+      ? state : { runs: [state], hasMore: false } } });
+    writes.push({ path, key: request.headers()["idempotency-key"], body: request.postDataJSON() });
+    if (path !== `/api/experiments/booklet-runs/${runId}/approval`) {
+      return route.fulfill({ status: 409, json: { error: { message: "Only this pending approval is permitted." } } });
+    }
+    state = { ...state, status: "queued", revision: 10, pauseRequested: false, pendingApproval: null,
+      executionAllowance: { ...allowance, revision: 9, totals: { ...totals, maxMicrodollars: 2_000_000 } } };
+    return route.fulfill({ json: { data: { runId, approvalId: request.headers()["idempotency-key"],
+      runRevision: 10, campaignRevision: 9, totals: state.executionAllowance.totals, reused: false } } });
+  });
+
+  await page.goto(`/experiments/booklet-runs/${runId}`);
+  const review = page.getByRole("region", { name: "Operator allowance review" });
+  await expect(review).toBeVisible();
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
+  await expect(review.getByText(/Minimum funded total: \$1\.100000/)).toBeVisible();
+  await review.getByLabel(/Maximum USD/).fill("2.000000");
+  await review.getByLabel("Approval or decline reference").fill("Operator browser fixture: exact USD 2 total");
+  await page.screenshot({ path: "output/playwright/package-c-approval-pause.png", fullPage: true });
+  await review.getByRole("button", { name: "Approve exact totals" }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ path: `/api/experiments/booklet-runs/${runId}/approval`,
+    body: { action: "approve", expectedRevision: 9, expectedCampaignRevision: 8,
+      expectedPendingDigest: pending.requestDigest, totals: { ...totals, maxMicrodollars: 2_000_000 },
+      reference: "Operator browser fixture: exact USD 2 total" } });
+  expect(writes[0].key).toMatch(/^[0-9a-f-]{36}$/);
+  expect(external).toEqual([]);
+});
