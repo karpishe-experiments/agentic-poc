@@ -7,13 +7,16 @@
 
 The user requested one additional Kid experience and a report, selected Balanced
 mode, and explicitly selected a USD1 maximum. This supersedes the earlier
-no-additional-run restriction only for this separate campaign. The reviewed grant
-candidate is `b5bc4f7e-6b48-4abc-b782-08700fc5ada8`, with a USD1 policy ceiling,
+no-additional-run restriction only for this separate campaign. The delivered grant
+is `b5bc4f7e-6b48-4abc-b782-08700fc5ada8`, with a USD1 policy ceiling,
 Kid-only admission, 120 text calls, 12 simulated image calls and zero paid images.
 It has no historical recovery or continuation grants. Prior M4 campaign
 `690b0237-9c0d-4eb2-99ec-edf02356b70a` and all its evidence and liabilities remain
-retained. No new run has started; source review and normal staging delivery are
-pending. Do not admit Parent or Creator under this grant.
+retained. PRs #302 and #303 passed independent reviews and CI, then merged under
+the user's explicit approval. Normal host deployment `40500059213-1` completed
+and archived; the authenticated application readiness endpoint confirmed MongoDB,
+assets, open admission and a healthy runner. Do not admit Parent or Creator under
+this grant.
 
 The report must identify the new run, saved story and four approved final pages,
 terminal ownership, tester/judge disposition, timing, context measurements,
@@ -24,6 +27,33 @@ upper-bound liabilities; it is not a promise of completion within that amount.
 Credential inventory impact: none; bindings, keys, storage and consumers are
 unchanged. No request definitions, provider retries or infrastructure changes are
 part of this grant delivery.
+
+### Verified additional Kid result
+
+Run [200dfd28-2ad3-4030-8a09-3f8017e20252](https://booklet-staging.uniwares.co.uk/experiments/booklet-runs/200dfd28-2ad3-4030-8a09-3f8017e20252),
+*The Runaway Kite*, completed generation and both advisory evaluations at revision
+321. It ran from 15:48:51 to 16:16:37 Tehran time (UTC+03:30) on 2026-10-27:
+27.77 minutes overall and 24.13 minutes to generation completion. One creation
+was sent. No failed operation, mid-run operator intervention, replacement run or
+provider replay was required. All 48 operations succeeded; no active operation,
+preparation or unresolved lifecycle remains in the saved final view.
+
+All 20 current artifacts are approved, including four Page Bibles and four final
+page outputs. The tester and independent judge both match the current version
+set. Usage is 39/120 text calls, 9/12 simulated image calls, 48/300 steps and zero
+paid image calls. Settled upper-bound charges are USD0.105532; retained count
+liabilities are USD0.035100. Total allowance exposure is USD0.140632, leaving
+USD0.859368 of the USD1 ceiling. Invoice cost remains unavailable.
+
+Both reports find substantial textual alignment with the brief. Their geometry
+finding concerns simulated 8x8 outputs against the approved 1500x1200 canvas and
+is advisory. The judge also records unresolved intent about printing the cover
+narration. This run does not establish visual quality or print readiness. Preserve
+approved outputs rather than regenerate them for these findings. The historical
+Kid used 44 text calls and nine simulated image calls with failed advisory
+evaluation; its prior repairs and older release prevent a causal performance
+comparison. The operator report and detailed evidence remain local output
+artifacts, outside Git.
 
 ## Current Creator admission checkpoint
 
