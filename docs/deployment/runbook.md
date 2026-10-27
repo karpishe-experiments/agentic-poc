@@ -32,7 +32,7 @@ The issue #65 recovery dispatcher is installed and retained J11 completion has
 been verified through supported controls. Installation and live execution remain
 separate evidence; the commands below require matching dispatcher capabilities
 and application images. See the current [M4 record](../accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
-for the completed normal delivery, retained manager blocker and next checkpoint.
+for the verified normal staging delivery and retained Creator acceptance checkpoint.
 
 The count-failure correction uses the same `candidate-reconcile` action and
 preview/apply inputs. Its candidate must advertise `granted-legacy-count-failure`.

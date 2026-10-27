@@ -9,9 +9,10 @@ import type { Persona } from "@/lib/contracts/experiment-runner";
 
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
-async function setup(assumedCount = false) {
+async function setup(assumedCount = false, kidOnly = false) {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const policy = m4TestPolicy();
+  if (kidOnly) { policy.maxMicrodollars = 1_000_000; policy.allowedPersonas = ["playful_kid"]; }
   if (assumedCount) { policy.countChargeStatus = "assumed"; policy.countChargeCeilingMicrodollars = 900; }
   const authority = { policy, grant: { campaignId: id(1), reference: "fake-provider-test-grant-only" } };
   const repo = createExperimentRepository(db, { m4Authority: authority });
@@ -40,6 +41,26 @@ async function setup(assumedCount = false) {
 }
 
 describe("M4 campaign ledger with real persistence and no providers", () => {
+  it("enforces a saved USD1 Kid-only grant and rolls back an over-budget reservation", async () => {
+    const { db, repo, creation, prepare, reserve, policy } = await setup(true, true);
+    await expect(repo.createRun(creation(30, "enthusiast_parent"))).rejects.toThrow("outside this campaign");
+    expect(await db.collections.experiment_campaigns.countDocuments()).toBe(0);
+    const run = await repo.createRun(creation(10));
+    expect(JSON.parse(run.m4!.policyJson)).toMatchObject({ maxMicrodollars: 1_000_000, allowedPersonas: ["playful_kid"] });
+    await expect(repo.createRun(creation(20))).rejects.toThrow("Persona already");
+    await expect(repo.createRun(creation(40, "professional_creator"))).rejects.toThrow("outside this campaign");
+    await prepare(10, 12);
+    const ceiling = m4MaximumCharge(policy, "decision");
+    await db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { settledMicrodollars: 1_000_000 - ceiling + 1 } });
+    const before = await db.collections.experiment_campaigns.findOne({ _id: id(1) });
+    await expect(reserve(10, 12)).rejects.toMatchObject({ reason: "limit_exhausted" });
+    expect(await db.collections.experiment_campaigns.findOne({ _id: id(1) })).toEqual(before);
+    expect(await db.collections.experiment_operations.findOne({ _id: id(12) })).not.toHaveProperty("m4Reservation");
+    await db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { settledMicrodollars: 1_000_000 - ceiling } });
+    await reserve(10, 12);
+    const exact = await db.collections.experiment_campaigns.findOne({ _id: id(1) });
+    expect(exact!.settledMicrodollars + exact!.reservedMicrodollars).toBe(1_000_000);
+  });
   it("still rejects missing, duplicate or changed binding identities before saving the run", async () => {
     const { db, repo, creation } = await setup();
     const input = creation(10);
