@@ -66,6 +66,18 @@ records the observed failure and verified exact recovery. Normal delivery and
 Creator acceptance remain separate gates. Promotion
 candidate: **Documentation** for repair delivery and acceptance fixtures.
 
+### Test admission-dependent helper composition
+
+A retirement preview required open, idle admission, but its shared helper called
+a verifier that required closed admission. Isolated tests stubbed that helper and
+missed the conflict. Separate immutable provenance from live admission-dependent
+verification. Exercise the real composition at both boundaries. PR #301's Linux
+regressions and the subsequent successful closure and normal deployment verify
+this correction. The deployment observer expired after five minutes while the
+host completed within its original budget; reconcile saved host status before
+interpreting a workflow timeout as deployment failure or submitting another job.
+Promotion candidate: **Documentation** for recovery composition and observation.
+
 ### Offer only actions that remain eligible
 
 The M4 reviewer received saved revision counts but its schema still offered an

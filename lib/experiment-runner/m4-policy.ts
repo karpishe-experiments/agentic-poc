@@ -24,7 +24,9 @@ export const m4PolicySchema = z.strictObject({
   countChargeStatus: z.enum(["verified", "assumed"]),
   countChargeCeilingMicrodollars: money, countVerificationReference: z.string().min(1).max(500),
   maxInputTokens: z.literal(32000), maxRequests: z.literal(500), maxJudges: z.literal(3),
-  maxMicrodollars: z.literal(M4_DOLLAR_LIMIT), retries: z.literal(0), tools: z.literal(false),
+  maxMicrodollars: money.positive(),
+  allowedPersonas: z.array(personaSchema).min(1).max(3).refine(value => new Set(value).size === value.length).optional(),
+  retries: z.literal(0), tools: z.literal(false),
   maxTimeoutSeconds: z.literal(120),
   models: z.strictObject({
     decision: modelPolicy("gpt-6-luna", "none", 2048),

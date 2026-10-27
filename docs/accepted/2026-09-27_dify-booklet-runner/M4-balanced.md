@@ -1,9 +1,121 @@
 # M4 — Simulation hardening and Balanced acceptance
 
-**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Initial Balanced Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed all nine J12 Page Bibles. Exact pre-deployment recovery closed its exhausted tester decision while preserving the original response, history, assets and accounting. The last saved read shows the run blocked and paused at revision 658, with no active operation or preparation. Normal staging deployment is interrupted during backup; no continuation has run. M4 remains incomplete until Creator generation, ownership and accounting pass. No replacement run, failed-report replay or M5 execution is authorized.
+**State:** Kid and Parent retain accepted generation/accounting with incomplete advisory evaluation. Retained Creator `47894c71-7991-4b15-8dc2-810395ec3f01` completed generation and evaluation at revision 847 on 2026-10-27, with all nine final pages approved, 108 text calls and 20 simulated image calls. Final M4 evidence reconciliation remains separate from the additional Kid experience below. No M5 execution is authorized.
 **Predecessor:** [M3](M3-completion.md). Apply [EXECUTION](EXECUTION.md).
 
+## Additional Balanced Kid experience - 2026-10-27
+
+The user requested one additional Kid experience and a report, selected Balanced
+mode, and explicitly selected a USD1 maximum. This supersedes the earlier
+no-additional-run restriction only for this separate campaign. The reviewed grant
+candidate is `b5bc4f7e-6b48-4abc-b782-08700fc5ada8`, with a USD1 policy ceiling,
+Kid-only admission, 120 text calls, 12 simulated image calls and zero paid images.
+It has no historical recovery or continuation grants. Prior M4 campaign
+`690b0237-9c0d-4eb2-99ec-edf02356b70a` and all its evidence and liabilities remain
+retained. No new run has started; source review and normal staging delivery are
+pending. Do not admit Parent or Creator under this grant.
+
+The report must identify the new run, saved story and four approved final pages,
+terminal ownership, tester/judge disposition, timing, context measurements,
+accounting exposure and any interventions. Simulated image evidence cannot prove
+visual quality, and count-endpoint invoice cost remains unavailable under the
+existing explicit fee assumption. The USD1 ceiling includes settled and reserved
+upper-bound liabilities; it is not a promise of completion within that amount.
+Credential inventory impact: none; bindings, keys, storage and consumers are
+unchanged. No request definitions, provider retries or infrastructure changes are
+part of this grant delivery.
+
 ## Current Creator admission checkpoint
+
+### Verified closure, deployment and continuation - 2026-10-27
+
+PR #301 corrected the admission ordering conflict exposed by the first retirement
+preview. Immutable helper provenance is checked before drain; completed-target
+verification runs after normal drain. Regression tests exercise the real helper
+composition. Two independent reviews and full Linux CI passed. The installed
+dispatcher is source commit `1a3ad025342be0cf5cf170091d7b737f097f0cbd`.
+
+Exact closure apply [40469698506](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40469698506)
+archived expired request `40359148858-1` without changing its journal bytes,
+deadline, application records or admission. Read-only verification
+[40473096380](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40473096380)
+confirmed the completed receipt and archived hash. Do not resume that request.
+
+Fresh normal Deploy [40473224893](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40473224893)
+reused staging commit `ffefe4c87685b7b0a5c0f6499547d1dc3d17506d` and image
+`sha256:644e10d74a2c47e36da8c7550012cdb6481903231f0892c2dd856d8b97d20f00`.
+Its five-minute observer expired while the host continued. Saved host inspection
+[40474297807](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40474297807)
+confirmed request `40473224893-1` complete and archived at 08:32:59 UTC, within its
+normal 45-minute budget. Backup `staging-20261027T082520Z-520579eb1e89ebc1` was
+retained. No second deployment was dispatched.
+
+Independent [staging readiness](https://github.com/karpishe-experiments/agentic-poc/actions/runs/40475108309)
+passed. An earlier check selected `master` and failed the branch guard before host
+access; the successful check used `_staging`. Fresh Creator detail confirmed
+91/220 text calls, 13/20 image calls, seven missing final-page images, one draft
+awaiting approval and zero spare image calls. The single continuation was saved at
+08:41:31 UTC; the campaign became active. At 08:46:07 UTC, saved details showed
+93 text calls, 14 image calls and active J13 preparation. Temporary unavailable
+capacity during active preparation is advisory. Completion remains unverified.
+
+The first two new tester operations succeeded in 95 and 120 seconds. Their
+requests were 154,352 and 157,455 application-measured bytes, with authoritative
+input counts of 43,501 and 44,794. Current artifacts were the largest sections
+(130,720 and 133,385 bytes). Size warnings remained advisory. The two new image
+operations succeeded in 99 and 100 seconds, each with one reservation. No paid
+image call or provider retry was introduced. Read JSON size/time were unavailable
+in the trace; these observations do not isolate database latency.
+
+Credential inventory impact: none. Credential names, storage and consumers are
+unchanged. All campaign, persona and image limits remain in force.
+
+## Retained earlier checkpoint evidence
+
+The sections below preserve earlier observations and decisions. Their pending
+recovery, installation, deployment and continuation instructions are superseded
+by the current checkpoint above. Do not execute those historical next steps.
+Historical acceptance limits and preservation requirements remain applicable.
+
+### Verified backup recovery and normal delivery — 2026-10-26
+
+The corrected dispatcher installed successfully. Exact resume then stopped before
+service restart because systemd rejected the existing `set-property` call for
+`RuntimeMaxSec`. Replace only a proven stopped transient unit after preserving
+allowlisted status and verifying unloading; recreate it through the canonical
+unit builder with the same journal and original deadline. No data reset, new
+application image or provider call belongs in this correction. Credential use is
+unchanged. Source reviews, focused rejection tests and Linux CI remain required.
+
+Normal delivery subsequently stopped at draining before selecting another backup.
+The handoff leaves admission closed, but its new deployment branch invokes the
+ordinary drain transition, which requires maintenance to be false. The selected
+prior release contains that rejection predicate. Reproduce the closed-handoff
+lifecycle with the real shell dispatcher before correction. Reuse the established
+closed-and-quiet admission proof only after the full helper/decision provenance
+checks; retain ordinary drain for open admission and reject ambiguous owners or
+mixed states. This is a host-only transition correction. Keep the reviewed
+application image and its tree fixed, preserve the failed request/deadline, and
+require two independent reviews and Linux CI before any installed dispatcher
+update or supported resume. No deployment replay, database edit or provider call
+is authorized by a diagnostic observation.
+
+Source PR #296 and staging PR #297 each passed two independent reviews and Linux
+CI, including both complete deployment shell suites. The operator installed the
+reviewed dispatcher without changing the failed journal. Preview `40356657404`
+passed; the exact apply `40357162445` completed successfully. Its fresh immutable
+backup passed completion-marker, manifest, archive and asset verification. Original
+deployment and decision-recovery evidence remain preserved. Prior-service readiness
+passed with admission closed; no Creator continuation or provider request was made.
+
+Sanitized progress measurements show successful manifest and completion-marker
+write/readback, with approximately 22 minutes remaining in the 30-minute backup
+budget at the last measurement. This confirms backup progress and success; it does
+not establish the direction, size or cause of the original timed-out transfer.
+No reset or repeated recovery mutation was used. Staging merged as
+`ffefe4c87685b7b0a5c0f6499547d1dc3d17506d`; its source tree matches the reviewed
+helper. Normal Deploy `40359148858` stopped during draining and requires the reviewed dispatcher correction, exact resume and readiness before the
+authorized same-Creator continuation. M4 remains incomplete.
 
 ### Maintenance storage correction contract — 2026-10-26
 

@@ -20,27 +20,26 @@ describe("reviewed non-secret M4 campaign configuration", () => {
     expect(Object.isFrozen(state.config.m4!.authority!.policy)).toBe(true);
     expect(Object.isFrozen(state.config.m4!.authority!.grant)).toBe(true);
   });
-  it("pins the authorized campaign and unchanged released policy for staging only", () => {
+  it("pins the additional USD1 Kid campaign for staging only", () => {
     const releaseEnv = { ...env, DIFY_BOOKLET_BINDINGS_JSON: JSON.stringify(releaseManifest.policy.publications.map(binding => ({ ...binding, apiKey: "fake-only" }))) };
     const state = readM4RunnerConfig(releaseEnv);
     expect(state).toMatchObject({ enabled: true, config: { m4: { state: "granted", authority: { grant: releaseManifest.grant } } } });
     if (!state.enabled) throw new Error("Missing ready configuration");
     const frozen = m4PolicySnapshot(releaseManifest.policy);
-    expect(frozen.hash).toBe("b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3");
-    expect(releaseManifest.grant.reference).toContain("User grant 2026-10-16");
+    expect(frozen.hash).toBe("14d99213c6986594860afdf062b285eca4f9a59d099a42f16f50f8a3586a7bbb");
+    expect(frozen.policy).toMatchObject({ maxMicrodollars: 1_000_000, allowedPersonas: ["playful_kid"] });
+    expect(releaseManifest.grant.reference).toContain("User 2026-10-27 authorized one additional Balanced Kid");
     const effective = m4AdmittedTokenPolicy(frozen.policy, m4GrantSchema.parse(releaseManifest.grant));
     expect(effective).toMatchObject({ maxInputTokens: 128000, warningInputTokens: 32000,
-      hash: "1bae98d7fa53d84d8818798afca94436bfa889dbe07a7b443a7473f74ab7ff2c" });
+      hash: "a622568bcf30692576801858693858892af0205ca3219458357ae6845cca1eea" });
     expect(m4EffectiveTokenPolicy(frozen.policy).maxInputTokens).toBe(32000);
     expect(m4MaximumCharge(frozen.policy, "specialist", effective.snapshot)).toBe(20996);
     expect(m4MaximumCharge(frozen.policy, "specialist")).toBe(8996);
-    expect(releaseManifest.grant.continuations.filter(entry => entry.operationId === "928cb32d-daf7-4703-b005-fdaf076d6cb6"))
-      .toEqual([{ runId: "47894c71-7991-4b15-8dc2-810395ec3f01", operationId: "928cb32d-daf7-4703-b005-fdaf076d6cb6",
-        reference: expect.stringContaining("User 2026-10-26") }]);
-    expect(releaseManifest.grant.progressRecoveries).toEqual([{
-      runId: "47894c71-7991-4b15-8dc2-810395ec3f01", operationId: "3d705816-f6fd-4434-a807-222958ef39c8",
-      reference: expect.stringContaining("User 2026-10-26"),
-    }]);
+    expect(releaseManifest.grant).not.toHaveProperty("continuations");
+    expect(releaseManifest.grant).not.toHaveProperty("remainingPersonaAdmission");
+    const historical = { ...releaseManifest.policy, maxMicrodollars: 5_000_000 };
+    delete (historical as Partial<typeof historical>).allowedPersonas;
+    expect(m4PolicySnapshot(historical).hash).toBe("b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3");
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "local" })).toMatchObject({ config: { m4: { state: "invalid" } } });
     expect(readM4RunnerConfig({ ...releaseEnv, DEPLOYMENT_ENV: "_prod" })).toEqual({ enabled: false, reason: "production" });
     expect(readM4RunnerConfig(env)).toMatchObject({ config: { m4: { state: "invalid" } } });

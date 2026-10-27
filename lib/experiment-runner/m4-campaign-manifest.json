@@ -8,7 +8,7 @@
     "imageProvider": "simulated",
     "maxInputTokens": 32000,
     "maxJudges": 3,
-    "maxMicrodollars": 5000000,
+    "maxMicrodollars": 1000000,
     "maxRequests": 500,
     "maxTimeoutSeconds": 120,
     "mode": "balanced",
@@ -197,106 +197,12 @@
     "retries": 0,
     "schemaVersion": "m4_v1",
     "serviceTier": "default",
-    "tools": false
+    "tools": false,
+    "allowedPersonas": [
+      "playful_kid"
+    ]
   },
   "grant": {
-    "campaignId": "690b0237-9c0d-4eb2-99ec-edf02356b70a",
-    "reference": "User grant 2026-10-16: Kid-Parent-Creator initial only; USD5 conditional on frozen prices and assumed USD0.0009 count fee; 120/160/220 requests,500 total,3 judges; simulated images; stop on technical failure; no retries/tools/escalation/smoke/successors.",
-    "continuations": [
-      {
-        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
-        "operationId": "2380f45a-5d66-482c-a6d2-7fed96f48466",
-        "decisionRejection": "revision_allowance_exhausted_v1",
-        "preDeploymentRecovery": "decision_rejection_v1",
-        "reference": "User 2026-10-26 authorized exact pre-deployment recovery of this tester decision after two reviews and CI. Prove original response, exhausted allowance, no output/claims, original bytes and accounting; preserve evidence/charges, leave Creator paused and campaign stopped. Normal deployment/readiness still precede one fresh reviewer. Keep all revision/USD5/500-request/persona/image limits. No provider replay, drain bypass, replacement or automatic retry."
-      },
-      {
-        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
-        "operationId": "928cb32d-daf7-4703-b005-fdaf076d6cb6",
-        "reference": "User 2026-10-26 approved required PR/Chrome actions to finish M4 after this exact continuation was identified. Continue the same Creator once after reviewed delivery and original no-dispatch, zero-reservation, global output, ownership and accounting proof. Retain history, frozen liabilities, new-request amendment, USD5/500-request/persona/image limits and deadlines. No replacement, automatic retry, paid image, infrastructure or signature-policy change."
-      },
-      {
-        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
-        "operationId": "26606176-6380-4dab-ac59-c903e90bf3f7",
-        "reference": "User 2026-10-25 authorized this exact guarded J12 preparation continuation after reviews, CI and staging checks. Verify original no-dispatch, zero reservation, global output absence, resolved ownership and intact accounting through the existing proof before continuing the same Creator once. Retain failed history and conditional USD5/500-request/persona/image limits; no timeout increase, speculative optimization, infrastructure change, replacement or automatic retry."
-      },
-      {
-        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
-        "operationId": "97007a0e-3811-4c5a-974b-1c3b2f7cd24a",
-        "reference": "User 2026-10-25 authorized bounded review-input repair and exact same-Creator continuation after reviews and staging checks. Verify authenticated 32923/32000 input_limit_exceeded before generation, original request, full reservation/count liability and resolved ownership/output. Retain failed history, 32000-token guard and conditional USD5/500-request/persona/image limits; no replacement or automatic retry."
-      },
-      {
-        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
-        "operationId": "865ca52b-36d1-460e-bc18-e2249c87b5a7",
-        "reference": "User 2026-10-25 authorized bounded repair and exact continuation: prove no dispatch, reservation, output or unresolved owner before continuing this same Creator after reviewed J09 ownership and Pause repair. Retain history, conditional USD5/500-request and persona limits; no replacement run or automatic retry."
-      },
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "7d490c15-5ae1-4276-83ce-7d86a0da7ba4",
-        "reference": "User 2026-10-21 context/count correction plan and Kid-only completion instruction: exact inspected count-guard failure; supported closure with full reservation/history retained, reviewed correction and explicit same-run continuation; conditional USD5 and all cumulative limits unchanged."
-      },
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "f748c0a3-61cc-47b4-884f-53b8b5933ff4",
-        "reference": "User Kid-only completion instruction 2026-10-21: exact inspected manager execution 8964e01f-047f-44c3-9df8-c4378d16a653 failed at authorization before any reservation/provider request; reviewed atomic authorization correction and same-run continuation through normal controls; preserve failed history, cumulative conditional USD5 and request limits; no automatic replay, new run or paid images."
-      },
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "ac39211f-4e61-4c08-a3b6-81f922bf9be4",
-        "reference": "User grant 2026-10-16: all necessary actions to complete M4; exact inspected Kid manager continuation; preserve same USD5 conditional campaign, cumulative limits, failed operation and charges; no automatic retries or paid images."
-      },
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "e46b6b9b-a751-4809-87a5-f4aa8df49903",
-        "reference": "Latest user M4 completion grant: inspected J11 invalid normalized rectangles and Kid multi-panel output; reviewed definition amendment and exact same-campaign continuation; preserve charges and limits."
-      },
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "cbc18fd7-7aa5-475e-bc0a-a312e584d25c",
-        "reference": "User M4 completion grant: inspected J11 incomplete max_output_tokens with whitespace-heavy unfinished JSON; reviewed compact-output instruction mitigation and exact same-campaign continuation; retain all charges, outputs and cumulative limits."
-      },
-      {
-        "runId": "d07dace4-c4d0-4b57-879e-02fe54f0e530",
-        "operationId": "0371a9ef-43ff-489a-926d-29c8470e27e2",
-        "reference": "User 2026-10-22 approved fixing blockers then continuing initial Parent before Creator. Authenticated terminal malformed manager result retained; continue only after reviewed final-answer adapter installation, exact binding readback and resolved ownership. Preserve failed operation, counters and liability; no replay or successor."
-      },
-      {
-        "runId": "d07dace4-c4d0-4b57-879e-02fe54f0e530",
-        "operationId": "abcad8f9-d96f-40e2-bf8d-432d5a7f3666",
-        "reference": "User 2026-10-23 authorized blocker fixes then continuation: authenticated terminal J11 output duplicates a sheet subject and mixes saved version/image identities. Continue the same Parent only after reviewed subject-routing correction and normal validation; retain failed output, all charges and cumulative limits. No output repair, automatic retry or successor."
-      }
-    ],
-    "progressRecoveries": [
-      {
-        "runId": "47894c71-7991-4b15-8dc2-810395ec3f01",
-        "operationId": "3d705816-f6fd-4434-a807-222958ef39c8",
-        "reference": "User 2026-10-26 authorized required bounded M4 repairs and same-Creator continuation. Recover only the verified false progress stop following exact consumed failure 928cb32d-daf7-4703-b005-fdaf076d6cb6; preserve saved manager, history and all liabilities; no replay or automatic retry."
-      }
-    ],
-    "completionRecoveries": [
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "48e69de1-cbc9-4ac6-a5d2-bd81dddffad9",
-        "reference": "User M4 completion grant: inspected complete J11 output blocked by story-only manuscript coverage; recover this exact retained result through normal source checks and materialization, preserving deadline, requests and charges."
-      },
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "bf1c9dd8-781c-4307-868b-45d566b7b58e",
-        "reference": "Explicit user grant 2026-10-20: exact retained manager completion from Dify execution 97422092-2627-46e2-bb7f-9d4b26dbb270; normal source/approval/accounting validation, manager-specific preservation, reviewed preview/apply then normal staging delivery and same-Kid continuation; preserve conditional USD5, limits and no successors; no provider replay or saved-output edits."
-      }
-    ],
-    "preGenerationRecoveries": [
-      {
-        "runId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-        "operationId": "7d490c15-5ae1-4276-83ce-7d86a0da7ba4",
-        "workflowRunId": "a90fe27f-1644-4eb8-8d8b-7c409600d2a9",
-        "publishedWorkflowId": "64d08408-4ab7-4413-a5a1-0fccadd2ff26",
-        "pluginIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
-        "guardSourceSha256": "1c18f6440772cbed926368d2d04fde90771ee181f4fbacde92a19c67913e7de8",
-        "nodeTraceDigest": "aebc0ec55b881a868623eb92bca07eea0a0590702d9f8989c4e371d532413f12",
-        "reference": "User 2026-10-21 approved plan: exact legacy count-guard bookkeeping closure using retained authenticated node receipt and fresh execution GET; preserve full reservation, failed history and deadline; no output, usage, replay or automatic Resume."
-      }
-    ],
     "providerAdapterUpdate": {
       "fromIdentity": "langgenius/openai:1.0.7-dev2@5a3107c1a2237e76ac04e09198a1fb1fbe446747d23ab4574f8c0aec914cfb3d",
       "version": "1.0.7-dev5",
@@ -309,26 +215,19 @@
       "toBundleHash": "227c57c778bf11bf2ed48dc8aa2107e0d8ea8396f72da7018e180a3185c6035c",
       "reference": "User 2026-10-26 approved bounded reviewer eligibility repair: new mid-run tester requests pair revision task/version choices with remaining saved allowances and distinguish accepted simulated geometry warnings. Preserve the prior focused contexts, advisory size warnings, saved definitions, dev5/token amendment, all hard evidence/transport/spending limits and no retries."
     },
-    "remainingPersonaAdmission": {
-      "anchorRunId": "c79b63dd-6ebb-4c49-8be3-d0bb409ac49e",
-      "anchorRevision": 3014,
-      "personas": [
-        "enthusiast_parent",
-        "professional_creator"
-      ],
-      "reference": "User 2026-10-22 approved both remaining initial Balanced personas and required blocker fixes; admit only after verified completed preceding runs, resolved ownership and intact accounting; no successor, replay or allowance reset."
-    },
     "tokenPolicy": {
       "amendment": {
         "version": "m4_context_policy_v2",
-        "basePolicyHash": "b05ef70a81049a46bfb6fd456fc112fdc8bb61a3a79444ea0a145db37e57f1e3",
+        "basePolicyHash": "14d99213c6986594860afdf062b285eca4f9a59d099a42f16f50f8a3586a7bbb",
         "warningInputTokens": 32000,
         "maxInputTokens": 128000,
         "requiredProviderAdapterIdentity": "langgenius/openai:1.0.7-dev5@eeba51ff094dadc68ffc2f94ab80422f8de0a6d3b640c50ff35f881190092a1f",
         "requiredProviderPackageSha256": "eeea0674e15c32b239713abc277095d6da5c49456d64e2b6183a367e99191aa9",
-        "reference": "User approved efficient-read/context-warning implementation plan 2026-10-25: forward-only 128000 hard input and 32000 warning after exact dev5 installation/readback. Preserve frozen rates, USD5/500-request/persona/image ceilings, liabilities, original deadlines and no automatic retries."
+        "reference": "Retain the installed dev5 adapter and existing forward-only 128000-token hard ceiling with 32000-token advisory warning for the separately authorized USD1 Kid campaign. No provider, model, rate, retry or image-policy change."
       },
-      "hash": "1bae98d7fa53d84d8818798afca94436bfa889dbe07a7b443a7473f74ab7ff2c"
-    }
+      "hash": "a622568bcf30692576801858693858892af0205ca3219458357ae6845cca1eea"
+    },
+    "campaignId": "b5bc4f7e-6b48-4abc-b782-08700fc5ada8",
+    "reference": "User 2026-10-27 authorized one additional Balanced Kid experience and report with USD1 maximum, 120 text calls, 12 simulated image calls and zero paid images. Separate campaign; preserve completed M4 history and liabilities. No Parent, Creator, replacement, automatic retry or budget increase."
   }
 }
