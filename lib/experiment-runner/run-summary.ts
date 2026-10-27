@@ -7,7 +7,7 @@ export type RunTiming = {
   confidence: "recorded" | "live" | "unavailable";
 };
 export type RunAttention = {
-  kind: "reconcile" | "inspect" | "paused";
+  kind: "reconcile" | "inspect" | "paused" | "approval";
   explanation: string;
   action: "open_run" | "resume";
 } | null;
@@ -28,12 +28,14 @@ export function runTiming(run: TimingSource, nowMs = Date.now()): RunTiming {
 
 export function runAttention(run: { status?: string; revision?: number; safeFailure?: string | null;
   failureDiagnostics?: FailureDiagnostics | null; activeOperationId?: string | null;
-  preparation?: { unresolved?: boolean } | null }): RunAttention {
+  preparation?: { unresolved?: boolean } | null; pendingApproval?: { reason: string } | null }): RunAttention {
   if (run.safeFailure === "unknown_outcome" || run.preparation?.unresolved) return {
     kind: "reconcile", explanation: "A previous operation is unresolved. Inspect its saved result before continuing.", action: "open_run" };
   if (run.status === "blocked" || run.status === "failed") return {
     kind: "inspect", explanation: run.failureDiagnostics?.runRevision === run.revision && run.failureDiagnostics
       ? failureReasonLabels[run.failureDiagnostics.reason] : "Reason details unavailable.", action: "open_run" };
+  if (run.pendingApproval) return { kind: "approval",
+    explanation: `Operator allowance review required: ${run.pendingApproval.reason.replaceAll("_", " ")}.`, action: "open_run" };
   if (run.status === "paused") return { kind: "paused", explanation: run.activeOperationId
     ? "The run is paused; current work may still be finishing." : "The run is paused and can be resumed.",
     action: run.activeOperationId ? "open_run" : "resume" };

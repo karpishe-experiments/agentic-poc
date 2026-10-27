@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { imageCapacity } from "@/lib/experiment-runner/image-capacity";
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasM4SimulatedImagePolicy, hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
@@ -265,7 +265,7 @@ export function createExperimentContextService(database: Database, options: { st
       ] }).toArray() : [];
     const countFailures = new Map(countFailureRows.map(row => [row._id, m4CountFailureDiagnostic(row, run)]));
     let pageSelection = null;
-    if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasM4SimulatedImagePolicy(run)) &&
+    if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasExperimentSimulatedImagePolicy(run)) &&
         run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
         run.generationCompletedAtMs == null && !pageBatch) {
       const readiness = pageBibleWork(run, currentArtifacts);
@@ -296,6 +296,16 @@ export function createExperimentContextService(database: Database, options: { st
         remainingMicrodollars: Math.max(0, policy.maxMicrodollars - campaign.reservedMicrodollars - campaign.settledMicrodollars),
         maxMicrodollars: policy.maxMicrodollars, countChargeStatus: policy.countChargeStatus, invoiceCostAvailable: false as const };
     })() : null;
+    const executionAllowance = (projection === "inspection" || projection === "report") && run.execution ? await (async () => {
+      const campaign = await database.collections.experiment_campaigns.findOne({ _id: run.execution!.campaignId });
+      if (!campaign || (campaign as unknown as { schemaVersion?: string }).schemaVersion !== "execution_v1") return null;
+      const saved = campaign as unknown as import("@/db/experiment-execution-allowance").ExecutionCampaignDocument;
+      if (saved.profileHash !== run.execution!.profileHash || saved.runId !== run._id) return null;
+      return { campaignId: saved._id, revision: saved.revision, totals: saved.allowance,
+        reservedMicrodollars: saved.reservedMicrodollars, settledMicrodollars: saved.settledMicrodollars,
+        textRequests: saved.textRequests, imageRequests: saved.imageRequests,
+        latestApprovalReference: saved.approvals.at(-1)?.reference ?? null };
+    })() : null;
     let capacity;
     if (projection === "inspection" && configuredPageIllustrationTask(run.configurationJson)) {
       const pendingOutputs = await operations.find({ runId: run._id, role: "image", taskId: "J13", state: "succeeded",
@@ -310,16 +320,19 @@ export function createExperimentContextService(database: Database, options: { st
       try { pageIds = parseStoredPageLayout(run.persona, layout?.versions.find(v => v.id === layout.currentVersionId)?.content).pages.map(p => p.pageId); }
       catch { /* Incomplete source evidence yields unavailable capacity. */ }
       const pending = parseJson(run.pendingDecisionJson) as { kind?: string; taskId?: string; subjectId?: string } | null;
-      capacity = imageCapacity({ runId: run._id, limit: run.limits.image, used: run.counters.logicalImage, pageIds,
+      capacity = imageCapacity({ runId: run._id, limit: executionAllowance?.totals.imageCalls ?? run.limits.image, used: run.counters.logicalImage, pageIds,
         artifacts: currentArtifacts, unresolved, revisionPageId: pending?.kind === "revision" && pending.taskId === "J13" ? pending.subjectId : null });
     }
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       ...(run.mode === "balanced" && (projection === "inspection" || projection === "report") ? { m4Accounting } : {}),
+      ...(projection === "inspection" ? { executionAllowance, pendingApproval: run.pendingApproval ?? null } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       ...(projection === "inspection" ? { terminalAtMs: run.terminalAtMs ?? null, timing: runTiming(run), attention: runAttention(run),
         runAccounting: runAccounting(run.mode, operationRows, run.counters.payableText) } : {}),
-      evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: { ...run.limits },
+      evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: executionAllowance ?
+        { text: executionAllowance.totals.textCalls, image: executionAllowance.totals.imageCalls,
+          steps: executionAllowance.totals.steps } : { ...run.limits },
       generationStatus: run.generationCompletedAtMs != null ? "complete" as const : "in_progress" as const,
       generationCompletedAtMs: run.generationCompletedAtMs ?? null,
       safeFailure: run.safeFailure, activeOperationId: run.activeOperationId,
@@ -395,7 +408,7 @@ export function createExperimentContextService(database: Database, options: { st
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     if (operation.role === "image") {
-      if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run))) deny("Image context requires its retained simulated image policy.");
+      if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run))) deny("Image context requires its retained simulated image policy.");
       // Only the authorize handler passes fresh evidence returned by its claim.
       // Standalone context requests perform a new current-source check.
       if (claimedImageRequest && (imageRequestFingerprint(claimedImageRequest) !== operation.inputFingerprint ||
@@ -419,7 +432,7 @@ export function createExperimentContextService(database: Database, options: { st
     const identity = preparationIdentity.parse(raw);
     const run = await runs.findOne({ _id: identity.runId });
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
-    if (!run || !operation || run.mode !== "balanced" || !run.m4 || operation.mode !== "balanced" ||
+    if (!run || !operation || run.mode !== "balanced" || (!run.m4 && !run.execution) || operation.mode !== "balanced" ||
         run.activeOperationId !== operation._id || run.pauseRequested || !["queued", "running"].includes(run.status) ||
         operation.state !== "prepared" || operation.providerKind !== "text" || operation.role === "image" ||
         operation.reservationCount !== 0 || operation.lifecycle?.stop != null || operation.m4Reservation != null || operation.dispatchStartedAtMs != null ||

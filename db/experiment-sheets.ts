@@ -1,4 +1,4 @@
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -57,7 +57,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle work with a simulated image policy.");
+    if ((run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle work with a simulated image policy.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftSheetVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);

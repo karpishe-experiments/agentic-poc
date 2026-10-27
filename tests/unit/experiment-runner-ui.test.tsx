@@ -22,6 +22,36 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("shows a paused allowance request and prevents ordinary Resume from bypassing it", async () => {
+    fetchMock.mockResolvedValue(Response.json({ data: { ...run, status: "paused", activeOperationId: null,
+      pauseRequested: true, pendingApproval: { kind: "allowance_v1", reason: "monetary", requestDigest: "a".repeat(64),
+        requestedAtMs: 1, requiredTotal: 7_000_000, nextAction: { role: "specialist", taskId: "J12", providerKind: "text" } },
+      executionAllowance: { campaignId: "campaign", revision: 2,
+        totals: { maxMicrodollars: 6_000_000, textCalls: 120, imageCalls: 12, steps: 300,
+          textRevisions: 1, imageRevisions: 1, noProgress: 3 }, reservedMicrodollars: 1_000_000,
+        settledMicrodollars: 2_000_000, textRequests: 4, imageRequests: 2, latestApprovalReference: "initial" },
+    } }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    const review = await screen.findByRole("region", { name: "Operator allowance review" });
+    expect(review.textContent).toContain("Minimum funded total: $7.000000");
+    expect(review.textContent).toContain("Money settled $2.000000 + held $1.000000");
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Approve exact totals" })).toBeTruthy();
+  });
+  it("shows saved allowance and Review request on a paused summary card", async () => {
+    fetchMock.mockResolvedValue(Response.json({ data: [{ ...run, status: "paused", activeOperationId: null,
+      pendingApproval: { kind: "allowance_v1", reason: "monetary", requestDigest: "a".repeat(64), requestedAtMs: 1 },
+      executionAllowance: { campaignId: "campaign", revision: 4,
+        totals: { maxMicrodollars: 8_000_000, textCalls: 120, imageCalls: 12, steps: 300,
+          textRevisions: 1, imageRevisions: 1, noProgress: 3 }, reservedMicrodollars: 1_000_000,
+        settledMicrodollars: 2_000_000, textRequests: 4, imageRequests: 2 },
+    }] }));
+    render(<BookletRunner />);
+    expect(await screen.findByRole("link", { name: "Review request" })).toBeTruthy();
+    expect(screen.getByText(/Approved allowance revision 4: \$8\.000000 maximum/)).toBeTruthy();
+    expect(screen.getByText("Run paused for operator allowance review.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+  });
   it("shows zero spare image calls and historical stop details without disabling execution", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, activeOperationId: null,
       failureDiagnostics: { version: "failure_diagnostics_v1", runRevision: 1, timestampMs: 1, phase: "page_assembly",
@@ -186,28 +216,61 @@ describe("booklet runner inspector", () => {
   });
   it("retains the selected Balanced mode and key for explicit retry and hides bulk creation", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
-    fetchMock.mockImplementation(async (_url, options) => options?.method === "POST" ? Promise.reject(new Error("lost")) :
-      new Response(JSON.stringify({ data: [] })));
+    fetchMock.mockImplementation(async (url, options) => options?.method === "POST" ?
+      String(url).endsWith("/campaigns") ? new Response(JSON.stringify({ data: { campaignId: "campaign-1" } })) :
+        Promise.reject(new Error("lost")) : new Response(JSON.stringify({ data: [] })));
     const view = render(<BookletRunner balancedEnabled m4State="granted" />);
     await screen.findByText("No runs yet.");
     fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "balanced" } });
     expect(screen.queryByRole("button", { name: "Start all three" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Operator reference" }), { target: { value: "test grant" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
+    await screen.findByText(/Saved initial grant: campaign-1/);
     fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
     await screen.findByRole("alert");
-    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    const runWrites = () => fetchMock.mock.calls.filter(([url, options]) => options?.method === "POST" && !String(url).endsWith("/campaigns"));
+    expect(runWrites()).toHaveLength(1);
     fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "simulated" } });
     view.rerender(<BookletRunner m4State="ready" />);
     expect((screen.getByRole("button", { name: "Retry pending creation" }) as HTMLButtonElement).disabled).toBe(true);
     view.rerender(<BookletRunner balancedEnabled m4State="granted" />);
     fireEvent.click(screen.getByRole("button", { name: "Retry pending creation" }));
-    await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(2));
-    const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
+    await waitFor(() => expect(runWrites()).toHaveLength(2));
+    const writes = runWrites();
     for (const [, options] of writes) {
-      expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "balanced" });
+      expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "balanced", executionCampaignId: "campaign-1" });
       expect(new Headers(options?.headers).get("Idempotency-Key")).toBe("00000000-0000-4000-8000-000000000010");
     }
     expect(timeout.mock.calls.filter(([milliseconds]) => milliseconds === 60_000)).toHaveLength(2);
     timeout.mockRestore();
+  });
+  it("retains the exact initial grant request after uncertain acknowledgement", async () => {
+    let attempts = 0;
+    fetchMock.mockImplementation(async (url, options) => {
+      if (String(url).endsWith("/campaigns") && options?.method === "POST") {
+        attempts += 1;
+        if (attempts === 1) throw new Error("lost");
+        return Response.json({ data: { campaignId: "campaign-1" } });
+      }
+      return Response.json({ data: [] });
+    });
+    render(<BookletRunner balancedEnabled m4State="granted" />);
+    await screen.findByText("No runs yet.");
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "balanced" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Operator reference" }), { target: { value: "grant-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
+    await screen.findByRole("button", { name: "Retry exact grant" });
+    expect((screen.getByRole("textbox", { name: "Operator reference" }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("combobox", { name: "Mode" }) as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole("combobox", { name: "Persona" }) as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Start selected" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Retry exact grant" }));
+    await screen.findByText(/Saved initial grant: campaign-1/);
+    const grants = fetchMock.mock.calls.filter(([url, options]) => String(url).endsWith("/campaigns") && options?.method === "POST");
+    expect(grants).toHaveLength(2);
+    expect(grants[0]?.[1]?.body).toBe(grants[1]?.[1]?.body);
+    expect(new Headers(grants[0]?.[1]?.headers).get("Idempotency-Key"))
+      .toBe(new Headers(grants[1]?.[1]?.headers).get("Idempotency-Key"));
   });
   it("labels saved Balanced images simulated and offers no linked successor", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [{ ...run, mode: "balanced", status: "blocked", activeOperationId: null,
