@@ -192,7 +192,11 @@ signature verification to `true`. The private-root policy handoff is complete;
 do not reopen its installation window. All eighteen Real publications matched
 their reviewed graphs on immutable readback. API and worker have no native-file
 format override and inherit Dify 1.17.1's `base64` default. The reviewed readiness
-activation still needs staging delivery, followed by an exact finite Kid grant.
+activation completed at staging commit `7a332234d37fae10637f5f0429f72728356f5ff2`.
+Request `40679395869-1` completed and archived, as verified by status
+`40681236948` after the observer timeout. Check deployment `40682459095` passed.
+The live Real Kid grant form is available;
+the exact finite Kid spending grant remains pending.
 Reuse existing credentials; request private entry only if a concrete missing
 credential is proved. No paid call, reset or replacement M4 campaign is authorized.
 
