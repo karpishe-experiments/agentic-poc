@@ -203,9 +203,11 @@ authorized. Campaign `e7fc2af8-a5d6-4f62-81df-650c9abdec10` and run
 `c2e3b0ab-9deb-4cdc-8b74-928f4c54c078` retain the grant and first-image
 pre-provider failure. See the [Kid checkpoint](M5-real.md#first-real-kid-checkpoint---2026-10-28).
 Reuse existing credentials; request private entry only if a concrete missing
-credential is proved. The new dev2 image candidate needs a separately approved
-installation window and verified readiness; no new signature exception, image
-retry, successor, reset or replacement M4 campaign is authorized.
+credential is proved. The operator separately approved the pinned dev2 image
+installation, exact Community readback matched it, and signature verification is
+restored to `true`. The matching application readiness update still needs verified
+delivery. No further signature exception, image retry, successor, reset or
+replacement M4 campaign is authorized.
 
 The following older checkpoints are retained as historical execution evidence;
 do not execute their pending next steps.
