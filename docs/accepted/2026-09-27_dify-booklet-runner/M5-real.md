@@ -159,10 +159,31 @@ while backup remained active, so that Actions run is red and skipped short-tag
 publication; the saved host completion and later check prove the actual release.
 Do not replay deployment to repair the observer result.
 
-Real readiness remains disabled. Community still has text dev5 and the original
-image 0.2.2 plugin. The next checkpoint is explicit approval for the two pinned
-unsigned candidates and a temporary signature window, followed by restoration,
-publication and native-file readback. No Real spending grant or call exists.
+The operator approved and completed the two-package installation window.
+Community readback matched text `1.0.7-dev6` and image `0.2.2-dev1` with the exact
+package hashes above. Signature verification is restored to `true`; the private
+configuration backup is retained on the host. Do not repeat the installation
+handoff. The text provider lists `gpt-6-luna` and `gpt-6-sol` as active. The image
+tool has one existing authorization and exposes the bounded Real-image action.
+These observations do not prove model entitlement or a successful paid request.
+
+All eighteen Real workflow drafts were saved with their environment variables
+and features preserved. Immutable publication readback matched each reviewed
+graph. The readiness manifest records the new publication IDs and reuses the
+existing protected application keys. Private pre-publication DSL backups, hashes
+and prior publication IDs are retained outside Git in the Community state
+directory. No workflow or provider request was executed for this setup.
+
+The API and worker containers have no `MULTIMODAL_SEND_FORMAT` override. The
+[Dify 1.17.1 configuration](https://github.com/langgenius/dify/blob/1.17.1/api/configs/feature/__init__.py)
+defaults to `base64`; this is inherited-default evidence, not an explicit runtime
+override. No host setting change is required. The reviewed activation candidate
+has technical profile hash
+`be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375`.
+Its staging delivery remains a separate checkpoint from the earlier application
+release above. No Real spending grant or call exists. After activation, obtain an
+exact finite Kid grant before creating its one-run campaign; the historical USD 1
+campaign grants no authority for it. No new credential or transfer path is added.
 
 ## Three execution checkpoints
 
