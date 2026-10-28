@@ -380,7 +380,7 @@ coverage alone did not expose the mismatch; its cover contains no manuscript uni
   excluding OOM. Verify application startup and a stable restart count after a
   repair; a momentary running state does not establish recovery.
 - **Evidence:** Operator kernel output from 2026-10-11 and the
-  [Community runbook](../../deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
+  [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#automated-diagnostics-and-sandbox-memory).
   The 1536 MiB repair passed startup and stability verification; subsequent
   readback showed 409.3 MiB usage, zero restarts and zero OOM counters.
 - **Promotion target:** Documentation for container failure diagnosis.
