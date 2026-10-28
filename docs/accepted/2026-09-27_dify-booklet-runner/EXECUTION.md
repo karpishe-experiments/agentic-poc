@@ -94,7 +94,7 @@ Recheck these facts at entry. Never copy credential values into this file.
 Current target after issue #69: Community at `https://dify.uniwares.co.uk`,
 workspace `ffac910f-2786-490e-90d8-07243d49741b`, with separate MCP/CLI sessions.
 The Cloud facts above remain historical. Use [M0](M0-readiness.md) for current
-probe identifiers and the [Community runbook](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md)
+probe identifiers and the [Community runbook](../../deployment/dify-community.md)
 for access limitations and platform readiness. Community adoption does not grant
 paid execution, staging deployment, resets or deletion of Cloud resources.
 
@@ -177,9 +177,38 @@ original campaign. Kid and Parent retain failed advisory evaluation; Creator
 retains both current reports. The campaign's stored state remains `active` as an
 accounting fact; this closeout does not mutate it or authorize another call.
 The separate USD 1 Kid experience is complete and outside those totals. M5 Real
-execution, image spending and any new allowance remain unapproved. Follow the
+Kid execution later received the separate USD 5 grant recorded below. Any other
+Real run or allowance extension remains unapproved. Follow the
 [accepted M5 A–F sequence](M5-real.md#accepted-m5-implementation-sequence---pending-delivery-and-paid-grants).
 No M4 report retry, new persona run, reset or manual saved-output repair is needed.
+**M5 delivery checkpoint - 2026-10-28:** Staging commit
+`82964797851fb40b85740fa177521e38774ec393` completed through saved request
+`40656308791-1`; protected status `40659139006` and Check deployment
+`40659711655` verified it. See [M5 delivery](M5-real.md#current-staging-delivery---2026-10-28)
+for the observer-timeout distinction. The operator explicitly approved all PR
+merges for this chat session; do not ask again within that scope. This grants no
+paid run or a further signature-policy exception. The operator separately approved
+the two pinned provider packages, completed their installation, and restored
+signature verification to `true`. The private-root policy handoff is complete;
+do not reopen its installation window. All eighteen Real publications matched
+their reviewed graphs on immutable readback. API and worker have no native-file
+format override and inherit Dify 1.17.1's `base64` default. The reviewed readiness
+activation completed at staging commit `7a332234d37fae10637f5f0429f72728356f5ff2`.
+Request `40679395869-1` completed and archived, as verified by status
+`40681236948` after the observer timeout. Check deployment `40682459095` passed.
+The live Real Kid grant form is available. The operator subsequently approved
+USD 5 for one initial Kid run, with 120 text/12 image calls, 300 steps, revision
+allowances 1/1 and a no-progress window of 3. No automatic retry or successor was
+authorized. Campaign `e7fc2af8-a5d6-4f62-81df-650c9abdec10` and run
+`c2e3b0ab-9deb-4cdc-8b74-928f4c54c078` retain the grant and first-image
+pre-provider failure. See the [Kid checkpoint](M5-real.md#first-real-kid-checkpoint---2026-10-28).
+Reuse existing credentials; request private entry only if a concrete missing
+credential is proved. The operator separately approved the pinned dev2 image
+installation, exact Community readback matched it, and signature verification is
+restored to `true`. The matching application readiness update still needs verified
+delivery. No further signature exception, image retry, successor, reset or
+replacement M4 campaign is authorized.
+
 The following older checkpoints are retained as historical execution evidence;
 do not execute their pending next steps.
 
@@ -289,7 +318,7 @@ evidence unless its relevant release/configuration inputs change.
 
 | Dependency / exact target | Technical status and evidence | Private reference / location (no values) | Required action / authority | Blocks / verification |
 | --- | --- | --- | --- | --- |
-| Community control: `https://dify.uniwares.co.uk`, workspace `ffac910f-2786-490e-90d8-07243d49741b` | MCP/CLI inventory and deterministic control passed; [M0](M0-readiness.md) | Separate Community CLI profile and local `DifyWf-Community-Codex` state; [access guide](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/dify-getting-started.md) | Private login only for an expired/failing interface. New `issue65-` model-free writes/publication/restoration granted in this chat on 2026-09-27; preserve existing Booklet resources, credentials and plan | Dependent Dify control; verify exact workspace with inventory, publication/read-back and applicable tool sync |
+| Community control: `https://dify.uniwares.co.uk`, workspace `ffac910f-2786-490e-90d8-07243d49741b` | MCP/CLI inventory and deterministic control passed; [M0](M0-readiness.md) | Separate Community CLI profile and local `DifyWf-Community-Codex` state; [access guide](../../dify-getting-started.md) | Private login only for an expired/failing interface. New `issue65-` model-free writes/publication/restoration granted in this chat on 2026-09-27; preserve existing Booklet resources, credentials and plan | Dependent Dify control; verify exact workspace with inventory, publication/read-back and applicable tool sync |
 | Runner app/callback bindings: issue #65 Community apps and Booklet staging | Eighteen active publication IDs and graph hashes were read back on 2026-10-06. Corrected staging activation [37490374204](https://github.com/karpishe-experiments/agentic-poc/actions/runs/37490374204) passed with backup `staging-20261006T154826Z-b370e46222477157`; full-suite acceptance remains pending | Prepared `issue65-m3-j13-bindings.dpapi.xml` and protected `DIFY_BOOKLET_RUNNER_SETTINGS_JSON`; existing callback secret `BOOKLET_TOOL_KEY` in Dify | Private preparation and activation are complete. Do not repeat key entry. Preserve prior encrypted settings and failed runs | Full-suite acceptance; verify authenticated runtime/callback behavior, exact active publication IDs and saved outputs. None of the eighteen active publications has a Workflow Tool binding |
 | Image transport/accounting: selected Community image workflow | Local ordered transport/recovery candidate exists; live runtime ownership, size and provider reference/accounting proof pending; [M3 entry gate](M3-completion.md#entry-gate) | Existing image app binding; provider credentials inside Dify only | Resolve model-free capabilities first; privately configure only missing approved provider binding | Dependent final-page/Real execution; verify order/digests, runtime access, output recovery, retries and pre-call reservations |
 | Data/assets: staging `kids_booklet` and `kids-booklet-staging-assets` | Saved M1/M2 artifacts and byte retrieval passed; [M1](M1-runner.md), [M2](M2-references.md) | Existing protected staging DB/storage configuration | Reuse access; private repair only if required checks fail. No production data or credentials | Dependent persistence/storage; verify current readiness and original-byte retrieval without destructive changes |

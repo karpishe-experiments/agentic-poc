@@ -35,7 +35,8 @@ export const executionPolicySchema = z.strictObject({
   tokenPolicy: m4TokenPolicySchema,
   publications: z.array(savedConfigurationItemSchema.extend({ persona: personaSchema.nullable() })).length(18),
   realImage: z.strictObject({ adapterIdentity: z.literal(REAL_IMAGE_ADAPTER_IDENTITY),
-    pluginIdentity: z.string().regex(/^langgenius\/openai_tool:0\.2\.2-dev1@[0-9a-f]{64}$/), packageSha256: digest,
+    // Keep saved dev1 profiles readable; new readiness pins only the reviewed dev2.
+    pluginIdentity: z.string().regex(/^langgenius\/openai_tool:0\.2\.2-dev[12]@[0-9a-f]{64}$/), packageSha256: digest,
     nativeFileOrigin: z.literal("https://dify.uniwares.co.uk"),
     model: z.literal(REAL_IMAGE_MODEL), size: z.enum(["1024x1024", "1536x1024", "1024x1536"]),
     quality: z.enum(["low", "medium", "high", "xhigh", "max"]),

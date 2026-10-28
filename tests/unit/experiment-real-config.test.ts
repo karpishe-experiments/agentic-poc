@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import release from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import delivered from "@/lib/experiment-runner/real-readiness-manifest.json";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
+import { executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
 import { m4TestId as id } from "@/tests/helpers/m4-policy";
 import {
   REAL_IMAGE_PACKAGE_SHA256, REAL_IMAGE_PLUGIN_IDENTITY, REAL_TEXT_PACKAGE_SHA256,
@@ -24,6 +25,24 @@ const ready = {
 } as const;
 
 describe("staging Real readiness manifest", () => {
+  it("pins dev2 for new readiness while preserving the retained dev1 profile hash", () => {
+    const prior = {
+      ...delivered,
+      imagePluginIdentity: "langgenius/openai_tool:0.2.2-dev1@c1f56e13bfdba8523fcb79e3bf2249a0c1ffd0e1be7ad92a947eeace51a80b31",
+      imagePackageSha256: "8ae9ddea724651f2c9d0559b043edfee735ca69cd1d07fae39474c11b3124ec8",
+    };
+    const current = realReadinessManifestSchema.parse(delivered);
+    if (current.state !== "ready") throw new Error("Missing delivered readiness");
+    const profile = (adapters: typeof prior) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+      current.sourcePolicy, current.tokenPolicy, current.publications, adapters));
+    const saved = profile(prior);
+    expect(saved.hash).toBe("be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375");
+    expect(executionPolicySnapshot(saved.policy).hash).toBe(saved.hash);
+    expect(profile(delivered).hash).not.toBe(saved.hash);
+    expect(realReadinessManifestSchema.safeParse(prior).success).toBe(false);
+    expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev3") })).toThrow();
+  });
+
   it("hydrates the delivered publications and never accepts local or production Real dispatch", () => {
     expect(realReadinessManifestSchema.safeParse(delivered).success).toBe(true);
     expect(readM4RunnerConfig(env).enabled).toBe(true);
