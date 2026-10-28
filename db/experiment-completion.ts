@@ -1,4 +1,4 @@
-import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
 import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
 import type { ClientSession } from "mongodb";
@@ -38,7 +38,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   const preparation = phase === "preparation";
   if (preparation && (!reportOperationId || !isBalancedImageVerificationRun(run) || run.pauseRequested ||
       !["queued", "running"].includes(run.status) || nowMs == null || !Number.isSafeInteger(nowMs) || nowMs < 0)) {
-    incomplete("Report preparation requires active Balanced work and an original deadline check.");
+    incomplete("Report preparation requires active execution and an original deadline check.");
   }
   if (reportOperationId) {
     const operation = await database.collections.experiment_operations.findOne({ _id: reportOperationId, runId: run._id }, { session });
@@ -61,14 +61,14 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     }
     if (preparation) await assertExperimentEvaluationOrder(database, session, run, operation.role as "tester" | "judge");
   }
-  if ((run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
+  if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       (run.activeOperationId && run.activeOperationId !== reportOperationId) || run.pendingDecisionJson ||
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
       (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.", "unresolved_ownership");
   // Preparation is a read-only source projection, not accounting acceptance.
   // Generation/report materialization and final exit require retained usage.
-  if (run.mode === "balanced" && !preparation) {
+  if ((run.mode === "balanced" || run.mode === "real") && !preparation) {
     try {
       await measurePhase({ runId: run._id, ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
         run.execution ? verifyExecutionAccounting(database, session, run, reportOperationId) :

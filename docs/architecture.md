@@ -709,6 +709,17 @@ uses the existing preparation, dispatch, authenticated observation, completion
 and simulated-image services. Real dispatch remains closed pending its own
 verified image transport.
 
+The local Real candidate reads a separate, tracked, non-secret readiness
+manifest. It is disabled by default. A staging-only ready record must pin the
+reviewed text and image adapter identities and package hashes, base64 native-file
+delivery, a source and effective token policy, and eighteen exact publication
+entries. The reader matches each app and role slot to the existing protected
+binding array and borrows that app's API key; the manifest stores no key. Real
+readiness is independent of the historical M4 campaign manifest, so changed
+publications do not rewrite an old M4 profile or hash. Missing or drifted Real
+metadata closes only Real. Neither a local candidate package nor a ready file
+proves Dify installation, publication readback, model permission, or paid use.
+
 The authenticated same-origin campaign route records an explicit initial grant
 before new-run creation. A new run claims that campaign's single slot. The
 runner pauses before an unaffordable call or step; an undispatched prepared

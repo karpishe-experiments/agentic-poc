@@ -173,6 +173,19 @@ describe("M4 trusted creative output assembly", () => {
         evidence: { versionIds: [id(2)], inspectedAssetIds: [] }, costEvidence: { status: "unavailable", actualUsd: null, estimatedUsd: null } } });
     }
   });
+  it("permits visual assessment only for a saved Real report with authenticated inspected assets", () => {
+    const note = { status: "observed", explanation: "Delivered original images" };
+    const report = JSON.stringify({ report: { summary: "Image-aware review", intent: note,
+      interaction: note, consistency: note, findings: [] } });
+    const reportSelector = { ...selector, role: "judge" as const, taskId: null, report: true };
+    const saved = (mode: string) => JSON.stringify({ reportEvidence: { role: "judge", mode,
+      runId: id(1), configurationHash: "a".repeat(64), versionIds: [id(2)] } });
+    expect(parseM4CreativeOutput(reportSelector, report, saved("real"), undefined, true, [id(3)]))
+      .toMatchObject({ kind: "assessment", payload: { consistency: note, evidence: { inspectedAssetIds: [id(3)] } } });
+    expect(() => parseM4CreativeOutput(reportSelector, report, saved("real"), undefined, true)).toThrow();
+    expect(() => parseM4CreativeOutput(reportSelector, report, saved("balanced"), undefined, true, [id(3)])).toThrow();
+    expect(() => parseM4CreativeOutput(reportSelector, report, saved("real"), undefined, false, [id(3)])).toThrow();
+  });
   it("fails malformed, wrong-task and truncated output without producing a result", () => {
     expect(() => parseM4CreativeOutput(selector, '{"result":', JSON.stringify(context))).toThrow();
     expect(() => parseM4CreativeOutput(selector, proposal("J10", sheetCreative), JSON.stringify(context))).toThrow();

@@ -5,7 +5,7 @@ import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { withMongoTransaction } from "@/db/client";
 import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
-import { defaultExecutionAllowance, executionAllowanceSchema, executionPolicyFromM4TechnicalProfile, executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
+import { defaultExecutionAllowance, executionAllowanceSchema, executionPolicyFromM4TechnicalProfile, realExecutionPolicyFromM4TechnicalProfile, executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { createExperimentImageRepository } from "@/db/experiment-images";
 import { createExperimentPageBatchRepository } from "@/db/experiment-page-batches";
@@ -37,9 +37,10 @@ import { runAccounting } from "@/lib/experiment-runner/run-accounting";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
+const realImageEvidence = imageIdentity.extend({ result: z.unknown() });
 const control = z.strictObject({ expectedRevision: z.number().int().nonnegative() });
 const runControl = control.extend({ responseMode: z.literal("receipt").optional() });
-const campaignGrant = z.strictObject({ mode: z.literal("balanced"), persona: personaSchema,
+const campaignGrant = z.strictObject({ mode: z.enum(["balanced", "real"]), persona: personaSchema,
   reference: z.string().trim().min(1).max(500), maxMicrodollars: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   predecessorRunId: opaqueIdSchema.optional(), totals: executionAllowanceSchema.omit({ maxMicrodollars: true }).optional() });
 const approvalBase = { expectedRevision: z.number().int().nonnegative(),
@@ -169,7 +170,8 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const callbackStore = diagnosticAssetStore(store());
     const authority = state.enabled && state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
     return { repository: createExperimentRepository(db, { store: () => callbackStore,
-      ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}) }),
+      ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}),
+      ...(state.enabled && state.config.real?.state === "ready" ? { realExecutionEnabled: true as const } : {}) }),
       context: createExperimentContextService(db, { store: () => callbackStore }) };
   }
   async function run(operation: () => Promise<Response>, budgetMs = 30_000) { try { return await withOperationBudget(Date.now() + budgetMs, operation); } catch (error) { return safeError(error); } }
@@ -185,7 +187,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const rows = await collections.experiment_runs.find({}, { projection: {
       _id: 1, bookletId: 1, predecessorRunId: 1, persona: 1, mode: 1, status: 1, revision: 1, pauseRequested: 1,
       counters: 1, limits: 1, safeFailure: 1, failureDiagnostics: 1, activeOperationId: 1, evaluationStatus: 1, generationCompletedAtMs: 1,
-      preparation: 1, pendingApproval: 1, execution: 1, brief: 1, createdAtMs: 1, updatedAtMs: 1, terminalAtMs: 1,
+      preparation: 1, "pendingApproval.reason": 1, "pendingApproval.requestDigest": 1,
+      "pendingApproval.requiredTotal": 1, "pendingApproval.nextAction": 1, "pendingApproval.declinedAtMs": 1,
+      "execution.campaignId": 1, brief: 1, createdAtMs: 1, updatedAtMs: 1, terminalAtMs: 1,
     } }).sort({ createdAtMs: -1, _id: -1 }).skip(page * limit).limit(limit + 1).toArray();
     const selected = rows.slice(0, limit);
     const bookletIds = [...new Set(selected.map(row => row.bookletId).filter((id): id is string => !!id))];
@@ -205,6 +209,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     const measured = runIds.length ? await collections.experiment_operations.find({ runId: { $in: runIds } },
       { projection: { _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
         "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+        "realImageReservation.unsettledMicrodollars": 1, "realImageReservation.settledMicrodollars": 1,
         "contextDiagnostics.warnings": 1 } }).toArray() : [];
     const warningCounts = new Map<string, { measuredOperations: number; warningCount: number }>();
     const operationsByRun = new Map<string, typeof measured>();
@@ -226,7 +231,8 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       predecessorRunId: row.predecessorRunId, persona: row.persona, mode: row.mode, status: row.status,
       revision: row.revision, createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs, terminalAtMs: row.terminalAtMs ?? null,
       timing: runTiming(row), attention: runAttention(row),
-      runAccounting: runAccounting(row.mode, operationsByRun.get(row._id) ?? [], row.counters?.payableText ?? 0),
+      runAccounting: runAccounting(row.mode, operationsByRun.get(row._id) ?? [], row.counters?.payableText ?? 0,
+        row.counters?.payableImage ?? 0),
       currentTask: (operationsByRun.get(row._id) ?? []).find(operation => operation._id === row.activeOperationId)?.taskId ?? (operationsByRun.get(row._id) ?? []).find(operation => operation._id === row.activeOperationId)?.role ?? null,
       pauseRequested: row.pauseRequested, counters: row.counters, limits: (() => {
         const campaign = row.execution ? executionLimits.get(row.execution.campaignId) : null;
@@ -257,9 +263,14 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       if (!key.success) return reply(400, "invalid_request");
       const body = campaignGrant.parse(await boundedJson(request, 4096));
       const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
-      if (!authority?.grant.tokenPolicy) return reply(422, "mode_unavailable");
-      const policy = executionPolicyFromM4TechnicalProfile(m4PolicySnapshot(authority.policy).policy,
-        authority.grant.tokenPolicy);
+      if (body.mode === "balanced" && !authority?.grant.tokenPolicy ||
+          body.mode === "real" && state.config.real?.state !== "ready") return reply(422, "mode_unavailable");
+      const policy = body.mode === "real" ? realExecutionPolicyFromM4TechnicalProfile(
+        state.config.real!.sourcePolicy, state.config.real!.tokenPolicy,
+        state.config.real!.bindings.map(({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) =>
+          ({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, ...(finalPageIllustration ? { finalPageIllustration } : {}) })),
+        state.config.real!) : executionPolicyFromM4TechnicalProfile(m4PolicySnapshot(authority!.policy).policy,
+        authority!.grant.tokenPolicy!);
       const campaignId = stableUuid(key.data, "execution-campaign");
       const approvalId = stableUuid(key.data, "execution-initial-approval");
       const totals = body.totals ? executionAllowanceSchema.parse({ ...body.totals, maxMicrodollars: body.maxMicrodollars }) :
@@ -338,6 +349,15 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       database: database(), store: diagnosticAssetStore(store()) }).complete({ identity: input, content }), { admitted: true, runId: input.runId, operationId: input.operationId }));
       return data({ assetId: completed.asset?._id, sha256: completed.operation.imageCompletionDigest, state: completed.operation.state, reused: completed.reused });
     }); },
+    imageEvidence(request: Request) { return run(async () => {
+      const state = config(); const denied = toolAuth(request, state); if (denied) return denied;
+      if (!state.enabled || state.config.real?.state !== "ready") return reply(422, "mode_unavailable");
+      const body = realImageEvidence.parse(await boundedJson(request, 32_768));
+      const saved = await measurePhase(body, "real_image_evidence", () => mutate(() =>
+        services(state).repository.observeRealImage({ ...body, nowMs: Date.now() }),
+      { admitted: true, runId: body.runId, operationId: body.operationId }));
+      return data(saved);
+    }); },
     list(request: Request) { return run(async () => { const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
       if (new URL(request.url).searchParams.get("view") === "summary") return data(await runSummaries(request, state));
       const { repository, context } = services(state); const rows = await repository.listRuns(); return data(await Promise.all(rows.map(async row => {
@@ -360,20 +380,21 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       if (!key.success) return reply(400, "invalid_request");
       const body = createRunInputSchema.parse(await boundedJson(request, 4096));
       const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
-      if (body.mode === "real" || body.mode === "balanced" && (!body.executionCampaignId && (!authority || body.predecessorRunId))) return reply(422, "mode_unavailable");
+      if (body.mode === "real" && (state.config.real?.state !== "ready" || !body.executionCampaignId) ||
+          body.mode === "balanced" && (!body.executionCampaignId && (!authority || body.predecessorRunId))) return reply(422, "mode_unavailable");
       const { repository, context } = services(state);
       const runId = stableUuid(key.data, "booklet-run");
       const bookletId = stableUuid(key.data, "booklet");
       const prior = await repository.getRun(runId);
       if (prior) {
         if (prior.persona !== body.persona || prior.mode !== body.mode || prior.predecessorRunId !== (body.predecessorRunId ?? null) ||
-            body.mode === "balanced" && (body.executionCampaignId ? prior.execution?.campaignId !== body.executionCampaignId :
+            (body.mode === "balanced" || body.mode === "real") && (body.executionCampaignId ? prior.execution?.campaignId !== body.executionCampaignId :
               prior.m4?.campaignId !== authority!.grant.campaignId)) return reply(409, "conflict");
         return data(await measurePhase({ runId }, "create_existing_detail", () => context.getRunView(prior._id)), 200);
       }
       const saved = await measurePhase({ runId }, "create_mutation", () => mutate(() => repository.createRun({ runId, bookletId, ...body,
         ...(body.mode === "balanced" && !body.executionCampaignId ? { campaignId: authority!.grant.campaignId } : {}),
-        configuration: configurationSnapshot(state.config, body.persona), nowMs: Date.now() }), { runId }));
+        configuration: configurationSnapshot(state.config, body.persona, body.mode), nowMs: Date.now() }), { runId }));
       return data(await measurePhase({ runId }, "create_detail", () => context.getRunView(saved._id)), 201);
     }, 60_000); },
     control(request: Request, runId: string, action: "pause" | "resume") { return run(async () => {
@@ -419,10 +440,43 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const { repository, context } = services(state);
       const savedRun = await measurePhase(callbackIdentity, "callback_run_read", () => repository.getRun(callbackIdentity.runId));
       if (!savedRun) return reply(404, "not_found");
-      if (savedRun.mode === "real") return reply(422, "mode_unavailable");
-      if (savedRun.mode === "balanced") {
+      if (savedRun.mode === "real" && (await repository.getOperation(callbackIdentity.operationId))?.providerKind === "image") {
+        if (state.config.real?.state !== "ready" || action !== "authorize") {
+          if (action === "result" || action === "failure") {
+            const operation = await repository.getOperation(callbackIdentity.operationId);
+            if (operation?.runId !== savedRun._id || operation?.workflowRunId !== callbackIdentity.workflowRunId) return reply(409, "conflict");
+            await mutate(() => repository.requestObservation(operation._id), { admitted: true, runId: savedRun._id, operationId: operation._id });
+            return data({ observationRequested: true });
+          }
+          return reply(422, "mode_unavailable");
+        }
+        const body = identity.parse(raw);
+        const operation = await repository.getOperation(body.operationId);
+        if (!operation || operation.runId !== body.runId || operation.mode !== "real" || operation.providerKind !== "image" ||
+            operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== body.parentWorkflowRunId ||
+            operation.workflowRunId && operation.workflowRunId !== body.workflowRunId || !operation.realImagePreparation) return reply(409, "conflict");
+        const saved = savedConfigurationSchema.parse(JSON.parse(savedRun.configurationJson)).find(item => item.role === "image" && item.taskId === null);
+        const binding = state.config.real.bindings.find(item => item.role === "image" && item.taskId === null);
+        if (!saved || !binding || saved.appId !== binding.appId || saved.publishedWorkflowId !== binding.publishedWorkflowId || !binding.apiKey)
+          return reply(409, "conflict");
+        const deadlineAtMs = (operation.deadlineAtMs ?? 0) - RECONCILIATION_RESERVE_MS;
+        const remote = await (deps.runtime ?? createWorkflowRuntime)(state.config).retrieve(binding, body.workflowRunId,
+          { deadlineAtMs: Math.min(deadlineAtMs, Date.now() + 30_000), signal: request.signal });
+        if (remote.kind !== "execution" || remote.execution.status !== "running" ||
+            remote.execution.workflow_id !== binding.publishedWorkflowId || remote.execution.id !== body.workflowRunId)
+          return reply(409, "conflict");
+        const claim = await mutate(() => repository.claimOperation({ ...body, nowMs: Date.now() }, {
+          workflowId: remote.execution.workflow_id,
+          ...(remote.execution.task_id ? { workflowTaskId: remote.execution.task_id } : {}),
+        }), { admitted: true, runId: body.runId, operationId: body.operationId });
+        return data({ started: claim.started, reason: claim.reason ?? null, role: operation.role, taskId: operation.taskId,
+          subjectKind: operation.subjectKind, subjectId: operation.subjectId, mode: operation.mode,
+          inputFingerprint: operation.inputFingerprint,
+          ...(claim.started ? { requestJson: operation.realImagePreparation.requestJson } : {}) });
+      }
+      if (savedRun.mode === "balanced" || savedRun.mode === "real") {
         const operation = await measurePhase(callbackIdentity, "callback_operation_read", () => repository.getOperation(callbackIdentity.operationId));
-        if (!operation || operation.runId !== callbackIdentity.runId || operation.mode !== "balanced" ||
+        if (!operation || operation.runId !== callbackIdentity.runId || operation.mode !== savedRun.mode ||
             operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== callbackIdentity.parentWorkflowRunId ||
             operation.workflowRunId && operation.workflowRunId !== callbackIdentity.workflowRunId) return reply(409, "conflict");
         if (operation.providerKind === "text") {
@@ -446,7 +500,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           const expected = snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
             item.persona === (operation.role === "tester" ? savedRun.persona : null));
           const saved = savedConfigurationSchema.parse(JSON.parse(savedRun.configurationJson)).find((item) => item.role === operation.role && item.taskId === operation.taskId);
-          const candidates = state.config.bindings.filter((item) => item.role === operation.role && item.taskId === operation.taskId &&
+          const candidates = (savedRun.mode === "real" ? state.config.real?.bindings ?? [] : state.config.bindings).filter((item) => item.role === operation.role && item.taskId === operation.taskId &&
             item.persona === (operation.role === "tester" ? savedRun.persona : null));
           const binding = candidates[0];
           if (!prep || !expected || !saved || candidates.length !== 1 || !binding.apiKey ||
@@ -468,11 +522,22 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
           if (timeoutSeconds < 1) return reply(409, "conflict");
           // Measure the actual escaped JSON envelope, not the unescaped request.
           // These immutable prepared bytes are the only context sent to M4 text.
-          const encoded = m4AuthorizationEnvelope(summary, prep.requestJson,
+          let encoded = m4AuthorizationEnvelope(summary, prep.requestJson,
             savedRun.execution ? executionPolicySnapshot(JSON.parse(savedRun.execution.profileJson)).policy.tokenPolicy :
               m4AdmittedTokenPolicy(m4PolicySnapshot(authority!.policy).policy, authority!.grant, prep).snapshot,
             timeoutSeconds, deadlineAtMs,
             (operation.role === "tester" || operation.role === "judge") && savedRun.generationCompletedAtMs != null);
+          if (savedRun.mode === "real" && savedRun.generationCompletedAtMs != null &&
+              (operation.role === "tester" || operation.role === "judge")) {
+            const report = operation.realReportPreparation;
+            if (!report || !prep || report.uploadFileIds.length === 0 ||
+                report.carrierJson !== JSON.stringify(JSON.parse(report.carrierJson), (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
+                  ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)) return reply(409, "conflict");
+            const envelope = JSON.parse(encoded) as { data: { m4: { requestJson: string; requestDigest: string } } };
+            envelope.data.m4.requestJson = report.carrierJson;
+            envelope.data.m4.requestDigest = report.finalRequestDigest;
+            encoded = JSON.stringify(envelope);
+          }
           if (Buffer.byteLength(encoded, "utf8") > 1_048_576) return reply(422, "invalid_result");
           const execution = remote.execution;
           const claim = await measurePhase(body, "authorization_admission", () => mutate(() =>

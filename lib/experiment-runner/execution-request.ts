@@ -2,6 +2,7 @@ import type { ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 import { z } from "zod";
 import { personaSchema, specialistTaskSchema, roleResultSchema, executionAllowanceRequestSchema } from "@/lib/contracts/experiment-runner";
 import { m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
+import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
 import { m4AuthorizedCarrier, m4BindAllowedValues, m4CanonicalJson, m4Hash, m4RequestDefinition, m4StrictSchema,
   M4ReportSizeError, type M4AllowedValues, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 
@@ -38,13 +39,50 @@ export function executionRequestBundleHash() {
   return bundleHash = m4Hash(m4CanonicalJson(selectors.map(executionRequestDefinition)));
 }
 
+const realDefinitions = new Map<string, ReturnType<typeof m4RequestDefinition>>();
+export function realRequestDefinition(selector: M4RequestSelector) {
+  const key = m4CanonicalJson(selector);
+  const cached = realDefinitions.get(key);
+  if (cached) return cached;
+  const base = executionRequestDefinition(selector);
+  const report = selector.report && ["tester", "judge"].includes(selector.role);
+  const outputSchema = report ? m4StrictSchema(z.strictObject({ report: experimentReportSchema.pick({
+    summary: true, intent: true, consistency: true, interaction: true, findings: true,
+  }) })) : base.outputSchema;
+  const systemPrompt = report ? base.systemPrompt.replace(
+    "Images are simulated and this request is text-only: visual consistency must be not_assessed.",
+    "Real original current page images are attached in the reviewed manifest order. Inspect each supplied cover and final page before assessing visual consistency. Mark consistency observed only when every required final image is delivered; identify concrete visible evidence and limitations. Do not infer unseen historical images.") :
+    selector.role === "tester" ? base.systemPrompt.replace(
+      "Images are simulated and text-only: visual assessment is not_assessed; do not claim to have inspected rendered images.",
+      "This decision request is text-only. Do not claim to have inspected image pixels; decide from saved identities, text, source rules and warnings.") : base.systemPrompt;
+  const definition = { ...base, version: "real_request_v1", systemPrompt, outputSchema };
+  const { hash: _ignored, ...contents } = definition;
+  void _ignored;
+  const result = { ...contents, hash: m4Hash(m4CanonicalJson(contents)) } as ReturnType<typeof m4RequestDefinition>;
+  realDefinitions.set(key, result);
+  return result;
+}
+
+let realBundleHash: string | undefined;
+export function realRequestBundleHash() {
+  if (realBundleHash) return realBundleHash;
+  const selectors: M4RequestSelector[] = personaSchema.options.flatMap(persona => [
+    { role: "manager", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: true },
+    { role: "judge", taskId: null, persona, report: true },
+    ...specialistTaskSchema.options.map(taskId => ({ role: "specialist" as const, taskId, persona, report: false })),
+  ]);
+  return realBundleHash = m4Hash(m4CanonicalJson(selectors.map(realRequestDefinition)));
+}
+
 /** Execution profiles retain the M4 carrier and preparation lifecycle. */
 export function prepareExecutionRequest(policy: ExecutionPolicy, selector: M4RequestSelector,
   contextJson: string, allowed: M4AllowedValues) {
   if (!contextJson.trim()) throw new Error("Execution context must not be blank.");
   const context = JSON.parse(contextJson) as unknown;
   if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("Execution context must be an object.");
-  const definition = executionRequestDefinition(selector);
+  const definition = policy.mode === "real" ? realRequestDefinition(selector) : executionRequestDefinition(selector);
   const contextBytes = Buffer.byteLength(contextJson, "utf8");
   if (contextBytes > 2 * 1024 * 1024) {
     if (selector.report) throw new M4ReportSizeError(contextBytes, 2 * 1024 * 1024,

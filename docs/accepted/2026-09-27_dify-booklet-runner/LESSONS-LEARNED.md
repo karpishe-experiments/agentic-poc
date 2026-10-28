@@ -697,6 +697,24 @@ coverage alone did not expose the mismatch; its cover contains no manuscript uni
   proves publication readback without another POST or reservation.
 - **Promotion target:** Documentation for asynchronous external-operation recovery.
 
+### Save attributable usage before image storage
+
+- **Context:** A provider can charge for an image before the workflow stores its
+  output. A tool's emitted messages do not necessarily reach downstream nodes
+  immediately.
+- **Observation:** Dify 1.17.1 pins Graphon 0.7.0. Its tool node buffers JSON
+  until tool message consumption finishes; blob-storage failure can discard that
+  output. Emitting usage JSON before a blob does not preserve the usage record.
+- **Guidance:** Save attributable usage through an authenticated, idempotent
+  callback before output materialization. Retain the reservation when evidence
+  is unavailable. Reconcile the saved operation after an acknowledgement failure;
+  do not repeat the provider request. Keep callback credentials outside the
+  semantic provider request and use the workflow's secret-masked parameter path.
+- **Evidence:** The pinned Graphon tool-node source and the offline ordering and
+  callback-failure cases in [the image adapter tests](dify/m5-openai-image-bounded-tests.py).
+  These tests do not establish live callback reachability or provider permissions.
+- **Promotion target:** Documentation for external paid-operation accounting.
+
 ### Completion acknowledgements must cover every admitted task
 
 - **Context:** A callback saves a valid manager result before constructing its

@@ -52,7 +52,11 @@ export const savedConfigurationSchema = z.array(savedConfigurationItemSchema).ma
   }
 });
 export type BookletRunnerConfig = { enabled: true; baseUrl: string; publicOrigin: string; callbackKey: string; bindings: BookletBinding[];
-  m4?: { state: "disabled" | "invalid" | "ready" | "granted"; authority?: M4Authority } };
+  m4?: { state: "disabled" | "invalid" | "ready" | "granted"; authority?: M4Authority };
+  real?: { state: "ready"; bindings: BookletBinding[]; textPluginIdentity: string;
+    textPackageSha256: string; imagePluginIdentity: string; imagePackageSha256: string;
+    nativeFileFormat: "base64"; sourcePolicy: import("@/lib/experiment-runner/m4-policy").M4Policy;
+    tokenPolicy: import("@/lib/experiment-runner/m4-policy").M4TokenPolicy } };
 export type RunnerConfig = BookletRunnerConfig;
 export type RunnerBinding = BookletBinding;
 export type ConfigState = { enabled: false; reason: "disabled" | "production" } | { enabled: true; config: BookletRunnerConfig } | { enabled: false; reason: "invalid" };
@@ -95,14 +99,18 @@ export function readBookletRunnerConfig(env: Record<string, string | undefined> 
   return { enabled: true, config: { enabled: true, baseUrl, publicOrigin, callbackKey, bindings } };
 }
 
-export function selectBinding(config: BookletRunnerConfig, role: BookletBinding["role"], taskId: SpecialistTask | null, persona: Persona) {
-  const selected = config.bindings.find((item) => item.role === role && item.taskId === (role === "image" ? null : taskId) && item.persona === (role === "tester" ? persona : null));
+export function selectBinding(config: BookletRunnerConfig, role: BookletBinding["role"], taskId: SpecialistTask | null, persona: Persona,
+  mode: "simulated" | "balanced" | "real" = "balanced") {
+  const available = mode === "real" ? config.real?.state === "ready" ? config.real.bindings : [] : config.bindings;
+  const selected = available.find((item) => item.role === role && item.taskId === (role === "image" ? null : taskId) && item.persona === (role === "tester" ? persona : null));
   if (!selected) throw new Error("No configured binding for this role and task.");
   return selected;
 }
 
-export function configurationSnapshot(config: BookletRunnerConfig, persona: Persona) {
-  return config.bindings.filter((item) => item.persona === null || item.persona === persona).map(({ role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) =>
+export function configurationSnapshot(config: BookletRunnerConfig, persona: Persona,
+  mode: "simulated" | "balanced" | "real" = "balanced") {
+  const available = mode === "real" ? config.real?.state === "ready" ? config.real.bindings : [] : config.bindings;
+  return available.filter((item) => item.persona === null || item.persona === persona).map(({ role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) =>
     finalPageIllustration === true ? { role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration } : { role, taskId, appId, publishedWorkflowId, toolProviderId });
 }
 

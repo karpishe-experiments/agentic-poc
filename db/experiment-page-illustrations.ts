@@ -1,4 +1,4 @@
-import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -72,7 +72,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
         $or: [{ role: "tester" }, { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId,
           providerKind: "text", workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null } }],
         mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
-    if ((run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
+    if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
       invalid("Page illustration assembly requires idle work with a simulated image policy.");
     }
     if (!configuredPageIllustrationTask(run.configurationJson)) invalid("Page illustration is not enabled by this saved run configuration.");

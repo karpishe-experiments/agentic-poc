@@ -5,6 +5,8 @@ import { approveAssembledDelegation } from "@/db/experiment-narrative";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
+import { createRealImagePreparation } from "@/db/experiment-real-image-preparation";
+import { createRealReportPreparation } from "@/db/experiment-real-report-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
 import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
@@ -66,7 +68,8 @@ export function createExperimentDispatcher(deps: {
   const store = deps.store ?? createAssetStore;
   const authority = deps.config.m4?.state === "granted" ? deps.config.m4.authority : undefined;
   const repository = createExperimentRepository(deps.database, { store,
-    ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}) });
+    ...(authority ? { m4Authority: authority, m4ExecutionEnabled: true as const } : {}),
+    ...(deps.config.real?.state === "ready" ? { realExecutionEnabled: true as const } : {}) });
   const context = createExperimentContextService(deps.database, { store });
   const rawRuntime = deps.runtime ?? createWorkflowRuntime(deps.config);
   const mutate = deps.mutate ?? runTrackedMutation;
@@ -90,7 +93,7 @@ export function createExperimentDispatcher(deps: {
   const uploadReference = deps.uploadReference ?? createReferenceTransport(deps.config).upload;
   const batches = () => createExperimentPageBatchRepository({ database: deps.database, store: store(), now });
   const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
-    operation.role, operation.taskId as SpecialistTask | null, run.persona);
+    operation.role, operation.taskId as SpecialistTask | null, run.persona, run.mode);
   const assemblyFailures = new WeakMap<object, { startedAt: number; operationId: string }>();
   const assemblyDiagnostic = (error: unknown) => {
     const origin = error && typeof error === "object" ? assemblyFailures.get(error) : undefined;
@@ -366,7 +369,7 @@ export function createExperimentDispatcher(deps: {
         return;
       }
       await repository.recordDispatchIdentity({ ...identity, workflowRunId: execution.id, ...(execution.task_id ? { workflowTaskId: execution.task_id } : {}) });
-      if (run.mode === "balanced" && operation.providerKind === "text" && current.reservationCount === 1) {
+      if ((run.mode === "balanced" || run.mode === "real") && operation.providerKind === "text" && current.reservationCount === 1) {
         if (!authority && !run.execution) return;
         if (current.state === "succeeded" && current.verifiedWorkflowId) {
           if (execution.status === "succeeded") await observeProgress(run._id, current);
@@ -417,7 +420,7 @@ export function createExperimentDispatcher(deps: {
             }
           }
           await observeProgress(run._id, completed);
-        } else if (outcome.kind === "blocked" && run.generationCompletedAtMs != null) {
+        } else if (outcome.kind === "blocked" && run.mode === "balanced" && run.m4 && run.generationCompletedAtMs != null) {
           const retained = await repository.getRun(run._id);
           if (retained?.safeFailure === "definite_failure" && !retained.activeOperationId && !retained.preparation) {
             await createExperimentCompletionService(deps.database, store()).completeAdvisoryFailure({ runId: retained._id,
@@ -549,7 +552,7 @@ export function createExperimentDispatcher(deps: {
   async function advanceWork(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
     return mutate(async () => {
       let run = await repository.getRun(runId);
-      if (!run || run.mode === "real" || run.mode === "balanced" && !run.execution && (!authority || run.m4?.campaignId !== authority.grant.campaignId) ||
+      if (!run || run.mode === "real" && deps.config.real?.state !== "ready" || run.mode === "balanced" && !run.execution && (!authority || run.m4?.campaignId !== authority.grant.campaignId) ||
           run.status === "completed" || run.status === "failed") return "blocked";
       if (run.generationCompletedAtMs != null && !run.activeOperationId && run.status === "blocked" && run.safeFailure === "definite_failure") {
         try {
@@ -595,7 +598,7 @@ export function createExperimentDispatcher(deps: {
               !savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).some((binding) => binding.role === "judge")) return "boundary";
         }
       }
-      const expected = configurationSnapshot(deps.config, run.persona);
+      const expected = configurationSnapshot(deps.config, run.persona, run.mode);
       if (canonical(expected) !== run.configurationJson) {
         await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
         return "blocked";
@@ -769,18 +772,33 @@ export function createExperimentDispatcher(deps: {
         }
       }
       await bindTrackedMutationOperation(runId, operation._id);
-      if (run.mode === "balanced" && operation.providerKind === "text") {
+      if ((run.mode === "balanced" || run.mode === "real") && operation.providerKind === "text") {
         if (!authority && !run.execution) return "blocked";
         const executionProfile = run.execution ? executionPolicySnapshot(JSON.parse(run.execution.profileJson)).policy : null;
         await measurePhase({ runId, operationId: operation._id }, "text_preparation", () =>
           createM4TextPreparation(deps.database, executionProfile ? { executionProfile, campaignId: run.execution!.campaignId } : authority!, { store })
             .prepare({ runId, operationId: operation!._id, nowMs: now() }));
       }
+      if (run.mode === "real" && operation.providerKind === "text" && run.generationCompletedAtMs != null &&
+          (operation.role === "tester" || operation.role === "judge")) {
+        const report = await measurePhase({ runId, operationId: operation._id }, "real_report_preparation", () =>
+          createRealReportPreparation({ database: deps.database, store: store(), upload: uploadReference })
+            .prepare({ runId, operationId: operation!._id, nowMs: now() }, binding));
+        if (report.kind !== "ready") {
+          await repository.failPreparation(runId, operation._id, now());
+          return "blocked";
+        }
+        referenceFileIds = report.fileIds;
+      }
+      if (run.mode === "real" && operation.providerKind === "image") {
+        await measurePhase({ runId, operationId: operation._id }, "real_image_preparation", () =>
+          createRealImagePreparation(deps.database, store()).prepare({ runId, operationId: operation!._id, nowMs: now() }));
+      }
       const admission = await measurePhase({ runId, operationId: operation._id }, "dispatch_admission", () =>
         repository.beginDispatch({ runId, operationId: operation!._id, parentWorkflowRunId, nowMs: now() }));
       if (!admission.dispatched) return "waiting";
       operation = admission.operation;
-      const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: run.mode === "balanced" ? "balanced" : "simulated",
+      const result = await runtime.start(binding, { runId, operationId: operation._id, parentWorkflowRunId, mode: run.mode,
         ...(referenceFileIds ? { referenceFileIds } : {}) }, {
         deadlineAtMs: (operation.deadlineAtMs ?? operation.dispatchStartedAtMs! + OPERATION_LIMIT_MS) - RECONCILIATION_RESERVE_MS,
         onStarted: async (execution) => {

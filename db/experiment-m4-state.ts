@@ -38,3 +38,20 @@ export function hasExperimentSimulatedImagePolicy(run: ExperimentRunDocument): b
       item.finalPageIllustration === binding.finalPageIllustration));
   } catch { return false; }
 }
+
+export function hasExperimentImagePolicy(run: ExperimentRunDocument): boolean {
+  if (hasExperimentSimulatedImagePolicy(run)) return true;
+  if (run.mode !== "real" || !run.execution) return false;
+  try {
+    const snapshot = executionPolicySnapshot(JSON.parse(run.execution.profileJson));
+    if (snapshot.hash !== run.execution.profileHash || snapshot.json !== run.execution.profileJson ||
+        snapshot.policy.mode !== "real" || !snapshot.policy.realImage || !snapshot.policy.realReport ||
+        createHash("sha256").update(run.configurationJson).digest("hex") !== run.configurationHash) return false;
+    const expected = snapshot.policy.publications.filter(item => item.persona === null || item.persona === run.persona);
+    const actual = savedConfigurationSchema.parse(JSON.parse(run.configurationJson));
+    return actual.length === expected.length && expected.every(binding => actual.some(item =>
+      item.role === binding.role && item.taskId === binding.taskId && item.appId === binding.appId &&
+      item.publishedWorkflowId === binding.publishedWorkflowId && item.toolProviderId === binding.toolProviderId &&
+      item.finalPageIllustration === binding.finalPageIllustration));
+  } catch { return false; }
+}

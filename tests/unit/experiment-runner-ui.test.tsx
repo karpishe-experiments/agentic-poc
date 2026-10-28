@@ -22,6 +22,58 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("keeps Real creation unavailable until the provider profile is ready", async () => {
+    render(<BookletRunner />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    expect((screen.getByRole("option", { name: "Real (unavailable)" }) as HTMLOptionElement).disabled).toBe(true);
+    expect(screen.queryByRole("region", { name: "Initial Real allowance" })).toBeNull();
+  });
+  it("requires a new exact Real grant and retains the same linked run request after lost acknowledgement", async () => {
+    const predecessor = "00000000-0000-4000-8000-000000000099";
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        if (url.endsWith("/campaigns")) return Response.json({ data: { campaignId: "real-campaign" } });
+        throw new Error("Lost creation acknowledgement");
+      }
+      return Response.json({ data: [run] });
+    });
+    const view = render(<BookletRunner realEnabled />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "real" } });
+    expect((screen.getByRole("textbox", { name: "Maximum dollars" }) as HTMLInputElement).value).toBe("");
+    expect((screen.getByRole("button", { name: "Start selected" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Start all three" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
+    await screen.findByRole("alert");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(0);
+    fireEvent.change(screen.getByRole("textbox", { name: "Maximum dollars" }), { target: { value: "1.234567" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Operator reference" }), { target: { value: "Exact test-only grant" } });
+    fireEvent.click(screen.getByText("Link the preceding experiment"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Predecessor run ID (optional)" }), { target: { value: predecessor } });
+    fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
+    await screen.findByText(/Saved initial grant: real-campaign/);
+    const grant = fetchMock.mock.calls.find(([url, options]) => url.endsWith("/campaigns") && options?.method === "POST")!;
+    expect(JSON.parse(String(grant[1]?.body))).toMatchObject({ mode: "real", persona: "playful_kid",
+      maxMicrodollars: 1_234_567, predecessorRunId: predecessor,
+      totals: { textCalls: 120, imageCalls: 12 }, reference: "Exact test-only grant" });
+    fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry pending creation" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url, options]) => url === "/api/experiments/booklet-runs" && options?.method === "POST")).toHaveLength(2));
+    for (const [, options] of fetchMock.mock.calls.filter(([url, options]) => url === "/api/experiments/booklet-runs" && options?.method === "POST")) {
+      expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "real",
+        executionCampaignId: "real-campaign", predecessorRunId: predecessor });
+      expect(new Headers(options?.headers).get("idempotency-key")).toBe("00000000-0000-4000-8000-000000000010");
+    }
+    view.rerender(<BookletRunner realEnabled={false} />);
+    expect((screen.getByRole("button", { name: "Retry pending creation" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it("does not offer advisory-failure finalization for a Real run missing required reports", async () => {
+    fetchMock.mockResolvedValue(Response.json({ data: { ...run, mode: "real", status: "blocked",
+      generationStatus: "complete", evaluationStatus: "failed", safeFailure: "definite_failure", activeOperationId: null } }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    await screen.findByRole("heading", { name: "Kite Rescue" });
+    expect(screen.queryByRole("button", { name: "Finalize completed booklet" })).toBeNull();
+  });
   it("shows a paused allowance request and prevents ordinary Resume from bypassing it", async () => {
     fetchMock.mockResolvedValue(Response.json({ data: { ...run, status: "paused", activeOperationId: null,
       pauseRequested: true, pendingApproval: { kind: "allowance_v1", reason: "monetary", requestDigest: "a".repeat(64),

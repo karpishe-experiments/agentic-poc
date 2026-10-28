@@ -12,7 +12,8 @@ import { configuredPageIllustrationTask } from "@/lib/experiment-runner/page-ill
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import type { VerificationMetadata } from "@/db/experiment-verification-metadata";
-import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
+import { realImageResultSchema } from "@/lib/experiment-runner/real-image-contract";
 
 const time = z.number().int().nonnegative();
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
@@ -76,7 +77,8 @@ export function createExperimentImageRepository(database: Database, options: { s
     const run = await runs.findOne({ _id: input.runId }, { session });
     if (!operation || !run) throw new ExperimentRepositoryError("not_found", "Image operation was not found.");
     if (operation.role !== "image" || operation.providerKind !== "image" || operation.mode !== run.mode ||
-        (run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || operation.reservationCount !== 1) invalid("Operation is not an authorized simulated image claim.");
+        (run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || operation.reservationCount !== 1 ||
+        run.mode === "real" && (!operation.realImageReservation || !operation.realImageObservation)) invalid("Operation is not an authorized image claim.");
     if (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId || operation.inputFingerprint !== input.inputFingerprint) conflict("Image completion identity differs from the saved claim.");
     const request = requestFor(operation);
     if (imageRequestFingerprint(request) !== input.inputFingerprint || JSON.stringify(request.sourceVersionIds) !== JSON.stringify(operation.dependencyVersionIds)) conflict("Saved image request or source identity changed.");
@@ -97,6 +99,7 @@ export function createExperimentImageRepository(database: Database, options: { s
     const input = identitySchema.parse(raw);
     return withMongoTransaction(database, async (session) => {
       const { operation, run, request } = await checked(input, session);
+      if (run.mode === "real") invalid("Synthetic image fixture is unavailable for Real runs.");
       // Download is read-only: reservation and the active operation must already
       // have been established by the ordinary provider authorization callback.
       if (operation.state !== "started" && operation.state !== "unknown") invalid("Image fixture operation has not started.");
@@ -126,6 +129,14 @@ export function createExperimentImageRepository(database: Database, options: { s
     const input = claimSchema.parse(raw);
     return withMongoTransaction(database, async (session) => {
       const { operation, run, request } = await checked(input, session);
+      if (run.mode === "real") {
+        const result = realImageResultSchema.parse(JSON.parse(operation.realImageObservation!.resultJson));
+        const output = result.output;
+        if (result.status !== "succeeded" || !output ||
+            output.sha256 !== input.validatedImage.sha256 || output.byteLength !== input.validatedImage.byteLength ||
+            output.mimeType !== input.validatedImage.mimeType || output.width !== input.validatedImage.width ||
+            output.height !== input.validatedImage.height) conflict("Real provider output differs from original bytes.");
+      }
       if (operation.imageCompletionDigest && operation.imageCompletionDigest !== input.validatedImage.sha256) conflict("Image operation has different original bytes.");
       if (operation.state === "succeeded") {
         const asset = await assets.findOne({ _id: operation._id, bookletId: run.bookletId }, { session });

@@ -57,7 +57,7 @@ type Run = {
   preparation?: { identity: string; startedAtMs: number; deadlineAtMs: number; unresolved: boolean } | null;
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
-type Mode = "simulated" | "balanced";
+type Mode = "simulated" | "balanced" | "real";
 const retainedDecisionControl = (state: Pick<Run, "status" | "safeFailure" | "generationStatus" | "activeOperationId" | "preparation" | "retainedDecisionContinuation">) =>
   state.retainedDecisionContinuation === true && state.status === "blocked" && state.safeFailure === "definite_failure" &&
   state.generationStatus === "in_progress" && !!state.activeOperationId && !state.preparation;
@@ -93,13 +93,14 @@ function ContextMeasurements({ value, operation }: { value?: ContextDiagnostics 
   </section>;
 }
 
-export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State = "disabled" }: {
-  focusedRunId?: string; balancedEnabled?: boolean; m4State?: "disabled" | "invalid" | "ready" | "granted";
+export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabled = false, m4State = "disabled" }: {
+  focusedRunId?: string; balancedEnabled?: boolean; realEnabled?: boolean; m4State?: "disabled" | "invalid" | "ready" | "granted";
 } = {}) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [persona, setPersona] = useState<Persona>("playful_kid");
   const [mode, setMode] = useState<Mode>("simulated");
   const [newCampaignId, setNewCampaignId] = useState<string | null>(null);
+  const [newPredecessorId, setNewPredecessorId] = useState<string | undefined>();
   const [grantLocked, setGrantLocked] = useState(false);
   const canCreateBalanced = balancedEnabled && m4State === "granted";
   const [pending, setPending] = useState<PendingCreate[] | null>(null);
@@ -169,6 +170,9 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
   async function create(queue: PendingCreate[]) {
     if (queue.some((item) => item.mode === "balanced") && !canCreateBalanced) {
       setActionError("Balanced creation requires the campaign execution grant."); return;
+    }
+    if (queue.some((item) => item.mode === "real") && !realEnabled) {
+      setActionError("Real creation requires verified provider readiness."); return;
     }
     setBusy(true); setActionError(null); setPending(queue);
     for (let index = 0; index < queue.length; index += 1) {
@@ -299,17 +303,17 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
       <h2 id="new-run-heading" className="text-xl font-semibold">Start runs</h2>
       <p className="text-sm text-[var(--muted-ink)]">Choose a mode and persona. The tester makes creator decisions automatically; this is not a manual authoring session.</p>
       <label className="block space-y-1"><span>Mode</span><select aria-label="Mode" className="rounded border border-[var(--border)] p-2" value={mode} disabled={grantLocked} onChange={(event) => {
-        if (event.target.value === "simulated" || event.target.value === "balanced" && canCreateBalanced) {
-          setMode(event.target.value); setNewCampaignId(null);
+        if (event.target.value === "simulated" || event.target.value === "balanced" && canCreateBalanced || event.target.value === "real" && realEnabled) {
+          setMode(event.target.value); setNewCampaignId(null); setNewPredecessorId(undefined);
         }
-      }}><option value="simulated">Simulated</option><option value="balanced" disabled={!canCreateBalanced}>Balanced</option><option value="real" disabled>Real (unavailable)</option></select></label>
-      <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} disabled={grantLocked} onChange={(event) => { setPersona(event.target.value as Persona); setNewCampaignId(null); }}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-      <p className="text-sm text-[var(--muted-ink)]">{canCreateBalanced ? "Balanced uses real text models and simulated images. Start one persona at a time: Kid, Parent, then Creator. Real mode is unavailable." :
+      }}><option value="simulated">Simulated</option><option value="balanced" disabled={!canCreateBalanced}>Balanced</option><option value="real" disabled={!realEnabled}>{realEnabled ? "Real" : "Real (unavailable)"}</option></select></label>
+      <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} disabled={grantLocked} onChange={(event) => { setPersona(event.target.value as Persona); setNewCampaignId(null); setNewPredecessorId(undefined); }}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+      <p className="text-sm text-[var(--muted-ink)]">{realEnabled ? "Real mode uses paid text and images. Record a separate finite grant, then start one persona: Kid, Parent, then Creator." : canCreateBalanced ? "Balanced uses real text models and simulated images. Start one persona at a time: Kid, Parent, then Creator. Real mode is unavailable." :
         m4State === "ready" ? "Balanced is ready but awaits the campaign execution grant. Real mode is unavailable." :
           m4State === "invalid" ? "Balanced setup needs attention before creation. Real mode is unavailable." : "Balanced and Real modes are unavailable."}</p>
-      {mode === "balanced" && canCreateBalanced ? newCampaignId ? <p role="status" className="break-all">Saved initial grant: {newCampaignId}. Start the one run for this campaign.</p> :
-        <InitialAllowanceGrant key={persona} persona={persona} onGrant={setNewCampaignId} onLocked={setGrantLocked} /> : null}
-      <div className="flex flex-wrap gap-2"><button className={secondaryAction} disabled={mutationDisabled || pending !== null || mode === "balanced" && (!canCreateBalanced || !newCampaignId)} onClick={() => void create([{ persona, mode, key: crypto.randomUUID(), ...(mode === "balanced" && newCampaignId ? { executionCampaignId: newCampaignId } : {}) }])}>Start selected</button>{mode === "simulated" ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, mode: "simulated", key: crypto.randomUUID() })))}>Start all three</button> : null}{pending?.length ? <button disabled={mutationDisabled || pending.some((item) => item.mode === "balanced") && !canCreateBalanced} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
+      {mode === "balanced" && canCreateBalanced || mode === "real" && realEnabled ? newCampaignId ? <p role="status" className="break-all">Saved initial grant: {newCampaignId}. Start the one run for this campaign.</p> :
+        <InitialAllowanceGrant key={`${persona}:${mode}`} persona={persona} mode={mode as "balanced" | "real"} onGrant={(id, predecessor) => { setNewCampaignId(id); setNewPredecessorId(predecessor); }} onLocked={setGrantLocked} /> : null}
+      <div className="flex flex-wrap gap-2"><button className={secondaryAction} disabled={mutationDisabled || pending !== null || mode !== "simulated" && (!newCampaignId || mode === "balanced" && !canCreateBalanced || mode === "real" && !realEnabled)} onClick={() => void create([{ persona, mode, key: crypto.randomUUID(), ...(mode !== "simulated" && newCampaignId ? { executionCampaignId: newCampaignId, ...(newPredecessorId ? { predecessorRunId: newPredecessorId } : {}) } : {}) }])}>Start selected</button>{mode === "simulated" ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, mode: "simulated", key: crypto.randomUUID() })))}>Start all three</button> : null}{pending?.length ? <button disabled={mutationDisabled || pending.some((item) => item.mode === "balanced") && !canCreateBalanced || pending.some((item) => item.mode === "real") && !realEnabled} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
     </section>}
     <button className={secondaryAction} onClick={() => void refresh()}>Refresh</button>
     {controlNotice ? <p role="status">{controlNotice}</p> : null}
@@ -329,7 +333,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         </div>
         <div className="flex flex-wrap gap-2">
           {!focusedRunId ? <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--ink)] px-5 py-2 font-semibold hover:opacity-90" style={{ color: "var(--surface)" }} href={`/experiments/booklet-runs/${encodeURIComponent(run.runId)}`} aria-label={`Open run: ${personas.find(item => item.id === run.persona)?.label ?? run.persona} (${run.runId})`}>Open run <span aria-hidden="true">&rarr;</span></Link> : null}
-          {run.pendingApproval ? null : (run.mode === "balanced" || run.generationStatus === "complete") && run.status === "blocked" && run.safeFailure === "definite_failure" && (!run.activeOperationId || retainedDecisionControl(run)) ? <button className={secondaryAction} disabled={mutationDisabled} onClick={() => void control(run, "resume")}>{run.generationStatus === "complete" ? "Finalize completed booklet" : "Continue inspected run"}</button> : run.pauseRequested || run.status === "paused" ? <button className={secondaryAction} disabled={mutationDisabled || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button className={secondaryAction} disabled={mutationDisabled || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}
+          {run.pendingApproval ? null : (run.mode === "balanced" || run.mode === "simulated" && run.generationStatus === "complete") && run.status === "blocked" && run.safeFailure === "definite_failure" && (!run.activeOperationId || retainedDecisionControl(run)) ? <button className={secondaryAction} disabled={mutationDisabled} onClick={() => void control(run, "resume")}>{run.generationStatus === "complete" ? "Finalize completed booklet" : "Continue inspected run"}</button> : run.pauseRequested || run.status === "paused" ? <button className={secondaryAction} disabled={mutationDisabled || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button className={secondaryAction} disabled={mutationDisabled || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}
         </div>
       </header>
       <RunMetrics run={run} />
@@ -357,7 +361,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
       </section>
       <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · {run.mode === "real" ? "Image calls" : "Simulated image calls"} {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>
       {run.runAccounting ? <p className="text-sm" aria-label="Run cost estimate">Estimated settled {dollars(run.runAccounting.settledMicrodollars)} ? Reserved {dollars(run.runAccounting.reservedMicrodollars)} ? Allowance used {dollars(run.runAccounting.estimatedTotalMicrodollars)}. Failed attempts can retain reservations. Invoice cost unavailable.</p> : null}
-      {run.mode === "balanced" && run.runAccounting === null ? <p className="text-sm">Run cost estimate unavailable: reservation evidence is incomplete.</p> : null}
+      {(run.mode === "balanced" || run.mode === "real") && run.runAccounting === null ? <p className="text-sm">Run cost estimate unavailable: reservation evidence is incomplete.</p> : null}
       <p className="text-sm">Needs attention: {(run.attention ?? runAttention(run))?.explanation ?? (run.pendingDecision ? "Review saved decision" : "None")}{run.contextWarningSummary?.warningCount ? ` · ${run.contextWarningSummary.warningCount} context warnings` : ""}</p>
       {!focusedRunId && run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create([{ persona: run.persona, mode: "simulated", key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
       {focusedRunId ? <>
