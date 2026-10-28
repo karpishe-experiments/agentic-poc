@@ -98,6 +98,8 @@ describe("Real workflow graph candidates", () => {
     assertEdges(graph);
     expect(graph.nodes.filter(item => !item.id.startsWith("real_"))).toEqual(old.nodes);
     const tool = node(graph, "real_image_tool").data;
+    // Upstream ToolManager resolves workspace credentials only on this path.
+    expect(tool.provider_type).toBe("builtin");
     expect(tool).toMatchObject({ type: "tool", ...REAL_IMAGE_TOOL,
       retry_config: { retry_enabled: false, max_retries: 0 }, tool_parameters: {
         request_json: { type: "variable", value: ["real_decode", "request_json"] },
