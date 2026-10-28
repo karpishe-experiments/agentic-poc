@@ -1059,6 +1059,17 @@ host's cast shape in fake-provider tests. Evidence: the
 twenty image-adapter cases. Promotion candidate: **Documentation** for native-file
 compatibility verification.
 
+## Resolve installed tool credentials through the supported runtime path
+
+Dify 1.17.1 distinguishes an installed plugin from the workflow node's provider
+type. Its `plugin` runtime returns the tool without resolving workspace credentials;
+the `builtin` runtime loads the existing authorization for the same provider ID.
+An installed package and a visible default authorization did not prove that the
+generated node would receive credentials. Pin the supported node classification
+in the graph contract. Evidence: the retained dev2 Kid pre-provider `credentials`
+rejection, official ToolManager branches and focused graph tests. No image request
+began. Promotion candidate: **Documentation** for Dify graph compatibility.
+
 ## Preserve complete graphs across tool boundaries
 
 Large execution-tool output can truncate a string inside otherwise valid JSON.

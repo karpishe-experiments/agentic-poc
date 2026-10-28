@@ -248,6 +248,30 @@ retry was submitted. Preserve this run and its grant/accounting.
 No saved output repair, reset, automatic retry or successor spending is authorized.
 Credential inventory impact: no credential, consumer, storage or transfer changes.
 
+The operator then approved USD 5 for one linked Kid successor with the same
+120 text / 12 image / 300 step allowances, revisions 1/1, no-progress 3 and zero
+automatic retries or further successors. Campaign
+`ca99e6dc-b893-4d15-8c45-1786742e62db`, run
+`3cee84d2-a83b-4177-8288-e9501272e2f7`, retains the prior Kid link and dev2 profile.
+J01-J07 are approved and J08 is a saved draft. Its first image rejected before
+provider dispatch with `failure.code=credentials`; no image provider call began.
+The run is blocked at revision 106 with 17 text calls, one image attempt and
+18 steps: USD 0.006828 estimated settled plus USD 0.015300 retained liability.
+
+The generated node selected Dify's `plugin` runtime path. In
+[Dify 1.17.1 ToolManager](https://github.com/langgenius/dify/blob/1.17.1/api/core/tools/tool_manager.py),
+that path returns the plugin tool without loading workspace credentials; the
+`builtin` path resolves the existing authorization. The generator correction
+selects `builtin`, preserving the provider, parameters and zero retries. No key
+entry, credential rotation or signature window is needed. Two independent reviews
+and focused checks passed before publication. Immutable image publication
+`420f7987-df83-4b88-afe0-27bc000c0cff` matches the reviewed graph exactly; features
+and environment/conversation variables are preserved. The other seventeen
+publications and package identities are unchanged. The matching readiness profile
+is `9fab201953ff06cba920713dded4a8f623f28fa44fbeb9fc34bf6a7390a80f8e`;
+application delivery remains pending. Neither retained run is resumed or repaired,
+and no further successor or spending is authorized.
+
 ## Three execution checkpoints
 
 ### Historical carry-forward review before the M4 exit

@@ -26,19 +26,21 @@ const ready = {
 
 describe("staging Real readiness manifest", () => {
   it("pins dev2 for new readiness while preserving the retained dev1 profile hash", () => {
-    const prior = {
-      ...delivered,
-      imagePluginIdentity: "langgenius/openai_tool:0.2.2-dev1@c1f56e13bfdba8523fcb79e3bf2249a0c1ffd0e1be7ad92a947eeace51a80b31",
-      imagePackageSha256: "8ae9ddea724651f2c9d0559b043edfee735ca69cd1d07fae39474c11b3124ec8",
-    };
     const current = realReadinessManifestSchema.parse(delivered);
     if (current.state !== "ready") throw new Error("Missing delivered readiness");
+    const prior = {
+      ...current,
+      imagePluginIdentity: "langgenius/openai_tool:0.2.2-dev1@c1f56e13bfdba8523fcb79e3bf2249a0c1ffd0e1be7ad92a947eeace51a80b31",
+      imagePackageSha256: "8ae9ddea724651f2c9d0559b043edfee735ca69cd1d07fae39474c11b3124ec8",
+      publications: current.publications.map(item => item.role === "image"
+        ? { ...item, publishedWorkflowId: "ab5ca725-8268-40ca-912a-a4d432fbcac6" } : item),
+    };
     const profile = (adapters: typeof prior) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
-      current.sourcePolicy, current.tokenPolicy, current.publications, adapters));
+      current.sourcePolicy, current.tokenPolicy, adapters.publications, adapters));
     const saved = profile(prior);
     expect(saved.hash).toBe("be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375");
     expect(executionPolicySnapshot(saved.policy).hash).toBe(saved.hash);
-    expect(profile(delivered).hash).not.toBe(saved.hash);
+    expect(profile(current).hash).not.toBe(saved.hash);
     expect(realReadinessManifestSchema.safeParse(prior).success).toBe(false);
     expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev3") })).toThrow();
   });
