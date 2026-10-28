@@ -205,8 +205,10 @@ pre-provider failure. See the [Kid checkpoint](M5-real.md#first-real-kid-checkpo
 Reuse existing credentials; request private entry only if a concrete missing
 credential is proved. The operator separately approved the pinned dev2 image
 installation, exact Community readback matched it, and signature verification is
-restored to `true`. The matching application readiness update still needs verified
-delivery. No further signature exception, image retry, successor, reset or
+restored to `true`. The matching readiness update completed at staging commit
+`c245e12ecc4a084dc83444b1dc5ca13935cc26b2`; saved request `40702684339-1`
+completed/archived and Check deployment `40706102119` passed. Live Real readiness
+and unchanged retained Kid accounting were verified. No further signature exception, image retry, successor, reset or
 replacement M4 campaign is authorized.
 
 The following older checkpoints are retained as historical execution evidence;
