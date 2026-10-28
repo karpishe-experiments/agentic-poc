@@ -25,7 +25,8 @@ export class M4CreativeOutputError extends Error {
 }
 
 export function parseM4CreativeOutput(selector: M4RequestSelector, content: string, savedContextJson: string,
-  costEvidence: ExperimentReport["costEvidence"] = unavailableCost, execution = false): RoleResult {
+  costEvidence: ExperimentReport["costEvidence"] = unavailableCost, execution = false,
+  inspectedAssetIds: string[] = []): RoleResult {
   let parsed: {
     result?: { kind: string; payload: { taskId?: string; content?: unknown } }; report?: Record<string, unknown>;
   };
@@ -40,17 +41,20 @@ export function parseM4CreativeOutput(selector: M4RequestSelector, content: stri
     if (Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("M4 model output exceeds its parsing bound.");
     const schema = execution && selector.role === "tester" && !selector.report
       ? z.strictObject({ result: z.union([roleResultSchema.options.find(option => option.shape.kind.value === "decision")!, executionAllowanceRequestSchema]) })
-      : m4ModelOutputSchema(selector, layoutSubjects);
+      : selector.report && execution && context.reportEvidence &&
+          (context.reportEvidence as Record<string, unknown>).mode === "real" && inspectedAssetIds.length > 0
+        ? z.strictObject({ report: experimentReportSchema.pick({ summary: true, intent: true,
+          consistency: true, interaction: true, findings: true }) })
+        : m4ModelOutputSchema(selector, layoutSubjects);
     parsed = schema.parse(JSON.parse(content)) as typeof parsed;
   } catch (error) { throw new M4CreativeOutputError(error); }
   if (selector.report) {
-    const evidence = z.object({ role: z.enum(["tester", "judge"]), mode: z.literal("balanced"), runId: opaqueIdSchema,
+    const evidence = z.object({ role: z.enum(["tester", "judge"]), mode: z.enum(["balanced", "real"]), runId: opaqueIdSchema,
       configurationHash: z.string().regex(/^[a-f0-9]{64}$/), versionIds: z.array(opaqueIdSchema) }).parse(context.reportEvidence);
     if (evidence.role !== selector.role) throw new Error("M4 report role differs from its saved context.");
     const report = experimentReportSchema.parse({ ...parsed.report, schemaVersion: "2", role: evidence.role, mode: evidence.mode,
       runId: evidence.runId, configurationHash: evidence.configurationHash, costEvidence,
-      // No images are sent to this model, so it cannot claim visual inspection.
-      evidence: { versionIds: evidence.versionIds, inspectedAssetIds: [] } });
+      evidence: { versionIds: evidence.versionIds, inspectedAssetIds: evidence.mode === "real" ? inspectedAssetIds : [] } });
     return roleResultSchema.parse({ kind: selector.role === "judge" ? "assessment" : "feedback", payload: report });
   }
   const result = parsed.result!;

@@ -1,3 +1,5 @@
+import { m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { m4PolicySnapshot, m4TokenPolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { describe, expect, it, vi } from "vitest";
 import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import type { ConfigState } from "@/lib/experiment-runner/config";
@@ -310,6 +312,7 @@ describe("booklet runner HTTP boundary", () => {
     expect(findOperations).toHaveBeenCalledWith({ runId: { $in: ["run-1"] } },
       { projection: { _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
         "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+        "realImageReservation.unsettledMicrodollars": 1, "realImageReservation.settledMicrodollars": 1,
         "contextDiagnostics.warnings": 1 } });
     expect(store).not.toHaveBeenCalled();
     expect((await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary&limit=1000"))).status).toBe(400);
@@ -340,6 +343,7 @@ describe("booklet runner HTTP boundary", () => {
     expect(find).toHaveBeenCalledOnce(); expect(operationFind).toHaveBeenCalledOnce();
     expect(operationFind.mock.calls[0][1].projection).toEqual({ _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
       "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+      "realImageReservation.unsettledMicrodollars": 1, "realImageReservation.settledMicrodollars": 1,
       "contextDiagnostics.warnings": 1 });
   });
   it("projects the current execution allowance and approval wait in grouped summaries", async () => {
@@ -366,12 +370,17 @@ describe("booklet runner HTTP boundary", () => {
     expect(findCampaigns).toHaveBeenCalledOnce();
     expect(findCampaigns.mock.calls[0][1].projection).toMatchObject({ allowance: 1, revision: 1,
       reservedMicrodollars: 1, settledMicrodollars: 1 });
+    const projection = findRuns.mock.calls[0][1].projection;
+    expect(projection["execution.campaignId"]).toBe(1);
+    expect(projection["pendingApproval.reason"]).toBe(1);
+    expect(projection.execution).toBeUndefined();
+    expect(projection.pendingApproval).toBeUndefined();
   });
   it("groups paid reservations by run without mixing another campaign run into the card", async () => {
     const rows = ["run-1", "run-2"].map((_id, index) => ({ _id, bookletId: `book-${index}`, brief: `Run ${index}`,
-      persona: "playful_kid", mode: "balanced", status: "blocked", revision: 1, createdAtMs: 1000,
+      persona: "playful_kid", mode: index === 0 ? "balanced" : "real", status: "blocked", revision: 1, createdAtMs: 1000,
       updatedAtMs: 2000, pauseRequested: false, activeOperationId: null,
-      counters: { logicalText: 1, logicalImage: 0, payableText: 1, payableImage: 0, steps: 1 },
+      counters: { logicalText: 1, logicalImage: index, payableText: 1, payableImage: index, steps: 1 + index },
       limits: { text: 120, image: 12, steps: 300 }, evaluationStatus: "pending" }));
     const operations = [
       { _id: "op-1", runId: "run-1", role: "specialist", reservationCount: 1,
@@ -380,6 +389,8 @@ describe("booklet runner HTTP boundary", () => {
         m4Reservation: { settledMicrodollars: null, unsettledMicrodollars: 500 } },
       { _id: "op-3", runId: "run-2", role: "specialist", reservationCount: 1,
         m4Reservation: { settledMicrodollars: 900, unsettledMicrodollars: 0 } },
+      { _id: "op-4", runId: "run-2", role: "image", reservationCount: 1,
+        realImageReservation: { settledMicrodollars: 150, unsettledMicrodollars: 30 } },
     ];
     const find = vi.fn().mockReturnValue({ sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) });
@@ -393,8 +404,8 @@ describe("booklet runner HTTP boundary", () => {
     const cards = (await response.json()).data.runs;
     expect(cards[0].runAccounting).toMatchObject({ settledMicrodollars: 125, reservedMicrodollars: 500,
       estimatedTotalMicrodollars: 625 });
-    expect(cards[1].runAccounting).toMatchObject({ settledMicrodollars: 900, reservedMicrodollars: 0,
-      estimatedTotalMicrodollars: 900 });
+    expect(cards[1].runAccounting).toMatchObject({ settledMicrodollars: 1050, reservedMicrodollars: 30,
+      estimatedTotalMicrodollars: 1080 });
     expect(findOperations).toHaveBeenCalledOnce();
     expect(findOperations.mock.calls[0][0]).toEqual({ runId: { $in: ["run-1", "run-2"] } });
   });
@@ -452,6 +463,48 @@ describe("booklet runner HTTP boundary", () => {
     const payload = await response.json();
     expect(JSON.stringify(payload)).not.toContain("not-json");
     expect(payload).toEqual({ error: { code: "unauthorized", message: "Authentication is required." } });
+  });
+  it("authenticates Real image evidence before checking readiness or parsing its body", async () => {
+    const database = () => { throw new Error("unexpected database access"); };
+    const off = createBookletRunnerHttp({ config: () => disabled, database });
+    expect((await off.imageEvidence(request({}, "not-json"))).status).toBe(404);
+    const http = createBookletRunnerHttp({ config: () => enabled, database });
+    expect((await http.imageEvidence(request({ origin: enabled.config.publicOrigin }, "not-json"))).status).toBe(401);
+    expect((await http.imageEvidence(request({ "x-booklet-tool-key": enabled.config.callbackKey }, "not-json"))).status).toBe(422);
+  });
+
+  it("retains a compact Real evidence receipt without loading creative details", async () => {
+    const ready: ConfigState = { enabled: true, config: { ...enabled.config, real: { state: "ready", bindings: [],
+      textPluginIdentity: `langgenius/openai:1.0.7-dev6@${"a".repeat(64)}`, textPackageSha256: "b".repeat(64),
+      imagePluginIdentity: `langgenius/openai_tool:0.2.2-dev1@${"c".repeat(64)}`, imagePackageSha256: "d".repeat(64),
+      sourcePolicy: m4TestPolicy(), tokenPolicy: m4TokenPolicySnapshot({ version: "m4_context_policy_v2",
+        basePolicyHash: m4PolicySnapshot(m4TestPolicy()).hash, warningInputTokens: 32000, maxInputTokens: 128000,
+        requiredProviderAdapterIdentity: `langgenius/openai:1.0.7-dev5@${"a".repeat(64)}`,
+        requiredProviderPackageSha256: "b".repeat(64), reference: "nonbillable-unit-fixture" }), nativeFileFormat: "base64" } } };
+    const payload = { runId: controlRunId, operationId: "00000000-0000-4000-8000-000000000002",
+      workflowRunId: "00000000-0000-4000-8000-000000000003", parentWorkflowRunId: null,
+      inputFingerprint: "a".repeat(64), result: { schemaVersion: "booklet_real_image_result_v1", status: "succeeded" } };
+    const receipt = { reused: false, status: "succeeded", chargeMicrodollars: 123, overrunMicrodollars: 0 };
+    const observeRealImage = vi.fn().mockResolvedValue(receipt);
+    const factory = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({ observeRealImage } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const getRunView = vi.fn();
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    const ownership = vi.fn();
+    try {
+      const http = createBookletRunnerHttp({ config: () => ready, database: () => ({} as Database),
+        store: () => ({} as AssetStore), mutate: async (action, options) => { ownership(options); return action(); } });
+      const headers = { "x-booklet-tool-key": enabled.config.callbackKey };
+      const response = await http.imageEvidence(request(headers, JSON.stringify(payload)));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ data: receipt });
+      expect(observeRealImage).toHaveBeenCalledWith({ ...payload, nowMs: expect.any(Number) });
+      expect(ownership).toHaveBeenCalledWith({ admitted: true, runId: payload.runId, operationId: payload.operationId });
+      expect(getRunView).not.toHaveBeenCalled();
+      expect((await http.imageEvidence(request(headers, "not-json"))).status).toBe(400);
+      expect((await http.imageEvidence(request(headers, JSON.stringify({ ...payload, operationId: "wrong" })))).status).toBe(400);
+      expect((await http.imageEvidence(request({ ...headers, "content-length": "32769" }, "{}"))).status).toBe(400);
+      expect(observeRealImage).toHaveBeenCalledTimes(1);
+    } finally { factory.mockRestore(); context.mockRestore(); }
   });
   it("treats invalid UTF-8 as malformed JSON after authentication", async () => {
     const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });

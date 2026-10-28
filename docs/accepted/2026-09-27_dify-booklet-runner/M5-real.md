@@ -85,7 +85,7 @@ finite allowance in one-run campaigns, pre-dispatch approval pauses, a new-only
 tester revision request, atomic approval/decline history and an operator review
 view. Approval queues a saved run after current ownership, source and accounting
 checks. The historical M4 profile and request hashes remain unchanged. Real
-admission remains closed pending Package D image-provider and liability work.
+admission remains disabled until the Package D live readiness record is verified.
 
 Package C verification: 107 focused units and 64 historical M4 contract units
 passed; eight disposable MongoDB allowance cases passed with fake provider
@@ -97,9 +97,49 @@ after source changes. Typecheck, ESLint and production build passed. The isolate
 waiting-for-approval browser case passed with mocked traffic. No new paid grant
 or Real run exists.
 
-Credential inventory impact: none. Packages B and C change inspection, terminal
-metadata and execution allowances. Credential names, storage, transfer and
-consumers remain unchanged.
+Package D's local readiness reader uses
+`lib/experiment-runner/real-readiness-manifest.json`, which remains `disabled`.
+A future reviewed staging `ready` record must list all eighteen new publication
+identities, the source and effective token policy, base64 native-file format,
+and exact text and image plugin identities and package hashes. The reader
+matches those app IDs and role slots to the existing protected binding array
+and uses its API keys. It does not change the protected settings bundle or
+historical M4 campaign. Invalid Real metadata closes Real without disabling
+Simulated or an otherwise valid Balanced configuration. Production stays
+disabled. Local package candidates are pinned to text archive SHA-256
+`8d88f8e73a1f7c7807861d594d0fd46e156ff6d7acbc7ca3591b08532604a766`
+and image archive SHA-256
+`8ae9ddea724651f2c9d0559b043edfee735ca69cd1d07fae39474c11b3124ec8`.
+These are local candidate identities, not verified live installations or
+provider permission. A coordinated publication readback and reviewed readiness
+manifest are still required before Real admission; no paid Real grant or run
+is recorded here.
+
+Package D local proof: all three fake-provider journeys passed: complete Kid
+generation through tester and image-aware judge, Parent multi-panel image routing,
+and Creator reference-sheet revision followed by explicit approval. The journeys
+use disposable MongoDB, actual generated Python graph decoders, durable original
+PNG retrieval from another process, and no external HTTP. Five image-ledger cases, two known-failure inspection cases
+and eight allowance-persistence cases passed. They verify concurrent reservation,
+unknown liability retention, attributable overrun, duplicate receipts and approval
+continuation. The failure cases verify immediate J13 job/item closure, repeat inspection without
+provider replay or accounting drift, and rejection of changed evidence. These
+checks do not prove live provider permission or image quality.
+
+Final local verification on 2026-10-28: 249 affected unit contracts passed across
+the final focused runs, 12 agent fixtures passed, and typecheck, full ESLint and
+the production build passed. Both isolated browser flows passed (running through
+completed inspection and allowance approval); the first cold-start detail check
+timed out and passed on an unchanged isolated rerun. Provider candidate tests
+passed 18 image cases, 12 Real report cases and 40 legacy text cases. Two
+independent whole-bundle reviews check the final source before publication.
+No live provider package, Dify publication, application release or Real grant is
+asserted by this local checkpoint.
+
+Credential inventory impact: Packages B and C change no credential use. Package D
+reuses the existing eighteen application API keys and shared callback key for Real
+consumers. No new secret, protected storage or transfer path is introduced. The
+canonical inventory records these additional consumers.
 
 ## Three execution checkpoints
 
@@ -259,8 +299,9 @@ authorization and exhausted limits remain technical blockers.
 5. Advance only after an uninterrupted successful Kid run. Repeat for Parent
    5 pages (11 initial outputs, one two-panel page), then Creator 8 pages
    (15 initial outputs, at least two multi-panel pages).
-6. Never raise a per-run limit, reset a request counter or reset the project to
-   conceal a failure. Quality-only suggestions may wait for M6.
+6. Extend a finite allowance only through its recorded operator approval; never
+   reset counters or the project to conceal a failure. Approval cannot resolve
+   unknown paid outcomes or repair data. Quality-only suggestions may wait for M6.
 
 ## Checkpoint 3 — Evidence and M6 handoff
 

@@ -60,7 +60,7 @@ describe("model-free runtime transport", () => {
       expect(fetcher).toHaveBeenCalledTimes(1);
     }
   });
-  it("propagates Balanced without changing the Simulated wire shape", async () => {
+  it("propagates paid modes without changing the Simulated wire shape", async () => {
     const bodies: string[] = [];
     const fetcher = vi.fn<typeof fetch>(async (_url, options) => {
       bodies.push(options!.body as string);
@@ -72,7 +72,8 @@ describe("model-free runtime transport", () => {
     expect(bodies[0]).toBe(JSON.stringify({ inputs: { run_id: id, operation_id: workflow, parent_workflow_run_id: "", mode: "simulated" }, response_mode: "streaming", user: `booklet-${id}` }));
     expect(bodies[1]).toBe(bodies[0].replace('"mode":"simulated"', '"mode":"balanced"'));
     expect(await runtime.start(binding, { ...input, mode: "real" } as unknown as typeof input)).toEqual({ kind: "rejected" });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(bodies[2]).toBe(bodies[0].replace('"mode":"simulated"', '"mode":"real"'));
+    expect(fetcher).toHaveBeenCalledTimes(3);
   });
   it("parses a strict image acknowledgement without treating it as a narrative result", () => {
     const result = { runId: id, operationId: workflow, workflowRunId: id, parentWorkflowRunId: null,

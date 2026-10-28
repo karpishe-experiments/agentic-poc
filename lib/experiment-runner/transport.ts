@@ -25,7 +25,7 @@ export type RuntimeInput = {
   runId: string;
   operationId: string;
   parentWorkflowRunId: string | null;
-  mode: "simulated" | "balanced";
+  mode: "simulated" | "balanced" | "real";
   referenceFileIds?: string[];
 };
 export type WorkflowStartOptions = {
@@ -55,7 +55,7 @@ const runtimeInputSchema = z.object({
   runId: opaqueIdSchema,
   operationId: opaqueIdSchema,
   parentWorkflowRunId: opaqueIdSchema.nullable(),
-  mode: z.enum(["simulated", "balanced"]),
+  mode: z.enum(["simulated", "balanced", "real"]),
   referenceFileIds: z.array(opaqueIdSchema).min(1).max(15)
     .refine((ids) => new Set(ids).size === ids.length, "Reference file IDs must be unique")
     .optional(),

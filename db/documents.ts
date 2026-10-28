@@ -99,6 +99,17 @@ export type ExperimentOperationDocument = BaseDocument & {
   m4Reservation?: { campaignId: string; policyHash: string; requestDigest: string; bucket: M4ModelBucket;
     tokenPolicy?: import("@/lib/experiment-runner/m4-policy").M4TokenPolicy; effectivePolicyHash?: string; maxInputTokens?: number;
     maximumMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null; evidenceDigest: string | null };
+  realImageReservation?: { campaignId: string; profileHash: string; requestDigest: string;
+    planningHoldMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null;
+    evidenceDigest: string | null; overrunMicrodollars: number };
+  realImagePreparation?: { requestJson: string; requestDigest: string; logicalFingerprint: string;
+    preparedAtMs: number };
+  realImageObservation?: { resultJson: string; resultDigest: string; observedAtMs: number;
+    chargeBasis: "reported_categories" | "upper_estimate" | "unknown_outcome" };
+  realReportPreparation?: { carrierJson: string; manifestDigest: string; finalRequestDigest: string;
+    textRequestDigest: string; orderedImages: import("@/lib/experiment-runner/real-image-contract").RealImageRequest["references"];
+    uploadFileIds: string[]; preparedAtMs: number };
+  realReportUploadJournalJson?: string | null;
   runId: string; role: ExperimentRole; taskId: ExperimentTask | null;
   subjectKind: "book" | "character" | "location" | "page"; subjectId: string;
   idempotencyKey: string; inputFingerprint: string; attempt: number;

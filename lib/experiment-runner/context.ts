@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { imageCapacity } from "@/lib/experiment-runner/image-capacity";
-import { hasM4SimulatedImagePolicy, hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasM4SimulatedImagePolicy, hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { verifyExperimentGeneration } from "@/db/experiment-completion";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
@@ -249,7 +249,8 @@ export function createExperimentContextService(database: Database, options: { st
       verifiedWorkflowId: 1, workflowTaskId: 1, deadlineAtMs: 1, remoteStatus: 1, lifecycle: 1,
       ...(projection === "inspection" ? { contextDiagnostics: 1 } : {}),
       dispatchStartedAtMs: 1, createdAtMs: 1, updatedAtMs: 1, reservationCount: 1, safeFailure: 1,
-      ...(projection === "inspection" ? { "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1 } : {}),
+      ...(projection === "inspection" ? { "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+        "realImageReservation.unsettledMicrodollars": 1, "realImageReservation.settledMicrodollars": 1 } : {}),
       "localReportFailure.code": 1, "localReportFailure.scope": 1, "localReportFailure.requestBytes": 1, "localReportFailure.byteLimit": 1,
       resultJson: { $cond: [{ $in: ["$role", ["tester", "judge"]] }, "$resultJson", null] },
     } }).sort({ createdAtMs: 1, _id: 1 }).toArray()
@@ -265,7 +266,7 @@ export function createExperimentContextService(database: Database, options: { st
       ] }).toArray() : [];
     const countFailures = new Map(countFailureRows.map(row => [row._id, m4CountFailureDiagnostic(row, run)]));
     let pageSelection = null;
-    if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasExperimentSimulatedImagePolicy(run)) &&
+    if (configuredPageIllustrationTask(run.configurationJson) && (run.mode === "simulated" || hasExperimentImagePolicy(run)) &&
         run.status === "paused" && run.pauseRequested && !run.activeOperationId && !run.pendingDecisionJson &&
         run.generationCompletedAtMs == null && !pageBatch) {
       const readiness = pageBibleWork(run, currentArtifacts);
@@ -329,7 +330,7 @@ export function createExperimentContextService(database: Database, options: { st
       ...(projection === "inspection" ? { executionAllowance, pendingApproval: run.pendingApproval ?? null } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       ...(projection === "inspection" ? { terminalAtMs: run.terminalAtMs ?? null, timing: runTiming(run), attention: runAttention(run),
-        runAccounting: runAccounting(run.mode, operationRows, run.counters.payableText) } : {}),
+        runAccounting: runAccounting(run.mode, operationRows, run.counters.payableText, run.counters.payableImage) } : {}),
       evaluationStatus: run.evaluationStatus, counters: { ...run.counters }, limits: executionAllowance ?
         { text: executionAllowance.totals.textCalls, image: executionAllowance.totals.imageCalls,
           steps: executionAllowance.totals.steps } : { ...run.limits },
@@ -408,7 +409,7 @@ export function createExperimentContextService(database: Database, options: { st
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
     if (!run || !operation || run.activeOperationId !== operation._id || (operation.state !== "started" && operation.state !== "unknown") || operation.workflowRunId !== identity.workflowRunId || operation.parentWorkflowRunId !== identity.parentWorkflowRunId) deny("Operation claim identity is not current.");
     if (operation.role === "image") {
-      if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run))) deny("Image context requires its retained simulated image policy.");
+      if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasExperimentImagePolicy(run))) deny("Image context requires its retained image policy.");
       // Only the authorize handler passes fresh evidence returned by its claim.
       // Standalone context requests perform a new current-source check.
       if (claimedImageRequest && (imageRequestFingerprint(claimedImageRequest) !== operation.inputFingerprint ||
@@ -432,7 +433,7 @@ export function createExperimentContextService(database: Database, options: { st
     const identity = preparationIdentity.parse(raw);
     const run = await runs.findOne({ _id: identity.runId });
     const operation = await operations.findOne({ _id: identity.operationId, runId: identity.runId });
-    if (!run || !operation || run.mode !== "balanced" || (!run.m4 && !run.execution) || operation.mode !== "balanced" ||
+    if (!run || !operation || !(["balanced", "real"].includes(run.mode)) || (!run.m4 && !run.execution) || operation.mode !== run.mode ||
         run.activeOperationId !== operation._id || run.pauseRequested || !["queued", "running"].includes(run.status) ||
         operation.state !== "prepared" || operation.providerKind !== "text" || operation.role === "image" ||
         operation.reservationCount !== 0 || operation.lifecycle?.stop != null || operation.m4Reservation != null || operation.dispatchStartedAtMs != null ||

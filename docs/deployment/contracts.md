@@ -146,6 +146,10 @@ owns Dify applications/providers; each developer owns their administration sessi
 
 App IDs, publication IDs, graph hashes, workspace IDs and bucket names are not
 secrets. `DIFY_BOOKLET_BINDINGS_JSON` is secret-bearing because it includes keys.
+The tracked Real readiness manifest is disabled by default and contains only
+publication, policy, provider-package and native-file-format metadata. A
+reviewed staging-ready record reuses the existing eighteen binding keys by
+app ID; no additional protected setting or transfer copy is introduced.
 
 ### Booklet application credentials
 
@@ -173,7 +177,7 @@ infer their presence from `.env.example`.
 | Three tester application keys: same field, role `tester`, personas `playful_kid`, `enthusiast_parent`, `professional_creator` | Same stores; one independent key per tester app | Execute/recover external creator-persona workflows. The exact decision-rejection candidate conditionally uses the saved persona's existing key for authenticated read-only execution retrieval; provider start/stop are unavailable in recovery. Implementation does not establish live candidate use; no new storage, transfer copy or permission |
 | Image application key: same field, role `image` | Same stores | Execute/recover the generic image workflow, including J13 final-page illustrations; J13 has no separate specialist key |
 | Judge application key: same field, role `judge` | Same stores | Execute/recover independent advisory evaluation |
-| Shared callback/tool key: Booklet `DIFY_BOOKLET_TOOL_KEY`; Dify secret variable `BOOKLET_TOOL_KEY` | Staging host override; Dify workflow secret variables; private preparation copies | Dify sends `x-booklet-tool-key` to Booklet authorization, callback and image-transfer routes; independent of Cloud and diagnostic probe keys |
+| Shared callback/tool key: Booklet `DIFY_BOOKLET_TOOL_KEY`; Dify secret variable `BOOKLET_TOOL_KEY` | Staging host override; Dify workflow secret variables; private preparation copies | Dify sends `x-booklet-tool-key` to Booklet authorization, callback and image-transfer routes; the local Real image candidate also uses it for a protected attributable-usage evidence callback before original-byte upload. No new key, storage or transfer copy. Live Real use is unverified. Independent of Cloud and diagnostic probe keys |
 | Transfer bundle: `DIFY_BOOKLET_RUNNER_SETTINGS_JSON` | GitHub Actions repository secret; private encrypted settings file | `dify-tool-key.yml` passes the five-setting JSON bundle to `rotate-protected-dify-key`; contains the callback key and binding keys, not a new authentication key |
 
 The full final/evaluation profile has 18 application keys plus one shared callback

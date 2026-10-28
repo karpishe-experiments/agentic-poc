@@ -43,7 +43,7 @@ export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operati
   const policy = snapshot.policy;
   const wrapper = m4ProviderReadbackSchema.parse(raw);
   const evidence = wrapper.providerEvidence; const reservation = operation.m4Reservation;
-  if (!reservation || !operation.m4Preparation || operation.mode !== "balanced" || operation.providerKind !== "text" ||
+  if (!reservation || !operation.m4Preparation || !["balanced", "real"].includes(operation.mode) || operation.providerKind !== "text" ||
       reservation.policyHash !== snapshot.hash || operation.m4Preparation.policyHash !== snapshot.hash ||
       evidence.requestDigest !== reservation.requestDigest || evidence.requestDigest !== operation.m4Preparation.requestDigest) {
     throw new Error("M4 provider result has no matching prepared reservation.");

@@ -1,4 +1,4 @@
-import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -35,7 +35,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
     if (!run || !job) throw new ExperimentRepositoryError("not_found", "Page batch or owning run was not found.");
     const batch = experimentPageBatchSchema.parse(JSON.parse(job.inputJson));
     if (batch.runId !== run._id || job.bookletId !== run.bookletId || batch.configurationHash !== run.configurationHash ||
-      (run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
+      (run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       job.idempotencyKey !== `dify-pages:${run._id}:${pageBatchFingerprint(batch)}`) invalid("Page batch ownership or saved selection changed.");
     const items = await database.collections.generation_items.find({ jobId: job._id }, options).sort({ position: 1 }).toArray();
     const states: PageBatchItemState[] = items.map((item) => {
@@ -189,7 +189,7 @@ export function createExperimentPageBatchRepository(input: { database: Database;
       const options = { session };
       const run = await database.collections.experiment_runs.findOne({ _id: value.batch.runId }, options);
       if (!run) throw new ExperimentRepositoryError("not_found", "Page batch run was not found.");
-      if (run.configurationHash !== value.batch.configurationHash || (run.mode !== "simulated" && !hasExperimentSimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson)) {
+      if (run.configurationHash !== value.batch.configurationHash || (run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson)) {
         invalid("Page batch requires the saved simulated final-page configuration.");
       }
       const existing = await database.collections.generation_jobs.findOne({ idempotencyKey }, options);

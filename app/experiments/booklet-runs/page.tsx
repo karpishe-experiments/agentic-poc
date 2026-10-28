@@ -10,5 +10,5 @@ export default function BookletRunsPage() {
   if (!state.enabled && state.reason !== "invalid") notFound();
   if (!state.enabled) return <section role="alert" className="max-w-2xl space-y-3"><h1 className="text-3xl font-semibold">Booklet runner unavailable</h1><p>The runner setup needs attention before runs can start.</p></section>;
   const m4State = state.config.m4?.state ?? "disabled";
-  return <BookletRunner balancedEnabled={m4State === "granted"} m4State={m4State} />;
+  return <BookletRunner balancedEnabled={m4State === "granted"} realEnabled={state.config.real?.state === "ready"} m4State={m4State} />;
 }

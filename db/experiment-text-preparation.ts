@@ -4,7 +4,7 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import type { M4Authority } from "@/db/experiment-campaign";
 import { executionPolicySnapshot, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
-import { prepareExecutionRequest, executionRequestDefinition } from "@/lib/experiment-runner/execution-request";
+import { prepareExecutionRequest, executionRequestDefinition, realRequestDefinition } from "@/lib/experiment-runner/execution-request";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentTaskSchema, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
@@ -115,6 +115,8 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
   const campaignId = isExecution ? authority.campaignId : grant!.campaignId;
   const contexts = createExperimentContextService(database, options);
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
+  const definitionFor = (selector: M4RequestSelector) => isExecution ?
+    (snapshot.policy.mode === "real" ? realRequestDefinition(selector) : executionRequestDefinition(selector)) : m4RequestDefinition(selector);
   async function prepare(raw: unknown): Promise<NonNullable<ExperimentOperationDocument["m4Preparation"]>> {
     const effective = isExecution ? { snapshot: authority.executionProfile.tokenPolicy } :
       m4AdmittedTokenPolicy(snapshot.policy as ReturnType<typeof m4PolicySnapshot>["policy"], grant!);
@@ -124,7 +126,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     const load = async (session: ClientSession) => {
       const run = await database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
       const operation = await database.collections.experiment_operations.findOne({ _id: input.operationId, runId: input.runId }, { session });
-      if (!run || !operation || run.mode !== "balanced" || operation.mode !== run.mode || operation.providerKind !== "text" ||
+      if (!run || !operation || run.mode !== (isExecution ? snapshot.policy.mode : "balanced") || operation.mode !== run.mode || operation.providerKind !== "text" ||
           operation.role === "image" || run.activeOperationId !== operation._id || operation.state !== "prepared" || operation.reservationCount !== 0 ||
           run.pauseRequested || operation.lifecycle?.stop != null || !["queued", "running"].includes(run.status) || operation.deadlineAtMs == null || operation.deadlineAtMs <= now() ||
           (isExecution ? run.execution?.campaignId !== campaignId || run.execution.profileHash !== snapshot.hash ||
@@ -147,7 +149,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
         if (m4CanonicalJson(saved.tokenPolicy ?? null) !== m4CanonicalJson(effective.snapshot)) conflict("Saved execution carrier changed.");
       } else m4AdmittedTokenPolicy(snapshot.policy as ReturnType<typeof m4PolicySnapshot>["policy"], grant!, saved);
       if (saved.policyHash !== snapshot.hash || saved.sourceFingerprint !== before.sourceFingerprint ||
-          saved.definitionHash !== (isExecution ? executionRequestDefinition(selector) : m4RequestDefinition(selector)).hash ||
+          saved.definitionHash !== definitionFor(selector).hash ||
           m4CanonicalJson(saved.definitionUpdate ?? null) !== m4CanonicalJson(grant?.requestDefinitionUpdate ?? null) ||
           m4CanonicalJson(saved.adapterUpdate ?? null) !== m4CanonicalJson(grant?.providerAdapterUpdate ?? null) ||
           saved.operationFingerprint !== m4OperationFingerprint(before.operation)) conflict("Saved M4 preparation became stale; do not replay it.");
@@ -228,7 +230,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     if (manager) {
       const selected = JSON.parse(manager.resultJson ?? "null") as { kind?: string; payload?: { taskId?: string; subjectId?: string; subjectKind?: string } } | null;
       const expectedManager = snapshot.policy.publications.find((p) => p.role === "manager");
-      if (manager.mode !== "balanced" || manager.reservationCount !== 1 || manager.verifiedWorkflowId !== expectedManager?.publishedWorkflowId ||
+      if (manager.mode !== before.run.mode || manager.reservationCount !== 1 || manager.verifiedWorkflowId !== expectedManager?.publishedWorkflowId ||
           selected?.kind !== "delegate" || selected.payload?.taskId !== before.operation.taskId ||
           selected.payload?.subjectKind !== before.operation.subjectKind || selected.payload?.subjectId !== before.operation.subjectId) {
         conflict("M4 specialist differs from the latest verified manager selection.");
@@ -249,7 +251,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
         const events = recentDiagnostics(input.runId, 500).events.filter(event => event.operationId === input.operationId &&
           Date.parse(event.timestamp) >= diagnosticStartedAt &&
           ["preparation_question_operations", "preparation_answer_messages", "preparation_manager_parent"].includes(event.phase));
-        return buildContextDiagnostics({ projectionVersion: (isExecution ? executionRequestDefinition(selector) : m4RequestDefinition(selector)).version,
+        return buildContextDiagnostics({ projectionVersion: definitionFor(selector).version,
           requestDigest: saved.requestDigest, role: selector.role, contextJson, systemPrompt: request.systemPrompt,
           outputSchema: request.modelParameters.json_schema.schema, requestJson: request.requestJson,
           ...(events.length ? { read: { returnedJsonBytes: events.some(event => event.readJsonBytes == null) ? null

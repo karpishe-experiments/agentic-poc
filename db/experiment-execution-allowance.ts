@@ -6,6 +6,7 @@ import { executionAllowanceSchema, executionPolicySnapshot, executionMaximumText
   type ExecutionAllowance, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 import { m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
 import { m4Hash, m4CanonicalJson } from "@/lib/experiment-runner/m4-request";
+import { realImageCharge, realImageResultSchema, type RealImageResult } from "@/lib/experiment-runner/real-image-contract";
 
 export type ExecutionApprovalRecord = {
   approvalId: string; reference: string; requestDigest: string;
@@ -99,7 +100,10 @@ export function createExecutionAllowanceLedger(database: Database) {
     role: ExperimentOperationDocument["role"], providerKind: ExperimentOperationDocument["providerKind"]): ExecutionAllowanceReason | null {
     const totals = campaign.allowance;
     if (run.counters.steps >= totals.steps) return "steps";
-    if (providerKind === "image") return run.counters.logicalImage >= totals.imageCalls ? "image_calls" : null;
+    if (providerKind === "image") {
+      if (run.counters.logicalImage >= totals.imageCalls) return "image_calls";
+      return run.mode === "real" && campaign.settledMicrodollars + campaign.reservedMicrodollars >= totals.maxMicrodollars ? "monetary" : null;
+    }
     if (run.counters.logicalText >= totals.textCalls) return "text_calls";
     const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
     const maximum = executionMaximumTextCharge(profile, m4ModelBucket(role, run.generationCompletedAtMs != null));
@@ -121,7 +125,7 @@ export function createExecutionAllowanceLedger(database: Database) {
     if (!action || reason(campaign, run, action.role, action.providerKind) !== denied) conflict("Allowance reason differs from the next action.");
     const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
     const requiredTotal = denied === "monetary" ? campaign.settledMicrodollars + campaign.reservedMicrodollars +
-      executionMaximumTextCharge(profile, m4ModelBucket(action.role, run.generationCompletedAtMs != null)) :
+      (action.providerKind === "image" ? 1 : executionMaximumTextCharge(profile, m4ModelBucket(action.role, run.generationCompletedAtMs != null))) :
       denied === "text_calls" ? run.counters.logicalText + 1 : denied === "image_calls" ? run.counters.logicalImage + 1 :
       denied === "steps" ? run.counters.steps + 1 : denied === "text_revisions" ? run.textRevisions + 1 :
       denied === "image_revisions" ? run.imageRevisions + 1 : (run.noProgressCount ?? 0) + 1;
@@ -135,6 +139,7 @@ export function createExecutionAllowanceLedger(database: Database) {
     if (operation) {
       const proofDigest = digest({ kind: "undispatched_allowance_v1", runId: run._id, operationId: operation._id,
         profileHash: campaign.profileHash, preparation: operation.m4Preparation ?? null,
+        ...(run.mode === "real" ? { realImagePreparation: operation.realImagePreparation ?? null } : {}),
         inputFingerprint: operation.inputFingerprint, configurationHash: run.configurationHash });
       const cancelled = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
         state: "prepared", dispatchStartedAtMs: null, reservationCount: 0 }, { $set: {
@@ -192,6 +197,78 @@ export function createExecutionAllowanceLedger(database: Database) {
       revision: campaign.revision }, { $set: { imageRequests: campaign.imageRequests + 1,
         updatedAtMs: nowMs }, $inc: { revision: 1 } }, { session });
     if (changed.modifiedCount !== 1) stale("Campaign image count changed.");
+  }
+
+  async function reserveRealImage(session: ClientSession, run: ExperimentRunDocument,
+    operation: ExperimentOperationDocument, requestDigest: string, nowMs: number) {
+    const campaign = await current(session, run.execution!.campaignId, run);
+    const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
+    if (run.mode !== "real" || campaign.mode !== "real" || !profile.realImage || operation.providerKind !== "image") {
+      conflict("Real image profile is not current.");
+    }
+    const denied = reason(campaign, run, operation.role, "image");
+    if (denied) throw new ExecutionAllowanceError("limit_exhausted", "Real image allowance is exhausted.", denied);
+    const hold = campaign.allowance.maxMicrodollars - campaign.reservedMicrodollars - campaign.settledMicrodollars;
+    if (!Number.isSafeInteger(hold) || hold <= 0) conflict("Real image planning hold is unavailable.");
+    const reservation = { campaignId: campaign._id, profileHash: campaign.profileHash, requestDigest,
+      planningHoldMicrodollars: hold, unsettledMicrodollars: hold, settledMicrodollars: null,
+      evidenceDigest: null, overrunMicrodollars: 0 };
+    const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
+      state: "prepared", reservationCount: 0, realImageReservation: { $exists: false } },
+    { $set: { realImageReservation: reservation } }, { session });
+    if (saved.modifiedCount !== 1) conflict("Real image reservation changed.");
+    const changed = await campaigns.updateOne({ _id: campaign._id, schemaVersion: "execution_v1", revision: campaign.revision },
+      { $set: { reservedMicrodollars: campaign.reservedMicrodollars + hold,
+        imageRequests: campaign.imageRequests + 1, updatedAtMs: nowMs }, $inc: { revision: 1 } }, { session });
+    if (changed.modifiedCount !== 1) stale("Real image campaign reservation changed.");
+    return reservation;
+  }
+
+  async function settleRealImage(session: ClientSession, run: ExperimentRunDocument,
+    operation: ExperimentOperationDocument, raw: RealImageResult, nowMs: number) {
+    const result = realImageResultSchema.parse(raw);
+    const campaign = await current(session, run.execution!.campaignId, run);
+    const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
+    const reservation = operation.realImageReservation;
+    if (run.mode !== "real" || !profile.realImage || !reservation ||
+        reservation.profileHash !== campaign.profileHash || reservation.campaignId !== campaign._id ||
+        reservation.requestDigest !== result.requestDigest ||
+        campaign.reservedMicrodollars < reservation.unsettledMicrodollars) conflict("Real image settlement has no attributable hold.");
+    const evidenceDigest = digest(result);
+    if (reservation.evidenceDigest) {
+      if (reservation.evidenceDigest !== evidenceDigest) conflict("Real image observation changed.");
+      return { reused: true as const, chargeMicrodollars: reservation.settledMicrodollars,
+        overrunMicrodollars: reservation.overrunMicrodollars };
+    }
+    const priced = realImageCharge(result, profile.realImage.price);
+    if (!priced) {
+      const savedUnknown = await database.collections.experiment_operations.updateOne({ _id: operation._id,
+        runId: run._id, "realImageReservation.evidenceDigest": null }, { $set: {
+        realImageObservation: { resultJson: m4CanonicalJson(result), resultDigest: evidenceDigest,
+          observedAtMs: nowMs, chargeBasis: "unknown_outcome" },
+        "realImageReservation.evidenceDigest": evidenceDigest,
+      } }, { session });
+      if (savedUnknown.modifiedCount !== 1) conflict("Real image unknown outcome changed concurrently.");
+      return { reused: false as const, chargeMicrodollars: null, overrunMicrodollars: 0 };
+    }
+    const charge = priced.microdollars;
+    const hold = reservation.unsettledMicrodollars;
+    const overrun = Math.max(0, charge - hold);
+    const saved = await database.collections.experiment_operations.updateOne({ _id: operation._id, runId: run._id,
+      "realImageReservation.evidenceDigest": null }, { $set: { realImageObservation: {
+        resultJson: m4CanonicalJson(result), resultDigest: evidenceDigest, observedAtMs: nowMs,
+        chargeBasis: priced.basis },
+      "realImageReservation.evidenceDigest": evidenceDigest,
+      "realImageReservation.settledMicrodollars": charge,
+      "realImageReservation.unsettledMicrodollars": 0,
+      "realImageReservation.overrunMicrodollars": overrun } }, { session });
+    if (saved.modifiedCount !== 1) conflict("Real image settlement changed concurrently.");
+    const changed = await campaigns.updateOne({ _id: campaign._id, schemaVersion: "execution_v1", revision: campaign.revision },
+      { $set: { reservedMicrodollars: campaign.reservedMicrodollars - hold,
+        settledMicrodollars: campaign.settledMicrodollars + charge, updatedAtMs: nowMs },
+      $inc: { revision: 1 } }, { session });
+    if (changed.modifiedCount !== 1) stale("Real image campaign settlement changed.");
+    return { reused: false as const, chargeMicrodollars: charge, overrunMicrodollars: overrun };
   }
 
   async function settleText(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument,
@@ -309,5 +386,6 @@ export function createExecutionAllowanceLedger(database: Database) {
     return { runRevision: changed.revision, campaignRevision: campaign.revision + 1, reused: false as const };
   }
 
-  return { current, create, claimRun, check, pause, reserveText, countImage, settleText, approve, decline };
+  return { current, create, claimRun, check, pause, reserveText, countImage, settleText,
+    reserveRealImage, settleRealImage, approve, decline };
 }
