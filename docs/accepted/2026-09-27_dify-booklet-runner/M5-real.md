@@ -225,10 +225,19 @@ placeholder generation and missing/extra-reference rejection.
 
 The unsigned `0.2.2-dev2` image candidate has archive SHA-256
 `cc66cfd3cd181b0c2886e3190e5198d28c443a8b6cfb6fad214c6582e7a57f80`.
-It is not installed or active. Review, an explicit bounded installation window,
-restoration of signature verification, exact readback and readiness delivery
-must precede paid use. Preserve this run and its grant/accounting. No saved
-output repair, reset, automatic retry or successor spending is authorized.
+The operator approved its one-package installation window. Community now reports
+`langgenius/openai_tool:0.2.2-dev2@098ed46c290cf283e1a5d7e0944490f27a00b9f29296f95c0d988f793f7bac68`.
+Text dev6 is unchanged. The private-root receipt confirms signature verification
+restored to `true` and the plugin daemon running. No provider call was made for
+installation. The immutable image workflow still selects the stable provider
+`langgenius/openai_tool/openai`; its publication is unchanged.
+
+The matching readiness update selects dev2 for new profiles, with technical hash
+`f4aab1e502e7befae6dc8f47195c9779111989bde4c2dc325e516459c9dbdce5`.
+The saved dev1 profile remains readable with its original hash. Readiness delivery
+must be verified before paid use. Preserve this run and its grant/accounting.
+No saved output repair, reset, automatic retry or successor spending is authorized.
+Credential inventory impact: no credential, consumer, storage or transfer changes.
 
 ## Three execution checkpoints
 
