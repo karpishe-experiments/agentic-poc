@@ -189,9 +189,46 @@ and backup `staging-20261028T112523Z-e3f6c1ac139bbb30`. Its Deploy observer exit
 without replay. Check deployment `40682459095` passed on `_staging`. Live browser
 inspection exposes Real mode and the empty Kid grant
 form with 120 text calls, 12 images and 300 steps; Start remains disabled until a
-grant is recorded. No Real spending grant or call exists. Obtain an
-exact finite Kid grant before creating its one-run campaign; the historical USD 1
-campaign grants no authority for it. No new credential or transfer path is added.
+grant is recorded. At activation, no Real spending grant or call existed. The
+historical USD 1 campaign grants no M5 authority. No new credential or transfer
+path is added.
+
+## First Real Kid checkpoint - 2026-10-28
+
+The operator approved USD 5 for one initial Kid run, 120 text calls, 12 images,
+300 steps, text/image revision allowances of 1/1 and a no-progress window of 3.
+Zero automatic provider retries and zero successors were authorized. Campaign
+`e7fc2af8-a5d6-4f62-81df-650c9abdec10` records that chat reference and links the
+completed additional Balanced Kid. Run `c2e3b0ab-9deb-4cdc-8b74-928f4c54c078`
+owns booklet `6188a72b-4e75-49a5-86b5-62b8b98f6c5c` and the unchanged technical
+profile above.
+
+J01-J07 completed and were approved; J08 has a saved draft. The first required
+style-sample image stopped before OpenAI dispatch. Dify workflow
+`8a3bd524-a376-40b6-9443-71b41afe81e5`, image operation
+`93586ad6-3a99-4dc2-a0d6-2b455f0217c4`, retained
+`rejected_pre_provider`, `dispatchStarted=false`, `failure.code=reference_count`.
+The following result node reported a missing upload receipt because no image
+was produced. No paid image outcome is unknown and no image retry was made.
+Run revision 106 is blocked: 17 text calls, one image attempt and 18 steps;
+USD 0.006909 estimated settled plus USD 0.015300 retained count liabilities,
+USD 0.022209 total planning exposure. Invoice cost is unavailable. Generation
+and both reports remain incomplete; this is not a passing Kid acceptance.
+
+[Dify 1.17.1's file parameter cast](https://github.com/langgenius/dify/blob/1.17.1/api/core/plugin/entities/parameters.py)
+wraps the absent optional list as `[None]` before plugin invocation. The adapter
+accepted `None` and `[]`, but rejected that placeholder. The focused correction
+normalizes exactly `[None]` only when the canonical request has no references.
+Edit reference counts, identities, original bytes, order, deadlines and zero
+retries remain enforced. Twenty fake-provider adapter tests pass, including
+placeholder generation and missing/extra-reference rejection.
+
+The unsigned `0.2.2-dev2` image candidate has archive SHA-256
+`cc66cfd3cd181b0c2886e3190e5198d28c443a8b6cfb6fad214c6582e7a57f80`.
+It is not installed or active. Review, an explicit bounded installation window,
+restoration of signature verification, exact readback and readiness delivery
+must precede paid use. Preserve this run and its grant/accounting. No saved
+output repair, reset, automatic retry or successor spending is authorized.
 
 ## Three execution checkpoints
 

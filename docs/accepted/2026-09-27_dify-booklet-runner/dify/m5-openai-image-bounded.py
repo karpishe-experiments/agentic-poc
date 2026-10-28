@@ -199,7 +199,11 @@ def validate(request_json: str, reference_files: Any, *, now_ms: int, now=time.t
         raise Rejected("reference_count")
     if len({(item.get("assetId"), item.get("versionId")) for item in refs if isinstance(item, dict)}) != len(refs):
         raise Rejected("reference_identity")
-    if reference_files is None and not refs:
+    # Dify 1.17.1 casts an absent FILES value to [None] before plugin invocation.
+    # Only a no-reference generation may treat that exact placeholder as empty.
+    empty_placeholder = (isinstance(reference_files, list) and len(reference_files) == 1
+                         and reference_files[0] is None)
+    if not refs and (reference_files is None or empty_placeholder):
         reference_files = []
     if not isinstance(reference_files, list) or len(reference_files) != len(refs):
         raise Rejected("reference_count")
