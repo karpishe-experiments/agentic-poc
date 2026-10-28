@@ -136,6 +136,12 @@ independent whole-bundle reviews check the final source before publication.
 No live provider package, Dify publication, application release or Real grant is
 asserted by this local checkpoint.
 
+The staging promotion review identified a missing proxy exemption for the new
+image-evidence callback. The correction adds only that exact machine path; its
+handler still requires the callback key and Real readiness. Forty focused proxy
+and handler checks pass for enabled staging, disabled runner, production and
+lookalike paths. No provider request was used to reproduce this boundary.
+
 Credential inventory impact: Packages B and C change no credential use. Package D
 reuses the existing eighteen application API keys and shared callback key for Real
 consumers. No new secret, protected storage or transfer path is introduced. The
