@@ -10,7 +10,9 @@ const noRetry = { retry_enabled: false, max_retries: 0, retry_interval: 0 };
 // These are publication candidates. Installation and native-file delivery
 // remain separate checks before any Real request can be enabled.
 export const REAL_TEXT_PROVIDER = "langgenius/openai/openai";
-export const REAL_IMAGE_TOOL = { provider_type: "plugin", provider_id: "langgenius/openai_tool/openai",
+// Dify 1.17.1 loads workspace tool credentials through its builtin runtime path.
+// The plugin path returns a tool without resolving that existing authorization.
+export const REAL_IMAGE_TOOL = { provider_type: "builtin", provider_id: "langgenius/openai_tool/openai",
   provider_name: "openai", tool_name: "booklet_real_image" } as const;
 
 function route(id: string, selector: string[], value: string): Node {
