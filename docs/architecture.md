@@ -706,11 +706,12 @@ adapter, models, token carrier, eighteen publications and a new request bundle;
 allowance totals do not enter that bundle. Historical `m4_v1` policy parsing,
 request hashes and campaign readers remain separate. The new Balanced path
 uses the existing preparation, dispatch, authenticated observation, completion
-and simulated-image services. Real dispatch remains closed pending its own
-verified image transport.
+and simulated-image services. Real dispatch uses its separate verified readiness
+record and still requires an explicit finite execution grant.
 
-The local Real candidate reads a separate, tracked, non-secret readiness
-manifest. It is disabled by default. A staging-only ready record must pin the
+The Real path reads a separate, tracked, non-secret readiness manifest. The
+reviewed activation record is ready for staging delivery after the eighteen
+publications and two installed packages were verified. A staging-only ready record pins the
 reviewed text and image adapter identities and package hashes, base64 native-file
 delivery, a source and effective token policy, and eighteen exact publication
 entries. The reader matches each app and role slot to the existing protected
