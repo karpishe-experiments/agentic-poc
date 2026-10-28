@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import release from "@/lib/experiment-runner/m4-campaign-manifest.json";
-import disabled from "@/lib/experiment-runner/real-readiness-manifest.json";
+import delivered from "@/lib/experiment-runner/real-readiness-manifest.json";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { m4TestId as id } from "@/tests/helpers/m4-policy";
 import {
@@ -24,12 +24,18 @@ const ready = {
 } as const;
 
 describe("staging Real readiness manifest", () => {
-  it("is disabled by default and never accepts local or production Real dispatch", () => {
-    expect(disabled).toEqual({ state: "disabled" });
+  it("hydrates the delivered publications and never accepts local or production Real dispatch", () => {
+    expect(realReadinessManifestSchema.safeParse(delivered).success).toBe(true);
     expect(readM4RunnerConfig(env).enabled).toBe(true);
     const defaultState = readM4RunnerConfig(env);
     if (!defaultState.enabled) throw new Error("Missing staging config");
-    expect(defaultState.config.real).toBeUndefined();
+    expect(defaultState.config.real?.bindings.map(item => item.publishedWorkflowId))
+      .toEqual(delivered.publications.map(item => item.publishedWorkflowId));
+    expect(defaultState.config.real?.bindings.map(item => item.apiKey))
+      .toEqual(release.policy.publications.map(item => `fake-${item.appId}`));
+    const disabledState = readM4RunnerConfig(env, release, { state: "disabled" });
+    if (!disabledState.enabled) throw new Error("Missing staging config");
+    expect(disabledState.config.real).toBeUndefined();
     const local = readM4RunnerConfig({ ...env, DEPLOYMENT_ENV: "local" }, { state: "disabled" }, ready);
     expect(local.enabled).toBe(true);
     if (local.enabled) expect(local.config.real).toBeUndefined();

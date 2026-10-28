@@ -404,9 +404,14 @@ available for subsequent integration checks; no probe was deleted.
 The pinned bridge has two additional Community compatibility gaps: draft sync
 sends `environment_variables`, which 1.17.1 rejects as an extra field; published
 execution through console cookies returns HTTP 405. Use the inspected official
-CLI `import studio-app --app-id` and `run app --inputs-file` fallbacks. Keep
-`--http-retry 0` during probes and inspect uncertain results before retrying.
-CLI import preserved the app ID; MCP restore preserved both the app ID and the
+CLI `run app --inputs-file` execution fallback. On 2026-10-28, official CLI
+Studio import and export returned HTTP 500. For graph-only saves, the existing
+reviewed issue #65 compatibility client at `.tools/dify-mcp-issue65` omitted the
+unsupported field and preserved environment variables and features on readback.
+It uses the private Community state directory; it does not replace the registered
+MCP process. Use MCP for current reads and publication, and save with a fresh
+draft hash. Inspect uncertain saves before another mutation. Keep `--http-retry 0`
+during probes. The earlier CLI import preserved the app ID; MCP restore preserved both the app ID and the
 original graph hash. Tool synchronization and published app execution were
 verified separately; a caller invoking the Workflow Tool remains untested.
 Booklet runtime-key lookup and callback-based interrupted-response recovery passed

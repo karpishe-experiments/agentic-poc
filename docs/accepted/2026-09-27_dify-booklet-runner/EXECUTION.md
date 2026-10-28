@@ -186,13 +186,15 @@ No M4 report retry, new persona run, reset or manual saved-output repair is need
 `40659711655` verified it. See [M5 delivery](M5-real.md#current-staging-delivery---2026-10-28)
 for the observer-timeout distinction. The operator explicitly approved all PR
 merges for this chat session; do not ask again within that scope. This grants no
-paid run or new signature-policy exception. The reviewed private-root handoff is
-`output/issue65-m5-plugin-policy.sh.txt`; only Bash syntax, ShellCheck and independent
-local review are verified. The two pinned provider candidates, temporary signature
-window and installation remain pending explicit action-time approval. Reuse existing
-credentials; request private entry only if a concrete missing credential is proved.
-After installation, restore signature verification before publication/readback and
-the later exact Kid grant. No reset or replacement M4 campaign is authorized.
+paid run or a further signature-policy exception. The operator separately approved
+the two pinned provider packages, completed their installation, and restored
+signature verification to `true`. The private-root policy handoff is complete;
+do not reopen its installation window. All eighteen Real publications matched
+their reviewed graphs on immutable readback. API and worker have no native-file
+format override and inherit Dify 1.17.1's `base64` default. The reviewed readiness
+activation still needs staging delivery, followed by an exact finite Kid grant.
+Reuse existing credentials; request private entry only if a concrete missing
+credential is proved. No paid call, reset or replacement M4 campaign is authorized.
 
 The following older checkpoints are retained as historical execution evidence;
 do not execute their pending next steps.

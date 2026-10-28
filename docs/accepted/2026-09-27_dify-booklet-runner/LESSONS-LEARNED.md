@@ -1047,6 +1047,17 @@ alone is insufficient evidence to adopt an optimization. The measured gate kept
 normal admission unchanged. Evidence: the M4 live-result table. Promotion target:
 **Documentation** for measured persistence changes.
 
+## Preserve complete graphs across tool boundaries
+
+Large execution-tool output can truncate a string inside otherwise valid JSON.
+During M5 publication preparation, graph source read through shell output lost
+content. Validation caught this before any save. Use a direct local graph file
+for submission, or bounded UTF-8 chunks with exact length checks. Compare the
+saved and immutable published graph with the complete reviewed input. JSON
+parsing alone does not prove content preservation. Evidence: eighteen M5 graph
+and publication readbacks. Promotion candidate: **Documentation** for configuration
+transport verification.
+
 ## Bound reviewer evidence to its current decision
 
 A mid-run Creator reviewer exceeded the unchanged 32,000-token guard while its
