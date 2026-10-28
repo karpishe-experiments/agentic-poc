@@ -22,27 +22,36 @@ import { pageIllustrationAttachmentSchema } from "@/lib/contracts/experiment-pag
 import { assertExperimentEvaluationOrder } from "@/db/experiment-completion";
 import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
-import { OPERATION_LIMIT_MS, withCleanupBudget } from "@/lib/operations/budget";
+import { OPERATION_LIMIT_MS, RECONCILIATION_RESERVE_MS, withCleanupBudget } from "@/lib/operations/budget";
 import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner/completion-lifecycle";
 import { CampaignAdmissionError, createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
+import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
+import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
+import { executionRequestDefinition, realRequestDefinition } from "@/lib/experiment-runner/execution-request";
+import { executionTesterRevisionEligibility } from "@/lib/experiment-runner/tester-decision-eligibility";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
-import { m4Hash, m4RequestBundleMatches, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
+import { m4CanonicalJson, m4Hash, m4RequestBundleMatches, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasM4SimulatedImagePolicy, hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { hasM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
 import { reportCleanup } from "@/lib/operations/completion-failure";
 import { isCompletionRecoveryRole } from "@/lib/operations/operation-recovery-outcome";
 import { closeM4DecisionRejection, verifyM4DecisionRejection } from "@/db/experiment-decision-rejection";
 import { createExperimentPageIllustrationAssembly } from "@/db/experiment-page-illustrations";
 import { createAssetStore } from "@/lib/assets/create-asset-store";
 import { failureDiagnosticsSchema, type FailureReason } from "@/lib/contracts/experiment-failure";
+import { currentMutationOwnerId } from "@/lib/application/deployment-control";
+import { createRealImagePreparation } from "@/db/experiment-real-image-preparation";
+import type { RealImageRequest } from "@/lib/experiment-runner/real-image-contract";
+import { realImageCharge, realImageResultSchema } from "@/lib/experiment-runner/real-image-contract";
 
 const time = z.number().int().nonnegative();
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
-const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: savedConfigurationSchema, campaignId: opaqueIdSchema.optional(), nowMs: time });
+const createInput = z.strictObject({ runId: opaqueIdSchema, bookletId: opaqueIdSchema, persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional(), configuration: savedConfigurationSchema, campaignId: opaqueIdSchema.optional(), executionCampaignId: opaqueIdSchema.optional(), nowMs: time });
 const controlInput = z.strictObject({ runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), nowMs: time });
 const prepareInput = z.strictObject({ operationId: opaqueIdSchema, runId: opaqueIdSchema, expectedRevision: z.number().int().nonnegative(), role: experimentRoleSchema, taskId: experimentTaskSchema.nullable(), subjectKind: z.enum(["book", "character", "location", "page"]), subjectId: opaqueIdSchema, inputFingerprint: fingerprint, attempt: z.number().int().min(1), providerKind: z.enum(["text", "image"]), imageRequest: experimentImageRequestSchema.optional(), parentWorkflowRunId: opaqueIdSchema.optional(), nowMs: time });
 const claimInput = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable(), nowMs: time });
@@ -104,11 +113,13 @@ function isJ13Image(operation: Pick<ExperimentOperationDocument, "role" | "taskI
   return operation.role === "image" && operation.taskId === "J13" && operation.subjectKind === "page" && operation.providerKind === "image";
 }
 
-export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number; m4Authority?: M4Authority; m4ExecutionEnabled?: true } = {}) {
+export function createExperimentRepository(database: Database, options: { store?: () => AssetStore; elapsedNow?: () => number; m4Authority?: M4Authority; m4ExecutionEnabled?: true; realExecutionEnabled?: true } = {}) {
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   const runs = database.collections.experiment_runs;
   const operations = database.collections.experiment_operations;
   const campaignLedger = options.m4Authority ? createExperimentCampaignLedger(database, options.m4Authority) : null;
+  const executionLedger = createExecutionAllowanceLedger(database);
+  const realImagePreparation = createRealImagePreparation(database, (options.store ?? createAssetStore)());
   async function assertM4ImageAdmission(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument) {
     if (!campaignLedger || options.m4ExecutionEnabled !== true || !hasM4SimulatedImagePolicy(run) || operation.mode !== run.mode ||
         operation.providerKind !== "image" || operation.role !== "image" || operation.lifecycle?.stop != null ||
@@ -118,6 +129,28 @@ export function createExperimentRepository(database: Database, options: { store?
     if (!campaign || campaign.state !== "active" || campaign.policyHash !== run.m4.policyHash || campaign.slots[run.persona] !== run._id) {
       throw new ExperimentRepositoryError("invalid_state", "Balanced campaign admission is stopped.");
     }
+  }
+  async function assertExecutionPrepared(session: ClientSession, run: ExperimentRunDocument,
+    operation: ExperimentOperationDocument, parent: string | null, phase: "dispatch" | "claim") {
+    if (!run.execution || !["balanced", "real"].includes(run.mode) || operation.mode !== run.mode || operation.providerKind !== "text" ||
+        operation.lifecycle?.stop != null) throw new ExperimentRepositoryError("invalid_state", "Execution text profile is unavailable.");
+    const snapshot = executionPolicySnapshot(JSON.parse(run.execution.profileJson));
+    const prepared = operation.m4Preparation;
+    const binding = snapshot.policy.publications.find(item => item.role === operation.role && item.taskId === operation.taskId &&
+      item.persona === (operation.role === "tester" ? run.persona : null));
+    if (snapshot.hash !== run.execution.profileHash || !prepared || prepared.policyHash !== snapshot.hash ||
+        prepared.configurationHash !== run.configurationHash || prepared.parentWorkflowRunId !== parent ||
+        prepared.requestDigest !== m4Hash(prepared.requestJson) ||
+        prepared.operationFingerprint !== m4OperationFingerprint(operation) ||
+        canonical(prepared.tokenPolicy ?? null) !== canonical(snapshot.policy.tokenPolicy) ||
+        prepared.definitionHash !== (run.mode === "real" ? realRequestDefinition : executionRequestDefinition)({ role: operation.role, taskId: operation.taskId,
+          persona: run.persona, report: ["tester", "judge"].includes(operation.role) && run.generationCompletedAtMs != null } as M4RequestSelector).hash ||
+        !binding || prepared.publishedWorkflowId !== binding.publishedWorkflowId ||
+        phase === "claim" && operation.verifiedWorkflowId !== prepared.publishedWorkflowId ||
+        prepared.sourceFingerprint !== await m4SourceFingerprint(database, session, run)) {
+      throw new ExperimentRepositoryError("conflict", "Execution preparation, source, policy or publication differs.");
+    }
+    return prepared;
   }
   async function assertM4Prepared(session: ClientSession, run: ExperimentRunDocument, operation: ExperimentOperationDocument, parent: string | null, phase: "dispatch" | "claim") {
     const prepared = operation.m4Preparation;
@@ -151,7 +184,7 @@ export function createExperimentRepository(database: Database, options: { store?
     parentWorkflowRunId: string | null,
     phase: "prepare" | "dispatch" | "claim",
   ): Promise<{ expectedTargetVersionId: string | null; imageRequest: z.infer<typeof experimentImageRequestSchema> }> {
-    if (!isJ13Image(operation) || run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run) || operation.mode !== run.mode ||
+    if (!isJ13Image(operation) || run.mode !== "simulated" && !hasExperimentImagePolicy(run) || operation.mode !== run.mode ||
         !operation.imageRequestJson || !options.store || !configuredPageIllustrationTask(run.configurationJson)) {
       throw new ExperimentRepositoryError("invalid_state", "J13 requires the enabled simulated final-page profile and retained source verification.");
     }
@@ -260,23 +293,39 @@ export function createExperimentRepository(database: Database, options: { store?
     const configurationHash = digest(configurationJson);
     const sameCreation = (prior: ExperimentRunDocument) => prior.bookletId === input.bookletId && prior.persona === input.persona && prior.mode === input.mode &&
       prior.predecessorRunId === (input.predecessorRunId ?? null) && prior.configurationHash === configurationHash &&
-      prior.m4?.campaignId === input.campaignId && (!prior.m4 || prior.m4.policyHash === campaignLedger?.snapshot.hash);
+      prior.m4?.campaignId === input.campaignId && (!prior.m4 || prior.m4.policyHash === campaignLedger?.snapshot.hash) &&
+      prior.execution?.campaignId === input.executionCampaignId;
     const prior = await runs.findOne({ _id: input.runId });
     if (prior) {
       if (sameCreation(prior)) return prior;
       throw new ExperimentRepositoryError("conflict", "Run ID already belongs to different input.");
     }
-    if (input.mode === "real" || input.mode === "balanced" && (!campaignLedger || !input.campaignId) || input.mode !== "balanced" && input.campaignId) {
+    if (input.mode === "real" && (options.realExecutionEnabled !== true || !input.executionCampaignId || !!input.campaignId) ||
+        input.mode === "balanced" && (input.executionCampaignId ? !!input.campaignId : !campaignLedger || !input.campaignId) ||
+        input.mode === "simulated" && (input.campaignId || input.executionCampaignId)) {
       throw new ExperimentRepositoryError("invalid_state", "Mode requires a ready protected campaign; Real is unavailable.");
     }
     const fixed = CASES[input.persona];
     const run: ExperimentRunDocument = { _id: input.runId, schemaVersion: "2", bookletId: input.bookletId, persona: input.persona, mode: input.mode, brief: fixed.brief, predecessorRunId: input.predecessorRunId ?? null, configurationJson, configurationHash, status: "queued", evaluationStatus: "pending", revision: 0, pauseRequested: false, activeOperationId: null, counters: { logicalText: 0, logicalImage: 0, payableText: 0, payableImage: 0, steps: 0 }, limits: { text: fixed.llmLimit, image: fixed.imageLimit, steps: 300 }, safeFailure: null, activeDelegationId: null, decisionSequence: 0, pendingDecisionJson: null, textRevisions: 0, imageRevisions: 0, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
     try {
       await measurePhase({ runId: input.runId }, "create_transaction", () => withMongoTransaction(database, async (session) => {
-        if (input.mode === "balanced") {
-          await campaignLedger!.create(session, input.nowMs);
-          run.m4 = await measurePhase({ runId: run._id }, "create_campaign_admission", () =>
-            campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs, options.store?.()));
+        if (input.mode === "balanced" || input.mode === "real") {
+          if (input.executionCampaignId) {
+            const campaign = await executionLedger.current(session, input.executionCampaignId);
+            const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson));
+            if (campaign.profileHash !== profile.hash || campaign.mode !== input.mode || campaign.persona !== run.persona ||
+                campaign.predecessorRunId !== run.predecessorRunId ||
+                canonical(profile.policy.publications.filter(item => item.persona === null || item.persona === run.persona)
+                  .map(item => Object.fromEntries(Object.entries(item).filter(([key]) => key !== "persona")))) !== configurationJson) {
+              throw new ExperimentRepositoryError("conflict", "Execution campaign profile differs from the new run.");
+            }
+            run.execution = { campaignId: campaign._id, profileHash: profile.hash, profileJson: profile.json };
+            await executionLedger.claimRun(session, run, input.nowMs);
+          } else {
+            await campaignLedger!.create(session, input.nowMs);
+            run.m4 = await measurePhase({ runId: run._id }, "create_campaign_admission", () =>
+              campaignLedger!.claimPersona(session, run, input.campaignId!, input.nowMs, options.store?.()));
+          }
         }
         if (input.predecessorRunId) {
           const predecessor = must(await runs.findOne({ _id: input.predecessorRunId }, { session }), "Predecessor run");
@@ -390,6 +439,7 @@ export function createExperimentRepository(database: Database, options: { store?
         await verifyM4Accounting(database, session, updated);
         return updated;
       }
+      if (run.pendingApproval) throw new ExperimentRepositoryError("invalid_state", "Operator allowance approval is still pending.");
       if (!run.pauseRequested) return run;
       const active = run.activeOperationId ? await operations.findOne({ _id: run.activeOperationId }, { session }) : null;
       const status = active?.state === "started" || active?.state === "unknown" ? "running" : "queued";
@@ -421,7 +471,11 @@ export function createExperimentRepository(database: Database, options: { store?
     try {
       return await withMongoTransaction(database, async (session) => {
         const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+        if (input.imageRequest && "schemaVersion" in input.imageRequest && !run.execution) {
+          throw new ExperimentRepositoryError("invalid_input", "Image request version differs from the run execution profile.");
+        }
         if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
+      if (run.pendingApproval) throw new ExperimentRepositoryError("invalid_state", "Operator allowance approval is still pending.");
         if (run.status !== "queued" && run.status !== "running" || run.pauseRequested || run.activeOperationId) throw new ExperimentRepositoryError("invalid_state", "Run cannot prepare another operation.");
         if (run.generationCompletedAtMs != null && input.role !== "tester" && input.role !== "judge") {
           throw new ExperimentRepositoryError("invalid_state", "Completed generation permits evaluation only; use a successor for changes.");
@@ -480,9 +534,31 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.activeOperationId !== operation._id || operation.state !== "prepared") throw new ExperimentRepositoryError("invalid_state", "Operation is not awaiting dispatch.");
       if (run.pauseRequested || run.status === "paused" || (run.status !== "queued" && run.status !== "running")) return { dispatched: false, operation };
-      if (run.mode === "real") return { dispatched: false, operation };
+      if (run.mode === "real") {
+        if (options.realExecutionEnabled !== true || !run.execution) {
+          return { dispatched: false, operation };
+        }
+        if (operation.providerKind === "image") await realImagePreparation.verify(session, run, operation);
+        else await assertExecutionPrepared(session, run, operation, input.parentWorkflowRunId, "dispatch");
+        const allowance = await executionLedger.check(session, run, operation.role, operation.providerKind);
+        if (allowance.reason) {
+          await executionLedger.pause(session, run, allowance.reason, input.nowMs, operation, operation.lifecycle?.ownerId);
+          return { dispatched: false, operation };
+        }
+      }
       if (run.mode === "balanced") {
-        if (operation.providerKind === "text") await assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "dispatch");
+        if (run.execution) {
+          if (operation.providerKind === "text") await assertExecutionPrepared(session, run, operation, input.parentWorkflowRunId, "dispatch");
+          else {
+            const campaign = await executionLedger.current(session, run.execution.campaignId, run);
+            if (campaign.mode !== "balanced") throw new ExperimentRepositoryError("invalid_state", "Execution image profile differs.");
+          }
+          const allowance = await executionLedger.check(session, run, operation.role, operation.providerKind);
+          if (allowance.reason) {
+            await executionLedger.pause(session, run, allowance.reason, input.nowMs, operation, operation.lifecycle?.ownerId);
+            return { dispatched: false, operation };
+          }
+        } else if (operation.providerKind === "text") await assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "dispatch");
         else await assertM4ImageAdmission(session, run, operation);
       }
       const deployment = await database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" }, { session });
@@ -529,7 +605,8 @@ export function createExperimentRepository(database: Database, options: { store?
   }
 
   async function claimOperation(raw: unknown, verifiedM4Dispatch?: { workflowId: string; workflowTaskId?: string }): Promise<{ started: boolean; reason?: "already_started" | "paused" | "limit_exhausted" | "blocked";
-    operation: ExperimentOperationDocument; imageRequest?: z.infer<typeof experimentImageRequestSchema> }> {
+    operation: ExperimentOperationDocument; imageRequest?: z.infer<typeof experimentImageRequestSchema>;
+    realImageRequest?: RealImageRequest }> {
     const input = parse(claimInput, raw);
     // Internal evidence from the authorization handler's authenticated Dify GET.
     // Public callback bodies cannot supply this separate argument.
@@ -555,14 +632,19 @@ export function createExperimentRepository(database: Database, options: { store?
       let operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs != null && operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Claim parent differs from dispatch.");
-      // No public route/config enables this internal seam. Focused fake-provider
-      // tests can exercise the whole protected claim before later readiness wiring.
-      if (run.mode === "real" || run.mode === "balanced" && (!campaignLedger || options.m4ExecutionEnabled !== true)) return { started: false, reason: "blocked", operation };
+      // Real admission additionally requires its separately verified profile.
+      // Historical Balanced work retains the original campaign authority.
+      if (run.mode === "real" && (options.realExecutionEnabled !== true || !run.execution) ||
+          run.mode === "balanced" && !run.execution && (!campaignLedger || options.m4ExecutionEnabled !== true)) {
+        return { started: false, reason: "blocked", operation };
+      }
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
       if (verified) {
         const expected = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown)
-          .find(item => item.role === operation.role && item.taskId === operation.taskId);
-        if (run.mode !== "balanced" || operation.mode !== "balanced" || operation.providerKind !== "text" ||
+          .find(item => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
+        if (!((run.mode === "balanced" && operation.providerKind === "text") ||
+            (run.mode === "real" && options.realExecutionEnabled === true)) ||
+            operation.mode !== run.mode ||
             operation.dispatchStartedAtMs == null || !expected || expected.publishedWorkflowId !== verified.workflowId ||
             operation.verifiedWorkflowId && operation.verifiedWorkflowId !== verified.workflowId ||
             verified.workflowTaskId && operation.workflowTaskId && operation.workflowTaskId !== verified.workflowTaskId) {
@@ -580,7 +662,8 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (operation.state !== "prepared") return { started: false, reason: "already_started", operation };
       if (run.activeOperationId !== operation._id) throw new ExperimentRepositoryError("conflict", "Operation is not active.");
-      if (operation.deadlineAtMs != null && input.nowMs >= operation.deadlineAtMs) {
+      if (operation.deadlineAtMs != null && input.nowMs >= operation.deadlineAtMs -
+          (run.mode === "real" && operation.providerKind === "image" ? RECONCILIATION_RESERVE_MS : 0)) {
         // An unclaimed late callback cannot admit new provider work. Keep its
         // uncertain dispatch identity and lane for observation, not replacement.
         return { started: false, reason: "blocked", operation };
@@ -606,27 +689,39 @@ export function createExperimentRepository(database: Database, options: { store?
       if (operation.deadlineAtMs != null && nowMs() >= operation.deadlineAtMs) return { started: false, reason: "blocked", operation };
       const logical = operation.providerKind === "text" ? "logicalText" : "logicalImage";
       const payable = operation.providerKind === "text" ? "payableText" : "payableImage";
-      const limit = operation.providerKind === "text" ? run.limits.text : run.limits.image;
-      if (run.counters[logical] >= limit || run.counters.steps >= run.limits.steps) {
+      const executionAllowance = run.execution ? (await executionLedger.current(session, run.execution.campaignId, run)).allowance : null;
+      const limit = executionAllowance ? operation.providerKind === "text" ? executionAllowance.textCalls : executionAllowance.imageCalls :
+        operation.providerKind === "text" ? run.limits.text : run.limits.image;
+      if (run.counters[logical] >= limit || run.counters.steps >= (executionAllowance?.steps ?? run.limits.steps)) {
+        if (run.mode === "real") return { started: false, reason: "paused", operation };
         if (run.mode === "balanced" && campaignLedger && run.m4?.campaignId === campaignLedger.grant.campaignId) await campaignLedger.stop(session, input.nowMs);
         await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "blocked", safeFailure: "limit_exhausted", updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
         return { started: false, reason: "limit_exhausted", operation };
       }
-      if (run.mode === "balanced" && operation.providerKind === "image") {
+      if (run.mode === "balanced" && operation.providerKind === "image" && !run.execution) {
         await assertM4ImageAdmission(session, run, operation);
         const deployment = await database.collections.deployment_control.findOne({ environment: process.env.DEPLOYMENT_ENV ?? "local" }, { session });
         if (deployment?.draining || deployment?.maintenance) return { started: false, reason: "blocked", operation };
       }
-      if (run.mode === "balanced" && operation.providerKind === "text") {
-        const prepared = await measurePhase(input, "authorization_sources", () =>
+      if ((run.mode === "balanced" || run.mode === "real") && operation.providerKind === "text") {
+        const prepared = await measurePhase(input, "authorization_sources", () => run.execution ?
+          assertExecutionPrepared(session, run, operation, input.parentWorkflowRunId, "claim") :
           assertM4Prepared(session, run, operation, input.parentWorkflowRunId, "claim"));
         if (nowMs() >= operation.deadlineAtMs! || lease.expiresAtMs <= nowMs()) return { started: false, reason: "blocked", operation };
         try {
-          await measurePhase(input, "authorization_reservation", () =>
+          if (run.execution) await measurePhase(input, "authorization_reservation", () =>
+            executionLedger.reserveText(session, run, operation, prepared.requestDigest, nowMs()));
+          else await measurePhase(input, "authorization_reservation", () =>
             campaignLedger!.reserve(session, run, operation, prepared.requestDigest, nowMs()));
         } catch (error) {
           // Allowance checks precede all reservation writes. Preserve the
           // unstarted dispatch for observation; never replay it as a new request.
+          if (error instanceof ExecutionAllowanceError && error.code === "limit_exhausted") {
+            // Dify has started, but this exact wrapper did not admit its provider.
+            // Keep its identity for authenticated observation. Approval cannot
+            // turn an expired wrapper into another request.
+            return { started: false, reason: "paused", operation };
+          }
           if (!(error instanceof CampaignAdmissionError) || error.reason !== "limit_exhausted") throw error;
           await campaignLedger!.stop(session, nowMs());
           const blocked = await runs.updateOne({ _id: run._id, revision: run.revision },
@@ -635,7 +730,26 @@ export function createExperimentRepository(database: Database, options: { store?
           return { started: false, reason: "limit_exhausted", operation };
         }
       }
-      const isPayable = run.mode === "balanced" && operation.providerKind === "text";
+      let realImageRequest: RealImageRequest | undefined;
+      if (run.mode === "real" && operation.providerKind === "image") {
+        realImageRequest = await measurePhase(input, "authorization_sources", () =>
+          realImagePreparation.verify(session, run, operation));
+        if (nowMs() >= operation.deadlineAtMs! || lease.expiresAtMs <= nowMs()) {
+          return { started: false, reason: "blocked", operation };
+        }
+        try {
+          await executionLedger.reserveRealImage(session, run, operation, realImageRequest.requestDigest, nowMs());
+        } catch (error) {
+          if (error instanceof ExecutionAllowanceError && error.code === "limit_exhausted") {
+            return { started: false, reason: "paused", operation };
+          }
+          throw error;
+        }
+      } else if (run.execution && operation.providerKind === "image") {
+        await executionLedger.countImage(session, run, nowMs());
+      }
+      const isPayable = (run.mode === "balanced" || run.mode === "real") && operation.providerKind === "text" ||
+        run.mode === "real" && operation.providerKind === "image";
       const counters = { ...run.counters, [logical]: run.counters[logical] + 1, steps: run.counters.steps + 1 };
       if (isPayable) counters[payable] = run.counters[payable] + 1;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: "prepared", "authorizationClaim.id": claimId }, { $set: { state: "started", authorizationClaim: null, workflowRunId: input.workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId,
@@ -645,7 +759,8 @@ export function createExperimentRepository(database: Database, options: { store?
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation was claimed concurrently.");
       const changed = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: { status: "running", counters, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
-      return { started: true, operation: updated, ...(imageRequest ? { imageRequest } : {}) };
+      return { started: true, operation: updated, ...(imageRequest ? { imageRequest } : {}),
+        ...(realImageRequest ? { realImageRequest } : {}) };
       }));
       committed = completed.started;
       return completed;
@@ -715,6 +830,36 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Dispatch identity differs from outcome.");
       if (operation.state === "succeeded") return operation;
+      // An authenticated failed workflow can confirm a callback's already
+      // settled image failure. Recheck its retained bytes and charge instead of
+      // reopening it as an unknown paid outcome.
+      if (run.mode === "real" && run.execution && operation.providerKind === "image" &&
+          operation.state === "failed" && operation.safeFailure === "definite_failure" &&
+          operation.lifecycle?.unresolved === false && operation.verifiedWorkflowId &&
+          operation.reservationCount === 1 && operation.realImageObservation && operation.realImageReservation &&
+          (input.category === "observed_failure" && operation.remoteStatus === "failed" ||
+            input.category === "observed_stop" && operation.remoteStatus === "stopped")) {
+        const observation = operation.realImageObservation, reservation = operation.realImageReservation;
+        const result = realImageResultSchema.parse(JSON.parse(observation.resultJson));
+        const profile = executionPolicySnapshot(JSON.parse(run.execution.profileJson));
+        const charge = profile.policy.realImage ? realImageCharge(result, profile.policy.realImage.price) : null;
+        const imageBinding = profile.policy.publications.find(item => item.role === "image" && item.taskId === null);
+        if (!["rejected_pre_provider", "failed_after_provider"].includes(result.status) || !charge ||
+            profile.hash !== run.execution.profileHash || reservation.profileHash !== profile.hash ||
+            reservation.campaignId !== run.execution.campaignId ||
+            imageBinding?.publishedWorkflowId !== operation.verifiedWorkflowId ||
+            result.requestDigest !== operation.realImagePreparation?.requestDigest ||
+            reservation.requestDigest !== result.requestDigest ||
+            observation.resultDigest !== m4Hash(m4CanonicalJson(result)) ||
+            reservation.evidenceDigest !== observation.resultDigest ||
+            charge.microdollars !== reservation.settledMicrodollars || charge.basis !== observation.chargeBasis ||
+            reservation.unsettledMicrodollars !== 0 ||
+            reservation.overrunMicrodollars !== Math.max(0, charge.microdollars - reservation.planningHoldMicrodollars)) {
+          throw new ExperimentRepositoryError("conflict", "Retained Real image failure evidence differs.");
+        }
+        await failTerminalPageBatchItems(database, run, session, input.nowMs);
+        return operation;
+      }
       // The callback may claim between a runtime status read and this write.
       // Resolve failed/stopped/rejected observations from the persisted claim
       // in this transaction so a late authorized completion remains possible.
@@ -778,9 +923,19 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (run.activeOperationId || run.status === "completed" || run.status === "failed" || run.status === "blocked") throw new ExperimentRepositoryError("invalid_state", "Run cannot record progress.");
       const noProgressCount = run.progressFingerprint === input.fingerprint64 ? (run.noProgressCount ?? 0) + 1 : 0;
-      const blocked = noProgressCount >= 3;
+      const allowance = run.execution ? (await executionLedger.current(session, run.execution.campaignId, run)).allowance : null;
+      const blocked = noProgressCount >= (allowance?.noProgress ?? 3);
       if (blocked && run.mode === "balanced" && campaignLedger && run.m4?.campaignId === campaignLedger.grant.campaignId) await campaignLedger.stop(session, input.nowMs);
-      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null }, { $set: { progressFingerprint: input.fingerprint64, progressOperationId: operation._id, noProgressCount, ...(blocked ? { status: "blocked" as const, safeFailure: "definite_failure" as const } : {}), updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+      const pendingApproval = run.pendingApproval ?? (blocked && run.execution ? { kind: "allowance_v1" as const, reason: "no_progress" as const,
+        operationId: operation._id, requestedAtMs: input.nowMs,
+        requestDigest: m4Hash(m4CanonicalJson({ kind: "allowance_v1", reason: "no_progress",
+          runId: run._id, operationId: operation._id, count: noProgressCount,
+          fingerprint: input.fingerprint64, profileHash: run.execution.profileHash })) } : null);
+      const updated = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null }, { $set: {
+        progressFingerprint: input.fingerprint64, progressOperationId: operation._id, noProgressCount,
+        ...(blocked ? run.execution ? { status: "paused" as const, pauseRequested: true, pendingApproval } :
+          { status: "blocked" as const, safeFailure: "definite_failure" as const } : {}),
+        updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run progress changed concurrently.");
       return updated;
     });
@@ -866,10 +1021,14 @@ export function createExperimentRepository(database: Database, options: { store?
       let result: RoleResult;
       try { result = validateRoleResult(operation.role, envelope.result); }
       catch { throw new ExperimentRepositoryError("invalid_result", "Result kind does not match the operation role."); }
-      if (run.mode === "balanced" && operation.providerKind === "text") {
+      if (result.kind === "allowance_request" && (!run.execution || run.generationCompletedAtMs != null ||
+          operation.role !== "tester" || operation.providerKind !== "text")) {
+        throw new ExperimentRepositoryError("invalid_result", "Allowance requests require a new execution tester.");
+      }
+      if ((run.mode === "balanced" || run.mode === "real") && operation.providerKind === "text") {
         try {
           if (canonical(m4ObservedRoleResult(run, operation)) !== canonical(result)) throw new Error("Different original result");
-        } catch { throw new ExperimentRepositoryError("invalid_result", "Balanced completion must match retained provider evidence and usage."); }
+        } catch { throw new ExperimentRepositoryError("invalid_result", "Execution completion must match retained provider evidence and usage."); }
       }
       if (operation.role === "image" && (operation.taskId !== "J13" || result.kind !== "clarification" ||
           !configuredPageIllustrationTask(run.configurationJson) || operation.imageCompletionDigest || operation.imageCompletionClaim)) {
@@ -915,15 +1074,48 @@ export function createExperimentRepository(database: Database, options: { store?
         if (admitted.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Recovery admission changed.");
       }
       const materializationRun = recovering ? { ...run, status: "running" as const, safeFailure: null } : run;
-      const materialized = await materializeNarrativeResult(database, session, materializationRun, operation, result, warnings, input.nowMs, options.store);
+      const allowanceRequest = result.kind === "allowance_request" ? result.payload : null;
+      if (allowanceRequest) {
+        const campaign = await executionLedger.current(session, run.execution!.campaignId, run);
+        const savedContext = JSON.parse(operation.m4Preparation?.contextJson ?? "null") as unknown;
+        const limits = { text: campaign.allowance.textRevisions, image: campaign.allowance.imageRevisions };
+        const eligible = executionTesterRevisionEligibility(savedContext, limits).allowanceTargets.some(target =>
+          target.taskId === allowanceRequest.requestedTaskId && target.versionId === allowanceRequest.requestedVersionId);
+        const expectedReason = allowanceRequest.requestedTaskId === "J13" ? "image_revisions" : "text_revisions";
+        const version = await database.collections.artifact_versions.findOne({ _id: allowanceRequest.requestedVersionId }, { session });
+        const artifact = version ? await database.collections.artifacts.findOne({ _id: version.artifactId,
+          experimentRunId: run._id, taskId: allowanceRequest.requestedTaskId }, { session }) : null;
+        // Claim increments these three counters after preparation. Compare the
+        // frozen source to the exact pre-claim run while reading current assets.
+        const priorCounters = { ...run.counters, logicalText: run.counters.logicalText - 1,
+          payableText: run.counters.payableText - 1, steps: run.counters.steps - 1 };
+        const sourceCurrent = priorCounters.logicalText >= 0 && priorCounters.payableText >= 0 &&
+          priorCounters.steps >= 0 && operation.m4Preparation?.sourceFingerprint ===
+            await m4SourceFingerprint(database, session, { ...run, counters: priorCounters });
+        if (!eligible || expectedReason !== allowanceRequest.reason || !artifact ||
+            artifact.currentVersionId !== allowanceRequest.requestedVersionId ||
+            !["draft", "approved"].includes(artifact.state) || run.pendingApproval || run.pendingDecisionJson ||
+            !sourceCurrent) {
+          throw new ExperimentRepositoryError("invalid_result", "Allowance target is not current or exhausted.");
+        }
+      }
+      const materialized = allowanceRequest ? { summary: { allowanceRequest: true }, runPatch: {} } :
+        await materializeNarrativeResult(database, session, materializationRun, operation, result, warnings, input.nowMs, options.store);
       if (lease.expiresAtMs <= nowMs()) throw new ExperimentRepositoryError("conflict", "Result finalization lease expired before saving.");
       const finalWarnings = Array.isArray(materialized.summary.warnings) ? materialized.summary.warnings : warnings;
       const updated = await operations.findOneAndUpdate({ _id: operation._id, state: operation.state, "resultFinalizationClaim.id": claimId }, { $set: { state: "succeeded", ...completionLifecycle(operation, nowMs()), resultFinalizationClaim: null, resultJson, resultDigest, warningsJson: canonical(finalWarnings), materializationJson: canonical(materialized.summary), safeFailure: null, updatedAtMs: input.nowMs,
         ...(recovering ? { m4CompletionRecovery: { reference: recoveryPermission!.reference, evidenceDigest: operation.m4Observation!.evidenceDigest!,
           requestDigest: operation.m4Preparation!.requestDigest, recoveredAtMs: input.nowMs } } : {}) } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("conflict", "Operation completion changed concurrently.");
-      const pauseRequested = run.pauseRequested || isRecoveredAttempt(operation, nowMs());
-      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { ...materialized.runPatch, activeOperationId: null, pauseRequested, status: pauseRequested ? "paused" : "queued", safeFailure: null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+      const pauseRequested = !!allowanceRequest || run.pauseRequested || isRecoveredAttempt(operation, nowMs());
+      const pendingApproval = allowanceRequest ? { kind: "allowance_v1" as const, reason: allowanceRequest.reason,
+        operationId: operation._id, decisionOperationId: operation._id,
+        targetTaskId: allowanceRequest.requestedTaskId, targetVersionId: allowanceRequest.requestedVersionId,
+        instruction: allowanceRequest.instruction, requestedAtMs: input.nowMs,
+        requestDigest: m4Hash(m4CanonicalJson({ kind: "tester_allowance_request_v1", runId: run._id,
+          operationId: operation._id, resultDigest, campaignId: run.execution!.campaignId })) } : null;
+      const changed = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id }, { $set: { ...materialized.runPatch, activeOperationId: null, pauseRequested, status: pauseRequested ? "paused" : "queued", safeFailure: null,
+        ...(pendingApproval ? { pendingApproval } : {}), updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
       if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
       if (recovering) {
         await campaignLedger!.recoverCompletion(session, run, operation, input.nowMs);
@@ -965,8 +1157,110 @@ export function createExperimentRepository(database: Database, options: { store?
           operation.resultFinalizationClaim || operation.authorizationClaim || operation.imageCompletionClaim ||
           operation.lifecycle?.unresolved !== false || operation.reservationCount !== 1 || !operation.verifiedWorkflowId ||
           run.activeOperationId === operation._id) throw new ExperimentRepositoryError("conflict", "Completion readback is inconsistent.");
-      if (run.mode === "balanced") await verifyM4Accounting(database, session, run);
+      if (run.mode === "balanced") {
+        if (run.execution) await verifyExecutionAccounting(database, session, run);
+        else await verifyM4Accounting(database, session, run);
+      }
       return { kind: "saved" as const, operation };
+    });
+  }
+
+  async function approveExecutionAllowance(input: { runId: string; approvalId: string; reference: string;
+    expectedRunRevision: number; expectedCampaignRevision: number; expectedPendingDigest: string;
+    totals: import("@/lib/experiment-runner/execution-policy").ExecutionAllowance; nowMs: number }) {
+    return withMongoTransaction(database, session => executionLedger.approve(session, input, async (run) => {
+      const controls = await database.collections.deployment_control.find({ "mutationOwners.runId": run._id }, { session }).toArray();
+      if (controls.some(control => control.mutationOwners?.some(owner =>
+        owner.runId === run._id && owner.id !== currentMutationOwnerId()))) {
+        throw new ExperimentRepositoryError("invalid_state", "Another mutation still owns this run.");
+      }
+      const unresolved = await operations.findOne({ runId: run._id, $or: [
+        { state: { $in: ["prepared", "started", "unknown"] } },
+        { authorizationClaim: { $ne: null } }, { resultFinalizationClaim: { $ne: null } },
+        { imageCompletionClaim: { $ne: null } },
+      ] }, { session });
+      if (unresolved) throw new ExperimentRepositoryError("invalid_state", "Unresolved provider work forbids approval continuation.");
+      await verifyExecutionAccounting(database, session, run);
+      const pending = run.pendingApproval;
+      if (pending?.operationId) {
+        const pausedOperation = must(await operations.findOne({ _id: pending.operationId, runId: run._id }, { session }), "Paused operation");
+        if (pausedOperation.executionAllowanceCancellation?.kind === "undispatched_allowance_v1") {
+          if (pausedOperation.m4Preparation && pausedOperation.m4Preparation.sourceFingerprint !==
+              await m4SourceFingerprint(database, session, run)) {
+            throw new ExperimentRepositoryError("invalid_state", "Paused preparation sources changed before approval.");
+          }
+          if (pausedOperation.providerKind === "image" && pausedOperation.imageRequestJson) {
+            const request = experimentImageRequestSchema.parse(JSON.parse(pausedOperation.imageRequestJson));
+            if (pausedOperation.taskId === "J13") {
+              const sources = await verifyCurrentPageIllustrationSources(database, session, run, pausedOperation.subjectId,
+                (options.store ?? createAssetStore)());
+              if (canonical(sources.request.request) !== canonical(request)) {
+                throw new ExperimentRepositoryError("invalid_state", "Paused page image sources changed before approval.");
+              }
+            } else await assertCurrentImageSources(database, session, run, request);
+          }
+        }
+      }
+      if (!pending?.decisionOperationId) return {};
+      const decisionOperation = must(await operations.findOne({ _id: pending.decisionOperationId, runId: run._id }, { session }), "Tester operation");
+      const recorded = decisionOperation.resultJson ? JSON.parse(decisionOperation.resultJson) as RoleResult : null;
+      if (decisionOperation.role !== "tester" || decisionOperation.state !== "succeeded" || !decisionOperation.m4Observation ||
+          recorded?.kind !== "allowance_request" || pending.operationId !== decisionOperation._id ||
+          pending.targetTaskId !== recorded.payload.requestedTaskId ||
+          pending.targetVersionId !== recorded.payload.requestedVersionId || pending.instruction !== recorded.payload.instruction ||
+          decisionOperation.executionApprovedDecision) {
+        throw new ExperimentRepositoryError("invalid_state", "Pending tester request differs from its original operation.");
+      }
+      const decision: RoleResult = { kind: "decision", payload: { decision: { action: "revise",
+        taskId: recorded.payload.requestedTaskId,
+        artifactVersionId: recorded.payload.requestedVersionId,
+        instruction: recorded.payload.instruction } } };
+      const materialized = await materializeNarrativeResult(database, session, run, decisionOperation, decision, [], input.nowMs, options.store);
+      const changed = await operations.updateOne({ _id: decisionOperation._id, state: "succeeded",
+        executionApprovedDecision: { $exists: false } }, { $set: { executionApprovedDecision: {
+          approvalId: input.approvalId, decisionJson: canonical(decision), materializedAtMs: input.nowMs } } }, { session });
+      if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("conflict", "Tester continuation changed.");
+      return materialized.runPatch;
+    }));
+  }
+
+  async function observeRealImage(input: { runId: string; operationId: string; workflowRunId: string;
+    parentWorkflowRunId: string | null; inputFingerprint: string; result: unknown; nowMs: number }) {
+    const result = realImageResultSchema.parse(input.result);
+    return withMongoTransaction(database, async session => {
+      const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
+      const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
+      const policy = run.execution ? executionPolicySnapshot(JSON.parse(run.execution.profileJson)).policy : null;
+      const imageBinding = policy?.publications.find(item => item.role === "image" && item.taskId === null && item.persona === null);
+      if (options.realExecutionEnabled !== true || run.mode !== "real" || operation.mode !== "real" ||
+          operation.providerKind !== "image" || !policy?.realImage || !imageBinding ||
+          operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId ||
+          operation.inputFingerprint !== input.inputFingerprint || operation.verifiedWorkflowId !== imageBinding.publishedWorkflowId ||
+          operation.reservationCount !== 1 || !operation.realImageReservation || !operation.realImagePreparation ||
+          result.requestDigest !== operation.realImagePreparation.requestDigest ||
+          result.requestedModel !== policy.realImage.model ||
+          !["started", "unknown", "succeeded", "failed"].includes(operation.state)) {
+        throw new ExperimentRepositoryError("conflict", "Real image provider evidence differs from the admitted operation.");
+      }
+      const settled = await executionLedger.settleRealImage(session, run, operation, result, input.nowMs);
+      if (settled.reused) return { reused: true as const, status: result.status,
+        chargeMicrodollars: settled.chargeMicrodollars, overrunMicrodollars: settled.overrunMicrodollars };
+      if (result.status !== "succeeded") {
+        const unknown = result.status === "unknown_outcome";
+        const updated = await operations.updateOne({ _id: operation._id, runId: run._id, state: { $in: ["started", "unknown"] } },
+          { $set: { state: unknown ? "unknown" : "failed", safeFailure: unknown ? "unknown_outcome" : "definite_failure",
+            lifecycle: { ...operation.lifecycle!, phase: "finished", attemptOutcome: "failed", unresolved: unknown,
+              endedAtMs: input.nowMs, lastProgressAtMs: input.nowMs }, updatedAtMs: input.nowMs } }, { session });
+        if (updated.modifiedCount !== 1) throw new ExperimentRepositoryError("conflict", "Real image failure changed concurrently.");
+        const blocked = await runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: operation._id },
+          { $set: { status: "blocked", safeFailure: unknown ? "unknown_outcome" : "definite_failure",
+            activeOperationId: unknown ? operation._id : null, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+        if (blocked.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Real image failure run changed.");
+        if (!unknown) await failTerminalPageBatchItems(database, { ...run, status: "blocked",
+          safeFailure: "definite_failure", activeOperationId: null }, session, input.nowMs);
+      }
+      return { reused: false as const, status: result.status,
+        chargeMicrodollars: settled.chargeMicrodollars, overrunMicrodollars: settled.overrunMicrodollars };
     });
   }
 
@@ -1039,5 +1333,5 @@ export function createExperimentRepository(database: Database, options: { store?
       dispatchStartedAtMs: { $ne: null }, authorizationClaim: null, imageCompletionClaim: null, resultFinalizationClaim: null }, { $set: { nextObservationAtMs: 0 } });
   }
 
-  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, inspectCompletion, blockCompletionFailure, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, latestOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
+  return { createRun, getRun, listRuns, pause, resume, prepareOperation, failPreparation, beginDispatch, recordDispatchIdentity, verifyDispatchPublication, claimOperation, completeOperation, inspectCompletion, approveExecutionAllowance, observeRealImage, blockCompletionFailure, failOperation, recordDispatchOutcome, recordProgress, blockRun, recordTerminalConflict, getOperation, latestOperation, listOperations, listOperationHeads, beginObservation, requestObservation };
 }

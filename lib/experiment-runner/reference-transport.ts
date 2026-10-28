@@ -35,7 +35,7 @@ async function readAcknowledgement(response: Response, signal: AbortSignal): Pro
 export function createReferenceTransport(config: BookletRunnerConfig, fetcher: typeof fetch = fetch) {
   return {
     async upload(binding: BookletBinding, runId: string, original: Uint8Array): Promise<ReferenceUploadResult> {
-      if (!opaqueIdSchema.safeParse(runId).success || !config.bindings.some((item) =>
+      if (!opaqueIdSchema.safeParse(runId).success || ![...config.bindings, ...(config.real?.bindings ?? [])].some((item) =>
         item.appId === binding.appId && item.apiKey === binding.apiKey && item.publishedWorkflowId === binding.publishedWorkflowId)) {
         return { kind: "rejected", reason: "invalid_input" };
       }

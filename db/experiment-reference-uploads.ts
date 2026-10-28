@@ -11,7 +11,7 @@ import { savedConfigurationSchema, type BookletBinding } from "@/lib/experiment-
 import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-transport";
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { operationSignal, remainingOperationMs } from "@/lib/operations/budget";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema });
@@ -58,7 +58,7 @@ export function createExperimentReferenceUploads(input: {
         const options = { session };
         const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
         const operation = await database.collections.experiment_operations.findOne({ _id: value.operationId, runId: value.runId }, options);
-        if (!run || !operation || run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run) || !configuredPageIllustrationTask(run.configurationJson) ||
+        if (!run || !operation || run.mode !== "simulated" && !hasExperimentImagePolicy(run) || !configuredPageIllustrationTask(run.configurationJson) ||
             operation.role !== "image" || operation.taskId !== "J13" || operation.subjectKind !== "page" ||
             operation.mode !== run.mode || operation.providerKind !== "image" || operation.state !== "prepared" || operation.lifecycle?.stop ||
             operation.dispatchStartedAtMs != null || operation.workflowRunId !== null || operation.reservationCount !== 0 ||

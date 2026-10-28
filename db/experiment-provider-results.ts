@@ -3,6 +3,8 @@ import { z } from "zod";
 import { withMongoTransaction, type Database } from "@/db/client";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import { createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
+import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
+import { executionMaximumTextCharge, executionPolicySnapshot, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { m4OperationFingerprint } from "@/db/experiment-text-sources";
@@ -11,6 +13,7 @@ import type { RoleResult } from "@/lib/contracts/experiment-runner";
 import { savedConfigurationSchema, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { assessM4ProviderResult, m4ProviderReadbackSchema } from "@/lib/experiment-runner/m4-provider-result";
 import { m4ObservedRoleResult } from "@/lib/experiment-runner/m4-observed-result";
+import { assessRealReportProviderResult, realReportPreGenerationFailure, realReportProviderWrapperSchema } from "@/lib/experiment-runner/real-report-provider-result";
 import { M4CreativeOutputError } from "@/lib/experiment-runner/m4-output";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { m4MaximumCharge, m4ModelBucket, m4OperationTokenPolicy } from "@/lib/experiment-runner/m4-policy";
@@ -27,28 +30,36 @@ function conflict(): never { throw new ExperimentRepositoryError("conflict", "M4
 
 // Internal authenticated observation only. No caller-supplied outputs, provider
 // POST, completion, callback, or public route is accepted by this service.
-export function createM4ProviderResults(database: Database, authority: M4Authority,
+export function createM4ProviderResults(database: Database, authority: M4Authority | { executionProfile: ExecutionPolicy; campaignId: string },
   config: BookletRunnerConfig, runtime: WorkflowRuntime) {
-  const ledger = createExperimentCampaignLedger(database, authority);
-  const bindings = structuredClone(config.bindings);
+  const isExecution = "executionProfile" in authority;
+  const ledger = isExecution ? null : createExperimentCampaignLedger(database, authority);
+  const executionLedger = isExecution ? createExecutionAllowanceLedger(database) : null;
+  const snapshot = isExecution ? executionPolicySnapshot(authority.executionProfile) : ledger!.snapshot;
+  const campaignId = isExecution ? authority.campaignId : ledger!.grant.campaignId;
+  const bindings = structuredClone(isExecution && snapshot.policy.mode === "real" ? config.real?.bindings ?? [] : config.bindings);
   const repository = createExperimentRepository(database);
   async function load(session: ClientSession, input: z.infer<typeof identity>) {
     const run = await database.collections.experiment_runs.findOne({ _id: input.runId }, { session });
     const operation = await database.collections.experiment_operations.findOne({ _id: input.operationId, runId: input.runId }, { session });
     const prep = operation?.m4Preparation, reservation = operation?.m4Reservation;
-    if (!run || !operation || run.mode !== "balanced" || operation.mode !== "balanced" || operation.providerKind !== "text" ||
+    if (!run || !operation || run.mode !== (isExecution ? snapshot.policy.mode : "balanced") || operation.mode !== run.mode || operation.providerKind !== "text" ||
         operation.role === "image" || !["started", "unknown"].includes(operation.state) || run.activeOperationId !== operation._id ||
         ["completed", "failed"].includes(run.status) || operation.reservationCount !== 1 || operation.dispatchStartedAtMs == null ||
-        !operation.workflowRunId || !prep || !reservation || run.m4?.campaignId !== ledger.grant.campaignId ||
-        run.m4.policyHash !== ledger.snapshot.hash || run.m4.policyJson !== ledger.snapshot.json ||
-        prep.policyHash !== ledger.snapshot.hash || reservation.policyHash !== ledger.snapshot.hash ||
-        reservation.campaignId !== ledger.grant.campaignId || prep.configurationHash !== run.configurationHash ||
+        !operation.workflowRunId || !prep || !reservation || (isExecution ?
+          run.execution?.campaignId !== campaignId || run.execution.profileHash !== snapshot.hash ||
+          run.execution.profileJson !== snapshot.json :
+          run.m4?.campaignId !== campaignId || run.m4.policyHash !== snapshot.hash || run.m4.policyJson !== snapshot.json) ||
+        prep.policyHash !== snapshot.hash || reservation.policyHash !== snapshot.hash ||
+        reservation.campaignId !== campaignId || prep.configurationHash !== run.configurationHash ||
         prep.operationFingerprint !== m4OperationFingerprint(operation) ||
         reservation.bucket !== m4ModelBucket(operation.role, run.generationCompletedAtMs != null) ||
-        reservation.maximumMicrodollars !== m4MaximumCharge(ledger.snapshot.policy, reservation.bucket, m4OperationTokenPolicy(ledger.snapshot.policy, operation).snapshot) ||
+        reservation.maximumMicrodollars !== (isExecution ?
+          executionMaximumTextCharge(snapshot.policy as ExecutionPolicy, reservation.bucket) :
+          m4MaximumCharge(ledger!.snapshot.policy, reservation.bucket, m4OperationTokenPolicy(ledger!.snapshot.policy, operation).snapshot)) ||
         prep.requestDigest !== reservation.requestDigest || prep.requestDigest !== m4Hash(prep.requestJson) ||
         prep.parentWorkflowRunId !== operation.parentWorkflowRunId || prep.publishedWorkflowId !== operation.verifiedWorkflowId) conflict();
-    const expected = ledger.snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
+    const expected = snapshot.policy.publications.find((item) => item.role === operation.role && item.taskId === operation.taskId &&
       item.persona === (operation.role === "tester" ? run.persona : null));
     const saved = savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).find((item) => item.role === operation.role && item.taskId === operation.taskId);
     const candidates = bindings.filter((item) => item.role === operation.role && item.taskId === operation.taskId &&
@@ -61,7 +72,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     return { run, operation, binding, prep };
   }
   async function block(input: z.infer<typeof identity>): Promise<Outcome> {
-    if (await closeM4KnownFailure(database, { policy: ledger.snapshot.policy, grant: ledger.grant }, input) === "closed") return { kind: "blocked" };
+    if (ledger && await closeM4KnownFailure(database, { policy: ledger.snapshot.policy, grant: ledger.grant }, input) === "closed") return { kind: "blocked" };
     // Missing, conflicting or unattributed evidence preserves the unresolved lane.
     const run = await repository.getRun(input.runId);
     if (run && run.status !== "blocked" && run.status !== "completed" && run.status !== "failed") {
@@ -88,7 +99,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
         if (identityMismatch || remote.kind === "conflict" || current.operation.m4Observation && execution?.status === "running") {
           if (current.operation.m4Observation) await database.collections.experiment_operations.updateOne({ _id: current.operation._id },
             { $set: { "m4Observation.issue": "conflicting_evidence" } }, { session });
-          await ledger.stop(session, input.nowMs); return true;
+          if (ledger) await ledger.stop(session, input.nowMs); return true;
         }
         return false;
       });
@@ -96,21 +107,28 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     }
     const value = execution.outputs?.booklet_provider_result;
     const wrapperText = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 2_500_000 ? value : null;
-    let parsed: ReturnType<typeof m4ProviderReadbackSchema.safeParse> = m4ProviderReadbackSchema.safeParse(null);
+    let parsed: ReturnType<typeof m4ProviderReadbackSchema.safeParse> | ReturnType<typeof realReportProviderWrapperSchema.safeParse> = m4ProviderReadbackSchema.safeParse(null);
     let originalContent: string | null = null;
-    let preGeneration: ReturnType<typeof m4PreGenerationFailure> = null;
+    let preGeneration: ReturnType<typeof m4PreGenerationFailure> | ReturnType<typeof realReportPreGenerationFailure> = null;
     if (wrapperText !== null) {
       try {
         const rawWrapper: unknown = JSON.parse(wrapperText);
-        preGeneration = m4PreGenerationFailure(rawWrapper, ledger.snapshot.policy, before.operation);
+        preGeneration = ledger ? m4PreGenerationFailure(rawWrapper, ledger.snapshot.policy, before.operation) : null;
+        if (isExecution && snapshot.policy.mode === "real" && before.operation.realReportPreparation)
+          preGeneration = realReportPreGenerationFailure(rawWrapper, snapshot.policy as ExecutionPolicy, before.operation);
         parsed = m4ProviderReadbackSchema.safeParse(rawWrapper);
+        const realParsed = isExecution && snapshot.policy.mode === "real" && before.operation.realReportPreparation
+          ? realReportProviderWrapperSchema.safeParse(rawWrapper) : null;
+        if (realParsed?.success) parsed = realParsed;
         const creative = z.object({ content: z.string().max(2 * 1024 * 1024) }).safeParse(rawWrapper);
         if (creative.success) originalContent = creative.data.content;
       } catch { /* No arbitrary error/body is saved. */ }
     }
     let assessment: ReturnType<typeof assessM4ProviderResult> | null = null;
     if (parsed.success) {
-      try { assessment = assessM4ProviderResult(parsed.data, ledger.snapshot.policy, before.operation); } catch { /* Retain bounded evidence, but no attribution. */ }
+      try { assessment = isExecution && snapshot.policy.mode === "real" && before.operation.realReportPreparation
+        ? assessRealReportProviderResult(parsed.data, snapshot.policy as ExecutionPolicy, before.operation) :
+          assessM4ProviderResult(parsed.data, snapshot.policy, before.operation); } catch { /* Retain bounded evidence, but no attribution. */ }
     }
     const evidenceJson = preGeneration ? m4CanonicalJson(preGeneration) : parsed.success ? m4CanonicalJson(parsed.data.providerEvidence) : null;
     const observation: Observation = { workflowRunId: execution.id, publishedWorkflowId: execution.workflow_id,
@@ -127,7 +145,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
       if (changed || prior?.issue === "conflicting_evidence") {
         await database.collections.experiment_operations.updateOne({ _id: current.operation._id },
           { $set: { "m4Observation.issue": "conflicting_evidence" } }, { session });
-        await ledger.stop(session, input.nowMs); return { stopped: true, reused: false };
+        if (ledger) await ledger.stop(session, input.nowMs); return { stopped: true, reused: false };
       }
       if (!prior) {
         // Count evidence was authenticated above; this optional measurement has
@@ -141,7 +159,10 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
         if (saved.modifiedCount !== 1) conflict();
       }
       if (assessment?.chargeUpperMicrodollars != null) {
-        const settlement = await ledger.settle(session, current.operation, { digest: assessment.evidenceDigest, chargeMicrodollars: assessment.chargeUpperMicrodollars }, input.nowMs);
+        const settlement = executionLedger ? await executionLedger.settleText(session, current.run, current.operation,
+          { digest: assessment.evidenceDigest, chargeMicrodollars: assessment.chargeUpperMicrodollars }, input.nowMs) :
+          await ledger!.settle(session, current.operation,
+            { digest: assessment.evidenceDigest, chargeMicrodollars: assessment.chargeUpperMicrodollars }, input.nowMs);
         if (settlement === "conflict") {
           await database.collections.experiment_operations.updateOne({ _id: current.operation._id },
             { $set: { "m4Observation.issue": "conflicting_evidence" } }, { session });
@@ -149,10 +170,11 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
         }
       }
       if (!prior && !observation.issue && before.run.generationCompletedAtMs != null && ["tester", "judge"].includes(before.operation.role)) {
-        const reservations = await database.collections.experiment_operations.find({ runId: before.run._id, providerKind: "text" },
-          { session, projection: { m4Reservation: 1 } }).toArray();
+        const reservations = await database.collections.experiment_operations.find({ runId: before.run._id },
+          { session, projection: { m4Reservation: 1, realImageReservation: 1 } }).toArray();
         const upper = reservations.reduce((sum, item) => sum + (item.m4Reservation?.settledMicrodollars ?? 0) +
-          (item.m4Reservation?.unsettledMicrodollars ?? 0), 0);
+          (item.m4Reservation?.unsettledMicrodollars ?? 0) + (item.realImageReservation?.settledMicrodollars ?? 0) +
+          (item.realImageReservation?.unsettledMicrodollars ?? 0), 0);
         // Freeze the report's cost snapshot here, including its own request.
         // A later judge request must not change an earlier report on inspection.
         await database.collections.experiment_operations.updateOne({ _id: current.operation._id }, { $set: {
@@ -160,7 +182,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
             explanation: "Frozen-price upper charge allocation for this run through this report, including retained count allowances. Invoice cost is unavailable; token-count endpoint charges remain an assumption when marked assumed in the saved policy." },
         } }, { session });
       }
-      if (observation.issue) await ledger.stop(session, input.nowMs);
+      if (observation.issue && ledger) await ledger.stop(session, input.nowMs);
       return { stopped: observation.issue !== null, reused: !!prior };
     });
     if (retained.stopped) return block(input);
@@ -179,14 +201,15 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
           await database.collections.experiment_operations.updateOne({ _id: current.operation._id },
             { $set: { "m4Observation.issue": "creative_invalid" } }, { session });
         }
-        await ledger.stop(session, input.nowMs);
+        if (ledger) await ledger.stop(session, input.nowMs);
       });
       return block(input);
     }
     const currentState = await withMongoTransaction(database, async (session) => {
       const current = await load(session, input);
-      const campaign = await database.collections.experiment_campaigns.findOne({ _id: ledger.grant.campaignId }, { session });
-      return { admitted: !!campaign && campaign.policyHash === ledger.snapshot.hash &&
+      const admitted = executionLedger ? (await executionLedger.current(session, campaignId, current.run)).profileHash === snapshot.hash :
+        (await database.collections.experiment_campaigns.findOne({ _id: campaignId }, { session }))?.policyHash === snapshot.hash;
+      return { admitted: admitted &&
         current.operation.m4Observation?.wrapperDigest === observation.wrapperDigest,
         pauseRequested: current.run.pauseRequested, stopRequested: !!current.operation.lifecycle?.stop };
     });

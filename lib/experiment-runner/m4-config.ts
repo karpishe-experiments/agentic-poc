@@ -1,6 +1,8 @@
 import { z } from "zod";
 import manifest from "@/lib/experiment-runner/m4-campaign-manifest.json";
+import realManifest from "@/lib/experiment-runner/real-readiness-manifest.json";
 import { readBookletRunnerConfig, type ConfigState } from "@/lib/experiment-runner/config";
+import { realReadinessFromManifest } from "@/lib/experiment-runner/real-config";
 import { m4AdmittedTokenPolicy, m4GrantSchema, m4PolicySchema, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4RequestBundleMatches } from "@/lib/experiment-runner/m4-request";
 
@@ -13,9 +15,12 @@ export const m4CampaignManifestSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("granted"), policy: m4PolicySchema, grant: m4GrantSchema }),
 ]);
 
-export function readM4RunnerConfig(env: Record<string, string | undefined> = process.env, rawManifest: unknown = manifest): ConfigState {
-  const base = readBookletRunnerConfig(env);
-  if (!base.enabled) return base;
+export function readM4RunnerConfig(env: Record<string, string | undefined> = process.env,
+  rawManifest: unknown = manifest, rawRealManifest: unknown = realManifest): ConfigState {
+  const baseState = readBookletRunnerConfig(env);
+  if (!baseState.enabled) return baseState;
+  const real = env.DEPLOYMENT_ENV === "_staging" ? realReadinessFromManifest(baseState.config, rawRealManifest) : undefined;
+  const base = real ? { ...baseState, config: { ...baseState.config, real } } : baseState;
   const unavailable = () => ({ ...base, config: { ...base.config, m4: { state: "invalid" as const } } });
   const parsed = m4CampaignManifestSchema.safeParse(rawManifest);
   if (!parsed.success) return unavailable();

@@ -4,6 +4,17 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Run lists use one grouped, projected operation read for each visible page. Cards
+show run-specific settled estimates and retained reservation liabilities; campaign
+accounting remains separate. Missing historical accounting proof remains unavailable.
+Inspection responses add timing and attention fields without adding those fields
+to execution contexts. New terminal transitions retain `terminalAtMs`; subsequent
+acknowledgements preserve it. Historical terminal runs without reliable terminal
+evidence show unavailable duration. Elapsed time includes pauses, and timestamps
+use the viewer's timezone with UTC in their details. Selected-run artifacts precede
+reports, and raw artifact content and technical activity are collapsed by default.
+
+
 A reviewed Balanced campaign policy can select a positive monetary ceiling up to
 USD5 and an optional `allowedPersonas` subset. Admission checks the subset before
 claiming a persona slot. The frozen policy already owns reservation ceilings,
@@ -687,6 +698,44 @@ are verified. The grant manifest requires reviewed staging delivery before paid 
 Historical run configuration hashes remain unchanged. See the
 [M4 provider record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md#local-bounded-provider-correction-candidate---2026-10-14).
 
+The local M5 approval-only path adds `execution_v1` campaigns in the same
+`experiment_campaigns` collection. A new campaign has one run slot, a saved
+technical profile and a separate append-only history of finite initial and
+extended approvals and declines. Its profile pins the effective installed text
+adapter, models, token carrier, eighteen publications and a new request bundle;
+allowance totals do not enter that bundle. Historical `m4_v1` policy parsing,
+request hashes and campaign readers remain separate. The new Balanced path
+uses the existing preparation, dispatch, authenticated observation, completion
+and simulated-image services. Real dispatch remains closed pending its own
+verified image transport.
+
+The local Real candidate reads a separate, tracked, non-secret readiness
+manifest. It is disabled by default. A staging-only ready record must pin the
+reviewed text and image adapter identities and package hashes, base64 native-file
+delivery, a source and effective token policy, and eighteen exact publication
+entries. The reader matches each app and role slot to the existing protected
+binding array and borrows that app's API key; the manifest stores no key. Real
+readiness is independent of the historical M4 campaign manifest, so changed
+publications do not rewrite an old M4 profile or hash. Missing or drifted Real
+metadata closes only Real. Neither a local candidate package nor a ready file
+proves Dify installation, publication readback, model permission, or paid use.
+
+The authenticated same-origin campaign route records an explicit initial grant
+before new-run creation. A new run claims that campaign's single slot. The
+runner pauses before an unaffordable call or step; an undispatched prepared
+operation is cancelled with saved proof. A tester may return the new-only
+`allowance_request` for an exhausted current text or image revision. The paid
+result stays immutable. An exact operator approval rechecks retained accounting,
+ownership and current target, records new totals by compare-and-swap and queues
+the same run in one transaction. Its approved revision decision is materialized
+through the existing narrative service with separate provenance. Decline keeps
+the run paused and remains in append-only campaign history. Ordinary Resume
+cannot clear a pending request. New page-image requests carry an explicit
+version tag for more than two approved revisions; untagged M4 requests retain
+their original two-revision validation and fingerprints. The UI shows the
+request, current liabilities and exact finite USD totals. No live M5 campaign
+or paid execution is established by this local implementation.
+
 ## Artifact and decision flow
 
 ### Issue #65 local foundation
@@ -1325,7 +1374,7 @@ Completed items and active assets are never discarded because another item fails
 
 The progress panel and persisted progress cards share one poller per job. Running jobs poll every five seconds; non-running observable states poll every fifteen seconds. Publishing a retry or Continue response updates the same coordinator immediately. Diagnostics record safe job/item boundaries and waiting heartbeats without prompts, image bytes, credentials, or arbitrary provider response bodies.
 
-In the application-managed generation path, `IMAGE_PROVIDER_MODE` selects only `fake` or `real`. The selected frozen image-agent profile supplies provider, model, quality, and resolution; no global image model or quality setting exists. Real requests use provider-native square, landscape, or portrait sizes, then Sharp normalizes them to the approved final canvas without stretching or drawing text. PDF export uses approved composed assets in deterministic cover-first order. This does not enable Real execution in the Dify experiment runner: its current admission and image-accounting policy allow simulated images only, and its image workflow uses synthetic transport.
+In the application-managed generation path, `IMAGE_PROVIDER_MODE` selects only `fake` or `real`. The selected frozen image-agent profile supplies provider, model, quality, and resolution; no global image model or quality setting exists. Real requests use provider-native square, landscape, or portrait sizes, then Sharp normalizes them to the approved final canvas without stretching or drawing text. PDF export uses approved composed assets in deterministic cover-first order. The Dify experiment runner has a separate Real execution profile, original-image transport and liability ledger. Its readiness manifest remains disabled until the exact live publications and provider packages are verified.
 
 ## Changing the architecture
 
@@ -1365,7 +1414,7 @@ Deployed environments use the same application services and MongoDB job contract
 
 VPS deployment uses a persisted `deployment_control` record. Mutation entrypoints and the job runner check it before accepting work. The runner records startup, heartbeat, and fatal state. Maintenance containers set `RUNNER_ENABLED=false`, so initialization, readiness, backup, restore, and reset cannot recover or claim queued work.
 
-`/api/health/live` is the only unauthenticated route and reports process liveness. The deployment proxy applies Basic authentication to pages, APIs, assets, admin actions, and Server Actions. Authenticated readiness verifies MongoDB structure, runner state, maintenance state, and required asset access without invoking a provider. Slow mutation routes stream NDJSON heartbeats and a terminal status/body record. Chat keeps the AI SDK UI stream open with transient heartbeat records.
+`/api/health/live` reports public process liveness. Enabled non-production runner machine callbacks bypass the page Basic gate and enforce their own callback-key authentication and readiness checks. This exact-path list includes `/api/experiments/booklet-tools/image-evidence`; suffixes and unknown paths do not bypass the gate. The deployment proxy applies Basic authentication to pages, APIs, assets, admin actions, and Server Actions. Authenticated readiness verifies MongoDB structure, runner state, maintenance state, and required asset access without invoking a provider. Slow mutation routes stream NDJSON heartbeats and a terminal status/body record. Chat keeps the AI SDK UI stream open with transient heartbeat records.
 
 The VPS topology and operational sequence are documented in [the deployment runbook](deployment/runbook.md). Terraform owns Cloudflare R2, Tunnel, Access and DNS rules. The root-owned host dispatcher owns Compose releases and a persistent operation journal; host flock and GitHub concurrency serialize changes. See [deployment contracts](deployment/contracts.md) for scope and acceptance limits.
 

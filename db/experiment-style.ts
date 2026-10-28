@@ -1,4 +1,4 @@
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -55,7 +55,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
+    if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || (!recovered && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) ||
         (!verificationOnly && run.activeOperationId)) invalid("Style assembly requires idle work with a simulated image policy.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftStyleVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftStyleVersionId }, options);
     if (!draft) invalid("Style draft was not found.");

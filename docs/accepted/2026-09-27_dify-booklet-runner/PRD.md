@@ -1,6 +1,6 @@
 # Dify booklet experiment — product requirements
 
-**Status:** Accepted product direction; runtime implementation and live acceptance are not complete.
+**Status:** Accepted product direction. M4 Balanced acceptance completed on 2026-10-27; M5 Real implementation and live acceptance remain incomplete.
 **Date:** 2026-09-27
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 **Delivery roadmap:** [PLAN.md](PLAN.md)
@@ -178,6 +178,14 @@ The independent Dify judge receives the brief, dialogue, decisions, artifacts an
 
 Distinguish booklet generation completion from evaluation status. A failed advisory call must not undo stored generation success. For M4 Balanced acceptance, valid generation and accounting plus a verified terminal tester or judge failure permit completion with evaluation incomplete. Retain the failed attempt, omit a judge dependent on a failed tester, and do not retry the report. Unknown outcomes and unresolved ownership remain blocking. Retained reports remain required for the separately authorized Real acceptance. API-driven testers assess interaction flow, not human UI usability; browser checks provide separate UI evidence.
 
+For M5 Real acceptance, an allowance-exhausted run may pause for a specific
+operator approval and continue under a recorded finite allowance. This
+approval-only pause does not count as manual repair. Resume alone cannot grant
+allowance. A run with manual data or output repair does not satisfy the retained
+same-run Real acceptance case; retain its failure and use a separately authorized
+linked successor. Unknown provider outcomes remain blocking and cannot be
+approved away. Each paid run and additional allowance needs explicit authority.
+
 ## 7. Observable acceptance
 
 | ID | Required evidence |
@@ -185,7 +193,7 @@ Distinguish booklet generation completion from evaluation status. A failed advis
 | AC01 | Thirteen specialist contracts, complete instructions/bindings/fixtures, and correct manager delegation and revision routing. |
 | AC02 | All three cases and recovery scenarios pass through actual Dify Simulated paths with zero real provider calls. |
 | AC03 | All three Balanced cases complete within LLM limits and with zero real image calls. |
-| AC04 | Real acceptance proceeds 3 → 5 → 8 pages, each plus cover; each retained run completes without manual repair during that run. |
+| AC04 | Real acceptance proceeds 3 → 5 → 8 pages, each plus cover; each retained run completes without manual data or output repair. A recorded approval-only allowance pause may continue the same run. |
 | AC05 | Required artifacts/images, current approvals, source lineage and run evidence are durably stored; quality warnings do not block completion. |
 | AC06 | Pause/restart/recovery, duplicates, concurrent completion, stale results and limits preserve completed work and do not automatically repeat uncertain paid work. |
 | AC07 | Tester and independent judge reports cover intent, consistency, cost and interaction quality; UI verification is separately recorded. M4 may retain verified terminal advisory failure with evaluation incomplete under section 6; this does not claim report coverage passed. |
