@@ -180,6 +180,20 @@ The separate USD 1 Kid experience is complete and outside those totals. M5 Real
 execution, image spending and any new allowance remain unapproved. Follow the
 [accepted M5 A–F sequence](M5-real.md#accepted-m5-implementation-sequence---pending-delivery-and-paid-grants).
 No M4 report retry, new persona run, reset or manual saved-output repair is needed.
+**M5 delivery checkpoint - 2026-10-28:** Staging commit
+`82964797851fb40b85740fa177521e38774ec393` completed through saved request
+`40656308791-1`; protected status `40659139006` and Check deployment
+`40659711655` verified it. See [M5 delivery](M5-real.md#current-staging-delivery---2026-10-28)
+for the observer-timeout distinction. The operator explicitly approved all PR
+merges for this chat session; do not ask again within that scope. This grants no
+paid run or new signature-policy exception. The reviewed private-root handoff is
+`output/issue65-m5-plugin-policy.sh.txt`; only Bash syntax, ShellCheck and independent
+local review are verified. The two pinned provider candidates, temporary signature
+window and installation remain pending explicit action-time approval. Reuse existing
+credentials; request private entry only if a concrete missing credential is proved.
+After installation, restore signature verification before publication/readback and
+the later exact Kid grant. No reset or replacement M4 campaign is authorized.
+
 The following older checkpoints are retained as historical execution evidence;
 do not execute their pending next steps.
 

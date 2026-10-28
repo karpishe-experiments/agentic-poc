@@ -147,6 +147,23 @@ reuses the existing eighteen application API keys and shared callback key for Re
 consumers. No new secret, protected storage or transfer path is introduced. The
 canonical inventory records these additional consumers.
 
+## Current staging delivery - 2026-10-28
+
+Source PRs #304 and #305 merged after explicit operator approval. Staging PR #306
+preserved the existing environment integrations and delivered commit
+`82964797851fb40b85740fa177521e38774ec393`. Deployment request `40656308791-1`
+completed with backup `staging-20261028T082558Z-8b024fa4e006f222`; protected status
+workflow `40659139006` returned `step=complete` and `outcome=archived`.
+Check deployment `40659711655` passed. The original Deploy observer exited 124
+while backup remained active, so that Actions run is red and skipped short-tag
+publication; the saved host completion and later check prove the actual release.
+Do not replay deployment to repair the observer result.
+
+Real readiness remains disabled. Community still has text dev5 and the original
+image 0.2.2 plugin. The next checkpoint is explicit approval for the two pinned
+unsigned candidates and a temporary signature window, followed by restoration,
+publication and native-file readback. No Real spending grant or call exists.
+
 ## Three execution checkpoints
 
 ### Historical carry-forward review before the M4 exit
