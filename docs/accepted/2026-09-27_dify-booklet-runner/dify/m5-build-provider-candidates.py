@@ -49,7 +49,7 @@ def build_image(files: dict[str, bytes], directory: pathlib.Path, output: pathli
     provider = files["provider/openai.yaml"].decode("utf-8")
     if manifest.count("version: 0.2.2") != 1 or provider.count("- tools/gpt_image_2_edit.yaml") != 1:
         raise ValueError("Audited image package descriptor differs")
-    files["manifest.yaml"] = manifest.replace("version: 0.2.2", "version: 0.2.2-dev1").encode()
+    files["manifest.yaml"] = manifest.replace("version: 0.2.2", "version: 0.2.2-dev2").encode()
     files["provider/openai.yaml"] = provider.replace("- tools/gpt_image_2_edit.yaml", "- tools/gpt_image_2_edit.yaml\n- tools/booklet_real_image.yaml").encode()
     files["tools/booklet_real_image.py"] = (directory / "m5-openai-image-bounded.py").read_bytes()
     files["tools/booklet_real_image.yaml"] = (directory / "m5-openai-image-bounded.yaml").read_bytes()
@@ -87,7 +87,7 @@ def main() -> None:
     target.mkdir(parents=True, exist_ok=True)
     image_files = checked_package(image_original, IMAGE_ORIGINAL_SHA)
     text_files = checked_package(text_dev5, TEXT_DEV5_SHA)
-    image_path = target / "openai_tool-0.2.2-dev1-candidate.difypkg"
+    image_path = target / "openai_tool-0.2.2-dev2-candidate.difypkg"
     text_path = target / "openai-1.0.7-dev6-candidate.difypkg"
     manifest = {"image": {"path": str(image_path), "sha256": build_image(image_files, directory, image_path)},
                 "text": {"path": str(text_path), "sha256": build_text(text_files, directory, text_path)},

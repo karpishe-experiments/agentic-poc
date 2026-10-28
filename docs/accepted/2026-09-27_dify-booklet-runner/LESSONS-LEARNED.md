@@ -1047,6 +1047,18 @@ alone is insufficient evidence to adopt an optimization. The measured gate kept
 normal admission unchanged. Evidence: the M4 live-result table. Promotion target:
 **Documentation** for measured persistence changes.
 
+## Test the host's empty native-file conversion
+
+The first Real Kid image request supplied no references. Dify 1.17.1 converted
+the absent optional FILES input into `[None]`, so tests with only `None` and `[]`
+did not cover the actual plugin boundary. The adapter rejected it before provider
+dispatch. Normalize only that exact placeholder for a no-reference generation;
+retain rejection of missing edit references and malformed lists. Include the
+host's cast shape in fake-provider tests. Evidence: the
+[first Kid checkpoint](M5-real.md#first-real-kid-checkpoint---2026-10-28) and the
+twenty image-adapter cases. Promotion candidate: **Documentation** for native-file
+compatibility verification.
+
 ## Preserve complete graphs across tool boundaries
 
 Large execution-tool output can truncate a string inside otherwise valid JSON.

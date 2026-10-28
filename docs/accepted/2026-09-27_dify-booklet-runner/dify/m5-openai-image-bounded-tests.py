@@ -136,6 +136,30 @@ class ImageContract(unittest.TestCase):
         result, _ = run(raw, None, {"openai_api_key": "test"}, client_factory=Factory(provider_response()), now=lambda: 1)
         self.assertEqual(result["status"], "succeeded")
 
+    def test_generate_accepts_dify_absent_files_cast(self):
+        # Dify cast_parameter_value(FILES, None) returns [None].
+        raw, _ = request()
+        factory = Factory(provider_response())
+        result, blob = run(raw, [None], {"openai_api_key": "test"}, client_factory=factory, now=lambda: 1)
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(blob, png())
+        self.assertEqual([method for method, _ in factory.methods], ["generate"])
+        self.assertEqual(factory.calls[0]["max_retries"], 0)
+
+    def test_empty_placeholder_cannot_hide_missing_or_extra_references(self):
+        for operation, blobs, files in (("edit", (png(),), [None]),
+                                         ("generate", (), [None, None]),
+                                         ("generate", (), [""]),
+                                         ("generate", (), [NativeFile(png())])):
+            with self.subTest(operation=operation, files=files):
+                raw, _ = request(operation, blobs)
+                factory = Factory()
+                result, blob = run(raw, files, {"openai_api_key": "test"}, client_factory=factory, now=lambda: 1)
+                self.assertEqual(result["status"], "rejected_pre_provider")
+                self.assertFalse(result["dispatchStarted"])
+                self.assertIsNone(blob)
+                self.assertEqual(factory.calls, [])
+
     def test_untrusted_native_url_is_rejected_before_fetch(self):
         raw, _ = request("edit", (png(),))
         FETCHED_URLS.clear()
