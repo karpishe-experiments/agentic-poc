@@ -147,6 +147,98 @@ reuses the existing eighteen application API keys and shared callback key for Re
 consumers. No new secret, protected storage or transfer path is introduced. The
 canonical inventory records these additional consumers.
 
+## Current staging delivery - 2026-10-28
+
+Source PRs #304 and #305 merged after explicit operator approval. Staging PR #306
+preserved the existing environment integrations and delivered commit
+`82964797851fb40b85740fa177521e38774ec393`. Deployment request `40656308791-1`
+completed with backup `staging-20261028T082558Z-8b024fa4e006f222`; protected status
+workflow `40659139006` returned `step=complete` and `outcome=archived`.
+Check deployment `40659711655` passed. The original Deploy observer exited 124
+while backup remained active, so that Actions run is red and skipped short-tag
+publication; the saved host completion and later check prove the actual release.
+Do not replay deployment to repair the observer result.
+
+The operator approved and completed the two-package installation window.
+Community readback matched text `1.0.7-dev6` and image `0.2.2-dev1` with the exact
+package hashes above. Signature verification is restored to `true`; the private
+configuration backup is retained on the host. Do not repeat the installation
+handoff. The text provider lists `gpt-6-luna` and `gpt-6-sol` as active. The image
+tool has one existing authorization and exposes the bounded Real-image action.
+These observations do not prove model entitlement or a successful paid request.
+
+All eighteen Real workflow drafts were saved with their environment variables
+and features preserved. Immutable publication readback matched each reviewed
+graph. The readiness manifest records the new publication IDs and reuses the
+existing protected application keys. Private pre-publication DSL backups, hashes
+and prior publication IDs are retained outside Git in the Community state
+directory. No workflow or provider request was executed for this setup.
+
+The API and worker containers have no `MULTIMODAL_SEND_FORMAT` override. The
+[Dify 1.17.1 configuration](https://github.com/langgenius/dify/blob/1.17.1/api/configs/feature/__init__.py)
+defaults to `base64`; this is inherited-default evidence, not an explicit runtime
+override. No host setting change is required. The reviewed activation candidate
+has technical profile hash
+`be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375`.
+Activation PRs #308 and #309 passed CI and two independent source and staging
+reviews. Staging commit `7a332234d37fae10637f5f0429f72728356f5ff2` completed through
+request `40679395869-1`, using image
+`sha256:38cc9b91cd29aa54355e407c60649cf4bdf40dd4bea5fe1ed4cce9d02aba70db`
+and backup `staging-20261028T112523Z-e3f6c1ac139bbb30`. Its Deploy observer exited
+124 during backup; read-only status `40681236948` proved `complete` / `archived`
+without replay. Check deployment `40682459095` passed on `_staging`. Live browser
+inspection exposes Real mode and the empty Kid grant
+form with 120 text calls, 12 images and 300 steps; Start remains disabled until a
+grant is recorded. At activation, no Real spending grant or call existed. The
+historical USD 1 campaign grants no M5 authority. No new credential or transfer
+path is added.
+
+## First Real Kid checkpoint - 2026-10-28
+
+The operator approved USD 5 for one initial Kid run, 120 text calls, 12 images,
+300 steps, text/image revision allowances of 1/1 and a no-progress window of 3.
+Zero automatic provider retries and zero successors were authorized. Campaign
+`e7fc2af8-a5d6-4f62-81df-650c9abdec10` records that chat reference and links the
+completed additional Balanced Kid. Run `c2e3b0ab-9deb-4cdc-8b74-928f4c54c078`
+owns booklet `6188a72b-4e75-49a5-86b5-62b8b98f6c5c` and the unchanged technical
+profile above.
+
+J01-J07 completed and were approved; J08 has a saved draft. The first required
+style-sample image stopped before OpenAI dispatch. Dify workflow
+`8a3bd524-a376-40b6-9443-71b41afe81e5`, image operation
+`93586ad6-3a99-4dc2-a0d6-2b455f0217c4`, retained
+`rejected_pre_provider`, `dispatchStarted=false`, `failure.code=reference_count`.
+The following result node reported a missing upload receipt because no image
+was produced. No paid image outcome is unknown and no image retry was made.
+Run revision 106 is blocked: 17 text calls, one image attempt and 18 steps;
+USD 0.006909 estimated settled plus USD 0.015300 retained count liabilities,
+USD 0.022209 total planning exposure. Invoice cost is unavailable. Generation
+and both reports remain incomplete; this is not a passing Kid acceptance.
+
+[Dify 1.17.1's file parameter cast](https://github.com/langgenius/dify/blob/1.17.1/api/core/plugin/entities/parameters.py)
+wraps the absent optional list as `[None]` before plugin invocation. The adapter
+accepted `None` and `[]`, but rejected that placeholder. The focused correction
+normalizes exactly `[None]` only when the canonical request has no references.
+Edit reference counts, identities, original bytes, order, deadlines and zero
+retries remain enforced. Twenty fake-provider adapter tests pass, including
+placeholder generation and missing/extra-reference rejection.
+
+The unsigned `0.2.2-dev2` image candidate has archive SHA-256
+`cc66cfd3cd181b0c2886e3190e5198d28c443a8b6cfb6fad214c6582e7a57f80`.
+The operator approved its one-package installation window. Community now reports
+`langgenius/openai_tool:0.2.2-dev2@098ed46c290cf283e1a5d7e0944490f27a00b9f29296f95c0d988f793f7bac68`.
+Text dev6 is unchanged. The private-root receipt confirms signature verification
+restored to `true` and the plugin daemon running. No provider call was made for
+installation. The immutable image workflow still selects the stable provider
+`langgenius/openai_tool/openai`; its publication is unchanged.
+
+The matching readiness update selects dev2 for new profiles, with technical hash
+`f4aab1e502e7befae6dc8f47195c9779111989bde4c2dc325e516459c9dbdce5`.
+The saved dev1 profile remains readable with its original hash. Readiness delivery
+must be verified before paid use. Preserve this run and its grant/accounting.
+No saved output repair, reset, automatic retry or successor spending is authorized.
+Credential inventory impact: no credential, consumer, storage or transfer changes.
+
 ## Three execution checkpoints
 
 ### Historical carry-forward review before the M4 exit

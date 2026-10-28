@@ -177,9 +177,38 @@ original campaign. Kid and Parent retain failed advisory evaluation; Creator
 retains both current reports. The campaign's stored state remains `active` as an
 accounting fact; this closeout does not mutate it or authorize another call.
 The separate USD 1 Kid experience is complete and outside those totals. M5 Real
-execution, image spending and any new allowance remain unapproved. Follow the
+Kid execution later received the separate USD 5 grant recorded below. Any other
+Real run or allowance extension remains unapproved. Follow the
 [accepted M5 A–F sequence](M5-real.md#accepted-m5-implementation-sequence---pending-delivery-and-paid-grants).
 No M4 report retry, new persona run, reset or manual saved-output repair is needed.
+**M5 delivery checkpoint - 2026-10-28:** Staging commit
+`82964797851fb40b85740fa177521e38774ec393` completed through saved request
+`40656308791-1`; protected status `40659139006` and Check deployment
+`40659711655` verified it. See [M5 delivery](M5-real.md#current-staging-delivery---2026-10-28)
+for the observer-timeout distinction. The operator explicitly approved all PR
+merges for this chat session; do not ask again within that scope. This grants no
+paid run or a further signature-policy exception. The operator separately approved
+the two pinned provider packages, completed their installation, and restored
+signature verification to `true`. The private-root policy handoff is complete;
+do not reopen its installation window. All eighteen Real publications matched
+their reviewed graphs on immutable readback. API and worker have no native-file
+format override and inherit Dify 1.17.1's `base64` default. The reviewed readiness
+activation completed at staging commit `7a332234d37fae10637f5f0429f72728356f5ff2`.
+Request `40679395869-1` completed and archived, as verified by status
+`40681236948` after the observer timeout. Check deployment `40682459095` passed.
+The live Real Kid grant form is available. The operator subsequently approved
+USD 5 for one initial Kid run, with 120 text/12 image calls, 300 steps, revision
+allowances 1/1 and a no-progress window of 3. No automatic retry or successor was
+authorized. Campaign `e7fc2af8-a5d6-4f62-81df-650c9abdec10` and run
+`c2e3b0ab-9deb-4cdc-8b74-928f4c54c078` retain the grant and first-image
+pre-provider failure. See the [Kid checkpoint](M5-real.md#first-real-kid-checkpoint---2026-10-28).
+Reuse existing credentials; request private entry only if a concrete missing
+credential is proved. The operator separately approved the pinned dev2 image
+installation, exact Community readback matched it, and signature verification is
+restored to `true`. The matching application readiness update still needs verified
+delivery. No further signature exception, image retry, successor, reset or
+replacement M4 campaign is authorized.
+
 The following older checkpoints are retained as historical execution evidence;
 do not execute their pending next steps.
 
