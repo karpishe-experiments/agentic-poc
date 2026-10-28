@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { controlStateSchema, type ControlState } from "@/lib/experiment-runner/control-state";
+import { RunMetrics } from "./run-metrics";
+import { runAttention, type RunTiming, type RunAttention } from "@/lib/experiment-runner/run-summary";
 import { SavedArtifactImages } from "./saved-artifact-images";
 import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 import type { ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 import { PageBatchSelector, type PageSelection } from "./page-batch-selector";
+import { AllowanceReview, type AllowanceView, type PendingAllowance } from "./allowance-review";
+import { InitialAllowanceGrant } from "./initial-allowance-grant";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 import { failureReasonLabels, type FailureDiagnostics } from "@/lib/contracts/experiment-failure";
 import type { ImageCapacity } from "@/lib/experiment-runner/image-capacity";
@@ -25,12 +29,15 @@ type Operation = { id: string; role: string; taskId: string | null; state: strin
   contextDiagnostics?: ContextDiagnostics | null;
   elapsedMs?: number; remoteStatus?: string | null; deadlineAtMs?: number | null; lifecycle?: { phase: string; startedAtMs: number; lastProgressAtMs: number; attemptOutcome?: string; unresolved?: boolean; stop?: { delivery: string } } | null };
 type Run = {
-  runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; title?: string | null; brief?: string; status: string; revision: number; pauseRequested: boolean;
-  createdAtMs?: number; updatedAtMs?: number;
+  runId: string; predecessorRunId?: string | null; persona: Persona; mode: string; title?: string | null; workingTitle?: string | null; brief?: string; status: string; revision: number; pauseRequested: boolean;
+  createdAtMs?: number; updatedAtMs?: number; timing?: RunTiming; attention?: RunAttention; terminalAtMs?: number | null;
+  runAccounting?: { settledMicrodollars: number; reservedMicrodollars: number; estimatedTotalMicrodollars: number; invoiceCostAvailable: false } | null;
+  currentTask?: string | null;
   counters: { logicalText: number; logicalImage: number; payableText: number; payableImage: number; steps: number };
   m4Accounting?: { campaignId: string; state: "active" | "stopped" | "completed"; requests: number; maxRequests: number;
     runRequests: number; runMaxRequests: number; reservedMicrodollars: number; settledMicrodollars: number;
     remainingMicrodollars: number; maxMicrodollars: number; countChargeStatus: "verified" | "assumed"; invoiceCostAvailable: false };
+  executionAllowance?: AllowanceView | null; pendingApproval?: PendingAllowance | null;
   limits: { text: number; image: number; steps: number }; currentArtifacts?: Artifact[];
   pendingDecision?: unknown; nextNarrativeTask?: string | null; safeFailure?: string | null; activeOperationId?: string | null;
   retainedDecisionContinuation?: boolean;
@@ -50,11 +57,11 @@ type Run = {
   preparation?: { identity: string; startedAtMs: number; deadlineAtMs: number; unresolved: boolean } | null;
 };
 type Envelope<T> = { data?: T; error?: { code: string; message: string } };
-type Mode = "simulated" | "balanced";
+type Mode = "simulated" | "balanced" | "real";
 const retainedDecisionControl = (state: Pick<Run, "status" | "safeFailure" | "generationStatus" | "activeOperationId" | "preparation" | "retainedDecisionContinuation">) =>
   state.retainedDecisionContinuation === true && state.status === "blocked" && state.safeFailure === "definite_failure" &&
   state.generationStatus === "in_progress" && !!state.activeOperationId && !state.preparation;
-type PendingCreate = { persona: Persona; mode: Mode; key: string; predecessorRunId?: string };
+type PendingCreate = { persona: Persona; mode: Mode; key: string; predecessorRunId?: string; executionCampaignId?: string };
 class RunnerRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
 }
@@ -67,14 +74,6 @@ async function read<T>(response: Response): Promise<T> {
 }
 const format = (value: unknown) => typeof value === "string" ? value : JSON.stringify(value, null, 2);
 const dollars = (microdollars: number) => `$${(microdollars / 1_000_000).toFixed(6)}`;
-const timestampFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit",
-  hourCycle: "h23", timeZone: "UTC",
-});
-function RunTimestamp({ value }: { value?: number }) {
-  if (value == null || !Number.isFinite(value) || !Number.isFinite(new Date(value).getTime())) return <>Unavailable</>;
-  return <time dateTime={new Date(value).toISOString()}>{timestampFormat.format(value)} UTC</time>;
-}
 const label = (value: string) => value.replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
 const secondaryAction = "inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -94,12 +93,15 @@ function ContextMeasurements({ value, operation }: { value?: ContextDiagnostics 
   </section>;
 }
 
-export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State = "disabled" }: {
-  focusedRunId?: string; balancedEnabled?: boolean; m4State?: "disabled" | "invalid" | "ready" | "granted";
+export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabled = false, m4State = "disabled" }: {
+  focusedRunId?: string; balancedEnabled?: boolean; realEnabled?: boolean; m4State?: "disabled" | "invalid" | "ready" | "granted";
 } = {}) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [persona, setPersona] = useState<Persona>("playful_kid");
   const [mode, setMode] = useState<Mode>("simulated");
+  const [newCampaignId, setNewCampaignId] = useState<string | null>(null);
+  const [newPredecessorId, setNewPredecessorId] = useState<string | undefined>();
+  const [grantLocked, setGrantLocked] = useState(false);
   const canCreateBalanced = balancedEnabled && m4State === "granted";
   const [pending, setPending] = useState<PendingCreate[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -169,6 +171,9 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
     if (queue.some((item) => item.mode === "balanced") && !canCreateBalanced) {
       setActionError("Balanced creation requires the campaign execution grant."); return;
     }
+    if (queue.some((item) => item.mode === "real") && !realEnabled) {
+      setActionError("Real creation requires verified provider readiness."); return;
+    }
     setBusy(true); setActionError(null); setPending(queue);
     for (let index = 0; index < queue.length; index += 1) {
       const item = queue[index];
@@ -176,7 +181,9 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         await read<Run>(await fetch("/api/experiments/booklet-runs", {
           method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": item.key },
           signal: AbortSignal.timeout(60_000),
-          body: JSON.stringify({ persona: item.persona, mode: item.mode, ...(item.predecessorRunId ? { predecessorRunId: item.predecessorRunId } : {}) }),
+          body: JSON.stringify({ persona: item.persona, mode: item.mode,
+            ...(item.predecessorRunId ? { predecessorRunId: item.predecessorRunId } : {}),
+            ...(item.executionCampaignId ? { executionCampaignId: item.executionCampaignId } : {}) }),
         }));
         setPending(queue.slice(index + 1));
       } catch (caught) {
@@ -210,7 +217,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
     const applyState = (state: ControlState) => {
       const previous = latestRuns.current.get(state.runId);
       if (!previous || state.revision < previous.revision) throw new Error("Stale control state");
-      const patch = { ...state, retainedDecisionContinuation: state.retainedDecisionContinuation ?? false };
+      const patch = { ...state, attention: undefined, retainedDecisionContinuation: state.retainedDecisionContinuation ?? false };
       latestRuns.current.set(state.runId, { ...previous, ...patch });
       if (alive.current) {
         setRuns(rows => rows.map(row => row.runId === state.runId && row.revision <= state.revision ? { ...row, ...patch } : row));
@@ -295,14 +302,18 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
     {focusedRunId ? <Link className="underline" href="/experiments/booklet-runs">Back to all runs</Link> : <section aria-labelledby="new-run-heading" className="space-y-3 rounded-lg border border-[var(--border)] p-5">
       <h2 id="new-run-heading" className="text-xl font-semibold">Start runs</h2>
       <p className="text-sm text-[var(--muted-ink)]">Choose a mode and persona. The tester makes creator decisions automatically; this is not a manual authoring session.</p>
-      <label className="block space-y-1"><span>Mode</span><select aria-label="Mode" className="rounded border border-[var(--border)] p-2" value={mode} onChange={(event) => {
-        if (event.target.value === "simulated" || event.target.value === "balanced" && canCreateBalanced) setMode(event.target.value);
-      }}><option value="simulated">Simulated</option><option value="balanced" disabled={!canCreateBalanced}>Balanced</option><option value="real" disabled>Real (unavailable)</option></select></label>
-      <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-      <p className="text-sm text-[var(--muted-ink)]">{canCreateBalanced ? "Balanced uses real text models and simulated images. Start one persona at a time: Kid, Parent, then Creator. Real mode is unavailable." :
+      <label className="block space-y-1"><span>Mode</span><select aria-label="Mode" className="rounded border border-[var(--border)] p-2" value={mode} disabled={grantLocked} onChange={(event) => {
+        if (event.target.value === "simulated" || event.target.value === "balanced" && canCreateBalanced || event.target.value === "real" && realEnabled) {
+          setMode(event.target.value); setNewCampaignId(null); setNewPredecessorId(undefined);
+        }
+      }}><option value="simulated">Simulated</option><option value="balanced" disabled={!canCreateBalanced}>Balanced</option><option value="real" disabled={!realEnabled}>{realEnabled ? "Real" : "Real (unavailable)"}</option></select></label>
+      <label className="block space-y-1"><span>Persona</span><select aria-label="Persona" className="rounded border border-[var(--border)] p-2" value={persona} disabled={grantLocked} onChange={(event) => { setPersona(event.target.value as Persona); setNewCampaignId(null); setNewPredecessorId(undefined); }}>{personas.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+      <p className="text-sm text-[var(--muted-ink)]">{realEnabled ? "Real mode uses paid text and images. Record a separate finite grant, then start one persona: Kid, Parent, then Creator." : canCreateBalanced ? "Balanced uses real text models and simulated images. Start one persona at a time: Kid, Parent, then Creator. Real mode is unavailable." :
         m4State === "ready" ? "Balanced is ready but awaits the campaign execution grant. Real mode is unavailable." :
           m4State === "invalid" ? "Balanced setup needs attention before creation. Real mode is unavailable." : "Balanced and Real modes are unavailable."}</p>
-      <div className="flex flex-wrap gap-2"><button className={secondaryAction} disabled={mutationDisabled || pending !== null || mode === "balanced" && !canCreateBalanced} onClick={() => void create([{ persona, mode, key: crypto.randomUUID() }])}>Start selected</button>{mode === "simulated" ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, mode: "simulated", key: crypto.randomUUID() })))}>Start all three</button> : null}{pending?.length ? <button disabled={mutationDisabled || pending.some((item) => item.mode === "balanced") && !canCreateBalanced} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
+      {mode === "balanced" && canCreateBalanced || mode === "real" && realEnabled ? newCampaignId ? <p role="status" className="break-all">Saved initial grant: {newCampaignId}. Start the one run for this campaign.</p> :
+        <InitialAllowanceGrant key={`${persona}:${mode}`} persona={persona} mode={mode as "balanced" | "real"} onGrant={(id, predecessor) => { setNewCampaignId(id); setNewPredecessorId(predecessor); }} onLocked={setGrantLocked} /> : null}
+      <div className="flex flex-wrap gap-2"><button className={secondaryAction} disabled={mutationDisabled || pending !== null || mode !== "simulated" && (!newCampaignId || mode === "balanced" && !canCreateBalanced || mode === "real" && !realEnabled)} onClick={() => void create([{ persona, mode, key: crypto.randomUUID(), ...(mode !== "simulated" && newCampaignId ? { executionCampaignId: newCampaignId, ...(newPredecessorId ? { predecessorRunId: newPredecessorId } : {}) } : {}) }])}>Start selected</button>{mode === "simulated" ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, mode: "simulated", key: crypto.randomUUID() })))}>Start all three</button> : null}{pending?.length ? <button disabled={mutationDisabled || pending.some((item) => item.mode === "balanced") && !canCreateBalanced || pending.some((item) => item.mode === "real") && !realEnabled} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
     </section>}
     <button className={secondaryAction} onClick={() => void refresh()}>Refresh</button>
     {controlNotice ? <p role="status">{controlNotice}</p> : null}
@@ -311,26 +322,26 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
     <section aria-labelledby="saved-runs-heading" className="space-y-4"><h2 id="saved-runs-heading" className="text-xl font-semibold">Saved runs</h2>{loading ? <p role="status">Loading runs…</p> : runs.length === 0 ? <p>No runs yet.</p> : runs.map((run) => <article key={run.runId} className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
-          <h3 className="text-xl font-semibold">{personas.find((item) => item.id === run.persona)?.label ?? run.persona}</h3>
-          {!focusedRunId && run.title ? <p>{run.title}</p> : null}
+          <h3 className="text-xl font-semibold">{run.title || run.workingTitle || "Untitled run"}</h3>
           <div className="flex flex-wrap gap-2 text-sm">
+            <span>{personas.find((item) => item.id === run.persona)?.label ?? run.persona}</span>
             <span className="rounded-full border border-[var(--border)] px-3 py-1">{label(run.mode)}</span>
             <span className={`rounded-full px-3 py-1 font-semibold ${run.status === "blocked" || run.status === "failed" ? "bg-amber-100 text-amber-950" : run.status === "completed" ? "bg-emerald-100 text-emerald-950" : "bg-stone-100 text-stone-800"}`}>{run.status === "completed" && run.evaluationStatus === "failed" ? "Completed — evaluation incomplete" : label(run.status)}</span>
           </div>
+          {run.pendingApproval ? <p className="text-sm text-amber-900">Waiting for operator approval: {label(run.pendingApproval.reason)}. {!focusedRunId ? <Link className="underline" href={`/experiments/booklet-runs/${encodeURIComponent(run.runId)}`}>Review request</Link> : null}</p> : null}
+          {run.executionAllowance ? <p className="text-sm">Approved allowance revision {run.executionAllowance.revision}: ${(run.executionAllowance.totals.maxMicrodollars / 1_000_000).toFixed(6)} maximum; ${(run.executionAllowance.settledMicrodollars / 1_000_000).toFixed(6)} settled, ${(run.executionAllowance.reservedMicrodollars / 1_000_000).toFixed(6)} held.</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {!focusedRunId ? <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--ink)] px-5 py-2 font-semibold hover:opacity-90" style={{ color: "var(--surface)" }} href={`/experiments/booklet-runs/${encodeURIComponent(run.runId)}`} aria-label={`Open run: ${personas.find(item => item.id === run.persona)?.label ?? run.persona} (${run.runId})`}>Open run <span aria-hidden="true">&rarr;</span></Link> : null}
-          {(run.mode === "balanced" || run.generationStatus === "complete") && run.status === "blocked" && run.safeFailure === "definite_failure" && (!run.activeOperationId || retainedDecisionControl(run)) ? <button className={secondaryAction} disabled={mutationDisabled} onClick={() => void control(run, "resume")}>{run.generationStatus === "complete" ? "Finalize completed booklet" : "Continue inspected run"}</button> : run.pauseRequested || run.status === "paused" ? <button className={secondaryAction} disabled={mutationDisabled || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button className={secondaryAction} disabled={mutationDisabled || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}
+          {run.pendingApproval ? null : (run.mode === "balanced" || run.mode === "simulated" && run.generationStatus === "complete") && run.status === "blocked" && run.safeFailure === "definite_failure" && (!run.activeOperationId || retainedDecisionControl(run)) ? <button className={secondaryAction} disabled={mutationDisabled} onClick={() => void control(run, "resume")}>{run.generationStatus === "complete" ? "Finalize completed booklet" : "Continue inspected run"}</button> : run.pauseRequested || run.status === "paused" ? <button className={secondaryAction} disabled={mutationDisabled || run.status === "blocked" || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "resume")}>Resume</button> : <button className={secondaryAction} disabled={mutationDisabled || run.status === "failed" || run.status === "completed"} onClick={() => void control(run, "pause")}>Pause</button>}
         </div>
       </header>
-      <dl className="grid gap-4 border-y border-[var(--border)] py-4 text-sm sm:grid-cols-2">
-        <div><dt className="text-[var(--muted-ink)]">Started</dt><dd className="mt-1 font-medium tabular-nums"><RunTimestamp value={run.createdAtMs} /></dd></div>
-        <div><dt className="text-[var(--muted-ink)]">Latest update</dt><dd className="mt-1 font-medium tabular-nums"><RunTimestamp value={run.updatedAtMs} /></dd></div>
-      </dl>
+      <RunMetrics run={run} />
       {run.brief ? <p className="max-w-prose leading-relaxed">{run.brief}</p> : null}
       <section aria-label="Run progress" className="space-y-2 rounded-lg bg-[var(--canvas)] p-4 text-sm">
         <h4 className="font-semibold">Progress</h4>
-        <p>{run.status === "blocked" ? "Run blocked. Inspect the saved details before continuing; unresolved work may still finish." : run.status === "failed" ? "Run failed. Inspect the saved details before taking another action." : run.status === "completed" ? (run.evaluationStatus === "failed" ? "Booklet generation is complete. Advisory evaluation failed; its saved failure remains available in the operation trace." : "Run complete. Open the saved artifacts and reports to review the result.") : run.status === "paused" ? "Run paused. Resume when you are ready to continue." : run.pauseRequested ? "Pause requested. Current work may still be finishing." : run.nextNarrativeTask ? `Next responsibility: ${run.nextNarrativeTask}` : "Waiting for the next execution update."}</p>
+        <p>Current task: {run.currentTask ?? run.operationHistory?.find(operation => operation.id === run.activeOperationId)?.taskId ?? run.operationHistory?.find(operation => operation.id === run.activeOperationId)?.role ?? run.nextNarrativeTask ?? (run.status === "completed" ? "Complete" : "No active task")}</p>
+        <p>{run.pendingApproval ? "Run paused for operator allowance review." : run.status === "blocked" ? "Run blocked. Inspect the saved details before continuing; unresolved work may still finish." : run.status === "failed" ? "Run failed. Inspect the saved details before taking another action." : run.status === "completed" ? (run.evaluationStatus === "failed" ? "Booklet generation is complete. Advisory evaluation failed; its saved failure remains available in the operation trace." : "Run complete. Open the saved artifacts and reports to review the result.") : run.status === "paused" ? "Run paused. Resume when you are ready to continue." : run.pauseRequested ? "Pause requested. Current work may still be finishing." : run.nextNarrativeTask ? `Next responsibility: ${run.nextNarrativeTask}` : "Waiting for the next execution update."}</p>
         <dl className="flex flex-wrap gap-x-8 gap-y-2">
           <div><dt className="text-[var(--muted-ink)]">Booklet generation</dt><dd className="font-medium">{label(run.generationStatus ?? "in_progress")}</dd></div>
           <div><dt className="text-[var(--muted-ink)]">Reports and evaluation</dt><dd className="font-medium">{label(run.evaluationStatus ?? "pending")}</dd></div>
@@ -339,7 +350,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         {run.safeFailure ? <p>Failure classification: {label(run.safeFailure)}</p> : null}
         {run.failureDiagnostics ? <p>{run.status === "blocked" && run.failureDiagnostics.runRevision === run.revision ? "Stopped reason" : "Previous stop"}: {failureReasonLabels[run.failureDiagnostics.reason] ?? "Reason details unavailable."} Phase: {label(run.failureDiagnostics.phase)}. Recorded at revision {run.failureDiagnostics.runRevision}.</p> : null}
         {run.status === "blocked" && run.failureDiagnostics?.runRevision !== run.revision ? <p>Reason details unavailable.</p> : null}
-        {run.imageCapacity ? <div aria-label="Image allowance">
+        {focusedRunId && run.imageCapacity ? <div aria-label="Image allowance">
           <p>Remaining image calls: {run.imageCapacity.remainingImageCalls}.</p>
           {run.imageCapacity.status === "available" ? <>
             <p>Final pages needing a new image: {run.imageCapacity.requiredNewImages}. Saved drafts awaiting approval: {run.imageCapacity.savedDraftsAwaitingApproval}. Spare image calls: {run.imageCapacity.spareImageCalls}.</p>
@@ -348,13 +359,24 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
           </> : <p>Image capacity is unavailable while source or attempt evidence remains unresolved.</p>}
         </div> : null}
       </section>
+      <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · {run.mode === "real" ? "Image calls" : "Simulated image calls"} {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>
+      {run.runAccounting ? <p className="text-sm" aria-label="Run cost estimate">Estimated settled {dollars(run.runAccounting.settledMicrodollars)} ? Reserved {dollars(run.runAccounting.reservedMicrodollars)} ? Allowance used {dollars(run.runAccounting.estimatedTotalMicrodollars)}. Failed attempts can retain reservations. Invoice cost unavailable.</p> : null}
+      {(run.mode === "balanced" || run.mode === "real") && run.runAccounting === null ? <p className="text-sm">Run cost estimate unavailable: reservation evidence is incomplete.</p> : null}
+      <p className="text-sm">Needs attention: {(run.attention ?? runAttention(run))?.explanation ?? (run.pendingDecision ? "Review saved decision" : "None")}{run.contextWarningSummary?.warningCount ? ` · ${run.contextWarningSummary.warningCount} context warnings` : ""}</p>
+      {!focusedRunId && run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create([{ persona: run.persona, mode: "simulated", key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
+      {focusedRunId ? <>
+      {run.pendingApproval && run.executionAllowance ? <AllowanceReview key={`${run.pendingApproval.requestDigest}:${run.executionAllowance.revision}`} runId={run.runId} runRevision={run.revision}
+        pending={run.pendingApproval} allowance={run.executionAllowance} onSaved={() => refresh(undefined, true)} /> : null}
       <details className="text-sm text-[var(--muted-ink)]"><summary className="cursor-pointer">Run identifiers</summary><div className="mt-2 space-y-1 break-all"><p>Run {run.runId}</p>{run.bookletId ? <p>Booklet {run.bookletId}</p> : null}<p>Revision {run.revision}</p></div></details>
+      {run.pendingDecision ? <section aria-label="Saved decision"><h4 className="font-semibold">Saved decision</h4><p>The tester will resolve the saved creator decision when execution continues.</p></section> : null}
+      <h4 className="font-semibold">Saved pages and artifacts</h4>
       {run.pageSelection ? <PageBatchSelector key={`${run.runId}:${run.pageSelection.layoutVersionId}:${run.pageSelection.pages.map((page) => `${page.pageBibleVersionId}:${page.previousPageVersionId}`).join(",")}`}
         selection={run.pageSelection} busy={mutationDisabled} onSave={(batch) => void savePages(run, batch)} /> : null}
       {run.pageBatch ? <details><summary>Saved page batch ({run.pageBatch.pages.length} pages)</summary>
         <p className="text-sm">Retained dispatch order; individual approvals still apply.</p>
         <ol className="list-decimal pl-5">{run.pageBatch.pages.map((page) => <li className="break-all text-xs" key={page.pageId}>{page.pageId}</li>)}</ol>
       </details> : null}
+      <div className="space-y-3">{run.currentArtifacts?.map((artifact) => <section key={artifact.id} className="rounded border border-[var(--border)] p-3"><h4 className="font-semibold">{artifact.taskId} · {artifact.state}</h4>{artifact.versions.map((version) => <details key={version.id} open={version.id === artifact.currentVersionId}><summary>Version {version.number} · {version.approval ? `Approved (${version.approval.origin})` : "Needs review"}</summary><p className="break-all text-xs">Version ID: {version.id}</p>{version.dependencyVersionIds.length ? <p className="break-all text-xs">Sources: {version.dependencyVersionIds.join(", ")}</p> : null}<SavedArtifactImages taskId={artifact.taskId} content={version.content} simulated={run.mode === "simulated" || run.mode === "balanced"} /><details><summary className="cursor-pointer text-sm">Technical content</summary><pre className="overflow-auto whitespace-pre-wrap text-sm">{format(version.content)}</pre></details>{version.warnings.length ? <ul className="list-disc pl-5">{version.warnings.map((warning, index) => <li key={`${warning.field}-${index}`}>{warning.field}: {warning.message}</li>)}</ul> : null}</details>)}</section>)}</div>
       {run.reports?.length ? <section aria-label="Advisory reports" className="space-y-2"><h4 className="font-semibold">Advisory reports</h4>
         {run.reports.map((entry) => <details key={entry.operationId}><summary>{entry.report.role === "tester" ? "Tester feedback" : "Independent judge assessment"} · {entry.report.mode}</summary>
           <p>{entry.report.summary}</p><p className="text-sm">Current artifact versions: {entry.matchesCurrentVersions ? "match" : "do not match; report is historical"}</p>
@@ -362,9 +384,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
           <pre className="overflow-auto whitespace-pre-wrap text-sm">{format(entry.report)}</pre>
         </details>)}</section> : null}
       {run.predecessorRunId ? <p className="break-all text-xs">Predecessor run: {run.predecessorRunId}</p> : null}
-      {!focusedRunId && run.mode === "simulated" && (run.status === "blocked" || run.status === "failed") ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create([{ persona: run.persona, mode: "simulated", key: crypto.randomUUID(), predecessorRunId: run.runId }])}>Start linked successor</button> : null}
       {pendingDetails.includes(run.runId) ? <p role="status">Saved details are awaiting refresh.</p> : null}
-      <p className="text-sm">Text calls {run.counters.logicalText}/{run.limits.text} · Image calls {run.counters.logicalImage}/{run.limits.image} · Steps {run.counters.steps}/{run.limits.steps} · Payable text {run.counters.payableText} · Payable image {run.counters.payableImage}</p>
       {run.contextWarningSummary ? <p className="text-sm">Context measurements: {run.contextWarningSummary.measuredOperations} operations · {run.contextWarningSummary.warningCount} warnings</p> : null}
       {run.m4Accounting ? <section aria-label="Balanced campaign accounting" className="space-y-1 text-sm">
         <p className="break-all">Campaign {run.m4Accounting.campaignId} · {run.m4Accounting.state}</p>
@@ -386,7 +406,8 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, m4State =
         <ContextMeasurements value={operation.contextDiagnostics} operation={operation} />
         <button disabled={mutationDisabled} onClick={() => void inspectOperation(run, operation.id, "inspect")}>Inspect/reconcile</button>{run.activeOperationId === operation.id ? <button disabled={mutationDisabled} onClick={() => void inspectOperation(run, operation.id, "stop")}>Stop operation</button> : null}
       </li>)}</ol></details> : null}
-      <div className="space-y-3">{run.currentArtifacts?.map((artifact) => <section key={artifact.id} className="rounded border border-[var(--border)] p-3"><h4 className="font-semibold">{artifact.taskId} · {artifact.state}</h4>{artifact.versions.map((version) => <details key={version.id} open={version.id === artifact.currentVersionId}><summary>Version {version.number} · {version.approval ? `Approved (${version.approval.origin})` : "Needs review"}</summary><p className="break-all text-xs">Version ID: {version.id}</p>{version.dependencyVersionIds.length ? <p className="break-all text-xs">Sources: {version.dependencyVersionIds.join(", ")}</p> : null}<SavedArtifactImages taskId={artifact.taskId} content={version.content} simulated={run.mode === "simulated" || run.mode === "balanced"} /><pre className="overflow-auto whitespace-pre-wrap text-sm">{format(version.content)}</pre>{version.warnings.length ? <ul className="list-disc pl-5">{version.warnings.map((warning, index) => <li key={`${warning.field}-${index}`}>{warning.field}: {warning.message}</li>)}</ul> : null}</details>)}</section>)}</div>
+
+      </> : null}
     </article>)}</section>
     {!focusedRunId ? <nav aria-label="Run pages"><button disabled={page === 0 || busy} onClick={() => setPage(value => value - 1)}>Previous page</button><span> Page {page + 1} </span><button disabled={!hasMore || busy} onClick={() => setPage(value => value + 1)}>Next page</button></nav> : null}
   </section>;

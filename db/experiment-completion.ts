@@ -1,5 +1,6 @@
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 import { verifyM4Accounting } from "@/db/experiment-m4-accounting";
+import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { z } from "zod";
@@ -37,7 +38,7 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
   const preparation = phase === "preparation";
   if (preparation && (!reportOperationId || !isBalancedImageVerificationRun(run) || run.pauseRequested ||
       !["queued", "running"].includes(run.status) || nowMs == null || !Number.isSafeInteger(nowMs) || nowMs < 0)) {
-    incomplete("Report preparation requires active Balanced work and an original deadline check.");
+    incomplete("Report preparation requires active execution and an original deadline check.");
   }
   if (reportOperationId) {
     const operation = await database.collections.experiment_operations.findOne({ _id: reportOperationId, runId: run._id }, { session });
@@ -60,17 +61,18 @@ export async function verifyExperimentGeneration(database: Database, session: Cl
     }
     if (preparation) await assertExperimentEvaluationOrder(database, session, run, operation.role as "tester" | "judge");
   }
-  if ((run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
+  if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || !configuredPageIllustrationTask(run.configurationJson) ||
       (run.activeOperationId && run.activeOperationId !== reportOperationId) || run.pendingDecisionJson ||
       (run.pauseRequested && !reportOperationId) || run.status === "failed" ||
       (run.status === "paused" && !reportOperationId) ||
       (run.status === "blocked" && !(reportOperationId && run.safeFailure === "unknown_outcome"))) incomplete("Generation has unfinished or blocked work.", "unresolved_ownership");
   // Preparation is a read-only source projection, not accounting acceptance.
   // Generation/report materialization and final exit require retained usage.
-  if (run.mode === "balanced" && !preparation) {
+  if ((run.mode === "balanced" || run.mode === "real") && !preparation) {
     try {
       await measurePhase({ runId: run._id, ...(reportOperationId ? { operationId: reportOperationId } : {}) }, "generation_accounting", () =>
-        verifyM4Accounting(database, session, run, reportOperationId, attempt));
+        run.execution ? verifyExecutionAccounting(database, session, run, reportOperationId) :
+          verifyM4Accounting(database, session, run, reportOperationId, attempt));
     } catch (error) { tagFailureReason(error, "invalid_accounting"); throw error; }
   }
   const metadata = await verificationMetadata(database, session, run._id, attempt);
@@ -231,7 +233,7 @@ export function createExperimentCompletionService(database: Database, store: Ass
       // generation verifier can inspect it. Any failed check rolls it back.
       const candidate = alreadyComplete ? run : await database.collections.experiment_runs.findOneAndUpdate(
         { _id: run._id, revision: run.revision, activeOperationId: null },
-        { $set: { status: "completed", evaluationStatus: "failed", safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs },
+        { $set: { status: "completed", evaluationStatus: "failed", terminalAtMs: input.nowMs, safeFailure: null, pauseRequested: false, updatedAtMs: input.nowMs },
           $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!candidate) throw new ExperimentRepositoryError("stale_revision", "Completion changed concurrently.");
       await verifyExperimentGeneration(database, session, candidate, store);
@@ -265,7 +267,8 @@ export function createExperimentCompletionService(database: Database, store: Ass
         }
       }
       if (evaluation ? run.status === "completed" && run.evaluationStatus === "complete" : run.generationCompletedAtMs != null) return run;
-      const patch = evaluation ? { status: "completed" as const, evaluationStatus: "complete" as const, updatedAtMs: input.nowMs } :
+      const patch = evaluation ? { status: "completed" as const, evaluationStatus: "complete" as const,
+        terminalAtMs: run.status === "completed" ? run.terminalAtMs ?? null : input.nowMs, updatedAtMs: input.nowMs } :
         { generationCompletedAtMs: input.nowMs, generationVersionIds: evidence.artifacts.map((item) => item.versionId), updatedAtMs: input.nowMs };
       const updated = await database.collections.experiment_runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: null },
         { $set: patch, $inc: { revision: 1 } }, { session, returnDocument: "after" });

@@ -41,11 +41,18 @@ export type ExperimentCampaignDocument = BaseDocument & {
 export type ExperimentRunDocument = BaseDocument & {
   failureDiagnostics?: FailureDiagnostics;
   m4?: { campaignId: string; policyHash: string; policyJson: string };
+  execution?: { campaignId: string; profileHash: string; profileJson: string };
+  pendingApproval?: { kind: "allowance_v1"; reason: import("@/db/experiment-execution-allowance").ExecutionAllowanceReason;
+    requestDigest: string; requestedAtMs: number; operationId: string | null; targetTaskId?: ExperimentTask;
+      targetVersionId?: string; decisionOperationId?: string; instruction?: string;
+      requiredTotal?: number; nextAction?: { role: ExperimentRole; providerKind: "text" | "image"; taskId: ExperimentTask | null };
+      declinedAtMs?: number; declineId?: string; declineReference?: string } | null;
   schemaVersion: "2"; bookletId: string; persona: Persona; mode: ExperimentMode; brief: string;
   predecessorRunId: string | null; configurationJson: string; configurationHash: string;
   status: "queued" | "running" | "paused" | "blocked" | "completed" | "failed";
   evaluationStatus: "pending" | "running" | "complete" | "failed";
   generationCompletedAtMs?: number;
+  terminalAtMs?: number | null;
   generationVersionIds?: string[];
   revision: number; pauseRequested: boolean; activeOperationId: string | null;
   preparation?: { ownerId: string; startedAtMs: number; deadlineAtMs: number; outcome?: "failed"; unresolved?: boolean; stopRequestedAtMs?: number } | null;
@@ -59,6 +66,8 @@ export type ExperimentRunDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentOperationDocument = BaseDocument & {
+  executionAllowanceCancellation?: { kind: "undispatched_allowance_v1"; proofDigest: string; cancelledAtMs: number };
+    executionApprovedDecision?: { approvalId: string; decisionJson: string; materializedAtMs: number };
   localReportFailure?: { code: "report_request_too_large"; scope: "context" | "request" | "authorization"; requestBytes: number; byteLimit: number;
     definitionHash: string; requestDigest: string; policyHash: string; configurationHash: string;
     sourceFingerprint: string; operationFingerprint: string; generationCompletedAtMs: number;
@@ -90,6 +99,17 @@ export type ExperimentOperationDocument = BaseDocument & {
   m4Reservation?: { campaignId: string; policyHash: string; requestDigest: string; bucket: M4ModelBucket;
     tokenPolicy?: import("@/lib/experiment-runner/m4-policy").M4TokenPolicy; effectivePolicyHash?: string; maxInputTokens?: number;
     maximumMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null; evidenceDigest: string | null };
+  realImageReservation?: { campaignId: string; profileHash: string; requestDigest: string;
+    planningHoldMicrodollars: number; unsettledMicrodollars: number; settledMicrodollars: number | null;
+    evidenceDigest: string | null; overrunMicrodollars: number };
+  realImagePreparation?: { requestJson: string; requestDigest: string; logicalFingerprint: string;
+    preparedAtMs: number };
+  realImageObservation?: { resultJson: string; resultDigest: string; observedAtMs: number;
+    chargeBasis: "reported_categories" | "upper_estimate" | "unknown_outcome" };
+  realReportPreparation?: { carrierJson: string; manifestDigest: string; finalRequestDigest: string;
+    textRequestDigest: string; orderedImages: import("@/lib/experiment-runner/real-image-contract").RealImageRequest["references"];
+    uploadFileIds: string[]; preparedAtMs: number };
+  realReportUploadJournalJson?: string | null;
   runId: string; role: ExperimentRole; taskId: ExperimentTask | null;
   subjectKind: "book" | "character" | "location" | "page"; subjectId: string;
   idempotencyKey: string; inputFingerprint: string; attempt: number;

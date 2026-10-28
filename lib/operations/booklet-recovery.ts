@@ -286,7 +286,7 @@ export function createBookletRecovery(deps: { database: Database; config: Bookle
   }
   async function observe(target: RecoveryTarget) {
     const { run, op } = await eligible(target);
-    const binding = selectBinding(config, op.role, op.taskId as Parameters<typeof selectBinding>[2], run.persona);
+    const binding = selectBinding(config, op.role, op.taskId as Parameters<typeof selectBinding>[2], run.persona, run.mode);
     requireProof(binding && binding.publishedWorkflowId === op.verifiedWorkflowId, "publication_changed");
     const result = await runtime.retrieve(binding, op.workflowRunId!, { deadlineAtMs: now() + 20_000 });
     const legacy = legacyGrant(target);

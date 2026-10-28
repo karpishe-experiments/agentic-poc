@@ -24,7 +24,8 @@ export const CASES = {
   professional_creator: { brief: "Two friends repair a community observatory after a disagreement; precise emotional arc; readers 9–12; eight story pages plus cover, two recurring characters, two locations, at least two multi-panel pages.", storyPages: 8, llmLimit: 220, imageLimit: 20, textRevisionLimit: 3, imageRevisionLimit: 2 },
 } as const satisfies Record<Persona, { brief: string; storyPages: number; llmLimit: number; imageLimit: number; textRevisionLimit: number; imageRevisionLimit: number }>;
 
-export const createRunInputSchema = z.strictObject({ persona: personaSchema, mode: experimentModeSchema, predecessorRunId: opaqueIdSchema.optional() });
+export const createRunInputSchema = z.strictObject({ persona: personaSchema, mode: experimentModeSchema,
+  predecessorRunId: opaqueIdSchema.optional(), executionCampaignId: opaqueIdSchema.optional() });
 export const lineageSchema = z.strictObject({
   correlationId: opaqueIdSchema,
   parentWorkflowRunId: opaqueIdSchema.nullable(),
@@ -283,8 +284,14 @@ const specialistProposal = z.strictObject({ kind: z.literal("proposal"), payload
 const specialistClarification = z.strictObject({ kind: z.literal("clarification"), payload: questionPayload });
 const testerDecision = z.strictObject({ kind: z.literal("decision"), payload: z.strictObject({ decision: testerDecisionSchema }) });
 const testerFeedback = z.strictObject({ kind: z.literal("feedback"), payload: z.unknown() });
+// New execution profiles alone may accept this result. Historical M4 request
+// definitions and their output parser continue to use decision/feedback only.
+export const executionAllowanceRequestSchema = z.strictObject({ kind: z.literal("allowance_request"), payload: z.strictObject({
+  reason: z.enum(["text_revisions", "image_revisions"]), requestedTaskId: experimentTaskSchema,
+  requestedVersionId: opaqueIdSchema, instruction: text,
+}) });
 const judgeAssessment = z.strictObject({ kind: z.literal("assessment"), payload: z.unknown() });
-export const roleResultSchema = z.discriminatedUnion("kind", [managerDelegate, managerAsk, specialistProposal, specialistClarification, testerDecision, testerFeedback, judgeAssessment]);
+export const roleResultSchema = z.discriminatedUnion("kind", [managerDelegate, managerAsk, specialistProposal, specialistClarification, testerDecision, testerFeedback, judgeAssessment, executionAllowanceRequestSchema]);
 export type RoleResult = z.infer<typeof roleResultSchema>;
 
 export const resultEnvelopeSchema = z.strictObject({
@@ -298,7 +305,7 @@ export const resultEnvelopeSchema = z.strictObject({
 const allowedKinds: Record<ExperimentRole, ReadonlySet<RoleResult["kind"]>> = {
   manager: new Set(["delegate", "ask"]),
   specialist: new Set(["proposal", "clarification"]),
-  tester: new Set(["decision", "feedback"]),
+  tester: new Set(["decision", "feedback", "allowance_request"]),
   judge: new Set(["assessment"]),
   image: new Set(["clarification"]),
 };

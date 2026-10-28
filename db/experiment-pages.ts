@@ -14,7 +14,7 @@ import { createExperimentStyleAssembly } from "@/db/experiment-style";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import { pageSourceRequest, withPageImageRevisions } from "@/lib/experiment-runner/page-image-requests";
-import { pageImageRevisionsSchema } from "@/lib/contracts/experiment-image";
+import { pageImageRevisionsSchema, executionPageImageRevisionsSchema } from "@/lib/contracts/experiment-image";
 import { validateSavedPageIllustrationPackage } from "@/lib/contracts/experiment-page-illustrations";
 import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { createVerificationAttempt, ImageEvidenceMismatch, type VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
@@ -300,12 +300,14 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
     }
   }
   if (revisions.length) {
-    const checked = pageImageRevisionsSchema.parse(revisions);
+    const checked = (run.execution ? executionPageImageRevisionsSchema : pageImageRevisionsSchema).parse(revisions);
     const testerBinding = savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).find((binding) => binding.role === "tester");
     for (const [index, revision] of checked.entries()) {
       const decision = await database.collections.experiment_operations.findOne({ _id: revision.decisionId, runId: run._id,
         role: "tester", state: "succeeded", reservationCount: 1 }, { session });
-      const result = decision?.resultJson ? JSON.parse(decision.resultJson) as { kind?: string; payload?: { decision?: {
+      const result = decision?.executionApprovedDecision?.decisionJson ? JSON.parse(decision.executionApprovedDecision.decisionJson) as { kind?: string; payload?: { decision?: {
+        action?: string; taskId?: string; artifactVersionId?: string; instruction?: string } } } :
+        decision?.resultJson ? JSON.parse(decision.resultJson) as { kind?: string; payload?: { decision?: {
         action?: string; taskId?: string; artifactVersionId?: string; instruction?: string } } } : null;
       const action = result?.payload?.decision;
       const previous = illustration ? await database.collections.artifact_versions.findOne({ _id: revision.previousPageVersionId,
@@ -317,7 +319,7 @@ export async function verifyCurrentPageIllustrationSources(database: Database, s
           !prior || prior.runId !== run._id || prior.pageId !== pageId || canonical(prior.sourceVersionIds) !== canonical(request.request.sourceVersionIds) ||
           canonical(prior.request.revisions ?? []) !== canonical(checked.slice(0, index))) reject("J13 revision decision or version ancestry is invalid.");
     }
-    request.request = withPageImageRevisions(request.request, checked);
+    request.request = withPageImageRevisions(request.request, checked, !!run.execution);
   }
 
   const warnings: string[] = [];

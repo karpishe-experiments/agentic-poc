@@ -1,0 +1,73 @@
+identity:
+  author: OpenAI
+  name: booklet_real_image
+  label:
+    en_US: Booklet Real image (bounded candidate)
+description:
+  human:
+    en_US: Bounded image generation for the Booklet Real experiment.
+  llm: Use only with a Booklet-authorized canonical request and native reference files.
+extra:
+  python:
+    source: tools/booklet_real_image.py
+parameters:
+  - name: request_json
+    type: string
+    required: true
+    form: llm
+    label:
+      en_US: Canonical request JSON
+    human_description:
+      en_US: Authorized Booklet request carrier.
+    llm_description: Exact canonical Booklet request carrier.
+  - name: reference_files
+    type: files
+    required: false
+    form: llm
+    label:
+      en_US: Ordered native reference files
+    human_description:
+      en_US: Native files matching the ordered request manifest.
+    llm_description: Exact native files in manifest order; empty for generation.
+  - name: run_id
+    type: string
+    required: true
+    form: llm
+    label: {en_US: Saved run ID}
+    human_description: {en_US: Saved Booklet run identity.}
+    llm_description: Exact saved run ID.
+  - name: operation_id
+    type: string
+    required: true
+    form: llm
+    label: {en_US: Saved operation ID}
+    human_description: {en_US: Reserved Booklet operation identity.}
+    llm_description: Exact reserved operation ID.
+  - name: workflow_run_id
+    type: string
+    required: true
+    form: llm
+    label: {en_US: Dify workflow run ID}
+    human_description: {en_US: Current Dify workflow identity.}
+    llm_description: Current Dify workflow run ID.
+  - name: parent_workflow_run_id
+    type: string
+    required: false
+    form: llm
+    label: {en_US: Parent workflow run ID}
+    human_description: {en_US: Parent run identity, when present.}
+    llm_description: Parent workflow run ID or empty.
+  - name: input_fingerprint
+    type: string
+    required: true
+    form: llm
+    label: {en_US: Reserved input fingerprint}
+    human_description: {en_US: Saved input fingerprint.}
+    llm_description: Exact reserved input SHA-256.
+  - name: booklet_tool_key
+    type: string
+    required: true
+    form: llm
+    label: {en_US: Protected Booklet tool key}
+    human_description: {en_US: Protected Dify environment binding.}
+    llm_description: Bind only as a MIXED environment secret; never place in the request carrier.

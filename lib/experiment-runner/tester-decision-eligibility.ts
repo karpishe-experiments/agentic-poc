@@ -33,3 +33,16 @@ export function m4TesterRevisionEligibility(persona: Persona, contextRaw: unknow
   }).sort((a, b) => a.taskId.localeCompare(b.taskId) || a.versionId.localeCompare(b.versionId));
   return { textRemaining, imageRemaining, revisionTargets, eligibleTaskIds };
 }
+
+export function executionTesterRevisionEligibility(contextRaw: unknown, limits: { text: number; image: number }) {
+  const context = contextSchema.parse(contextRaw);
+  const textRemaining = Math.max(0, limits.text - context.revisionCounts.text);
+  const imageRemaining = Math.max(0, limits.image - context.revisionCounts.image);
+  const eligibleTaskIds = [...new Set(context.eligibleTaskIds)].sort();
+  const current = context.pendingDecision != null ? [] : context.currentArtifacts.flatMap(artifact =>
+    artifact.currentVersionId && ["draft", "approved"].includes(artifact.state) && eligibleTaskIds.includes(artifact.taskId)
+      ? [{ taskId: artifact.taskId, versionId: artifact.currentVersionId }] : []);
+  const revisionTargets = current.filter(target => (target.taskId === "J13" ? imageRemaining : textRemaining) > 0);
+  const allowanceTargets = current.filter(target => (target.taskId === "J13" ? imageRemaining : textRemaining) === 0);
+  return { textRemaining, imageRemaining, revisionTargets, allowanceTargets, eligibleTaskIds };
+}

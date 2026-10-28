@@ -1,4 +1,5 @@
-import { hasM4SimulatedImagePolicy } from "@/db/experiment-m4-state";
+import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
+import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -162,7 +163,7 @@ async function approveVersion(database: Database, session: ClientSession, run: E
   if (!version) invalid("Approval version does not exist.");
   const artifact = await database.collections.artifacts.findOne({ _id: version.artifactId }, { session });
   if (!artifact || artifact.experimentRunId !== run._id || artifact.bookletId !== run.bookletId || artifact.currentVersionId !== versionId) invalid("Approval target is not the current run artifact.");
-  if (["J08", "J09", "J10", "J13"].includes(artifact.taskId ?? "") && run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) {
+  if (["J08", "J09", "J10", "J13"].includes(artifact.taskId ?? "") && run.mode !== "simulated" && !hasExperimentImagePolicy(run)) {
     invalid("Image artifact approval requires its retained simulated image policy.");
   }
   const pageImage = artifact.taskId === "J13" && configuredPageIllustrationTask(run.configurationJson);
@@ -344,7 +345,7 @@ export async function materializeNarrativeResult(database: Database, session: Cl
     if (operation.taskId && operation.taskId !== result.payload.taskId) invalid("Manager delegation target is not eligible.");
     try {
       if (result.payload.taskId === "J13") {
-        if (operation.mode !== run.mode || !configuredPageIllustrationTask(run.configurationJson) || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run))) invalid("Page illustration is outside the saved configuration.");
+        if (operation.mode !== run.mode || !configuredPageIllustrationTask(run.configurationJson) || (run.mode !== "simulated" && !hasExperimentImagePolicy(run))) invalid("Page illustration is outside the saved configuration.");
         const target = await database.collections.artifacts.findOne({ bookletId: run.bookletId, experimentRunId: run._id,
           taskId: "J13", subjectKind: "page", subjectId: result.payload.subjectId }, { session });
         const decision = pending(run);
@@ -431,15 +432,18 @@ export async function materializeNarrativeResult(database: Database, session: Cl
         experimentRunId: run._id, bookletId: run.bookletId, taskId: decision.taskId }, { session }) : null;
       if (!artifact || artifact.currentVersionId !== decision.artifactVersionId) invalid("Revision target is not current.");
       if (pageImageRevision) {
-        if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasM4SimulatedImagePolicy(run)) || artifact.subjectKind !== "page" || !artifact.subjectId ||
+        if (operation.mode !== run.mode || (run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || artifact.subjectKind !== "page" || !artifact.subjectId ||
             !["draft", "approved"].includes(artifact.state)) invalid("Image revision requires a current saved page image.");
-        if (run.imageRevisions >= CASES[run.persona].imageRevisionLimit) invalid("Image revision allowance is exhausted.");
+        const imageRevisionLimit = run.execution ?
+          (await createExecutionAllowanceLedger(database).current(session, run.execution.campaignId, run)).allowance.imageRevisions :
+          CASES[run.persona].imageRevisionLimit;
+        if (run.imageRevisions >= imageRevisionLimit) invalid("Image revision allowance is exhausted.");
         await createExperimentPageIllustrationAssembly({ database, store: assetStore() }).verifyVersion({ runId: run._id, versionId: decision.artifactVersionId }, session);
         const sources = await verifyCurrentPageIllustrationSources(database, session, run, artifact.subjectId, assetStore());
         try {
           withPageImageRevisions(sources.baseRequest, [...sources.request.request.revisions ?? [], {
             decisionId, previousPageVersionId: decision.artifactVersionId, instruction: decision.instruction,
-          }]);
+          }], !!run.execution);
         } catch { invalid("Image revision cannot form a valid bounded page request."); }
         // Keep earlier approval/version evidence. Only this page becomes a draft
         // target while its explicit revision is pending.
@@ -449,7 +453,10 @@ export async function materializeNarrativeResult(database: Database, session: Cl
       } else {
         if (!enabled(run, decision.taskId)) invalid("Revision task is outside the saved configuration.");
         if (artifact.state === "needs_review" || await approvedSourceIds(database, session, run, decision.taskId, artifact.subjectKind ?? "book", artifact.subjectId ?? run.bookletId, assetStore) === null) invalid("Revision requires current approved dependencies.");
-        if (run.textRevisions >= CASES[run.persona].textRevisionLimit) invalid("Text revision allowance is exhausted.");
+        const textRevisionLimit = run.execution ?
+          (await createExecutionAllowanceLedger(database).current(session, run.execution.campaignId, run)).allowance.textRevisions :
+          CASES[run.persona].textRevisionLimit;
+        if (run.textRevisions >= textRevisionLimit) invalid("Text revision allowance is exhausted.");
         runPatch.textRevisions = run.textRevisions + 1;
       }
       runPatch.pendingDecisionJson = canonical({ kind: "revision", taskId: decision.taskId, subjectKind: artifact.subjectKind, subjectId: artifact.subjectId, artifactVersionId: decision.artifactVersionId, instruction: decision.instruction,

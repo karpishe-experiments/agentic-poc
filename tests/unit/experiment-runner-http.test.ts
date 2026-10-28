@@ -1,3 +1,5 @@
+import { m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { m4PolicySnapshot, m4TokenPolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { describe, expect, it, vi } from "vitest";
 import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import type { ConfigState } from "@/lib/experiment-runner/config";
@@ -307,8 +309,11 @@ describe("booklet runner HTTP boundary", () => {
     expect(find.mock.calls[0][1].projection.configurationJson).toBeUndefined();
     expect(find.mock.calls[0][1].projection).toMatchObject({ createdAtMs: 1, updatedAtMs: 1 });
     expect(findBooklets).toHaveBeenCalledWith({ _id: { $in: ["book-1"] } }, { projection: { _id: 1, workingTitle: 1 } });
-    expect(findOperations).toHaveBeenCalledWith({ runId: { $in: ["run-1"] }, contextDiagnostics: { $exists: true } },
-      { projection: { _id: 0, runId: 1, "contextDiagnostics.warnings": 1 } });
+    expect(findOperations).toHaveBeenCalledWith({ runId: { $in: ["run-1"] } },
+      { projection: { _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
+        "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+        "realImageReservation.unsettledMicrodollars": 1, "realImageReservation.settledMicrodollars": 1,
+        "contextDiagnostics.warnings": 1 } });
     expect(store).not.toHaveBeenCalled();
     expect((await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary&limit=1000"))).status).toBe(400);
     const legacy = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries?page=2&limit=1"));
@@ -320,7 +325,9 @@ describe("booklet runner HTTP boundary", () => {
   });
   it("includes the retained-decision control in summaries using only existing metadata reads", async () => {
     const operationId = "00000000-0000-4000-8000-000000000002";
-    const row = { ...savedControl, bookletId: "book", status: "blocked", safeFailure: "definite_failure", activeOperationId: operationId };
+    const row = { ...savedControl, bookletId: "book", mode: "balanced" as const,
+      counters: { logicalText: 0, logicalImage: 0, payableText: 0, payableImage: 0, steps: 0 },
+      status: "blocked", safeFailure: "definite_failure", activeOperationId: operationId };
     const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue([row]) };
     const find = vi.fn().mockReturnValue(cursor);
     const operationFind = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
@@ -334,7 +341,73 @@ describe("booklet runner HTTP boundary", () => {
     const response = await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary"));
     expect((await response.json()).data.runs[0].retainedDecisionContinuation).toBe(true);
     expect(find).toHaveBeenCalledOnce(); expect(operationFind).toHaveBeenCalledOnce();
-    expect(operationFind.mock.calls[0][1].projection).toEqual({ _id: 0, runId: 1, "contextDiagnostics.warnings": 1 });
+    expect(operationFind.mock.calls[0][1].projection).toEqual({ _id: 1, runId: 1, role: 1, taskId: 1, reservationCount: 1,
+      "m4Reservation.unsettledMicrodollars": 1, "m4Reservation.settledMicrodollars": 1,
+      "realImageReservation.unsettledMicrodollars": 1, "realImageReservation.settledMicrodollars": 1,
+      "contextDiagnostics.warnings": 1 });
+  });
+  it("projects the current execution allowance and approval wait in grouped summaries", async () => {
+    const row = { _id: controlRunId, bookletId: "book", mode: "balanced", status: "paused", revision: 6,
+      persona: "playful_kid", pauseRequested: true, counters: { logicalText: 0, logicalImage: 0,
+        payableText: 0, payableImage: 0, steps: 0 }, limits: { text: 120, image: 12, steps: 300 },
+      execution: { campaignId: "campaign" }, pendingApproval: { reason: "monetary" }, createdAtMs: 1, updatedAtMs: 2 };
+    const findRuns = vi.fn().mockReturnValue({ sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue([row]) });
+    const findCampaigns = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([{ _id: "campaign",
+      schemaVersion: "execution_v1", runId: controlRunId, revision: 4,
+      allowance: { maxMicrodollars: 8_000_000, textCalls: 120, imageCalls: 12, steps: 300,
+        textRevisions: 1, imageRevisions: 1, noProgress: 3 },
+      textRequests: 2, imageRequests: 1, reservedMicrodollars: 1_000_000, settledMicrodollars: 2_000_000 }]) });
+    const empty = { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
+    const http = createBookletRunnerHttp({ config: () => enabled,
+      database: () => ({ collections: { experiment_runs: { find: findRuns },
+        experiment_campaigns: { find: findCampaigns }, booklets: empty, experiment_operations: empty } } as unknown as Database),
+      store: () => { throw new Error("Summary must not read assets"); } });
+    const response = await http.list(new Request("http://localhost:3000/api/experiments/booklet-runs?view=summary"));
+    expect((await response.json()).data.runs[0]).toMatchObject({ attention: { kind: "approval", action: "open_run" },
+      executionAllowance: { campaignId: "campaign", revision: 4, totals: { maxMicrodollars: 8_000_000 },
+        reservedMicrodollars: 1_000_000, settledMicrodollars: 2_000_000 } });
+    expect(findCampaigns).toHaveBeenCalledOnce();
+    expect(findCampaigns.mock.calls[0][1].projection).toMatchObject({ allowance: 1, revision: 1,
+      reservedMicrodollars: 1, settledMicrodollars: 1 });
+    const projection = findRuns.mock.calls[0][1].projection;
+    expect(projection["execution.campaignId"]).toBe(1);
+    expect(projection["pendingApproval.reason"]).toBe(1);
+    expect(projection.execution).toBeUndefined();
+    expect(projection.pendingApproval).toBeUndefined();
+  });
+  it("groups paid reservations by run without mixing another campaign run into the card", async () => {
+    const rows = ["run-1", "run-2"].map((_id, index) => ({ _id, bookletId: `book-${index}`, brief: `Run ${index}`,
+      persona: "playful_kid", mode: index === 0 ? "balanced" : "real", status: "blocked", revision: 1, createdAtMs: 1000,
+      updatedAtMs: 2000, pauseRequested: false, activeOperationId: null,
+      counters: { logicalText: 1, logicalImage: index, payableText: 1, payableImage: index, steps: 1 + index },
+      limits: { text: 120, image: 12, steps: 300 }, evaluationStatus: "pending" }));
+    const operations = [
+      { _id: "op-1", runId: "run-1", role: "specialist", reservationCount: 1,
+        m4Reservation: { settledMicrodollars: 125, unsettledMicrodollars: 0 } },
+      { _id: "op-2", runId: "run-1", role: "tester", reservationCount: 0,
+        m4Reservation: { settledMicrodollars: null, unsettledMicrodollars: 500 } },
+      { _id: "op-3", runId: "run-2", role: "specialist", reservationCount: 1,
+        m4Reservation: { settledMicrodollars: 900, unsettledMicrodollars: 0 } },
+      { _id: "op-4", runId: "run-2", role: "image", reservationCount: 1,
+        realImageReservation: { settledMicrodollars: 150, unsettledMicrodollars: 30 } },
+    ];
+    const find = vi.fn().mockReturnValue({ sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) });
+    const findOperations = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(operations) });
+    const http = createBookletRunnerHttp({ config: () => enabled, database: () => ({ collections: {
+      experiment_runs: { find }, experiment_operations: { find: findOperations },
+      booklets: { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) },
+    } } as unknown as Database), store: () => { throw new Error("Summary must not read assets"); } });
+    const response = await http.summaries(new Request("http://localhost:3000/api/experiments/booklet-runs/summaries"));
+    expect(response.status).toBe(200);
+    const cards = (await response.json()).data.runs;
+    expect(cards[0].runAccounting).toMatchObject({ settledMicrodollars: 125, reservedMicrodollars: 500,
+      estimatedTotalMicrodollars: 625 });
+    expect(cards[1].runAccounting).toMatchObject({ settledMicrodollars: 1050, reservedMicrodollars: 30,
+      estimatedTotalMicrodollars: 1080 });
+    expect(findOperations).toHaveBeenCalledOnce();
+    expect(findOperations.mock.calls[0][0]).toEqual({ runId: { $in: ["run-1", "run-2"] } });
   });
   it("protects inspect and stop before reading operation state", async () => {
     const database = vi.fn(() => { throw new Error("unexpected database access"); });
@@ -391,6 +464,48 @@ describe("booklet runner HTTP boundary", () => {
     expect(JSON.stringify(payload)).not.toContain("not-json");
     expect(payload).toEqual({ error: { code: "unauthorized", message: "Authentication is required." } });
   });
+  it("authenticates Real image evidence before checking readiness or parsing its body", async () => {
+    const database = () => { throw new Error("unexpected database access"); };
+    const off = createBookletRunnerHttp({ config: () => disabled, database });
+    expect((await off.imageEvidence(request({}, "not-json"))).status).toBe(404);
+    const http = createBookletRunnerHttp({ config: () => enabled, database });
+    expect((await http.imageEvidence(request({ origin: enabled.config.publicOrigin }, "not-json"))).status).toBe(401);
+    expect((await http.imageEvidence(request({ "x-booklet-tool-key": enabled.config.callbackKey }, "not-json"))).status).toBe(422);
+  });
+
+  it("retains a compact Real evidence receipt without loading creative details", async () => {
+    const ready: ConfigState = { enabled: true, config: { ...enabled.config, real: { state: "ready", bindings: [],
+      textPluginIdentity: `langgenius/openai:1.0.7-dev6@${"a".repeat(64)}`, textPackageSha256: "b".repeat(64),
+      imagePluginIdentity: `langgenius/openai_tool:0.2.2-dev1@${"c".repeat(64)}`, imagePackageSha256: "d".repeat(64),
+      sourcePolicy: m4TestPolicy(), tokenPolicy: m4TokenPolicySnapshot({ version: "m4_context_policy_v2",
+        basePolicyHash: m4PolicySnapshot(m4TestPolicy()).hash, warningInputTokens: 32000, maxInputTokens: 128000,
+        requiredProviderAdapterIdentity: `langgenius/openai:1.0.7-dev5@${"a".repeat(64)}`,
+        requiredProviderPackageSha256: "b".repeat(64), reference: "nonbillable-unit-fixture" }), nativeFileFormat: "base64" } } };
+    const payload = { runId: controlRunId, operationId: "00000000-0000-4000-8000-000000000002",
+      workflowRunId: "00000000-0000-4000-8000-000000000003", parentWorkflowRunId: null,
+      inputFingerprint: "a".repeat(64), result: { schemaVersion: "booklet_real_image_result_v1", status: "succeeded" } };
+    const receipt = { reused: false, status: "succeeded", chargeMicrodollars: 123, overrunMicrodollars: 0 };
+    const observeRealImage = vi.fn().mockResolvedValue(receipt);
+    const factory = vi.spyOn(repositoryModule, "createExperimentRepository").mockReturnValue({ observeRealImage } as unknown as ReturnType<typeof repositoryModule.createExperimentRepository>);
+    const getRunView = vi.fn();
+    const context = vi.spyOn(contextModule, "createExperimentContextService").mockReturnValue({ getRunView } as unknown as ReturnType<typeof contextModule.createExperimentContextService>);
+    const ownership = vi.fn();
+    try {
+      const http = createBookletRunnerHttp({ config: () => ready, database: () => ({} as Database),
+        store: () => ({} as AssetStore), mutate: async (action, options) => { ownership(options); return action(); } });
+      const headers = { "x-booklet-tool-key": enabled.config.callbackKey };
+      const response = await http.imageEvidence(request(headers, JSON.stringify(payload)));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ data: receipt });
+      expect(observeRealImage).toHaveBeenCalledWith({ ...payload, nowMs: expect.any(Number) });
+      expect(ownership).toHaveBeenCalledWith({ admitted: true, runId: payload.runId, operationId: payload.operationId });
+      expect(getRunView).not.toHaveBeenCalled();
+      expect((await http.imageEvidence(request(headers, "not-json"))).status).toBe(400);
+      expect((await http.imageEvidence(request(headers, JSON.stringify({ ...payload, operationId: "wrong" })))).status).toBe(400);
+      expect((await http.imageEvidence(request({ ...headers, "content-length": "32769" }, "{}"))).status).toBe(400);
+      expect(observeRealImage).toHaveBeenCalledTimes(1);
+    } finally { factory.mockRestore(); context.mockRestore(); }
+  });
   it("treats invalid UTF-8 as malformed JSON after authentication", async () => {
     const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });
     const response = await http.tool(new Request("http://localhost:3000", { method: "POST", headers: { "x-booklet-tool-key": "x".repeat(32) }, body: new Uint8Array([0xff]) }), "authorize");
@@ -401,6 +516,21 @@ describe("booklet runner HTTP boundary", () => {
     const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });
     expect((await http.create(request({ origin: "http://localhost:3001" }))).status).toBe(403);
     expect((await http.create(request({ origin: "http://localhost:3000" }))).status).toBe(400);
+  });
+  it("keeps campaign grants and allowance decisions outside callback credentials", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "staging");
+    vi.stubEnv("ACCESS_GATE_PASSWORD", "test-only-password-long-enough");
+    try {
+      const http = createBookletRunnerHttp({ config: () => enabled,
+        database: () => { throw new Error("unexpected database access"); } });
+      const toolHeaders = { "x-booklet-tool-key": "x".repeat(32), origin: enabled.config.publicOrigin,
+        "idempotency-key": controlRunId };
+      expect((await http.campaign(request(toolHeaders))).status).toBe(401);
+      expect((await http.approval(request(toolHeaders), controlRunId)).status).toBe(401);
+      const browserHeaders = { ...toolHeaders, authorization: `Basic ${btoa(`booklet:test-only-password-long-enough`)}` };
+      expect((await http.campaign(request({ ...browserHeaders, origin: "http://localhost:3001" }))).status).toBe(403);
+      expect((await http.approval(request({ ...browserHeaders, origin: "http://localhost:3001" }), controlRunId)).status).toBe(403);
+    } finally { vi.unstubAllEnvs(); }
   });
   it("validates page selection origin, identity and body before database access", async () => {
     const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });
