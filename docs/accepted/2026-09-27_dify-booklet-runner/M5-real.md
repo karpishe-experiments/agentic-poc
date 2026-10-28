@@ -180,8 +180,16 @@ defaults to `base64`; this is inherited-default evidence, not an explicit runtim
 override. No host setting change is required. The reviewed activation candidate
 has technical profile hash
 `be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375`.
-Its staging delivery remains a separate checkpoint from the earlier application
-release above. No Real spending grant or call exists. After activation, obtain an
+Activation PRs #308 and #309 passed CI and two independent source and staging
+reviews. Staging commit `7a332234d37fae10637f5f0429f72728356f5ff2` completed through
+request `40679395869-1`, using image
+`sha256:38cc9b91cd29aa54355e407c60649cf4bdf40dd4bea5fe1ed4cce9d02aba70db`
+and backup `staging-20261028T112523Z-e3f6c1ac139bbb30`. Its Deploy observer exited
+124 during backup; read-only status `40681236948` proved `complete` / `archived`
+without replay. Check deployment `40682459095` passed on `_staging`. Live browser
+inspection exposes Real mode and the empty Kid grant
+form with 120 text calls, 12 images and 300 steps; Start remains disabled until a
+grant is recorded. No Real spending grant or call exists. Obtain an
 exact finite Kid grant before creating its one-run campaign; the historical USD 1
 campaign grants no authority for it. No new credential or transfer path is added.
 
