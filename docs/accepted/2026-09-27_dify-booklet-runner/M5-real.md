@@ -234,8 +234,17 @@ installation. The immutable image workflow still selects the stable provider
 
 The matching readiness update selects dev2 for new profiles, with technical hash
 `f4aab1e502e7befae6dc8f47195c9779111989bde4c2dc325e516459c9dbdce5`.
-The saved dev1 profile remains readable with its original hash. Readiness delivery
-must be verified before paid use. Preserve this run and its grant/accounting.
+The saved dev1 profile remains readable with its original hash. Source PR #312
+and staging PR #313 passed CI and two independent reviews each. Staging commit
+`c245e12ecc4a084dc83444b1dc5ca13935cc26b2` completed through request
+`40702684339-1`, with immutable image
+`sha256:1d71e69d9dd9b4c4289c0e2536e4f963a62361f998d4b6b016e0f8c4f542069b`
+and backup `staging-20261028T141311Z-b87d97bc7a4137b4`. The observer exited 124
+while backup was active; status `40705958533` proved `complete` / `archived`
+without replay. Check deployment `40706102119` passed on `_staging`. Live browser
+inspection confirmed Real readiness, a blank finite-grant form with Start
+disabled, and unchanged retained Kid accounting. No successor grant or provider
+retry was submitted. Preserve this run and its grant/accounting.
 No saved output repair, reset, automatic retry or successor spending is authorized.
 Credential inventory impact: no credential, consumer, storage or transfer changes.
 
