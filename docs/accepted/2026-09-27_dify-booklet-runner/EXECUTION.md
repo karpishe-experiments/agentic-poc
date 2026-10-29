@@ -211,8 +211,11 @@ completed/archived and Check deployment `40706102119` passed. Live Real readines
 and unchanged retained Kid accounting were verified. No further signature exception, image retry, successor, reset or
 replacement M4 campaign is authorized. The operator subsequently approved one
 USD 5 linked Kid successor. It is retained after a first-image pre-provider
-credential-routing rejection; no image provider call began. The graph correction
-and remaining setup are recorded in the current M5 checkpoint. No further paid
+credential-routing rejection; no image provider call began. The corrected
+publication and matching readiness completed at staging commit
+`f0082a6434dd1995d09347fc42684ca660a16604`, request `40910015592-1`;
+status `40912420112` proved complete/archived and Check `40912558343` passed.
+Live readiness and retained accounting were verified. No further paid
 retry or successor is authorized.
 
 The following older checkpoints are retained as historical execution evidence;
