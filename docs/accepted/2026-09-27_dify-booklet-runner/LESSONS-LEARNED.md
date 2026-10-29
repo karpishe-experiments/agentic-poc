@@ -1047,6 +1047,40 @@ alone is insufficient evidence to adopt an optimization. The measured gate kept
 normal admission unchanged. Evidence: the M4 live-result table. Promotion target:
 **Documentation** for measured persistence changes.
 
+## Test the host's empty native-file conversion
+
+The first Real Kid image request supplied no references. Dify 1.17.1 converted
+the absent optional FILES input into `[None]`, so tests with only `None` and `[]`
+did not cover the actual plugin boundary. The adapter rejected it before provider
+dispatch. Normalize only that exact placeholder for a no-reference generation;
+retain rejection of missing edit references and malformed lists. Include the
+host's cast shape in fake-provider tests. Evidence: the
+[first Kid checkpoint](M5-real.md#first-real-kid-checkpoint---2026-10-28) and the
+twenty image-adapter cases. Promotion candidate: **Documentation** for native-file
+compatibility verification.
+
+## Resolve installed tool credentials through the supported runtime path
+
+Dify 1.17.1 distinguishes an installed plugin from the workflow node's provider
+type. Its `plugin` runtime returns the tool without resolving workspace credentials;
+the `builtin` runtime loads the existing authorization for the same provider ID.
+An installed package and a visible default authorization did not prove that the
+generated node would receive credentials. Pin the supported node classification
+in the graph contract. Evidence: the retained dev2 Kid pre-provider `credentials`
+rejection, official ToolManager branches and focused graph tests. No image request
+began. Promotion candidate: **Documentation** for Dify graph compatibility.
+
+## Preserve complete graphs across tool boundaries
+
+Large execution-tool output can truncate a string inside otherwise valid JSON.
+During M5 publication preparation, graph source read through shell output lost
+content. Validation caught this before any save. Use a direct local graph file
+for submission, or bounded UTF-8 chunks with exact length checks. Compare the
+saved and immutable published graph with the complete reviewed input. JSON
+parsing alone does not prove content preservation. Evidence: eighteen M5 graph
+and publication readbacks. Promotion candidate: **Documentation** for configuration
+transport verification.
+
 ## Bound reviewer evidence to its current decision
 
 A mid-run Creator reviewer exceeded the unchanged 32,000-token guard while its
