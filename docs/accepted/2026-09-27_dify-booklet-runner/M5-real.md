@@ -269,8 +269,17 @@ and focused checks passed before publication. Immutable image publication
 and environment/conversation variables are preserved. The other seventeen
 publications and package identities are unchanged. The matching readiness profile
 is `9fab201953ff06cba920713dded4a8f623f28fa44fbeb9fc34bf6a7390a80f8e`;
-application delivery remains pending. Neither retained run is resumed or repaired,
-and no further successor or spending is authorized.
+source PR #315 and staging PR #316 passed CI and two independent reviews each.
+On 2026-10-29, staging commit `f0082a6434dd1995d09347fc42684ca660a16604`
+completed through request `40910015592-1`, with immutable image
+`sha256:ad617a6fc8fa8dc5abcd9abc03a621b83569913b915317d52ae73ca4e6a4fab6`
+and backup `staging-20261029T162017Z-c94331e3e3528e02`. Its observer exited 124
+while backup was active; status `40912420112` proved `complete` / `archived`
+without replay. Check deployment `40912558343` passed on `_staging`. Live browser
+inspection confirmed Real readiness, Start disabled without a new grant, and
+unchanged retained Kid state/accounting. Paid image success remains unverified;
+an optional isolated-node test was not executed. Neither retained run is resumed
+or repaired, and no further successor or spending is authorized.
 
 ## Three execution checkpoints
 
