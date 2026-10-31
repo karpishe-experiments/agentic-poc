@@ -333,11 +333,41 @@ Two independent final reviews passed. The Real manager publication
 4,096 output tokens, unchanged model settings and zero retries. The connector
 validated its one-node diff but rejected its save payload; Chrome saved the
 setting and authenticated MCP readback verified the publication. The tracked
-readiness now selects `execution_v2`. Staging recovery and deployment are still
-pending; local and Dify configuration proof do not establish live acceptance. No paid
+readiness now selects `execution_v2`. Staging recovery and deployment were pending
+at this implementation checkpoint; local and Dify configuration proof do not
+establish live acceptance. No paid
 call, successor grant or signature-policy change is included in this correction.
 Credential inventory impact: existing per-app credentials retain their current
 storage and consumers; recovery uses the saved application identity and publication.
+
+### Protected recovery checkpoint - 2026-10-31
+
+Source PR #318 merged at `8aa055f0dd5e0aa0fe7b5cb89a67e6248c63d33c`.
+The operator closed existing staging admission and verified stable target revision
+23,623. Protected preview `41198616652` passed. Apply `41198840942` completed
+request `m5-text-failure-20261031-v1` with backup
+`staging-recovery-m5-text-failure-20261031-v1`. The exact recovery verified failure
+closure and restored the prior service with admission closed. It did not replay
+the provider, complete generation or grant another run.
+
+Staging PR #319 merged at `77ae9213ef4141dfb6edbc43b97400ed31dbd458`.
+Its source tree matches recovery candidate `49ea7fabe635b35a2d7b618aade485b3135ed713`:
+`e09399057134593b07d49d161203a20c83b738ee`. Normal Deploy `41200278529` selected
+image `sha256:e3c98e80ecd5584924ef9e5727c4b6ee6067bd0e3ae8f433d56ca5fd854f1415`.
+Its observer exited 124 without stopping the host. Status `41200929724` verified
+the same saved request `41200278529-1` remained active at backup under its original
+budget. Status `41201322989` then verified `complete` / `archived`, with backup
+`staging-20261031T121921Z-0563f91a0cfbdcb7`. Check deployment `41201397514` passed.
+No second deployment was dispatched after the observer timeout. Chrome currently
+reports invalid access-gate credentials; private sign-in and browser readiness
+verification remain pending. Read-only diagnostics `41201544674` verified the
+new serving release and authenticated staging API. The retained run is blocked at
+revision 23,624 with no active operation; the manager is a definite terminal
+failure with `unresolved: false`. All ten text calls, zero image calls and ten
+steps remain recorded. The new technical
+profile hash is `f87eb3a370fcd9429846c3dcc3df4bac3f56d44c88ae7294ba7a426bd4187ce1`.
+No fourth Kid, Parent or Creator grant exists. Next: finish browser readiness and
+retained-accounting display inspection, then request one exact finite Kid successor grant.
 
 ### Historical carry-forward review before the M4 exit
 
