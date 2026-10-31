@@ -10,7 +10,7 @@ import type { ExperimentReport } from "@/lib/contracts/experiment-reports";
 import type { ExperimentPageBatch } from "@/lib/contracts/experiment-page-batches";
 import { PageBatchSelector, type PageSelection } from "./page-batch-selector";
 import { AllowanceReview, type AllowanceView, type PendingAllowance } from "./allowance-review";
-import { InitialAllowanceGrant } from "./initial-allowance-grant";
+import { SavedAllowanceGrants } from "./saved-allowance-grants";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 import { failureReasonLabels, type FailureDiagnostics } from "@/lib/contracts/experiment-failure";
 import type { ImageCapacity } from "@/lib/experiment-runner/image-capacity";
@@ -312,7 +312,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
         m4State === "ready" ? "Balanced is ready but awaits the campaign execution grant. Real mode is unavailable." :
           m4State === "invalid" ? "Balanced setup needs attention before creation. Real mode is unavailable." : "Balanced and Real modes are unavailable."}</p>
       {mode === "balanced" && canCreateBalanced || mode === "real" && realEnabled ? newCampaignId ? <p role="status" className="break-all">Saved initial grant: {newCampaignId}. Start the one run for this campaign.</p> :
-        <InitialAllowanceGrant key={`${persona}:${mode}`} persona={persona} mode={mode as "balanced" | "real"} onGrant={(id, predecessor) => { setNewCampaignId(id); setNewPredecessorId(predecessor); }} onLocked={setGrantLocked} /> : null}
+        <SavedAllowanceGrants key={`${persona}:${mode}`} persona={persona} mode={mode as "balanced" | "real"} onGrant={(id, predecessor) => { setNewCampaignId(id); setNewPredecessorId(predecessor); }} onLocked={setGrantLocked} /> : null}
       <div className="flex flex-wrap gap-2"><button className={secondaryAction} disabled={mutationDisabled || pending !== null || mode !== "simulated" && (!newCampaignId || mode === "balanced" && !canCreateBalanced || mode === "real" && !realEnabled)} onClick={() => void create([{ persona, mode, key: crypto.randomUUID(), ...(mode !== "simulated" && newCampaignId ? { executionCampaignId: newCampaignId, ...(newPredecessorId ? { predecessorRunId: newPredecessorId } : {}) } : {}) }])}>Start selected</button>{mode === "simulated" ? <button disabled={mutationDisabled || pending !== null} onClick={() => void create(personas.map((item) => ({ persona: item.id, mode: "simulated", key: crypto.randomUUID() })))}>Start all three</button> : null}{pending?.length ? <button disabled={mutationDisabled || pending.some((item) => item.mode === "balanced") && !canCreateBalanced || pending.some((item) => item.mode === "real") && !realEnabled} onClick={() => void create(pending)}>Retry pending creation</button> : null}</div>
     </section>}
     <button className={secondaryAction} onClick={() => void refresh()}>Refresh</button>

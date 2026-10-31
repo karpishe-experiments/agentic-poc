@@ -10,6 +10,10 @@ beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [run] }), { status: 200 }));
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
     const response = await fetchMock(url, options) as Response;
+    if (url.includes("/campaigns?") && options?.method !== "POST") {
+      const body = await response.clone().json();
+      return Array.isArray(body.data) ? Response.json({ data: { campaigns: [], hasMore: false } }, { status: response.status }) : response;
+    }
     if (!url.includes("?view=summary")) {
       const body = await response.clone().json();
       return Array.isArray(body.data) ? Response.json({ data: body.data[0] }, { status: response.status }) : response;
@@ -22,6 +26,35 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("booklet runner inspector", () => {
+  it("restores a saved Real grant after a closed tab without another grant POST or automatic start", async () => {
+    const campaignId = "00000000-0000-4000-8000-000000000081";
+    const predecessorRunId = "00000000-0000-4000-8000-000000000082";
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/campaigns?")) return Response.json({ data: { campaigns: [{ campaignId, predecessorRunId, createdAtMs: 1,
+        totals: { maxMicrodollars: 5_000_000, textCalls: 120, imageCalls: 12, steps: 300,
+          textRevisions: 1, imageRevisions: 1, noProgress: 3 } }], hasMore: false } });
+      return Response.json({ data: [run] });
+    });
+    render(<BookletRunner realEnabled />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "real" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Use saved grant" }));
+    await screen.findByText(new RegExp(`Saved initial grant: ${campaignId}`));
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1));
+    const [, options] = fetchMock.mock.calls.find(([, options]) => options?.method === "POST")!;
+    expect(JSON.parse(String(options?.body))).toEqual({ persona: "playful_kid", mode: "real", executionCampaignId: campaignId, predecessorRunId });
+  });
+  it("does not offer another grant when the saved-grant read fails", async () => {
+    fetchMock.mockImplementation(async url => url.includes("/campaigns?") ? Response.json({ error: {} }, { status: 503 }) : Response.json({ data: [run] }));
+    render(<BookletRunner realEnabled />);
+    await screen.findByText("Kite Rescue", { exact: false });
+    fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "real" } });
+    await screen.findByText("Saved grants could not be checked. Refresh before recording another grant.");
+    expect(screen.queryByRole("button", { name: "Record grant" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Start selected" }) as HTMLButtonElement).disabled).toBe(true);
+  });
   it("keeps Real creation unavailable until the provider profile is ready", async () => {
     render(<BookletRunner />);
     await screen.findByText("Kite Rescue", { exact: false });
@@ -40,7 +73,7 @@ describe("booklet runner inspector", () => {
     const view = render(<BookletRunner realEnabled />);
     await screen.findByText("Kite Rescue", { exact: false });
     fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "real" } });
-    expect((screen.getByRole("textbox", { name: "Maximum dollars" }) as HTMLInputElement).value).toBe("");
+    expect((await screen.findByRole("textbox", { name: "Maximum dollars" }) as HTMLInputElement).value).toBe("");
     expect((screen.getByRole("button", { name: "Start selected" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Start all three" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
@@ -275,7 +308,7 @@ describe("booklet runner inspector", () => {
     await screen.findByText("No runs yet.");
     fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "balanced" } });
     expect(screen.queryByRole("button", { name: "Start all three" })).toBeNull();
-    fireEvent.change(screen.getByRole("textbox", { name: "Operator reference" }), { target: { value: "test grant" } });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Operator reference" }), { target: { value: "test grant" } });
     fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
     await screen.findByText(/Saved initial grant: campaign-1/);
     fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
@@ -309,7 +342,7 @@ describe("booklet runner inspector", () => {
     render(<BookletRunner balancedEnabled m4State="granted" />);
     await screen.findByText("No runs yet.");
     fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), { target: { value: "balanced" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Operator reference" }), { target: { value: "grant-1" } });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Operator reference" }), { target: { value: "grant-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Record grant" }));
     await screen.findByRole("button", { name: "Retry exact grant" });
     expect((screen.getByRole("textbox", { name: "Operator reference" }) as HTMLInputElement).disabled).toBe(true);
