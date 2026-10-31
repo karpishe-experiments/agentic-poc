@@ -68,7 +68,8 @@ describe("Real workflow graph candidates", () => {
     expect(report.vision).toEqual({ enabled: true, configs: { variable_selector: ["start", "reference_files"], detail: "high" } });
     expect(decision.vision).toEqual({ enabled: false });
     expect((report.model as { completion_params: Record<string, unknown> }).completion_params)
-      .toMatchObject({ booklet_real_report_execution: true, booklet_bounded_execution: true, booklet_prepared_request: true });
+      .toMatchObject({ booklet_real_report_execution: true, booklet_bounded_execution: true, booklet_prepared_request: true,
+        response_format: "json_schema", json_schema: "{{#real_decode.schema_json#}}" });
     expect(graph.edges).toContainEqual(expect.objectContaining({ source: "real_report", target: "real_report_llm", sourceHandle: "true" }));
     const data = { started: true, mode: "real", role: "tester", taskId: null,
       inputFingerprint: "b".repeat(64), m4: { requestJson: carrierJson, requestDigest: carrier.finalRequestDigest,
@@ -77,6 +78,8 @@ describe("Real workflow graph candidates", () => {
     expect(decoded.authorized).toBe("yes");
     expect(decoded.digest).toBe(`sha256:${carrier.finalRequestDigest}`);
     expect(decoded.request_00).toBe(carrierJson);
+    expect(JSON.parse(String(decoded.schema_json))).toEqual({ name: "fixture", strict: true,
+      schema: { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false } });
     expect(decoded.token_policy_hash).toBe(`sha256:${token.hash}`);
     expect(() => execute(node(graph, "real_decode").data.code, { authorization_body: JSON.stringify({ data: {
       ...data, m4: { ...data.m4, requestDigest: "c".repeat(64) } } }), status_code: 200 })).toThrow();

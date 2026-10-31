@@ -8,6 +8,7 @@ import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
+import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import type { WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
@@ -64,10 +65,27 @@ async function setup(maxMicrodollars = 1, allowancePatch: Partial<ReturnType<typ
       expectedPendingDigest: paused.pendingApproval!.requestDigest,
       totals: { ...totals, maxMicrodollars: paused.pendingApproval!.requiredTotal! }, nowMs: 5 } };
   }
-  return { db, ledger, repository, totals, grant, createCampaign, creation, campaign, run, pause };
+  return { db, ledger, repository, totals, grant, source, tokenPolicy, createCampaign, creation, campaign, run, pause };
 }
 
 describe("Execution approval ledger with disposable persistence and no providers", () => {
+  it("recovers only unused grants for the current persona/profile without changing persisted allowance or claims", async () => {
+    const env = await setup(5_000_000);
+    await withMongoTransaction(env.db, async session => {
+      await env.ledger.create(session, { ...env.grant, campaignId: id(30), approvalId: id(31), nowMs: 30 });
+      await env.ledger.create(session, { ...env.grant, campaignId: id(32), approvalId: id(33), persona: "enthusiast_parent", nowMs: 31 });
+      await env.ledger.create(session, { ...env.grant, campaignId: id(34), approvalId: id(35), profile: { ...env.grant.profile, pricingReference: "older fixture profile" }, nowMs: 32 });
+    });
+    const before = await env.db.collections.experiment_campaigns.find({}).sort({ _id: 1 }).toArray();
+    const http = createBookletRunnerHttp({ database: () => env.db, config: () => ({ enabled: true, config: {
+      enabled: true, baseUrl: "https://dify.test", publicOrigin: "http://localhost:3000", callbackKey: "x".repeat(32), bindings: [],
+      m4: { state: "granted", authority: { policy: env.source, grant: { campaignId: id(1), reference: "fixture", tokenPolicy: env.tokenPolicy } } },
+    } }) });
+    const response = await http.campaigns(new Request("http://localhost:3000/api/experiments/booklet-runs/campaigns?mode=balanced&persona=playful_kid"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.campaigns.map((row: { campaignId: string }) => row.campaignId)).toEqual([id(30)]);
+    expect(await env.db.collections.experiment_campaigns.find({}).sort({ _id: 1 }).toArray()).toEqual(before);
+  });
   async function incompleteManager(mode: "balanced" | "real" = "balanced", version: "execution_v1" | "execution_v2" = "execution_v1") {
     const env = await setup(5_000_000, {}, mode, version);
     const run = await env.run(), profile = env.grant.profile;

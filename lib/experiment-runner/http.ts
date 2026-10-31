@@ -1,10 +1,11 @@
 import { controlState, controlStateProjection, hasRetainedDecisionContinuation } from "@/lib/experiment-runner/control-state";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { Collection } from "mongodb";
 import { getDatabase, type Database } from "@/db/client";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { withMongoTransaction } from "@/db/client";
-import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
+import { createExecutionAllowanceLedger, ExecutionAllowanceError, type ExecutionCampaignDocument } from "@/db/experiment-execution-allowance";
 import { defaultExecutionAllowance, executionAllowanceSchema, executionPolicyFromM4TechnicalProfile, realExecutionPolicyFromM4TechnicalProfile, executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { createExperimentCompletionService } from "@/db/experiment-completion";
 import { createExperimentImageRepository } from "@/db/experiment-images";
@@ -152,6 +153,18 @@ function browserAuth(request: Request, state: ConfigState, write: boolean): Resp
   if (write && state.enabled && request.headers.get("origin") !== state.config.publicOrigin) return reply(403, "invalid_origin");
   return null;
 }
+function campaignProfile(state: ConfigState, mode: "balanced" | "real") {
+  if (!state.enabled) return null;
+  const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
+  if (mode === "real") {
+    const real = state.config.real;
+    return real?.state === "ready" ? realExecutionPolicyFromM4TechnicalProfile(real.sourcePolicy, real.tokenPolicy,
+      real.bindings.map(({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) =>
+        ({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, ...(finalPageIllustration ? { finalPageIllustration } : {}) })), real) : null;
+  }
+  return authority?.grant.tokenPolicy ? executionPolicyFromM4TechnicalProfile(m4PolicySnapshot(authority.policy).policy,
+    authority.grant.tokenPolicy) : null;
+}
 function toolAuth(request: Request, state: ConfigState): Response | null {
   const unavailable = available(state);
   if (unavailable) return unavailable;
@@ -256,21 +269,31 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }, state)), page, hasMore: rows.length > limit };
   }
   return {
+    campaigns(request: Request) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      const query = new URL(request.url).searchParams;
+      const mode = z.enum(["balanced", "real"]).parse(query.get("mode"));
+      const persona = personaSchema.parse(query.get("persona"));
+      const page = z.coerce.number().int().min(0).max(100_000).parse(query.get("page") ?? 0);
+      const policy = campaignProfile(state, mode);
+      if (!policy) return reply(422, "mode_unavailable");
+      const profileHash = executionPolicySnapshot(policy).hash;
+      const collection = database().collections.experiment_campaigns as unknown as Collection<ExecutionCampaignDocument>;
+      const rows = await collection.find({ schemaVersion: "execution_v1", mode, persona, profileHash, runId: null },
+        { projection: { _id: 1, predecessorRunId: 1, allowance: 1, createdAtMs: 1 } })
+        .sort({ createdAtMs: -1, _id: 1 }).skip(page * 5).limit(6).toArray();
+      return data({ campaigns: rows.slice(0, 5).map(row => ({ campaignId: row._id,
+        predecessorRunId: row.predecessorRunId, totals: executionAllowanceSchema.parse(row.allowance), createdAtMs: row.createdAtMs })),
+        page, hasMore: rows.length > 5 });
+    }); },
     campaign(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, true); if (denied) return denied;
       if (!state.enabled) return reply(503, "runner_unavailable");
       const key = opaqueIdSchema.safeParse(request.headers.get("idempotency-key"));
       if (!key.success) return reply(400, "invalid_request");
       const body = campaignGrant.parse(await boundedJson(request, 4096));
-      const authority = state.config.m4?.state === "granted" ? state.config.m4.authority : undefined;
-      if (body.mode === "balanced" && !authority?.grant.tokenPolicy ||
-          body.mode === "real" && state.config.real?.state !== "ready") return reply(422, "mode_unavailable");
-      const policy = body.mode === "real" ? realExecutionPolicyFromM4TechnicalProfile(
-        state.config.real!.sourcePolicy, state.config.real!.tokenPolicy,
-        state.config.real!.bindings.map(({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) =>
-          ({ role, taskId, persona, appId, publishedWorkflowId, toolProviderId, ...(finalPageIllustration ? { finalPageIllustration } : {}) })),
-        state.config.real!) : executionPolicyFromM4TechnicalProfile(m4PolicySnapshot(authority!.policy).policy,
-        authority!.grant.tokenPolicy!);
+      const policy = campaignProfile(state, body.mode);
+      if (!policy) return reply(422, "mode_unavailable");
       const campaignId = stableUuid(key.data, "execution-campaign");
       const approvalId = stableUuid(key.data, "execution-initial-approval");
       const totals = body.totals ? executionAllowanceSchema.parse({ ...body.totals, maxMicrodollars: body.maxMicrodollars }) :

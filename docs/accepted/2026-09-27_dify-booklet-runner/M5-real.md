@@ -349,16 +349,56 @@ Its observer exited 124 without stopping the host. Status `41200929724` verified
 the same saved request `41200278529-1` remained active at backup under its original
 budget. Status `41201322989` then verified `complete` / `archived`, with backup
 `staging-20261031T121921Z-0563f91a0cfbdcb7`. Check deployment `41201397514` passed.
-No second deployment was dispatched after the observer timeout. Chrome currently
-reports invalid access-gate credentials; private sign-in and browser readiness
-verification remain pending. Read-only diagnostics `41201544674` verified the
+No second deployment was dispatched after the observer timeout. Private Chrome
+sign-in and browser readiness subsequently passed. Read-only diagnostics `41201544674` verified the
 new serving release and authenticated staging API. The retained run is blocked at
 revision 23,624 with no active operation; the manager is a definite terminal
 failure with `unresolved: false`. All ten text calls, zero image calls and ten
 steps remain recorded. The new technical
 profile hash is `f87eb3a370fcd9429846c3dcc3df4bac3f56d44c88ae7294ba7a426bd4187ce1`.
-No fourth Kid, Parent or Creator grant exists. Next: finish browser readiness and
-retained-accounting display inspection, then request one exact finite Kid successor grant.
+The operator subsequently approved one new USD 5 Kid attempt under that profile,
+with zero automatic retries and zero further successors. No Parent or Creator
+grant exists.
+
+### Current Kid and report correction - 2026-10-31
+
+Campaign `1fd5059c-2bed-44f7-8782-c35afa5a3727` owns run
+`b9151945-114d-4be2-809e-18117ed08c62`, booklet
+`00450d9f-0938-423d-8a66-8dd22371852d`. Generation completed with all nine real
+images and approved J01-J13 artifacts. The saved counters are 38 text calls,
+9 image calls and 47 steps. Estimated settled expenditure is USD 0.642312;
+reserved liability is USD 0.054296, for USD 0.696608 planning exposure. Invoice
+cost remains unavailable.
+
+The tester report operation `4a0e144c-39d5-46e3-b8cf-99927b22d5b9`, Dify run
+`be2bb281-0ff0-4d36-a3f6-59b52217aec6`, failed at `real_report_llm` with
+`Booklet Real report model parameters differ.` The authenticated trace has eight
+nodes, zero reported tokens and no other provider node or retry. The frozen
+tester publication omitted `response_format` and `json_schema`. The pinned dev6
+adapter rejects those missing parameters before SDK/client construction, counting
+or generation. This is a report workflow defect; generation and saved images
+remain intact. The application still retains unresolved report ownership.
+Neither report has completed, so Kid acceptance remains blocked.
+
+The local correction supplies the actual prepared schema to all three tester
+report nodes and the judge. The generated graph-to-adapter fake-provider check
+passes all four cases and reproduces the old rejection before client construction.
+The corrected publications, readiness manifest, protected closure and staging
+delivery remain pending. Do not rebind the retained run, replay its report or
+start another paid run under its consumed grant.
+
+The saved-grant UI correction lists persisted unused grants through the existing
+authenticated campaign API. Selection does not grant or start work. Start remains
+explicit and uses the existing one-run transaction. The earlier private Bash start
+was a workaround for lost in-memory selection, not a required allowance mechanism.
+Focused proof: 102 units, one disposable-persistence list case, typecheck, ESLint
+and 13 pinned-adapter fake-provider tests passed. Reproduce the four generated
+report cases with `node --import tsx tests/helpers/export-real-report-graph-contract.ts <output-json>`,
+then pass that file as `--graph-contract <output-json>` to
+`dify/m5-openai-bounded-tests.py` after its package argument. This check needs the
+existing isolated Python environment with the Dify SDK; it makes no provider call.
+Credential inventory impact: none; the API uses the existing operator boundary,
+and provider credentials, storage and consumers are unchanged.
 
 ### Historical carry-forward review before the M4 exit
 

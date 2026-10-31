@@ -68,7 +68,7 @@ def main(authorization_body, status_code):
         raise ValueError('Booklet authorization envelope is missing')
     result = {'request_%02d' % i: '' for i in range(32)}
     result.update(authorized='', authorization_reason='', report='', digest='', timeout_seconds=0, deadline_at_ms=0,
-                  token_policy_version='', token_policy_hash='', max_input_tokens=0, warning_input_tokens=0)
+                  token_policy_version='', token_policy_hash='', max_input_tokens=0, warning_input_tokens=0, schema_json='')
     if data.get('started') is not True:
         reason = data.get('reason')
         if data.get('started') is not False or not isinstance(reason, str) or not reason or len(reason) > 1024:
@@ -106,6 +106,10 @@ def main(authorization_body, status_code):
         text = json.loads(payload['textRequestJson'])
         if payload['textRequestJson'] != canonical(text):
             raise ValueError('Booklet Real text carrier differs')
+        output_format = text.get('text', {}).get('format', {})
+        if output_format.get('type') != 'json_schema' or output_format.get('strict') is not True or not isinstance(output_format.get('schema'), dict):
+            raise ValueError('Booklet Real report schema differs')
+        result['schema_json'] = canonical({key: value for key, value in output_format.items() if key != 'type'})
     elif hashlib.sha256(request.encode()).hexdigest() != digest:
         raise ValueError('Booklet prepared bytes differ')
     else:
@@ -148,7 +152,7 @@ export async function createRealWorkflowGraph(module: SimulationModule): Promise
     ...Object.fromEntries(M4_CARRIER_CHUNKS.map(name => [name, "string" as const])),
     authorized: "string", authorization_reason: "string", report: "string", digest: "string",
     timeout_seconds: "number", deadline_at_ms: "number", token_policy_version: "string", token_policy_hash: "string",
-    max_input_tokens: "number", warning_input_tokens: "number",
+    max_input_tokens: "number", warning_input_tokens: "number", schema_json: "string",
   }));
   nodes.push(route("real_authorized", ["real_decode", "authorized"], "yes"));
   nodes.push(end("real_paused", "authorization_reason", ["real_decode", "authorization_reason"]));
@@ -168,7 +172,7 @@ export async function createRealWorkflowGraph(module: SimulationModule): Promise
       booklet_token_policy_hash: "{{#real_decode.token_policy_hash#}}",
       booklet_max_input_tokens: "{{#real_decode.max_input_tokens#}}",
       booklet_warning_input_tokens: "{{#real_decode.warning_input_tokens#}}",
-      ...(report ? { booklet_real_report_execution: true } : {}),
+      ...(report ? { booklet_real_report_execution: true, response_format: "json_schema", json_schema: "{{#real_decode.schema_json#}}" } : {}),
     };
     llm.data.prompt_template = [{ role: "user", edition_type: "basic",
       text: M4_CARRIER_CHUNKS.map(name => `{{#real_decode.${name}#}}`).join("") }];
