@@ -400,6 +400,16 @@ existing isolated Python environment with the Dify SDK; it makes no provider cal
 Credential inventory impact: none; the API uses the existing operator boundary,
 and provider credentials, storage and consumers are unchanged.
 
+The exact report closure now extends the existing execution recovery service.
+The reviewed one-target attestation binds the original publication, failed node,
+disabled retries and dev6 package. Fresh authenticated execution retrieval must
+match the zero-token, eight-step guard and no output. The transaction retains the
+missing-wrapper observation, full report reservation, all other liabilities,
+generation, current sources, counters and original deadline/stop history. It only
+closes failed ownership and requests Pause. Its separate snapshot scope supports
+lost-acknowledgement and repeated verification. This candidate has not yet been
+applied live. It does not satisfy either required report or authorize another run.
+
 ### Historical carry-forward review before the M4 exit
 
 This table preserves the earlier readiness assessment. Its pending Creator and

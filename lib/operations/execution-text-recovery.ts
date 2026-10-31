@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ClientSession } from "mongodb";
+import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { closeExecutionTextFailure, hasExecutionTextFailure } from "@/db/experiment-execution-text-failure";
 import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
@@ -9,17 +10,20 @@ import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-ru
 import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, recoveryDigest,
   type RecoverySnapshot, type RecoveryTarget } from "@/lib/operations/booklet-recovery";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
+import { m4SourceFingerprint } from "@/db/experiment-text-sources";
+import { hasRetainedReportParameterFailure, retainedReportParameterFailure } from "@/lib/operations/retained-report-parameter-failure";
 
-const retained = Object.freeze({ runId: "f811de3a-f4af-4b9e-88a7-7d8d597c5d21",
+const retainedManager = Object.freeze({ runId: "f811de3a-f4af-4b9e-88a7-7d8d597c5d21",
   operationId: "b48a84f9-ef4f-48b3-b353-87b6790d1dcf",
   profileHash: "9fab201953ff06cba920713dded4a8f623f28fa44fbeb9fc34bf6a7390a80f8e" });
-const scope = "execution-text-failure-target-v1" as const;
+const managerScope = "execution-text-failure-target-v1" as const;
+const reportScope = "report-parameter-failure-target-v1" as const;
 function requireProof(value: unknown, code: string): asserts value {
   if (!value) throw new BookletRecoveryError(code);
 }
 const omit = (value: object, keys: string[]) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
 
-/** Exact retained manager closure. The host owns admission, backup and process quiescence. */
+/** Exact retained failure closures. The host owns admission, backup and process quiescence. */
 export function createExecutionTextFailureRecovery(deps: { database: Database; config: BookletRunnerConfig;
   runtime?: WorkflowRuntime; now?: () => number }) {
   const { database, config } = deps, c = database.collections;
@@ -28,7 +32,10 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
     requireProof((init?.method ?? "GET") === "GET", "provider_mutation_forbidden");
     return fetch(url, { ...init, redirect: "error" });
   });
+  const isReport = (target: RecoveryTarget) => target.runId === retainedReportParameterFailure.runId;
+  const authority = (target: RecoveryTarget) => isReport(target) ? retainedReportParameterFailure : retainedManager;
   function targetIdentity(target: RecoveryTarget) {
+    const retained = authority(target);
     requireProof(target.runId === retained.runId && target.operationId === retained.operationId &&
       Number.isSafeInteger(target.expectedRevision) && target.expectedRevision >= 0, "unsupported_execution_target");
   }
@@ -36,13 +43,23 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
     targetIdentity(target);
     const run = await c.experiment_runs.findOne({ _id: target.runId }, { session });
     const op = await c.experiment_operations.findOne({ _id: target.operationId, runId: target.runId }, { session });
-    requireProof(run && op && run.execution?.profileHash === retained.profileHash &&
-      run.mode === "real" && run.persona === "playful_kid" && !run.generationCompletedAtMs && !run.preparation &&
-      op.role === "manager" && op.providerKind === "text" && op.m4Observation?.issue === "provider_failure" &&
+    requireProof(run && op && run.execution?.profileHash === authority(target).profileHash &&
+      run.mode === "real" && run.persona === "playful_kid" && !run.preparation &&
+      op.providerKind === "text" &&
       op.deadlineAtMs != null && op.deadlineAtMs < now() &&
       !op.authorizationClaim && !op.resultFinalizationClaim && !op.imageCompletionClaim, "unsupported_execution_state");
-    requireProof(!await c.generation_jobs.findOne({ bookletId: run.bookletId, jobType: "dify_pages" }, { session, projection: { _id: 1 } }),
-      "unexpected_page_batch");
+    if (isReport(target)) {
+      // This local proof is also repeated transactionally. It never replaces
+      // the fresh authenticated original workflow read in observe().
+      requireProof(session ? await hasRetainedReportParameterFailure(database, session, run, op) :
+        await withMongoTransaction(database, active => hasRetainedReportParameterFailure(database, active, run, op)),
+      "report_failure_unverified");
+    } else {
+      requireProof(!run.generationCompletedAtMs && op.role === "manager" && op.m4Observation?.issue === "provider_failure",
+        "unsupported_execution_state");
+      requireProof(!await c.generation_jobs.findOne({ bookletId: run.bookletId, jobType: "dify_pages" }, { session, projection: { _id: 1 } }),
+        "unexpected_page_batch");
+    }
     const campaign = await c.experiment_campaigns.findOne({ _id: run.execution.campaignId }, { session });
     const booklet = await c.booklets.findOne({ _id: run.bookletId }, { session });
     requireProof(campaign && booklet, "target_missing");
@@ -53,7 +70,7 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
       const current = await state(target, session);
       const { run, op } = current;
       requireProof(run.revision === target.expectedRevision + (completed ? 1 : 0), "revision_changed");
-      requireProof(await hasExecutionTextFailure(database, session, run, op, now()), "execution_failure_unverified");
+      if (!isReport(target)) requireProof(await hasExecutionTextFailure(database, session, run, op, now()), "execution_failure_unverified");
       if (completed) {
         requireProof(run.status === "blocked" && run.safeFailure === "definite_failure" && run.pauseRequested && !run.activeOperationId &&
           op.state === "failed" && op.safeFailure === "definite_failure" && op.lifecycle?.phase === "finished" &&
@@ -74,15 +91,22 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
   }
   async function observe(target: RecoveryTarget) {
     const { run, op } = await state(target);
-    const saved = savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).find(binding => binding.role === "manager" && binding.taskId === null);
+    const saved = savedConfigurationSchema.parse(JSON.parse(run.configurationJson)).find(binding =>
+      binding.role === (isReport(target) ? "tester" : "manager") && binding.taskId === null);
     const credentials = [...config.bindings, ...(config.real?.bindings ?? [])].filter(binding => binding.appId === saved?.appId);
     requireProof(saved && credentials.length > 0 && credentials.every(binding => binding.apiKey === credentials[0].apiKey) &&
       saved.publishedWorkflowId === op.verifiedWorkflowId && op.workflowRunId, "saved_publication_unavailable");
-    const binding = { ...credentials[0], ...saved, taskId: null, persona: null };
+    const binding = { ...credentials[0], ...saved, taskId: null, persona: isReport(target) ? run.persona : null };
     const result = await runtime.retrieve(binding, op.workflowRunId, { deadlineAtMs: now() + 20_000 });
     requireProof(result.kind === "execution" && result.execution.id === op.workflowRunId &&
-      result.execution.workflow_id === op.verifiedWorkflowId && result.execution.status === op.m4Observation?.remoteStatus &&
+      result.execution.workflow_id === op.verifiedWorkflowId && result.execution.status === (isReport(target) ? "failed" : op.m4Observation?.remoteStatus) &&
       (!op.workflowTaskId || !result.execution.task_id || result.execution.task_id === op.workflowTaskId), "remote_evidence_changed");
+    if (isReport(target)) {
+      requireProof(result.execution.reportParameterFailure?.code === "real_report_parameter_guard" &&
+        result.execution.reportParameterFailure.totalTokens === 0 && result.execution.reportParameterFailure.totalSteps === 8 &&
+        (result.execution.outputs == null || Object.keys(result.execution.outputs).length === 0), "remote_evidence_changed");
+      return;
+    }
     const wrapper = result.execution.outputs?.booklet_provider_result;
     requireProof(typeof wrapper === "string" && createHash("sha256").update(wrapper).digest("hex") === op.m4Observation?.wrapperDigest,
       "remote_evidence_changed");
@@ -108,16 +132,19 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
       experiment_campaigns: { [campaign._id]: recoveryDigest(campaign) }, booklets: { [booklet._id]: recoveryDigest(booklet) },
       reservations: fingerprint(reservations), artifacts: fingerprint(artifacts), artifact_versions: fingerprint(versions),
       artifact_dependencies: fingerprint(dependencies), approvals: fingerprint(approvals), assets: fingerprint(assets) };
-    return { scope, rows, campaignId: campaign._id, bookletId: booklet._id,
+    return { scope: isReport(target) ? reportScope : managerScope, rows, campaignId: campaign._id, bookletId: booklet._id,
+      ...(isReport(target) ? { sourceFingerprint: session ? await m4SourceFingerprint(database, session, run) :
+        await withMongoTransaction(database, active => m4SourceFingerprint(database, active, run)) } : {}),
       runInvariant: recoveryDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested"])),
       operationInvariant: recoveryDigest(omit(op, ["state", "remoteStatus", "lifecycle", "safeFailure", "updatedAtMs"])),
       campaignInvariant: recoveryDigest(campaign), bookletInvariant: recoveryDigest(booklet), countersDigest: recoveryDigest(run.counters),
       deadlineAtMs: op.deadlineAtMs!, requestDigest: op.m4Preparation!.requestDigest,
-      evidenceDigest: op.m4Observation!.evidenceDigest!, wrapperDigest: op.m4Observation!.wrapperDigest!,
+      evidenceDigest: isReport(target) ? recoveryDigest(retainedReportParameterFailure) : op.m4Observation!.evidenceDigest!,
+      wrapperDigest: isReport(target) ? recoveryDigest(op.realReportPreparation) : op.m4Observation!.wrapperDigest!,
       lifecycleOrigin: recoveryDigest(omit(op.lifecycle!, ["phase", "attemptOutcome", "unresolved", "endedAtMs", "lastProgressAtMs"])),
       priorEndedAtMs: op.lifecycle!.endedAtMs ?? null, priorTimeoutAtMs: op.lifecycle!.timeoutAtMs ?? null };
   }
-  const digest = (target: RecoveryTarget, value: RecoverySnapshot) => recoveryDigest({ target, snapshot: value, authority: retained });
+  const digest = (target: RecoveryTarget, value: RecoverySnapshot) => recoveryDigest({ target, snapshot: value, authority: authority(target) });
   async function prepare(target: RecoveryTarget, closed: boolean, expected?: string) {
     await verifyMongoStructure(database);
     await failureProof(target, false);
@@ -133,12 +160,12 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
   }
   async function preview(target: RecoveryTarget, closed = false) { return prepare(target, closed); }
   async function verifyCompleted(target: RecoveryTarget, before: RecoverySnapshot) {
-    requireProof(before.scope === scope, "snapshot_scope_unsupported");
+    requireProof(before.scope === (isReport(target) ? reportScope : managerScope), "snapshot_scope_unsupported");
     const { op } = await failureProof(target, true);
     await observe(target);
     const after = await snapshot(target);
     for (const key of ["runInvariant", "operationInvariant", "campaignInvariant", "bookletInvariant", "countersDigest", "deadlineAtMs",
-      "requestDigest", "evidenceDigest", "wrapperDigest", "lifecycleOrigin", "priorTimeoutAtMs"] as const)
+      "requestDigest", "evidenceDigest", "wrapperDigest", "lifecycleOrigin", "priorTimeoutAtMs", "sourceFingerprint"] as const)
       requireProof(after[key] === before[key], "preservation_mismatch");
     requireProof(before.priorEndedAtMs === null || op.lifecycle!.endedAtMs === before.priorEndedAtMs, "attempt_history_changed");
     for (const name of Object.keys(before.rows)) {
@@ -157,7 +184,7 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
     const proof = await prepare(target, true, expected);
     await checkpoint(proof);
     await quiet(target, true);
-    requireProof(await closeExecutionTextFailure(database, { ...target, nowMs: now(), validate: async (session, run, op) => {
+    const validate = async (session: ClientSession, run: ExperimentRunDocument, op: ExperimentOperationDocument) => {
       await state(target, session);
       const control = await c.deployment_control.findOne({ environment: "_staging" }, { session });
       requireProof(control?.maintenance && !control.draining && control.activeMutations === 0 &&
@@ -169,7 +196,25 @@ export function createExecutionTextFailureRecovery(deps: { database: Database; c
       requireProof(recoveryDigest(campaign) === proof.snapshot.campaignInvariant && recoveryDigest(booklet) === proof.snapshot.bookletInvariant,
         "state_changed");
       requireProof(recoveryDigest(await snapshot(target, session)) === recoveryDigest(proof.snapshot), "state_changed");
-    }, validateAfter: (session, run) => verifyExecutionAccounting(database, session, run) }), "execution_closure_failed");
+    };
+    if (isReport(target)) {
+      await withMongoTransaction(database, async session => {
+        const { run, op } = await state(target, session);
+        requireProof(run.revision === target.expectedRevision && run.status === "blocked" && run.activeOperationId === op._id &&
+          ["started", "unknown"].includes(op.state), "execution_closure_failed");
+        await validate(session, run, op);
+        requireProof((await c.experiment_operations.updateOne({ _id: op._id, state: op.state }, { $set: {
+          state: "failed", remoteStatus: "failed", safeFailure: "definite_failure", updatedAtMs: now(), lifecycle: { ...op.lifecycle!,
+            phase: "finished", attemptOutcome: "failed", unresolved: false, endedAtMs: op.lifecycle!.endedAtMs ?? now(), lastProgressAtMs: now() },
+        } }, { session })).modifiedCount === 1, "execution_closure_failed");
+        const closed = await c.experiment_runs.findOneAndUpdate({ _id: run._id, revision: run.revision, activeOperationId: op._id },
+          { $set: { status: "blocked", safeFailure: "definite_failure", pauseRequested: true, activeOperationId: null, updatedAtMs: now() },
+            $inc: { revision: 1 } }, { session, returnDocument: "after" });
+        requireProof(closed, "execution_closure_failed");
+        await verifyExecutionAccounting(database, session, closed);
+      });
+    } else requireProof(await closeExecutionTextFailure(database, { ...target, nowMs: now(), validate,
+      validateAfter: (session, run) => verifyExecutionAccounting(database, session, run) }), "execution_closure_failed");
     return proof;
   }
   async function verifyUnapplied(target: RecoveryTarget, expected: string) {

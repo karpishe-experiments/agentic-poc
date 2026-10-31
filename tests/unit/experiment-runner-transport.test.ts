@@ -45,6 +45,22 @@ function openJsonResponse(chunks: string[]) {
 }
 
 describe("model-free runtime transport", () => {
+  it("exposes only the exact zero-token eight-step report guard diagnostic", async () => {
+    const original = { id, workflow_id: workflow, status: "failed", outputs: {},
+      error: "Booklet Real report model parameters differ.", total_tokens: 0, total_steps: 8 };
+    for (const change of [{}, { total_tokens: 1 }, { total_tokens: "0" }, { total_steps: 9 },
+      { total_steps: "8" }, { status: "running" }, { error: "arbitrary private error" }]) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ...original, ...change,
+        reportParameterFailure: { code: "real_report_parameter_guard", totalTokens: 0, totalSteps: 8 } })));
+      const result = await createWorkflowRuntime(config, fetcher).retrieve(binding, id);
+      expect(result.kind).toBe("execution"); if (result.kind !== "execution") throw Error("Expected GET");
+      expect(result.execution.reportParameterFailure).toEqual(Object.keys(change).length === 0
+        ? { code: "real_report_parameter_guard", totalTokens: 0, totalSteps: 8 } : undefined);
+      expect(result.execution).not.toHaveProperty("error");
+      expect(result.execution).not.toHaveProperty("total_tokens");
+      expect(result.execution).not.toHaveProperty("total_steps");
+    }
+  });
   it("extracts only the exact legacy count guard and zero-token diagnostic from authenticated GET", async () => {
     const exact = "Booklet complete input exceeds its verified token limit.";
     for (const [error, total_tokens, status, admitted] of [[exact, 0, "failed", true], [exact, 1, "failed", false],
