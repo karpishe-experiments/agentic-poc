@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  files: new Map<string, string>(), events: [] as string[],
+  files: new Map<string, string>(), events: [] as string[], execution: false,
   mutationError: undefined as Error | undefined,
   budgetError: undefined as Error | undefined,
   entryErrors: {} as Partial<Record<"environment" | "database" | "configuration" | "recovery_service" | "admission", Error>>,
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/db/client", () => ({ getDatabase: () => {
   if (mocks.entryErrors.database) throw mocks.entryErrors.database;
-  return { close: mocks.close, collections: { deployment_control: { findOne: async () => {
+  return { close: mocks.close, collections: { experiment_runs: { findOne: async () => ({ execution: mocks.execution ? {} : undefined }) }, deployment_control: { findOne: async () => {
     if (mocks.entryErrors.admission) throw mocks.entryErrors.admission;
     return { maintenance: false };
   } } } };
@@ -38,6 +38,11 @@ vi.mock("@/lib/operations/budget", async importOriginal => ({
   return action();
 } }));
 vi.mock("@/lib/operations/recovery-inspection", () => ({ inspectRecoveryWork: mocks.inspect }));
+vi.mock("@/lib/operations/execution-text-recovery", () => ({
+  createExecutionTextFailureRecovery: vi.fn(() => ({ preview: mocks.preview, apply: mocks.apply,
+    verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
+    previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim })),
+}));
 vi.mock("@/lib/operations/booklet-recovery", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/operations/booklet-recovery")>();
   return { ...actual,
@@ -66,6 +71,7 @@ function argumentsFor(phase: string) {
     "--expected-revision", "2", "--preview-digest", digest, "--evidence-dir", "/recovery"];
 }
 beforeEach(() => {
+  mocks.execution = false;
   vi.resetModules(); vi.clearAllMocks(); mocks.files.clear(); mocks.events.length = 0; mocks.mutationError = undefined; process.exitCode = 0;
   mocks.entryErrors = {};
   mocks.preview.mockResolvedValue({ contract: "booklet-recovery-v1", previewDigest: digest, snapshot: { rows: {} } });
@@ -91,6 +97,17 @@ beforeEach(() => {
 });
 afterEach(() => { process.argv = originalArgv; process.exitCode = 0; vi.restoreAllMocks(); });
 describe("supported booklet recovery command", () => {
+  it("routes saved execution targets through the same preview checkpoint interface", async () => {
+    mocks.execution = true;
+    argumentsFor("preview");
+    await import("@/scripts/booklet-recovery");
+    const { createExecutionTextFailureRecovery } = await import("@/lib/operations/execution-text-recovery");
+    expect(createExecutionTextFailureRecovery).toHaveBeenCalledOnce();
+    expect(mocks.preview).toHaveBeenCalledWith({ runId: "run", operationId: "operation", expectedRevision: 2 }, false);
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.files.size).toBe(0);
+    expect(process.exitCode).toBe(0);
+  });
   it.each([
     ["environment", "Error", "Error"], ["database", "MongoNetworkError", "MongoNetworkError"],
     ["configuration", "MongoServerSelectionError", "MongoServerSelectionError"],
