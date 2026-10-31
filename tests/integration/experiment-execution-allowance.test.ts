@@ -3,13 +3,15 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
 import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
+import { closeExecutionTextFailure, hasExecutionTextFailure } from "@/db/experiment-execution-text-failure";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
+import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import type { WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
-import { defaultExecutionAllowance, executionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
+import { defaultExecutionAllowance, executionPolicyFromM4TechnicalProfile, realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
 import { m4TokenPolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
@@ -17,22 +19,27 @@ import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 const databases: Database[] = [];
 afterEach(async () => { await Promise.all(databases.splice(0).map(closeTestDatabase)); });
 
-async function setup(maxMicrodollars = 1, allowancePatch: Partial<ReturnType<typeof defaultExecutionAllowance>> = {}) {
+async function setup(maxMicrodollars = 1, allowancePatch: Partial<ReturnType<typeof defaultExecutionAllowance>> = {}, mode: "balanced" | "real" = "balanced",
+  executionVersion: "execution_v1" | "execution_v2" = "execution_v1") {
   const db = await createTestDatabase({ seedAgents: false }); databases.push(db);
   const tokenPolicy = m4TokenPolicySnapshot({ version: "m4_context_policy_v2", basePolicyHash: "a".repeat(64),
     warningInputTokens: 32000, maxInputTokens: 128000,
     requiredProviderAdapterIdentity: `langgenius/openai:1.0.7-dev5@${"b".repeat(64)}`,
     requiredProviderPackageSha256: "c".repeat(64), reference: "fake-provider-test-only" });
-  const policy = executionPolicyFromM4TechnicalProfile({ ...m4TestPolicy(), countChargeStatus: "assumed",
-    countChargeCeilingMicrodollars: 900 }, tokenPolicy);
+  const source = { ...m4TestPolicy(), countChargeStatus: "assumed" as const, countChargeCeilingMicrodollars: 900 };
+  const policy = mode === "balanced" ? executionPolicyFromM4TechnicalProfile(source, tokenPolicy) :
+    realExecutionPolicyFromM4TechnicalProfile(source, tokenPolicy, source.publications, {
+      textPluginIdentity: `langgenius/openai:1.0.7-dev6@${"d".repeat(64)}`, textPackageSha256: "e".repeat(64),
+      imagePluginIdentity: `langgenius/openai_tool:0.2.2-dev1@${"f".repeat(64)}`, imagePackageSha256: "a".repeat(64), executionVersion,
+    });
   const totals = { ...defaultExecutionAllowance("playful_kid", maxMicrodollars), steps: 1, ...allowancePatch };
   const ledger = createExecutionAllowanceLedger(db);
-  const repository = createExperimentRepository(db);
-  const grant = { campaignId: id(1), mode: "balanced" as const, persona: "playful_kid" as const,
+  const repository = createExperimentRepository(db, mode === "real" ? { realExecutionEnabled: true } : {});
+  const grant = { campaignId: id(1), mode, persona: "playful_kid" as const,
     profile: policy, approvalId: id(2), reference: "fake-initial-approval", totals, nowMs: 1 };
   const createCampaign = () => withMongoTransaction(db, session => ledger.create(session, grant));
   await createCampaign();
-  const creation = (n: number) => ({ runId: id(n), bookletId: id(n + 1), persona: "playful_kid", mode: "balanced",
+  const creation = (n: number) => ({ runId: id(n), bookletId: id(n + 1), persona: "playful_kid", mode,
     executionCampaignId: id(1), nowMs: 2,
     configuration: policy.publications.filter(item => item.persona === null || item.persona === "playful_kid")
       .map(({ role, taskId, appId, publishedWorkflowId, toolProviderId, finalPageIllustration }) => ({
@@ -61,6 +68,176 @@ async function setup(maxMicrodollars = 1, allowancePatch: Partial<ReturnType<typ
 }
 
 describe("Execution approval ledger with disposable persistence and no providers", () => {
+  async function incompleteManager(mode: "balanced" | "real" = "balanced", version: "execution_v1" | "execution_v2" = "execution_v1") {
+    const env = await setup(5_000_000, {}, mode, version);
+    const run = await env.run(), profile = env.grant.profile;
+    await env.repository.prepareOperation({ runId: run._id, operationId: id(12), expectedRevision: run.revision,
+      role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId,
+      inputFingerprint: "d".repeat(64), attempt: 1, providerKind: "text", nowMs: 3 });
+    const prepared = await createM4TextPreparation(env.db, { executionProfile: profile, campaignId: id(1) },
+      { elapsedNow: () => 0 }).prepare({ runId: id(10), operationId: id(12), nowMs: 4 });
+    await env.repository.beginDispatch({ runId: id(10), operationId: id(12), parentWorkflowRunId: null, nowMs: 5 });
+    const identity = { runId: id(10), operationId: id(12), workflowRunId: id(13), parentWorkflowRunId: null, nowMs: 6 };
+    await env.repository.recordDispatchIdentity(identity);
+    const publication = profile.publications.find(item => item.role === "manager")!;
+    await env.repository.verifyDispatchPublication({ ...identity, workflowId: publication.publishedWorkflowId });
+    await env.repository.claimOperation(identity);
+    const wrapper = { schemaVersion: "booklet_provider_v2", content: "", providerEvidence: {
+      provider: "openai", apiBaseUrl: "https://api.openai.com/v1",
+      stdioSdk: { version: "0.10.2", readerSha256: "546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22" },
+      responseId: "resp_fake", requestId: "req_fake", model: "gpt-6-luna", serviceTier: "default", status: "incomplete",
+      refused: false, incompleteReason: "max_output_tokens" as string | null, requestDigest: prepared.requestDigest, countedInputTokens: 368,
+      usage: { source: "provider_reported", inputTokens: 368, outputTokens: 2048, cachedInputTokens: 0,
+        cacheWriteInputTokens: 0, reasoningOutputTokens: 0 },
+      effectivePolicy: { version: "m4_context_policy_v2", hash: profile.tokenPolicy.hash,
+        maxInputTokens: 128000, warningInputTokens: 32000 }, contextWarnings: [],
+    } };
+    const runtime: WorkflowRuntime = { start: vi.fn(async () => { throw new Error("Provider replay prohibited"); }),
+      retrieve: vi.fn(async () => ({ kind: "execution" as const, execution: { id: id(13),
+        workflow_id: publication.publishedWorkflowId, status: "succeeded" as const,
+        outputs: { booklet_provider_result: JSON.stringify(wrapper) } } })) };
+    const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "https://booklet.invalid",
+      callbackKey: "fixture", bindings: profile.publications.map(item => ({ ...item,
+        taskId: specialistTaskSchema.nullable().parse(item.taskId), apiKey: "fake-key" })) };
+    if (mode === "real") config.real = { state: "ready", bindings: config.bindings,
+      sourcePolicy: m4TestPolicy(), tokenPolicy: profile.tokenPolicy, nativeFileFormat: "base64",
+      textPluginIdentity: "fixture", textPackageSha256: "e".repeat(64), imagePluginIdentity: "fixture", imagePackageSha256: "a".repeat(64) };
+    const observe = () => createM4ProviderResults(env.db, { executionProfile: profile, campaignId: id(1) }, config, runtime)
+      .observe({ runId: id(10), operationId: id(12), nowMs: 7 });
+    const inspect = (nowMs = 9) => createExperimentDispatcher({ database: env.db, config, runtime, now: () => nowMs,
+      mutate: async fn => fn() }).inspect({ runId: id(10), operationId: id(12) });
+    return { ...env, runtime, wrapper, observe, inspect };
+  }
+
+  it.each(["balanced", "real"] as const)("closes an attributable incomplete %s manager without replay, spending reset or duplicate closure", async mode => {
+    const env = await incompleteManager(mode);
+    expect(await env.observe()).toEqual({ kind: "blocked" });
+    const run = await env.run(), op = await env.repository.getOperation(id(12)), campaign = await env.campaign();
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "definite_failure", activeOperationId: null,
+      counters: { logicalText: 1, payableText: 1, steps: 1 } });
+    expect(op).toMatchObject({ state: "failed", safeFailure: "definite_failure", remoteStatus: "succeeded",
+      lifecycle: { phase: "finished", unresolved: false, attemptOutcome: "failed" },
+      m4Observation: { issue: "provider_failure", content: "" },
+      m4Reservation: { settledMicrodollars: 1070, unsettledMicrodollars: 900 } });
+    expect(campaign).toMatchObject({ textRequests: 1, settledMicrodollars: 1070, reservedMicrodollars: 900 });
+    await withMongoTransaction(env.db, session => verifyExecutionAccounting(env.db, session, run));
+    expect(await closeExecutionTextFailure(env.db, { runId: run._id, operationId: id(12), nowMs: 9 })).toBe(true);
+    expect(await env.run()).toEqual(run);
+    expect(await env.repository.getOperation(id(12))).toEqual(op);
+    expect(await env.campaign()).toEqual(campaign);
+    expect(await env.inspect()).toMatchObject({ state: "failed", lifecycle: { unresolved: false } });
+    vi.mocked(env.runtime.retrieve).mockResolvedValue({ kind: "unknown" });
+    expect(await env.inspect()).toMatchObject({ state: "failed", lifecycle: { unresolved: false } });
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it.each([500, 501, "malformed"] as const)("classifies completed compact manager output %s from its saved bytes", async length => {
+    const env = await incompleteManager("real", "execution_v2");
+    env.wrapper.providerEvidence.status = "completed";
+    env.wrapper.providerEvidence.incompleteReason = null;
+    env.wrapper.providerEvidence.usage.outputTokens = 3000;
+    env.wrapper.content = length === "malformed" ? "{" : JSON.stringify({ result: {
+      kind: "ask", payload: { question: "a".repeat(length) },
+    } });
+    const outcome = await env.observe();
+    if (length === 500) {
+      expect(outcome.kind).toBe("result");
+      await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { "m4Observation.issue": "creative_invalid" } });
+      expect(await closeExecutionTextFailure(env.db, { runId: id(10), operationId: id(12), nowMs: 8 })).toBe(false);
+      await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { "m4Observation.issue": null } });
+      if (outcome.kind !== "result") throw new Error("Valid manager result missing");
+      const completion = { envelope: { runId: id(10), operationId: id(12), workflowRunId: id(13),
+        inputFingerprint: "d".repeat(64), result: outcome.result }, parentWorkflowRunId: null, nowMs: 8 };
+      expect((await env.repository.completeOperation(completion)).reused).toBe(false);
+      expect((await env.repository.completeOperation(completion)).reused).toBe(true);
+      expect(await env.repository.getOperation(id(12))).toMatchObject({ state: "succeeded" });
+    } else {
+      expect(outcome.kind).toBe("blocked");
+      expect(await env.run()).toMatchObject({ activeOperationId: null, safeFailure: "definite_failure", pauseRequested: true });
+      expect(await env.repository.getOperation(id(12))).toMatchObject({ state: "failed", resultJson: null,
+        lifecycle: { unresolved: false }, m4Observation: { issue: "creative_invalid", content: env.wrapper.content },
+        m4Reservation: { settledMicrodollars: 1546, unsettledMicrodollars: 900 } });
+      await withMongoTransaction(env.db, async session => verifyExecutionAccounting(env.db, session, await env.run()));
+      expect(await env.inspect()).toMatchObject({ state: "failed", lifecycle: { unresolved: false } });
+    }
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it.each(["wrapper", "status", "publication", "explicit"])("retains a conflicting %s readback after closure without accepting old proof", async field => {
+    const env = await incompleteManager("real");
+    await env.observe();
+    const original = await env.runtime.retrieve({} as never, id(13));
+    if (original.kind !== "execution") throw new Error("Fixture execution missing");
+    const changed = structuredClone(original);
+    if (field === "wrapper") changed.execution.outputs = { booklet_provider_result: "{}" };
+    if (field === "status") changed.execution.status = "running";
+    if (field === "publication") changed.execution.workflow_id = id(80);
+    vi.mocked(env.runtime.retrieve).mockResolvedValue(field === "explicit" ? { kind: "conflict" } : changed);
+    expect(await env.inspect()).toMatchObject({ state: "unknown", lifecycle: { unresolved: true },
+      m4Observation: { issue: "conflicting_evidence" } });
+    expect(await env.run()).toMatchObject({ activeOperationId: id(12), safeFailure: "unknown_outcome" });
+    expect(await closeExecutionTextFailure(env.db, { runId: id(10), operationId: id(12), nowMs: 10 })).toBe(false);
+    expect(await env.campaign()).toMatchObject({ settledMicrodollars: 1070, reservedMicrodollars: 900, textRequests: 1 });
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it("closes the expired acknowledged-stop failure without renewing its deadline or losing receipts", async () => {
+    const env = await incompleteManager("real");
+    // Retain the same observation without letting the fresh-result path close it.
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) },
+      { $set: { resultFinalizationClaim: { id: id(30), expiresAtMs: 100 } } });
+    await env.observe();
+    const original = (await env.repository.getOperation(id(12)))!;
+    if (original.deadlineAtMs === null) throw new Error("Fixture deadline missing");
+    const expiredAt = original.deadlineAtMs + 1;
+    const stop = { requestedAtMs: expiredAt, reason: "deadline" as const, delivery: "acknowledged" as const };
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: {
+      resultFinalizationClaim: null,
+      lifecycle: { ...original.lifecycle!, phase: "finished", attemptOutcome: "failed", unresolved: true,
+        endedAtMs: expiredAt, timeoutAtMs: expiredAt, stop },
+    } });
+    const before = await env.campaign();
+    expect(await env.inspect(expiredAt + 1)).toMatchObject({ state: "failed", deadlineAtMs: original.deadlineAtMs,
+      lifecycle: { phase: "finished", unresolved: false, endedAtMs: expiredAt, timeoutAtMs: expiredAt, stop } });
+    expect(await env.run()).toMatchObject({ activeOperationId: null, pauseRequested: true, safeFailure: "definite_failure" });
+    expect(await env.campaign()).toEqual(before);
+    const closed = await env.repository.getOperation(id(12));
+    expect(await env.inspect(expiredAt + 2)).toEqual(closed);
+    expect(env.runtime.start).not.toHaveBeenCalled();
+  });
+
+  it("keeps conflicting evidence and active save ownership unresolved, then reconciles the same result", async () => {
+    const env = await incompleteManager();
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) },
+      { $set: { resultFinalizationClaim: { id: id(30), expiresAtMs: 100 } } });
+    await env.observe();
+    const retained = (await env.repository.getOperation(id(12)))!;
+    expect(await env.run()).toMatchObject({ status: "blocked", activeOperationId: id(12), safeFailure: "unknown_outcome" });
+    expect(await closeExecutionTextFailure(env.db, { runId: id(10), operationId: id(12), nowMs: 8 })).toBe(false);
+    await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: { resultFinalizationClaim: null } });
+    for (const patch of [
+      { "m4Observation.issue": "conflicting_evidence" }, { "m4Observation.evidenceDigest": "e".repeat(64) },
+      { "m4Reservation.settledMicrodollars": 0 }, { "m4Preparation.requestDigest": "e".repeat(64) },
+      { "m4Observation.evidenceJson": null }, { "m4Observation.remoteStatus": "running" },
+      { "m4Observation.evidenceJson": JSON.stringify({ status: "unknown" }) },
+    ]) {
+      await env.db.collections.experiment_operations.updateOne({ _id: id(12) }, { $set: patch });
+      expect(await closeExecutionTextFailure(env.db, { runId: id(10), operationId: id(12), nowMs: 9 })).toBe(false);
+      await env.db.collections.experiment_operations.replaceOne({ _id: id(12) }, { ...retained, resultFinalizationClaim: null });
+    }
+    await env.db.collections.messages.insertOne({ _id: id(35), bookletId: id(11), sequence: 1, role: "assistant",
+      schemaVersion: "1", uiMessageJson: "{}", createdAtMs: 8, operationId: id(12) });
+    expect(await closeExecutionTextFailure(env.db, { runId: id(10), operationId: id(12), nowMs: 9 })).toBe(false);
+    await env.db.collections.messages.deleteOne({ _id: id(35) });
+    expect(await closeExecutionTextFailure(env.db, { runId: id(10), operationId: id(12), nowMs: 10 })).toBe(true);
+    expect(await env.campaign()).toMatchObject({ textRequests: 1, settledMicrodollars: 1070, reservedMicrodollars: 900 });
+    expect(env.runtime.start).not.toHaveBeenCalled();
+    const closed = (await env.repository.getOperation(id(12)))!;
+    const run = await env.run();
+    expect(await withMongoTransaction(env.db, session => hasExecutionTextFailure(env.db, session,
+      { ...run, execution: { ...run.execution!, profileHash: "e".repeat(64) } }, closed, 11))).toBe(false);
+  });
+
   it("verifies a historical prepared cancellation after later source changes and new preparation", async () => {
     const env = await setup();
     const initial = await env.run();

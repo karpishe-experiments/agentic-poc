@@ -2,6 +2,7 @@ import type { ClientSession } from "mongodb";
 import type { Database } from "@/db/client";
 import type { ExperimentRunDocument } from "@/db/documents";
 import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
+import { hasExecutionTextFailure } from "@/db/experiment-execution-text-failure";
 import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { executionMaximumTextCharge, executionOperationTokenPolicy,
   executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
@@ -47,7 +48,10 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
         operation.dispatchStartedAtMs == null && !operation.workflowRunId && !operation.m4Reservation) continue;
     const resolvedRealImageFailure = run.mode === "real" && operation.providerKind === "image" &&
       operation.state === "failed" && operation.lifecycle?.unresolved === false && !!operation.realImageObservation;
-    const resolvedFailure = operation.state === "failed" && operation.safeFailure === "definite_failure" &&
+    const settledTextFailure = operation.state === "failed" && operation.safeFailure === "definite_failure" &&
+      operation.lifecycle?.unresolved === false && operation.lifecycle.phase === "finished" &&
+      await hasExecutionTextFailure(database, session, run, operation, Date.now());
+    const resolvedFailure = settledTextFailure || operation.state === "failed" && operation.safeFailure === "definite_failure" &&
       operation.lifecycle?.unresolved === false &&
       ["failed", "stopped"].includes(operation.remoteStatus ?? "") &&
       !operation.resultJson && !operation.materializationJson;
@@ -89,13 +93,13 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
     text++;
     const reservation = operation.m4Reservation, prep = operation.m4Preparation, observation = operation.m4Observation;
     if (!reservation || !prep || !observation && !resolvedFailure ||
-        observation && observation.issue || observation && observation.remoteStatus !== "succeeded" && !resolvedFailure ||
+        observation && observation.issue && !settledTextFailure || observation && observation.remoteStatus !== "succeeded" && !resolvedFailure ||
         observation && !observation.evidenceJson && !resolvedFailure ||
         reservation.campaignId !== campaign._id || reservation.policyHash !== snapshot.hash ||
         prep.policyHash !== snapshot.hash || prep.configurationHash !== run.configurationHash ||
         prep.publishedWorkflowId !== operation.verifiedWorkflowId || prep.requestDigest !== m4Hash(prep.requestJson) ||
         reservation.requestDigest !== prep.requestDigest ||
-        reservation.maximumMicrodollars !== executionMaximumTextCharge(snapshot.policy, reservation.bucket) ||
+        reservation.maximumMicrodollars !== executionMaximumTextCharge(snapshot.policy, reservation.bucket, operation.role) ||
         !resolvedFailure && (observation!.evidenceDigest !== m4Hash(observation!.evidenceJson!) ||
           reservation.evidenceDigest !== observation!.evidenceDigest)) invalid();
     executionOperationTokenPolicy(snapshot.policy, operation);
@@ -108,8 +112,8 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
       if (!assessed.canMaterialize || assessed.chargeUpperMicrodollars !== reservation.settledMicrodollars ||
           reservation.unsettledMicrodollars !== (snapshot.policy.countChargeStatus === "assumed" ?
             snapshot.policy.countChargeCeilingMicrodollars : 0)) invalid();
-    } else if (reservation.evidenceDigest !== null || reservation.settledMicrodollars !== null ||
-        reservation.unsettledMicrodollars !== reservation.maximumMicrodollars) invalid();
+    } else if (!settledTextFailure && (reservation.evidenceDigest !== null || reservation.settledMicrodollars !== null ||
+        reservation.unsettledMicrodollars !== reservation.maximumMicrodollars)) invalid();
     reserved += reservation.unsettledMicrodollars;
     settled += reservation.settledMicrodollars ?? 0;
   }

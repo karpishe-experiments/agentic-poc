@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import { m4Digest, m4OperationTokenPolicy, m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
-import { executionOperationTokenPolicy, executionPolicySnapshot, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
+import { executionOperationTokenPolicy, executionPolicySnapshot, executionTextModel, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 
 const tokens = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable();
 export const m4ProviderWrapperSchema = z.strictObject({ schemaVersion: z.literal("booklet_provider_v1"),
@@ -38,7 +38,7 @@ export function m4RetainedProviderWrapper(content: string, providerEvidence: unk
 // and model creative content cannot supply accounting evidence. The result is
 // independent of creative JSON validity, so malformed content cannot erase usage.
 export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operation: ExperimentOperationDocument) {
-  const execution = !!policyRaw && typeof policyRaw === "object" && "schemaVersion" in policyRaw && policyRaw.schemaVersion === "execution_v1";
+  const execution = !!policyRaw && typeof policyRaw === "object" && "schemaVersion" in policyRaw && ["execution_v1", "execution_v2"].includes(String(policyRaw.schemaVersion));
   const snapshot = execution ? executionPolicySnapshot(policyRaw) : m4PolicySnapshot(policyRaw);
   const policy = snapshot.policy;
   const wrapper = m4ProviderReadbackSchema.parse(raw);
@@ -48,7 +48,7 @@ export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operati
       evidence.requestDigest !== reservation.requestDigest || evidence.requestDigest !== operation.m4Preparation.requestDigest) {
     throw new Error("M4 provider result has no matching prepared reservation.");
   }
-  const model = policy.models[reservation.bucket]; const usage = evidence.usage;
+  const model = execution ? executionTextModel(policy as ExecutionPolicy, reservation.bucket, operation.role) : policy.models[reservation.bucket]; const usage = evidence.usage;
   const effective = execution ? executionOperationTokenPolicy(policy as ExecutionPolicy, operation) :
     m4OperationTokenPolicy(policy as ReturnType<typeof m4PolicySnapshot>["policy"], operation);
   const violations: string[] = [];

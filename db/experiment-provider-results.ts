@@ -7,6 +7,7 @@ import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowa
 import { executionMaximumTextCharge, executionPolicySnapshot, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
+import { closeExecutionTextFailure } from "@/db/experiment-execution-text-failure";
 import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import type { RoleResult } from "@/lib/contracts/experiment-runner";
@@ -55,7 +56,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
         prep.operationFingerprint !== m4OperationFingerprint(operation) ||
         reservation.bucket !== m4ModelBucket(operation.role, run.generationCompletedAtMs != null) ||
         reservation.maximumMicrodollars !== (isExecution ?
-          executionMaximumTextCharge(snapshot.policy as ExecutionPolicy, reservation.bucket) :
+          executionMaximumTextCharge(snapshot.policy as ExecutionPolicy, reservation.bucket, operation.role) :
           m4MaximumCharge(ledger!.snapshot.policy, reservation.bucket, m4OperationTokenPolicy(ledger!.snapshot.policy, operation).snapshot)) ||
         prep.requestDigest !== reservation.requestDigest || prep.requestDigest !== m4Hash(prep.requestJson) ||
         prep.parentWorkflowRunId !== operation.parentWorkflowRunId || prep.publishedWorkflowId !== operation.verifiedWorkflowId) conflict();
@@ -72,6 +73,7 @@ export function createM4ProviderResults(database: Database, authority: M4Authori
     return { run, operation, binding, prep };
   }
   async function block(input: z.infer<typeof identity>): Promise<Outcome> {
+    if (executionLedger && await closeExecutionTextFailure(database, input)) return { kind: "blocked" };
     if (ledger && await closeM4KnownFailure(database, { policy: ledger.snapshot.policy, grant: ledger.grant }, input) === "closed") return { kind: "blocked" };
     // Missing, conflicting or unattributed evidence preserves the unresolved lane.
     const run = await repository.getRun(input.runId);
