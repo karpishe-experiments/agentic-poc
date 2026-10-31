@@ -305,7 +305,7 @@
       "role": "manager",
       "taskId": null,
       "appId": "46572ccb-d954-45e5-b73d-90fd0995cdb6",
-      "publishedWorkflowId": "6e1ebf6d-94e1-4265-9733-764504a0ddba",
+      "publishedWorkflowId": "be42392c-1fe1-4872-9139-86f14ae60a28",
       "toolProviderId": null,
       "persona": null
     },
@@ -366,5 +366,6 @@
       "finalPageIllustration": true,
       "persona": null
     }
-  ]
+  ],
+  "executionVersion": "execution_v2"
 }
