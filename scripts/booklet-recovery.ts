@@ -8,6 +8,7 @@ import { verifyDeploymentState, deploymentRead } from "@/db/deployment-readiness
 import dataContract from "@/db/deployment-contract.json";
 import { withOperationBudget, operationBudgetRemainingMs } from "@/lib/operations/budget";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
+import { createExecutionTextFailureRecovery } from "@/lib/operations/execution-text-recovery";
 import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, createBookletRecovery, recoveryDigest, inspectStep,
   type RecoverySnapshot } from "@/lib/operations/booklet-recovery";
 
@@ -46,7 +47,7 @@ async function main() {
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
     emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", ...dataContract,
-      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
+      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = await inspectStep("environment", async () => getServerEnv());
   if (env.RUNNER_ENABLED !== "false" || env.DEPLOYMENT_ENV !== "_staging" || env.MONGODB_DATABASE !== "kids_booklet" ||
@@ -65,7 +66,11 @@ async function main() {
   const target = { runId: input["run-id"], operationId: input["operation-id"], expectedRevision: input["expected-revision"] };
   const profile = await inspectStep("configuration", async () => readM4RunnerConfig());
   if (!profile.enabled) throw new BookletRecoveryError("configuration_invalid");
-  const service = await inspectStep("recovery_service", async () => createBookletRecovery({ database: database!, config: profile.config }));
+  const service = await inspectStep("recovery_service", async () => {
+    const run = await database!.collections.experiment_runs.findOne({ _id: target.runId }, { projection: { execution: 1 } });
+    return run?.execution ? createExecutionTextFailureRecovery({ database: database!, config: profile.config })
+      : createBookletRecovery({ database: database!, config: profile.config });
+  });
   if (input.phase.endsWith("-claim-release")) {
     const originalPath = "/original-recovery/application-recovery.json";
     const originalFile = await lstat(originalPath);

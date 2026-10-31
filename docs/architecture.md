@@ -709,6 +709,30 @@ uses the existing preparation, dispatch, authenticated observation, completion
 and simulated-image services. Real dispatch uses its separate verified readiness
 record and still requires an explicit finite execution grant.
 
+Authenticated text readback can close an attributable terminal provider failure
+for a new execution profile even when Dify marks the workflow successful. Closure
+revalidates the saved request, publication, provider usage and settlement, excludes
+save owners and materialized outputs, then records a definite failed operation
+and releases its run ownership. It preserves charges, count-fee liability, original
+deadline and failed-attempt history. Repeated inspection verifies that proof;
+missing or conflicting evidence remains unresolved. This does not retry a call,
+grant continuation or change legacy M4 interpretation.
+
+The `execution_v2` technical profile versions the Real manager request separately
+from the unchanged `execution_v1` campaign storage. It retains v1 request builders
+and hashes for historical reads. The new manager returns one compact decision,
+with a 500-character clarification limit and 4,096 output tokens. Its effective
+model limit is shared by preparation, reservation and provider-result assessment;
+tester decision limits remain 2,048 tokens. The Real manager publication must
+match this setting before its readiness record selects `execution_v2`.
+
+The protected candidate-reconciliation entrypoint routes the exact retained M5
+manager failure to a separate execution-profile proof service. It retrieves the
+original saved publication, fingerprints target metadata and reservations, and
+uses the shared closure transaction with accounting verification before commit.
+The existing private checkpoint owns interruption reconciliation. Legacy M4
+recovery and host orchestration retain their existing interpretation.
+
 The Real path reads a separate, tracked, non-secret readiness manifest. The
 reviewed activation record is ready for staging delivery after the eighteen
 publications and two installed packages were verified. A staging-only ready record pins the

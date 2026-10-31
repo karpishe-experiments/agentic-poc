@@ -4,7 +4,7 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import type { M4Authority } from "@/db/experiment-campaign";
 import { executionPolicySnapshot, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
-import { prepareExecutionRequest, executionRequestDefinition, realRequestDefinition } from "@/lib/experiment-runner/execution-request";
+import { prepareExecutionRequest, executionDefinitionFor } from "@/lib/experiment-runner/execution-request";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { experimentTaskSchema, type SpecialistTask } from "@/lib/contracts/experiment-runner";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
@@ -116,7 +116,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
   const contexts = createExperimentContextService(database, options);
   const elapsedNow = options.elapsedNow ?? (() => performance.now());
   const definitionFor = (selector: M4RequestSelector) => isExecution ?
-    (snapshot.policy.mode === "real" ? realRequestDefinition(selector) : executionRequestDefinition(selector)) : m4RequestDefinition(selector);
+    executionDefinitionFor(snapshot.policy as ExecutionPolicy, selector) : m4RequestDefinition(selector);
   async function prepare(raw: unknown): Promise<NonNullable<ExperimentOperationDocument["m4Preparation"]>> {
     const effective = isExecution ? { snapshot: authority.executionProfile.tokenPolicy } :
       m4AdmittedTokenPolicy(snapshot.policy as ReturnType<typeof m4PolicySnapshot>["policy"], grant!);
@@ -171,7 +171,7 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
       }
       return { context, contextJson: JSON.stringify(context) };
     });
-    let request: ReturnType<typeof prepareM4Request>;
+    let request: ReturnType<typeof prepareM4Request> | ReturnType<typeof prepareExecutionRequest>;
     try {
       request = await measurePhase(input, "preparation_request_construction", async () =>
         isExecution ? prepareExecutionRequest(snapshot.policy as ExecutionPolicy, selector, contextJson,

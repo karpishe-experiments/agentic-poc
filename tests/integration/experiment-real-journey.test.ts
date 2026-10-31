@@ -46,7 +46,7 @@ function python(source: string, args: Record<string, unknown>): Record<string, u
 
 // Provider creativity is deterministic; claims, saved preparation, original bytes,
 // authenticated workflow readback, settlement and materialization are real services.
-async function setup(persona: Persona = "playful_kid") {
+async function setup(persona: Persona = "playful_kid", executionVersion: "execution_v1" | "execution_v2" = "execution_v1") {
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(globalThis, "fetch").mockImplementation(async () => { throw new Error("External provider HTTP is forbidden in this fixture."); });
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
@@ -58,7 +58,7 @@ async function setup(persona: Persona = "playful_kid") {
     requiredProviderAdapterIdentity: `langgenius/openai:1.0.7-dev5@${"a".repeat(64)}`,
     requiredProviderPackageSha256: "b".repeat(64), reference: "nonbillable-journey-fixture" });
   const adapters = { textPluginIdentity: `langgenius/openai:1.0.7-dev6@${"c".repeat(64)}`, textPackageSha256: "d".repeat(64),
-    imagePluginIdentity: `langgenius/openai_tool:0.2.2-dev1@${"e".repeat(64)}`, imagePackageSha256: "f".repeat(64) };
+    imagePluginIdentity: `langgenius/openai_tool:0.2.2-dev1@${"e".repeat(64)}`, imagePackageSha256: "f".repeat(64), executionVersion };
   const profile = realExecutionPolicyFromM4TechnicalProfile(source, tokenPolicy, source.publications, adapters);
   const bindings = profile.publications.map(item => ({ ...item, apiKey: "fake-key" })) as BookletRunnerConfig["bindings"];
   const config: BookletRunnerConfig = { enabled: true, baseUrl: "https://dify.invalid", publicOrigin: "https://booklet.invalid",
@@ -78,6 +78,7 @@ async function setup(persona: Persona = "playful_kid") {
   let reviseSheet = false;
   let revisedVersionId: string | null = null;
   let imageFailure: "rejected_pre_provider" | "failed_after_provider" | null = null;
+  let reportStatus = "completed";
   let imageFailureTask: "J13" | null = null;
   const uploads = new Map<string, Uint8Array>();
   const uploadReference = vi.fn(async (_binding: BookletRunnerConfig["bindings"][number], _runId: string, bytes: Uint8Array) => {
@@ -188,7 +189,7 @@ async function setup(persona: Persona = "playful_kid") {
           providerEvidence: { provider: "openai", apiBaseUrl: "https://api.openai.com/v1",
             stdioSdk: { version: "0.10.2", readerSha256: "546de8f0c5171a924e80190df2f917782ae6ddda85db4515b6c021c4d9ce6e22" },
             responseId: `resp_${workflowRunId}`, requestId: `req_${workflowRunId}`, model: profile.models[reservation.bucket].model,
-            serviceTier: "default", status: "completed", refused: false, incompleteReason: null,
+            serviceTier: "default", status: report ? reportStatus : "completed", refused: false, incompleteReason: null,
             requestDigest: report?.finalRequestDigest ?? prepared.requestDigest, countedInputTokens: 100,
             usage: { source: "provider_reported", inputTokens: 100, outputTokens: 100, cachedInputTokens: 0,
               cacheWriteInputTokens: null, reasoningOutputTokens: 0 },
@@ -208,6 +209,7 @@ async function setup(persona: Persona = "playful_kid") {
   const advance = () => createExperimentDispatcher({ database, config, runtime, uploadReference, store: () => new FilesystemAssetStore(root),
     mutate: async fn => fn(), now }).advance(runId);
   return { database, root, repository, context, runId, campaignId, runtime, originals, uploads, advance, providerErrors,
+    unknownReportOutcome: () => { reportStatus = "unknown"; },
     inspect: (operationId: string) => createExperimentDispatcher({ database, config, runtime, store: () => store,
       mutate: async fn => fn(), now }).inspect({ runId, operationId }),
     failNextImage: (status: "rejected_pre_provider" | "failed_after_provider", task: "J13" | null = null) => {
@@ -226,6 +228,27 @@ async function advance(env: Awaited<ReturnType<typeof setup>>, step: number) {
 }
 
 describe("Real shared journey with fake providers and durable originals", () => {
+  it("keeps an attributable unknown report outcome owned instead of closing it as a terminal failure", async () => {
+    const env = await setup(); env.unknownReportOutcome();
+    for (let step = 0; step < 180; step++) {
+      await env.advance();
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+    }
+    const run = (await env.repository.getRun(env.runId))!;
+    expect(run).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: expect.any(String) });
+    expect(run.generationCompletedAtMs).toBeTypeOf("number");
+    const report = (await env.repository.getOperation(run.activeOperationId!))!;
+    expect(report.realReportPreparation).toBeDefined();
+    expect(report).toMatchObject({ state: "started", m4Observation: { issue: "provider_failure" },
+      m4Reservation: { settledMicrodollars: expect.any(Number), unsettledMicrodollars: 0 } });
+    expect(JSON.parse(report.m4Observation!.evidenceJson!).status).toBe("unknown");
+    const before = await env.database.collections.experiment_campaigns.findOne({ _id: env.campaignId });
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    expect(await env.inspect(report._id)).toMatchObject({ state: "started" });
+    expect((await env.repository.getRun(env.runId))!.activeOperationId).toBe(report._id);
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: env.campaignId })).toEqual(before);
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(calls);
+  }, 120_000);
   it.each(["rejected_pre_provider", "failed_after_provider"] as const)("inspects retained %s image failure without replay or accounting drift", async status => {
     const env = await setup(); env.failNextImage(status, status === "failed_after_provider" ? "J13" : null);
     let failed;
@@ -254,7 +277,7 @@ describe("Real shared journey with fake providers and durable originals", () => 
     expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(calls);
   }, 90_000);
   it("completes Kid generation and both multimodal reports without manual data repair", async () => {
-    const env = await setup();
+    const env = await setup("playful_kid", "execution_v2");
     for (let step = 0; step < 180; step++) {
       const run = (await env.repository.getRun(env.runId))!;
       if (run.status === "completed") break;

@@ -1070,6 +1070,28 @@ in the graph contract. Evidence: the retained dev2 Kid pre-provider `credentials
 rejection, official ToolManager branches and focused graph tests. No image request
 began. Promotion candidate: **Documentation** for Dify graph compatibility.
 
+## Distinguish workflow success from provider completion
+
+A Dify workflow can succeed while its provider returns an incomplete response
+with no usable content. New execution profiles settled the attributable token
+charge but lacked the legacy M4 failure-closure path, so operation ownership
+remained unresolved. Verify provider status, exact request/publication identity,
+settlement and absence of materialization before closing that failed operation.
+Retain liabilities and never infer retry authority from closure. Include this
+case in disposable persistence tests for each policy path. Evidence: the retained
+M5 manager `max_output_tokens` result and execution-allowance integration tests.
+Promotion candidate: **Documentation** for workflow/provider result boundaries.
+
+The correction package required a whole-package review after successive reviews
+found missing failure branches. Earlier reviews treated provider status, creative
+validation and lifecycle ownership as separate exceptions. The shared rule is
+that certain execution with unusable output can fail definitively; uncertainty
+about execution or commit must retain ownership. The shared classifier now also
+re-runs deterministic creative parsing before accepting a saved rejection. It
+does not classify stale dependencies, hydration errors or ownership conflicts as
+creative failure. Boundary tests cover incomplete output, malformed output,
+clarification length, unknown outcomes, conflicting evidence and lost replies.
+
 ## Preserve complete graphs across tool boundaries
 
 Large execution-tool output can truncate a string inside otherwise valid JSON.
