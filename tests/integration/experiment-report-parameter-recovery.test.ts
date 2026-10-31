@@ -6,7 +6,7 @@ import { m4OperationFingerprint } from "@/db/experiment-text-sources";
 import { createExecutionTextFailureRecovery } from "@/lib/operations/execution-text-recovery";
 import { retainedReportParameterFailure as target } from "@/lib/operations/retained-report-parameter-failure";
 import { realReadinessManifestSchema } from "@/lib/experiment-runner/real-config";
-import manifest from "@/lib/experiment-runner/real-readiness-manifest.json";
+import manifest from "@/tests/fixtures/m5-retained-real-readiness.json";
 import { defaultExecutionAllowance, executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
 import { m4AuthorizedCarrier, m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { realReportCarrier } from "@/lib/experiment-runner/real-report-carrier";

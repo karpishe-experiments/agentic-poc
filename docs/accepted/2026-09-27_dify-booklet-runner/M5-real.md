@@ -383,8 +383,8 @@ Neither report has completed, so Kid acceptance remains blocked.
 The local correction supplies the actual prepared schema to all three tester
 report nodes and the judge. The generated graph-to-adapter fake-provider check
 passes all four cases and reproduces the old rejection before client construction.
-The corrected publications, readiness manifest, protected closure and staging
-delivery remain pending. Do not rebind the retained run, replay its report or
+The corrected publications and readiness manifest are recorded below. Protected
+closure and staging delivery remain pending. Do not rebind the retained run, replay its report or
 start another paid run under its consumed grant.
 
 The saved-grant UI correction lists persisted unused grants through the existing
@@ -409,6 +409,37 @@ generation, current sources, counters and original deadline/stop history. It onl
 closes failed ownership and requests Pause. Its separate snapshot scope supports
 lost-acknowledgement and repeated verification. This candidate has not yet been
 applied live. It does not satisfy either required report or authorize another run.
+
+### Report publication selection - 2026-10-31
+
+PR #321 merged as `053026cb1f767d0597229e749eb1bca31c9a8060`, with CI
+`41218651776`. Exact closure PR #322 merged as
+`c1d097542d663013df2fcc7f31f96d2bed98f8d3`, with CI `41220378449`.
+Both packages passed two independent reviews. The closure passed 20 disposable
+recovery cases, 46 transport/command units, 25 recovery-storage units and the
+complete fake-provider Kid journey through generation and both reports.
+
+The existing reviewed Community compatibility client saved only the four report
+drafts with fresh hashes. Full graph, feature and environment-variable readbacks
+matched; no provider call or credential change occurred. Registered MCP published
+and read back these immutable versions with the prepared schema parameters and
+zero retries:
+
+| Report | Publication |
+| --- | --- |
+| Kid tester | `4d295741-f1e5-4d2d-ac22-5f1243d703b9` |
+| Parent tester | `c208d6c2-c88e-438b-849a-a9042b6834f5` |
+| Creator tester | `c2186c69-269e-48e5-972f-1a1b3a8bbb2f` |
+| Judge | `de9614e4-dbb6-4286-9a15-43d570c963bc` |
+
+The new technical profile is
+`dc7553679260b7f64df9cbf957ab5ef9fbbf64db00f25e88072efcd5a3ead83f`.
+Only these four publication identities changed. Models, prices, adapters,
+transport settings, retries and all other publications remain unchanged.
+Recovery tests use the frozen prior-readiness fixture to retain both historical
+profile hashes. No saved live run is rewritten, and no grant is created by this
+selection. Next: deliver this exact bundle through protected closure and normal
+staging deployment, then verify browser readiness before any paid execution.
 
 ### Historical carry-forward review before the M4 exit
 

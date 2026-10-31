@@ -313,7 +313,7 @@
       "role": "tester",
       "taskId": null,
       "appId": "bf57a8ea-1be6-4a97-a5c0-023cfde794f8",
-      "publishedWorkflowId": "bb863399-9547-4c2f-8ae2-a07f7ae78f7c",
+      "publishedWorkflowId": "4d295741-f1e5-4d2d-ac22-5f1243d703b9",
       "toolProviderId": null,
       "persona": "playful_kid"
     },
@@ -321,7 +321,7 @@
       "role": "tester",
       "taskId": null,
       "appId": "593fb610-624e-404c-92de-57f54e9a47fb",
-      "publishedWorkflowId": "01188db4-8886-4fac-90c1-2c8cc0c763b7",
+      "publishedWorkflowId": "c208d6c2-c88e-438b-849a-a9042b6834f5",
       "toolProviderId": null,
       "persona": "enthusiast_parent"
     },
@@ -329,7 +329,7 @@
       "role": "tester",
       "taskId": null,
       "appId": "cd284244-63d5-4169-95c3-9790001a5240",
-      "publishedWorkflowId": "bf5b919a-2e95-4964-ba01-a96a6e37ab64",
+      "publishedWorkflowId": "c2186c69-269e-48e5-972f-1a1b3a8bbb2f",
       "toolProviderId": null,
       "persona": "professional_creator"
     },
@@ -353,7 +353,7 @@
       "role": "judge",
       "taskId": null,
       "appId": "89f1adcd-1073-460d-98a3-e4df35c4263c",
-      "publishedWorkflowId": "7fafde00-7ebd-4218-b22c-b920f7334355",
+      "publishedWorkflowId": "de9614e4-dbb6-4286-9a15-43d570c963bc",
       "toolProviderId": null,
       "persona": null
     },
