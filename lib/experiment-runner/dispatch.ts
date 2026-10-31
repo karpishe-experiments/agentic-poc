@@ -12,6 +12,7 @@ import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
 import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
 import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
+import { closeExecutionTextFailure } from "@/db/experiment-execution-text-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
 import { verifyUndispatchedText } from "@/db/experiment-undispatched-text";
 import { validateLegacyCountFailureProof } from "@/lib/experiment-runner/m4-legacy-count-failure";
@@ -308,7 +309,8 @@ export function createExperimentDispatcher(deps: {
     const current = await repository.getOperation(operation._id);
     if (!current) return;
     const binding = bindingFor(operation, run);
-    if (result.kind === "conflict") {
+    if (result.kind === "conflict" && !(run.execution && current.providerKind === "text" &&
+        current.state === "failed" && current.m4Observation)) {
       await repository.blockRun({ runId: run._id, category: "definite_failure", nowMs: now() });
       return;
     }
@@ -354,6 +356,30 @@ export function createExperimentDispatcher(deps: {
     }
     // A failed lookup cannot reopen a previously proved terminal failure.
     // Revalidate its retained evidence before handling observation uncertainty.
+    if (run.execution && current.providerKind === "text" && current.state === "failed" && current.m4Observation) {
+      const proof = current.m4Observation;
+      if (result.kind === "conflict" || result.kind === "execution" && (result.execution.id !== current.workflowRunId ||
+          result.execution.workflow_id !== proof.publishedWorkflowId || result.execution.status !== proof.remoteStatus ||
+          current.workflowTaskId && result.execution.task_id && current.workflowTaskId !== result.execution.task_id ||
+          typeof result.execution.outputs?.booklet_provider_result !== "string" ||
+          createHash("sha256").update(result.execution.outputs.booklet_provider_result).digest("hex") !== proof.wrapperDigest)) {
+        await withMongoTransaction(deps.database, async session => {
+          const owner = await deps.database.collections.experiment_runs.findOne({ _id: run._id }, { session });
+          if (!owner || owner.activeOperationId && owner.activeOperationId !== current._id ||
+              ["completed", "failed"].includes(owner.status)) throw new ExperimentRepositoryError("conflict", "Failure observation ownership changed.");
+          const changed = await deps.database.collections.experiment_operations.updateOne({ _id: current._id, state: "failed",
+            "m4Observation.wrapperDigest": proof.wrapperDigest }, { $set: { state: "unknown", safeFailure: "unknown_outcome",
+            "m4Observation.issue": "conflicting_evidence", "lifecycle.unresolved": true, updatedAtMs: now() } }, { session });
+          if (changed.modifiedCount !== 1) throw new ExperimentRepositoryError("conflict", "Failure observation changed.");
+          const blocked = await deps.database.collections.experiment_runs.updateOne({ _id: owner._id, revision: owner.revision },
+            { $set: { status: "blocked", safeFailure: "unknown_outcome", pauseRequested: true,
+              activeOperationId: current._id, updatedAtMs: now() }, $inc: { revision: 1 } }, { session });
+          if (blocked.modifiedCount !== 1) throw new ExperimentRepositoryError("conflict", "Failure observation run changed.");
+        });
+        return;
+      }
+      if (await closeExecutionTextFailure(deps.database, { runId: run._id, operationId: current._id, nowMs: now() })) return;
+    }
     if (authority && run.mode === "balanced" && current.providerKind === "text" && current.state === "failed" &&
         await closeM4KnownFailure(deps.database, authority, { runId: run._id, operationId: current._id, nowMs: now() }) === "closed") return;
     if (result.kind === "accepted") {
@@ -540,6 +566,8 @@ export function createExperimentDispatcher(deps: {
 
   const coordinator = createOperationCoordinator({ database: deps.database, runtime, now, binding: bindingFor,
     resolvedFailure: async (run, operation) => {
+      if (run.execution && operation.providerKind === "text" && operation.state === "failed")
+        return closeExecutionTextFailure(deps.database, { runId: run._id, operationId: operation._id, nowMs: now() });
       if (!authority || run.mode !== "balanced" || operation.state !== "failed") return false;
       const local = operation.localPreparationCancellation ??
         (operation.m4Continuation?.kind === "undispatched_text_v1" ? operation.m4Continuation : null);

@@ -1,6 +1,6 @@
 # M5 — Staging transition and staged Real acceptance
 
-**State:** Planned. **Coverage:** AC04–AC13.
+**State:** In progress; Real Kid acceptance is blocked. **Coverage:** AC04–AC13.
 **Predecessor:** [M4](M4-balanced.md). Apply [EXECUTION](EXECUTION.md).
 
 For this milestone, "uninterrupted" means no manual data or output repair.
@@ -282,6 +282,62 @@ an optional isolated-node test was not executed. Neither retained run is resumed
 or repaired, and no further successor or spending is authorized.
 
 ## Three execution checkpoints
+
+### Current Kid attempt - 2026-10-29
+
+The operator approved one further linked USD 5 Kid attempt with the same finite
+call, step and revision totals, zero automatic retries and zero further successors.
+Campaign `6334f234-ac4b-4759-8795-732257920ec3`, run
+`f811de3a-f4af-4b9e-88a7-7d8d597c5d21`, uses profile `9fab2019...` above.
+J01-J04 are approved. The next manager response is empty and its provider status
+is `incomplete` / `max_output_tokens`: 368 input and 2,048 output tokens. Dify
+workflow `2d8e3dfc-9b3e-4d45-8f08-ffd440791149` reports successful workflow
+execution, which does not make its provider decision usable. Ten text calls,
+zero image calls and ten steps are retained. The UI reports USD 0.003341 estimated
+settled and USD 0.009000 held. One Inspect/reconcile confirmed the same saved
+workflow; it sent no replacement call. No image-provider dispatch occurred.
+
+The serving application still retains the manager operation as started and its
+run as blocked with unknown outcome. New execution profiles did not use the
+legacy M4 known-failure closure. A local correction verifies attributable terminal
+text failure and its saved settlement before releasing operation ownership. Its
+disposable persistence tests cover Balanced and Real, conflicting evidence,
+active save claims, saved outputs, accounting and repeated closure without replay.
+This correction is not yet delivered. Normal serving-release drain still rejects
+the retained operation; determine the supported candidate recovery route before
+starting deployment. Do not bypass drain, edit records or resume this failed call.
+M5 remains incomplete; no fourth Kid, Parent or Creator grant exists.
+
+### Correction implementation checkpoint - 2026-10-31
+
+The local correction now invalidates explicit transport conflicts as well as
+changed authenticated output. The exact expired, acknowledged-stop lifecycle
+closes without renewing its deadline or changing accounting. Focused closure and
+lifecycle verification passed 29 tests. The new `execution_v2` technical profile
+keeps historical request builders and profile hashes readable, limits manager
+clarification to 500 characters and raises only manager output to 4,096 tokens.
+The matching Real workflow graph changes only the manager node. Twenty focused
+policy, graph and provider-result unit tests passed; agent fixtures passed.
+
+The integrated failure/lifecycle matrix passed 32 tests. Three focused compact
+manager cases additionally verify 500-character idempotent completion and closure
+of 501-character or malformed output. Seven exact recovery tests verify preview
+drift, ownership, old-publication retrieval and interrupted acknowledgement. The
+full fake-provider `execution_v2` Kid journey passed generation and both reports.
+Forty-eight focused unit tests, typecheck, affected ESLint and twelve agent
+fixtures passed. The whole-package audit and correction are recorded in the
+lessons file. These checks made no paid provider requests.
+
+Two independent final reviews passed. The Real manager publication
+`be42392c-1fe1-4872-9139-86f14ae60a28` was published and read back with
+4,096 output tokens, unchanged model settings and zero retries. The connector
+validated its one-node diff but rejected its save payload; Chrome saved the
+setting and authenticated MCP readback verified the publication. The tracked
+readiness now selects `execution_v2`. Staging recovery and deployment are still
+pending; local and Dify configuration proof do not establish live acceptance. No paid
+call, successor grant or signature-policy change is included in this correction.
+Credential inventory impact: existing per-app credentials retain their current
+storage and consumers; recovery uses the saved application identity and publication.
 
 ### Historical carry-forward review before the M4 exit
 

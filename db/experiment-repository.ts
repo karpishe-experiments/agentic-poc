@@ -27,7 +27,7 @@ import { completionLifecycle, isRecoveredAttempt } from "@/lib/experiment-runner
 import { CampaignAdmissionError, createExperimentCampaignLedger, type M4Authority } from "@/db/experiment-campaign";
 import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
 import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
-import { executionRequestDefinition, realRequestDefinition } from "@/lib/experiment-runner/execution-request";
+import { executionDefinitionFor } from "@/lib/experiment-runner/execution-request";
 import { executionTesterRevisionEligibility } from "@/lib/experiment-runner/tester-decision-eligibility";
 import { m4OperationFingerprint, m4SourceFingerprint } from "@/db/experiment-text-sources";
 import { m4CanonicalJson, m4Hash, m4RequestBundleMatches, m4RequestDefinition, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
@@ -143,7 +143,7 @@ export function createExperimentRepository(database: Database, options: { store?
         prepared.requestDigest !== m4Hash(prepared.requestJson) ||
         prepared.operationFingerprint !== m4OperationFingerprint(operation) ||
         canonical(prepared.tokenPolicy ?? null) !== canonical(snapshot.policy.tokenPolicy) ||
-        prepared.definitionHash !== (run.mode === "real" ? realRequestDefinition : executionRequestDefinition)({ role: operation.role, taskId: operation.taskId,
+        prepared.definitionHash !== executionDefinitionFor(snapshot.policy, { role: operation.role, taskId: operation.taskId,
           persona: run.persona, report: ["tester", "judge"].includes(operation.role) && run.generationCompletedAtMs != null } as M4RequestSelector).hash ||
         !binding || prepared.publishedWorkflowId !== binding.publishedWorkflowId ||
         phase === "claim" && operation.verifiedWorkflowId !== prepared.publishedWorkflowId ||

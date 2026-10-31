@@ -4,6 +4,7 @@ import { m4PolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { m4Hash, type M4RequestSelector } from "@/lib/experiment-runner/m4-request";
 import { parseM4CreativeOutput } from "@/lib/experiment-runner/m4-output";
+import { M4CreativeOutputError } from "@/lib/experiment-runner/m4-output";
 import { assessRealReportProviderResult } from "@/lib/experiment-runner/real-report-provider-result";
 
 // Completion consumes retained authenticated observation, never a callback's
@@ -40,7 +41,12 @@ export function m4ObservedRoleResult(run: ExperimentRunDocument, operation: Expe
   }
   const selector = { role: operation.role, taskId: operation.taskId, persona: run.persona,
     report: (operation.role === "tester" || operation.role === "judge") && run.generationCompletedAtMs != null } as M4RequestSelector;
-  return parseM4CreativeOutput(selector, observation.content, preparation.contextJson, observation.costEvidence,
+  const result = parseM4CreativeOutput(selector, observation.content, preparation.contextJson, observation.costEvidence,
     !!run.execution, "inspectedAssetIds" in assessed && Array.isArray(assessed.inspectedAssetIds)
       ? assessed.inspectedAssetIds as string[] : []);
+  if (run.execution && snapshot.policy.schemaVersion === "execution_v2" && operation.role === "manager" &&
+      result.kind === "ask" && result.payload.question.length > 500) {
+    throw new M4CreativeOutputError("Compact manager clarification exceeds 500 characters.");
+  }
+  return result;
 }

@@ -17,6 +17,7 @@ export const realReadinessManifestSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("disabled") }),
   z.strictObject({ state: z.literal("ready"), schemaVersion: z.literal("booklet_real_readiness_v1"),
     sourcePolicy: m4PolicySchema, tokenPolicy: m4TokenPolicySchema,
+    executionVersion: z.enum(["execution_v1", "execution_v2"]).optional(),
     textPluginIdentity: z.literal(REAL_TEXT_PLUGIN_IDENTITY), textPackageSha256: z.literal(REAL_TEXT_PACKAGE_SHA256),
     imagePluginIdentity: z.literal(REAL_IMAGE_PLUGIN_IDENTITY), imagePackageSha256: z.literal(REAL_IMAGE_PACKAGE_SHA256),
     nativeFileFormat: z.literal("base64"), publications: z.array(publication).length(18),
@@ -45,6 +46,7 @@ export function realReadinessFromManifest(base: BookletRunnerConfig, raw: unknow
     realExecutionPolicyFromM4TechnicalProfile(source.policy, ready.tokenPolicy, ready.publications, ready);
   } catch { return undefined; }
   return { state: "ready", bindings,
+    ...(ready.executionVersion ? { executionVersion: ready.executionVersion } : {}),
     sourcePolicy: source.policy, tokenPolicy: ready.tokenPolicy,
     textPluginIdentity: ready.textPluginIdentity, textPackageSha256: ready.textPackageSha256,
     imagePluginIdentity: ready.imagePluginIdentity, imagePackageSha256: ready.imagePackageSha256,

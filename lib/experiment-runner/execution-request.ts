@@ -1,4 +1,4 @@
-import type { ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
+import { executionTextModel, type ExecutionPolicy } from "@/lib/experiment-runner/execution-policy";
 import { z } from "zod";
 import { personaSchema, specialistTaskSchema, roleResultSchema, executionAllowanceRequestSchema } from "@/lib/contracts/experiment-runner";
 import { m4ModelBucket } from "@/lib/experiment-runner/m4-policy";
@@ -76,13 +76,38 @@ export function realRequestBundleHash() {
   return realBundleHash = m4Hash(m4CanonicalJson(selectors.map(realRequestDefinition)));
 }
 
+// Historical v1 definitions above are immutable inputs to retained profile hashes.
+export function executionDefinitionFor(policy: Pick<ExecutionPolicy, "mode" | "schemaVersion">, selector: M4RequestSelector) {
+  const base = policy.mode === "real" ? realRequestDefinition(selector) : executionRequestDefinition(selector);
+  if (policy.schemaVersion !== "execution_v2" || selector.role !== "manager") return base;
+  const delegate = roleResultSchema.options.find(option => option.shape.kind.value === "delegate")!;
+  const ask = z.strictObject({ kind: z.literal("ask"), payload: z.strictObject({ question: z.string().min(1).max(500) }) });
+  const { hash: _prior, ...contents } = base;
+  void _prior;
+  const definition = { ...contents, version: "real_manager_compact_v2",
+    systemPrompt: `${base.systemPrompt} Return exactly one compact JSON object. Copy the supplied eligible route and target identities exactly. Include no explanation, markdown or repeated context outside the result. If clarification is necessary, ask one question of at most 500 characters. Stop immediately after the final closing brace.`,
+    outputSchema: m4StrictSchema(z.strictObject({ result: z.union([delegate, ask]) })) };
+  return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
+}
+
+export function executionV2RequestBundleHash() {
+  const selectors: M4RequestSelector[] = personaSchema.options.flatMap(persona => [
+    { role: "manager", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: true },
+    { role: "judge", taskId: null, persona, report: true },
+    ...specialistTaskSchema.options.map(taskId => ({ role: "specialist" as const, taskId, persona, report: false })),
+  ]);
+  return m4Hash(m4CanonicalJson(selectors.map(selector => executionDefinitionFor({ mode: "real", schemaVersion: "execution_v2" }, selector))));
+}
+
 /** Execution profiles retain the M4 carrier and preparation lifecycle. */
 export function prepareExecutionRequest(policy: ExecutionPolicy, selector: M4RequestSelector,
   contextJson: string, allowed: M4AllowedValues) {
   if (!contextJson.trim()) throw new Error("Execution context must not be blank.");
   const context = JSON.parse(contextJson) as unknown;
   if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("Execution context must be an object.");
-  const definition = policy.mode === "real" ? realRequestDefinition(selector) : executionRequestDefinition(selector);
+  const definition = executionDefinitionFor(policy, selector);
   const contextBytes = Buffer.byteLength(contextJson, "utf8");
   if (contextBytes > 2 * 1024 * 1024) {
     if (selector.report) throw new M4ReportSizeError(contextBytes, 2 * 1024 * 1024,
@@ -94,7 +119,7 @@ export function prepareExecutionRequest(policy: ExecutionPolicy, selector: M4Req
         selector.role === "tester" && (!allowed.action || !allowed.taskIds))) {
     throw new Error("Execution decisions require protected choices.");
   }
-  const model = policy.models[m4ModelBucket(selector.role, selector.report)];
+  const model = executionTextModel(policy, m4ModelBucket(selector.role, selector.report), selector.role);
   const format = { type: "json_schema", name: "booklet_role_v1", strict: true,
     schema: m4BindAllowedValues(definition.outputSchema, allowed) };
   const payload = { model: model.model,
