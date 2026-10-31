@@ -28,6 +28,20 @@ the error names the missing setting without printing its value.
 
 ### Supported recovery candidate
 
+The M5 candidate advertises `execution-text-failure-closure` for the exact retained
+Real Kid manager failure recorded in the [M5 checkpoint](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#current-kid-attempt---2026-10-29).
+Use the existing `candidate-reconcile` preview/apply flow with its run, operation
+and revision, without `original_request_id`. The candidate reads the saved
+publication using the existing matching app credential. Preview pins the terminal
+provider evidence and target metadata. Apply requires closed admission and no
+other work, then verifies accounting inside the closure transaction. Verification
+preserves the campaign, reservations, creative records, deadline and stop receipt.
+Its result is `failure_closed`; the run remains blocked and paused. The existing
+checkpoint reconciles a lost acknowledgement by verification. Normal deployment
+must use the same reviewed candidate source tree before admission is reopened.
+This capability is implemented locally; its live use remains pending until the
+M5 record contains the verified protected-workflow receipt.
+
 The issue #65 recovery dispatcher is installed and retained J11 completion has
 been verified through supported controls. Installation and live execution remain
 separate evidence; the commands below require matching dispatcher capabilities
