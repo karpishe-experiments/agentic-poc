@@ -7,7 +7,7 @@ import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExecutionTextFailureRecovery } from "@/lib/operations/execution-text-recovery";
 import type { RecoverySnapshot } from "@/lib/operations/booklet-recovery";
 import { realReadinessManifestSchema } from "@/lib/experiment-runner/real-config";
-import manifest from "@/lib/experiment-runner/real-readiness-manifest.json";
+import manifest from "@/tests/fixtures/m5-retained-real-readiness.json";
 import { defaultExecutionAllowance, executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
 import type { BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import type { WorkflowRuntime } from "@/lib/experiment-runner/transport";

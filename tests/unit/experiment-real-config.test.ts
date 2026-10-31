@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import release from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import delivered from "@/lib/experiment-runner/real-readiness-manifest.json";
+import retained from "@/tests/fixtures/m5-retained-real-readiness.json";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile, executionMaximumTextCharge } from "@/lib/experiment-runner/execution-policy";
 import { prepareExecutionRequest, executionDefinitionFor } from "@/lib/experiment-runner/execution-request";
@@ -26,13 +27,31 @@ const ready = {
 } as const;
 
 describe("staging Real readiness manifest", () => {
+  it("selects corrected report publications without changing the retained technical settings", () => {
+    const current = realReadinessManifestSchema.parse(delivered), historical = realReadinessManifestSchema.parse(retained);
+    if (current.state !== "ready" || historical.state !== "ready") throw Error("Missing readiness");
+    const snapshot = (ready: typeof current) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+      ready.sourcePolicy, ready.tokenPolicy, ready.publications, ready));
+    const before = snapshot(historical), after = snapshot(current);
+    expect(before.hash).toBe("f87eb3a370fcd9429846c3dcc3df4bac3f56d44c88ae7294ba7a426bd4187ce1");
+    expect(after.hash).toBe("dc7553679260b7f64df9cbf957ab5ef9fbbf64db00f25e88072efcd5a3ead83f");
+    const { publications: oldPublications, ...oldSettings } = before.policy;
+    const { publications: newPublications, ...newSettings } = after.policy;
+    expect(newSettings).toEqual(oldSettings);
+    expect(newPublications.filter(row => !["tester", "judge"].includes(row.role)))
+      .toEqual(oldPublications.filter(row => !["tester", "judge"].includes(row.role)));
+    expect(newPublications.filter(row => ["tester", "judge"].includes(row.role))
+      .every(row => oldPublications.find(old => old.appId === row.appId)?.publishedWorkflowId !== row.publishedWorkflowId)).toBe(true);
+  });
   it("versions compact manager requests while retaining the delivered profile and tester limits", () => {
     const current = realReadinessManifestSchema.parse(delivered);
     if (current.state !== "ready") throw new Error("Missing delivered readiness");
-    const retainedPublications = current.publications.map(item => item.role === "manager"
+    const historical = realReadinessManifestSchema.parse(retained);
+    if (historical.state !== "ready") throw new Error("Missing retained readiness");
+    const retainedPublications = historical.publications.map(item => item.role === "manager"
       ? { ...item, publishedWorkflowId: "6e1ebf6d-94e1-4265-9733-764504a0ddba" } : item);
     const prior = executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
-      current.sourcePolicy, current.tokenPolicy, retainedPublications, { ...current, executionVersion: "execution_v1" }));
+      historical.sourcePolicy, historical.tokenPolicy, retainedPublications, { ...historical, executionVersion: "execution_v1" }));
     expect(prior.hash).toBe("9fab201953ff06cba920713dded4a8f623f28fa44fbeb9fc34bf6a7390a80f8e");
     const next = executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
       current.sourcePolicy, current.tokenPolicy, current.publications, { ...current, executionVersion: "execution_v2" }));
@@ -52,12 +71,14 @@ describe("staging Real readiness manifest", () => {
   it("pins dev2 for new readiness while preserving the retained dev1 profile hash", () => {
     const current = realReadinessManifestSchema.parse(delivered);
     if (current.state !== "ready") throw new Error("Missing delivered readiness");
+    const historical = realReadinessManifestSchema.parse(retained);
+    if (historical.state !== "ready") throw new Error("Missing retained readiness");
     const prior = {
-      ...current,
+      ...historical,
       executionVersion: "execution_v1" as const,
       imagePluginIdentity: "langgenius/openai_tool:0.2.2-dev1@c1f56e13bfdba8523fcb79e3bf2249a0c1ffd0e1be7ad92a947eeace51a80b31",
       imagePackageSha256: "8ae9ddea724651f2c9d0559b043edfee735ca69cd1d07fae39474c11b3124ec8",
-      publications: current.publications.map(item => item.role === "image"
+      publications: historical.publications.map(item => item.role === "image"
         ? { ...item, publishedWorkflowId: "ab5ca725-8268-40ca-912a-a4d432fbcac6" } : item.role === "manager"
           ? { ...item, publishedWorkflowId: "6e1ebf6d-94e1-4265-9733-764504a0ddba" } : item),
     };
