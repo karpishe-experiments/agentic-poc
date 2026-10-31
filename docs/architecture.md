@@ -4,6 +4,19 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+The authenticated campaign list exposes unused execution grants for the selected
+persona and current technical profile. It uses projected, five-row pages and does
+not create or claim a grant. The runner can select a saved grant after a refresh
+or closed tab; Start still uses normal transactional one-run admission. A failed
+grant-list read requires refresh before the UI offers another grant. Allowance
+approval remains an operator UI/API action and does not require host access.
+
+Real report workflows pass the strict output schema from the canonical prepared
+request into the provider node's `response_format` and `json_schema` parameters.
+The prepared request remains authoritative. Legacy and ordinary decision paths
+retain their contracts. Missing duplicate report parameters fail in the pinned
+adapter before client construction; they do not imply a paid provider failure.
+
 Run lists use one grouped, projected operation read for each visible page. Cards
 show run-specific settled estimates and retained reservation liabilities; campaign
 accounting remains separate. Missing historical accounting proof remains unavailable.

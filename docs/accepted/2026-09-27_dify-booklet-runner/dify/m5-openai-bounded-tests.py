@@ -19,6 +19,11 @@ from unittest.mock import patch
 
 
 package = pathlib.Path(sys.argv.pop(1)).resolve()
+graph_contract = None
+if "--graph-contract" in sys.argv:
+    index = sys.argv.index("--graph-contract")
+    sys.argv.pop(index)
+    graph_contract = pathlib.Path(sys.argv.pop(index))
 sys.path.insert(0, str(package))
 source = pathlib.Path(__file__).with_name("m5-openai-bounded.py")
 spec = importlib.util.spec_from_file_location("models.llm.m5_bounded", source)
@@ -35,8 +40,8 @@ def prepared():
     return {"model": "gpt-6-luna", "input": [{"type": "message", "role": "system", "content": "System"}, {"type": "message", "role": "user", "content": "Judge قاصدک"}], "max_output_tokens": 2048, "reasoning": {"effort": "none", "mode": "standard"}, "service_tier": "default", "text": {"format": {"type": "json_schema", "name": "fixture", "strict": True, "schema": {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": False}}}, "store": False, "truncation": "disabled", "include": ["reasoning.encrypted_content"]}
 
 
-def carrier(blob=png()):
-    original = prepared()
+def carrier(blob=png(), request=None):
+    original = prepared() if request is None else request
     policy = {"version": "m4_context_policy_v2", "hash": "a" * 64, "maxInputTokens": 128000, "warningInputTokens": 32000}
     text_carrier = {**original, "bookletPolicy": {"contractVersion": "booklet_carrier_v2", "requestDigest": adapter._real_sha(adapter._real_canonical(original)), "tokenPolicy": policy}}
     manifest = [{"assetId": "00000000-0000-4000-8000-000000000001", "versionId": "00000000-0000-4000-8000-000000000002", "sha256": hashlib.sha256(blob).hexdigest(), "byteLength": len(blob), "mimeType": "image/png", "width": 1024, "height": 1024}]
@@ -48,7 +53,8 @@ def carrier(blob=png()):
 
 
 class FakeFactory:
-    def __init__(self):
+    def __init__(self, model="gpt-6-luna"):
+        self.model = model
         self.count_payload = None
         self.create_payload = None
         self.kwargs = None
@@ -69,10 +75,33 @@ class FakeFactory:
 
     def create(self, **payload):
         self.create_payload = payload
-        return SimpleNamespace(status="completed", id="response_1", _request_id="request_1", model="gpt-6-luna", service_tier="default", usage={"input_tokens": 100, "output_tokens": 8}, output=[{"type": "message", "role": "assistant", "phase": "final_answer", "status": "completed", "content": [{"type": "output_text", "text": '{"answer":"ok"}'}]}])
+        return SimpleNamespace(status="completed", id="response_1", _request_id="request_1", model=self.model, service_tier="default", usage={"input_tokens": 100, "output_tokens": 8}, output=[{"type": "message", "role": "assistant", "phase": "final_answer", "status": "completed", "content": [{"type": "output_text", "text": '{"answer":"ok"}'}]}])
 
 
 class Contract(unittest.TestCase):
+    @unittest.skipUnless(graph_contract, "Pass --graph-contract with resolved generated report-node fixtures")
+    def test_generated_workflow_report_parameters_reach_fake_provider(self):
+        fixtures = json.loads(graph_contract.read_text(encoding="utf-8-sig"))
+        self.assertEqual({row["case"] for row in fixtures}, {"playful_kid", "enthusiast_parent", "professional_creator", "judge"})
+        for row in fixtures:
+            with self.subTest(case=row["case"]):
+                messages, final, body = carrier(request=row["request"])
+                parameters = row["parameters"]
+                self.assertEqual(parameters["json_schema"], adapter._real_canonical({key: value for key, value in final["text"]["format"].items() if key != "type"}))
+                rejected_factory = FakeFactory(row["request"]["model"])
+                with self.assertRaisesRegex(InvokeBadRequestError, "model parameters differ"):
+                    adapter.generate(self.llm, rejected_factory, row["request"]["model"], {}, messages,
+                        {key: value for key, value in parameters.items() if key not in ("response_format", "json_schema")}, None, None, False, None)
+                self.assertIsNone(rejected_factory.kwargs)
+                factory = FakeFactory(row["request"]["model"])
+                result = adapter.generate(self.llm, factory, row["request"]["model"], {}, messages, parameters, None, None, False, None)
+                self.assertEqual(factory.count_payload["input"], final["input"])
+                self.assertEqual({key: value for key, value in factory.create_payload.items() if key != "timeout"}, final)
+                self.assertGreater(factory.create_payload["timeout"], 0)
+                self.assertLessEqual(factory.create_payload["timeout"], 60)
+                self.assertEqual(factory.kwargs["max_retries"], 0)
+                self.assertEqual(json.loads(result.message.content)["providerEvidence"]["requestDigest"], body["finalRequestDigest"])
+
     def setUp(self):
         self.llm = SimpleNamespace(_to_credential_kwargs=lambda credentials: {"api_key": "fixture", "base_url": "https://api.openai.com/v1"}, _calc_response_usage=Mock(return_value=LLMUsage.empty_usage()))
         self.params = {"booklet_real_report_execution": True, "booklet_timeout_seconds": 60, "max_tokens": 2048, "reasoning_effort": "none", "reasoning_mode": "standard", "service_tier": "default", "response_format": "json_schema", "json_schema": {"name": "fixture"}, "booklet_token_policy_version": "m4_context_policy_v2", "booklet_token_policy_hash": "a" * 64, "booklet_max_input_tokens": 128000, "booklet_warning_input_tokens": 32000}
