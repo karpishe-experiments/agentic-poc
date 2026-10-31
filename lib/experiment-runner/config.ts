@@ -55,7 +55,8 @@ export type BookletRunnerConfig = { enabled: true; baseUrl: string; publicOrigin
   m4?: { state: "disabled" | "invalid" | "ready" | "granted"; authority?: M4Authority };
   real?: { state: "ready"; bindings: BookletBinding[]; textPluginIdentity: string;
     textPackageSha256: string; imagePluginIdentity: string; imagePackageSha256: string;
-    nativeFileFormat: "base64"; sourcePolicy: import("@/lib/experiment-runner/m4-policy").M4Policy;
+    nativeFileFormat: "base64"; executionVersion?: "execution_v1" | "execution_v2";
+    sourcePolicy: import("@/lib/experiment-runner/m4-policy").M4Policy;
     tokenPolicy: import("@/lib/experiment-runner/m4-policy").M4TokenPolicy } };
 export type RunnerConfig = BookletRunnerConfig;
 export type RunnerBinding = BookletBinding;

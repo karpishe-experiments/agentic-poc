@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import release from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import delivered from "@/lib/experiment-runner/real-readiness-manifest.json";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
-import { executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
+import { executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile, executionMaximumTextCharge } from "@/lib/experiment-runner/execution-policy";
+import { prepareExecutionRequest, executionDefinitionFor } from "@/lib/experiment-runner/execution-request";
 import { m4TestId as id } from "@/tests/helpers/m4-policy";
 import {
   REAL_IMAGE_PACKAGE_SHA256, REAL_IMAGE_PLUGIN_IDENTITY, REAL_TEXT_PACKAGE_SHA256,
@@ -25,17 +26,42 @@ const ready = {
 } as const;
 
 describe("staging Real readiness manifest", () => {
+  it("versions compact manager requests while retaining the delivered profile and tester limits", () => {
+    const current = realReadinessManifestSchema.parse(delivered);
+    if (current.state !== "ready") throw new Error("Missing delivered readiness");
+    const retainedPublications = current.publications.map(item => item.role === "manager"
+      ? { ...item, publishedWorkflowId: "6e1ebf6d-94e1-4265-9733-764504a0ddba" } : item);
+    const prior = executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+      current.sourcePolicy, current.tokenPolicy, retainedPublications, { ...current, executionVersion: "execution_v1" }));
+    expect(prior.hash).toBe("9fab201953ff06cba920713dded4a8f623f28fa44fbeb9fc34bf6a7390a80f8e");
+    const next = executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+      current.sourcePolicy, current.tokenPolicy, current.publications, { ...current, executionVersion: "execution_v2" }));
+    expect(next.hash).not.toBe(prior.hash);
+    expect(executionPolicySnapshot(JSON.parse(prior.json)).hash).toBe(prior.hash);
+    const selector = { role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false };
+    const choices = { taskId: ["J01"], subjectKind: ["book"], subjectId: [id(1)] };
+    const prepared = prepareExecutionRequest(next.policy, selector, "{}", choices);
+    expect(JSON.parse(prepared.requestJson).max_output_tokens).toBe(4096);
+    expect(prepared.modelParameters.max_tokens).toBe(4096);
+    expect(executionDefinitionFor(next.policy, selector).systemPrompt).toContain("500 characters");
+    expect(executionMaximumTextCharge(next.policy, "decision", "manager") -
+      executionMaximumTextCharge(prior.policy, "decision", "manager")).toBe(1024);
+    expect(executionMaximumTextCharge(next.policy, "decision", "tester"))
+      .toBe(executionMaximumTextCharge(prior.policy, "decision", "tester"));
+  });
   it("pins dev2 for new readiness while preserving the retained dev1 profile hash", () => {
     const current = realReadinessManifestSchema.parse(delivered);
     if (current.state !== "ready") throw new Error("Missing delivered readiness");
     const prior = {
       ...current,
+      executionVersion: "execution_v1" as const,
       imagePluginIdentity: "langgenius/openai_tool:0.2.2-dev1@c1f56e13bfdba8523fcb79e3bf2249a0c1ffd0e1be7ad92a947eeace51a80b31",
       imagePackageSha256: "8ae9ddea724651f2c9d0559b043edfee735ca69cd1d07fae39474c11b3124ec8",
       publications: current.publications.map(item => item.role === "image"
-        ? { ...item, publishedWorkflowId: "ab5ca725-8268-40ca-912a-a4d432fbcac6" } : item),
+        ? { ...item, publishedWorkflowId: "ab5ca725-8268-40ca-912a-a4d432fbcac6" } : item.role === "manager"
+          ? { ...item, publishedWorkflowId: "6e1ebf6d-94e1-4265-9733-764504a0ddba" } : item),
     };
-    const profile = (adapters: typeof prior) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+    const profile = (adapters: Omit<typeof prior, "executionVersion"> & { executionVersion?: "execution_v1" | "execution_v2" }) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
       current.sourcePolicy, current.tokenPolicy, adapters.publications, adapters));
     const saved = profile(prior);
     expect(saved.hash).toBe("be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375");

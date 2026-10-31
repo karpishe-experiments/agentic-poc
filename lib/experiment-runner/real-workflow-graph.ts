@@ -161,6 +161,7 @@ export async function createRealWorkflowGraph(module: SimulationModule): Promise
     const model = llm.data.model as { provider: string; completion_params: Record<string, unknown> };
     model.provider = REAL_TEXT_PROVIDER;
     model.completion_params = { ...model.completion_params,
+      ...(module.role === "manager" ? { max_tokens: 4096 } : {}),
       booklet_request_digest: "{{#real_decode.digest#}}", booklet_timeout_seconds: "{{#real_decode.timeout_seconds#}}",
       booklet_deadline_at_ms: "{{#real_decode.deadline_at_ms#}}",
       booklet_token_policy_version: "{{#real_decode.token_policy_version#}}",

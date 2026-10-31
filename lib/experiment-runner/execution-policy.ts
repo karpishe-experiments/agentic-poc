@@ -4,7 +4,7 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { CASES, personaSchema } from "@/lib/contracts/experiment-runner";
 import { savedConfigurationItemSchema } from "@/lib/experiment-runner/config";
 import { m4PolicySchema, m4TokenPolicySchema, m4TokenPolicySnapshot, type M4Policy, type M4TokenPolicy } from "@/lib/experiment-runner/m4-policy";
-import { executionRequestBundleHash, realRequestBundleHash } from "@/lib/experiment-runner/execution-request";
+import { executionRequestBundleHash, realRequestBundleHash, executionV2RequestBundleHash } from "@/lib/experiment-runner/execution-request";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import { REAL_IMAGE_ADAPTER_IDENTITY, REAL_IMAGE_MODEL } from "@/lib/experiment-runner/real-image-contract";
 import { REAL_REPORT_ADAPTER_IDENTITY } from "@/lib/experiment-runner/real-report-carrier";
@@ -16,7 +16,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/);
 // This is a technical execution snapshot. Spending authority is recorded only
 // in the campaign's separate append-only allowance history.
 export const executionPolicySchema = z.strictObject({
-  schemaVersion: z.literal("execution_v1"),
+  schemaVersion: z.enum(["execution_v1", "execution_v2"]),
   mode: z.enum(["balanced", "real"]),
   provider: m4PolicySchema.shape.provider,
   protocol: m4PolicySchema.shape.protocol,
@@ -54,10 +54,15 @@ export const executionPolicySchema = z.strictObject({
       policy.mode === "balanced" && (policy.realImage || policy.realReport)) {
     context.addIssue({ code: "custom", message: "Real adapters belong only to a complete Real profile." });
   }
-  if (policy.requestDefinitionHash !== (policy.mode === "real" ? realRequestBundleHash() : executionRequestBundleHash())) {
+  const requestHash = policy.schemaVersion === "execution_v2" ? executionV2RequestBundleHash() :
+    policy.mode === "real" ? realRequestBundleHash() : executionRequestBundleHash();
+  if (policy.schemaVersion === "execution_v2" && policy.mode !== "real") {
+    context.addIssue({ code: "custom", message: "The compact manager profile is Real only." });
+  }
+  if (policy.requestDefinitionHash !== requestHash) {
     context.addIssue({ code: "custom", message: "Request definitions differ from the reviewed bundle." });
   }
-  if (policy.mode === "real" && policy.realReport?.requestDefinitionHash !== realRequestBundleHash()) {
+  if (policy.mode === "real" && policy.realReport?.requestDefinitionHash !== requestHash) {
     context.addIssue({ code: "custom", message: "Real report definition differs from its technical profile." });
   }
   if (policy.tokenPolicy.hash !== m4TokenPolicySnapshot(policy.tokenPolicy.amendment).hash) context.addIssue({ code: "custom", message: "Token carrier identity differs." });
@@ -131,11 +136,14 @@ export function realExecutionPolicyFromM4TechnicalProfile(source: M4Policy, toke
   bindings: ExecutionPolicy["publications"], adapters: {
     textPluginIdentity: string; textPackageSha256: string;
     imagePluginIdentity: string; imagePackageSha256: string;
+    executionVersion?: "execution_v1" | "execution_v2";
   }): ExecutionPolicy {
-  return executionPolicySchema.parse({ schemaVersion: "execution_v1", mode: "real",
+  const version = adapters.executionVersion ?? "execution_v1";
+  const requestHash = version === "execution_v2" ? executionV2RequestBundleHash() : realRequestBundleHash();
+  return executionPolicySchema.parse({ schemaVersion: version, mode: "real",
     provider: source.provider, protocol: source.protocol, serviceTier: source.serviceTier,
     apiBaseUrl: source.apiBaseUrl, pluginIdentity: adapters.textPluginIdentity,
-    requestDefinitionHash: realRequestBundleHash(), pricingReference: source.pricingReference,
+    requestDefinitionHash: requestHash, pricingReference: source.pricingReference,
     countChargeStatus: source.countChargeStatus,
     countChargeCeilingMicrodollars: source.countChargeCeilingMicrodollars,
     countVerificationReference: source.countVerificationReference,
@@ -152,11 +160,16 @@ export function realExecutionPolicyFromM4TechnicalProfile(source: M4Policy, toke
         inputImageMicrodollarsPerMillion: 8_000_000,
         outputImageMicrodollarsPerMillion: 30_000_000 } },
     realReport: { adapterIdentity: REAL_REPORT_ADAPTER_IDENTITY,
-      packageSha256: adapters.textPackageSha256, requestDefinitionHash: realRequestBundleHash() } });
+      packageSha256: adapters.textPackageSha256, requestDefinitionHash: requestHash } });
 }
 
-export function executionMaximumTextCharge(policy: ExecutionPolicy, bucket: keyof ExecutionPolicy["models"]): number {
-  const model = policy.models[bucket];
+export function executionTextModel(policy: ExecutionPolicy, bucket: keyof ExecutionPolicy["models"], role: ExperimentOperationDocument["role"]) {
+  return policy.schemaVersion === "execution_v2" && role === "manager"
+    ? { ...policy.models[bucket], maxOutputTokens: 4096 } : policy.models[bucket];
+}
+
+export function executionMaximumTextCharge(policy: ExecutionPolicy, bucket: keyof ExecutionPolicy["models"], role: ExperimentOperationDocument["role"]): number {
+  const model = executionTextModel(policy, bucket, role);
   const numerator = policy.tokenPolicy.amendment.maxInputTokens * model.inputMicrodollarsPerMillion +
     model.maxOutputTokens * model.outputMicrodollarsPerMillion;
   if (!Number.isSafeInteger(numerator)) throw new Error("Execution price bound is unsafe.");

@@ -51,6 +51,7 @@ describe("Real workflow graph candidates", () => {
     const graph = await createRealWorkflowGraph(manager);
     assertEdges(graph);
     expect(graph.nodes.filter(item => !item.id.startsWith("real_"))).toEqual(old.nodes);
+    expect(node(graph, "real_llm").data.model).toMatchObject({ completion_params: { max_tokens: 4096 } });
     expect(graph.edges.filter(item => !item.source.startsWith("real_") && !item.target.startsWith("real_") && item.source !== "start"))
       .toEqual(old.edges.filter(item => item.source !== "start"));
     expect(graph.edges).toContainEqual(expect.objectContaining({ source: "real_mode", target: "m4_mode", sourceHandle: "false" }));

@@ -106,7 +106,7 @@ export function createExecutionAllowanceLedger(database: Database) {
     }
     if (run.counters.logicalText >= totals.textCalls) return "text_calls";
     const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
-    const maximum = executionMaximumTextCharge(profile, m4ModelBucket(role, run.generationCompletedAtMs != null));
+    const maximum = executionMaximumTextCharge(profile, m4ModelBucket(role, run.generationCompletedAtMs != null), role);
     return campaign.settledMicrodollars + campaign.reservedMicrodollars + maximum > totals.maxMicrodollars ? "monetary" : null;
   }
 
@@ -125,7 +125,7 @@ export function createExecutionAllowanceLedger(database: Database) {
     if (!action || reason(campaign, run, action.role, action.providerKind) !== denied) conflict("Allowance reason differs from the next action.");
     const profile = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
     const requiredTotal = denied === "monetary" ? campaign.settledMicrodollars + campaign.reservedMicrodollars +
-      (action.providerKind === "image" ? 1 : executionMaximumTextCharge(profile, m4ModelBucket(action.role, run.generationCompletedAtMs != null))) :
+      (action.providerKind === "image" ? 1 : executionMaximumTextCharge(profile, m4ModelBucket(action.role, run.generationCompletedAtMs != null), action.role)) :
       denied === "text_calls" ? run.counters.logicalText + 1 : denied === "image_calls" ? run.counters.logicalImage + 1 :
       denied === "steps" ? run.counters.steps + 1 : denied === "text_revisions" ? run.textRevisions + 1 :
       denied === "image_revisions" ? run.imageRevisions + 1 : (run.noProgressCount ?? 0) + 1;
@@ -173,7 +173,7 @@ export function createExecutionAllowanceLedger(database: Database) {
     if (denied) throw new ExecutionAllowanceError("limit_exhausted", "Execution allowance is exhausted.", denied);
     const policy = executionPolicySnapshot(JSON.parse(campaign.profileJson)).policy;
     const bucket = m4ModelBucket(operation.role, run.generationCompletedAtMs != null);
-    const maximumMicrodollars = executionMaximumTextCharge(policy, bucket);
+    const maximumMicrodollars = executionMaximumTextCharge(policy, bucket, operation.role);
     const reservation = { campaignId: campaign._id, policyHash: campaign.profileHash, requestDigest, bucket,
       tokenPolicy: policy.tokenPolicy, effectivePolicyHash: policy.tokenPolicy.hash,
       maxInputTokens: policy.tokenPolicy.amendment.maxInputTokens,
