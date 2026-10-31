@@ -1,4 +1,4 @@
-﻿import { writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createRealWorkflowGraph } from '../../lib/experiment-runner/real-workflow-graph';
 import { m4CanonicalJson,m4Hash } from '../../lib/experiment-runner/m4-request';
@@ -28,4 +28,3 @@ for(const name of cases){
 }
 writeFileSync(destination,JSON.stringify(rows));
 console.log(JSON.stringify({cases:rows.map(r=>r.case),generated:true}));
-
