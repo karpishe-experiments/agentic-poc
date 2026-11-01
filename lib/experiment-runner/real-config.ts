@@ -7,10 +7,10 @@ import { realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runn
 
 // These are reviewed local package candidates, not an assertion of installed
 // Dify state or model permissions. A later candidate needs an explicit update.
-export const REAL_TEXT_PACKAGE_SHA256 = "8d88f8e73a1f7c7807861d594d0fd46e156ff6d7acbc7ca3591b08532604a766";
-export const REAL_TEXT_PLUGIN_IDENTITY = "langgenius/openai:1.0.7-dev6@0247e3661bcd4102d65f3ed5c4d9d5771873ec807f66806dfff690ceac74c70a";
-export const REAL_IMAGE_PACKAGE_SHA256 = "cc66cfd3cd181b0c2886e3190e5198d28c443a8b6cfb6fad214c6582e7a57f80";
-export const REAL_IMAGE_PLUGIN_IDENTITY = "langgenius/openai_tool:0.2.2-dev2@098ed46c290cf283e1a5d7e0944490f27a00b9f29296f95c0d988f793f7bac68";
+export const REAL_TEXT_PACKAGE_SHA256 = "a4eb441d0ac3ca84ccbe18b0f0be93b20c088ed6740a486dc490e66f14d24d53";
+export const REAL_TEXT_PLUGIN_IDENTITY = "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2";
+export const REAL_IMAGE_PACKAGE_SHA256 = "5f34caaee4b58e672eb3117ad0eb39fb4905049487844609c0b60d681a3a68ef";
+export const REAL_IMAGE_PLUGIN_IDENTITY = "langgenius/openai_tool:0.2.2-dev3@8a7f865a47ce9e25260bd7d7cade70d4712506d945a7a2a66607f9f324160f05";
 
 const publication = savedConfigurationItemSchema.extend({ taskId: specialistTaskSchema.nullable(), persona: personaSchema.nullable() });
 export const realReadinessManifestSchema = z.discriminatedUnion("state", [

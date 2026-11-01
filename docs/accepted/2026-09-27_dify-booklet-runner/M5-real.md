@@ -35,7 +35,30 @@ the adapters' 21 image / 14 text-report tests passed. The 27 page-batch tests
 include amended pause/clarification bindings. Three isolated browser flows cover
 allowance review, blocked diagnostics and recovered completion without provider
 traffic. Both Linux deployment suites, CI-level ShellCheck and typecheck passed.
-Two independent source reviews are clean. Live publication, final readiness pins,
+Two independent source reviews are clean. PR #325 merged as
+`0686b9c767d3dffc401e7a7cb85e4b7e2ca351e2`; all 871 unit tests and CI passed.
+
+The image result-handler correction is published as
+`d016b1e3-93a6-4e9b-8509-de2a9b3568ad`, graph hash
+`32d44724b3cfd3db9bbc143f93cfe55422e9f18b461283c2023418f91f2e89b4`.
+Readback proves that only `real_image_result` changed; variables, features and
+disabled retries are preserved. No provider call was made. The registered MCP
+save rejected a legacy environment field without changing the draft. The
+documented compatibility client saved the graph, and MCP published/read it back.
+
+The release candidate pins text dev7 and image dev3 to the reviewed packages:
+
+| Candidate | Archive SHA-256 |
+| --- | --- |
+| Text dev7 | `a4eb441d0ac3ca84ccbe18b0f0be93b20c088ed6740a486dc490e66f14d24d53` |
+| Image dev3 | `5f34caaee4b58e672eb3117ad0eb39fb4905049487844609c0b60d681a3a68ef` |
+
+Its profile hash is
+`e0138a67f748fc39301e8df6ee99284e9cafd51280f60eff972b9a4046edeb3d`.
+Models, prices, request definitions and other publications remain unchanged.
+The current run retains its original `dc755367...` profile; new replacement work
+uses a recorded diagnostic-only execution amendment after explicit approval.
+Candidate pins do not prove live installation. Package installation/readback,
 deployment verification and the exact live replacement grant remain pending.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
