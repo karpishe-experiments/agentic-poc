@@ -89,7 +89,10 @@ describe("staging Real readiness manifest", () => {
     expect(executionPolicySnapshot(saved.policy).hash).toBe(saved.hash);
     expect(profile(current).hash).not.toBe(saved.hash);
     expect(realReadinessManifestSchema.safeParse(prior).success).toBe(false);
-    expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev3") })).toThrow();
+    const diagnosticAdapter = { ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev3") };
+    expect(() => profile(diagnosticAdapter)).not.toThrow();
+    expect(realReadinessManifestSchema.safeParse(diagnosticAdapter).success).toBe(false);
+    expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev4") })).toThrow();
   });
 
   it("hydrates the delivered publications and never accepts local or production Real dispatch", () => {
