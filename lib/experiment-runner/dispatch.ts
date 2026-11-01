@@ -3,6 +3,7 @@ import type { Database } from "@/db/client";
 import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { approveAssembledDelegation } from "@/db/experiment-narrative";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
+import { externalError, retainExternalError } from "@/lib/experiment-runner/external-errors";
 import { createExperimentRepository, ExperimentRepositoryError } from "@/db/experiment-repository";
 import { createM4TextPreparation } from "@/db/experiment-text-preparation";
 import { createRealImagePreparation } from "@/db/experiment-real-image-preparation";
@@ -10,7 +11,9 @@ import { createRealReportPreparation } from "@/db/experiment-real-report-prepara
 import { createM4ProviderResults } from "@/db/experiment-provider-results";
 import { createExperimentCampaignLedger } from "@/db/experiment-campaign";
 import { createExecutionAllowanceLedger, ExecutionAllowanceError } from "@/db/experiment-execution-allowance";
+import { hasApprovedImageReplacement } from "@/db/experiment-image-replacement";
 import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
+import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 import { closeM4KnownFailure } from "@/db/experiment-provider-failure";
 import { closeExecutionTextFailure } from "@/db/experiment-execution-text-failure";
 import { m4UnclaimedFailureDigest } from "@/db/experiment-unclaimed-failure";
@@ -93,8 +96,12 @@ export function createExperimentDispatcher(deps: {
   const activeAdvances = new Set<string>();
   const uploadReference = deps.uploadReference ?? createReferenceTransport(deps.config).upload;
   const batches = () => createExperimentPageBatchRepository({ database: deps.database, store: store(), now });
-  const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => selectBinding(deps.config,
-    operation.role, operation.taskId as SpecialistTask | null, run.persona, run.mode);
+  const bindingFor = (operation: ExperimentOperationDocument, run: ExperimentRunDocument) => {
+    const current = selectBinding(deps.config, operation.role, operation.taskId as SpecialistTask | null, run.persona, run.mode);
+    const saved = operationConfiguration(run, operation).find(b => b.role === operation.role && b.taskId === (operation.role === "image" ? null : operation.taskId));
+    if (!saved || saved.appId !== current.appId) throw Error("Saved execution app differs from configured credentials.");
+    return { ...current, publishedWorkflowId: saved.publishedWorkflowId };
+  };
   const assemblyFailures = new WeakMap<object, { startedAt: number; operationId: string }>();
   const assemblyDiagnostic = (error: unknown) => {
     const origin = error && typeof error === "object" ? assemblyFailures.get(error) : undefined;
@@ -305,6 +312,11 @@ export function createExperimentDispatcher(deps: {
   }
 
   async function reconcileWork(run: ExperimentRunDocument, operation: ExperimentOperationDocument, result: RuntimeResult, observed: boolean) {
+    if ((result.kind === "execution" || result.kind === "accepted") && result.execution.diagnosticError &&
+        result.execution.status !== operation.remoteStatus) {
+      await retainExternalError({ runId: run._id, operationId: operation._id }, externalError({ service: "dify",
+        stage: "workflow_execution", error: result.execution.diagnosticError, dispatchStarted: true }), deps.database);
+    }
     const identity = { runId: run._id, operationId: operation._id, parentWorkflowRunId: operation.parentWorkflowRunId, nowMs: now() };
     const current = await repository.getOperation(operation._id);
     if (!current) return;
@@ -627,7 +639,7 @@ export function createExperimentDispatcher(deps: {
         }
       }
       const expected = configurationSnapshot(deps.config, run.persona, run.mode);
-      if (canonical(expected) !== run.configurationJson) {
+      if (canonical(expected) !== (run.executionAmendments?.at(-1)?.configurationJson ?? run.configurationJson)) {
         await repository.blockRun({ runId, category: "definite_failure", nowMs: now() });
         return "blocked";
       }
@@ -876,6 +888,11 @@ export function createExperimentDispatcher(deps: {
   async function advanceOwned(runId: string): Promise<"advanced" | "waiting" | "boundary" | "blocked"> {
     let run = await repository.getRun(runId);
     if (!run) return "blocked";
+    if (run.allowanceAdjustment) {
+      const applied = await mutate(() => withMongoTransaction(deps.database, session =>
+        createExecutionAllowanceLedger(deps.database).applyAdjustment(session, runId, now())), { runId });
+      if (applied) run = applied;
+    }
     const operation = run.activeOperationId ? await repository.getOperation(run.activeOperationId) : null;
     if (run.status === "completed" || run.status === "failed") {
       // A lost bookkeeping acknowledgement cannot undo terminal business state.
@@ -1021,6 +1038,18 @@ export function createExperimentDispatcher(deps: {
     }
     // Reconcile retained workflow IDs before admitting another persona's POST.
     for (const run of runs) {
+      if (run.imageReplacementParking) {
+        const parked = await repository.getOperation(run.imageReplacementParking.operationId);
+        if (!parked || !await withMongoTransaction(deps.database, session => hasApprovedImageReplacement(deps.database, session, run, parked))) {
+          // Parking is deployment preparation, not permission to release the
+          // experiment lane. Do not poll or rewrite a terminal unknown attempt.
+          return "waiting" as const;
+        }
+      }
+      if (run.allowanceAdjustment && !run.preparation) {
+        await advance(run._id);
+        return "waiting" as const;
+      }
       if (run.preparation?.unresolved) return "waiting" as const;
       if (run.preparation && !run.activeOperationId && run.preparation.outcome !== "failed") {
         await advance(run._id);
@@ -1028,6 +1057,11 @@ export function createExperimentDispatcher(deps: {
       }
       const operation = await unresolved(run, heads.get(run._id) ?? null);
       if (!operation) continue;
+      if (run.status === "blocked" && operation.state === "unknown") {
+        const terminal = await repository.getOperation(operation._id);
+        if (terminal && ["failed", "stopped"].includes(terminal.remoteStatus ?? "") &&
+            terminal.lifecycle?.phase === "finished" && now() >= (terminal.deadlineAtMs ?? Infinity)) return "waiting" as const;
+      }
       // Unresolved work retains the single-experiment lane even after expiry,
       // without an ID, or after a conflicting publication. Never admit a new
       // persona merely because the old observation deadline elapsed.

@@ -23,7 +23,7 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_key, item:
   item && typeof item === "object" && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
-function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
+function invalid(message: string, cause?: unknown): never { throw new ExperimentRepositoryError("invalid_state", message, undefined, { cause }); }
 function json(raw: string | null | undefined): unknown {
   try { return JSON.parse(raw ?? ""); } catch { return invalid("Saved sheet evidence is malformed."); }
 }
@@ -52,8 +52,9 @@ export function createExperimentSheetAssembly(input: { database: Database; store
           { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
     // Read original approved references for a late callback from the exact
     // claimed J13 operation. This does not authorize assembly or a new dispatch.
-    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+    const imageOperationId = run.activeOperationId ?? run.imageReplacementParking?.operationId;
+    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && imageOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: imageOperationId, runId: run._id,
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
@@ -131,7 +132,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
     try {
       const bytes = attempt ? await attempt.read(evidence) : await store.get(evidence.uri);
       if (bytes.byteLength !== evidence.byteLength || createHash("sha256").update(bytes).digest("hex") !== evidence.sha256) invalid("Saved sheet bytes are corrupt.");
-    } catch { invalid("Sheet storage verification failed."); }
+    } catch (cause) { invalid("Sheet storage verification failed.", cause); }
   }
   // Runs in the caller's approval transaction. No nested transaction, assembly,
   // reservation or stage change is permitted here.

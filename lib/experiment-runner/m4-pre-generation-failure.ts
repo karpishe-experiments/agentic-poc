@@ -15,6 +15,7 @@ export const m4PreGenerationFailureSchema = z.strictObject({ schemaVersion: z.li
     countedInputTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(), limit: z.literal(32000),
     generationStarted: z.literal(false), elapsedMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     countRequestId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/).nullable(),
+    diagnostic: z.unknown().optional(),
   }),
 });
 export const m4PreGenerationFailureV2Schema = m4PreGenerationFailureSchema.extend({

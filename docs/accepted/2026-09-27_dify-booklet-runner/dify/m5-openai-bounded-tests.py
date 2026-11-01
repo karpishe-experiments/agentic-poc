@@ -37,7 +37,7 @@ def png():
 
 
 def prepared():
-    return {"model": "gpt-6-luna", "input": [{"type": "message", "role": "system", "content": "System"}, {"type": "message", "role": "user", "content": "Judge قاصدک"}], "max_output_tokens": 2048, "reasoning": {"effort": "none", "mode": "standard"}, "service_tier": "default", "text": {"format": {"type": "json_schema", "name": "fixture", "strict": True, "schema": {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": False}}}, "store": False, "truncation": "disabled", "include": ["reasoning.encrypted_content"]}
+    return {"model": "gpt-6-luna", "input": [{"type": "message", "role": "system", "content": "System"}, {"type": "message", "role": "user", "content": "Judge Ù‚Ø§ØµØ¯Ú©"}], "max_output_tokens": 2048, "reasoning": {"effort": "none", "mode": "standard"}, "service_tier": "default", "text": {"format": {"type": "json_schema", "name": "fixture", "strict": True, "schema": {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": False}}}, "store": False, "truncation": "disabled", "include": ["reasoning.encrypted_content"]}
 
 
 def carrier(blob=png(), request=None):
@@ -79,6 +79,28 @@ class FakeFactory:
 
 
 class Contract(unittest.TestCase):
+
+    def test_raw_cookie_and_signed_url_diagnostics_are_redacted(self):
+        error = RuntimeError('upstream failed\nCookie: session=sample-private-cookie\nSet-Cookie: session=sample-private-cookie')
+        error.body = {'headers': {'Cookie': 'session=sample-private-cookie', 'Authorization': 'custom-private-auth'}, 'url': 'https://host/file?sig=sample-private-signature'}
+        result = adapter.provider_error(error)
+        text = str(result)
+        self.assertNotIn('sample-private-cookie', text)
+        self.assertNotIn('custom-private-auth', text)
+        self.assertNotIn('sample-private-signature', text)
+        self.assertTrue(result['redacted'])
+
+
+    def test_raw_cookie_and_signed_url_diagnostics_are_redacted(self):
+        error = RuntimeError('upstream failed\nCookie: session=sample-private-cookie\nSet-Cookie: session=sample-private-cookie')
+        error.body = {'headers': {'Cookie': 'session=sample-private-cookie', 'Authorization': 'custom-private-auth'}, 'url': 'https://host/file?sig=sample-private-signature'}
+        result = adapter.provider_error(error)
+        text = str(result)
+        self.assertNotIn('sample-private-cookie', text)
+        self.assertNotIn('custom-private-auth', text)
+        self.assertNotIn('sample-private-signature', text)
+        self.assertTrue(result['redacted'])
+
     @unittest.skipUnless(graph_contract, "Pass --graph-contract with resolved generated report-node fixtures")
     def test_generated_workflow_report_parameters_reach_fake_provider(self):
         fixtures = json.loads(graph_contract.read_text(encoding="utf-8-sig"))
@@ -195,7 +217,7 @@ class Contract(unittest.TestCase):
     def test_non_ascii_final_digest(self):
         _, final, body = carrier()
         self.assertEqual(body["finalRequestDigest"], adapter._real_sha(adapter._real_canonical(final)))
-        self.assertIn("قاصدک", adapter._real_canonical(final))
+        self.assertIn("Ù‚Ø§ØµØ¯Ú©", adapter._real_canonical(final))
 
     def test_expired_deadline_blocks_count_and_generation(self):
         messages, _, body = carrier()
@@ -211,7 +233,7 @@ class Contract(unittest.TestCase):
         class CountFailure(FakeFactory):
             def count(self, **payload):
                 self.count_payload = payload
-                raise RuntimeError("private count failure")
+                raise RuntimeError("count failure Bearer private-token-value")
         factory = CountFailure()
         result = adapter.generate(self.llm, factory, "gpt-6-luna", {}, messages, self.params, None, None, False, None)
         wrapper = json.loads(result.message.content)
@@ -224,7 +246,8 @@ class Contract(unittest.TestCase):
         self.assertEqual(evidence["inspectedAssetIds"], ["00000000-0000-4000-8000-000000000001"])
         self.assertFalse(evidence["generationStarted"])
         self.assertIsNone(factory.create_payload)
-        self.assertNotIn("private", result.message.content)
+        self.assertNotIn("private-token-value", result.message.content)
+        self.assertIn("count failure", evidence["diagnostic"]["message"])
 
     def test_client_setup_expiry_blocks_paid_count(self):
         messages, _, body = carrier()

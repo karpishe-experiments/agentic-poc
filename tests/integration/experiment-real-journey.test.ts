@@ -9,6 +9,8 @@ import { withMongoTransaction, type Database } from "@/db/client";
 import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
 import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
 import { createExperimentRepository } from "@/db/experiment-repository";
+import { createImageReplacementService } from "@/db/experiment-image-replacement";
+import { createImageReplacementParkingRecovery } from "@/lib/operations/image-replacement-parking";
 import { FilesystemAssetStore } from "@/lib/assets/filesystem-asset-store";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
@@ -77,7 +79,7 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
   const providerErrors: unknown[] = [];
   let reviseSheet = false;
   let revisedVersionId: string | null = null;
-  let imageFailure: "rejected_pre_provider" | "failed_after_provider" | null = null;
+  let imageFailure: "rejected_pre_provider" | "failed_after_provider" | "unknown_outcome" | null = null;
   let reportStatus = "completed";
   let imageFailureTask: "J13" | null = null;
   const uploads = new Map<string, Uint8Array>();
@@ -101,7 +103,7 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
           await repository.observeRealImage({ ...identity, inputFingerprint: operation.inputFingerprint,
             result: { schemaVersion: "booklet_real_image_result_v1", requestDigest: claim.realImageRequest!.requestDigest,
               adapterIdentity: REAL_IMAGE_ADAPTER_IDENTITY, requestedModel: REAL_IMAGE_MODEL,
-              dispatchStarted: failure === "failed_after_provider", status: failure,
+              dispatchStarted: failure !== "rejected_pre_provider", status: failure,
               usage: failure === "failed_after_provider" ? { inputTokens: 2, outputTokens: 3 } : null,
               output: null, failure: { stage: failure === "failed_after_provider" ? "post_provider" : "pre_provider", code: "fixture_failure" } }, nowMs: now() });
           const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId,
@@ -209,10 +211,21 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
   const advance = () => createExperimentDispatcher({ database, config, runtime, uploadReference, store: () => new FilesystemAssetStore(root),
     mutate: async fn => fn(), now }).advance(runId);
   return { database, root, repository, context, runId, campaignId, runtime, originals, uploads, advance, providerErrors,
+    diagnosticRelease: () => {
+      config.real!.textPluginIdentity = `langgenius/openai:1.0.7-dev7@${"a".repeat(64)}`;
+      config.real!.textPackageSha256 = "b".repeat(64);
+      config.real!.imagePluginIdentity = `langgenius/openai_tool:0.2.2-dev3@${"c".repeat(64)}`;
+      config.real!.imagePackageSha256 = "d".repeat(64);
+      config.real!.bindings.find(b => b.role === "image")!.publishedWorkflowId = randomUUID();
+    },
+    replacementService: () => createImageReplacementService({ database, config, store, runtime, now }),
+    parkingService: () => createImageReplacementParkingRecovery({ database, config, store, runtime, now }),
+    cycle: () => createExperimentDispatcher({ database, config, runtime, store: () => store, mutate: async fn => fn(), now }).cycle(),
+    expireOperation: () => { clock += 300_001; vi.spyOn(Date, "now").mockImplementation(now); },
     unknownReportOutcome: () => { reportStatus = "unknown"; },
     inspect: (operationId: string) => createExperimentDispatcher({ database, config, runtime, store: () => store,
       mutate: async fn => fn(), now }).inspect({ runId, operationId }),
-    failNextImage: (status: "rejected_pre_provider" | "failed_after_provider", task: "J13" | null = null) => {
+    failNextImage: (status: "rejected_pre_provider" | "failed_after_provider" | "unknown_outcome", task: "J13" | null = null) => {
       imageFailure = status; imageFailureTask = task;
     },
     reviseNextSheet: () => { reviseSheet = true; }, revisedVersion: () => revisedVersionId };
@@ -228,6 +241,91 @@ async function advance(env: Awaited<ReturnType<typeof setup>>, step: number) {
 }
 
 describe("Real shared journey with fake providers and durable originals", () => {
+  it("replaces one explicitly approved unknown image and completes Kid with its original liability intact", async () => {
+    const env = await setup("playful_kid", "execution_v2");
+    env.failNextImage("unknown_outcome", "J13");
+    for (let step = 0; step < 180; step++) {
+      await env.advance();
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+    }
+    const blocked = (await env.repository.getRun(env.runId))!;
+    const original = (await env.repository.getOperation(blocked.activeOperationId!))!;
+    expect(original).toMatchObject({ state: "unknown", realImageObservation: { chargeBasis: "unknown_outcome" } });
+    const retained = structuredClone(original.realImageReservation);
+    const calls = vi.mocked(env.runtime.start).mock.calls.length;
+    await expect(env.replacementService().preview(env.runId, original._id)).rejects.toThrow();
+    env.expireOperation();
+    env.diagnosticRelease();
+    await env.database.collections.deployment_control.insertOne({ _id: "_staging", schemaVersion: "1", environment: "_staging",
+      maintenance: false, draining: false, activeMutations: 0, mutationOwners: [], reason: "fixture", updatedAtMs: Date.now() });
+    const target = { runId: env.runId, operationId: original._id, expectedRevision: blocked.revision };
+    const parking = env.parkingService(), parkingPreview = await parking.preview(target);
+    await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: true } });
+    expect(await parking.verifyUnapplied(target, parkingPreview.previewDigest)).toMatchObject({ outcome: "unapplied" });
+    let checkpoint;
+    await parking.apply(target, parkingPreview.previewDigest, async proof => { checkpoint = proof.snapshot; });
+    expect(await parking.verifyCompleted(target, checkpoint!)).toMatchObject({ outcome: "image_parked", providerPosts: 0 });
+    expect(await parking.verifyCompleted(target, checkpoint!)).toMatchObject({ outcome: "image_parked" });
+    const waitingRunId = randomUUID(), waitingBookletId = randomUUID();
+    await env.repository.createRun({ runId: waitingRunId, bookletId: waitingBookletId, persona: "playful_kid", mode: "simulated",
+      configuration: JSON.parse(blocked.configurationJson), nowMs: Date.now() + 1 });
+    expect(await env.cycle()).toBe("waiting");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(calls);
+    expect((await env.repository.getRun(waitingRunId))!.status).toBe("queued");
+    await env.database.collections.experiment_runs.deleteOne({ _id: waitingRunId });
+    await env.database.collections.booklets.deleteOne({ _id: waitingBookletId });
+    expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
+    await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: false } });
+    const preview = await env.replacementService().preview(env.runId, original._id);
+    const approval = { runId: env.runId, operationId: original._id, approvalId: randomUUID(),
+      reference: "fixture approval: accept unknown charge and one replacement", expectedRevision: preview.expectedRevision,
+      expectedCampaignRevision: preview.expectedCampaignRevision, previewDigest: preview.previewDigest,
+      expiresAtMs: preview.expiresAtMs, acknowledgeUnknownCharge: true as const };
+    await expect(env.replacementService().approve(approval)).rejects.toThrow("additional allowance");
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(calls);
+    const input = { ...approval, totals: { ...preview.totals, maxMicrodollars: preview.totals.maxMicrodollars + 1_000_000 } };
+    await expect(env.replacementService().approve({ ...input, expiresAtMs: Date.now() - 1 })).rejects.toThrow("expired");
+    await expect(env.replacementService().approve({ ...input, expiresAtMs: input.expiresAtMs - 1 })).rejects.toThrow("changed");
+    await expect(env.replacementService().approve({ ...input, expectedRevision: input.expectedRevision + 1 })).rejects.toThrow("changed");
+    await env.database.collections.experiment_operations.updateOne({ _id: original._id }, { $set: { authorizationClaim: { id: randomUUID(), expiresAtMs: Date.now() + 10000 } } });
+    await expect(env.replacementService().preview(env.runId, original._id)).rejects.toThrow("owner");
+    await env.database.collections.experiment_operations.updateOne({ _id: original._id }, { $unset: { authorizationClaim: "" } });
+    const results = await Promise.all([env.replacementService().approve(input), env.replacementService().approve(input)]);
+    expect(new Set(results.map(r => r.replacementOperationId)).size).toBe(1);
+    expect(results.filter(r => !r.reused)).toHaveLength(1);
+    const receipt = results[0];
+    expect(await env.replacementService().approve(input)).toMatchObject({ replacementOperationId: receipt.replacementOperationId, reused: true });
+    expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
+    await expect(env.replacementService().approve({ ...input, reference: "different terms" })).rejects.toThrow("different terms");
+    for (let step = 0; step < 180; step++) {
+      if ((await env.repository.getRun(env.runId))!.status === "completed") break;
+      await advance(env, step);
+    }
+    const complete = (await env.repository.getRun(env.runId))!;
+    expect(complete.status).toBe("completed");
+    expect(complete.imageReplacementApprovals).toHaveLength(1);
+    expect(complete.executionAmendments).toHaveLength(1);
+    expect(complete.execution!.profileHash).not.toBe(complete.executionAmendments![0].profileHash);
+    expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
+    const operations = await env.repository.listOperations(env.runId);
+    expect(operations.filter(op => op.replacesImageOperationId === original._id)).toHaveLength(1);
+    expect(operations.filter(op => op.realReportPreparation).map(op => op.state)).toEqual(["succeeded", "succeeded"]);
+    await withMongoTransaction(env.database, session => verifyExecutionAccounting(env.database, session, complete));
+    expect(env.originals.size).toBe(9);
+    const replacement = operations.find(op => op._id === receipt.replacementOperationId)!;
+    const late = { ...JSON.parse(replacement.realImageObservation!.resultJson), requestDigest: original.realImagePreparation!.requestDigest };
+    const beforeLate = await env.database.collections.experiment_campaigns.findOne({ _id: env.campaignId });
+    await env.repository.observeRealImage({ runId: env.runId, operationId: original._id, workflowRunId: original.workflowRunId!,
+      parentWorkflowRunId: original.parentWorkflowRunId, inputFingerprint: original.inputFingerprint, result: late, nowMs: Date.now() });
+    expect(await env.database.collections.experiment_campaigns.findOne({ _id: env.campaignId })).toEqual(beforeLate);
+    expect(await env.repository.getOperation(original._id)).toMatchObject({ state: "unknown", resultJson: null,
+      externalErrors: [expect.objectContaining({ stage: "late_superseded_evidence" })] });
+    expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
+    await withMongoTransaction(env.database, session => verifyExecutionAccounting(env.database, session, complete));
+    await env.database.collections.experiment_operations.updateOne({ _id: original._id }, { $set: { "imageReplacement.evidenceDigest": "0".repeat(64) } });
+    await expect(withMongoTransaction(env.database, session => verifyExecutionAccounting(env.database, session, complete))).rejects.toThrow("accounting");
+    expect(fetch).not.toHaveBeenCalled();
+  }, 180_000);
   it("keeps an attributable unknown report outcome owned instead of closing it as a terminal failure", async () => {
     const env = await setup(); env.unknownReportOutcome();
     for (let step = 0; step < 180; step++) {

@@ -28,6 +28,16 @@ the error names the missing setting without printing its value.
 
 ### Supported recovery candidate
 
+The replacement candidate adds `image-replacement-parking` through the same
+`candidate-reconcile` preview/apply flow. Supply the exact run, image operation
+and current revision. Preview requires a terminal failed/stopped Dify execution,
+expired deadline, intact unknown reservation, current source bytes and no other
+owners. Apply requires closed quiet admission and preserves the original
+operation, page-batch evidence, counters and liabilities. Its result is
+`image_parked`, not a paid-outcome resolution or replacement approval. Reconcile
+an interrupted acknowledgement from the saved checkpoint. Continue with the
+existing candidate deployment handoff; do not resume the original operation.
+
 The M5 candidate advertises `execution-text-failure-closure` for the exact retained
 Real Kid manager failure and the later pre-provider tester parameter failure
 recorded in the [M5 checkpoint](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#current-kid-and-report-correction---2026-10-31).

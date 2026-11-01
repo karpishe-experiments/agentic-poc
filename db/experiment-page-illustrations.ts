@@ -1,4 +1,5 @@
 import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
+import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -78,9 +79,9 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     if (!configuredPageIllustrationTask(run.configurationJson)) invalid("Page illustration is not enabled by this saved run configuration.");
     const configuration = savedConfigurationSchema.parse(json(run.configurationJson, "Saved run configuration is malformed."));
     const managerBinding = configuration.find((item) => item.role === "manager" && item.taskId === null);
-    const imageBinding = configuration.find((item) => item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
     const sources = await verifyCurrentPageIllustrationSources(database, session, run, value.pageId, store, { attempt });
     const operation = snapshot ? snapshot.operations.find((item) => item._id === value.imageOperationId) : await database.collections.experiment_operations.findOne({ _id: value.imageOperationId, runId: run._id }, options);
+    const imageBinding = operation ? operationConfiguration(run, operation).find(item => item.role === "image" && item.taskId === null && item.finalPageIllustration === true) : null;
     if (!operation || operation.role !== "image" || operation.providerKind !== "image" || operation.taskId !== "J13" ||
       operation.subjectKind !== "page" || operation.subjectId !== value.pageId || operation.mode !== run.mode || operation.state !== "succeeded" ||
       operation.reservationCount !== 1 || !operation.workflowRunId || !operation.verifiedWorkflowId || !operation.parentWorkflowRunId || operation.imageCompletionClaim) {
