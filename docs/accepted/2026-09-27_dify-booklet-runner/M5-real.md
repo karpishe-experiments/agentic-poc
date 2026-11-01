@@ -58,8 +58,11 @@ Its profile hash is
 Models, prices, request definitions and other publications remain unchanged.
 The current run retains its original `dc755367...` profile; new replacement work
 uses a recorded diagnostic-only execution amendment after explicit approval.
-Candidate pins do not prove live installation. Package installation/readback,
-deployment verification and the exact live replacement grant remain pending.
+Exact Community readback now verifies both installed package identities. The
+operator accepted persistent unsigned installation for this Community instance;
+the [current signature policy](../../deployment/dify-community.md#baseline-and-targets)
+supersedes the earlier temporary-window restoration requirement. Deployment
+verification and the exact live replacement grant remain pending.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error

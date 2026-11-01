@@ -170,6 +170,17 @@ Technical access is not authority. Record verification and permission separately
 never infer a grant from a working login. These are the latest recorded results,
 not fresh live checks. Recheck the required row before dependent execution.
 
+**Current Community signature policy - 2026-11-01:** The operator explicitly
+accepted keeping unsigned installation enabled on `https://dify.uniwares.co.uk`.
+The private-root receipt verified `FORCE_VERIFYING_SIGNATURE=false`; MCP then
+verified the exact reviewed text dev7 and image dev3 package identities. Keep
+this instance's setting at `false`; restoration instructions in the older
+installation checkpoints below are historical. The
+[Community runbook](../../deployment/dify-community.md#baseline-and-targets)
+owns the current scope. This grants no new paid call, allowance increase,
+automatic retry or successor. The current Kid remains at USD 5 pending its
+separate exact replacement review.
+
 **Current M4/M5 status - 2026-10-27:** M4 is complete under the accepted Balanced
 criterion. [The M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27) records the
 three terminal original runs and USD 0.661455 upper-bound exposure in the
