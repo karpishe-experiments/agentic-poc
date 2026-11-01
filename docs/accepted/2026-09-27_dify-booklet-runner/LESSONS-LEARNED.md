@@ -1092,6 +1092,23 @@ does not classify stale dependencies, hydration errors or ownership conflicts as
 creative failure. Boundary tests cover incomplete output, malformed output,
 clarification length, unknown outcomes, conflicting evidence and lost replies.
 
+## Keep financial authority separate from uncertain execution
+
+For approval-based experiments, a higher allowance does not establish the result
+or charge of an earlier call. Preserve its reservation and original evidence.
+Record a replacement as one explicitly approved new operation, with current
+source/byte checks and a linked attempt. Deployment parking must retain the
+experiment's scheduling barrier until that approval exists. Evidence: the Real
+Kid fake-provider replacement journey covers parking, concurrent acknowledgement,
+both reports, accounting and late callback isolation. Promotion candidate:
+**Documentation** for operator approval and uncertain-result boundaries.
+
+Raw SDK bodies and stacks can contain cookie headers and signed URLs inside
+strings, even when structured credential fields are removed. Redact both forms
+before retention and test the actual adapter response path. Evidence: TypeScript
+and both adapter diagnostic fixtures. Promotion candidate: **Documentation** for
+external-call diagnostics.
+
 ## Verify generated workflow parameters against the adapter
 
 The first fully illustrated Real Kid reached evaluation, then its report stopped

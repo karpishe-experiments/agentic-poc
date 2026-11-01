@@ -44,12 +44,21 @@ def write_package(path: pathlib.Path, files: dict[str, bytes]) -> str:
     return sha(path.read_bytes())
 
 
+def content_identity(path: pathlib.Path, name: str, version: str) -> str:
+    checksum = hashlib.sha256()
+    with zipfile.ZipFile(path) as package:
+        for filename in sorted(package.namelist()):
+            checksum.update(hashlib.sha256(filename.encode()).digest())
+            checksum.update(hashlib.sha256(package.read(filename)).digest())
+    return f"langgenius/{name}:{version}@{checksum.hexdigest()}"
+
+
 def build_image(files: dict[str, bytes], directory: pathlib.Path, output: pathlib.Path) -> str:
     manifest = files["manifest.yaml"].decode("utf-8")
     provider = files["provider/openai.yaml"].decode("utf-8")
     if manifest.count("version: 0.2.2") != 1 or provider.count("- tools/gpt_image_2_edit.yaml") != 1:
         raise ValueError("Audited image package descriptor differs")
-    files["manifest.yaml"] = manifest.replace("version: 0.2.2", "version: 0.2.2-dev1").encode()
+    files["manifest.yaml"] = manifest.replace("version: 0.2.2", "version: 0.2.2-dev3").encode()
     files["provider/openai.yaml"] = provider.replace("- tools/gpt_image_2_edit.yaml", "- tools/gpt_image_2_edit.yaml\n- tools/booklet_real_image.yaml").encode()
     files["tools/booklet_real_image.py"] = (directory / "m5-openai-image-bounded.py").read_bytes()
     files["tools/booklet_real_image.yaml"] = (directory / "m5-openai-image-bounded.yaml").read_bytes()
@@ -62,7 +71,7 @@ def build_text(files: dict[str, bytes], directory: pathlib.Path, output: pathlib
     marker = 'if model_parameters.get("booklet_bounded_execution") is not None and model_parameters.get("booklet_bounded_execution") is not False:'
     if manifest.count("version: 1.0.7-dev5") != 1 or routing.count(marker) != 1:
         raise ValueError("Audited text package routing differs")
-    files["manifest.yaml"] = manifest.replace("version: 1.0.7-dev5", "version: 1.0.7-dev6").encode()
+    files["manifest.yaml"] = manifest.replace("version: 1.0.7-dev5", "version: 1.0.7-dev7").encode()
     routing = routing.replace(marker, 'if model_parameters.get("booklet_real_report_execution") is True or (model_parameters.get("booklet_bounded_execution") is not None and model_parameters.get("booklet_bounded_execution") is not False):')
     routing = routing.replace('model_parameters.pop("booklet_bounded_execution", None)', 'model_parameters.pop("booklet_real_report_execution", None)\n        model_parameters.pop("booklet_bounded_execution", None)')
     files["models/llm/llm.py"] = routing.encode()
@@ -87,12 +96,14 @@ def main() -> None:
     target.mkdir(parents=True, exist_ok=True)
     image_files = checked_package(image_original, IMAGE_ORIGINAL_SHA)
     text_files = checked_package(text_dev5, TEXT_DEV5_SHA)
-    image_path = target / "openai_tool-0.2.2-dev1-candidate.difypkg"
-    text_path = target / "openai-1.0.7-dev6-candidate.difypkg"
+    image_path = target / "openai_tool-0.2.2-dev3-candidate.difypkg"
+    text_path = target / "openai-1.0.7-dev7-candidate.difypkg"
     manifest = {"image": {"path": str(image_path), "sha256": build_image(image_files, directory, image_path)},
                 "text": {"path": str(text_path), "sha256": build_text(text_files, directory, text_path)},
                 "baseImageSha256": IMAGE_ORIGINAL_SHA, "baseTextSha256": TEXT_DEV5_SHA,
                 "note": "Unsigned local candidates; no installation or live provider proof."}
+    manifest["image"]["pluginIdentity"] = content_identity(image_path, "openai_tool", "0.2.2-dev3")
+    manifest["text"]["pluginIdentity"] = content_identity(text_path, "openai", "1.0.7-dev7")
     (target / "m5-candidate-metadata.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, indent=2))
 

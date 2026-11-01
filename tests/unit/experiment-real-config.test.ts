@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import release from "@/lib/experiment-runner/m4-campaign-manifest.json";
 import delivered from "@/lib/experiment-runner/real-readiness-manifest.json";
 import retained from "@/tests/fixtures/m5-retained-real-readiness.json";
+import reportCorrected from "@/tests/fixtures/m5-report-corrected-real-readiness.json";
 import { readM4RunnerConfig } from "@/lib/experiment-runner/m4-config";
 import { executionPolicySnapshot, realExecutionPolicyFromM4TechnicalProfile, executionMaximumTextCharge } from "@/lib/experiment-runner/execution-policy";
 import { prepareExecutionRequest, executionDefinitionFor } from "@/lib/experiment-runner/execution-request";
@@ -10,6 +12,13 @@ import {
   REAL_IMAGE_PACKAGE_SHA256, REAL_IMAGE_PLUGIN_IDENTITY, REAL_TEXT_PACKAGE_SHA256,
   REAL_TEXT_PLUGIN_IDENTITY, realReadinessManifestSchema,
 } from "@/lib/experiment-runner/real-config";
+
+// Historical fixtures are evidence, not active readiness grants. Their actual
+// adapter identities are validated when constructing the saved execution policy.
+const fixtureReadinessSchema = realReadinessManifestSchema.options[1].extend({
+  textPluginIdentity: z.string(), textPackageSha256: z.string(),
+  imagePluginIdentity: z.string(), imagePackageSha256: z.string(),
+});
 
 const env = {
   DEPLOYMENT_ENV: "_staging", DIFY_BOOKLET_RUNNER_ENABLED: "true",
@@ -28,7 +37,7 @@ const ready = {
 
 describe("staging Real readiness manifest", () => {
   it("selects corrected report publications without changing the retained technical settings", () => {
-    const current = realReadinessManifestSchema.parse(delivered), historical = realReadinessManifestSchema.parse(retained);
+    const current = fixtureReadinessSchema.parse(reportCorrected), historical = fixtureReadinessSchema.parse(retained);
     if (current.state !== "ready" || historical.state !== "ready") throw Error("Missing readiness");
     const snapshot = (ready: typeof current) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
       ready.sourcePolicy, ready.tokenPolicy, ready.publications, ready));
@@ -46,7 +55,7 @@ describe("staging Real readiness manifest", () => {
   it("versions compact manager requests while retaining the delivered profile and tester limits", () => {
     const current = realReadinessManifestSchema.parse(delivered);
     if (current.state !== "ready") throw new Error("Missing delivered readiness");
-    const historical = realReadinessManifestSchema.parse(retained);
+    const historical = fixtureReadinessSchema.parse(retained);
     if (historical.state !== "ready") throw new Error("Missing retained readiness");
     const retainedPublications = historical.publications.map(item => item.role === "manager"
       ? { ...item, publishedWorkflowId: "6e1ebf6d-94e1-4265-9733-764504a0ddba" } : item);
@@ -68,10 +77,10 @@ describe("staging Real readiness manifest", () => {
     expect(executionMaximumTextCharge(next.policy, "decision", "tester"))
       .toBe(executionMaximumTextCharge(prior.policy, "decision", "tester"));
   });
-  it("pins dev2 for new readiness while preserving the retained dev1 profile hash", () => {
+  it("pins diagnostic adapters for new readiness while preserving the retained dev1 profile hash", () => {
     const current = realReadinessManifestSchema.parse(delivered);
     if (current.state !== "ready") throw new Error("Missing delivered readiness");
-    const historical = realReadinessManifestSchema.parse(retained);
+    const historical = fixtureReadinessSchema.parse(retained);
     if (historical.state !== "ready") throw new Error("Missing retained readiness");
     const prior = {
       ...historical,
@@ -89,7 +98,26 @@ describe("staging Real readiness manifest", () => {
     expect(executionPolicySnapshot(saved.policy).hash).toBe(saved.hash);
     expect(profile(current).hash).not.toBe(saved.hash);
     expect(realReadinessManifestSchema.safeParse(prior).success).toBe(false);
-    expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev3") })).toThrow();
+    const diagnosticAdapter = { ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev3") };
+    expect(() => profile(diagnosticAdapter)).not.toThrow();
+    expect(realReadinessManifestSchema.safeParse(diagnosticAdapter).success).toBe(false);
+    expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev4") })).toThrow();
+  });
+
+  it("changes only diagnostic adapters and the verified image publication for the release candidate", () => {
+    expect(delivered).toEqual({ ...reportCorrected,
+      textPluginIdentity: REAL_TEXT_PLUGIN_IDENTITY, textPackageSha256: REAL_TEXT_PACKAGE_SHA256,
+      imagePluginIdentity: REAL_IMAGE_PLUGIN_IDENTITY, imagePackageSha256: REAL_IMAGE_PACKAGE_SHA256,
+      publications: reportCorrected.publications.map(item => item.role === "image"
+        ? { ...item, publishedWorkflowId: "d016b1e3-93a6-4e9b-8509-de2a9b3568ad" } : item),
+    });
+    expect(realReadinessManifestSchema.safeParse(reportCorrected).success).toBe(false);
+    const current = realReadinessManifestSchema.parse(delivered);
+    if (current.state !== "ready") throw Error("Missing candidate readiness");
+    const snapshot = executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+      current.sourcePolicy, current.tokenPolicy, current.publications, current));
+    expect(executionPolicySnapshot(JSON.parse(snapshot.json)).hash).toBe(snapshot.hash);
+    expect(snapshot.hash).not.toBe("dc7553679260b7f64df9cbf957ab5ef9fbbf64db00f25e88072efcd5a3ead83f");
   });
 
   it("hydrates the delivered publications and never accepts local or production Real dispatch", () => {

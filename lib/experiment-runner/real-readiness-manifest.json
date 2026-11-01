@@ -215,10 +215,10 @@
     },
     "hash": "a622568bcf30692576801858693858892af0205ca3219458357ae6845cca1eea"
   },
-  "textPluginIdentity": "langgenius/openai:1.0.7-dev6@0247e3661bcd4102d65f3ed5c4d9d5771873ec807f66806dfff690ceac74c70a",
-  "textPackageSha256": "8d88f8e73a1f7c7807861d594d0fd46e156ff6d7acbc7ca3591b08532604a766",
-  "imagePluginIdentity": "langgenius/openai_tool:0.2.2-dev2@098ed46c290cf283e1a5d7e0944490f27a00b9f29296f95c0d988f793f7bac68",
-  "imagePackageSha256": "cc66cfd3cd181b0c2886e3190e5198d28c443a8b6cfb6fad214c6582e7a57f80",
+  "textPluginIdentity": "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2",
+  "textPackageSha256": "a4eb441d0ac3ca84ccbe18b0f0be93b20c088ed6740a486dc490e66f14d24d53",
+  "imagePluginIdentity": "langgenius/openai_tool:0.2.2-dev3@8a7f865a47ce9e25260bd7d7cade70d4712506d945a7a2a66607f9f324160f05",
+  "imagePackageSha256": "5f34caaee4b58e672eb3117ad0eb39fb4905049487844609c0b60d681a3a68ef",
   "nativeFileFormat": "base64",
   "publications": [
     {
@@ -361,7 +361,7 @@
       "role": "image",
       "taskId": null,
       "appId": "923566e9-c6fd-4936-836f-b21704d39628",
-      "publishedWorkflowId": "420f7987-df83-4b88-afe0-27bc000c0cff",
+      "publishedWorkflowId": "d016b1e3-93a6-4e9b-8509-de2a9b3568ad",
       "toolProviderId": null,
       "finalPageIllustration": true,
       "persona": null

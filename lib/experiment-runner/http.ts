@@ -35,6 +35,8 @@ import { operationRecoveryOutcome } from "@/lib/operations/operation-recovery-ou
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 import { runTiming, runAttention } from "@/lib/experiment-runner/run-summary";
 import { runAccounting } from "@/lib/experiment-runner/run-accounting";
+import { externalError, redactExternalError } from "@/lib/experiment-runner/external-errors";
+import { createImageReplacementService } from "@/db/experiment-image-replacement";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -48,6 +50,12 @@ const approvalBase = { expectedRevision: z.number().int().nonnegative(),
   expectedCampaignRevision: z.number().int().nonnegative(), expectedPendingDigest: z.string().regex(/^[a-f0-9]{64}$/),
   reference: z.string().trim().min(1).max(500) };
 const approvalGrant = z.union([
+  z.strictObject({ action: z.literal("image_replacement"), operationId: opaqueIdSchema,
+    expectedRevision: z.number().int().nonnegative(), expectedCampaignRevision: z.number().int().nonnegative(),
+    previewDigest: z.string().regex(/^[a-f0-9]{64}$/), expiresAtMs: z.number().int().positive(),
+    reference: z.string().trim().min(1).max(500), acknowledgeUnknownCharge: z.literal(true), totals: executionAllowanceSchema.optional() }),
+  z.strictObject({ action: z.literal("adjust"), expectedRevision: z.number().int().nonnegative(),
+    expectedCampaignRevision: z.number().int().nonnegative(), reference: z.string().trim().min(1).max(500), totals: executionAllowanceSchema }),
   z.strictObject({ ...approvalBase, action: z.literal("approve"), totals: executionAllowanceSchema }),
   z.strictObject({ ...approvalBase, action: z.literal("decline") }),
 ]);
@@ -67,16 +75,19 @@ const errorMessages: Record<string, string> = {
 function reply(status: number, code: string) { return Response.json({ error: { code, message: errorMessages[code] ?? "Request failed." } }, { status, headers }); }
 function data(value: unknown, status = 200) { return Response.json({ data: value }, { status, headers }); }
 function safeError(error: unknown): Response {
-  if (error instanceof ExperimentImageValidationError) return reply(error.code === "too_large" ? 413 : 422, error.code === "too_large" ? "image_too_large" : "invalid_image");
-  if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof RangeError) return reply(400, "invalid_request");
+  const diagnostic = externalError({ service: "booklet", stage: "api", error });
+  const detailed = (status: number, code: string) => Response.json({ error: { code,
+    message: error instanceof Error ? String(redactExternalError(error.message).value) : errorMessages[code], diagnostic } }, { status, headers });
+  if (error instanceof ExperimentImageValidationError) return detailed(error.code === "too_large" ? 413 : 422, error.code === "too_large" ? "image_too_large" : "invalid_image");
+  if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof RangeError) return detailed(400, "invalid_request");
   if (error instanceof ExperimentRepositoryError) {
-    if (error.code === "not_found") return reply(404, "not_found");
-    if (error.code === "invalid_input") return reply(400, "invalid_request");
-    if (error.code === "invalid_result") return reply(422, "invalid_result");
-    return reply(409, "conflict");
+    if (error.code === "not_found") return detailed(404, "not_found");
+    if (error.code === "invalid_input") return detailed(400, "invalid_request");
+    if (error.code === "invalid_result") return detailed(422, "invalid_result");
+    return detailed(409, "conflict");
   }
-  if (error instanceof ExecutionAllowanceError) return reply(409, error.code === "stale_revision" ? "stale_revision" : "conflict");
-  return reply(503, "unavailable");
+  if (error instanceof ExecutionAllowanceError) return detailed(409, error.code === "stale_revision" ? "stale_revision" : "conflict");
+  return detailed(503, "unavailable");
 }
 const materialization = z.object({
   artifactId: opaqueIdSchema.optional(), versionId: opaqueIdSchema.optional(), approvalId: opaqueIdSchema.nullable().optional(),
@@ -269,6 +280,30 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     }, state)), page, hasMore: rows.length > limit };
   }
   return {
+    imageReplacementPreview(request: Request, runId: string) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      if (!state.enabled) return reply(503, "unavailable");
+      const operationId = opaqueIdSchema.parse(new URL(request.url).searchParams.get("operationId"));
+      return data(await createImageReplacementService({ database: database(), config: state.config, store: store() })
+        .preview(opaqueIdSchema.parse(runId), operationId));
+    }); },
+    externalErrors(request: Request, runId: string) { return run(async () => {
+      const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
+      const id = opaqueIdSchema.parse(runId);
+      const savedRun = await database().collections.experiment_runs.findOne({ _id: id }, { projection: { _id: 1, externalErrors: 1 } });
+      if (!savedRun) return reply(404, "not_found");
+      const page = z.coerce.number().int().min(0).max(100_000).parse(new URL(request.url).searchParams.get("page") ?? 0);
+      const rows = await database().collections.experiment_operations.find({ runId: id }, { projection: {
+        _id: 1, role: 1, taskId: 1, workflowRunId: 1, attempt: 1, createdAtMs: 1, deadlineAtMs: 1,
+        externalErrors: 1, realImageObservation: 1, m4Observation: 1,
+      } }).sort({ createdAtMs: 1, _id: 1 }).skip(page * 20).limit(21).toArray();
+      return data({ page, hasMore: rows.length > 20, runErrors: redactExternalError(savedRun.externalErrors ?? []).value,
+        operations: rows.slice(0, 20).map(row => ({ operationId: row._id, role: row.role, taskId: row.taskId,
+        workflowRunId: row.workflowRunId, attempt: row.attempt, startedAtMs: row.createdAtMs, deadlineAtMs: row.deadlineAtMs,
+        errors: redactExternalError(row.externalErrors ?? []).value,
+        textEvidence: redactExternalError(row.m4Observation ?? null).value,
+        providerEvidence: row.realImageObservation ? redactExternalError(JSON.parse(row.realImageObservation.resultJson)).value : null })) });
+    }); },
     campaigns(request: Request) { return run(async () => {
       const state = config(); const denied = browserAuth(request, state, false); if (denied) return denied;
       const query = new URL(request.url).searchParams;
@@ -312,6 +347,19 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       const key = opaqueIdSchema.safeParse(request.headers.get("idempotency-key"));
       if (!key.success) return reply(400, "invalid_request");
       const body = approvalGrant.parse(await boundedJson(request, 4096));
+      if (body.action === "image_replacement") {
+        if (!state.enabled) return reply(503, "unavailable");
+        const saved = await mutate(() => createImageReplacementService({ database: database(), config: state.config, store: store() })
+          .approve({ ...body, runId: opaqueIdSchema.parse(runId), approvalId: key.data }), { runId });
+        return data({ runId, ...saved });
+      }
+      if (body.action === "adjust") {
+        const saved = await mutate(() => withMongoTransaction(database(), session =>
+          createExecutionAllowanceLedger(database()).adjust(session, { runId: opaqueIdSchema.parse(runId),
+            approvalId: key.data, reference: body.reference, expectedRunRevision: body.expectedRevision,
+            expectedCampaignRevision: body.expectedCampaignRevision, totals: body.totals, nowMs: Date.now() })), { runId });
+        return data({ runId, ...saved });
+      }
       if (body.action === "decline") {
         const saved = await mutate(() => withMongoTransaction(database(), session =>
           createExecutionAllowanceLedger(database()).decline(session, { runId: opaqueIdSchema.parse(runId),
@@ -375,7 +423,9 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
     imageEvidence(request: Request) { return run(async () => {
       const state = config(); const denied = toolAuth(request, state); if (denied) return denied;
       if (!state.enabled || state.config.real?.state !== "ready") return reply(422, "mode_unavailable");
-      const body = realImageEvidence.parse(await boundedJson(request, 32_768));
+      // SDK messages, stacks and escaped Unicode bodies can exceed the former
+      // compact receipt limit. Keep a finite bound for the sanitized evidence.
+      const body = realImageEvidence.parse(await boundedJson(request, 262_144));
       const saved = await measurePhase(body, "real_image_evidence", () => mutate(() =>
         services(state).repository.observeRealImage({ ...body, nowMs: Date.now() }),
       { admitted: true, runId: body.runId, operationId: body.operationId }));

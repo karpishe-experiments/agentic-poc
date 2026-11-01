@@ -183,8 +183,14 @@ operator approval and continue under a recorded finite allowance. This
 approval-only pause does not count as manual repair. Resume alone cannot grant
 allowance. A run with manual data or output repair does not satisfy the retained
 same-run Real acceptance case; retain its failure and use a separately authorized
-linked successor. Unknown provider outcomes remain blocking and cannot be
-approved away. Each paid run and additional allowance needs explicit authority.
+linked successor. A budget increase does not resolve an unknown provider outcome.
+For a current approval-based Real run, an operator may explicitly approve one
+replacement of a terminal unknown image after its deadline expires and current
+sources, original bytes and absence of active owners are verified. Preserve its
+original outcome and liability, use a new operation identity/deadline, and retain
+late evidence without overwriting the replacement. Label accepted completion
+"completed with an approved replacement". Each replacement and any additional
+allowance needs exact explicit authority; there are no automatic paid retries.
 
 ## 7. Observable acceptance
 
@@ -193,7 +199,7 @@ approved away. Each paid run and additional allowance needs explicit authority.
 | AC01 | Thirteen specialist contracts, complete instructions/bindings/fixtures, and correct manager delegation and revision routing. |
 | AC02 | All three cases and recovery scenarios pass through actual Dify Simulated paths with zero real provider calls. |
 | AC03 | All three Balanced cases complete within LLM limits and with zero real image calls. |
-| AC04 | Real acceptance proceeds 3 → 5 → 8 pages, each plus cover; each retained run completes without manual data or output repair. A recorded approval-only allowance pause may continue the same run. |
+| AC04 | Real acceptance proceeds 3 → 5 → 8 pages, each plus cover; each retained run completes without manual data or output repair. Recorded allowance approvals and an explicitly labelled approved image replacement under section 6 may continue the same run. |
 | AC05 | Required artifacts/images, current approvals, source lineage and run evidence are durably stored; quality warnings do not block completion. |
 | AC06 | Pause/restart/recovery, duplicates, concurrent completion, stale results and limits preserve completed work and do not automatically repeat uncertain paid work. |
 | AC07 | Tester and independent judge reports cover intent, consistency, cost and interaction quality; UI verification is separately recorded. M4 may retain verified terminal advisory failure with evaluation incomplete under section 6; this does not claim report coverage passed. |

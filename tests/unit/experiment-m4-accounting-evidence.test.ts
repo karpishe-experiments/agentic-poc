@@ -49,16 +49,16 @@ describe("transaction-local M4 accounting evidence", () => {
     expect(await readM4FailureSourceVersion(f.database, f.session, "failed", second)).toMatchObject({ _id: "foreign-version" });
     expect(f.campaignRead).toHaveBeenCalledTimes(2); expect(f.sourcesRead).toHaveBeenCalledTimes(2);
   });
-  it("records a failed proof read without disclosing its body or changing the thrown error", async () => {
+  it("records a failed proof read with diagnostic details without changing the thrown error", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const f = fixture();
-    const error = Object.assign(new Error("private-proof-body"), { name: "MongoOperationTimeoutError" });
+    const error = Object.assign(new Error("Proof read timed out"), { name: "MongoOperationTimeoutError" });
     f.proofRead.mockImplementationOnce(() => ({ toArray: async () => { throw error; } }));
     await expect(readM4FailedOperations(f.database, f.session, "run", ["failed"], f.attempt())).rejects.toBe(error);
     const event = recentDiagnostics("run", 1).events[0];
     expect(event).toMatchObject({ phase: "accounting_failed_proofs_read", outcome: "failed", queryCount: 1,
       failure: { errorKind: "MongoOperationTimeoutError", code: "completion_failed" } });
-    expect(JSON.stringify(event)).not.toContain("private-proof-body");
+    expect(event.error?.details).toMatchObject({ name: "MongoOperationTimeoutError", message: "Proof read timed out" });
     expect(f.sourcesRead).not.toHaveBeenCalled();
   });
   it("keeps uncached callers reading current evidence", async () => {

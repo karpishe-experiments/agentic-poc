@@ -63,6 +63,7 @@ export const realImageResultSchema = z.strictObject({ schemaVersion: z.literal("
   dispatchStarted: z.boolean(), requestedModel: z.literal(REAL_IMAGE_MODEL),
   providerModel: z.string().min(1).optional(), providerResponseId: z.string().min(1).optional(),
   providerRequestId: z.string().min(1).optional(),
+  diagnostic: z.unknown().optional(),
   status: z.enum(["succeeded", "rejected_pre_provider", "failed_after_provider", "unknown_outcome"]),
   usage: usage.nullable(), output: imageOutput.nullable(),
   failure: z.strictObject({ stage: z.enum(["pre_provider", "provider", "post_provider"]),

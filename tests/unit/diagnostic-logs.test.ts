@@ -40,10 +40,12 @@ describe("staging diagnostic logs", () => {
       expect((await GET(request())).status).toBe(404);
     }
   });
-  it("filters bounded structured events and never retains exception bodies", async () => {
+  it("filters bounded structured events and retains redacted exception details", async () => {
     vi.stubEnv("DEPLOYMENT_ENV", "_staging"); vi.stubEnv("ACCESS_GATE_PASSWORD", "abcdefghijklmnop");
     vi.spyOn(console, "info").mockImplementation(() => {});
-    await expect(measurePhase({ runId }, "authorization", async () => { throw new Error("private-token"); })).rejects.toThrow();
+    await expect(measurePhase({ runId }, "authorization", async () => {
+      throw new Error("Provider rejected request\nAuthorization: Bearer private-token\nAccess credential: abcdefghijklmnop");
+    })).rejects.toThrow();
     await measurePhase({ runId }, "context", async () => 1);
     const response = await GET(request(`?runId=${runId}&limit=1`));
     const body = await response.json();
@@ -52,17 +54,21 @@ describe("staging diagnostic logs", () => {
     expect(body.data.events[0]).toMatchObject({ runId, phase: "context", outcome: "succeeded" });
     expect(body.data.truncated).toBe(true);
     expect(JSON.stringify(recentDiagnostics(runId, 500))).not.toContain("private-token");
+    expect(JSON.stringify(recentDiagnostics(runId, 500))).not.toContain("abcdefghijklmnop");
+    expect(recentDiagnostics(runId, 500).events.find(event => event.outcome === "failed")?.error)
+      .toMatchObject({ redacted: true, details: { message: expect.stringContaining("Provider rejected request") } });
     expect(recentDiagnostics(runId, 500).events.find(event => event.outcome === "failed")?.failure)
       .toEqual({ errorKind: "Error", code: "completion_failed" });
     for (const query of ["?limit=501", "?limit=0", "?runId=invalid", "?path=/etc/passwd"]) expect((await GET(request(query))).status).toBe(400);
   });
-  it("retains allowlisted failure kinds without exception text or arbitrary codes", async () => {
+  it("keeps allowlisted failure summaries separate from detailed exception evidence", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const error = Object.assign(new Error("private-connection-and-payload"), { name: "MongoOperationTimeoutError", code: "private-code" });
     await expect(measurePhase({ runId }, "create_mutation", async () => { throw error; })).rejects.toBe(error);
     const event = recentDiagnostics(runId, 1).events[0];
     expect(event.failure).toEqual({ errorKind: "MongoOperationTimeoutError", code: "completion_failed" });
-    expect(JSON.stringify(event)).not.toContain("private");
+    expect(event.error?.details).toMatchObject({ name: "MongoOperationTimeoutError",
+      message: "private-connection-and-payload", code: "private-code" });
   });
   it("retains at most 5000 events across module reloads", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});

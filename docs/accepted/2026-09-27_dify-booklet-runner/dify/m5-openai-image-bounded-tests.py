@@ -92,7 +92,10 @@ class Factory:
     def invoke(self, method, args):
         self.methods.append((method, {**args, **({"image": [stream.getvalue() for stream in args["image"]]} if "image" in args else {})}))
         if self.failure:
-            raise RuntimeError("secret provider response")
+            error = RuntimeError("provider response sk-private-test-key")
+            error.status_code = 503
+            error.request_id = "req_fixture_failure"
+            raise error
         return self.response
 
 
@@ -101,6 +104,17 @@ def provider_response(encoded=None):
 
 
 class ImageContract(unittest.TestCase):
+
+    def test_raw_cookie_and_signed_url_diagnostics_are_redacted(self):
+        error = RuntimeError('upstream failed\nCookie: session=sample-private-cookie\nSet-Cookie: session=sample-private-cookie')
+        error.body = {'headers': {'Cookie': 'session=sample-private-cookie', 'Authorization': 'custom-private-auth'}, 'url': 'https://host/file?sig=sample-private-signature'}
+        result = adapter.provider_error(error)
+        text = str(result)
+        self.assertNotIn('sample-private-cookie', text)
+        self.assertNotIn('custom-private-auth', text)
+        self.assertNotIn('sample-private-signature', text)
+        self.assertTrue(result['redacted'])
+
     @staticmethod
     def delivery_parameters():
         return {"run_id": "00000000-0000-4000-8000-000000000001",
@@ -135,6 +149,30 @@ class ImageContract(unittest.TestCase):
         raw, _ = request()
         result, _ = run(raw, None, {"openai_api_key": "test"}, client_factory=Factory(provider_response()), now=lambda: 1)
         self.assertEqual(result["status"], "succeeded")
+
+    def test_generate_accepts_dify_absent_files_cast(self):
+        # Dify cast_parameter_value(FILES, None) returns [None].
+        raw, _ = request()
+        factory = Factory(provider_response())
+        result, blob = run(raw, [None], {"openai_api_key": "test"}, client_factory=factory, now=lambda: 1)
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(blob, png())
+        self.assertEqual([method for method, _ in factory.methods], ["generate"])
+        self.assertEqual(factory.calls[0]["max_retries"], 0)
+
+    def test_empty_placeholder_cannot_hide_missing_or_extra_references(self):
+        for operation, blobs, files in (("edit", (png(),), [None]),
+                                         ("generate", (), [None, None]),
+                                         ("generate", (), [""]),
+                                         ("generate", (), [NativeFile(png())])):
+            with self.subTest(operation=operation, files=files):
+                raw, _ = request(operation, blobs)
+                factory = Factory()
+                result, blob = run(raw, files, {"openai_api_key": "test"}, client_factory=factory, now=lambda: 1)
+                self.assertEqual(result["status"], "rejected_pre_provider")
+                self.assertFalse(result["dispatchStarted"])
+                self.assertIsNone(blob)
+                self.assertEqual(factory.calls, [])
 
     def test_untrusted_native_url_is_rejected_before_fetch(self):
         raw, _ = request("edit", (png(),))
@@ -190,11 +228,14 @@ class ImageContract(unittest.TestCase):
         self.assertEqual(result["providerRequestId"], "req_123")
         self.assertIsNone(blob)
 
-    def test_provider_exception_is_unknown_without_leaking_body(self):
+    def test_provider_exception_retains_diagnostics_without_leaking_credentials(self):
         raw, _ = request()
         result, blob = run(raw, [], {"openai_api_key": "test"}, client_factory=Factory(failure=True), now=lambda: 1)
         self.assertEqual(result["status"], "unknown_outcome")
-        self.assertNotIn("secret", adapter.canonical(result))
+        self.assertNotIn("sk-private-test-key", adapter.canonical(result))
+        self.assertEqual(result["providerRequestId"], "req_fixture_failure")
+        self.assertEqual(result["diagnostic"]["status"], 503)
+        self.assertIn("provider response", result["diagnostic"]["message"])
         self.assertIsNone(blob)
 
     def test_non_ascii_digest_vector(self):
