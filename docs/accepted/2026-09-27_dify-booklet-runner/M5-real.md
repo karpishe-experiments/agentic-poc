@@ -324,11 +324,122 @@ Two independent final reviews passed. The Real manager publication
 4,096 output tokens, unchanged model settings and zero retries. The connector
 validated its one-node diff but rejected its save payload; Chrome saved the
 setting and authenticated MCP readback verified the publication. The tracked
-readiness now selects `execution_v2`. Staging recovery and deployment are still
-pending; local and Dify configuration proof do not establish live acceptance. No paid
+readiness now selects `execution_v2`. Staging recovery and deployment were pending
+at this implementation checkpoint; local and Dify configuration proof do not
+establish live acceptance. No paid
 call, successor grant or signature-policy change is included in this correction.
 Credential inventory impact: existing per-app credentials retain their current
 storage and consumers; recovery uses the saved application identity and publication.
+
+### Protected recovery checkpoint - 2026-10-31
+
+Source PR #318 merged at `8aa055f0dd5e0aa0fe7b5cb89a67e6248c63d33c`.
+The operator closed existing staging admission and verified stable target revision
+23,623. Protected preview `41198616652` passed. Apply `41198840942` completed
+request `m5-text-failure-20261031-v1` with backup
+`staging-recovery-m5-text-failure-20261031-v1`. The exact recovery verified failure
+closure and restored the prior service with admission closed. It did not replay
+the provider, complete generation or grant another run.
+
+Staging PR #319 merged at `77ae9213ef4141dfb6edbc43b97400ed31dbd458`.
+Its source tree matches recovery candidate `49ea7fabe635b35a2d7b618aade485b3135ed713`:
+`e09399057134593b07d49d161203a20c83b738ee`. Normal Deploy `41200278529` selected
+image `sha256:e3c98e80ecd5584924ef9e5727c4b6ee6067bd0e3ae8f433d56ca5fd854f1415`.
+Its observer exited 124 without stopping the host. Status `41200929724` verified
+the same saved request `41200278529-1` remained active at backup under its original
+budget. Status `41201322989` then verified `complete` / `archived`, with backup
+`staging-20261031T121921Z-0563f91a0cfbdcb7`. Check deployment `41201397514` passed.
+No second deployment was dispatched after the observer timeout. Private Chrome
+sign-in and browser readiness subsequently passed. Read-only diagnostics `41201544674` verified the
+new serving release and authenticated staging API. The retained run is blocked at
+revision 23,624 with no active operation; the manager is a definite terminal
+failure with `unresolved: false`. All ten text calls, zero image calls and ten
+steps remain recorded. The new technical
+profile hash is `f87eb3a370fcd9429846c3dcc3df4bac3f56d44c88ae7294ba7a426bd4187ce1`.
+The operator subsequently approved one new USD 5 Kid attempt under that profile,
+with zero automatic retries and zero further successors. No Parent or Creator
+grant exists.
+
+### Current Kid and report correction - 2026-10-31
+
+Campaign `1fd5059c-2bed-44f7-8782-c35afa5a3727` owns run
+`b9151945-114d-4be2-809e-18117ed08c62`, booklet
+`00450d9f-0938-423d-8a66-8dd22371852d`. Generation completed with all nine real
+images and approved J01-J13 artifacts. The saved counters are 38 text calls,
+9 image calls and 47 steps. Estimated settled expenditure is USD 0.642312;
+reserved liability is USD 0.054296, for USD 0.696608 planning exposure. Invoice
+cost remains unavailable.
+
+The tester report operation `4a0e144c-39d5-46e3-b8cf-99927b22d5b9`, Dify run
+`be2bb281-0ff0-4d36-a3f6-59b52217aec6`, failed at `real_report_llm` with
+`Booklet Real report model parameters differ.` The authenticated trace has eight
+nodes, zero reported tokens and no other provider node or retry. The frozen
+tester publication omitted `response_format` and `json_schema`. The pinned dev6
+adapter rejects those missing parameters before SDK/client construction, counting
+or generation. This is a report workflow defect; generation and saved images
+remain intact. The application still retains unresolved report ownership.
+Neither report has completed, so Kid acceptance remains blocked.
+
+The local correction supplies the actual prepared schema to all three tester
+report nodes and the judge. The generated graph-to-adapter fake-provider check
+passes all four cases and reproduces the old rejection before client construction.
+The corrected publications and readiness manifest are recorded below. Protected
+closure and staging delivery remain pending. Do not rebind the retained run, replay its report or
+start another paid run under its consumed grant.
+
+The saved-grant UI correction lists persisted unused grants through the existing
+authenticated campaign API. Selection does not grant or start work. Start remains
+explicit and uses the existing one-run transaction. The earlier private Bash start
+was a workaround for lost in-memory selection, not a required allowance mechanism.
+Focused proof: 102 units, one disposable-persistence list case, typecheck, ESLint
+and 13 pinned-adapter fake-provider tests passed. Reproduce the four generated
+report cases with `node --import tsx tests/helpers/export-real-report-graph-contract.ts <output-json>`,
+then pass that file as `--graph-contract <output-json>` to
+`dify/m5-openai-bounded-tests.py` after its package argument. This check needs the
+existing isolated Python environment with the Dify SDK; it makes no provider call.
+Credential inventory impact: none; the API uses the existing operator boundary,
+and provider credentials, storage and consumers are unchanged.
+
+The exact report closure now extends the existing execution recovery service.
+The reviewed one-target attestation binds the original publication, failed node,
+disabled retries and dev6 package. Fresh authenticated execution retrieval must
+match the zero-token, eight-step guard and no output. The transaction retains the
+missing-wrapper observation, full report reservation, all other liabilities,
+generation, current sources, counters and original deadline/stop history. It only
+closes failed ownership and requests Pause. Its separate snapshot scope supports
+lost-acknowledgement and repeated verification. This candidate has not yet been
+applied live. It does not satisfy either required report or authorize another run.
+
+### Report publication selection - 2026-10-31
+
+PR #321 merged as `053026cb1f767d0597229e749eb1bca31c9a8060`, with CI
+`41218651776`. Exact closure PR #322 merged as
+`c1d097542d663013df2fcc7f31f96d2bed98f8d3`, with CI `41220378449`.
+Both packages passed two independent reviews. The closure passed 20 disposable
+recovery cases, 46 transport/command units, 25 recovery-storage units and the
+complete fake-provider Kid journey through generation and both reports.
+
+The existing reviewed Community compatibility client saved only the four report
+drafts with fresh hashes. Full graph, feature and environment-variable readbacks
+matched; no provider call or credential change occurred. Registered MCP published
+and read back these immutable versions with the prepared schema parameters and
+zero retries:
+
+| Report | Publication |
+| --- | --- |
+| Kid tester | `4d295741-f1e5-4d2d-ac22-5f1243d703b9` |
+| Parent tester | `c208d6c2-c88e-438b-849a-a9042b6834f5` |
+| Creator tester | `c2186c69-269e-48e5-972f-1a1b3a8bbb2f` |
+| Judge | `de9614e4-dbb6-4286-9a15-43d570c963bc` |
+
+The new technical profile is
+`dc7553679260b7f64df9cbf957ab5ef9fbbf64db00f25e88072efcd5a3ead83f`.
+Only these four publication identities changed. Models, prices, adapters,
+transport settings, retries and all other publications remain unchanged.
+Recovery tests use the frozen prior-readiness fixture to retain both historical
+profile hashes. No saved live run is rewritten, and no grant is created by this
+selection. Next: deliver this exact bundle through protected closure and normal
+staging deployment, then verify browser readiness before any paid execution.
 
 ### Historical carry-forward review before the M4 exit
 

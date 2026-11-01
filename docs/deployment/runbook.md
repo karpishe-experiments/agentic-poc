@@ -23,7 +23,8 @@ those resources or production configuration.
 ### Supported recovery candidate
 
 The M5 candidate advertises `execution-text-failure-closure` for the exact retained
-Real Kid manager failure recorded in the [M5 checkpoint](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#current-kid-attempt---2026-10-29).
+Real Kid manager failure and the later pre-provider tester parameter failure
+recorded in the [M5 checkpoint](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#current-kid-and-report-correction---2026-10-31).
 Use the existing `candidate-reconcile` preview/apply flow with its run, operation
 and revision, without `original_request_id`. The candidate reads the saved
 publication using the existing matching app credential. Preview pins the terminal
@@ -33,8 +34,15 @@ preserves the campaign, reservations, creative records, deadline and stop receip
 Its result is `failure_closed`; the run remains blocked and paused. The existing
 checkpoint reconciles a lost acknowledgement by verification. Normal deployment
 must use the same reviewed candidate source tree before admission is reopened.
-This capability is implemented locally; its live use remains pending until the
-M5 record contains the verified protected-workflow receipt.
+The report target returns `report-parameter-failure-target-v1`. Its reviewed
+attestation pins the original publication, node, retry setting and dev6 package;
+fresh authenticated GET must match the zero-token, eight-step terminal guard and
+have no output. The original missing-wrapper observation and full liability stay
+unchanged. This is not a settlement, successful evaluation, allowance extension
+or report retry. Do not substitute another target or rebind its saved profile.
+The exact M5 recovery completed through protected apply `41198840942`; the
+[M5 record](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#protected-recovery-checkpoint---2026-10-31)
+owns its receipt and normal deployment status. Do not repeat the historical apply.
 
 The issue #65 recovery dispatcher is installed and retained J11 completion has
 been verified through supported controls. Installation and live execution remain

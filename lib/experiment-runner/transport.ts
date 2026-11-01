@@ -14,10 +14,14 @@ const execution = z.object({
   task_id: opaqueIdSchema.optional(),
   status: z.enum(["running", "succeeded", "failed", "stopped"]),
   outputs: z.record(z.string(), z.unknown()).nullable().optional(),
-  error: z.unknown().optional(), total_tokens: z.unknown().optional(),
-}).strip().transform(({ error, total_tokens, ...execution }) => ({ ...execution,
+  error: z.unknown().optional(), total_tokens: z.unknown().optional(), total_steps: z.unknown().optional(),
+}).strip().transform(({ error, total_tokens, total_steps, ...execution }) => ({ ...execution,
   ...(execution.status === "failed" && error === "Booklet complete input exceeds its verified token limit." && total_tokens === 0
     ? { legacyCountFailure: { code: "legacy_input_count_guard" as const, totalTokens: 0 as const } } : {}),
+  // Diagnostic only. Ordinary dispatch must not infer non-dispatch from this
+  // string. Exact protected recovery also pins publication, adapter and trace.
+  ...(execution.status === "failed" && error === "Booklet Real report model parameters differ." && total_tokens === 0 && total_steps === 8
+    ? { reportParameterFailure: { code: "real_report_parameter_guard" as const, totalTokens: 0 as const, totalSteps: 8 as const } } : {}),
 }));
 export type RuntimeExecution = z.infer<typeof execution>;
 export type RuntimeResult = { kind: "accepted"; execution: RuntimeExecution } | { kind: "execution"; execution: RuntimeExecution } | { kind: "conflict" } | { kind: "unknown" } | { kind: "rejected" };

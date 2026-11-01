@@ -17,6 +17,28 @@ const request = (headers: Record<string, string> = {}, body = "{}") => new Reque
 const imageUrl = "http://localhost:3000/api/experiments/booklet-tools/image?runId=00000000-0000-4000-8000-000000000001&operationId=00000000-0000-4000-8000-000000000002&workflowRunId=00000000-0000-4000-8000-000000000003&inputFingerprint=" + "a".repeat(64);
 
 describe("booklet runner HTTP boundary", () => {
+  it("lists only unused grants for the selected persona, mode and current profile with bounded projected reads", async () => {
+    const policy = m4TestPolicy();
+    const tokenPolicy = m4TokenPolicySnapshot({ version: "m4_context_policy_v2", basePolicyHash: m4PolicySnapshot(policy).hash,
+      warningInputTokens: 32000, maxInputTokens: 128000, requiredProviderAdapterIdentity: `langgenius/openai:1.0.7-dev5@${"b".repeat(64)}`,
+      requiredProviderPackageSha256: "c".repeat(64), reference: "test-only" });
+    const state: ConfigState = { ...enabled, config: { ...enabled.config, m4: { state: "granted", authority: {
+      policy, grant: { campaignId: "00000000-0000-4000-8000-000000000010", reference: "fixture", tokenPolicy } } } } };
+    const totals = { maxMicrodollars: 5_000_000, textCalls: 120, imageCalls: 12, steps: 300,
+      textRevisions: 1, imageRevisions: 1, noProgress: 3 };
+    const toArray = vi.fn().mockResolvedValue(Array.from({ length: 6 }, (_, n) => ({ _id: `campaign-${n}`, allowance: totals, predecessorRunId: null, createdAtMs: n })));
+    const cursor = { sort: vi.fn().mockReturnThis(), skip: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), toArray };
+    const find = vi.fn().mockReturnValue(cursor);
+    const mutate = vi.fn();
+    const http = createBookletRunnerHttp({ config: () => state, database: () => ({ collections: { experiment_campaigns: { find } } } as unknown as Database), mutate });
+    const response = await http.campaigns(new Request("http://localhost:3000/api/experiments/booklet-runs/campaigns?mode=balanced&persona=playful_kid&page=1"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toMatchObject({ page: 1, hasMore: true, campaigns: Array.from({ length: 5 }, (_, n) => ({ campaignId: `campaign-${n}`, totals, predecessorRunId: null, createdAtMs: n })) });
+    expect(find).toHaveBeenCalledWith({ schemaVersion: "execution_v1", mode: "balanced", persona: "playful_kid", profileHash: expect.stringMatching(/^[a-f0-9]{64}$/), runId: null },
+      { projection: { _id: 1, predecessorRunId: 1, allowance: 1, createdAtMs: 1 } });
+    expect(cursor.skip).toHaveBeenCalledWith(5); expect(cursor.limit).toHaveBeenCalledWith(6);
+    expect(mutate).not.toHaveBeenCalled();
+  });
   const controlRunId = "00000000-0000-4000-8000-000000000001";
   const savedControl = { _id: controlRunId, revision: 8, status: "paused", pauseRequested: true,
     generationCompletedAtMs: null, evaluationStatus: "pending", updatedAtMs: 2000,
@@ -526,6 +548,7 @@ describe("booklet runner HTTP boundary", () => {
       const toolHeaders = { "x-booklet-tool-key": "x".repeat(32), origin: enabled.config.publicOrigin,
         "idempotency-key": controlRunId };
       expect((await http.campaign(request(toolHeaders))).status).toBe(401);
+      expect((await http.campaigns(new Request("http://localhost:3000/api/experiments/booklet-runs/campaigns?mode=real&persona=playful_kid", { headers: toolHeaders }))).status).toBe(401);
       expect((await http.approval(request(toolHeaders), controlRunId)).status).toBe(401);
       const browserHeaders = { ...toolHeaders, authorization: `Basic ${btoa(`booklet:test-only-password-long-enough`)}` };
       expect((await http.campaign(request({ ...browserHeaders, origin: "http://localhost:3001" }))).status).toBe(403);

@@ -1092,6 +1092,17 @@ does not classify stale dependencies, hydration errors or ownership conflicts as
 creative failure. Boundary tests cover incomplete output, malformed output,
 clarification length, unknown outcomes, conflicting evidence and lost replies.
 
+## Verify generated workflow parameters against the adapter
+
+The first fully illustrated Real Kid reached evaluation, then its report stopped
+before provider dispatch. Handwritten adapter fixtures included schema parameters
+that the generated Dify report node omitted. Exercise the generated node settings
+and decoded prepared carrier together against the pinned adapter with fake
+providers. Cover every report role before another paid acceptance attempt.
+Evidence: the four generated report cases reproduce the old pre-client rejection
+and pass with the prepared strict schema. Promotion candidate: **Documentation**
+for integration contract tests.
+
 ## Preserve complete graphs across tool boundaries
 
 Large execution-tool output can truncate a string inside otherwise valid JSON.

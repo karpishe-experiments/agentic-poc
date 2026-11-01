@@ -4,6 +4,19 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+The authenticated campaign list exposes unused execution grants for the selected
+persona and current technical profile. It uses projected, five-row pages and does
+not create or claim a grant. The runner can select a saved grant after a refresh
+or closed tab; Start still uses normal transactional one-run admission. A failed
+grant-list read requires refresh before the UI offers another grant. Allowance
+approval remains an operator UI/API action and does not require host access.
+
+Real report workflows pass the strict output schema from the canonical prepared
+request into the provider node's `response_format` and `json_schema` parameters.
+The prepared request remains authoritative. Legacy and ordinary decision paths
+retain their contracts. Missing duplicate report parameters fail in the pinned
+adapter before client construction; they do not imply a paid provider failure.
+
 Run lists use one grouped, projected operation read for each visible page. Cards
 show run-specific settled estimates and retained reservation liabilities; campaign
 accounting remains separate. Missing historical accounting proof remains unavailable.
@@ -732,6 +745,18 @@ original saved publication, fingerprints target metadata and reservations, and
 uses the shared closure transaction with accounting verification before commit.
 The existing private checkpoint owns interruption reconciliation. Legacy M4
 recovery and host orchestration retain their existing interpretation.
+
+The same protected entrypoint supports one exact retained Real tester report
+that failed at the dev6 parameter guard before client construction. Its reviewed
+attestation pins the original run, immutable publication, failed node, disabled
+retries and adapter package. Fresh authenticated execution retrieval must still
+show that failure with zero tokens, eight steps and no output. Local verification
+pins the original prepared multimodal carrier, missing-wrapper observation and
+full unsettled reservation. Closure changes only failed ownership and pause state;
+it preserves generation, artifacts, campaign, all liability, counters and attempt
+history. A distinct snapshot scope retains current sources for transactional
+drift checks. Ordinary dispatch does not interpret the diagnostic as permission
+to close arbitrary failures or replay a report.
 
 The Real path reads a separate, tracked, non-secret readiness manifest. The
 reviewed activation record is ready for staging delivery after the eighteen

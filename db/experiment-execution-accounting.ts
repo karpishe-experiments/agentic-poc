@@ -3,6 +3,7 @@ import type { Database } from "@/db/client";
 import type { ExperimentRunDocument } from "@/db/documents";
 import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
 import { hasExecutionTextFailure } from "@/db/experiment-execution-text-failure";
+import { hasRetainedReportParameterFailure } from "@/lib/operations/retained-report-parameter-failure";
 import { hasExperimentSimulatedImagePolicy } from "@/db/experiment-m4-state";
 import { executionMaximumTextCharge, executionOperationTokenPolicy,
   executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
@@ -51,6 +52,9 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
     const settledTextFailure = operation.state === "failed" && operation.safeFailure === "definite_failure" &&
       operation.lifecycle?.unresolved === false && operation.lifecycle.phase === "finished" &&
       await hasExecutionTextFailure(database, session, run, operation, Date.now());
+    const retainedReportFailure = operation.state === "failed" && operation.safeFailure === "definite_failure" &&
+      operation.remoteStatus === "failed" && operation.lifecycle?.unresolved === false && operation.lifecycle.phase === "finished" &&
+      await hasRetainedReportParameterFailure(database, session, run, operation);
     const resolvedFailure = settledTextFailure || operation.state === "failed" && operation.safeFailure === "definite_failure" &&
       operation.lifecycle?.unresolved === false &&
       ["failed", "stopped"].includes(operation.remoteStatus ?? "") &&
@@ -93,7 +97,7 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
     text++;
     const reservation = operation.m4Reservation, prep = operation.m4Preparation, observation = operation.m4Observation;
     if (!reservation || !prep || !observation && !resolvedFailure ||
-        observation && observation.issue && !settledTextFailure || observation && observation.remoteStatus !== "succeeded" && !resolvedFailure ||
+        observation && observation.issue && !settledTextFailure && !retainedReportFailure || observation && observation.remoteStatus !== "succeeded" && !resolvedFailure ||
         observation && !observation.evidenceJson && !resolvedFailure ||
         reservation.campaignId !== campaign._id || reservation.policyHash !== snapshot.hash ||
         prep.policyHash !== snapshot.hash || prep.configurationHash !== run.configurationHash ||
