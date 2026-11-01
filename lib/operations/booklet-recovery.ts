@@ -107,7 +107,7 @@ export type ClaimReleaseProof = { previewDigest: string; claim: { id: string; ex
   restoreAs: "missing" | "null" };
 export type RecoverySnapshot = {
   // Absence retains the original full-inventory checkpoint interpretation.
-  scope?: "pre-generation-target-v1" | "decision-rejection-target-v1" | "execution-text-failure-target-v1" | "report-parameter-failure-target-v1";
+  scope?: "pre-generation-target-v1" | "decision-rejection-target-v1" | "execution-text-failure-target-v1" | "report-parameter-failure-target-v1" | "image-replacement-parking-v1";
   sourceFingerprint?: string;
   rows: Record<string, Record<string, string>>;
   runInvariant: string; operationInvariant: string; campaignInvariant: string; bookletInvariant: string;

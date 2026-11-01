@@ -327,7 +327,12 @@ export function createExperimentContextService(database: Database, options: { st
     return {
       runId: run._id, predecessorRunId: run.predecessorRunId, bookletId: run.bookletId, workingTitle: booklet.workingTitle, persona: run.persona, mode: run.mode,
       ...(run.mode === "balanced" && (projection === "inspection" || projection === "report") ? { m4Accounting } : {}),
-      ...(projection === "inspection" ? { executionAllowance, pendingApproval: run.pendingApproval ?? null } : {}),
+      ...(projection === "inspection" ? { executionAllowance, pendingApproval: run.pendingApproval ?? null,
+        imageReplacementApprovals: run.imageReplacementApprovals ?? [],
+        imageReplacementParking: run.imageReplacementParking ? { operationId: run.imageReplacementParking.operationId } : null,
+        executionAmendments: run.executionAmendments?.map(({ id, baseProfileHash, profileHash, reference, approvedAtMs }) => ({ id, baseProfileHash, profileHash, reference, approvedAtMs })) ?? [],
+        allowanceAdjustment: run.allowanceAdjustment ? { approvalId: run.allowanceAdjustment.approvalId,
+          totals: run.allowanceAdjustment.totals, requestedAtMs: run.allowanceAdjustment.requestedAtMs } : null } : {}),
       brief: run.brief, status: run.status, revision: run.revision, pauseRequested: run.pauseRequested,
       ...(projection === "inspection" ? { terminalAtMs: run.terminalAtMs ?? null, timing: runTiming(run), attention: runAttention(run),
         runAccounting: runAccounting(run.mode, operationRows, run.counters.payableText, run.counters.payableImage) } : {}),

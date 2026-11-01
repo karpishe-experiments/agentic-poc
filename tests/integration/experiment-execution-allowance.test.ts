@@ -15,6 +15,7 @@ import { specialistTaskSchema } from "@/lib/contracts/experiment-runner";
 import { defaultExecutionAllowance, executionPolicyFromM4TechnicalProfile, realExecutionPolicyFromM4TechnicalProfile } from "@/lib/experiment-runner/execution-policy";
 import { m4TokenPolicySnapshot } from "@/lib/experiment-runner/m4-policy";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
+import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import { m4TestId as id, m4TestPolicy } from "@/tests/helpers/m4-policy";
 
 const databases: Database[] = [];
@@ -69,6 +70,101 @@ async function setup(maxMicrodollars = 1, allowancePatch: Partial<ReturnType<typ
 }
 
 describe("Execution approval ledger with disposable persistence and no providers", () => {
+  it("raises any current-system allowance repeatedly without resuming a manual pause or resetting counters", async () => {
+    const env = await setup(5_000_000);
+    await env.repository.pause({ runId: id(10), expectedRevision: (await env.run()).revision, nowMs: 3 });
+    const before = await env.run();
+    const input = { runId: before._id, approvalId: id(401), reference: "approved six-dollar total",
+      expectedRunRevision: before.revision, expectedCampaignRevision: (await env.campaign()).revision,
+      totals: { ...env.totals, maxMicrodollars: 6_000_000 }, nowMs: 4 };
+    const saved = await withMongoTransaction(env.db, session => env.ledger.adjust(session, input));
+    expect(saved.pending).toBe(false);
+    expect((await env.campaign()).allowance.maxMicrodollars).toBe(6_000_000);
+    expect(await env.run()).toMatchObject({ status: "paused", pauseRequested: true, counters: before.counters });
+    expect(await withMongoTransaction(env.db, session => env.ledger.adjust(session, input))).toMatchObject({ reused: true });
+    await expect(withMongoTransaction(env.db, session => env.ledger.adjust(session, { ...input, totals: env.totals }))).rejects.toThrow();
+    await withMongoTransaction(env.db, session => env.ledger.adjust(session, { ...input, approvalId: id(402),
+      expectedRunRevision: saved.runRevision, expectedCampaignRevision: (0), totals: { ...env.totals, maxMicrodollars: 7_000_000 } }))
+      .then(() => { throw Error("stale approval unexpectedly succeeded"); }, error => expect(error.code).toBe("stale_revision"));
+    const current = await env.run(), campaign = await env.campaign();
+    await withMongoTransaction(env.db, session => env.ledger.adjust(session, { ...input, approvalId: id(403),
+      expectedRunRevision: current.revision, expectedCampaignRevision: campaign.revision,
+      totals: { ...env.totals, maxMicrodollars: 7_000_000 } }));
+    expect((await env.campaign()).approvals.map(a => a.totals.maxMicrodollars)).toEqual([5_000_000, 6_000_000, 7_000_000]);
+  });
+
+  it("saves an increase during active work and applies it only at the next safe checkpoint", async () => {
+    const env = await setup(5_000_000);
+    const before = await env.run();
+    await env.db.collections.experiment_runs.updateOne({ _id: before._id }, { $set: { status: "running", activeOperationId: id(405) } });
+    const input = { runId: before._id, approvalId: id(404), reference: "approved future total",
+      expectedRunRevision: before.revision, expectedCampaignRevision: (await env.campaign()).revision,
+      totals: { ...env.totals, maxMicrodollars: 6_000_000 }, nowMs: 4 };
+    const receipt = await withMongoTransaction(env.db, session => env.ledger.adjust(session, input));
+    expect(receipt).toMatchObject({ pending: true });
+    expect((await env.campaign()).allowance.maxMicrodollars).toBe(5_000_000);
+    expect(await withMongoTransaction(env.db, session => env.ledger.adjust(session, input))).toMatchObject({ reused: true, pending: true });
+    await env.db.collections.experiment_runs.updateOne({ _id: before._id }, { $set: { activeOperationId: null } });
+    await withMongoTransaction(env.db, session => env.ledger.applyAdjustment(session, before._id, 5));
+    expect(await env.run()).toMatchObject({ status: "queued", pauseRequested: false, allowanceAdjustment: null });
+    expect((await env.campaign()).allowance.maxMicrodollars).toBe(6_000_000);
+    expect(await withMongoTransaction(env.db, session => env.ledger.adjust(session, input))).toEqual({ ...receipt, reused: true });
+  });
+
+  it("can increase authority while preserving an unknown outcome and every retained liability", async () => {
+    const env = await setup(5_000_000);
+    const before = await env.run();
+    await env.db.collections.experiment_runs.updateOne({ _id: before._id }, { $set: {
+      status: "blocked", safeFailure: "unknown_outcome", pauseRequested: true, activeOperationId: id(407) } });
+    await env.db.collections.experiment_campaigns.updateOne({ _id: id(1) }, { $set: { reservedMicrodollars: 5_000_000 } });
+    await withMongoTransaction(env.db, session => env.ledger.adjust(session, { runId: before._id, approvalId: id(406),
+      reference: "budget only; no replacement authorization", expectedRunRevision: before.revision,
+      expectedCampaignRevision: 1, totals: { ...env.totals, maxMicrodollars: 6_000_000 }, nowMs: 4 }));
+    expect(await env.run()).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome", activeOperationId: id(407), pauseRequested: true });
+    expect(await env.campaign()).toMatchObject({ reservedMicrodollars: 5_000_000, settledMicrodollars: 0 });
+  });
+
+  it("preserves an undispatched bound J13 item while applying a proactive adjustment", async () => {
+    const env = await setup(5_000_000);
+    const before = await env.run();
+    const imageRequest = { kind: "page_source" as const, prompt: "Retained page", sourceVersionIds: [id(420), id(421)], styleVersionId: id(421) };
+    await env.repository.prepareOperation({ runId: before._id, operationId: id(410), expectedRevision: before.revision,
+      role: "manager", taskId: null, subjectKind: "book", subjectId: before.bookletId, inputFingerprint: "d".repeat(64),
+      attempt: 1, providerKind: "text", nowMs: 3 });
+    // Seed the retained J13 boundary. Source admission is exercised by the Real
+    // journey; this test isolates allowance changes after the item is bound.
+    await env.db.collections.experiment_operations.updateOne({ _id: id(410) }, { $set: { role: "image", taskId: "J13",
+      subjectKind: "page", subjectId: id(419), providerKind: "image", parentWorkflowRunId: id(424),
+      inputFingerprint: imageRequestFingerprint(imageRequest), imageRequestJson: JSON.stringify(imageRequest),
+      dependencyVersionIds: imageRequest.sourceVersionIds } });
+    await env.db.collections.generation_jobs.insertOne({ _id: id(422), bookletId: before.bookletId, jobType: "dify_pages", status: "running",
+      idempotencyKey: "retained-page-batch", inputJson: JSON.stringify({ runId: before._id }), errorJson: null,
+      createdAtMs: 3, startedAtMs: 3, finishedAtMs: null, updatedAtMs: 3 });
+    await env.db.collections.generation_items.insertOne({ _id: id(423), jobId: id(422), itemKey: id(419), position: 0,
+      status: "running", attemptCount: 1, inputJson: "{}", resultJson: JSON.stringify({ operationId: id(410), assetId: null, pageVersionId: null }),
+      assetId: null, errorJson: null, executionCardId: null, executionBatchId: null, startedAtMs: 3, finishedAtMs: null });
+    const item = await env.db.collections.generation_items.findOne({ _id: id(423) });
+    await withMongoTransaction(env.db, session => env.ledger.adjust(session, { runId: before._id, approvalId: id(411),
+      reference: "proactive higher total", expectedRunRevision: before.revision + 1, expectedCampaignRevision: 1,
+      totals: { ...env.totals, maxMicrodollars: 6_000_000 }, nowMs: 4 }));
+    expect(await env.run()).toMatchObject({ activeOperationId: id(410), status: "queued", pauseRequested: false });
+    expect(await env.repository.getOperation(id(410))).toMatchObject({ state: "prepared", reservationCount: 0 });
+    expect(await env.db.collections.generation_items.findOne({ _id: id(423) })).toEqual(item);
+    expect(await env.db.collections.generation_jobs.findOne({ _id: id(422) })).toMatchObject({ status: "running" });
+    await withMongoTransaction(env.db, async session => verifyExecutionAccounting(env.db, session, await env.run()));
+  });
+
+  it("preserves a manual pause received after a deferred increase was approved", async () => {
+    const env = await setup(5_000_000), before = await env.run();
+    await env.db.collections.experiment_runs.updateOne({ _id: before._id }, { $set: { status: "running", activeOperationId: id(412) } });
+    await withMongoTransaction(env.db, session => env.ledger.adjust(session, { runId: before._id, approvalId: id(413),
+      reference: "deferred approval", expectedRunRevision: before.revision, expectedCampaignRevision: 1,
+      totals: { ...env.totals, maxMicrodollars: 6_000_000 }, nowMs: 4 }));
+    await env.repository.pause({ runId: before._id, expectedRevision: (await env.run()).revision, nowMs: 5 });
+    await env.db.collections.experiment_runs.updateOne({ _id: before._id }, { $set: { activeOperationId: null } });
+    await withMongoTransaction(env.db, session => env.ledger.applyAdjustment(session, before._id, 6));
+    expect(await env.run()).toMatchObject({ status: "paused", pauseRequested: true });
+  });
   it("recovers only unused grants for the current persona/profile without changing persisted allowance or claims", async () => {
     const env = await setup(5_000_000);
     await withMongoTransaction(env.db, async session => {

@@ -36,7 +36,7 @@ export const executionPolicySchema = z.strictObject({
   publications: z.array(savedConfigurationItemSchema.extend({ persona: personaSchema.nullable() })).length(18),
   realImage: z.strictObject({ adapterIdentity: z.literal(REAL_IMAGE_ADAPTER_IDENTITY),
     // Keep saved dev1 profiles readable; new readiness pins only the reviewed dev2.
-    pluginIdentity: z.string().regex(/^langgenius\/openai_tool:0\.2\.2-dev[12]@[0-9a-f]{64}$/), packageSha256: digest,
+    pluginIdentity: z.string().regex(/^langgenius\/openai_tool:0\.2\.2-dev[123]@[0-9a-f]{64}$/), packageSha256: digest,
     nativeFileOrigin: z.literal("https://dify.uniwares.co.uk"),
     model: z.literal(REAL_IMAGE_MODEL), size: z.enum(["1024x1024", "1536x1024", "1024x1536"]),
     quality: z.enum(["low", "medium", "high", "xhigh", "max"]),
@@ -67,7 +67,7 @@ export const executionPolicySchema = z.strictObject({
   }
   if (policy.tokenPolicy.hash !== m4TokenPolicySnapshot(policy.tokenPolicy.amendment).hash) context.addIssue({ code: "custom", message: "Token carrier identity differs." });
   if (policy.mode === "balanced" && policy.pluginIdentity !== policy.tokenPolicy.amendment.requiredProviderAdapterIdentity ||
-      policy.mode === "real" && !/^langgenius\/openai:1\.0\.7-dev6@[0-9a-f]{64}$/.test(policy.pluginIdentity)) {
+      policy.mode === "real" && !/^langgenius\/openai:1\.0\.7-dev[67]@[0-9a-f]{64}$/.test(policy.pluginIdentity)) {
     // Real retains the reviewed v2 token carrier for its text roles. Its
     // actual installed provider is separately pinned to the dev6 candidate.
     context.addIssue({ code: "custom", message: "Execution provider identity differs from its mode." });

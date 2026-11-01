@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
+import { externalError, redactExternalError } from "@/lib/experiment-runner/external-errors";
 import { m4AdmittedTokenPolicy } from "@/lib/experiment-runner/m4-policy";
 import { z } from "zod";
 import type { ClientSession } from "mongodb";
@@ -68,8 +70,8 @@ const terminalConflictInput = claimInput.extend({ workflowId: opaqueIdSchema, st
 
 export class ExperimentRepositoryError extends Error {
   constructor(public readonly code: "invalid_input" | "not_found" | "conflict" | "stale_revision" | "invalid_state" | "invalid_result", message: string,
-    public readonly failureReason?: FailureReason) {
-    super(message); this.name = "ExperimentRepositoryError";
+    public readonly failureReason?: FailureReason, options?: ErrorOptions) {
+    super(message, options); this.name = "ExperimentRepositoryError";
   }
 }
 
@@ -188,7 +190,7 @@ export function createExperimentRepository(database: Database, options: { store?
         !operation.imageRequestJson || !options.store || !configuredPageIllustrationTask(run.configurationJson)) {
       throw new ExperimentRepositoryError("invalid_state", "J13 requires the enabled simulated final-page profile and retained source verification.");
     }
-    const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
+    const configuration = operationConfiguration(run, operation);
     const image = configuration.find((item) => item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
     const managerBinding = configuration.find((item) => item.role === "manager" && item.taskId === null);
     if (!image || !managerBinding) throw new ExperimentRepositoryError("invalid_state", "J13 configuration is incomplete.");
@@ -350,7 +352,7 @@ export function createExperimentRepository(database: Database, options: { store?
     return withMongoTransaction(database, async (session) => {
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (run.revision !== input.expectedRevision) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
-      if (run.pauseRequested) return run;
+      if (run.pauseRequested && !run.allowanceAdjustment?.resume) return run;
       const active = run.activeOperationId ? await operations.findOne({ _id: run.activeOperationId, runId: run._id }, { session }) : null;
       const cancellationDigest = options.m4Authority && active?.state === "prepared" && !run.preparation ?
         await verifyUndispatchedText(database, session, options.m4Authority, run, active._id) : null;
@@ -366,6 +368,7 @@ export function createExperimentRepository(database: Database, options: { store?
         if (cancelled.modifiedCount !== 1) throw new ExperimentRepositoryError("stale_revision", "Preparation changed during Pause.");
       }
       const updated = await runs.findOneAndUpdate({ _id: input.runId, revision: input.expectedRevision }, { $set: { pauseRequested: true,
+        ...(run.allowanceAdjustment ? { allowanceAdjustment: { ...run.allowanceAdjustment, resume: false } } : {}),
         ...(cancellationDigest ? { activeOperationId: null } : {}),
         status: run.status === "queued" || run.status === "running" ? "paused" : run.status, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
       if (!updated) throw new ExperimentRepositoryError("stale_revision", "Run revision changed.");
@@ -488,6 +491,7 @@ export function createExperimentRepository(database: Database, options: { store?
         if (input.imageRequest && !j13) await assertCurrentImageSources(database, session, run, input.imageRequest);
         const narrative = input.role === "specialist" && (isNarrativeTask(input.taskId) || input.taskId === "J09" || input.taskId === "J10" || input.taskId === "J11" || input.taskId === "J12") ? await prepareNarrativeContext(database, session, run, input.taskId, input.subjectKind, input.subjectId, options.store) : { expectedTargetVersionId: null, dependencyVersionIds: [] };
         const operation: ExperimentOperationDocument = { _id: input.operationId, runId: input.runId, role: input.role, taskId: input.taskId, subjectKind: input.subjectKind, subjectId: input.subjectId, idempotencyKey, inputFingerprint: input.inputFingerprint, attempt: input.attempt, mode: run.mode, providerKind: input.providerKind, state: "prepared", workflowRunId: null, parentWorkflowRunId: j13 ? input.parentWorkflowRunId! : null, reservationCount: 0, deadlineAtMs: null, resultJson: null, resultDigest: null, warningsJson: "[]", expectedTargetVersionId: narrative.expectedTargetVersionId, dependencyVersionIds: narrative.dependencyVersionIds, materializationJson: null, safeFailure: null, createdAtMs: input.nowMs, updatedAtMs: input.nowMs };
+        if (run.executionAmendments?.length) operation.executionAmendmentId = run.executionAmendments.at(-1)!.id;
         operation.deadlineAtMs = run.preparation?.deadlineAtMs ?? input.nowMs + OPERATION_LIMIT_MS;
         operation.lifecycle = { startedAtMs: run.preparation?.startedAtMs ?? input.nowMs, ownerId: run.preparation?.ownerId ?? randomUUID(), phase: "preparing", lastProgressAtMs: input.nowMs };
         if (input.nowMs >= operation.deadlineAtMs) throw new ExperimentRepositoryError("invalid_state", "Preparation deadline expired.");
@@ -640,7 +644,7 @@ export function createExperimentRepository(database: Database, options: { store?
       }
       if (operation.workflowRunId && (operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId)) throw new ExperimentRepositoryError("conflict", "Workflow identity differs from the saved claim.");
       if (verified) {
-        const expected = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown)
+        const expected = operationConfiguration(run, operation)
           .find(item => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
         if (!((run.mode === "balanced" && operation.providerKind === "text") ||
             (run.mode === "real" && options.realExecutionEnabled === true)) ||
@@ -803,7 +807,7 @@ export function createExperimentRepository(database: Database, options: { store?
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       if (operation.dispatchStartedAtMs == null || operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId) throw new ExperimentRepositoryError("conflict", "Publication verification identity differs from dispatch.");
-      const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
+      const configuration = operationConfiguration(run, operation);
       const expected = configuration.find((item) => item.role === operation.role && item.taskId === (operation.role === "image" ? null : operation.taskId));
       if (!expected || expected.publishedWorkflowId !== input.workflowId || (operation.verifiedWorkflowId && operation.verifiedWorkflowId !== input.workflowId)) throw new ExperimentRepositoryError("conflict", "Runtime publication differs from saved configuration.");
       if (input.terminalSucceeded && operation.state === "succeeded" && !run.activeOperationId &&
@@ -843,7 +847,7 @@ export function createExperimentRepository(database: Database, options: { store?
         const result = realImageResultSchema.parse(JSON.parse(observation.resultJson));
         const profile = executionPolicySnapshot(JSON.parse(run.execution.profileJson));
         const charge = profile.policy.realImage ? realImageCharge(result, profile.policy.realImage.price) : null;
-        const imageBinding = profile.policy.publications.find(item => item.role === "image" && item.taskId === null);
+        const imageBinding = operationConfiguration(run, operation).find(item => item.role === "image" && item.taskId === null);
         if (!["rejected_pre_provider", "failed_after_provider"].includes(result.status) || !charge ||
             profile.hash !== run.execution.profileHash || reservation.profileHash !== profile.hash ||
             reservation.campaignId !== run.execution.campaignId ||
@@ -974,7 +978,7 @@ export function createExperimentRepository(database: Database, options: { store?
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       const operation = must(await operations.findOne({ _id: input.operationId, runId: run._id }, { session }), "Operation");
       const latest = await operations.findOne({ runId: run._id }, { session, sort: { createdAtMs: -1 } });
-      const configuration = parse(savedConfigurationSchema, JSON.parse(run.configurationJson) as unknown);
+      const configuration = operationConfiguration(run, operation);
       const binding = configuration.find((item) => item.role === operation.role && item.taskId ===
         (operation.role === "image" ? null : operation.taskId));
       if (run.activeOperationId || latest?._id !== operation._id || operation.state !== "succeeded" ||
@@ -1226,12 +1230,12 @@ export function createExperimentRepository(database: Database, options: { store?
 
   async function observeRealImage(input: { runId: string; operationId: string; workflowRunId: string;
     parentWorkflowRunId: string | null; inputFingerprint: string; result: unknown; nowMs: number }) {
-    const result = realImageResultSchema.parse(input.result);
+    const result = realImageResultSchema.parse(redactExternalError(input.result).value);
     return withMongoTransaction(database, async session => {
       const operation = must(await operations.findOne({ _id: input.operationId, runId: input.runId }, { session }), "Operation");
       const run = must(await runs.findOne({ _id: input.runId }, { session }), "Run");
       const policy = run.execution ? executionPolicySnapshot(JSON.parse(run.execution.profileJson)).policy : null;
-      const imageBinding = policy?.publications.find(item => item.role === "image" && item.taskId === null && item.persona === null);
+      const imageBinding = operationConfiguration(run, operation).find(item => item.role === "image" && item.taskId === null);
       if (options.realExecutionEnabled !== true || run.mode !== "real" || operation.mode !== "real" ||
           operation.providerKind !== "image" || !policy?.realImage || !imageBinding ||
           operation.workflowRunId !== input.workflowRunId || operation.parentWorkflowRunId !== input.parentWorkflowRunId ||
@@ -1241,6 +1245,12 @@ export function createExperimentRepository(database: Database, options: { store?
           result.requestedModel !== policy.realImage.model ||
           !["started", "unknown", "succeeded", "failed"].includes(operation.state)) {
         throw new ExperimentRepositoryError("conflict", "Real image provider evidence differs from the admitted operation.");
+      }
+      if (operation.imageReplacement) {
+        await operations.updateOne({ _id: operation._id, runId: run._id }, { $push: { externalErrors: {
+          $each: [externalError({ service: "image_provider", stage: "late_superseded_evidence", error: result, dispatchStarted: true })], $slice: -20 } } }, { session });
+        return { reused: true as const, status: result.status, chargeMicrodollars: operation.realImageReservation.settledMicrodollars,
+          overrunMicrodollars: operation.realImageReservation.overrunMicrodollars };
       }
       const settled = await executionLedger.settleRealImage(session, run, operation, result, input.nowMs);
       if (settled.reused) return { reused: true as const, status: result.status,

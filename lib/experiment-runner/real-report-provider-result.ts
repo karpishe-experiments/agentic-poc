@@ -109,6 +109,7 @@ export const realReportPreGenerationFailureSchema = z.strictObject({
     adapterVersion: z.literal(REAL_REPORT_ADAPTER_IDENTITY), countedInputTokens: count, limit: z.literal(128000),
     generationStarted: z.literal(false), elapsedMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     countRequestId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/).nullable(),
+    diagnostic: z.unknown().optional(),
     effectivePolicy: m4EffectivePolicyEvidenceSchema, contextWarnings: m4ContextWarningsSchema,
     manifestDigest: digest, textRequestDigest: digest, inspectedAssetIds: z.array(opaqueIdSchema).min(1).max(15),
   }),

@@ -8,13 +8,24 @@ import { imageRequestFingerprint } from "@/lib/contracts/experiment-image";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { retainM4ImageTestPolicy } from "@/tests/helpers/m4-image-state";
+import * as executionAmendment from "@/lib/experiment-runner/execution-amendment";
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const { verifySources, verifyVersion } = vi.hoisted(() => ({ verifySources: vi.fn(), verifyVersion: vi.fn() }));
 vi.mock("@/db/experiment-pages", () => ({ verifyCurrentPageIllustrationSources: verifySources }));
 vi.mock("@/db/experiment-page-illustrations", () => ({ createExperimentPageIllustrationAssembly: () => ({ verifyVersion }) }));
 const databases: Database[] = [];
-afterEach(async () => { verifySources.mockReset(); verifyVersion.mockReset(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
+afterEach(async () => { vi.restoreAllMocks(); verifySources.mockReset(); verifyVersion.mockReset(); await Promise.all(databases.splice(0).map(closeTestDatabase)); });
+// Amendment validity is covered with real frozen profiles in the amendment and
+// Real journey suites. Here isolate which publication the batch must select.
+function amendedPublication() {
+  const original = executionAmendment.operationConfiguration;
+  vi.spyOn(executionAmendment, "operationConfiguration").mockImplementation((run, operation) => {
+    const configuration = original(run, {});
+    return operation.executionAmendmentId === "fixture-amendment"
+      ? configuration.map(binding => binding.role === "image" ? { ...binding, publishedWorkflowId: id(999) } : binding) : configuration;
+  });
+}
 async function setup() {
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
   const configuration = [{ role: "manager", taskId: null },
@@ -133,13 +144,15 @@ describe("saved Dify page batch selection", () => {
     expect(await env.repository().get(identity)).toEqual(before);
     expect(await env.database.collections.generation_jobs.countDocuments({})).toBe(1);
   });
-  it("retains a verified unclaimed Pause and rebinds the same ordered item after Resume", async () => {
+  it.each([false, true])("retains a verified unclaimed Pause and rebinds the same ordered item after Resume (amended=%s)", async amended => {
     const env = await setup(); const { identity, binding } = await prepareFirst(env);
     await env.repository().bind(binding);
     const original = (await env.database.collections.experiment_operations.findOne({ _id: id(11) }))!;
     await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: {
-      state: "failed", workflowRunId: id(18), verifiedWorkflowId: id(214), safeFailure: null, reservationCount: 0,
+      state: "failed", workflowRunId: id(18), verifiedWorkflowId: amended ? id(999) : id(214), safeFailure: null, reservationCount: 0,
+      ...(amended ? { executionAmendmentId: "fixture-amendment" } : {}),
     } });
+    if (amended) amendedPublication();
     await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { activeOperationId: null, status: "paused", pauseRequested: true } });
     expect(await env.repository().reconcile(identity)).toEqual({ kind: "paused" });
     expect((await env.repository().get(identity)).items.map((item) => item.status)).toEqual(["pending", "pending"]);
@@ -197,12 +210,14 @@ describe("saved Dify page batch selection", () => {
       idempotencyKey: "other-run", inputJson: JSON.stringify(otherBatch) });
   });
 
-  it("retains clarification history and requires its published, materialized answer before rebinding", async () => {
+  it.each([false, true])("retains clarification history and requires its published, materialized answer before rebinding (amended=%s)", async amended => {
     const env = await setup(); const { identity, binding } = await prepareFirst(env);
     await env.repository().bind(binding);
     const original = (await env.database.collections.experiment_operations.findOne({ _id: id(11) }))!;
     await env.database.collections.experiment_operations.updateOne({ _id: id(11) }, { $set: { state: "succeeded", workflowRunId: id(18),
-      verifiedWorkflowId: id(214), reservationCount: 1, resultJson: JSON.stringify({ kind: "clarification", payload: { question: "Which expression?" } }) } });
+      verifiedWorkflowId: amended ? id(999) : id(214), ...(amended ? { executionAmendmentId: "fixture-amendment" } : {}),
+      reservationCount: 1, resultJson: JSON.stringify({ kind: "clarification", payload: { question: "Which expression?" } }) } });
+    if (amended) amendedPublication();
     await env.database.collections.experiment_operations.insertOne({ ...original, _id: id(19), idempotencyKey: "successor", parentWorkflowRunId: id(20) });
     await env.database.collections.experiment_runs.updateOne({ _id: id(1) }, { $set: { activeOperationId: id(19) }, $inc: { revision: 1 } });
     const successor = { ...binding, operationId: id(19), expectedRevision: 4 };

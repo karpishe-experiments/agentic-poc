@@ -12,6 +12,7 @@ import type { ReferenceUploadResult } from "@/lib/experiment-runner/reference-tr
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import { measurePhase } from "@/lib/experiment-runner/diagnostics";
 import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
+import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 import { operationSignal, remainingOperationMs } from "@/lib/operations/budget";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema });
@@ -66,7 +67,7 @@ export function createExperimentReferenceUploads(input: {
             operationSignal()?.aborted || remainingOperationMs() <= 0) {
           conflict("Reference upload requires current, undispatched simulated J13 work.");
         }
-        const configuration = savedConfigurationSchema.parse(JSON.parse(run.configurationJson));
+        const configuration = operationConfiguration(run, operation);
         const saved = configuration.find((item) =>
           item.role === "image" && item.taskId === null && item.finalPageIllustration === true);
         if (!saved || binding.role !== "image" || binding.taskId !== null || binding.persona !== null ||

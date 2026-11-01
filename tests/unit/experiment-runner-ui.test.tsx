@@ -720,7 +720,7 @@ describe("booklet runner inspector", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start selected" }));
     expect(await screen.findByRole("button", { name: "Retry pending creation" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("The run could not be created.");
-    expect(screen.getByRole("alert").textContent).not.toContain("Connection lost");
+    expect(screen.getByRole("alert").textContent).toContain("Connection lost");
     // Empty/terminal pages do not keep polling. Manual Refresh stays available.
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, options]) => options?.method !== "POST").length).toBeGreaterThan(1));

@@ -140,7 +140,8 @@ describe("booklet runner HTTP boundary", () => {
           store: () => ({} as AssetStore), mutate: async (operation) => { const result = await operation(); if (cleanupFails) throw new Error("Claim cleanup failed"); return result; } });
         const response = await http.control(request({ origin: "http://localhost:3000" }, JSON.stringify({ expectedRevision: 7, responseMode: "receipt" })), controlRunId, "resume");
         expect(response.status).toBe(cleanupFails ? 503 : 200);
-        expect(await response.json()).toEqual(cleanupFails ? { error: { code: "unavailable", message: "Runner is temporarily unavailable." } } : { data: receiptFor(saved) });
+        expect(await response.json()).toMatchObject(cleanupFails ? { error: { code: "unavailable", message: "Claim cleanup failed",
+          diagnostic: { stage: "api" } } } : { data: receiptFor(saved) });
       }
       expect(resume).not.toHaveBeenCalled();
       expect(getRunView).not.toHaveBeenCalled();
@@ -524,15 +525,18 @@ describe("booklet runner HTTP boundary", () => {
       expect(getRunView).not.toHaveBeenCalled();
       expect((await http.imageEvidence(request(headers, "not-json"))).status).toBe(400);
       expect((await http.imageEvidence(request(headers, JSON.stringify({ ...payload, operationId: "wrong" })))).status).toBe(400);
-      expect((await http.imageEvidence(request({ ...headers, "content-length": "32769" }, "{}"))).status).toBe(400);
-      expect(observeRealImage).toHaveBeenCalledTimes(1);
+      expect((await http.imageEvidence(request({ ...headers, "content-length": "262145" }, "{}"))).status).toBe(400);
+      expect((await http.imageEvidence(request(headers, JSON.stringify({ ...payload,
+        result: { ...payload.result, diagnostic: { message: "x".repeat(60_000), truncated: true } } })))).status).toBe(200);
+      expect(observeRealImage).toHaveBeenCalledTimes(2);
     } finally { factory.mockRestore(); context.mockRestore(); }
   });
   it("treats invalid UTF-8 as malformed JSON after authentication", async () => {
     const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });
     const response = await http.tool(new Request("http://localhost:3000", { method: "POST", headers: { "x-booklet-tool-key": "x".repeat(32) }, body: new Uint8Array([0xff]) }), "authorize");
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: { code: "invalid_request", message: "Request is invalid." } });
+    expect(await response.json()).toMatchObject({ error: { code: "invalid_request", message: "Invalid UTF-8",
+      diagnostic: { service: "booklet", stage: "api" } } });
   });
   it("requires exact browser origin and a UUID replay key", async () => {
     const http = createBookletRunnerHttp({ config: () => enabled, database: () => { throw new Error("unexpected database access"); } });

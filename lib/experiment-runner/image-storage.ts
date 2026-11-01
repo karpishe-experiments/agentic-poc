@@ -10,7 +10,7 @@ import { reportCleanup } from "@/lib/operations/completion-failure";
 
 type Identity = { runId: string; operationId: string; workflowRunId: string; parentWorkflowRunId: string | null; inputFingerprint: string };
 function hash(bytes: Uint8Array) { return createHash("sha256").update(bytes).digest("hex"); }
-function storageFailure(): never { throw new ExperimentRepositoryError("invalid_state", "Image storage could not verify the original bytes."); }
+function storageFailure(cause?: unknown): never { throw new ExperimentRepositoryError("invalid_state", "Image storage could not verify the original bytes.", undefined, { cause }); }
 
 export function createExperimentImageStorage(input: { database: Database; store: AssetStore; now?: () => number; newClaimId?: () => string }) {
   const repository = createExperimentImageRepository(input.database, { store: () => input.store });
@@ -31,7 +31,7 @@ export function createExperimentImageStorage(input: { database: Database; store:
         try {
           const saved = await measurePhase(raw.identity, "image_reused_readback", () => claim.asset ? input.store.get(claim.asset.uri) : Promise.reject(new Error("missing asset")));
           if (hash(saved) !== validatedImage.sha256) storageFailure();
-        } catch { storageFailure(); }
+        } catch (cause) { storageFailure(cause); }
         return claim;
       }
       const run = await input.database.collections.experiment_runs.findOne({ _id: raw.identity.runId });
@@ -47,7 +47,7 @@ export function createExperimentImageStorage(input: { database: Database; store:
           }
           if (hash(await input.store.get(uri)) !== validatedImage.sha256) storageFailure();
         });
-      } catch { storageFailure(); }
+      } catch (cause) { storageFailure(cause); }
       return await measurePhase(raw.identity, "image_finalize", () => repository.finalize({ ...claimInput, uri, nowMs: now() }));
     } catch (error) {
       try {

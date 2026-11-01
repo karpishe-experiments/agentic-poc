@@ -15,6 +15,7 @@ import json
 import re
 import struct
 import time
+import traceback
 import httpx
 from importlib.metadata import version
 from pathlib import Path
@@ -50,6 +51,47 @@ class Rejected(ValueError):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
+
+
+def provider_error(exc: Exception, secrets=()) -> dict[str, Any]:
+    """Retain useful provider evidence without credentials or signed URLs."""
+    truncated = False
+    redacted = False
+    def read(value, name, default=None):
+        try:
+            return getattr(value, name, default)
+        except Exception:
+            return '[UNREADABLE PROPERTY]'
+    def clean(value):
+        nonlocal truncated, redacted
+        try:
+            original = str(value)
+        except Exception:
+            original = '[UNREADABLE ERROR]'
+        text = original
+        for secret in secrets:
+            if isinstance(secret, str) and len(secret) >= 8:
+                text = text.replace(secret, '[REDACTED]')
+        text = re.sub(r'(?i)(Bearer|Basic)\s+[A-Za-z0-9+/=_.-]+', '[REDACTED]', text)
+        text = re.sub(r'\bsk-[A-Za-z0-9_-]+', '[REDACTED]', text)
+        text = re.sub(r'''(?i)((?:set-cookie|cookie|authorization)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\r\n}]*)''', r'\1[REDACTED]', text)
+        text = re.sub(r'(?i)([?&]sig=)[^&\s\"\x27]+', r'\1[REDACTED]', text)
+        text = re.sub(r'(?i)((?:password|secret|api[_-]?key|token|signature|sign|nonce)[\"\x27]?\s*[:=]\s*[\"\x27]?)[^\s\"\x27&,}]+', r'\1[REDACTED]', text)
+        text = re.sub(r'(?i)(mongodb(?:\+srv)?://)[^/@\s]+@', r'\1[REDACTED]@', text)
+        text = re.sub(r'(?i)(https?://)[^/@\s]+:[^/@\s]+@', r'\1[REDACTED]@', text)
+        text = re.sub(r'(?i)([?&](?:X-Amz-[^=]+|timestamp|expires)=[^&\s]*)', '[REDACTED]', text)
+        redacted = redacted or text != original
+        truncated = truncated or len(text) > 4096
+        return text[:4096]
+    response = read(exc, 'response', None)
+    return {'exceptionClass': type(exc).__name__, 'message': clean(exc),
+            'stack': clean(''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))),
+            'status': read(exc, 'status_code', None),
+            'code': clean(read(exc, 'code', '')),
+            'requestId': clean(read(exc, 'request_id', '')),
+            'body': clean(read(exc, 'body', None) or read(response, 'text', '')),
+            'cause': clean(read(exc, '__cause__', None)),
+            'redacted': redacted, 'truncated': truncated}
 
 
 def canonical(value: Any) -> str:
@@ -199,7 +241,11 @@ def validate(request_json: str, reference_files: Any, *, now_ms: int, now=time.t
         raise Rejected("reference_count")
     if len({(item.get("assetId"), item.get("versionId")) for item in refs if isinstance(item, dict)}) != len(refs):
         raise Rejected("reference_identity")
-    if reference_files is None and not refs:
+    # Dify 1.17.1 casts an absent FILES value to [None] before plugin invocation.
+    # Only a no-reference generation may treat that exact placeholder as empty.
+    empty_placeholder = (isinstance(reference_files, list) and len(reference_files) == 1
+                         and reference_files[0] is None)
+    if not refs and (reference_files is None or empty_placeholder):
         reference_files = []
     if not isinstance(reference_files, list) or len(reference_files) != len(refs):
         raise Rejected("reference_count")
@@ -290,8 +336,13 @@ def run(request_json: str, reference_files: Any, credentials: dict[str, Any], *,
         if remaining <= 0:
             return evidence(request, "rejected_pre_provider", "pre_provider", "deadline"), None
         response = client.images.generate(**args, timeout=remaining) if request["operation"] == "generate" else client.images.edit(**args, timeout=remaining)
-    except Exception:
-        return evidence(request, "unknown_outcome", "provider", "request_failed"), None
+    except Exception as exc:
+        result = evidence(request, "unknown_outcome", "provider", "request_failed")
+        result['diagnostic'] = provider_error(exc, credentials.values())
+        request_id = safe_id(getattr(exc, 'request_id', None))
+        if request_id:
+            result['providerRequestId'] = request_id
+        return result, None
     finally:
         for stream in streams:
             stream.close()
