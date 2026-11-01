@@ -10,6 +10,20 @@ a destructive restore. Booklet staging and production remain independent.
 
 ## Baseline and targets
 
+The operator accepted `FORCE_VERIFYING_SIGNATURE=false` for this existing
+Community instance on 2026-11-01. Unsigned local packages can remain installable;
+do not automatically restore `true` after an installation on this instance.
+This supersedes the earlier temporary-window restoration requirement here.
+The private-root receipt verified both the protected runtime file and the
+running plugin daemon at `false`. Exact MCP readback subsequently verified
+the reviewed text dev7 and image dev3 packages recorded in
+[M5](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#reusable-approvals-and-diagnostics-implementation-checkpoint--2026-11-01).
+Keep package review, exact identity verification and paid-execution authority
+separate. This choice does not authorize arbitrary packages, provider retries,
+additional spending or changes to another Dify instance. Existing credentials,
+workspace authentication and network exposure are unchanged. New-install defaults
+remain unchanged; preserve this instance's accepted runtime setting.
+
 - Dify 1.17.1, source commit and archive hash in
   [`deploy/dify/release.json`](../../deploy/dify/release.json). The repository
   override pins the enabled images by digest. Keep the upstream Compose file;

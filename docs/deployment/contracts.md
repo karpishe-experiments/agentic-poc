@@ -305,6 +305,10 @@ the reviewed enablement manifest pins the separate forward-only amendment. Legac
 operations retain their saved provider/policy evidence. Offline candidate validation
 uses dummy credentials and forbids sockets; live installation is verified separately
 and does not establish a paid execution result.
+That restoration receipt describes the historical M4 installation. The
+[current Community signature policy](dify-community.md#baseline-and-targets)
+records the operator's later acceptance of persistent unsigned installation.
+It adds no credential name, storage path, transfer copy or credential consumer.
 
 ### Shared deployment and administrator credentials
 
